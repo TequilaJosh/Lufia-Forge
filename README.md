@@ -66,6 +66,4 @@ LufiaForge/
 
 
 <img width="1254" height="791" alt="Screenshot 2026-03-30 202722" src="https://github.com/user-attachments/assets/a6dbbdbc-8975-438f-ab30-795a64e8416b" />
-<img width="1254" height="791" alt="Screenshot 2026-03-30 202722" src="https://github.com/user-attachments/assets/a6dbbdbc-8975-438f-ab30-795a64e8416b" />
-<img width="1254" height="791" alt="image" src="https://github.com/user-attachments/assets/0b888b9e-2f89-40b3-9f2d-bc9fc317b31b" />
-<img width="1254" height="791" alt="image" src="https://github.com/user-attachments/assets/0b888b9e-2f89-40b3-9f2d-bc9fc317b31b" />
+
