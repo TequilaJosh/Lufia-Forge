@@ -1,0 +1,260 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:conv="clr-namespace:LufiaForge.Converters">
+
+    <!-- Converters -->
+    <conv:BoolToVisibilityConverter        x:Key="BoolToVisibilityConverter"/>
+    <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter"/>
+    <conv:InverseBoolConverter             x:Key="InverseBoolConverter"/>
+
+    <!-- =====================================================================
+         LUFIA FORGE COLOR PALETTE
+         Inspired by Lufia 1's deep purples, ancient stone, and golden accents
+         ===================================================================== -->
+
+    <!-- Base colors -->
+    <Color x:Key="DeepPurple">#1A0D2E</Color>
+    <Color x:Key="MidPurple">#2D1B4E</Color>
+    <Color x:Key="SurfacePurple">#3D2466</Color>
+    <Color x:Key="ElevatedPurple">#4A2D7A</Color>
+    <Color x:Key="BorderPurple">#5C3D8F</Color>
+
+    <!-- Gold accent -->
+    <Color x:Key="Gold">#C8942A</Color>
+    <Color x:Key="GoldLight">#E8B84B</Color>
+    <Color x:Key="GoldDim">#8B6518</Color>
+
+    <!-- Text -->
+    <Color x:Key="TextPrimary">#F0E6D3</Color>
+    <Color x:Key="TextSecondary">#A89880</Color>
+    <Color x:Key="TextDisabled">#5C5040</Color>
+
+    <!-- Status -->
+    <Color x:Key="ErrorRed">#C0392B</Color>
+    <Color x:Key="SuccessGreen">#27AE60</Color>
+    <Color x:Key="WarningAmber">#E67E22</Color>
+
+    <!-- Brushes -->
+    <SolidColorBrush x:Key="DeepPurpleBrush"     Color="{StaticResource DeepPurple}"/>
+    <SolidColorBrush x:Key="MidPurpleBrush"      Color="{StaticResource MidPurple}"/>
+    <SolidColorBrush x:Key="SurfacePurpleBrush"  Color="{StaticResource SurfacePurple}"/>
+    <SolidColorBrush x:Key="ElevatedPurpleBrush" Color="{StaticResource ElevatedPurple}"/>
+    <SolidColorBrush x:Key="BorderPurpleBrush"   Color="{StaticResource BorderPurple}"/>
+    <SolidColorBrush x:Key="GoldBrush"           Color="{StaticResource Gold}"/>
+    <SolidColorBrush x:Key="GoldLightBrush"      Color="{StaticResource GoldLight}"/>
+    <SolidColorBrush x:Key="GoldDimBrush"        Color="{StaticResource GoldDim}"/>
+    <SolidColorBrush x:Key="TextPrimaryBrush"    Color="{StaticResource TextPrimary}"/>
+    <SolidColorBrush x:Key="TextSecondaryBrush"  Color="{StaticResource TextSecondary}"/>
+    <SolidColorBrush x:Key="TextDisabledBrush"   Color="{StaticResource TextDisabled}"/>
+    <SolidColorBrush x:Key="ErrorBrush"          Color="{StaticResource ErrorRed}"/>
+    <SolidColorBrush x:Key="SuccessBrush"        Color="{StaticResource SuccessGreen}"/>
+    <SolidColorBrush x:Key="WarningBrush"        Color="{StaticResource WarningAmber}"/>
+
+    <!-- Window / panel gradient backgrounds -->
+    <LinearGradientBrush x:Key="WindowBackgroundBrush" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#1A0D2E" Offset="0.0"/>
+        <GradientStop Color="#0D0718" Offset="1.0"/>
+    </LinearGradientBrush>
+
+    <LinearGradientBrush x:Key="ToolbarBackgroundBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#3D2466" Offset="0.0"/>
+        <GradientStop Color="#2D1B4E" Offset="1.0"/>
+    </LinearGradientBrush>
+
+    <LinearGradientBrush x:Key="GoldAccentBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#E8B84B" Offset="0.0"/>
+        <GradientStop Color="#C8942A" Offset="1.0"/>
+    </LinearGradientBrush>
+
+    <!-- =====================================================================
+         CONTROL STYLES
+         ===================================================================== -->
+
+    <!-- Button -->
+    <Style x:Key="LufiaButton" TargetType="Button">
+        <Setter Property="Background"   Value="{StaticResource SurfacePurpleBrush}"/>
+        <Setter Property="Foreground"   Value="{StaticResource GoldLightBrush}"/>
+        <Setter Property="BorderBrush"  Value="{StaticResource GoldDimBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding"      Value="12,6"/>
+        <Setter Property="FontFamily"   Value="Segoe UI Semibold"/>
+        <Setter Property="FontSize"     Value="13"/>
+        <Setter Property="Cursor"       Value="Hand"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="3"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Background" Value="{StaticResource ElevatedPurpleBrush}"/>
+                            <Setter Property="BorderBrush" Value="{StaticResource GoldBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter Property="Background" Value="{StaticResource MidPurpleBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Foreground" Value="{StaticResource TextDisabledBrush}"/>
+                            <Setter Property="BorderBrush" Value="{StaticResource BorderPurpleBrush}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Gold accent button (primary actions) -->
+    <Style x:Key="LufiaButtonGold" TargetType="Button" BasedOn="{StaticResource LufiaButton}">
+        <Setter Property="Background"  Value="{StaticResource GoldDimBrush}"/>
+        <Setter Property="Foreground"  Value="#1A0D2E"/>
+        <Setter Property="BorderBrush" Value="{StaticResource GoldBrush}"/>
+        <Setter Property="FontFamily"  Value="Segoe UI Bold"/>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{StaticResource GoldBrush}"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- TextBox -->
+    <Style x:Key="LufiaTextBox" TargetType="TextBox">
+        <Setter Property="Background"        Value="{StaticResource MidPurpleBrush}"/>
+        <Setter Property="Foreground"        Value="{StaticResource TextPrimaryBrush}"/>
+        <Setter Property="BorderBrush"       Value="{StaticResource BorderPurpleBrush}"/>
+        <Setter Property="BorderThickness"   Value="1"/>
+        <Setter Property="Padding"           Value="6,4"/>
+        <Setter Property="FontFamily"        Value="Consolas"/>
+        <Setter Property="FontSize"          Value="13"/>
+        <Setter Property="CaretBrush"        Value="{StaticResource GoldLightBrush}"/>
+        <Setter Property="SelectionBrush"    Value="{StaticResource GoldDimBrush}"/>
+        <Style.Triggers>
+            <Trigger Property="IsFocused" Value="True">
+                <Setter Property="BorderBrush" Value="{StaticResource GoldBrush}"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- Label -->
+    <Style x:Key="LufiaLabel" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
+        <Setter Property="FontFamily" Value="Segoe UI"/>
+        <Setter Property="FontSize"   Value="12"/>
+    </Style>
+
+    <Style x:Key="LufiaLabelGold" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource GoldLightBrush}"/>
+        <Setter Property="FontFamily" Value="Segoe UI Semibold"/>
+        <Setter Property="FontSize"   Value="13"/>
+    </Style>
+
+    <!-- Tab control -->
+    <Style x:Key="LufiaTabControl" TargetType="TabControl">
+        <Setter Property="Background"       Value="Transparent"/>
+        <Setter Property="BorderBrush"      Value="{StaticResource BorderPurpleBrush}"/>
+        <Setter Property="BorderThickness"  Value="0,1,0,0"/>
+        <Setter Property="Padding"          Value="0"/>
+    </Style>
+
+    <Style x:Key="LufiaTabItem" TargetType="TabItem">
+        <Setter Property="Foreground"        Value="{StaticResource TextSecondaryBrush}"/>
+        <Setter Property="Background"        Value="Transparent"/>
+        <Setter Property="BorderBrush"       Value="Transparent"/>
+        <Setter Property="BorderThickness"   Value="0"/>
+        <Setter Property="Padding"           Value="16,8"/>
+        <Setter Property="FontFamily"        Value="Segoe UI Semibold"/>
+        <Setter Property="FontSize"          Value="13"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TabItem">
+                    <Border x:Name="TabBorder"
+                            Background="Transparent"
+                            BorderThickness="0,0,0,2"
+                            BorderBrush="Transparent"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter x:Name="ContentSite"
+                                          ContentSource="Header"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="TabBorder" Property="BorderBrush"
+                                    Value="{StaticResource GoldBrush}"/>
+                            <Setter Property="Foreground" Value="{StaticResource GoldLightBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ListBox -->
+    <Style x:Key="LufiaListBox" TargetType="ListBox">
+        <Setter Property="Background"      Value="{StaticResource MidPurpleBrush}"/>
+        <Setter Property="Foreground"      Value="{StaticResource TextPrimaryBrush}"/>
+        <Setter Property="BorderBrush"     Value="{StaticResource BorderPurpleBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="FontFamily"      Value="Consolas"/>
+        <Setter Property="FontSize"        Value="12"/>
+    </Style>
+
+    <Style x:Key="LufiaListBoxItem" TargetType="ListBoxItem">
+        <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+        <Setter Property="Padding"    Value="8,4"/>
+        <Style.Triggers>
+            <Trigger Property="IsSelected" Value="True">
+                <Setter Property="Background" Value="{StaticResource SurfacePurpleBrush}"/>
+                <Setter Property="Foreground" Value="{StaticResource GoldLightBrush}"/>
+            </Trigger>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{StaticResource ElevatedPurpleBrush}"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- Separator / divider -->
+    <Style x:Key="LufiaSeparator" TargetType="Separator">
+        <Setter Property="Background" Value="{StaticResource BorderPurpleBrush}"/>
+        <Setter Property="Margin"     Value="8,4"/>
+    </Style>
+
+    <!-- Status bar text -->
+    <Style x:Key="StatusBarText" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
+        <Setter Property="FontFamily" Value="Segoe UI"/>
+        <Setter Property="FontSize"   Value="11"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+
+    <!-- ComboBox -->
+    <Style x:Key="LufiaComboBox" TargetType="ComboBox">
+        <Setter Property="Background"      Value="{StaticResource MidPurpleBrush}"/>
+        <Setter Property="Foreground"      Value="{StaticResource TextPrimaryBrush}"/>
+        <Setter Property="BorderBrush"     Value="{StaticResource BorderPurpleBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding"         Value="6,4"/>
+        <Setter Property="FontFamily"      Value="Segoe UI"/>
+        <Setter Property="FontSize"        Value="12"/>
+    </Style>
+
+    <!-- CheckBox -->
+    <Style x:Key="LufiaCheckBox" TargetType="CheckBox">
+        <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+        <Setter Property="FontFamily" Value="Segoe UI"/>
+        <Setter Property="FontSize"   Value="12"/>
+    </Style>
+
+    <!-- ScrollBar -->
+    <Style TargetType="ScrollBar">
+        <Setter Property="Background" Value="{StaticResource MidPurpleBrush}"/>
+    </Style>
+
+</ResourceDictionary>

@@ -1,0 +1,373 @@
+<UserControl x:Class="LufiaForge.Modules.TextEditor.TextEditorView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:LufiaForge.Modules.TextEditor"
+             Background="{StaticResource MidPurpleBrush}">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/> <!-- Toolbar -->
+            <RowDefinition Height="Auto"/> <!-- Progress bar -->
+            <RowDefinition Height="*"/>    <!-- Content -->
+            <RowDefinition Height="Auto"/> <!-- Status -->
+        </Grid.RowDefinitions>
+
+        <!-- ============================================================
+             TOOLBAR
+             ============================================================ -->
+        <Border Grid.Row="0"
+                Background="{StaticResource DeepPurpleBrush}"
+                Padding="8,6"
+                BorderBrush="{StaticResource BorderPurpleBrush}"
+                BorderThickness="0,0,0,1">
+            <WrapPanel Orientation="Horizontal">
+
+                <Button Content="🔍  Scan Dialogue"
+                        Style="{StaticResource LufiaButtonGold}"
+                        Command="{Binding ScanDialogueCommand}"
+                        IsEnabled="{Binding IsScanning, Converter={StaticResource InverseBoolConverter}}"
+                        Margin="0,0,8,0"/>
+
+                <Separator Style="{StaticResource LufiaSeparator}"/>
+
+                <!-- Search box -->
+                <TextBlock Text="Search:"
+                           Style="{StaticResource LufiaLabel}"
+                           VerticalAlignment="Center"
+                           Margin="8,0,4,0"/>
+                <TextBox Style="{StaticResource LufiaTextBox}"
+                         Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                         Width="200"
+                         Margin="0,0,8,0"/>
+
+                <CheckBox Content="Modified Only"
+                          Style="{StaticResource LufiaCheckBox}"
+                          IsChecked="{Binding ShowModifiedOnly}"
+                          VerticalAlignment="Center"
+                          Margin="0,0,16,0"/>
+
+                <Separator Style="{StaticResource LufiaSeparator}"/>
+
+                <Button Content="📄  Export Script"
+                        Style="{StaticResource LufiaButton}"
+                        Command="{Binding ExportScriptCommand}"
+                        Margin="8,0,8,0"/>
+
+                <Button Content="📖  Export Dictionary"
+                        Style="{StaticResource LufiaButton}"
+                        Command="{Binding ExportDictionaryCommand}"
+                        Margin="0,0,0,0"/>
+
+                <!-- Stats chips -->
+                <Border Background="{StaticResource SurfacePurpleBrush}"
+                        CornerRadius="3" Padding="10,4"
+                        Margin="16,0,0,0">
+                    <TextBlock Style="{StaticResource LufiaLabel}"
+                               Foreground="{StaticResource TextPrimaryBrush}">
+                        <Run Text="Strings: "/>
+                        <Run Text="{Binding TotalCount, Mode=OneWay}" Foreground="{StaticResource GoldLightBrush}"/>
+                        <Run Text="  Modified: "/>
+                        <Run Text="{Binding ModifiedCount, Mode=OneWay}" Foreground="{StaticResource WarningBrush}"/>
+                    </TextBlock>
+                </Border>
+            </WrapPanel>
+        </Border>
+
+        <!-- Scan progress bar -->
+        <ProgressBar Grid.Row="1"
+                     Height="3"
+                     Value="{Binding ScanProgress}"
+                     Maximum="100"
+                     Minimum="0"
+                     Background="{StaticResource DeepPurpleBrush}"
+                     Foreground="{StaticResource GoldBrush}"
+                     Visibility="{Binding IsScanning, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+        <!-- ============================================================
+             MAIN CONTENT - Tabs: Dialogue | Dictionary
+             ============================================================ -->
+        <TabControl Grid.Row="2"
+                    Style="{StaticResource LufiaTabControl}"
+                    SelectedIndex="{Binding SelectedTabIndex}"
+                    Background="{StaticResource MidPurpleBrush}">
+
+            <!-- DIALOGUE TAB -->
+            <TabItem Header="Dialogue Strings" Style="{StaticResource LufiaTabItem}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="380" MinWidth="200"/>
+                        <ColumnDefinition Width="5"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Left: entry list -->
+                    <Grid Grid.Column="0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <Border Grid.Row="0"
+                                Background="{StaticResource DeepPurpleBrush}"
+                                Padding="8,4">
+                            <TextBlock Style="{StaticResource LufiaLabel}"
+                                       Text="{Binding FilteredEntries.Count, StringFormat='Showing {0} entries'}"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                        </Border>
+
+                        <!-- Entry list -->
+                        <ListBox Grid.Row="1"
+                                 Style="{StaticResource LufiaListBox}"
+                                 ItemContainerStyle="{StaticResource LufiaListBoxItem}"
+                                 ItemsSource="{Binding FilteredEntries}"
+                                 SelectedItem="{Binding SelectedEntry}"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,2">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+
+                                        <!-- Header row: index + offset + modified marker -->
+                                        <StackPanel Grid.Row="0" Orientation="Horizontal">
+                                            <TextBlock Text="{Binding Index, StringFormat='#{0:D4}'}"
+                                                       Foreground="{StaticResource GoldDimBrush}"
+                                                       FontFamily="Consolas"
+                                                       FontSize="11"
+                                                       Margin="0,0,8,0"/>
+                                            <TextBlock Text="{Binding OffsetHex}"
+                                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                                       FontFamily="Consolas"
+                                                       FontSize="11"
+                                                       Margin="0,0,8,0"/>
+                                            <TextBlock Text="✏ MODIFIED"
+                                                       Foreground="{StaticResource WarningBrush}"
+                                                       FontSize="10"
+                                                       Visibility="{Binding IsModified, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                        </StackPanel>
+
+                                        <!-- Preview text -->
+                                        <TextBlock Grid.Row="1"
+                                                   Text="{Binding Preview}"
+                                                   Foreground="{StaticResource TextPrimaryBrush}"
+                                                   FontFamily="Segoe UI"
+                                                   FontSize="12"
+                                                   TextWrapping="Wrap"
+                                                   Margin="0,2,0,0"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
+
+                    <!-- Splitter -->
+                    <GridSplitter Grid.Column="1"
+                                  Width="5"
+                                  HorizontalAlignment="Stretch"
+                                  Background="{StaticResource BorderPurpleBrush}"/>
+
+                    <!-- Right: editor pane -->
+                    <Grid Grid.Column="2">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>  <!-- Entry header -->
+                            <RowDefinition Height="*"/>     <!-- Edit boxes side by side -->
+                            <RowDefinition Height="Auto"/>  <!-- Byte count warning -->
+                            <RowDefinition Height="Auto"/>  <!-- Action buttons -->
+                            <RowDefinition Height="140"/>   <!-- Hex token view -->
+                        </Grid.RowDefinitions>
+
+                        <!-- Entry info header -->
+                        <Border Grid.Row="0"
+                                Background="{StaticResource DeepPurpleBrush}"
+                                Padding="12,8">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource LufiaLabelGold}"
+                                           FontSize="14"
+                                           Text="{Binding SelectedEntry.OffsetHex, FallbackValue='No entry selected', StringFormat='Offset: {0}'}"/>
+                                <TextBlock Style="{StaticResource LufiaLabel}" Margin="0,2,0,0">
+                                    <Run Text="SNES: "/>
+                                    <Run Text="{Binding SelectedEntry.SnesAddress, Mode=OneWay, FallbackValue='---'}"/>
+                                    <Run Text="   Size: "/>
+                                    <Run Text="{Binding SelectedEntry.RawByteLength, Mode=OneWay, FallbackValue='---'}"/>
+                                    <Run Text=" bytes max"/>
+                                </TextBlock>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Original | Edit side by side -->
+                        <Grid Grid.Row="1" Margin="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="8"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Grid Grid.Column="0">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+                                <TextBlock Grid.Row="0"
+                                           Text="ORIGINAL"
+                                           Style="{StaticResource LufiaLabel}"
+                                           FontSize="10"
+                                           Margin="0,0,0,4"/>
+                                <TextBox Grid.Row="1"
+                                         Style="{StaticResource LufiaTextBox}"
+                                         Text="{Binding SelectedEntry.DecodedText, FallbackValue=''}"
+                                         IsReadOnly="True"
+                                         TextWrapping="Wrap"
+                                         AcceptsReturn="True"
+                                         VerticalScrollBarVisibility="Auto"
+                                         FontFamily="Consolas"
+                                         FontSize="13"
+                                         Background="{StaticResource DeepPurpleBrush}"/>
+                            </Grid>
+
+                            <Grid Grid.Column="2">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+                                <TextBlock Grid.Row="0"
+                                           Text="EDIT HERE"
+                                           Style="{StaticResource LufiaLabel}"
+                                           Foreground="{StaticResource GoldLightBrush}"
+                                           FontSize="10"
+                                           Margin="0,0,0,4"/>
+                                <TextBox Grid.Row="1"
+                                         Style="{StaticResource LufiaTextBox}"
+                                         Text="{Binding EditBuffer, UpdateSourceTrigger=PropertyChanged}"
+                                         TextWrapping="Wrap"
+                                         AcceptsReturn="True"
+                                         VerticalScrollBarVisibility="Auto"
+                                         FontFamily="Consolas"
+                                         FontSize="13"
+                                         IsEnabled="{Binding HasEntries}"
+                                         x:Name="EditTextBox"/>
+                            </Grid>
+                        </Grid>
+
+                        <!-- Byte count info -->
+                        <Border Grid.Row="2"
+                                Background="{StaticResource DeepPurpleBrush}"
+                                Padding="12,4"
+                                Margin="8,0">
+                            <TextBlock Style="{StaticResource LufiaLabel}" FontSize="11">
+                                <Run Text="Control tags: "/>
+                                <Run Foreground="{StaticResource GoldLightBrush}" Text="[NL] = newline  |  [PAGE] = press A  |  [Hero] [Lufia] [Aguro] [Jerin] = character names"/>
+                            </TextBlock>
+                        </Border>
+
+                        <!-- Action buttons -->
+                        <StackPanel Grid.Row="3"
+                                    Orientation="Horizontal"
+                                    Margin="8,8,8,4"
+                                    HorizontalAlignment="Right">
+                            <Button Content="↩  Revert"
+                                    Style="{StaticResource LufiaButton}"
+                                    Command="{Binding RevertEntryCommand}"
+                                    Margin="0,0,8,0"/>
+                            <Button Content="✔  Commit to ROM"
+                                    Style="{StaticResource LufiaButtonGold}"
+                                    Command="{Binding CommitEditCommand}"/>
+                        </StackPanel>
+
+                        <!-- Token hex view (shows raw bytes decoded) -->
+                        <Border Grid.Row="4"
+                                Background="{StaticResource DeepPurpleBrush}"
+                                BorderBrush="{StaticResource BorderPurpleBrush}"
+                                BorderThickness="0,1,0,0"
+                                Margin="8,0,8,8">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+                                <TextBlock Grid.Row="0"
+                                           Text="RAW BYTES (decoded view)"
+                                           Style="{StaticResource LufiaLabel}"
+                                           FontSize="10"
+                                           Margin="8,6,0,4"/>
+                                <TextBox Grid.Row="1"
+                                         x:Name="HexView"
+                                         Style="{StaticResource LufiaTextBox}"
+                                         IsReadOnly="True"
+                                         FontFamily="Consolas"
+                                         FontSize="11"
+                                         TextWrapping="Wrap"
+                                         VerticalScrollBarVisibility="Auto"
+                                         Background="Transparent"
+                                         BorderThickness="0"
+                                         Margin="8,0,8,8"/>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </Grid>
+            </TabItem>
+
+            <!-- DICTIONARY TAB -->
+            <TabItem Header="Word Dictionary" Style="{StaticResource LufiaTabItem}">
+                <Grid Margin="8">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <Border Grid.Row="0"
+                            Background="{StaticResource DeepPurpleBrush}"
+                            Padding="12,8"
+                            Margin="0,0,0,8">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource LufiaLabelGold}" FontSize="14"
+                                       Text="Lufia 1 Word Dictionary"/>
+                            <TextBlock Style="{StaticResource LufiaLabel}" Margin="0,4,0,0"
+                                       Text="{Binding DictionaryWords.Count, StringFormat='File offsets 0x054E19-0x0553CC  |  {0} words found'}"/>
+                            <TextBlock Style="{StaticResource LufiaLabel}" Margin="0,4,0,0"
+                                       TextWrapping="Wrap"
+                                       Text="These words are referenced by 0x0C pointer codes in dialogue. They cannot currently be edited without rebuilding the pointer table (planned for a future update)."/>
+                            <Button Content="📄  Export Dictionary"
+                                    Style="{StaticResource LufiaButton}"
+                                    Command="{Binding ExportDictionaryCommand}"
+                                    HorizontalAlignment="Left"
+                                    Margin="0,8,0,0"/>
+                        </StackPanel>
+                    </Border>
+
+                    <ListView Grid.Row="1"
+                              ItemsSource="{Binding DictionaryWords}"
+                              Background="{StaticResource MidPurpleBrush}"
+                              Foreground="{StaticResource TextPrimaryBrush}"
+                              BorderBrush="{StaticResource BorderPurpleBrush}"
+                              BorderThickness="1"
+                              FontFamily="Consolas"
+                              FontSize="12">
+                        <ListView.View>
+                            <GridView>
+                                <GridViewColumn Header="File Offset" Width="110"
+                                                DisplayMemberBinding="{Binding Offset, StringFormat='0x{0:X6}'}"/>
+                                <GridViewColumn Header="Ptr Value" Width="90"
+                                                DisplayMemberBinding="{Binding Offset, StringFormat={}{0}}"/>
+                                <GridViewColumn Header="Word" Width="300"
+                                                DisplayMemberBinding="{Binding Word}"/>
+                            </GridView>
+                        </ListView.View>
+                    </ListView>
+                </Grid>
+            </TabItem>
+
+        </TabControl>
+
+        <!-- Status bar -->
+        <Border Grid.Row="3"
+                Background="{StaticResource DeepPurpleBrush}"
+                BorderBrush="{StaticResource BorderPurpleBrush}"
+                BorderThickness="0,1,0,0"
+                Padding="12,4">
+            <TextBlock Style="{StaticResource StatusBarText}"
+                       Text="{Binding StatusText}"/>
+        </Border>
+    </Grid>
+</UserControl>

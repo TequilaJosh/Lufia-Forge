@@ -1,0 +1,151 @@
+<UserControl x:Class="LufiaForge.Modules.TileViewer.TileViewerView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid Background="{StaticResource MidPurpleBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- TOOLBAR -->
+        <Border Grid.Row="0"
+                Background="{StaticResource SurfacePurpleBrush}"
+                BorderBrush="{StaticResource BorderPurpleBrush}"
+                BorderThickness="0,0,0,1"
+                Padding="10,7">
+            <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+
+                <!-- ROM Offset -->
+                <TextBlock Text="Offset:"
+                           Style="{StaticResource LufiaLabel}"
+                           VerticalAlignment="Center"
+                           Margin="0,0,4,0"/>
+                <TextBox Text="{Binding OffsetText, UpdateSourceTrigger=PropertyChanged}"
+                         Style="{StaticResource LufiaTextBox}"
+                         Width="88"
+                         ToolTip="ROM file offset in hex (e.g. 0x050000)"
+                         Margin="0,0,14,0"/>
+
+                <!-- Bit Depth -->
+                <TextBlock Text="Bit Depth:"
+                           Style="{StaticResource LufiaLabel}"
+                           VerticalAlignment="Center"
+                           Margin="0,0,4,0"/>
+                <ComboBox ItemsSource="{Binding BitDepthOptions}"
+                          SelectedIndex="{Binding SelectedBitDepthIndex}"
+                          Style="{StaticResource LufiaComboBox}"
+                          Width="136"
+                          Margin="0,0,14,0"/>
+
+                <!-- Palette from ROM checkbox + offset -->
+                <CheckBox Content="ROM Palette"
+                          IsChecked="{Binding UseRomPalette}"
+                          Style="{StaticResource LufiaCheckBox}"
+                          VerticalAlignment="Center"
+                          ToolTip="Read palette colors from the ROM at the given offset (BGR555)"
+                          Margin="0,0,5,0"/>
+                <TextBox Text="{Binding PaletteOffsetText, UpdateSourceTrigger=PropertyChanged}"
+                         Style="{StaticResource LufiaTextBox}"
+                         IsEnabled="{Binding UseRomPalette}"
+                         Width="88"
+                         ToolTip="Palette data offset in hex"
+                         Margin="0,0,14,0"/>
+
+                <!-- Tiles per row -->
+                <TextBlock Text="Tiles/Row:"
+                           Style="{StaticResource LufiaLabel}"
+                           VerticalAlignment="Center"
+                           Margin="0,0,4,0"/>
+                <TextBox Text="{Binding TilesPerRow, UpdateSourceTrigger=PropertyChanged}"
+                         Style="{StaticResource LufiaTextBox}"
+                         Width="46"
+                         Margin="0,0,14,0"/>
+
+                <!-- Tile count -->
+                <TextBlock Text="Count:"
+                           Style="{StaticResource LufiaLabel}"
+                           VerticalAlignment="Center"
+                           Margin="0,0,4,0"/>
+                <TextBox Text="{Binding TileCount, UpdateSourceTrigger=PropertyChanged}"
+                         Style="{StaticResource LufiaTextBox}"
+                         Width="56"
+                         Margin="0,0,14,0"/>
+
+                <!-- Zoom -->
+                <TextBlock Text="Zoom:"
+                           Style="{StaticResource LufiaLabel}"
+                           VerticalAlignment="Center"
+                           Margin="0,0,4,0"/>
+                <ComboBox ItemsSource="{Binding ZoomOptions}"
+                          SelectedItem="{Binding ZoomLevel}"
+                          Style="{StaticResource LufiaComboBox}"
+                          Width="58"
+                          Margin="0,0,16,0"/>
+
+                <!-- Render button -->
+                <Button Content="▶  Render"
+                        Style="{StaticResource LufiaButtonGold}"
+                        Command="{Binding RenderCommand}"
+                        Padding="14,6"/>
+
+            </WrapPanel>
+        </Border>
+
+        <!-- TILE CANVAS -->
+        <ScrollViewer Grid.Row="1"
+                      HorizontalScrollBarVisibility="Auto"
+                      VerticalScrollBarVisibility="Auto"
+                      Background="{StaticResource DeepPurpleBrush}">
+            <Grid>
+
+                <!-- Placeholder when nothing has been rendered yet -->
+                <StackPanel HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Margin="40"
+                            Visibility="{Binding HasImage,
+                                         Converter={StaticResource InverseBoolToVisibilityConverter}}">
+                    <TextBlock Text="🎨"
+                               FontSize="48"
+                               HorizontalAlignment="Center"
+                               Margin="0,0,0,12"/>
+                    <TextBlock Text="Tile Viewer"
+                               Style="{StaticResource LufiaLabelGold}"
+                               FontSize="18"
+                               HorizontalAlignment="Center"
+                               Margin="0,0,0,6"/>
+                    <TextBlock Text="Set a ROM offset, choose bit depth, then click Render."
+                               Style="{StaticResource LufiaLabel}"
+                               HorizontalAlignment="Center"/>
+                    <TextBlock Text="Tip: most Lufia 1 sprite tiles start around 0x030000 (4bpp)."
+                               Style="{StaticResource LufiaLabel}"
+                               HorizontalAlignment="Center"
+                               Margin="0,4,0,0"/>
+                </StackPanel>
+
+                <!-- Rendered tile grid image -->
+                <Image Source="{Binding RenderedImage}"
+                       RenderOptions.BitmapScalingMode="NearestNeighbor"
+                       Stretch="None"
+                       HorizontalAlignment="Left"
+                       VerticalAlignment="Top"
+                       Margin="8"
+                       Visibility="{Binding HasImage,
+                                    Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+            </Grid>
+        </ScrollViewer>
+
+        <!-- STATUS BAR -->
+        <Border Grid.Row="2"
+                Background="{StaticResource DeepPurpleBrush}"
+                BorderBrush="{StaticResource BorderPurpleBrush}"
+                BorderThickness="0,1,0,0"
+                Padding="10,5">
+            <TextBlock Text="{Binding StatusText, Mode=OneWay}"
+                       Style="{StaticResource StatusBarText}"/>
+        </Border>
+
+    </Grid>
+</UserControl>

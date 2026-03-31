@@ -1,0 +1,42 @@
+# Build outputs
+bin/
+obj/
+out/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.rsuser
+
+# Rider
+.idea/
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# .NET
+*.dll
+*.exe
+*.pdb
+*.cache
+
+# Publish profiles
+**/Properties/PublishProfiles/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ROM files (don't commit copyrighted game data)
+*.smc
+*.sfc
+*.ips
