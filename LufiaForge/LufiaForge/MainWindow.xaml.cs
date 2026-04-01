@@ -1,4 +1,5 @@
 using LufiaForge.Core;
+using LufiaForge.Modules.Emulator;
 using LufiaForge.Modules.PatchManager;
 using LufiaForge.Modules.TextEditor;
 using LufiaForge.Modules.TileViewer;
@@ -32,6 +33,10 @@ public partial class MainWindow : Window
         var vm  = (MainViewModel)DataContext;
         var rom = vm.RomBuffer;
         if (rom == null) return;
+
+        // Emulator — pass ROM file path so it can auto-load on launch
+        if (EmulatorView.DataContext is EmulatorHostViewModel emVm)
+            emVm.SetRomPath(rom.FilePath ?? "");
 
         // Text Editor
         if (TextEditorView.DataContext is TextEditorViewModel textVm)
