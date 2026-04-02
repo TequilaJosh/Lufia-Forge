@@ -44,7 +44,7 @@ LufiaForge/
     ├── Themes/             # LufiaTheme.xaml (purple/gold)
     ├── ViewModels/         # MainViewModel
     ├── Modules/
-    │   ├── TextEditor/     # ✅ Phase 2
+    │   ├── TextEditor/     # 🔄 Phase 2
     │   ├── Emulator/       # Phase 3
     │   ├── Disassembler/   # Phase 4
     │   ├── TileViewer/     # Phase 5
@@ -63,3 +63,7 @@ LufiaForge/
 - 🔲 Not started
 - 🔄 In progress
 - ⚠️ Blocked / needs research
+
+
+<img width="1254" height="791" alt="Screenshot 2026-03-30 202722" src="https://github.com/user-attachments/assets/a6dbbdbc-8975-438f-ab30-795a64e8416b" />
+
