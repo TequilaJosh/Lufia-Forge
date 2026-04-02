@@ -55,6 +55,12 @@ public sealed class MemoryPoller : IDisposable
         _cts = null;
     }
 
+    /// <summary>
+    /// Updates the RAM base address while the poller is running (used when
+    /// FindRamBase succeeds after the initial attach attempt).
+    /// </summary>
+    public void UpdateRamBase(long ramBase) => Interlocked.Exchange(ref _ramBase, ramBase);
+
     public void Detach()
     {
         Stop();

@@ -16,10 +16,11 @@ public class AppSettings
     // -------------------------------------------------------------------------
     // Properties
     // -------------------------------------------------------------------------
-    public string Snes9xPath      { get; set; } = "";
-    public string LastRomPath     { get; set; } = "";
-    public int    MemoryPollRateMs{ get; set; } = 33;   // ~30 fps
-    public bool   AutoLoadRom     { get; set; } = false;
+    public string            Snes9xPath      { get; set; } = "";
+    public string            LastRomPath     { get; set; } = "";
+    public int               MemoryPollRateMs{ get; set; } = 33;   // ~30 fps
+    public bool              AutoLoadRom     { get; set; } = false;
+    public ControllerMapping Controller      { get; set; } = new();
 
     // -------------------------------------------------------------------------
     // Singleton load / save

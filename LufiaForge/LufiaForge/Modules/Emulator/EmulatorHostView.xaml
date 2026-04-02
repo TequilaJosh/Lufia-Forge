@@ -2,8 +2,7 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:em="clr-namespace:LufiaForge.Modules.Emulator"
-             Background="{StaticResource WindowBackgroundBrush}"
-             KeyDown="UserControl_KeyDown">
+             Background="{StaticResource WindowBackgroundBrush}">
 
     <Grid>
         <Grid.ColumnDefinitions>
@@ -18,6 +17,7 @@
         <Grid Grid.Column="0">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>   <!-- toolbar -->
+                <RowDefinition Height="Auto"/>   <!-- key bindings panel (collapsible) -->
                 <RowDefinition Height="Auto"/>   <!-- config row -->
                 <RowDefinition Height="*"/>      <!-- game window -->
                 <RowDefinition Height="Auto"/>   <!-- status -->
@@ -58,13 +58,109 @@
                             Style="{StaticResource LufiaButton}"
                             Command="{Binding ForwardF7Command}"
                             IsEnabled="{Binding IsRunning}"
+                            Margin="0,0,8,0"/>
+
+                    <Separator Style="{StaticResource LufiaSeparator}" Margin="0,0,8,0"/>
+
+                    <Button Content="🎮  Key Bindings"
+                            Style="{StaticResource LufiaButton}"
+                            Command="{Binding ToggleKeyBindingsCommand}"
                             Margin="0,0,0,0"/>
 
                 </WrapPanel>
             </Border>
 
-            <!-- Config row (shown when not running) -->
+            <!-- Key bindings panel (collapsible) -->
             <Border Grid.Row="1"
+                    Background="{StaticResource DeepPurpleBrush}"
+                    BorderBrush="{StaticResource BorderPurpleBrush}"
+                    BorderThickness="0,0,0,1"
+                    Padding="8,6"
+                    Visibility="{Binding ShowKeyBindings,
+                        Converter={StaticResource BoolToVisibilityConverter}}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Header row with Reset button -->
+                    <Grid Grid.Row="0" Margin="0,0,0,6">
+                        <TextBlock Text="Controller Key Bindings"
+                                   Style="{StaticResource LufiaLabel}"
+                                   FontWeight="Bold"
+                                   VerticalAlignment="Center"/>
+                        <Button Content="Reset to Defaults"
+                                Style="{StaticResource LufiaButton}"
+                                Command="{Binding ResetBindingsCommand}"
+                                HorizontalAlignment="Right"/>
+                    </Grid>
+
+                    <!-- Binding grid: 2 columns × 6 rows = 12 buttons -->
+                    <ItemsControl Grid.Row="1"
+                                  ItemsSource="{Binding KeyBindings}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Columns="2" HorizontalAlignment="Stretch"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type em:KeyBindingRow}">
+                                <Grid Margin="2,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="80"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock Grid.Column="0"
+                                               Text="{Binding Label}"
+                                               Style="{StaticResource LufiaLabel}"
+                                               VerticalAlignment="Center"/>
+
+                                    <!-- Key name / capturing indicator -->
+                                    <Border Grid.Column="1"
+                                            Background="{StaticResource MidPurpleBrush}"
+                                            BorderBrush="{StaticResource BorderPurpleBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="3"
+                                            Padding="6,2"
+                                            Margin="0,0,4,0">
+                                        <TextBlock VerticalAlignment="Center"
+                                                   FontFamily="Cascadia Code, Consolas, monospace"
+                                                   FontSize="11">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Text"    Value="{Binding KeyName}"/>
+                                                    <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsCapturing}" Value="True">
+                                                            <Setter Property="Text"       Value="Press a key…"/>
+                                                            <Setter Property="Foreground" Value="{StaticResource GoldBrush}"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </Border>
+
+                                    <Button Grid.Column="2"
+                                            Content="Bind"
+                                            Style="{StaticResource LufiaButton}"
+                                            FontSize="10"
+                                            Padding="5,2"
+                                            Command="{Binding DataContext.StartCaptureCommand,
+                                                RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            CommandParameter="{Binding}"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Grid>
+            </Border>
+
+            <!-- Config row (shown when not running) -->
+            <Border Grid.Row="2"
                     Background="{StaticResource MidPurpleBrush}"
                     BorderBrush="{StaticResource BorderPurpleBrush}"
                     BorderThickness="0,0,0,1"
@@ -103,7 +199,7 @@
             </Border>
 
             <!-- Game window host -->
-            <Border Grid.Row="2"
+            <Border Grid.Row="3"
                     Background="Black"
                     x:Name="EmulatorBorder"
                     SizeChanged="EmulatorBorder_SizeChanged">
@@ -135,7 +231,7 @@
             </Border>
 
             <!-- Status bar -->
-            <Border Grid.Row="3"
+            <Border Grid.Row="4"
                     Background="{StaticResource DeepPurpleBrush}"
                     Padding="8,4">
                 <Grid>
@@ -177,7 +273,7 @@
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="5"/>
-                <RowDefinition Height="200"/>
+                <RowDefinition Height="300" MinHeight="220"/>
             </Grid.RowDefinitions>
 
             <!-- Memory viewer header -->
@@ -245,18 +341,132 @@
                           HorizontalAlignment="Stretch"
                           Background="{StaticResource BorderPurpleBrush}"/>
 
-            <!-- Watchlist panel -->
-            <Grid Grid.Row="3">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
+            <!-- Search + Watchlist tab panel -->
+            <TabControl Grid.Row="3"
+                        Background="{StaticResource DeepPurpleBrush}"
+                        BorderBrush="{StaticResource BorderPurpleBrush}"
+                        BorderThickness="0,1,0,0">
 
-                <!-- Watchlist toolbar -->
-                <Border Grid.Row="0"
-                        Background="{StaticResource ToolbarBackgroundBrush}"
-                        Padding="6,4">
+                <!-- ═══════════════════════════════════════════════
+                     TAB 1 — Memory Search
+                     ═══════════════════════════════════════════════ -->
+                <TabItem Header="🔍 Search">
+                    <Grid Background="{StaticResource DeepPurpleBrush}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>  <!-- search controls -->
+                            <RowDefinition Height="Auto"/>  <!-- status line -->
+                            <RowDefinition Height="*"/>     <!-- results list -->
+                            <RowDefinition Height="Auto"/>  <!-- action buttons -->
+                        </Grid.RowDefinitions>
+
+                        <!-- Search controls -->
+                        <Border Grid.Row="0"
+                                Background="{StaticResource ToolbarBackgroundBrush}"
+                                Padding="6,5">
+                            <WrapPanel Orientation="Horizontal">
+                                <TextBox Style="{StaticResource LufiaTextBox}"
+                                         Text="{Binding SearchValue, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="Value to search (decimal or $hex). Not needed for Changed/Increased/etc."
+                                         Width="70"
+                                         FontFamily="Cascadia Code, Consolas, monospace"
+                                         Padding="3,2"
+                                         Margin="0,0,4,0"/>
+
+                                <ComboBox Style="{StaticResource LufiaComboBox}"
+                                          ItemsSource="{x:Static em:WatchTypeValues.All}"
+                                          SelectedItem="{Binding SearchType}"
+                                          Width="48"
+                                          Padding="3,2"
+                                          Margin="0,0,4,0"/>
+
+                                <ComboBox Style="{StaticResource LufiaComboBox}"
+                                          ItemsSource="{x:Static em:SearchComparisonValues.All}"
+                                          SelectedItem="{Binding SearchComparison}"
+                                          Width="88"
+                                          Padding="3,2"
+                                          Margin="0,0,6,0"/>
+
+                                <Button Content="First Scan"
+                                        Style="{StaticResource LufiaButton}"
+                                        Command="{Binding FirstScanCommand}"
+                                        Margin="0,0,3,0"/>
+
+                                <Button Content="Next Scan"
+                                        Style="{StaticResource LufiaButton}"
+                                        Command="{Binding NextScanCommand}"
+                                        Margin="0,0,3,0"/>
+
+                                <Button Content="Reset"
+                                        Style="{StaticResource LufiaButton}"
+                                        Command="{Binding ResetSearchCommand}"/>
+                            </WrapPanel>
+                        </Border>
+
+                        <!-- Status line -->
+                        <Border Grid.Row="1"
+                                Background="{StaticResource MidPurpleBrush}"
+                                Padding="6,3">
+                            <TextBlock Text="{Binding SearchStatus}"
+                                       Style="{StaticResource LufiaLabel}"
+                                       FontSize="11"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                        </Border>
+
+                        <!-- Results list -->
+                        <ListView Grid.Row="2"
+                                  ItemsSource="{Binding SearchResults}"
+                                  SelectedItem="{Binding SelectedSearchResult}"
+                                  Background="{StaticResource DeepPurpleBrush}"
+                                  Foreground="{StaticResource TextPrimaryBrush}"
+                                  BorderThickness="0"
+                                  FontFamily="Cascadia Code, Consolas, monospace"
+                                  FontSize="11">
+                            <ListView.View>
+                                <GridView>
+                                    <GridViewColumn Header="Address"  Width="72"
+                                                    DisplayMemberBinding="{Binding AddressHex}"/>
+                                    <GridViewColumn Header="Current"  Width="62"
+                                                    DisplayMemberBinding="{Binding CurrentValue}"/>
+                                    <GridViewColumn Header="Previous" Width="62"
+                                                    DisplayMemberBinding="{Binding PreviousValue}"/>
+                                </GridView>
+                            </ListView.View>
+                        </ListView>
+
+                        <!-- Action buttons -->
+                        <Border Grid.Row="3"
+                                Background="{StaticResource ToolbarBackgroundBrush}"
+                                Padding="4,3">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <TextBlock Style="{StaticResource LufiaLabel}"
+                                           FontSize="10"
+                                           Foreground="{StaticResource TextDisabledBrush}"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,8,0"
+                                           Text="Select a result then:"/>
+                                <Button Content="Add to Watchlist"
+                                        Style="{StaticResource LufiaButton}"
+                                        Command="{Binding AddSearchResultToWatchlistCommand}"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </TabItem>
+
+                <!-- ═══════════════════════════════════════════════
+                     TAB 2 — Watchlist
+                     ═══════════════════════════════════════════════ -->
+                <TabItem Header="👁 Watchlist">
+                    <Grid Background="{StaticResource DeepPurpleBrush}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Watchlist toolbar -->
+                        <Border Grid.Row="0"
+                                Background="{StaticResource ToolbarBackgroundBrush}"
+                                Padding="6,4">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="80"/>
@@ -299,41 +509,45 @@
                     </Grid>
                 </Border>
 
-                <!-- Watchlist grid -->
-                <ListView Grid.Row="1"
-                          ItemsSource="{Binding Watchlist}"
-                          SelectedItem="{Binding SelectedWatch}"
-                          Background="{StaticResource DeepPurpleBrush}"
-                          Foreground="{StaticResource TextPrimaryBrush}"
-                          BorderThickness="0"
-                          FontFamily="Cascadia Code, Consolas, monospace"
-                          FontSize="11">
-                    <ListView.View>
-                        <GridView>
-                            <GridViewColumn Header="Address" Width="70"
-                                            DisplayMemberBinding="{Binding AddressHex}"/>
-                            <GridViewColumn Header="Label"   Width="80"
-                                            DisplayMemberBinding="{Binding Label}"/>
-                            <GridViewColumn Header="Type"    Width="40"
-                                            DisplayMemberBinding="{Binding Type}"/>
-                            <GridViewColumn Header="Current" Width="55"
-                                            DisplayMemberBinding="{Binding CurrentValue}"/>
-                            <GridViewColumn Header="Prev"    Width="45"
-                                            DisplayMemberBinding="{Binding PreviousValue}"/>
-                            <GridViewColumn Header="Delta"   Width="45"
-                                            DisplayMemberBinding="{Binding Delta}"/>
-                        </GridView>
-                    </ListView.View>
-                </ListView>
+                        <!-- Watchlist grid -->
+                        <ListView Grid.Row="1"
+                                  ItemsSource="{Binding Watchlist}"
+                                  SelectedItem="{Binding SelectedWatch}"
+                                  Background="{StaticResource DeepPurpleBrush}"
+                                  Foreground="{StaticResource TextPrimaryBrush}"
+                                  BorderThickness="0"
+                                  FontFamily="Cascadia Code, Consolas, monospace"
+                                  FontSize="11">
+                            <ListView.View>
+                                <GridView>
+                                    <GridViewColumn Header="Address" Width="70"
+                                                    DisplayMemberBinding="{Binding AddressHex}"/>
+                                    <GridViewColumn Header="Label"   Width="80"
+                                                    DisplayMemberBinding="{Binding Label}"/>
+                                    <GridViewColumn Header="Type"    Width="40"
+                                                    DisplayMemberBinding="{Binding Type}"/>
+                                    <GridViewColumn Header="Current" Width="55"
+                                                    DisplayMemberBinding="{Binding CurrentValue}"/>
+                                    <GridViewColumn Header="Prev"    Width="45"
+                                                    DisplayMemberBinding="{Binding PreviousValue}"/>
+                                    <GridViewColumn Header="Delta"   Width="45"
+                                                    DisplayMemberBinding="{Binding Delta}"/>
+                                </GridView>
+                            </ListView.View>
+                        </ListView>
 
-                <!-- Remove button -->
-                <Button Grid.Row="2"
-                        Content="Remove Selected"
-                        Style="{StaticResource LufiaButton}"
-                        Command="{Binding RemoveWatchCommand}"
-                        HorizontalAlignment="Right"
-                        Margin="4"/>
-            </Grid>
+                        <!-- Remove button -->
+                        <Button Grid.Row="2"
+                                Content="Remove Selected"
+                                Style="{StaticResource LufiaButton}"
+                                Command="{Binding RemoveWatchCommand}"
+                                HorizontalAlignment="Right"
+                                Margin="4"/>
+                    </Grid>
+                </TabItem>
+
+            </TabControl>
+
         </Grid>
     </Grid>
 </UserControl>

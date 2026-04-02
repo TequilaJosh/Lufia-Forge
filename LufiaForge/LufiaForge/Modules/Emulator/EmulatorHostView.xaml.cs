@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 
 namespace LufiaForge.Modules.Emulator;
@@ -8,6 +9,9 @@ public partial class EmulatorHostView : UserControl
 {
     private EmulatorHost?          _host;
     private EmulatorHostViewModel? _vm;
+
+    // Keep a reference to the parent Window so we can unhook on unload.
+    private Window? _parentWindow;
 
     public EmulatorHostView()
     {
@@ -34,10 +38,27 @@ public partial class EmulatorHostView : UserControl
             Dispatcher.InvokeAsync(() => { if (_vm != null) _vm.StatusText = msg; });
 
         EmulatorHostContainer.Children.Add(_host);
+
+        // Hook the parent Window's preview key events so we can forward controller
+        // inputs to Snes9x even while WPF controls have focus.
+        _parentWindow = Window.GetWindow(this);
+        if (_parentWindow != null)
+        {
+            _parentWindow.PreviewKeyDown += OnWindowPreviewKeyDown;
+            _parentWindow.PreviewKeyUp   += OnWindowPreviewKeyUp;
+        }
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
+        // Unhook window-level key events
+        if (_parentWindow != null)
+        {
+            _parentWindow.PreviewKeyDown -= OnWindowPreviewKeyDown;
+            _parentWindow.PreviewKeyUp   -= OnWindowPreviewKeyUp;
+            _parentWindow = null;
+        }
+
         _host?.Shutdown();
         _vm?.Dispose();
     }
@@ -47,15 +68,46 @@ public partial class EmulatorHostView : UserControl
         _host?.FitToHost();
     }
 
-    // Forward F5/F6/F7 from WPF keyboard to Snes9x
-    private void UserControl_KeyDown(object sender, KeyEventArgs e)
+    // -------------------------------------------------------------------------
+    // Window-level key forwarding
+    // -------------------------------------------------------------------------
+
+    private void OnWindowPreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (_host == null) return;
-        switch (e.Key)
-        {
-            case Key.F5: _host.ForwardKey(Key.F5, true); e.Handled = true; break;
-            case Key.F6: _host.ForwardKey(Key.F6, true); e.Handled = true; break;
-            case Key.F7: _host.ForwardKey(Key.F7, true); e.Handled = true; break;
-        }
+        if (_vm == null) return;
+
+        // Always try to forward mapped keys to Snes9x — the game must receive
+        // input regardless of which WPF element currently has logical focus.
+        bool forwarded = _vm.HandleWindowKey(e.Key, isDown: true);
+
+        // Only swallow the event when NO interactive WPF control has focus.
+        // If a TextBox/ListView/etc. is focused we let the event pass through
+        // so normal typing and list navigation still work; Snes9x gets the key
+        // via PostMessage either way.
+        if (forwarded && !IsInteractiveFocus())
+            e.Handled = true;
+    }
+
+    private void OnWindowPreviewKeyUp(object sender, KeyEventArgs e)
+    {
+        if (_vm == null) return;
+        bool forwarded = _vm.HandleWindowKey(e.Key, isDown: false);
+        if (forwarded && !IsInteractiveFocus())
+            e.Handled = true;
+    }
+
+    /// <summary>
+    /// Returns true when a WPF control that uses keyboard input for its own
+    /// purposes (typing, list navigation) currently holds keyboard focus.
+    /// In that case we forward to Snes9x but do NOT mark the event handled,
+    /// so the control also receives the key.
+    /// </summary>
+    private static bool IsInteractiveFocus()
+    {
+        return Keyboard.FocusedElement is TextBoxBase    // TextBox, PasswordBox, RichTextBox
+                                       or ComboBox
+                                       or ListView
+                                       or ListBox
+                                       or TreeView;
     }
 }
