@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Linq;
 using System.Text;
+using System.Windows.Forms;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -13,13 +14,18 @@ namespace LufiaForge.Modules.MemoryMonitor;
 public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
 {
     private readonly BizHawkBridge _bridge = new();
+    private readonly BizHawkHost   _host   = new();
     private readonly DispatcherTimer _timer;
+
+    // Default BizHawk path - configurable later
+    private const string DefaultEmuHawkPath = @"D:\BizHawk\EmuHawk.exe";
 
     // -------------------------------------------------------------------------
     // Observable properties
     // -------------------------------------------------------------------------
     [ObservableProperty] private bool   _isConnected;
-    [ObservableProperty] private string _connectionStatus = "Disconnected - start BizHawk with the Lufia Forge Monitor tool.";
+    [ObservableProperty] private bool   _isBizHawkRunning;
+    [ObservableProperty] private string _connectionStatus = "Click Launch to start BizHawk.";
     [ObservableProperty] private string _hexText = "  Waiting for BizHawk connection...";
     [ObservableProperty] private int    _hexOffset;
     [ObservableProperty] private string _frameInfo = "";
@@ -30,33 +36,49 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string _watchLabelText = "";
     [ObservableProperty] private int    _watchTypeIndex;
 
-    public ObservableCollection<WatchItem>   Watches       { get; } = new();
+    public ObservableCollection<WatchItem>        Watches       { get; } = new();
     public ObservableCollection<SearchResultItem> SearchResults { get; } = new();
 
     public string[] SizeOptions => ["U8", "U16", "U32", "S8", "S16"];
 
-    private const int HexRows = 32;
-    private const int HexCols = 16;
+    private const int HexRows  = 32;
+    private const int HexCols  = 16;
     private const int WramSize = BizHawkBridge.WramSize;
 
     // Search state
     private List<int>? _searchCandidates;
+
+    /// <summary>
+    /// Exposes the WinForms Panel hosting BizHawk's reparented window.
+    /// The View binds this into a WindowsFormsHost.
+    /// </summary>
+    public Panel HostPanel { get; }
 
     // -------------------------------------------------------------------------
     // Init
     // -------------------------------------------------------------------------
     public MemoryMonitorViewModel()
     {
+        HostPanel = _host.CreateHostPanel();
+
         // Seed default watches for Lufia 1
-        Watches.Add(new WatchItem(0x7E0B9E, "Hero HP",      WatchSize.U16));
-        Watches.Add(new WatchItem(0x7E0BA0, "Hero Max HP",   WatchSize.U16));
-        Watches.Add(new WatchItem(0x7E0BA2, "Hero MP",      WatchSize.U16));
-        Watches.Add(new WatchItem(0x7E0BA4, "Hero Max MP",   WatchSize.U16));
-        Watches.Add(new WatchItem(0x7E0B86, "Hero Level",   WatchSize.U8));
-        Watches.Add(new WatchItem(0x7E0BF4, "Gold",         WatchSize.U32));
-        Watches.Add(new WatchItem(0x7E0016, "Map ID",       WatchSize.U16));
-        Watches.Add(new WatchItem(0x7E0078, "X Position",   WatchSize.U16));
-        Watches.Add(new WatchItem(0x7E007A, "Y Position",   WatchSize.U16));
+        Watches.Add(new WatchItem(0x7E0B9E, "Hero HP",    WatchSize.U16));
+        Watches.Add(new WatchItem(0x7E0BA0, "Hero Max HP", WatchSize.U16));
+        Watches.Add(new WatchItem(0x7E0BA2, "Hero MP",    WatchSize.U16));
+        Watches.Add(new WatchItem(0x7E0BA4, "Hero Max MP", WatchSize.U16));
+        Watches.Add(new WatchItem(0x7E0B86, "Hero Level", WatchSize.U8));
+        Watches.Add(new WatchItem(0x7E0BF4, "Gold",       WatchSize.U32));
+        Watches.Add(new WatchItem(0x7E0016, "Map ID",     WatchSize.U16));
+        Watches.Add(new WatchItem(0x7E0078, "X Position", WatchSize.U16));
+        Watches.Add(new WatchItem(0x7E007A, "Y Position", WatchSize.U16));
+
+        _host.Attached += () => IsBizHawkRunning = true;
+        _host.Exited   += () =>
+        {
+            IsBizHawkRunning = false;
+            IsConnected      = false;
+            ConnectionStatus = "BizHawk closed. Click Launch to restart.";
+        };
 
         _timer = new DispatcherTimer
         {
@@ -67,10 +89,48 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
     }
 
     // -------------------------------------------------------------------------
+    // BizHawk launch
+    // -------------------------------------------------------------------------
+    [RelayCommand]
+    private async System.Threading.Tasks.Task LaunchBizHawk()
+    {
+        if (_host.IsRunning) return;
+
+        ConnectionStatus = "Launching BizHawk...";
+        try
+        {
+            await _host.LaunchAsync(DefaultEmuHawkPath);
+            if (_host.IsRunning)
+            {
+                ConnectionStatus = "BizHawk running. Load a ROM, then open Tools > External Tools > Lufia Forge Monitor.";
+                IsBizHawkRunning = true;
+            }
+            else
+            {
+                ConnectionStatus = "Failed to launch BizHawk. Check path.";
+            }
+        }
+        catch (Exception ex)
+        {
+            ConnectionStatus = $"Launch error: {ex.Message}";
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // Polling loop
     // -------------------------------------------------------------------------
     private void Timer_Tick(object? sender, EventArgs e)
     {
+        // Check if BizHawk is still alive
+        if (IsBizHawkRunning && !_host.IsRunning)
+        {
+            IsBizHawkRunning = false;
+            IsConnected      = false;
+            ConnectionStatus = "BizHawk closed. Click Launch to restart.";
+            _bridge.Disconnect();
+            return;
+        }
+
         if (!_bridge.IsConnected)
         {
             _bridge.TryConnect();
@@ -79,22 +139,23 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
         if (_bridge.ReadFrame())
         {
             IsConnected      = true;
-            ConnectionStatus = "Connected to BizHawk";
+            ConnectionStatus = "Connected - live WRAM streaming";
             FrameInfo        = $"Frame: {_bridge.FrameCount:N0}";
             RefreshHexView();
             RefreshWatches();
         }
         else if (!_bridge.IsConnected && IsConnected)
         {
-            // Lost connection
             IsConnected      = false;
-            ConnectionStatus = "Disconnected - start BizHawk with the Lufia Forge Monitor tool.";
+            ConnectionStatus = IsBizHawkRunning
+                ? "BizHawk running - open Tools > External Tools > Lufia Forge Monitor"
+                : "Disconnected - click Launch to start BizHawk.";
             FrameInfo        = "";
-            _bridge.Disconnect(); // Reset so TryConnect can re-open
+            _bridge.Disconnect();
         }
         else if (!_bridge.IsConnected)
         {
-            _bridge.Disconnect(); // Reset for next attempt
+            _bridge.Disconnect();
         }
     }
 
@@ -160,8 +221,8 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
             int offset = w.SnesAddr - 0x7E0000;
             if (offset < 0 || offset >= WramSize) continue;
 
-            long cur  = ReadTyped(wram, offset, w.Size);
-            long prv  = prev != null ? ReadTyped(prev, offset, w.Size) : cur;
+            long cur = ReadTyped(wram, offset, w.Size);
+            long prv = prev != null ? ReadTyped(prev, offset, w.Size) : cur;
 
             w.CurrentValue  = cur.ToString();
             w.PreviousValue = prv.ToString();
@@ -176,7 +237,7 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
         if (!int.TryParse(addrText, NumberStyles.HexNumber, null, out int snesAddr))
             return;
 
-        var size = (WatchSize)WatchTypeIndex;
+        var size  = (WatchSize)WatchTypeIndex;
         string label = string.IsNullOrWhiteSpace(WatchLabelText) ? $"${snesAddr:X6}" : WatchLabelText;
         Watches.Add(new WatchItem(snesAddr, label, size));
         WatchAddrText  = "";
@@ -303,6 +364,7 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
     {
         _timer.Stop();
         _bridge.Dispose();
+        _host.Dispose();
     }
 }
 
