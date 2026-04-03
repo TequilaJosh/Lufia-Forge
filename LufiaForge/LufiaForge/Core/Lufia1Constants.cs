@@ -80,8 +80,10 @@ public static class Lufia1Constants
     public const int DictionaryEndOffset   = 0x0553CC;
     public const int DictionaryBaseOffset  = 0x48000;  // add to 2-byte LE ptr to get file offset
 
-    // Dialogue text lives in banks $88–$AF
-    public const int DialogueScanStartOffset = 0x40000;
+    // Dialogue text lives in banks $84–$AF (file 0x20000–0x57FFF).
+    // Story/NPC dialogue: banks $84–$87 (0x20000–0x3FFFF)
+    // Battle messages:    banks $88–$AF (0x40000–0x57FFF)
+    public const int DialogueScanStartOffset = 0x20000;
     public const int DialogueScanEndOffset   = 0x58000;
 
     // -------------------------------------------------------------------------

@@ -237,12 +237,31 @@
     <!-- ComboBox -->
     <Style x:Key="LufiaComboBox" TargetType="ComboBox">
         <Setter Property="Background"      Value="{StaticResource MidPurpleBrush}"/>
-        <Setter Property="Foreground"      Value="{StaticResource TextPrimaryBrush}"/>
+        <Setter Property="Foreground"      Value="Black"/>
         <Setter Property="BorderBrush"     Value="{StaticResource BorderPurpleBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="Padding"         Value="6,4"/>
         <Setter Property="FontFamily"      Value="Segoe UI"/>
         <Setter Property="FontSize"        Value="12"/>
+        <!-- Dropdown items: black text on the system's light popup background -->
+        <Setter Property="ItemContainerStyle">
+            <Setter.Value>
+                <Style TargetType="ComboBoxItem">
+                    <Setter Property="Foreground" Value="Black"/>
+                    <Setter Property="Padding"    Value="6,3"/>
+                    <Style.Triggers>
+                        <Trigger Property="IsHighlighted" Value="True">
+                            <Setter Property="Background" Value="{StaticResource SurfacePurpleBrush}"/>
+                            <Setter Property="Foreground" Value="Black"/>
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter Property="Background" Value="{StaticResource SurfacePurpleBrush}"/>
+                            <Setter Property="Foreground" Value="Black"/>
+                        </Trigger>
+                    </Style.Triggers>
+                </Style>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <!-- CheckBox -->
