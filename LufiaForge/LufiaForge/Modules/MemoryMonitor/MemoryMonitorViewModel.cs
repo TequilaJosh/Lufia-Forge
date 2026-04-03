@@ -25,7 +25,7 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
     // -------------------------------------------------------------------------
     [ObservableProperty] private bool   _isConnected;
     [ObservableProperty] private bool   _isBizHawkRunning;
-    [ObservableProperty] private string _connectionStatus = "Click Launch to start BizHawk.";
+    [ObservableProperty] private string _connectionStatus = "Waiting for BizHawk...";
     [ObservableProperty] private string _hexText = "  Waiting for BizHawk connection...";
     [ObservableProperty] private int    _hexOffset;
     [ObservableProperty] private string _frameInfo = "";
@@ -72,13 +72,18 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
         Watches.Add(new WatchItem(0x7E0078, "X Position", WatchSize.U16));
         Watches.Add(new WatchItem(0x7E007A, "Y Position", WatchSize.U16));
 
-        _host.Attached += () => IsBizHawkRunning = true;
-        _host.Exited   += () =>
+        _host.Attached += () =>
+        {
+            IsBizHawkRunning = true;
+            ConnectionStatus = "BizHawk embedded. Load ROM, then open Tools > External Tools > Lufia Forge Monitor.";
+        };
+        _host.Exited += () =>
         {
             IsBizHawkRunning = false;
             IsConnected      = false;
             ConnectionStatus = "BizHawk closed. Click Launch to restart.";
         };
+        _host.StatusChanged += msg => ConnectionStatus = msg;
 
         _timer = new DispatcherTimer
         {
@@ -94,21 +99,16 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private async System.Threading.Tasks.Task LaunchBizHawk()
     {
-        if (_host.IsRunning) return;
+        if (_host.IsRunning)
+        {
+            ConnectionStatus = "BizHawk is already embedded.";
+            return;
+        }
 
-        ConnectionStatus = "Launching BizHawk...";
         try
         {
             await _host.LaunchAsync(DefaultEmuHawkPath);
-            if (_host.IsRunning)
-            {
-                ConnectionStatus = "BizHawk running. Load a ROM, then open Tools > External Tools > Lufia Forge Monitor.";
-                IsBizHawkRunning = true;
-            }
-            else
-            {
-                ConnectionStatus = "Failed to launch BizHawk. Check path.";
-            }
+            IsBizHawkRunning = _host.IsRunning;
         }
         catch (Exception ex)
         {
@@ -119,6 +119,8 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
     // -------------------------------------------------------------------------
     // Polling loop
     // -------------------------------------------------------------------------
+    private int _attachAttemptCooldown;
+
     private void Timer_Tick(object? sender, EventArgs e)
     {
         // Check if BizHawk is still alive
@@ -131,6 +133,22 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
             return;
         }
 
+        // Auto-attach: if BizHawk isn't embedded yet, try to find and embed it
+        if (!_host.IsRunning && _attachAttemptCooldown <= 0)
+        {
+            if (_host.TryAttachToRunning())
+            {
+                IsBizHawkRunning = true;
+            }
+            else
+            {
+                // Don't spam: wait ~2 seconds before trying again (60 ticks at 33ms)
+                _attachAttemptCooldown = 60;
+            }
+        }
+        if (_attachAttemptCooldown > 0) _attachAttemptCooldown--;
+
+        // Poll shared memory for WRAM data
         if (!_bridge.IsConnected)
         {
             _bridge.TryConnect();
@@ -138,19 +156,21 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
 
         if (_bridge.ReadFrame())
         {
-            IsConnected      = true;
-            ConnectionStatus = "Connected - live WRAM streaming";
-            FrameInfo        = $"Frame: {_bridge.FrameCount:N0}";
+            IsConnected = true;
+            ConnectionStatus = _host.IsRunning
+                ? "Connected - live WRAM streaming"
+                : "WRAM streaming (BizHawk not embedded - click Launch)";
+            FrameInfo = $"Frame: {_bridge.FrameCount:N0}";
             RefreshHexView();
             RefreshWatches();
         }
         else if (!_bridge.IsConnected && IsConnected)
         {
-            IsConnected      = false;
+            IsConnected = false;
             ConnectionStatus = IsBizHawkRunning
-                ? "BizHawk running - open Tools > External Tools > Lufia Forge Monitor"
-                : "Disconnected - click Launch to start BizHawk.";
-            FrameInfo        = "";
+                ? "BizHawk embedded - open Tools > External Tools > Lufia Forge Monitor"
+                : "Waiting for BizHawk...";
+            FrameInfo = "";
             _bridge.Disconnect();
         }
         else if (!_bridge.IsConnected)
