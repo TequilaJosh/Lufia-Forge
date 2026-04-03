@@ -1,0 +1,278 @@
+<UserControl x:Class="LufiaForge.Modules.MemoryMonitor.MemoryMonitorView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:LufiaForge.Modules.MemoryMonitor"
+             Background="{StaticResource MidPurpleBrush}">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>  <!-- Connection bar -->
+            <RowDefinition Height="*"/>     <!-- Sub-tabs -->
+        </Grid.RowDefinitions>
+
+        <!-- ================================================================
+             CONNECTION STATUS BAR
+             ================================================================ -->
+        <Border Grid.Row="0"
+                Background="{StaticResource DeepPurpleBrush}"
+                BorderBrush="{StaticResource BorderPurpleBrush}"
+                BorderThickness="0,0,0,1"
+                Padding="12,8">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                    <!-- Connection indicator dot -->
+                    <Ellipse Width="10" Height="10"
+                             VerticalAlignment="Center"
+                             Margin="0,0,8,0">
+                        <Ellipse.Style>
+                            <Style TargetType="Ellipse">
+                                <Setter Property="Fill" Value="{StaticResource ErrorBrush}"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsConnected}" Value="True">
+                                        <Setter Property="Fill" Value="{StaticResource SuccessBrush}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Ellipse.Style>
+                    </Ellipse>
+                    <TextBlock Text="{Binding ConnectionStatus}"
+                               Style="{StaticResource LufiaLabel}"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <TextBlock Grid.Column="2"
+                           Text="{Binding FrameInfo}"
+                           Style="{StaticResource LufiaLabel}"
+                           Foreground="{StaticResource GoldDimBrush}"
+                           VerticalAlignment="Center"/>
+            </Grid>
+        </Border>
+
+        <!-- ================================================================
+             SUB-TAB CONTENT
+             ================================================================ -->
+        <TabControl Grid.Row="1"
+                    Style="{StaticResource LufiaTabControl}"
+                    Background="Transparent">
+
+            <!-- ============ HEX VIEW TAB ============ -->
+            <TabItem Header="Hex View" Style="{StaticResource LufiaTabItem}">
+                <Grid Background="{StaticResource MidPurpleBrush}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Hex toolbar -->
+                    <Border Grid.Row="0" Padding="8,6"
+                            Background="{StaticResource SurfacePurpleBrush}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Offset:" Style="{StaticResource LufiaLabel}"
+                                       VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <TextBox Style="{StaticResource LufiaTextBox}"
+                                     Text="{Binding HexOffset, UpdateSourceTrigger=PropertyChanged}"
+                                     Width="80" Margin="0,0,8,0"/>
+                            <Button Content="+" Style="{StaticResource LufiaButton}"
+                                    Command="{Binding HexScrollUpCommand}"
+                                    Padding="8,2" Margin="0,0,4,0" FontFamily="Consolas" FontWeight="Bold"/>
+                            <Button Content="-" Style="{StaticResource LufiaButton}"
+                                    Command="{Binding HexScrollDownCommand}"
+                                    Padding="8,2" FontFamily="Consolas" FontWeight="Bold"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Hex dump -->
+                    <TextBox Grid.Row="1"
+                             Text="{Binding HexText, Mode=OneWay}"
+                             IsReadOnly="True"
+                             FontFamily="Cascadia Code, Consolas, Courier New"
+                             FontSize="12"
+                             Background="#120C1C"
+                             Foreground="#C8DCFF"
+                             BorderThickness="0"
+                             Padding="8,4"
+                             VerticalScrollBarVisibility="Auto"
+                             HorizontalScrollBarVisibility="Auto"
+                             TextWrapping="NoWrap"
+                             AcceptsReturn="True"/>
+                </Grid>
+            </TabItem>
+
+            <!-- ============ WATCHLIST TAB ============ -->
+            <TabItem Header="Watchlist" Style="{StaticResource LufiaTabItem}">
+                <Grid Background="{StaticResource MidPurpleBrush}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Add watch toolbar -->
+                    <Border Grid.Row="0" Padding="8,6"
+                            Background="{StaticResource SurfacePurpleBrush}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBox Style="{StaticResource LufiaTextBox}"
+                                     Text="{Binding WatchAddrText, UpdateSourceTrigger=PropertyChanged}"
+                                     Width="80" Margin="0,0,6,0"
+                                     ToolTip="SNES address (hex, e.g. 7E0B9E)"/>
+                            <TextBox Style="{StaticResource LufiaTextBox}"
+                                     Text="{Binding WatchLabelText, UpdateSourceTrigger=PropertyChanged}"
+                                     Width="100" Margin="0,0,6,0"
+                                     ToolTip="Label"/>
+                            <ComboBox Style="{StaticResource LufiaComboBox}"
+                                      ItemsSource="{Binding SizeOptions}"
+                                      SelectedIndex="{Binding WatchTypeIndex}"
+                                      Width="60" Margin="0,0,6,0"/>
+                            <Button Content="+ Add" Style="{StaticResource LufiaButton}"
+                                    Command="{Binding AddWatchCommand}"
+                                    Padding="10,4" Margin="0,0,6,0"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Watch table -->
+                    <DataGrid Grid.Row="1"
+                              ItemsSource="{Binding Watches}"
+                              AutoGenerateColumns="False"
+                              IsReadOnly="True"
+                              CanUserAddRows="False"
+                              CanUserDeleteRows="False"
+                              SelectionMode="Single"
+                              GridLinesVisibility="Horizontal"
+                              Background="#120C1C"
+                              Foreground="#C8DCFF"
+                              RowBackground="#120C1C"
+                              AlternatingRowBackground="#1A1230"
+                              BorderThickness="0"
+                              FontFamily="Cascadia Code, Consolas, Courier New"
+                              FontSize="12"
+                              HeadersVisibility="Column"
+                              HorizontalGridLinesBrush="#2D1B4E"
+                              ColumnHeaderHeight="28">
+                        <DataGrid.ColumnHeaderStyle>
+                            <Style TargetType="DataGridColumnHeader">
+                                <Setter Property="Background" Value="#2D1B4E"/>
+                                <Setter Property="Foreground" Value="#E8B84B"/>
+                                <Setter Property="Padding" Value="8,4"/>
+                                <Setter Property="FontFamily" Value="Segoe UI Semibold"/>
+                                <Setter Property="FontSize" Value="11"/>
+                                <Setter Property="BorderBrush" Value="#3D2466"/>
+                                <Setter Property="BorderThickness" Value="0,0,1,1"/>
+                            </Style>
+                        </DataGrid.ColumnHeaderStyle>
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Address" Binding="{Binding AddressHex}" Width="90"/>
+                            <DataGridTextColumn Header="Label"   Binding="{Binding Label}"      Width="120"/>
+                            <DataGridTextColumn Header="Current" Binding="{Binding CurrentValue}" Width="80"/>
+                            <DataGridTextColumn Header="Prev"    Binding="{Binding PreviousValue}" Width="80"/>
+                            <DataGridTextColumn Header="Delta"   Binding="{Binding Delta}"      Width="70"/>
+                            <DataGridTemplateColumn Header="" Width="60">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Button Content="X" FontSize="10" Padding="4,1"
+                                                Command="{Binding DataContext.RemoveWatchCommand,
+                                                    RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                CommandParameter="{Binding}"
+                                                Style="{StaticResource LufiaButton}"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </TabItem>
+
+            <!-- ============ SEARCH TAB ============ -->
+            <TabItem Header="Search" Style="{StaticResource LufiaTabItem}">
+                <Grid Background="{StaticResource MidPurpleBrush}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Search toolbar -->
+                    <Border Grid.Row="0" Padding="8,6"
+                            Background="{StaticResource SurfacePurpleBrush}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBox Style="{StaticResource LufiaTextBox}"
+                                     Text="{Binding SearchValueText, UpdateSourceTrigger=PropertyChanged}"
+                                     Width="140" Margin="0,0,6,0"
+                                     ToolTip="Value ($hex or decimal)"/>
+                            <ComboBox Style="{StaticResource LufiaComboBox}"
+                                      ItemsSource="{Binding SizeOptions}"
+                                      SelectedIndex="{Binding SearchTypeIndex}"
+                                      Width="60" Margin="0,0,6,0"/>
+                            <Button Content="First Scan" Style="{StaticResource LufiaButton}"
+                                    Command="{Binding FirstScanCommand}"
+                                    Padding="10,4" Margin="0,0,4,0"/>
+                            <Button Content="Next Scan" Style="{StaticResource LufiaButton}"
+                                    Command="{Binding NextScanCommand}"
+                                    Padding="10,4" Margin="0,0,4,0"/>
+                            <Button Content="Reset" Style="{StaticResource LufiaButton}"
+                                    Command="{Binding ResetSearchCommand}"
+                                    Padding="10,4"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Search status -->
+                    <TextBlock Grid.Row="1"
+                               Text="{Binding SearchStatus}"
+                               Style="{StaticResource LufiaLabel}"
+                               Margin="12,6"/>
+
+                    <!-- Search results -->
+                    <DataGrid Grid.Row="2"
+                              ItemsSource="{Binding SearchResults}"
+                              AutoGenerateColumns="False"
+                              IsReadOnly="True"
+                              CanUserAddRows="False"
+                              SelectionMode="Single"
+                              GridLinesVisibility="Horizontal"
+                              Background="#120C1C"
+                              Foreground="#C8DCFF"
+                              RowBackground="#120C1C"
+                              AlternatingRowBackground="#1A1230"
+                              BorderThickness="0"
+                              FontFamily="Cascadia Code, Consolas, Courier New"
+                              FontSize="12"
+                              HeadersVisibility="Column"
+                              HorizontalGridLinesBrush="#2D1B4E"
+                              ColumnHeaderHeight="28">
+                        <DataGrid.ColumnHeaderStyle>
+                            <Style TargetType="DataGridColumnHeader">
+                                <Setter Property="Background" Value="#2D1B4E"/>
+                                <Setter Property="Foreground" Value="#E8B84B"/>
+                                <Setter Property="Padding" Value="8,4"/>
+                                <Setter Property="FontFamily" Value="Segoe UI Semibold"/>
+                                <Setter Property="FontSize" Value="11"/>
+                                <Setter Property="BorderBrush" Value="#3D2466"/>
+                                <Setter Property="BorderThickness" Value="0,0,1,1"/>
+                            </Style>
+                        </DataGrid.ColumnHeaderStyle>
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Address" Binding="{Binding Address}" Width="100"/>
+                            <DataGridTextColumn Header="Value"   Binding="{Binding Value}"   Width="100"/>
+                            <DataGridTemplateColumn Header="" Width="100">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Button Content="+ Watch" FontSize="10" Padding="6,1"
+                                                Command="{Binding DataContext.AddResultToWatchlistCommand,
+                                                    RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                CommandParameter="{Binding}"
+                                                Style="{StaticResource LufiaButton}"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </TabItem>
+
+        </TabControl>
+    </Grid>
+</UserControl>

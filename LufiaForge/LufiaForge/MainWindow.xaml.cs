@@ -1,4 +1,5 @@
 using LufiaForge.Core;
+using LufiaForge.Modules.MemoryMonitor;
 using LufiaForge.Modules.PatchManager;
 using LufiaForge.Modules.TextEditor;
 using LufiaForge.Modules.TileViewer;
@@ -77,6 +78,14 @@ public partial class MainWindow : Window
         };
 
         RomInfoItems.ItemsSource = items;
+    }
+
+    protected override void OnClosed(System.EventArgs e)
+    {
+        // Dispose the memory monitor bridge/timer
+        if (MemoryMonitorView.DataContext is MemoryMonitorViewModel mmVm)
+            mmVm.Dispose();
+        base.OnClosed(e);
     }
 
     private void AboutMenuItem_Click(object sender, RoutedEventArgs e)

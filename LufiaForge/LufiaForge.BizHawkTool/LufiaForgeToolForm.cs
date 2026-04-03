@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.IO.MemoryMappedFiles;
 using System.Linq;
 using System.Text;
 using System.Windows.Forms;
@@ -47,6 +48,16 @@ public sealed class LufiaForgeToolForm : ToolFormBase, IExternalToolForm
     private NumericUpDown _hexOffset     = null!;
 
     // -------------------------------------------------------------------------
+    // Shared memory (MemoryMappedFile) for Lufia Forge WPF bridge
+    // -------------------------------------------------------------------------
+    private const string MmfName       = "LufiaForge_WRAM";
+    private const int    MmfHeaderSize = 256;
+    private const int    MmfTotalSize  = MmfHeaderSize + WramSize; // 256 + 131072
+    private MemoryMappedFile?         _mmf;
+    private MemoryMappedViewAccessor? _mmfAccessor;
+    private uint _frameCounter;
+
+    // -------------------------------------------------------------------------
     // State
     // -------------------------------------------------------------------------
     private byte[]? _wram;
@@ -59,6 +70,26 @@ public sealed class LufiaForgeToolForm : ToolFormBase, IExternalToolForm
     public LufiaForgeToolForm()
     {
         BuildUI();
+        InitSharedMemory();
+    }
+
+    private void InitSharedMemory()
+    {
+        try
+        {
+            _mmf         = MemoryMappedFile.CreateOrOpen(MmfName, MmfTotalSize);
+            _mmfAccessor = _mmf.CreateViewAccessor();
+        }
+        catch { /* WPF app won't connect — not fatal */ }
+    }
+
+    protected override void OnFormClosing(FormClosingEventArgs e)
+    {
+        // Signal disconnected
+        try { _mmfAccessor?.Write(20, (uint)0); } catch { }
+        _mmfAccessor?.Dispose();
+        _mmf?.Dispose();
+        base.OnFormClosing(e);
     }
 
     // -------------------------------------------------------------------------
@@ -86,8 +117,29 @@ public sealed class LufiaForgeToolForm : ToolFormBase, IExternalToolForm
         _prevWram = _wram;
         _wram     = ReadWram();
 
+        WriteToSharedMemory();
         RefreshHexView();
         RefreshWatchlist();
+    }
+
+    private void WriteToSharedMemory()
+    {
+        if (_mmfAccessor == null || _wram == null) return;
+        try
+        {
+            _frameCounter++;
+            // Magic: "LFWM"
+            _mmfAccessor.Write(0,  (byte)'L');
+            _mmfAccessor.Write(1,  (byte)'F');
+            _mmfAccessor.Write(2,  (byte)'W');
+            _mmfAccessor.Write(3,  (byte)'M');
+            _mmfAccessor.Write(4,  _frameCounter);
+            _mmfAccessor.Write(8,  DateTime.UtcNow.Ticks);
+            _mmfAccessor.Write(16, (uint)WramSize);
+            _mmfAccessor.Write(20, (uint)1); // flags: connected
+            _mmfAccessor.WriteArray(MmfHeaderSize, _wram, 0, _wram.Length);
+        }
+        catch { /* non-fatal */ }
     }
 
     // -------------------------------------------------------------------------
