@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <OutputType>Library</OutputType>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>LufiaForge.BizHawkTool</AssemblyName>
+    <RootNamespace>LufiaForge.BizHawkTool</RootNamespace>
+    <!-- Auto-deploy to BizHawk's ExternalTools folder on build -->
+    <BizHawkDir>D:\BizHawk</BizHawkDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="System.Windows.Forms" />
+
+    <Reference Include="BizHawk.Client.Common"
+      HintPath="$(BizHawkDir)\dll\BizHawk.Client.Common.dll"
+      Private="false" />
+
+    <Reference Include="BizHawk.Client.EmuHawk"
+      HintPath="$(BizHawkDir)\EmuHawk.exe"
+      Private="false" />
+
+    <Reference Include="BizHawk.Common"
+      HintPath="$(BizHawkDir)\dll\BizHawk.Common.dll"
+      Private="false" />
+
+    <Reference Include="BizHawk.Emulation.Common"
+      HintPath="$(BizHawkDir)\dll\BizHawk.Emulation.Common.dll"
+      Private="false" />
+
+    <Reference Include="BizHawk.WinForms.Controls"
+      HintPath="$(BizHawkDir)\dll\BizHawk.WinForms.Controls.dll"
+      Private="false" />
+  </ItemGroup>
+
+  <!-- Copy the built DLL into BizHawk's ExternalTools folder -->
+  <Target Name="DeployToBizHawk" AfterTargets="Build">
+    <Copy SourceFiles="$(TargetPath)"
+          DestinationFolder="$(BizHawkDir)\ExternalTools"
+          SkipUnchangedFiles="true" />
+    <Message Text="Deployed $(TargetFileName) → $(BizHawkDir)\ExternalTools\" Importance="high" />
+  </Target>
+
+</Project>
