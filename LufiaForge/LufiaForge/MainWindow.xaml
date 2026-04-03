@@ -35,20 +35,23 @@ Title="{Binding WindowTitle}"
             <MenuItem Header="_File" Foreground="{StaticResource TextPrimaryBrush}">
                 <MenuItem Header="Open ROM..."
                           Command="{Binding OpenRomCommand}"
-                          InputGestureText="Ctrl+O"/>
+                          InputGestureText="Ctrl+O"
+                          Foreground="Black"/>
                 <Separator Style="{StaticResource LufiaSeparator}"/>
                 <MenuItem Header="Save ROM"
                           Command="{Binding SaveRomCommand}"
-                          InputGestureText="Ctrl+S"/>
+                          InputGestureText="Ctrl+S"
+                          Foreground="Black"/>
                 <MenuItem Header="Save ROM As..."
                           Command="{Binding SaveRomAsCommand}"
-                          InputGestureText="Ctrl+Shift+S"/>
+                          InputGestureText="Ctrl+Shift+S"
+                          Foreground="Black"/>
                 <Separator Style="{StaticResource LufiaSeparator}"/>
-                <MenuItem Header="Exit" Command="{Binding ExitCommand}"/>
+                <MenuItem Header="Exit" Command="{Binding ExitCommand}" Foreground="Black"/>
             </MenuItem>
 
             <MenuItem Header="_Help" Foreground="{StaticResource TextPrimaryBrush}">
-                <MenuItem Header="About Lufia Forge" Click="AboutMenuItem_Click"/>
+                <MenuItem Header="About Lufia Forge" Click="AboutMenuItem_Click" Foreground="Black"/>
             </MenuItem>
         </Menu>
 

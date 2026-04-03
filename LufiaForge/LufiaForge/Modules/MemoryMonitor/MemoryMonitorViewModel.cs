@@ -35,11 +35,15 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string _watchAddrText = "7E0000";
     [ObservableProperty] private string _watchLabelText = "";
     [ObservableProperty] private int    _watchTypeIndex;
+    [ObservableProperty] private string _labelSearchText = "";
+    [ObservableProperty] private KnownAddress? _selectedKnownAddress;
 
     public ObservableCollection<WatchItem>        Watches       { get; } = new();
     public ObservableCollection<SearchResultItem> SearchResults { get; } = new();
+    public ObservableCollection<KnownAddress>     FilteredAddresses { get; } = new();
 
     public string[] SizeOptions => ["U8", "U16", "U32", "S8", "S16"];
+    public IReadOnlyList<string> AddressCategories => Lufia1AddressMap.Categories;
 
     private const int HexRows  = 32;
     private const int HexCols  = 16;
@@ -60,6 +64,9 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
     public MemoryMonitorViewModel()
     {
         HostPanel = _host.CreateHostPanel();
+
+        // Load user-defined custom labels from disk
+        Lufia1AddressMap.LoadCustom();
 
         // Seed default watches for Lufia 1
         Watches.Add(new WatchItem(0x7E0B9E, "Hero HP",    WatchSize.U16));
@@ -226,6 +233,47 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
     }
 
     partial void OnHexOffsetChanged(int value) => RefreshHexView();
+
+    // -------------------------------------------------------------------------
+    // Label search (known address lookup)
+    // -------------------------------------------------------------------------
+    partial void OnLabelSearchTextChanged(string value)
+    {
+        FilteredAddresses.Clear();
+        foreach (var addr in Lufia1AddressMap.Search(value).Take(50))
+            FilteredAddresses.Add(addr);
+    }
+
+    [RelayCommand]
+    private void AddKnownWatch(KnownAddress? known)
+    {
+        if (known == null) return;
+        // Avoid duplicates
+        if (Watches.Any(w => w.SnesAddr == known.Address)) return;
+        Watches.Add(new WatchItem(known.Address, known.Label, known.Size));
+    }
+
+    [RelayCommand]
+    private void AddAllFromCategory(string? category)
+    {
+        if (string.IsNullOrEmpty(category)) return;
+        foreach (var addr in Lufia1AddressMap.ByCategory(category))
+        {
+            if (Watches.Any(w => w.SnesAddr == addr.Address)) continue;
+            Watches.Add(new WatchItem(addr.Address, addr.Label, addr.Size));
+        }
+    }
+
+    /// <summary>Save a watch entry as a reusable custom label for all users.</summary>
+    [RelayCommand]
+    private void SaveAsLabel(WatchItem? item)
+    {
+        if (item == null) return;
+        Lufia1AddressMap.AddCustom(item.SnesAddr, item.Label, item.Size);
+        // Refresh the filtered list if a search is active
+        OnLabelSearchTextChanged(LabelSearchText);
+        OnPropertyChanged(nameof(AddressCategories));
+    }
 
     // -------------------------------------------------------------------------
     // Watchlist
