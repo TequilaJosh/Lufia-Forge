@@ -98,19 +98,6 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
         };
         _timer.Tick += Timer_Tick;
         _timer.Start();
-
-        // Auto-launch BizHawk on startup (fire and forget)
-        _ = AutoLaunchAsync();
-    }
-
-    private async System.Threading.Tasks.Task AutoLaunchAsync()
-    {
-        // Small delay to let the UI finish loading
-        await System.Threading.Tasks.Task.Delay(500);
-        if (!_host.IsRunning && File.Exists(DefaultEmuHawkPath))
-        {
-            await LaunchBizHawk();
-        }
     }
 
     // -------------------------------------------------------------------------
