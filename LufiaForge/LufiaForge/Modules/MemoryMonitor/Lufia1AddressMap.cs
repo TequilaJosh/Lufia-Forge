@@ -110,148 +110,125 @@ public static class Lufia1AddressMap
     }
 
     // -------------------------------------------------------------------------
-    // Address database
+    // Address database — verified from PAR codes & SRAM research
+    // Sources: Almar's Guides PAR codes, Data Crystal SRAM map,
+    //          vegetaman SRAM offsets, GameHacking.org
     // -------------------------------------------------------------------------
     private static List<KnownAddress> BuildMap()
     {
         var map = new List<KnownAddress>();
 
-        // ----- System / Game State -----
+        // =====================================================================
+        // SYSTEM / TIMER
+        // =====================================================================
         AddRange(map, "System", [
-            (0x7E0010, "Game Mode / State",        WatchSize.U8),
-            (0x7E0012, "Screen Brightness",        WatchSize.U8),
-            (0x7E0014, "Frame Counter",            WatchSize.U16),
-            (0x7E0016, "Map ID",                   WatchSize.U16),
-            (0x7E0018, "Previous Map ID",          WatchSize.U16),
-            (0x7E001A, "Warp Destination Map",     WatchSize.U16),
-            (0x7E001C, "Warp Destination X",       WatchSize.U8),
-            (0x7E001D, "Warp Destination Y",       WatchSize.U8),
-            (0x7E0020, "Game Clock Frames",        WatchSize.U16),
-            (0x7E0022, "Game Clock Seconds",       WatchSize.U8),
-            (0x7E0023, "Game Clock Minutes",       WatchSize.U8),
-            (0x7E0024, "Game Clock Hours",         WatchSize.U16),
+            (0x7E0543, "In-Game Timer (byte 1)",   WatchSize.U8),
+            (0x7E0544, "In-Game Timer (byte 2)",   WatchSize.U8),
         ]);
 
-        // ----- Map / Movement -----
-        AddRange(map, "Map", [
-            (0x7E0078, "Player X Position",        WatchSize.U16),
-            (0x7E007A, "Player Y Position",        WatchSize.U16),
-            (0x7E007C, "Player Direction",          WatchSize.U8),
-            (0x7E007E, "Player Movement State",     WatchSize.U8),
-            (0x7E0080, "Camera Scroll X",          WatchSize.U16),
-            (0x7E0082, "Camera Scroll Y",          WatchSize.U16),
-            (0x7E0084, "Tile Player Standing On",   WatchSize.U8),
-            (0x7E0060, "NPC Count on Map",         WatchSize.U8),
-            (0x7E0086, "Steps Taken",              WatchSize.U16),
-            (0x7E0088, "Encounter Counter",        WatchSize.U16),
-        ]);
-
-        // ----- Party -----
-        AddRange(map, "Party", [
-            (0x7E0B80, "Party Size",               WatchSize.U8),
-            (0x7E0B82, "Party Member 1 ID",        WatchSize.U8),
-            (0x7E0B83, "Party Member 2 ID",        WatchSize.U8),
-            (0x7E0B84, "Party Member 3 ID",        WatchSize.U8),
-            (0x7E0B85, "Party Member 4 ID",        WatchSize.U8),
-        ]);
-
-        // ----- Hero (Character 1) -----
-        const int hero = 0x7E0B86;
-        AddCharacter(map, "Hero", hero);
-
-        // ----- Lufia (Character 2) -----
-        const int lufia = 0x7E0BF8;
-        AddCharacter(map, "Lufia", lufia);
-
-        // ----- Aguro (Character 3) -----
-        const int aguro = 0x7E0C6A;
-        AddCharacter(map, "Aguro", aguro);
-
-        // ----- Jerin (Character 4) -----
-        const int jerin = 0x7E0CDC;
-        AddCharacter(map, "Jerin", jerin);
-
-        // ----- Gold / Money -----
-        AddRange(map, "Inventory", [
-            (0x7E0BF4, "Gold",                     WatchSize.U32),
-        ]);
-
-        // ----- Inventory Slots (first 16) -----
-        for (int i = 0; i < 16; i++)
-        {
-            map.Add(new KnownAddress(0x7E0D4E + i * 2, $"Item Slot {i + 1} ID", WatchSize.U8, "Inventory"));
-            map.Add(new KnownAddress(0x7E0D4F + i * 2, $"Item Slot {i + 1} Qty", WatchSize.U8, "Inventory"));
-        }
-
-        // ----- Battle -----
+        // =====================================================================
+        // BATTLE / ENCOUNTERS
+        // =====================================================================
         AddRange(map, "Battle", [
-            (0x7E1000, "Battle State Flag",        WatchSize.U8),
-            (0x7E1002, "In Battle Flag",           WatchSize.U8),
-            (0x7E1004, "Turn Counter",             WatchSize.U16),
-            (0x7E1010, "Enemy 1 HP",               WatchSize.U16),
-            (0x7E1012, "Enemy 1 Max HP",           WatchSize.U16),
-            (0x7E1014, "Enemy 1 ATK",              WatchSize.U16),
-            (0x7E1016, "Enemy 1 DEF",              WatchSize.U16),
-            (0x7E1018, "Enemy 1 AGI",              WatchSize.U16),
-            (0x7E101A, "Enemy 1 INT",              WatchSize.U16),
-            (0x7E1020, "Enemy 2 HP",               WatchSize.U16),
-            (0x7E1022, "Enemy 2 Max HP",           WatchSize.U16),
-            (0x7E1030, "Enemy 3 HP",               WatchSize.U16),
-            (0x7E1032, "Enemy 3 Max HP",           WatchSize.U16),
-            (0x7E1040, "Enemy 4 HP",               WatchSize.U16),
-            (0x7E1042, "Enemy 4 Max HP",           WatchSize.U16),
-            (0x7E1006, "Enemy Count",              WatchSize.U8),
-            (0x7E1008, "Battle Reward EXP",        WatchSize.U16),
-            (0x7E100A, "Battle Reward Gold",       WatchSize.U16),
+            (0x7E078C, "Random Encounter Flag",    WatchSize.U8),  // 05 = no encounters
         ]);
 
-        // ----- Event Flags (sample) -----
-        AddRange(map, "Events", [
-            (0x7E0E00, "Event Flag Block 1",       WatchSize.U8),
-            (0x7E0E01, "Event Flag Block 2",       WatchSize.U8),
-            (0x7E0E02, "Event Flag Block 3",       WatchSize.U8),
-            (0x7E0E03, "Event Flag Block 4",       WatchSize.U8),
-            (0x7E0E10, "Story Progress Flag",      WatchSize.U16),
-            (0x7E0E12, "Boss Defeated Flags",      WatchSize.U16),
-            (0x7E0E14, "Chest Opened Flags 1",     WatchSize.U16),
-            (0x7E0E16, "Chest Opened Flags 2",     WatchSize.U16),
+        // =====================================================================
+        // GOLD (3 bytes, little-endian at $7E14CF)
+        // =====================================================================
+        AddRange(map, "Inventory", [
+            (0x7E14CF, "Gold (low byte)",          WatchSize.U8),
+            (0x7E14D0, "Gold (mid byte)",          WatchSize.U8),
+            (0x7E14D1, "Gold (high byte)",         WatchSize.U8),
+            (0x7E14CF, "Gold (full)",              WatchSize.U16), // low 2 bytes readable as U16
         ]);
 
-        // ----- Ancient Cave (if applicable) -----
-        AddRange(map, "Dungeon", [
-            (0x7E0E20, "Dungeon Floor",            WatchSize.U8),
-            (0x7E0E22, "Dungeon Room ID",          WatchSize.U16),
+        // =====================================================================
+        // EXPERIENCE (party-wide)
+        // =====================================================================
+        AddRange(map, "Party", [
+            (0x7E141A, "Experience (low byte)",    WatchSize.U8),
+            (0x7E141B, "Experience (high byte)",   WatchSize.U8),
+            (0x7E141A, "Experience",               WatchSize.U16),
+        ]);
+
+        // =====================================================================
+        // HERO (Player 1) — verified PAR addresses
+        // =====================================================================
+        AddRange(map, "Hero", [
+            (0x7E157F, "Hero Current HP",          WatchSize.U16),
+            (0x7E1587, "Hero Current MP",          WatchSize.U16),
+            (0x7E15F1, "Hero Max HP",              WatchSize.U16),
+            (0x7E15F9, "Hero Max MP",              WatchSize.U16),
+            (0x7E1710, "Hero STR",                 WatchSize.U16),
+            (0x7E1700, "Hero AGL",                 WatchSize.U16),
+            (0x7E1708, "Hero INT",                 WatchSize.U16),
+            (0x7E1718, "Hero MGR",                 WatchSize.U16),
+            (0x7E16F0, "Hero ATP",                 WatchSize.U16),
+            (0x7E16F8, "Hero DFP",                 WatchSize.U16),
+            (0x7E1691, "Hero EXP (low)",           WatchSize.U8),
+            (0x7E1695, "Hero EXP (mid)",           WatchSize.U8),
+            (0x7E1699, "Hero EXP (high)",          WatchSize.U8),
+        ]);
+
+        // =====================================================================
+        // LUFIA (Player 3 in PAR numbering) — verified PAR addresses
+        // =====================================================================
+        AddRange(map, "Lufia", [
+            (0x7E1581, "Lufia Current HP",         WatchSize.U16),
+            (0x7E1589, "Lufia Current MP",         WatchSize.U16),
+            (0x7E15F3, "Lufia Max HP",             WatchSize.U16),
+            (0x7E15FB, "Lufia Max MP",             WatchSize.U16),
+            (0x7E1714, "Lufia STR",                WatchSize.U16),
+            (0x7E1704, "Lufia AGL",                WatchSize.U16),
+            (0x7E170C, "Lufia INT",                WatchSize.U16),
+            (0x7E171C, "Lufia MGR",                WatchSize.U16),
+            (0x7E16F4, "Lufia ATP",                WatchSize.U16),
+            (0x7E16FC, "Lufia DFP",                WatchSize.U16),
+            (0x7E1693, "Lufia EXP (low)",          WatchSize.U8),
+            (0x7E1697, "Lufia EXP (mid)",          WatchSize.U8),
+            (0x7E169B, "Lufia EXP (high)",         WatchSize.U8),
+        ]);
+
+        // =====================================================================
+        // AGURO (Player 2 in PAR numbering) — verified PAR addresses
+        // =====================================================================
+        AddRange(map, "Aguro", [
+            (0x7E1583, "Aguro Current HP",         WatchSize.U16),
+            (0x7E158B, "Aguro Current MP",         WatchSize.U16),
+            (0x7E15F5, "Aguro Max HP",             WatchSize.U16),
+            (0x7E15FD, "Aguro Max MP",             WatchSize.U16),
+            (0x7E1712, "Aguro STR",                WatchSize.U16),
+            (0x7E1702, "Aguro AGL",                WatchSize.U16),
+            (0x7E170A, "Aguro INT",                WatchSize.U16),
+            (0x7E171A, "Aguro MGR",                WatchSize.U16),
+            (0x7E16F2, "Aguro ATP",                WatchSize.U16),
+            (0x7E16FA, "Aguro DFP",                WatchSize.U16),
+            (0x7E1692, "Aguro EXP (low)",          WatchSize.U8),
+            (0x7E1696, "Aguro EXP (mid)",          WatchSize.U8),
+            (0x7E169A, "Aguro EXP (high)",         WatchSize.U8),
+        ]);
+
+        // =====================================================================
+        // JERIN (Player 4 in PAR numbering) — verified PAR addresses
+        // =====================================================================
+        AddRange(map, "Jerin", [
+            (0x7E1585, "Jerin Current HP",         WatchSize.U16),
+            (0x7E158D, "Jerin Current MP",         WatchSize.U16),
+            (0x7E15F7, "Jerin Max HP",             WatchSize.U16),
+            (0x7E15FF, "Jerin Max MP",             WatchSize.U16),
+            (0x7E1716, "Jerin STR",                WatchSize.U16),
+            (0x7E1706, "Jerin AGL",                WatchSize.U16),
+            (0x7E170E, "Jerin INT",                WatchSize.U16),
+            (0x7E171E, "Jerin MGR",                WatchSize.U16),
+            (0x7E16F6, "Jerin ATP",                WatchSize.U16),
+            (0x7E16FE, "Jerin DFP",                WatchSize.U16),
+            (0x7E1694, "Jerin EXP (low)",          WatchSize.U8),
+            (0x7E1698, "Jerin EXP (mid)",          WatchSize.U8),
+            (0x7E169C, "Jerin EXP (high)",         WatchSize.U8),
         ]);
 
         return map;
-    }
-
-    /// <summary>Add a standard character stat block.</summary>
-    private static void AddCharacter(List<KnownAddress> map, string name, int baseAddr)
-    {
-        AddRange(map, name, [
-            (baseAddr + 0x00, $"{name} Level",     WatchSize.U8),
-            (baseAddr + 0x02, $"{name} Current EXP", WatchSize.U32),
-            (baseAddr + 0x06, $"{name} EXP to Next", WatchSize.U32),
-            (baseAddr + 0x0A, $"{name} Max HP",    WatchSize.U16),
-            (baseAddr + 0x0C, $"{name} Max MP",    WatchSize.U16),
-            (baseAddr + 0x0E, $"{name} STR",       WatchSize.U16),
-            (baseAddr + 0x10, $"{name} AGI",       WatchSize.U16),
-            (baseAddr + 0x12, $"{name} INT",       WatchSize.U16),
-            (baseAddr + 0x14, $"{name} GUT",       WatchSize.U16),
-            (baseAddr + 0x16, $"{name} MGR",       WatchSize.U16),
-            (baseAddr + 0x18, $"{name} HP",        WatchSize.U16),
-            (baseAddr + 0x1A, $"{name} MP",        WatchSize.U16),
-            (baseAddr + 0x1C, $"{name} ATK",       WatchSize.U16),
-            (baseAddr + 0x1E, $"{name} DEF",       WatchSize.U16),
-            (baseAddr + 0x20, $"{name} Status",    WatchSize.U8),
-            (baseAddr + 0x22, $"{name} Weapon ID", WatchSize.U8),
-            (baseAddr + 0x23, $"{name} Armor ID",  WatchSize.U8),
-            (baseAddr + 0x24, $"{name} Shield ID", WatchSize.U8),
-            (baseAddr + 0x25, $"{name} Helmet ID", WatchSize.U8),
-            (baseAddr + 0x26, $"{name} Ring ID",   WatchSize.U8),
-            (baseAddr + 0x27, $"{name} Jewel ID",  WatchSize.U8),
-        ]);
     }
 
     private static void AddRange(List<KnownAddress> map, string category,
