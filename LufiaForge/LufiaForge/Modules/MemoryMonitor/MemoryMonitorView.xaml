@@ -138,11 +138,100 @@
                 <TabItem Header="Watchlist" Style="{StaticResource LufiaTabItem}">
                     <Grid Background="{StaticResource MidPurpleBrush}">
                         <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>  <!-- Label search -->
+                            <RowDefinition Height="Auto"/>  <!-- Manual add -->
+                            <RowDefinition Height="*"/>     <!-- Watch table -->
                         </Grid.RowDefinitions>
 
+                        <!-- Label search bar -->
                         <Border Grid.Row="0" Padding="8,6"
+                                Background="{StaticResource SurfacePurpleBrush}"
+                                BorderBrush="{StaticResource BorderPurpleBrush}"
+                                BorderThickness="0,0,0,1">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <StackPanel Grid.Row="0" Orientation="Horizontal">
+                                    <TextBlock Text="Search:" Style="{StaticResource LufiaLabel}"
+                                               VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <TextBox Style="{StaticResource LufiaTextBox}"
+                                             Text="{Binding LabelSearchText, UpdateSourceTrigger=PropertyChanged}"
+                                             Width="180" Margin="0,0,8,0"
+                                             ToolTip="Type to search (e.g. 'HP', 'Gold', 'Hero', 'Map')"/>
+                                    <ComboBox Style="{StaticResource LufiaComboBox}"
+                                              ItemsSource="{Binding AddressCategories}"
+                                              Width="90" Margin="0,0,4,0"
+                                              ToolTip="Add all from category"
+                                              x:Name="CategoryCombo"/>
+                                    <Button Content="+ Category" Style="{StaticResource LufiaButton}"
+                                            Command="{Binding AddAllFromCategoryCommand}"
+                                            CommandParameter="{Binding SelectedItem, ElementName=CategoryCombo}"
+                                            Padding="6,3"/>
+                                </StackPanel>
+
+                                <!-- Filtered results list -->
+                                <ListBox Grid.Row="1"
+                                         ItemsSource="{Binding FilteredAddresses}"
+                                         SelectedItem="{Binding SelectedKnownAddress}"
+                                         MaxHeight="140"
+                                         Background="#1A1230"
+                                         Foreground="{StaticResource TextPrimaryBrush}"
+                                         BorderThickness="0"
+                                         Margin="0,4,0,0"
+                                         FontFamily="Cascadia Code, Consolas, Courier New"
+                                         FontSize="11"
+                                         ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                    <ListBox.Visibility>
+                                        <Binding Path="FilteredAddresses.Count">
+                                            <Binding.Converter>
+                                                <local:CountToVisibilityConverter/>
+                                            </Binding.Converter>
+                                        </Binding>
+                                    </ListBox.Visibility>
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="70"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="{Binding AddressHex}"
+                                                           Foreground="{StaticResource GoldDimBrush}" Margin="0,0,8,0"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding Label}"
+                                                           Foreground="{StaticResource TextPrimaryBrush}"/>
+                                                <TextBlock Grid.Column="2" Text="{Binding Category}"
+                                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                                           FontSize="9" Margin="8,0,0,0"
+                                                           VerticalAlignment="Center"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                    <ListBox.ItemContainerStyle>
+                                        <Style TargetType="ListBoxItem">
+                                            <Setter Property="Padding" Value="6,3"/>
+                                            <Setter Property="Cursor" Value="Hand"/>
+                                            <EventSetter Event="MouseDoubleClick" Handler="LabelResult_DoubleClick"/>
+                                            <Style.Triggers>
+                                                <Trigger Property="IsSelected" Value="True">
+                                                    <Setter Property="Background" Value="{StaticResource SurfacePurpleBrush}"/>
+                                                    <Setter Property="Foreground" Value="{StaticResource GoldLightBrush}"/>
+                                                </Trigger>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter Property="Background" Value="{StaticResource ElevatedPurpleBrush}"/>
+                                                </Trigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </ListBox.ItemContainerStyle>
+                                </ListBox>
+                            </Grid>
+                        </Border>
+
+                        <!-- Manual add bar -->
+                        <Border Grid.Row="1" Padding="8,4"
                                 Background="{StaticResource SurfacePurpleBrush}">
                             <WrapPanel>
                                 <TextBox Style="{StaticResource LufiaTextBox}"
@@ -163,7 +252,7 @@
                             </WrapPanel>
                         </Border>
 
-                        <DataGrid Grid.Row="1"
+                        <DataGrid Grid.Row="2"
                                   ItemsSource="{Binding Watches}"
                                   AutoGenerateColumns="False"
                                   IsReadOnly="True"
@@ -198,14 +287,22 @@
                                 <DataGridTextColumn Header="Cur"     Binding="{Binding CurrentValue}" Width="60"/>
                                 <DataGridTextColumn Header="Prev"    Binding="{Binding PreviousValue}" Width="60"/>
                                 <DataGridTextColumn Header="Delta"   Binding="{Binding Delta}"        Width="50"/>
-                                <DataGridTemplateColumn Header="" Width="40">
+                                <DataGridTemplateColumn Header="" Width="80">
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate>
-                                            <Button Content="X" FontSize="9" Padding="3,0"
-                                                    Command="{Binding DataContext.RemoveWatchCommand,
-                                                        RelativeSource={RelativeSource AncestorType=DataGrid}}"
-                                                    CommandParameter="{Binding}"
-                                                    Style="{StaticResource LufiaButton}"/>
+                                            <StackPanel Orientation="Horizontal">
+                                                <Button Content="Save" FontSize="9" Padding="3,0" Margin="0,0,2,0"
+                                                        ToolTip="Save as reusable label for all sessions"
+                                                        Command="{Binding DataContext.SaveAsLabelCommand,
+                                                            RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                        CommandParameter="{Binding}"
+                                                        Style="{StaticResource LufiaButton}"/>
+                                                <Button Content="X" FontSize="9" Padding="3,0"
+                                                        Command="{Binding DataContext.RemoveWatchCommand,
+                                                            RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                        CommandParameter="{Binding}"
+                                                        Style="{StaticResource LufiaButton}"/>
+                                            </StackPanel>
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>
