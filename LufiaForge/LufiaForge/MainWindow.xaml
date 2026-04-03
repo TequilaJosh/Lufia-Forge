@@ -5,8 +5,7 @@
         xmlns:te="clr-namespace:LufiaForge.Modules.TextEditor"
         xmlns:tv="clr-namespace:LufiaForge.Modules.TileViewer"
         xmlns:pm="clr-namespace:LufiaForge.Modules.PatchManager"
-        xmlns:em="clr-namespace:LufiaForge.Modules.Emulator"
-        Title="{Binding WindowTitle}"
+Title="{Binding WindowTitle}"
         Width="1280" Height="800"
         MinWidth="900" MinHeight="600"
         WindowStartupLocation="CenterScreen"
@@ -162,15 +161,6 @@
                         SelectedIndex="{Binding SelectedTabIndex}"
                         Background="Transparent"
                         Visibility="{Binding IsRomLoaded, Converter={StaticResource BoolToVisibilityConverter}}">
-
-                <!-- Tab headers -->
-                <TabItem Header="▶  Emulator" Style="{StaticResource LufiaTabItem}">
-                    <em:EmulatorHostView x:Name="EmulatorView">
-                        <em:EmulatorHostView.DataContext>
-                            <em:EmulatorHostViewModel/>
-                        </em:EmulatorHostView.DataContext>
-                    </em:EmulatorHostView>
-                </TabItem>
 
                 <TabItem Header="📝  Text Editor" Style="{StaticResource LufiaTabItem}">
                     <te:TextEditorView x:Name="TextEditorView">
