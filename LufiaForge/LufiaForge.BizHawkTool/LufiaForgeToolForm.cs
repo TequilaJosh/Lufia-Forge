@@ -295,7 +295,6 @@ public sealed class LufiaForgeToolForm : ToolFormBase, IExternalToolForm
     // -------------------------------------------------------------------------
     private void BuildUI()
     {
-        Text            = "Lufia Forge Monitor";
         Size            = new Size(720, 560);
         MinimumSize     = new Size(600, 400);
         BackColor       = Color.FromArgb(28, 20, 40);
