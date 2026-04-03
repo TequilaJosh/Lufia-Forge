@@ -176,4 +176,32 @@ public sealed class MemoryReader : IDisposable
         }
         return -1;
     }
+
+    /// <summary>
+    /// Enumerate all committed, readable (non-guard) memory regions in the
+    /// target process between <paramref name="startAddress"/> and
+    /// <paramref name="endAddress"/>. Yields (baseAddress, regionSize) pairs.
+    /// </summary>
+    public IEnumerable<(long baseAddress, long size)> EnumerateCommittedRegions(
+        long startAddress, long endAddress)
+    {
+        if (!IsAttached) yield break;
+
+        long addr = startAddress;
+        uint mbiSize = (uint)Marshal.SizeOf<MEMORY_BASIC_INFORMATION>();
+
+        while (addr < endAddress)
+        {
+            var result = VirtualQueryEx(_handle, (IntPtr)addr, out var mbi, mbiSize);
+            if (result == IntPtr.Zero) break;
+
+            long regionEnd = (long)mbi.BaseAddress + (long)mbi.RegionSize;
+
+            if (mbi.State == MEM_COMMIT && (mbi.Protect & PAGE_GUARD) == 0 && mbi.RegionSize != IntPtr.Zero)
+                yield return ((long)mbi.BaseAddress, (long)mbi.RegionSize);
+
+            if (regionEnd <= addr) break;
+            addr = regionEnd;
+        }
+    }
 }

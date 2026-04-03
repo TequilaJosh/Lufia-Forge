@@ -1,129 +1,131 @@
 using System.Diagnostics;
+using System.Text;
 
 namespace LufiaForge.Modules.Emulator;
 
 /// <summary>
-/// Maps SNES logical addresses to offsets within the Snes9x 1.62.3 Win32
-/// process memory.
+/// Locates the emulated WRAM buffer inside the Snes9x process.
 ///
-/// Snes9x stores the emulated 128 KB WRAM in a contiguous block somewhere in
-/// its heap. We locate it by scanning the process address space for the
-/// characteristic 128 KB-aligned region that starts with the SNES power-on RAM
-/// pattern, or by locating known static symbols.
+/// Strategy 1 (ROM-title anchor, most reliable):
+///   Scan for the Lufia 1 ROM title bytes ("ESTPOLIS" or "LUFIA").
+///   The title is stored at offset 0x7FC0 inside the ROM buffer.
+///   Subtracting that offset gives the ROM buffer base.
+///   We then search for a 32-bit pointer to that base — that's CMemory.ROM.
+///   CMemory layout (32-bit snes9x):
+///     NSRTHeader[32] + HeaderCount[4] + RAM*[4] + SRAM*[4] + VRAM*[4] + ROM*[4]
+///   So RAM pointer is 12 bytes before the ROM pointer field.
 ///
-/// The Snes9x 1.62.3 Win32 build exposes its memory layout as a global struct
-/// called "Memory" at a predictable offset from the .data section. We use a
-/// two-pass approach:
-///   Pass 1 — signature scan for the 128 KB RAM region (works for all builds).
-///   Pass 2 — fallback: assume the RAM base is the first committed 128 KB block
-///             in the process heap that looks like SNES RAM.
+/// Strategy 2 (region-size scan, fallback):
+///   Walk all committed memory regions via VirtualQueryEx.
+///   The WRAM buffer is always exactly 0x20000 bytes (128 KB).
+///   The first readable private committed region of that exact size is WRAM.
 /// </summary>
 public static class Snes9xAddressMap
 {
-    public const int RamSize    = 0x20000;   // 128 KB
-    public const int VramSize   = 0x10000;   // 64 KB
-    public const int CgramSize  = 0x200;     // 512 bytes
+    public const int RamSize   = 0x20000;  // 128 KB
+    public const int VramSize  = 0x10000;  // 64 KB
+    public const int CgramSize = 0x200;    // 512 bytes
 
     // -------------------------------------------------------------------------
     // RAM base discovery
     // -------------------------------------------------------------------------
 
-    /// <summary>
-    /// Scan the Snes9x process for its emulated WRAM base address.
-    /// Returns 0 if not found.
-    /// </summary>
     public static long FindRamBase(MemoryReader reader, Process process)
     {
-        // Strategy 1: look for a 131072-byte region whose first byte is 0x00
-        // and that has a plausible SNES RAM content signature.
-        // We scan from 0x10000 (skip the null page) to 2 GB.
-        // SNES RAM typically starts all zeros at power-on, so we look for
-        // a large block of mostly-zero bytes followed by Snes9x's internal
-        // header patterns.
+        long ram = FindRamViaRomTitle(reader);
+        if (ram > 0) return ram;
 
-        // Strategy 2 (fast): locate the Snes9x module base and use the known
-        // static offset for Memory.RAM in version 1.62.3.
-        long moduleBase = GetMainModuleBase(process);
-        if (moduleBase != 0)
-        {
-            // In Snes9x 1.62.3 Win32 the Memory struct is at a fixed RVA.
-            // Probe several known candidates for the Memory.RAM pointer.
-            foreach (long rva in Snes9x1623RamRvas)
-            {
-                long candidate = reader.ReadUInt32Le(moduleBase + rva);
-                if (candidate != 0 && LooksLikeRam(reader, candidate))
-                    return candidate;
-            }
-        }
-
-        // Strategy 3: brute-force scan for the RAM signature pattern.
-        // WRAM $7E:0000 tends to start with specific values set by the game.
-        // We look for a 128 KB-aligned committed region.
-        return ScanForRamRegion(reader);
+        return FindRamViaRegionSize(reader);
     }
 
-    // Known RVAs for Memory.RAM pointer in Snes9x 1.62.3 x86 Win32.
-    // These are offsets from the module base where Snes9x stores a pointer
-    // to its internal RAM buffer.
-    private static readonly long[] Snes9x1623RamRvas = { 0x2E8000, 0x2E9000, 0x2EA000, 0x300000 };
+    // -------------------------------------------------------------------------
+    // Strategy 1 — ROM title anchor
+    // -------------------------------------------------------------------------
 
-    private static long GetMainModuleBase(Process process)
+    private static long FindRamViaRomTitle(MemoryReader reader)
     {
-        try
+        // Lufia 1 (US) internal ROM header title. Try both common spellings.
+        foreach (string title in new[] { "ESTPOLIS", "LUFIA" })
         {
-            process.Refresh();
-            return (long)process.MainModule!.BaseAddress;
+            long ram = TryTitle(reader, Encoding.ASCII.GetBytes(title));
+            if (ram > 0) return ram;
         }
-        catch { return 0; }
+        return 0;
     }
+
+    private static long TryTitle(MemoryReader reader, byte[] titleBytes)
+    {
+        // Scan up to 8 GB — covers all 32-bit and typical 64-bit snes9x heaps.
+        long titleAddr = reader.ScanForPattern(titleBytes, 0x10000, 0x200000000L);
+        if (titleAddr <= 0x7FC0) return 0;
+
+        // Title is at ROM_base + 0x7FC0 (LoROM header offset)
+        long romBase = titleAddr - 0x7FC0;
+
+        // Find the CMemory.ROM pointer field (a 32-bit value == romBase)
+        byte[] romPtrBytes = BitConverter.GetBytes((uint)romBase);
+        long romPtrAddr = reader.ScanForPattern(romPtrBytes, 0x10000, 0x200000000L);
+        if (romPtrAddr <= 0) return 0;
+
+        // RAM* is 12 bytes before ROM* in the CMemory struct.
+        // Also probe 8 bytes before as some builds differ.
+        foreach (int delta in new[] { 12, 8 })
+        {
+            long ramBase = reader.ReadUInt32Le(romPtrAddr - delta);
+            if (ramBase > 0x10000 && ramBase < 0x100000000L && LooksLikeRam(reader, ramBase))
+                return ramBase;
+        }
+        return 0;
+    }
+
+    // -------------------------------------------------------------------------
+    // Strategy 2 — exact 128 KB region scan
+    // -------------------------------------------------------------------------
+
+    private static long FindRamViaRegionSize(MemoryReader reader)
+    {
+        foreach (var (baseAddr, size) in reader.EnumerateCommittedRegions(0x10000, 0x100000000L))
+        {
+            if (size == RamSize && LooksLikeRam(reader, baseAddr))
+                return baseAddr;
+        }
+        return 0;
+    }
+
+    // -------------------------------------------------------------------------
+    // Validation
+    // -------------------------------------------------------------------------
 
     private static bool LooksLikeRam(MemoryReader reader, long address)
     {
-        // A 128 KB block that is mostly readable bytes. We just check it's addressable.
         try
         {
             byte[] probe = reader.ReadBytes(address, 64);
-            return true; // if read succeeded, it's likely valid
+            // ReadBytes returns all-zero on failure; a valid region should at
+            // least be readable (even if all-zero is valid SNES RAM at power-on).
+            return probe.Length == 64;
         }
         catch { return false; }
     }
 
-    private static long ScanForRamRegion(MemoryReader reader)
-    {
-        // Scan for a large zero-filled region (power-on SNES RAM pattern).
-        // Not 100% reliable mid-game but better than nothing.
-        byte[] zeroes = new byte[64]; // 64 consecutive zero bytes
-        long   result = reader.ScanForPattern(zeroes, 0x100000, 0x80000000);
-        // Align down to 64 KB boundary
-        if (result > 0) result &= ~0xFFFFL;
-        return result;
-    }
-
     // -------------------------------------------------------------------------
-    // SNES address → process address translation
+    // SNES address → WRAM offset translation
     // -------------------------------------------------------------------------
 
-    /// <summary>
-    /// Convert a 24-bit SNES logical address (bank:addr) to a byte offset
-    /// within the WRAM block, or -1 if not in WRAM.
-    /// </summary>
     public static int SnesAddressToRamOffset(int snesAddress)
     {
         int bank = (snesAddress >> 16) & 0xFF;
         int addr = snesAddress & 0xFFFF;
 
-        // WRAM mirrors: $7E:0000–$7F:FFFF (banks $7E–$7F)
         if (bank == 0x7E) return addr;
         if (bank == 0x7F) return 0x10000 + addr;
 
-        // Low-page WRAM mirrors: banks $00–$3F and $80–$BF, addr $0000–$1FFF
         if (addr < 0x2000 && (bank <= 0x3F || (bank >= 0x80 && bank <= 0xBF)))
             return addr;
 
         return -1;
     }
 
-    /// <summary>Format a 24-bit SNES address as a hex string like $7E:05A0.</summary>
     public static string FormatSnesAddress(int snesAddress) =>
         $"${(snesAddress >> 16) & 0xFF:X2}:{snesAddress & 0xFFFF:X4}";
 }
