@@ -22,11 +22,12 @@ project.lock.json
 project.fragment.lock.json
 artifacts/
 
-# .NET
+# .NET (exclude build artifacts but allow bundled BizHawk)
 *.dll
 *.exe
 *.pdb
 *.cache
+!BizHawk/**
 
 # Publish profiles
 **/Properties/PublishProfiles/
@@ -40,9 +41,6 @@ desktop.ini
 *.smc
 *.sfc
 *.ips
-
-# BizHawk emulator (place BizHawk/ folder alongside LufiaForge/ — auto-detected at runtime)
-BizHawk/
 
 # Claude Code
 .claude/
