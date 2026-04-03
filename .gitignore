@@ -40,3 +40,7 @@ desktop.ini
 *.smc
 *.sfc
 *.ips
+
+# BizHawk emulator (place BizHawk/ folder alongside LufiaForge/ — auto-detected at runtime)
+BizHawk/
+

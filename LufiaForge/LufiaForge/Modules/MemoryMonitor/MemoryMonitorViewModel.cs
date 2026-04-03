@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Windows.Forms;
@@ -17,8 +18,7 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
     private readonly BizHawkHost   _host   = new();
     private readonly DispatcherTimer _timer;
 
-    // Default BizHawk path - configurable later
-    private const string DefaultEmuHawkPath = @"D:\BizHawk\EmuHawk.exe";
+    private static readonly string DefaultEmuHawkPath = FindBundledBizHawk();
 
     // -------------------------------------------------------------------------
     // Observable properties
@@ -68,16 +68,16 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
         // Load user-defined custom labels from disk
         Lufia1AddressMap.LoadCustom();
 
-        // Seed default watches for Lufia 1
-        Watches.Add(new WatchItem(0x7E0B9E, "Hero HP",    WatchSize.U16));
-        Watches.Add(new WatchItem(0x7E0BA0, "Hero Max HP", WatchSize.U16));
-        Watches.Add(new WatchItem(0x7E0BA2, "Hero MP",    WatchSize.U16));
-        Watches.Add(new WatchItem(0x7E0BA4, "Hero Max MP", WatchSize.U16));
-        Watches.Add(new WatchItem(0x7E0B86, "Hero Level", WatchSize.U8));
-        Watches.Add(new WatchItem(0x7E0BF4, "Gold",       WatchSize.U32));
-        Watches.Add(new WatchItem(0x7E0016, "Map ID",     WatchSize.U16));
-        Watches.Add(new WatchItem(0x7E0078, "X Position", WatchSize.U16));
-        Watches.Add(new WatchItem(0x7E007A, "Y Position", WatchSize.U16));
+        // Seed default watches for Lufia 1 — verified PAR code addresses
+        Watches.Add(new WatchItem(0x7E157F, "Hero Current HP",  WatchSize.U16));
+        Watches.Add(new WatchItem(0x7E15F1, "Hero Max HP",      WatchSize.U16));
+        Watches.Add(new WatchItem(0x7E1587, "Hero Current MP",  WatchSize.U16));
+        Watches.Add(new WatchItem(0x7E15F9, "Hero Max MP",      WatchSize.U16));
+        Watches.Add(new WatchItem(0x7E14CF, "Gold (full)",       WatchSize.U16));
+        Watches.Add(new WatchItem(0x7E141A, "Experience",        WatchSize.U16));
+        Watches.Add(new WatchItem(0x7E16F0, "Hero ATP",          WatchSize.U16));
+        Watches.Add(new WatchItem(0x7E16F8, "Hero DFP",          WatchSize.U16));
+        Watches.Add(new WatchItem(0x7E1710, "Hero STR",          WatchSize.U16));
 
         _host.Attached += () =>
         {
@@ -98,6 +98,19 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
         };
         _timer.Tick += Timer_Tick;
         _timer.Start();
+
+        // Auto-launch BizHawk on startup (fire and forget)
+        _ = AutoLaunchAsync();
+    }
+
+    private async System.Threading.Tasks.Task AutoLaunchAsync()
+    {
+        // Small delay to let the UI finish loading
+        await System.Threading.Tasks.Task.Delay(500);
+        if (!_host.IsRunning && File.Exists(DefaultEmuHawkPath))
+        {
+            await LaunchBizHawk();
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -427,6 +440,35 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
         WatchSize.U32                  => 4,
         _                              => 1,
     };
+
+    /// <summary>
+    /// Walks up from the application directory to find the bundled BizHawk folder.
+    /// Looks for a sibling "BizHawk" folder relative to the repo/solution root.
+    /// Falls back to a hardcoded path if not found.
+    /// </summary>
+    private static string FindBundledBizHawk()
+    {
+        try
+        {
+            // Start from the executable's directory and walk up looking for BizHawk\EmuHawk.exe
+            string? dir = AppDomain.CurrentDomain.BaseDirectory;
+            while (dir != null)
+            {
+                string candidate = Path.Combine(dir, "BizHawk", "EmuHawk.exe");
+                if (File.Exists(candidate))
+                    return candidate;
+
+                dir = Path.GetDirectoryName(dir);
+            }
+        }
+        catch { /* non-fatal */ }
+
+        // Fallback: check common locations
+        string localBizHawk = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BizHawk", "EmuHawk.exe");
+        if (File.Exists(localBizHawk)) return localBizHawk;
+
+        return @"D:\BizHawk\EmuHawk.exe";
+    }
 
     public void Dispose()
     {
