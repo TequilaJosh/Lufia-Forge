@@ -10,8 +10,8 @@ Built in C# WPF (.NET 8). Each phase below has its own checklist file.
 | # | Phase | Status |
 |---|-------|--------|
 | [1](./phase-01-foundation.md) | ROM Loader, Core Infrastructure, IPS Handler | ✅ Complete |
-| [2](./phase-02-text-editor.md) | Text Editor + Dictionary Expansion | ✅ Complete |
-| [3](./phase-03-emulator.md) | Embedded Emulator + Live Memory Viewer | 🔲 Not Started |
+| [2](./phase-02-text-editor.md) | Text Editor + Dictionary Expansion | 🔄 Complete |
+| [3](./phase-03-emulator.md) | Embedded Emulator + Live Memory Viewer | ✅ Not Started |
 | [4](./phase-04-disassembler.md) | 65816 Disassembler + Research Tools | 🔲 Not Started |
 | [5](./phase-05-tile-viewer.md) | Tile & Sprite Viewer | 🔲 Not Started |
 | [6](./phase-06-script-event-editor.md) | Script Editor, Event Editor, Cutscene Sequencer | 🔲 Not Started |
