@@ -64,6 +64,7 @@ LufiaForge/
 - 🔄 In progress
 - ⚠️ Blocked / needs research
 
+<img width="1264" height="789" alt="image" src="https://github.com/user-attachments/assets/a17aee8c-9aa3-4813-84a4-ae132ccaf8fb" />
 
 <img width="1254" height="791" alt="Screenshot 2026-03-30 202722" src="https://github.com/user-attachments/assets/a6dbbdbc-8975-438f-ab30-795a64e8416b" />
 
