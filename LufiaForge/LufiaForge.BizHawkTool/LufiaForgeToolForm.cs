@@ -8,6 +8,7 @@ using System.Windows.Forms;
 
 using BizHawk.Client.Common;
 using BizHawk.Client.EmuHawk;
+using BizHawk.Emulation.Common;
 
 namespace LufiaForge.BizHawkTool;
 
@@ -64,6 +65,7 @@ public sealed class LufiaForgeToolForm : ToolFormBase, IExternalToolForm
     private byte[]? _prevWram;
     private List<int>? _searchCandidates; // RAM offsets surviving Next Scan
 
+
     // -------------------------------------------------------------------------
     // Init
     // -------------------------------------------------------------------------
@@ -99,12 +101,14 @@ public sealed class LufiaForgeToolForm : ToolFormBase, IExternalToolForm
     /// <summary>Called when a new ROM is loaded or the tool is opened.</summary>
     public override void Restart()
     {
-        _wram           = null;
-        _prevWram       = null;
-        _searchCandidates = null;
+        _wram                    = null;
+        _prevWram                = null;
+        _searchCandidates        = null;
         _searchResults.Items.Clear();
         _statusLabel.Text = "ROM loaded — monitoring WRAM.";
+
     }
+
 
     /// <summary>Called every frame by BizHawk.</summary>
     public override void UpdateValues(ToolFormUpdateType type)
@@ -118,6 +122,7 @@ public sealed class LufiaForgeToolForm : ToolFormBase, IExternalToolForm
         _wram     = ReadWram();
 
         WriteToSharedMemory();
+        PollLoadRomCommand();
         RefreshHexView();
         RefreshWatchlist();
     }
@@ -138,6 +143,80 @@ public sealed class LufiaForgeToolForm : ToolFormBase, IExternalToolForm
             _mmfAccessor.Write(16, (uint)WramSize);
             _mmfAccessor.Write(20, (uint)1); // flags: connected
             _mmfAccessor.WriteArray(MmfHeaderSize, _wram, 0, _wram.Length);
+
+            // CPU registers (bytes 24-30) — read from BizHawk register file
+            WriteCpuRegisters();
+        }
+        catch { /* non-fatal */ }
+    }
+
+    private void WriteCpuRegisters()
+    {
+        if (_mmfAccessor == null) return;
+        try
+        {
+            // NOTE: Requires bsnes core (Config → Cores → SNES → BSNES).
+            // Snes9x does not implement GetCpuFlagsAndRegisters and returns empty.
+            var regs = APIs.Emulation.GetRegisters();
+            if (regs.Count == 0)
+            {
+                if (_frameCounter % 120 == 0)
+                    _statusLabel.Text = "PC unavailable — switch to BSNES core (Config → Cores → SNES).";
+                return;
+            }
+
+            regs.TryGetValue("PC", out ulong pcRaw);
+            ushort pc;
+            byte   pb;
+            if (pcRaw > 0xFFFF)           // some bsnes builds pack full 24-bit into "PC"
+            {
+                pb = (byte)((pcRaw >> 16) & 0xFF);
+                pc = (ushort)(pcRaw & 0xFFFF);
+            }
+            else
+            {
+                pc = (ushort)(pcRaw & 0xFFFF);
+                pb = regs.TryGetValue("PB", out ulong pbRaw) ? (byte)(pbRaw & 0xFF) : (byte)0;
+            }
+
+            byte   p  = regs.TryGetValue("P",  out ulong pRaw)  ? (byte)(pRaw  & 0xFF)    : (byte)0;
+            ushort d  = regs.TryGetValue("D",  out ulong dRaw)  ? (ushort)(dRaw & 0xFFFF) : (ushort)0;
+            byte   db = regs.TryGetValue("DB", out ulong dbRaw) ? (byte)(dbRaw  & 0xFF)   : (byte)0;
+
+            _mmfAccessor.Write(24, pc);
+            _mmfAccessor.Write(26, pb);
+            _mmfAccessor.Write(27, p);
+            _mmfAccessor.Write(28, d);
+            _mmfAccessor.Write(30, db);
+
+            if (_frameCounter % 60 == 0)
+                _statusLabel.Text = $"PC=${((int)pb << 16) | pc:X6}  |  ROM loaded — monitoring WRAM + PC.";
+        }
+        catch { /* non-fatal */ }
+    }
+
+    // -------------------------------------------------------------------------
+    // ROM auto-load command (written by LufiaForge WPF when user opens a ROM)
+    // -------------------------------------------------------------------------
+    private static readonly string LoadRomCommandFile =
+        System.IO.Path.Combine(System.IO.Path.GetTempPath(), "LufiaForge_LoadROM.txt");
+
+    private void PollLoadRomCommand()
+    {
+        // Check once per second (~60 frames) to avoid filesystem overhead
+        if (_frameCounter % 60 != 0) return;
+        if (!System.IO.File.Exists(LoadRomCommandFile)) return;
+
+        try
+        {
+            string romPath = System.IO.File.ReadAllText(LoadRomCommandFile).Trim();
+            System.IO.File.Delete(LoadRomCommandFile);
+
+            if (!string.IsNullOrEmpty(romPath) && System.IO.File.Exists(romPath))
+            {
+                APIs.EmuClient.OpenRom(romPath);
+                _statusLabel.Text = $"Loaded: {System.IO.Path.GetFileName(romPath)}";
+            }
         }
         catch { /* non-fatal */ }
     }
