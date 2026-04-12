@@ -52,6 +52,25 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
     // Search state
     private List<int>? _searchCandidates;
 
+    // -------------------------------------------------------------------------
+    // Cross-module API
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Called by the Disassembler's "Add to Watchlist" context menu item.
+    /// Adds a U16 watch if the address is not already tracked.
+    /// </summary>
+    public void AddWatch(int snesAddress, string label)
+    {
+        if (Watches.Any(w => w.SnesAddr == snesAddress)) return;
+        Watches.Add(new WatchItem(snesAddress, label, WatchSize.U16));
+    }
+
+    // ROM auto-load
+    private string? _pendingRomPath;
+    private static readonly string LoadRomCommandFile =
+        Path.Combine(Path.GetTempPath(), "LufiaForge_LoadROM.txt");
+
     /// <summary>
     /// Exposes the WinForms Panel hosting BizHawk's reparented window.
     /// The View binds this into a WindowsFormsHost.
@@ -82,7 +101,9 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
         _host.Attached += () =>
         {
             IsBizHawkRunning = true;
-            ConnectionStatus = "BizHawk embedded. Load ROM, then open Tools > External Tools > Lufia Forge Monitor.";
+            ConnectionStatus = _pendingRomPath != null
+                ? "BizHawk embedded — loading ROM automatically…"
+                : "BizHawk embedded. Open Tools › External Tools › Lufia Forge Monitor.";
         };
         _host.Exited += () =>
         {
@@ -101,7 +122,45 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
     }
 
     // -------------------------------------------------------------------------
-    // BizHawk launch
+    // ROM propagation — called by MainWindow when user opens a ROM
+    // -------------------------------------------------------------------------
+    public void SetRom(Core.RomBuffer rom)
+    {
+        _pendingRomPath = rom.FilePath;
+
+        if (!_host.IsRunning)
+        {
+            // Not running yet — launch with the ROM path as a command-line arg
+            _ = LaunchBizHawkWithRom(_pendingRomPath);
+        }
+        else
+        {
+            // Already embedded — tell the external tool to load the ROM via temp file
+            WriteLoadRomCommand(_pendingRomPath);
+            ConnectionStatus = "Signalling BizHawk to load ROM…";
+        }
+    }
+
+    private static void WriteLoadRomCommand(string romPath)
+    {
+        try { File.WriteAllText(LoadRomCommandFile, romPath); } catch { }
+    }
+
+    private async System.Threading.Tasks.Task LaunchBizHawkWithRom(string romPath)
+    {
+        try
+        {
+            await _host.LaunchAsync(DefaultEmuHawkPath, romPath);
+            IsBizHawkRunning = _host.IsRunning;
+        }
+        catch (Exception ex)
+        {
+            ConnectionStatus = $"Launch error: {ex.Message}";
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // BizHawk launch (manual button)
     // -------------------------------------------------------------------------
     [RelayCommand]
     private async System.Threading.Tasks.Task LaunchBizHawk()
@@ -114,7 +173,8 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
 
         try
         {
-            await _host.LaunchAsync(DefaultEmuHawkPath);
+            // Pass any already-open ROM so BizHawk loads it immediately
+            await _host.LaunchAsync(DefaultEmuHawkPath, _pendingRomPath);
             IsBizHawkRunning = _host.IsRunning;
         }
         catch (Exception ex)
