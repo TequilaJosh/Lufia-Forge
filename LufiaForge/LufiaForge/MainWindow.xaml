@@ -6,6 +6,7 @@
         xmlns:te="clr-namespace:LufiaForge.Modules.TextEditor"
         xmlns:tv="clr-namespace:LufiaForge.Modules.TileViewer"
         xmlns:pm="clr-namespace:LufiaForge.Modules.PatchManager"
+        xmlns:dis="clr-namespace:LufiaForge.Modules.Disassembler"
 Title="{Binding WindowTitle}"
         Width="1280" Height="800"
         MinWidth="900" MinHeight="600"
@@ -163,12 +164,11 @@ Title="{Binding WindowTitle}"
             </TabItem>
 
             <TabItem Header="⚙  Disassembler"  Style="{StaticResource LufiaTabItem}">
-                <Border Background="{StaticResource MidPurpleBrush}" Padding="16">
-                    <TextBlock Text="65816 Disassembler - Phase 5"
-                               Style="{StaticResource LufiaLabelGold}"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center"/>
-                </Border>
+                <dis:DisassemblerView x:Name="DisassemblerView">
+                    <dis:DisassemblerView.DataContext>
+                        <dis:DisassemblerViewModel/>
+                    </dis:DisassemblerView.DataContext>
+                </dis:DisassemblerView>
             </TabItem>
 
             <TabItem Header="🩹  Patch Manager" Style="{StaticResource LufiaTabItem}">
