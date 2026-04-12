@@ -1,0 +1,568 @@
+<UserControl x:Class="LufiaForge.Modules.Disassembler.DisassemblerView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:LufiaForge.Modules.Disassembler">
+
+    <UserControl.Resources>
+        <!-- Color constants for syntax highlighting -->
+        <SolidColorBrush x:Key="MnemonicBrush"   Color="#E8B84B"/>  <!-- gold -->
+        <SolidColorBrush x:Key="AddressBrush"     Color="#8B6518"/>  <!-- gold-dim -->
+        <SolidColorBrush x:Key="RawBytesBrush"    Color="#5C5040"/>  <!-- text-disabled -->
+        <SolidColorBrush x:Key="OperandAddrBrush" Color="#B0A0E0"/>  <!-- light purple -->
+        <SolidColorBrush x:Key="ImmediateBrush"   Color="#F0E6D3"/>  <!-- text-primary -->
+        <SolidColorBrush x:Key="CommentBrush"     Color="#6A8A6A"/>  <!-- dim green -->
+        <SolidColorBrush x:Key="JumpTargetBrush"  Color="#A080FF"/>  <!-- bright purple for jumps -->
+        <SolidColorBrush x:Key="DataLineBrush"    Color="#C0392B"/>  <!-- red for data markers -->
+        <SolidColorBrush x:Key="CurrentPcBrush"   Color="#2A3A1A"/>  <!-- dark green PC highlight bg -->
+
+        <!-- Bool → Visibility converter inline for operand coloring -->
+
+        <!-- Disassembly row DataTemplate -->
+        <DataTemplate x:Key="DisassemblyRowTemplate" DataType="{x:Type local:DisassemblyLine}">
+            <Border x:Name="RowBorder"
+                    Background="Transparent"
+                    Padding="2,1">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="80"/>   <!-- SNES address -->
+                        <ColumnDefinition Width="88"/>   <!-- Raw bytes -->
+                        <ColumnDefinition Width="46"/>   <!-- Mnemonic -->
+                        <ColumnDefinition Width="150"/>  <!-- Operand -->
+                        <ColumnDefinition Width="*"/>    <!-- Comment -->
+                    </Grid.ColumnDefinitions>
+
+                    <!-- SNES address -->
+                    <TextBlock Grid.Column="0"
+                               Text="{Binding SnesAddressHex}"
+                               Foreground="{StaticResource AddressBrush}"
+                               FontFamily="Consolas"
+                               FontSize="12"/>
+
+                    <!-- Raw bytes -->
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding RawBytesHex}"
+                               Foreground="{StaticResource RawBytesBrush}"
+                               FontFamily="Consolas"
+                               FontSize="12"/>
+
+                    <!-- Mnemonic -->
+                    <TextBlock Grid.Column="2"
+                               Text="{Binding Mnemonic}"
+                               FontFamily="Consolas"
+                               FontSize="12"
+                               FontWeight="SemiBold">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="{StaticResource MnemonicBrush}"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsData}" Value="True">
+                                        <Setter Property="Foreground" Value="{StaticResource DataLineBrush}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+
+                    <!-- Operand — clickable when HasJumpTarget is true -->
+                    <TextBlock Grid.Column="3"
+                               Text="{Binding Operand}"
+                               FontFamily="Consolas"
+                               FontSize="12"
+                               Cursor="Arrow"
+                               x:Name="OperandText">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="{StaticResource OperandAddrBrush}"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasJumpTarget}" Value="True">
+                                        <Setter Property="Foreground"       Value="{StaticResource JumpTargetBrush}"/>
+                                        <Setter Property="TextDecorations"  Value="Underline"/>
+                                        <Setter Property="Cursor"           Value="Hand"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding IsData}" Value="True">
+                                        <Setter Property="Foreground" Value="{StaticResource DataLineBrush}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+
+                    <!-- Comment -->
+                    <TextBlock Grid.Column="4"
+                               Text="{Binding Comment}"
+                               Foreground="{StaticResource CommentBrush}"
+                               FontFamily="Consolas"
+                               FontSize="11"
+                               FontStyle="Italic"/>
+                </Grid>
+            </Border>
+            <DataTemplate.Triggers>
+                <!-- Gold background for live PC line -->
+                <DataTrigger Binding="{Binding IsCurrentPc}" Value="True">
+                    <Setter TargetName="RowBorder" Property="Background" Value="{StaticResource CurrentPcBrush}"/>
+                    <Setter TargetName="RowBorder" Property="BorderBrush" Value="{StaticResource MnemonicBrush}"/>
+                    <Setter TargetName="RowBorder" Property="BorderThickness" Value="0,1"/>
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+    </UserControl.Resources>
+
+    <Grid Background="{StaticResource MidPurpleBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>  <!-- Toolbar row 1: address / flags -->
+            <RowDefinition Height="Auto"/>  <!-- Toolbar row 2: live PC / xref / export -->
+            <RowDefinition Height="Auto"/>  <!-- Gold divider -->
+            <RowDefinition Height="*"/>     <!-- Main content -->
+            <RowDefinition Height="Auto"/>  <!-- Status bar -->
+        </Grid.RowDefinitions>
+
+        <!-- ================================================================
+             TOOLBAR ROW 1 — address input, flags, disassemble
+             ================================================================ -->
+        <Border Grid.Row="0"
+                Background="{StaticResource SurfacePurpleBrush}"
+                BorderBrush="{StaticResource BorderPurpleBrush}"
+                BorderThickness="0,0,0,1"
+                Padding="10,7">
+            <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+
+                <TextBlock Text="Address:"
+                           Style="{StaticResource LufiaLabel}"
+                           VerticalAlignment="Center"
+                           Margin="0,0,4,0"/>
+                <TextBox Text="{Binding AddressText, UpdateSourceTrigger=PropertyChanged}"
+                         Style="{StaticResource LufiaTextBox}"
+                         Width="90"
+                         ToolTip="SNES address or file offset (e.g. $808000 or 0x008000)"
+                         Margin="0,0,12,0"/>
+
+                <TextBlock Text="Bytes:"
+                           Style="{StaticResource LufiaLabel}"
+                           VerticalAlignment="Center"
+                           Margin="0,0,4,0"/>
+                <TextBox Text="{Binding ByteCountText, UpdateSourceTrigger=PropertyChanged}"
+                         Style="{StaticResource LufiaTextBox}"
+                         Width="64"
+                         ToolTip="How many ROM bytes to decode (hex)"
+                         Margin="0,0,12,0"/>
+
+                <CheckBox Content="M (8-bit acc)"
+                          IsChecked="{Binding FlagM}"
+                          Style="{StaticResource LufiaCheckBox}"
+                          VerticalAlignment="Center"
+                          ToolTip="Initial accumulator size: checked = 8-bit, unchecked = 16-bit"
+                          Margin="0,0,10,0"/>
+                <CheckBox Content="X (8-bit idx)"
+                          IsChecked="{Binding FlagX}"
+                          Style="{StaticResource LufiaCheckBox}"
+                          VerticalAlignment="Center"
+                          ToolTip="Initial index register size: checked = 8-bit, unchecked = 16-bit"
+                          Margin="0,0,16,0"/>
+
+                <Button Content="▶  Disassemble"
+                        Style="{StaticResource LufiaButtonGold}"
+                        Command="{Binding DisassembleCommand}"
+                        Padding="14,6"
+                        Margin="0,0,8,0"/>
+
+                <Button Content="← Back"
+                        Style="{StaticResource LufiaButton}"
+                        Command="{Binding GoBackCommand}"
+                        Padding="10,6"
+                        Margin="0,0,4,0"/>
+                <Button Content="→ Fwd"
+                        Style="{StaticResource LufiaButton}"
+                        Command="{Binding GoForwardCommand}"
+                        Padding="10,6"
+                        Margin="0,0,16,0"/>
+
+                <Button Content="Export .asm"
+                        Style="{StaticResource LufiaButton}"
+                        Command="{Binding ExportAsmCommand}"
+                        Padding="10,6"/>
+
+            </WrapPanel>
+        </Border>
+
+        <!-- ================================================================
+             TOOLBAR ROW 2 — live PC / auto-scroll / cross-reference
+             ================================================================ -->
+        <Border Grid.Row="1"
+                Background="{StaticResource DeepPurpleBrush}"
+                BorderBrush="{StaticResource BorderPurpleBrush}"
+                BorderThickness="0,0,0,1"
+                Padding="10,5">
+            <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+
+                <CheckBox Content="Follow PC"
+                          IsChecked="{Binding FollowPc}"
+                          Style="{StaticResource LufiaCheckBox}"
+                          VerticalAlignment="Center"
+                          ToolTip="Re-disassemble around the live BizHawk program counter whenever it moves outside the current view"
+                          Margin="0,0,12,0"/>
+                <CheckBox Content="Auto-scroll"
+                          IsChecked="{Binding AutoScroll}"
+                          Style="{StaticResource LufiaCheckBox}"
+                          VerticalAlignment="Center"
+                          ToolTip="Keep the current PC instruction visible"
+                          Margin="0,0,20,0"/>
+
+                <!-- Live PC badge -->
+                <Border Background="{StaticResource SurfacePurpleBrush}"
+                        BorderBrush="{StaticResource BorderPurpleBrush}"
+                        BorderThickness="1"
+                        CornerRadius="3"
+                        Padding="8,3"
+                        Margin="0,0,16,0"
+                        Visibility="{Binding HasCurrentPc, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="PC: "
+                                   Style="{StaticResource LufiaLabel}"
+                                   VerticalAlignment="Center"/>
+                        <TextBlock Foreground="{StaticResource MnemonicBrush}"
+                                   FontFamily="Consolas"
+                                   FontSize="12"
+                                   VerticalAlignment="Center">
+                            <TextBlock.Text>
+                                <Binding Path="LivePcSnesAddress" StringFormat="${0:X6}"/>
+                            </TextBlock.Text>
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
+
+                <!-- XRef builder -->
+                <Button Content="Build XRef…"
+                        Style="{StaticResource LufiaButton}"
+                        Command="{Binding BuildXrefCommand}"
+                        IsEnabled="{Binding IsXrefBuilding, Converter={StaticResource InverseBoolConverter}}"
+                        Padding="10,4"
+                        Margin="0,0,8,0"/>
+
+                <ProgressBar Width="120"
+                             Height="14"
+                             Minimum="0"
+                             Maximum="100"
+                             Value="{Binding XrefProgress}"
+                             Visibility="{Binding IsXrefBuilding, Converter={StaticResource BoolToVisibilityConverter}}"
+                             Foreground="{StaticResource GoldBrush}"
+                             Background="{StaticResource MidPurpleBrush}"
+                             BorderBrush="{StaticResource BorderPurpleBrush}"
+                             Margin="0,0,8,0"/>
+
+                <TextBlock Text="XRef ready"
+                           Foreground="{StaticResource SuccessBrush}"
+                           FontSize="11"
+                           VerticalAlignment="Center"
+                           Visibility="{Binding IsXrefBuilt, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+            </WrapPanel>
+        </Border>
+
+        <!-- Gold accent line -->
+        <Rectangle Grid.Row="2" Height="1" Fill="{StaticResource GoldAccentBrush}"/>
+
+        <!-- ================================================================
+             MAIN CONTENT — disassembly list + side panels
+             ================================================================ -->
+        <Grid Grid.Row="3">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="3*"/>  <!-- Disassembly -->
+                <ColumnDefinition Width="Auto"/> <!-- Splitter -->
+                <ColumnDefinition Width="220"/>  <!-- Side panels -->
+            </Grid.ColumnDefinitions>
+
+            <!-- ── Disassembly list ───────────────────────────────────────── -->
+            <DockPanel Grid.Column="0">
+
+                <!-- Column header row -->
+                <Border DockPanel.Dock="Top"
+                        Background="{StaticResource SurfacePurpleBrush}"
+                        BorderBrush="{StaticResource BorderPurpleBrush}"
+                        BorderThickness="0,0,0,1"
+                        Padding="4,3">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="80"/>
+                            <ColumnDefinition Width="88"/>
+                            <ColumnDefinition Width="46"/>
+                            <ColumnDefinition Width="150"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="Address"  Style="{StaticResource LufiaLabel}" FontSize="11"/>
+                        <TextBlock Grid.Column="1" Text="Bytes"    Style="{StaticResource LufiaLabel}" FontSize="11"/>
+                        <TextBlock Grid.Column="2" Text="Mnem"     Style="{StaticResource LufiaLabel}" FontSize="11"/>
+                        <TextBlock Grid.Column="3" Text="Operand"  Style="{StaticResource LufiaLabel}" FontSize="11"/>
+                        <TextBlock Grid.Column="4" Text="Comment"  Style="{StaticResource LufiaLabel}" FontSize="11"/>
+                    </Grid>
+                </Border>
+
+                <ListBox DockPanel.Dock="Bottom"
+                     x:Name="DisassemblyList"
+                     ItemsSource="{Binding DisassemblyLines}"
+                     SelectedItem="{Binding SelectedLine}"
+                     ItemTemplate="{StaticResource DisassemblyRowTemplate}"
+                     Style="{StaticResource LufiaListBox}"
+                     ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                     VirtualizingStackPanel.IsVirtualizing="True"
+                     VirtualizingStackPanel.VirtualizationMode="Recycling"
+                     MouseDoubleClick="DisassemblyList_MouseDoubleClick">
+
+                <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem">
+                        <Setter Property="Padding"          Value="2,0"/>
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                        <Setter Property="Foreground"       Value="{StaticResource TextPrimaryBrush}"/>
+                        <Style.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter Property="Background" Value="{StaticResource ElevatedPurpleBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="{StaticResource SurfacePurpleBrush}"/>
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </ListBox.ItemContainerStyle>
+
+                <ListBox.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="Follow Jump Target"
+                                  Command="{Binding DataContext.FollowJumpCommand,
+                                            RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                  CommandParameter="{Binding PlacementTarget.SelectedItem,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                        <Separator Style="{StaticResource LufiaSeparator}"/>
+                        <MenuItem Header="Add Bookmark…"
+                                  Command="{Binding DataContext.AddBookmarkCommand,
+                                            RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                  CommandParameter="{Binding PlacementTarget.SelectedItem,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                        <MenuItem Header="Add to Watchlist"
+                                  Command="{Binding DataContext.AddToWatchlistCommand,
+                                            RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                  CommandParameter="{Binding PlacementTarget.SelectedItem,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                        <MenuItem Header="Mark as Data"
+                                  Command="{Binding DataContext.MarkAsDataCommand,
+                                            RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                  CommandParameter="{Binding PlacementTarget.SelectedItem,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                        <Separator Style="{StaticResource LufiaSeparator}"/>
+                        <MenuItem Header="Copy Line"
+                                  Command="{Binding DataContext.CopyLineCommand,
+                                            RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                  CommandParameter="{Binding PlacementTarget.SelectedItem,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                        <MenuItem Header="Copy Address"
+                                  Command="{Binding DataContext.CopyAddressCommand,
+                                            RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                  CommandParameter="{Binding PlacementTarget.SelectedItem,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                    </ContextMenu>
+                </ListBox.ContextMenu>
+
+            </ListBox>
+            </DockPanel>
+
+            <GridSplitter Grid.Column="1"
+                          Width="3"
+                          Background="{StaticResource BorderPurpleBrush}"
+                          VerticalAlignment="Stretch"
+                          ResizeBehavior="PreviousAndNext"/>
+
+            <!-- ── Side panels ────────────────────────────────────────────── -->
+            <Grid Grid.Column="2" Background="{StaticResource DeepPurpleBrush}">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>   <!-- Bookmarks -->
+                    <RowDefinition Height="Auto"/> <!-- XRef header -->
+                    <RowDefinition Height="*"/>    <!-- XRef content -->
+                </Grid.RowDefinitions>
+
+                <!-- Bookmarks panel -->
+                <DockPanel Grid.Row="0">
+                    <!-- Header -->
+                    <Border DockPanel.Dock="Top"
+                            Background="{StaticResource SurfacePurpleBrush}"
+                            BorderBrush="{StaticResource BorderPurpleBrush}"
+                            BorderThickness="0,0,0,1"
+                            Padding="8,4">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Bookmarks"
+                                       Style="{StaticResource LufiaLabelGold}"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,8,0"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Add bookmark row -->
+                    <Border DockPanel.Dock="Bottom"
+                            Background="{StaticResource MidPurpleBrush}"
+                            BorderBrush="{StaticResource BorderPurpleBrush}"
+                            BorderThickness="0,1,0,0"
+                            Padding="4,4">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox Grid.Column="0"
+                                     Text="{Binding NewBookmarkLabel, UpdateSourceTrigger=PropertyChanged}"
+                                     Style="{StaticResource LufiaTextBox}"
+                                     FontSize="11"
+                                     ToolTip="Label for selected address"
+                                     Margin="0,0,4,0"/>
+                            <Button Grid.Column="1"
+                                    Content="+"
+                                    Style="{StaticResource LufiaButton}"
+                                    Padding="8,4"
+                                    Command="{Binding AddBookmarkCommand}"
+                                    CommandParameter="{Binding SelectedLine}"
+                                    ToolTip="Add bookmark at selected address"/>
+                        </Grid>
+                    </Border>
+
+                    <!-- Bookmark list -->
+                    <ListBox ItemsSource="{Binding AllBookmarks}"
+                             Style="{StaticResource LufiaListBox}"
+                             BorderThickness="0"
+                             FontSize="11">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem" BasedOn="{StaticResource LufiaListBoxItem}">
+                                <Setter Property="Padding" Value="6,3"/>
+                                <EventSetter Event="MouseDoubleClick" Handler="BookmarkItem_DoubleClick"/>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate DataType="{x:Type local:Bookmark}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Border Grid.Column="0"
+                                            Width="4"
+                                            Margin="0,0,6,0"
+                                            CornerRadius="2">
+                                        <Border.Background>
+                                            <SolidColorBrush Color="{Binding GutterColor}"/>
+                                        </Border.Background>
+                                    </Border>
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock Text="{Binding Label}"
+                                                   Foreground="{StaticResource TextPrimaryBrush}"
+                                                   FontFamily="Consolas"
+                                                   FontSize="11"/>
+                                        <TextBlock Text="{Binding SnesAddressHex}"
+                                                   Foreground="{StaticResource AddressBrush}"
+                                                   FontFamily="Consolas"
+                                                   FontSize="10"/>
+                                    </StackPanel>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                        <ListBox.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Navigate to Address"
+                                          Command="{Binding DataContext.NavigateToBookmarkCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding}"/>
+                                <MenuItem Header="Remove Bookmark"
+                                          Command="{Binding DataContext.RemoveBookmarkCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding}"/>
+                            </ContextMenu>
+                        </ListBox.ContextMenu>
+                    </ListBox>
+                </DockPanel>
+
+                <!-- Cross-Reference panel -->
+                <Border Grid.Row="1"
+                        Background="{StaticResource SurfacePurpleBrush}"
+                        BorderBrush="{StaticResource BorderPurpleBrush}"
+                        BorderThickness="0,1,0,1"
+                        Padding="8,4">
+                    <TextBlock Text="Cross Reference"
+                               Style="{StaticResource LufiaLabelGold}"/>
+                </Border>
+
+                <ScrollViewer Grid.Row="2"
+                              VerticalScrollBarVisibility="Auto"
+                              Background="{StaticResource DeepPurpleBrush}">
+                    <StackPanel Margin="6,4">
+
+                        <TextBlock Text="Called from:"
+                                   Style="{StaticResource LufiaLabel}"
+                                   Margin="0,0,0,2"/>
+                        <ItemsControl ItemsSource="{Binding XrefCalledFrom}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding}"
+                                               FontFamily="Consolas"
+                                               FontSize="11"
+                                               Foreground="{StaticResource JumpTargetBrush}"
+                                               Cursor="Hand"
+                                               MouseLeftButtonDown="XrefEntry_Click"
+                                               Margin="2,1"/>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <TextBlock Text="(none)"
+                                   Style="{StaticResource LufiaLabel}"
+                                   FontSize="11"
+                                   Margin="4,1"
+                                   Visibility="{Binding XrefCalledFrom.Count,
+                                                Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+
+                        <Separator Style="{StaticResource LufiaSeparator}" Margin="0,6"/>
+
+                        <TextBlock Text="Calls to:"
+                                   Style="{StaticResource LufiaLabel}"
+                                   Margin="0,0,0,2"/>
+                        <ItemsControl ItemsSource="{Binding XrefCallsTo}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding}"
+                                               FontFamily="Consolas"
+                                               FontSize="11"
+                                               Foreground="{StaticResource JumpTargetBrush}"
+                                               Cursor="Hand"
+                                               MouseLeftButtonDown="XrefEntry_Click"
+                                               Margin="2,1"/>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <TextBlock Text="(none)"
+                                   Style="{StaticResource LufiaLabel}"
+                                   FontSize="11"
+                                   Margin="4,1"
+                                   Visibility="{Binding XrefCallsTo.Count,
+                                                Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+
+                        <TextBlock Text="Build XRef to populate."
+                                   Style="{StaticResource LufiaLabel}"
+                                   FontSize="10"
+                                   Margin="0,6,0,0"
+                                   Visibility="{Binding IsXrefBuilt,
+                                                Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+                    </StackPanel>
+                </ScrollViewer>
+
+            </Grid>
+        </Grid>
+
+        <!-- ================================================================
+             STATUS BAR
+             ================================================================ -->
+        <Border Grid.Row="4"
+                Background="{StaticResource DeepPurpleBrush}"
+                BorderBrush="{StaticResource BorderPurpleBrush}"
+                BorderThickness="0,1,0,0"
+                Padding="10,5">
+            <TextBlock Text="{Binding StatusText, Mode=OneWay}"
+                       Style="{StaticResource StatusBarText}"/>
+        </Border>
+
+    </Grid>
+</UserControl>

@@ -1,4 +1,5 @@
 using LufiaForge.Core;
+using LufiaForge.Modules.Disassembler;
 using LufiaForge.Modules.MemoryMonitor;
 using LufiaForge.Modules.PatchManager;
 using LufiaForge.Modules.TextEditor;
@@ -17,6 +18,13 @@ public partial class MainWindow : Window
         InitializeComponent();
         var vm = (MainViewModel)DataContext;
         vm.PropertyChanged += Vm_PropertyChanged;
+
+        // Wire cross-module: Disassembler "Add to Watchlist" → Memory Monitor
+        if (DisassemblerView.DataContext  is DisassemblerViewModel  disVm &&
+            MemoryMonitorView.DataContext is MemoryMonitorViewModel  mmVm)
+        {
+            disVm.RequestAddWatch = mmVm.AddWatch;
+        }
     }
 
     private void Vm_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -45,6 +53,14 @@ public partial class MainWindow : Window
         // Patch Manager (also needs reference to MainViewModel for NotifyRomModified)
         if (PatchManagerView.DataContext is PatchManagerViewModel patchVm)
             patchVm.SetRom(rom, vm);
+
+        // Disassembler
+        if (DisassemblerView.DataContext is DisassemblerViewModel disVm)
+            disVm.SetRom(rom);
+
+        // Memory Monitor — auto-launches BizHawk with the ROM
+        if (MemoryMonitorView.DataContext is MemoryMonitorViewModel mmVm)
+            mmVm.SetRom(rom);
     }
 
     private void RefreshRomInfo()
