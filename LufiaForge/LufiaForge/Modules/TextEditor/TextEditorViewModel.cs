@@ -116,7 +116,7 @@ public partial class TextEditorViewModel : ObservableObject
         if (SelectedEntry == null || _rom == null) return;
 
         string newText = EditBuffer;
-        byte[] encoded = TextDecoder.Encode(newText);
+        byte[] encoded = TextDecoder.Encode(newText, _rom);
 
         if (encoded.Length > SelectedEntry.RawByteLength)
         {
