@@ -55,30 +55,51 @@ public static class Lufia1Constants
     //   0x04             Page break (player presses A to continue)
     //   0x05             Newline within current dialogue box
     //   0x07 + 1 byte    Character name  (ID: 00=Hero, 01=Lufia, 02=Aguro, 03=Jerin...)
+    //   0x09 + 1 byte    Item name       (ID: 00=Nothing, 01=Leather Armor, ...)
+    //   0x0A + 1 byte    Spell name      (ID: 00=Flash, 01=Spark, 02=Blaze, ...)
     //   0x0B + 1 byte    Town name       (ID: 01=Alekia, 02=Chatam, 03=Sheran...)
-    //   0x0C + 2 bytes   Dictionary word, lowercase  (2-byte LE ptr + DictionaryBaseOffset)
-    //   0x0D + 2 bytes   Dictionary word, capitalized (same pointer, first char uppercased)
-    //   0x10–0x1F        Special single-byte sequences ('s, ed, ing, I'm, Sinistral...)
+    //   0x0C + 1 byte    MTE3 word, lowercase  (1-byte index; word from MTE3 pointer table)
+    //   0x0D + 1 byte    MTE3 word, capitalized (same index, first char uppercased)
+    //   0x10–0x1F        MTE4: Special single-byte sequences ('s, ed, ing, I'm, Sinistral...)
     //   0x20–0x7E        Standard printable ASCII
-    //   0x80–0xBF        Single-byte compressed words, lowercase (the, you, to, it...)
-    //   0xC0–0xFF        Single-byte compressed words, capitalized (The, You, To, It...)
+    //   0x80–0xBF        MTE1: Single-byte compressed words, lowercase (the, you, to, it...)
+    //   0xC0–0xFF        MTE1: Single-byte compressed words, capitalized (The, You, To, It...)
     //
     // NOTE: 0x0B is TOWN names, NOT character names. Character names use 0x07.
     //       Previous Vegetaman research incorrectly identified 0x0B as char names.
+    //
+    // MTE = Multiple Title Entry (compression). Four tables, all in ROM bank 0x0A:
+    //   MTE1 (0x80–0xFF):  64 word pairs, ptr table at file 0x54AC0, entries at 0x54B42
+    //   MTE2 (0x0D XX):    same entry data as MTE3, first char capitalized by decoder
+    //   MTE3 (0x0C XX):    256 words, ptr table at file 0x54C17, entries at 0x54E19
+    //   MTE4 (0x10–0x1F):  16 special sequences, ptr table at 0x54A50, entries at 0x54A72
+    //
+    // Pointer format: LE 16-bit SNES bank-relative address. File offset = ptr + 0x48000.
+    // (All MTE tables are in SNES bank 0x0A: file = 0x0A*0x8000 + (ptr - 0x8000) = ptr + 0x48000)
     // -------------------------------------------------------------------------
 
     public const byte CtrlEndString        = 0x00;
     public const byte CtrlPageBreak        = 0x04;
     public const byte CtrlNewline          = 0x05;
-    public const byte CtrlCharName         = 0x07;  // corrected from 0x0B
-    public const byte CtrlTownName         = 0x0B;  // new — was incorrectly used as char name
-    public const byte CtrlDictionaryRef    = 0x0C;  // lowercase; followed by 2-byte LE pointer
-    public const byte CtrlDictionaryRefCap = 0x0D;  // capitalized; same pointer format as 0x0C
+    public const byte CtrlCharName         = 0x07;  // followed by 1-byte character ID
+    public const byte CtrlItemName         = 0x09;  // followed by 1-byte item ID
+    public const byte CtrlSpellName        = 0x0A;  // followed by 1-byte spell ID
+    public const byte CtrlTownName         = 0x0B;  // followed by 1-byte town ID
+    public const byte CtrlDictionaryRef    = 0x0C;  // MTE3 lowercase; followed by 1-byte index
+    public const byte CtrlDictionaryRefCap = 0x0D;  // MTE3 capitalized; followed by 1-byte index
 
-    // Dictionary region (US ROM, Vegetaman 2010)
+    // MTE pointer table file offsets (US ROM, bank 0x0A, empirically verified)
+    public const int Mte4PtrTableOffset    = 0x54A50;  // 17 LE16 ptrs (16 entries + end sentinel)
+    public const int Mte1PtrTableOffset    = 0x54AC0;  // 65 LE16 ptrs (64 entries + end sentinel)
+    public const int Mte3PtrTableOffset    = 0x54C17;  // 257 LE16 ptrs (256 entries + end sentinel)
+    public const int Mte1EntryCount        = 64;
+    public const int Mte3EntryCount        = 256;
+    public const int MtePtrBase            = 0x48000;  // add to raw LE16 ptr to get file offset
+
+    // MTE3 scan region (used by dictionary export; start = first entry, end = last entry end)
     public const int DictionaryStartOffset = 0x054E19;
     public const int DictionaryEndOffset   = 0x0553CC;
-    public const int DictionaryBaseOffset  = 0x48000;  // add to 2-byte LE ptr to get file offset
+    public const int DictionaryBaseOffset  = 0x48000;  // ptr + DictionaryBaseOffset = file offset
 
     // Dialogue text lives in banks $84–$AF (file 0x20000–0x57FFF).
     // Story/NPC dialogue: banks $84–$87 (0x20000–0x3FFFF)

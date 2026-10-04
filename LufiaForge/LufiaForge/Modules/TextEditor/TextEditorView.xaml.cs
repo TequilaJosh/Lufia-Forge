@@ -46,7 +46,7 @@ public partial class TextEditorView : UserControl
         var sb    = new StringBuilder();
 
         // Re-decode with token detail
-        var result = TextDecoder.Decode(rom, entry.RomOffset, expandDictionary: true);
+        var result = TextDecoder.Decode(rom, entry.RomOffset, expandMte: true);
 
         sb.AppendLine($"Offset: {entry.OffsetHex}  |  {result.Tokens.Count} tokens  |  {result.BytesConsumed} bytes");
         sb.AppendLine();

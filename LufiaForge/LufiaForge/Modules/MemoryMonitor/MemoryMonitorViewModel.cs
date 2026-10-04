@@ -25,6 +25,7 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
     // -------------------------------------------------------------------------
     [ObservableProperty] private bool   _isConnected;
     [ObservableProperty] private bool   _isBizHawkRunning;
+    [ObservableProperty] private bool   _isBizHawkUndocked;
     [ObservableProperty] private string _connectionStatus = "Waiting for BizHawk...";
     [ObservableProperty] private string _hexText = "  Waiting for BizHawk connection...";
     [ObservableProperty] private int    _hexOffset;
@@ -107,11 +108,13 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
         };
         _host.Exited += () =>
         {
-            IsBizHawkRunning = false;
-            IsConnected      = false;
-            ConnectionStatus = "BizHawk closed. Click Launch to restart.";
+            IsBizHawkRunning    = false;
+            IsBizHawkUndocked   = false;
+            IsConnected         = false;
+            ConnectionStatus    = "BizHawk closed. Click Launch to restart.";
         };
-        _host.StatusChanged += msg => ConnectionStatus = msg;
+        _host.StatusChanged    += msg     => ConnectionStatus  = msg;
+        _host.DockStateChanged += undocked => IsBizHawkUndocked = undocked;
 
         _timer = new DispatcherTimer
         {
@@ -126,19 +129,10 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
     // -------------------------------------------------------------------------
     public void SetRom(Core.RomBuffer rom)
     {
+        // Just remember which ROM is open. BizHawk will receive the path when
+        // the user manually clicks "Launch BizHawk". We don't auto-launch or
+        // auto-load so the user stays in control of when the emulator starts.
         _pendingRomPath = rom.FilePath;
-
-        if (!_host.IsRunning)
-        {
-            // Not running yet — launch with the ROM path as a command-line arg
-            _ = LaunchBizHawkWithRom(_pendingRomPath);
-        }
-        else
-        {
-            // Already embedded — tell the external tool to load the ROM via temp file
-            WriteLoadRomCommand(_pendingRomPath);
-            ConnectionStatus = "Signalling BizHawk to load ROM…";
-        }
     }
 
     private static void WriteLoadRomCommand(string romPath)
@@ -181,6 +175,19 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
         {
             ConnectionStatus = $"Launch error: {ex.Message}";
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // Dock / Undock toggle
+    // -------------------------------------------------------------------------
+    [RelayCommand]
+    private void ToggleUndock()
+    {
+        if (!_host.IsRunning) return;
+        if (_host.IsUndocked)
+            _host.Dock();
+        else
+            _host.Undock();
     }
 
     // -------------------------------------------------------------------------

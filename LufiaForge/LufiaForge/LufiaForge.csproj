@@ -10,11 +10,16 @@
     <AssemblyName>LufiaForge</AssemblyName>
     <RootNamespace>LufiaForge</RootNamespace>
     <ApplicationIcon>Assets\icon.ico</ApplicationIcon>
+    <!-- Bump before each release; the auto-updater compares against GitHub release versions. -->
+    <Version>0.3.0</Version>
+    <!-- Custom Main (Program.cs) so Velopack can handle install/update hooks before WPF starts. -->
+    <StartupObject>LufiaForge.Program</StartupObject>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
     <PackageReference Include="Microsoft.Xaml.Behaviors.Wpf" Version="1.1.135" />
+    <PackageReference Include="Velopack" Version="1.2.161" />
   </ItemGroup>
 
 </Project>

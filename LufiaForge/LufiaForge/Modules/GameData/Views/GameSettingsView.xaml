@@ -1,0 +1,71 @@
+<UserControl x:Class="LufiaForge.Modules.GameData.Views.GameSettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="clr-namespace:LufiaForge.Modules.GameData.Views">
+    <UserControl.Resources>
+        <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="12,12,0,0">
+            <WrapPanel Orientation="Horizontal">
+
+                <Border Style="{StaticResource GdCard}" Width="360">
+                    <StackPanel>
+                        <TextBlock Text="MOVEMENT" Style="{StaticResource GdSection}"/>
+                        <CheckBox Content="Fast walking" Style="{StaticResource GdCheck}" IsChecked="{Binding FastWalk}"/>
+                        <TextBlock Style="{StaticResource GdHint}" Margin="20,0,0,6"
+                                   Text="Warning: breaks the Foul Water item - its effect becomes permanent (a battle every step) until the game is reset."/>
+                        <CheckBox Content="Fast sailing (ship)" Style="{StaticResource GdCheck}" IsChecked="{Binding FastShip}"/>
+                        <CheckBox Content="Fast flying (airship)" Style="{StaticResource GdCheck}" IsChecked="{Binding FastAirship}"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource GdCard}" Width="360">
+                    <StackPanel>
+                        <TextBlock Text="BALANCE" Style="{StaticResource GdSection}"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition/><RowDefinition/><RowDefinition/>
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Text="Swamp damage per step" Style="{StaticResource GdFieldLabel}"/>
+                            <TextBox   Grid.Row="0" Grid.Column="1" Style="{StaticResource GdNumber}" Text="{Binding SwampDamage}"/>
+                            <TextBlock Grid.Row="1" Text="Max level (displayed)" Style="{StaticResource GdFieldLabel}"/>
+                            <TextBox   Grid.Row="1" Grid.Column="1" Style="{StaticResource GdNumber}" Text="{Binding MaxLevelDisplayed}"/>
+                            <TextBlock Grid.Row="2" Text="Max level (actual)" Style="{StaticResource GdFieldLabel}"/>
+                            <TextBox   Grid.Row="2" Grid.Column="1" Style="{StaticResource GdNumber}" Text="{Binding MaxLevelActual}"/>
+                        </Grid>
+                        <TextBlock Style="{StaticResource GdHint}" Margin="0,8,0,0"
+                                   Text="Swamp damage above ~50 can wipe the party quickly. The game is designed for a level cap of 99; higher values may not display correctly."/>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource GdCard}" Width="360">
+                    <StackPanel>
+                        <TextBlock Text="ROM HEADER" Style="{StaticResource GdSection}"/>
+                        <TextBlock Text="Internal title (21 characters)" Style="{StaticResource LufiaLabel}" Margin="0,0,0,2"/>
+                        <TextBox Style="{StaticResource GdText}" MaxLength="21"
+                                 Text="{Binding InternalTitle, UpdateSourceTrigger=PropertyChanged}"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                            <TextBlock Text="Region:" Style="{StaticResource GdFieldLabel}"/>
+                            <TextBlock Text="{Binding RegionText}" Style="{StaticResource LufiaLabel}"
+                                       Foreground="{StaticResource TextPrimaryBrush}" TextWrapping="Wrap" MaxWidth="260"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+            </WrapPanel>
+        </ScrollViewer>
+
+        <v:EditorFooter Grid.Row="1"/>
+    </Grid>
+</UserControl>

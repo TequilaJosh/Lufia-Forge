@@ -7,6 +7,7 @@
         xmlns:tv="clr-namespace:LufiaForge.Modules.TileViewer"
         xmlns:pm="clr-namespace:LufiaForge.Modules.PatchManager"
         xmlns:dis="clr-namespace:LufiaForge.Modules.Disassembler"
+        xmlns:gd="clr-namespace:LufiaForge.Modules.GameData"
 Title="{Binding WindowTitle}"
         Width="1280" Height="800"
         MinWidth="900" MinHeight="600"
@@ -39,7 +40,7 @@ Title="{Binding WindowTitle}"
                           InputGestureText="Ctrl+O"
                           Foreground="Black"/>
                 <Separator Style="{StaticResource LufiaSeparator}"/>
-                <MenuItem Header="Save ROM"
+                <MenuItem Header="Save ROM (dated copy)" ToolTip="Saves a new copy named with the date and time; the opened ROM is never overwritten"
                           Command="{Binding SaveRomCommand}"
                           InputGestureText="Ctrl+S"
                           Foreground="Black"/>
@@ -52,6 +53,7 @@ Title="{Binding WindowTitle}"
             </MenuItem>
 
             <MenuItem Header="_Help" Foreground="{StaticResource TextPrimaryBrush}">
+                <MenuItem Header="Check for Updates..." Click="CheckUpdatesMenuItem_Click" Foreground="Black"/>
                 <MenuItem Header="About Lufia Forge" Click="AboutMenuItem_Click" Foreground="Black"/>
             </MenuItem>
         </Menu>
@@ -86,7 +88,7 @@ Title="{Binding WindowTitle}"
                         Command="{Binding OpenRomCommand}"
                         Margin="0,0,8,0"/>
 
-                <Button Content="💾  Save ROM"
+                <Button Content="💾  Save ROM" ToolTip="Saves a new copy named with the date and time; the opened ROM is never overwritten"
                         Style="{StaticResource LufiaButton}"
                         Command="{Binding SaveRomCommand}"
                         Margin="0,0,8,0"/>
@@ -144,6 +146,14 @@ Title="{Binding WindowTitle}"
                         <te:TextEditorViewModel/>
                     </te:TextEditorView.DataContext>
                 </te:TextEditorView>
+            </TabItem>
+
+            <TabItem Header="⚔  Game Data"     Style="{StaticResource LufiaTabItem}">
+                <gd:GameDataView x:Name="GameDataView">
+                    <gd:GameDataView.DataContext>
+                        <gd:GameDataViewModel/>
+                    </gd:GameDataView.DataContext>
+                </gd:GameDataView>
             </TabItem>
 
             <TabItem Header="🎨  Tile Viewer"   Style="{StaticResource LufiaTabItem}">

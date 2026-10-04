@@ -1,5 +1,6 @@
 using LufiaForge.Core;
 using LufiaForge.Modules.Disassembler;
+using LufiaForge.Modules.GameData;
 using LufiaForge.Modules.MemoryMonitor;
 using LufiaForge.Modules.PatchManager;
 using LufiaForge.Modules.TextEditor;
@@ -18,6 +19,9 @@ public partial class MainWindow : Window
         InitializeComponent();
         var vm = (MainViewModel)DataContext;
         vm.PropertyChanged += Vm_PropertyChanged;
+
+        // Quietly check GitHub for a newer release once the window is up.
+        Loaded += async (_, _) => await UpdateService.CheckAsync(silentIfNone: true, HasUnsavedChanges);
 
         // Wire cross-module: Disassembler "Add to Watchlist" → Memory Monitor
         if (DisassemblerView.DataContext  is DisassemblerViewModel  disVm &&
@@ -45,6 +49,10 @@ public partial class MainWindow : Window
         // Text Editor
         if (TextEditorView.DataContext is TextEditorViewModel textVm)
             textVm.SetRom(rom);
+
+        // Game Data editors (characters, items, shops, spells, monsters, settings)
+        if (GameDataView.DataContext is GameDataViewModel gameVm)
+            gameVm.SetRom(rom, vm);
 
         // Tile Viewer
         if (TileViewerView.DataContext is TileViewerViewModel tileVm)
@@ -104,10 +112,15 @@ public partial class MainWindow : Window
         base.OnClosed(e);
     }
 
+    private bool HasUnsavedChanges() => ((MainViewModel)DataContext).RomBuffer?.IsDirty == true;
+
+    private async void CheckUpdatesMenuItem_Click(object sender, RoutedEventArgs e) =>
+        await UpdateService.CheckAsync(silentIfNone: false, HasUnsavedChanges);
+
     private void AboutMenuItem_Click(object sender, RoutedEventArgs e)
     {
         MessageBox.Show(
-            "Lufia Forge v1.0\n\n" +
+            $"Lufia Forge v{UpdateService.CurrentVersion}\n\n" +
             "A ROM hack toolkit for Lufia & The Fortress of Doom (SNES, US)\n\n" +
             "Phase 1: ROM loader, IPS patch apply/export, core infrastructure\n" +
             "Phase 2: Text editor with full encoding support, script export\n" +

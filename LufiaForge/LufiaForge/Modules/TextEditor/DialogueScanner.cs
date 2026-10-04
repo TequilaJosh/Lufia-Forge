@@ -94,7 +94,7 @@ public static class DialogueScanner
             if (!isValidStart) { pos++; continue; }
 
             // Try to decode from here
-            var decoded = TextDecoder.Decode(rom, pos, expandDictionary: true);
+            var decoded = TextDecoder.Decode(rom, pos, expandMte: true);
 
             // Quality filter: must have enough printable content and end with [END]
             int printableCount = decoded.Tokens.Count(t =>
