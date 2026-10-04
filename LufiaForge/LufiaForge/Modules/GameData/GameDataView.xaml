@@ -1,0 +1,44 @@
+<UserControl x:Class="LufiaForge.Modules.GameData.GameDataView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="clr-namespace:LufiaForge.Modules.GameData.Views">
+
+    <Grid Background="{StaticResource MidPurpleBrush}">
+
+        <TabControl Style="{StaticResource LufiaTabControl}"
+                    Visibility="{Binding IsRomLoaded, Converter={StaticResource BoolToVisibilityConverter}}">
+            <TabItem Header="Characters" Style="{StaticResource LufiaTabItem}">
+                <v:CharacterEditorView DataContext="{Binding Characters}"/>
+            </TabItem>
+            <TabItem Header="Character Magic" Style="{StaticResource LufiaTabItem}">
+                <v:CharacterMagicView DataContext="{Binding CharacterMagic}"/>
+            </TabItem>
+            <TabItem Header="Items" Style="{StaticResource LufiaTabItem}">
+                <v:ItemEditorView DataContext="{Binding Items}"/>
+            </TabItem>
+            <TabItem Header="Prologue Items" Style="{StaticResource LufiaTabItem}">
+                <v:PartyItemsView DataContext="{Binding PartyItems}"/>
+            </TabItem>
+            <TabItem Header="Shops" Style="{StaticResource LufiaTabItem}">
+                <v:ShopEditorView DataContext="{Binding Shops}"/>
+            </TabItem>
+            <TabItem Header="Spells" Style="{StaticResource LufiaTabItem}">
+                <v:SpellEditorView DataContext="{Binding Spells}"/>
+            </TabItem>
+            <TabItem Header="Monsters" Style="{StaticResource LufiaTabItem}">
+                <v:MonsterEditorView DataContext="{Binding Monsters}"/>
+            </TabItem>
+            <TabItem Header="Game Settings" Style="{StaticResource LufiaTabItem}">
+                <v:GameSettingsView DataContext="{Binding Settings}"/>
+            </TabItem>
+        </TabControl>
+
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Visibility="{Binding IsRomLoaded, Converter={StaticResource InverseBoolToVisibilityConverter}}">
+            <TextBlock Text="Game Data Editor" Style="{StaticResource LufiaLabelGold}" FontSize="16"
+                       HorizontalAlignment="Center" Margin="0,0,0,8"/>
+            <TextBlock Text="Open a Lufia 1 (US) ROM to edit characters, magic, items, shops, spells and monsters."
+                       Style="{StaticResource LufiaLabel}" HorizontalAlignment="Center"/>
+        </StackPanel>
+    </Grid>
+</UserControl>

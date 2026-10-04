@@ -1,0 +1,144 @@
+<UserControl x:Class="LufiaForge.Modules.GameData.Views.SpellEditorView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="clr-namespace:LufiaForge.Modules.GameData.Views">
+    <UserControl.Resources>
+        <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="230"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <ListBox Grid.Column="0" Margin="12"
+                 Style="{StaticResource GdRecordList}"
+                 ItemsSource="{Binding SpellNames}"
+                 SelectedIndex="{Binding SelectedIndex}"/>
+
+        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" Padding="0,12,0,0">
+            <WrapPanel Orientation="Horizontal" IsEnabled="{Binding IsEditable}">
+
+                <Border Style="{StaticResource GdCard}">
+                    <StackPanel>
+                        <TextBlock Text="GENERAL" Style="{StaticResource GdSection}"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/>
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Text="Name" Style="{StaticResource GdFieldLabel}"/>
+                            <TextBox   Grid.Row="0" Grid.Column="1" Style="{StaticResource GdText}" Width="120"
+                                       HorizontalAlignment="Left" MaxLength="8"
+                                       Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"/>
+                            <TextBlock Grid.Row="1" Text="MP cost" Style="{StaticResource GdFieldLabel}"/>
+                            <TextBox   Grid.Row="1" Grid.Column="1" Style="{StaticResource GdNumber}" Text="{Binding Mp}"/>
+                            <TextBlock Grid.Row="2" Text="Usage" Style="{StaticResource GdFieldLabel}"/>
+                            <ComboBox  Grid.Row="2" Grid.Column="1" Style="{StaticResource GdCombo}"
+                                       ItemsSource="{Binding UsageOptions}" DisplayMemberPath="Label"
+                                       SelectedValuePath="Value" SelectedValue="{Binding Usage}"/>
+                            <TextBlock Grid.Row="3" Text="Target" Style="{StaticResource GdFieldLabel}"/>
+                            <ComboBox  Grid.Row="3" Grid.Column="1" Style="{StaticResource GdCombo}"
+                                       ItemsSource="{Binding TargetOptions}" DisplayMemberPath="Label"
+                                       SelectedValuePath="Value" SelectedValue="{Binding Target}"/>
+                            <TextBlock Grid.Row="4" Text="Effect" Style="{StaticResource GdFieldLabel}"/>
+                            <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding EffectText}"
+                                       Style="{StaticResource LufiaLabel}" Foreground="{StaticResource TextPrimaryBrush}"
+                                       VerticalAlignment="Center" Margin="0,6"/>
+                        </Grid>
+                        <TextBlock Style="{StaticResource GdHint}" MaxWidth="300" Margin="0,8,0,0"
+                                   Text="The effect type can't be changed: each effect has a different parameter size and spell records can't grow."/>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource GdCard}">
+                    <StackPanel MinWidth="300">
+                        <TextBlock Text="EFFECT PARAMETERS" Style="{StaticResource GdSection}"/>
+
+                        <!-- Cure / stat / element: kind + power + random -->
+                        <Grid>
+                            <Grid.Style>
+                                <Style TargetType="Grid">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                    <Style.Triggers>
+                                        <MultiDataTrigger>
+                                            <MultiDataTrigger.Conditions>
+                                                <Condition Binding="{Binding IsCure}"    Value="False"/>
+                                                <Condition Binding="{Binding IsStat}"    Value="False"/>
+                                                <Condition Binding="{Binding IsElement}" Value="False"/>
+                                            </MultiDataTrigger.Conditions>
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </MultiDataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Grid.Style>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition/><RowDefinition/><RowDefinition/>
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Text="Affects" Style="{StaticResource GdFieldLabel}"/>
+                            <ComboBox  Grid.Row="0" Grid.Column="1" Style="{StaticResource GdCombo}" MinWidth="160"
+                                       ItemsSource="{Binding SubTypeOptions}" DisplayMemberPath="Label"
+                                       SelectedValuePath="Value" SelectedValue="{Binding SubType}"/>
+                            <TextBlock Grid.Row="1" Text="Base power" Style="{StaticResource GdFieldLabel}"/>
+                            <TextBox   Grid.Row="1" Grid.Column="1" Style="{StaticResource GdNumber}" Text="{Binding Power}"/>
+                            <TextBlock Grid.Row="2" Text="Random power" Style="{StaticResource GdFieldLabel}"/>
+                            <TextBox   Grid.Row="2" Grid.Column="1" Style="{StaticResource GdNumber}" Text="{Binding RandomPower}"/>
+                        </Grid>
+
+                        <!-- Ailments -->
+                        <StackPanel Visibility="{Binding IsAilment, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <ItemsControl ItemsSource="{Binding Ailments}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><UniformGrid Columns="2"/></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <CheckBox Content="{Binding Name}" IsChecked="{Binding IsSet}"
+                                                  Style="{StaticResource GdCheck}"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                <TextBlock Text="Success rate (0-255)" Style="{StaticResource GdFieldLabel}"/>
+                                <TextBox Style="{StaticResource GdNumber}" Width="70"
+                                         Text="{Binding SuccessRate, UpdateSourceTrigger=PropertyChanged}"/>
+                                <TextBlock Text="{Binding SuccessText}" Style="{StaticResource GdFieldLabel}" Margin="10,0,0,0"/>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!-- Teleport -->
+                        <StackPanel Orientation="Horizontal"
+                                    Visibility="{Binding IsTeleport, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <TextBlock Text="Teleport kind:" Style="{StaticResource GdFieldLabel}"/>
+                            <TextBlock Text="{Binding TeleportText}" Style="{StaticResource LufiaLabel}"
+                                       Foreground="{StaticResource TextPrimaryBrush}"/>
+                        </StackPanel>
+
+                        <TextBlock Style="{StaticResource GdHint}" MaxWidth="300"
+                                   Visibility="{Binding HasNoParameters, Converter={StaticResource BoolToVisibilityConverter}}"
+                                   Text="This effect has no editable parameters."/>
+
+                        <TextBlock Text="Raw record from +8 (read-only)" Style="{StaticResource LufiaLabel}" Margin="0,12,0,2"/>
+                        <TextBox Style="{StaticResource GdText}" IsReadOnly="True" TextWrapping="Wrap" MaxWidth="320"
+                                 Text="{Binding RawHex, Mode=OneWay}"/>
+                    </StackPanel>
+                </Border>
+
+            </WrapPanel>
+        </ScrollViewer>
+
+        <v:EditorFooter Grid.Row="1" Grid.ColumnSpan="2"/>
+    </Grid>
+</UserControl>

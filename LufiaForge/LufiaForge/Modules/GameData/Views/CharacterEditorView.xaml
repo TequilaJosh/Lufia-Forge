@@ -1,0 +1,110 @@
+<UserControl x:Class="LufiaForge.Modules.GameData.Views.CharacterEditorView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="clr-namespace:LufiaForge.Modules.GameData.Views">
+    <UserControl.Resources>
+        <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="230"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <ListBox Grid.Column="0" Margin="12"
+                 Style="{StaticResource GdRecordList}"
+                 ItemsSource="{Binding Characters}"
+                 SelectedIndex="{Binding SelectedIndex}"/>
+
+        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" Padding="0,12,0,0">
+            <WrapPanel Orientation="Horizontal">
+
+                <Border Style="{StaticResource GdCard}">
+                    <StackPanel>
+                        <TextBlock Text="STARTING STATS" Style="{StaticResource GdSection}"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/>
+                                <RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Text="Name" Style="{StaticResource GdFieldLabel}"/>
+                            <TextBox   Grid.Row="0" Grid.Column="1" Style="{StaticResource GdText}" Width="120"
+                                       HorizontalAlignment="Left" MaxLength="5"
+                                       Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
+                                       IsEnabled="{Binding CanRename}"
+                                       ToolTip="5 characters max. The Hero's name is chosen by the player."/>
+
+                            <TextBlock Grid.Row="1" Text="Level" Style="{StaticResource GdFieldLabel}"/>
+                            <TextBox   Grid.Row="1" Grid.Column="1" Style="{StaticResource GdNumber}" Text="{Binding Level}"/>
+                            <TextBlock Grid.Row="2" Text="HP" Style="{StaticResource GdFieldLabel}"/>
+                            <TextBox   Grid.Row="2" Grid.Column="1" Style="{StaticResource GdNumber}" Text="{Binding Hp}"/>
+                            <TextBlock Grid.Row="3" Text="MP" Style="{StaticResource GdFieldLabel}"/>
+                            <TextBox   Grid.Row="3" Grid.Column="1" Style="{StaticResource GdNumber}" Text="{Binding Mp}"/>
+                            <TextBlock Grid.Row="4" Text="STR" Style="{StaticResource GdFieldLabel}"/>
+                            <TextBox   Grid.Row="4" Grid.Column="1" Style="{StaticResource GdNumber}" Text="{Binding Str}"/>
+                            <TextBlock Grid.Row="5" Text="AGL" Style="{StaticResource GdFieldLabel}"/>
+                            <TextBox   Grid.Row="5" Grid.Column="1" Style="{StaticResource GdNumber}" Text="{Binding Agl}"/>
+                            <TextBlock Grid.Row="6" Text="INT" Style="{StaticResource GdFieldLabel}"/>
+                            <TextBox   Grid.Row="6" Grid.Column="1" Style="{StaticResource GdNumber}" Text="{Binding Int}"/>
+                            <TextBlock Grid.Row="7" Text="MGR" Style="{StaticResource GdFieldLabel}"/>
+                            <TextBox   Grid.Row="7" Grid.Column="1" Style="{StaticResource GdNumber}" Text="{Binding Mgr}"/>
+                            <TextBlock Grid.Row="8" Text="EXP" Style="{StaticResource GdFieldLabel}"/>
+                            <TextBox   Grid.Row="8" Grid.Column="1" Style="{StaticResource GdNumber}" Text="{Binding Exp}"/>
+                        </Grid>
+                        <TextBlock Style="{StaticResource GdHint}" MaxWidth="240" Margin="0,8,0,0"
+                                   Text="Stats are 0-65535 in the ROM, but the game is balanced for HP/MP ≤ 999 and stats ≤ 5000."/>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource GdCard}">
+                    <StackPanel>
+                        <TextBlock Text="STARTING EQUIPMENT" Style="{StaticResource GdSection}"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition/><RowDefinition/><RowDefinition/>
+                                <RowDefinition/><RowDefinition/><RowDefinition/>
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Text="Weapon" Style="{StaticResource GdFieldLabel}"/>
+                            <ComboBox  Grid.Row="0" Grid.Column="1" Style="{StaticResource GdCombo}"
+                                       ItemsSource="{Binding ItemNames}" SelectedIndex="{Binding Weapon}"/>
+                            <TextBlock Grid.Row="1" Text="Armor" Style="{StaticResource GdFieldLabel}"/>
+                            <ComboBox  Grid.Row="1" Grid.Column="1" Style="{StaticResource GdCombo}"
+                                       ItemsSource="{Binding ItemNames}" SelectedIndex="{Binding Armor}"/>
+                            <TextBlock Grid.Row="2" Text="Shield" Style="{StaticResource GdFieldLabel}"/>
+                            <ComboBox  Grid.Row="2" Grid.Column="1" Style="{StaticResource GdCombo}"
+                                       ItemsSource="{Binding ItemNames}" SelectedIndex="{Binding Shield}"/>
+                            <TextBlock Grid.Row="3" Text="Helmet" Style="{StaticResource GdFieldLabel}"/>
+                            <ComboBox  Grid.Row="3" Grid.Column="1" Style="{StaticResource GdCombo}"
+                                       ItemsSource="{Binding ItemNames}" SelectedIndex="{Binding Helmet}"/>
+                            <TextBlock Grid.Row="4" Text="Shoes" Style="{StaticResource GdFieldLabel}"/>
+                            <ComboBox  Grid.Row="4" Grid.Column="1" Style="{StaticResource GdCombo}"
+                                       ItemsSource="{Binding ItemNames}" SelectedIndex="{Binding Shoes}"/>
+                            <TextBlock Grid.Row="5" Text="Ring" Style="{StaticResource GdFieldLabel}"/>
+                            <ComboBox  Grid.Row="5" Grid.Column="1" Style="{StaticResource GdCombo}"
+                                       ItemsSource="{Binding ItemNames}" SelectedIndex="{Binding Ring}"/>
+                        </Grid>
+                        <TextBlock Style="{StaticResource GdHint}" MaxWidth="280" Margin="0,8,0,0"
+                                   Text="00 = empty slot. Pick items the character is allowed to equip (see the Items tab)."/>
+                    </StackPanel>
+                </Border>
+
+            </WrapPanel>
+        </ScrollViewer>
+
+        <v:EditorFooter Grid.Row="1" Grid.ColumnSpan="2"/>
+    </Grid>
+</UserControl>

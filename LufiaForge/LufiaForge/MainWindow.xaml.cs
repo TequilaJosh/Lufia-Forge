@@ -1,5 +1,6 @@
 using LufiaForge.Core;
 using LufiaForge.Modules.Disassembler;
+using LufiaForge.Modules.GameData;
 using LufiaForge.Modules.MemoryMonitor;
 using LufiaForge.Modules.PatchManager;
 using LufiaForge.Modules.TextEditor;
@@ -45,6 +46,10 @@ public partial class MainWindow : Window
         // Text Editor
         if (TextEditorView.DataContext is TextEditorViewModel textVm)
             textVm.SetRom(rom);
+
+        // Game Data editors (characters, items, shops, spells, monsters, settings)
+        if (GameDataView.DataContext is GameDataViewModel gameVm)
+            gameVm.SetRom(rom, vm);
 
         // Tile Viewer
         if (TileViewerView.DataContext is TileViewerViewModel tileVm)
