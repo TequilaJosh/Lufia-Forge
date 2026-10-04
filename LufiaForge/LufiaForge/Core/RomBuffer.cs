@@ -121,12 +121,26 @@ public class RomBuffer
         return copy;
     }
 
-    /// <summary>Save the current buffer to its original file path.</summary>
-    public void SaveToFile()
+    /// <summary>
+    /// Save the current buffer to a new copy next to the ROM, named with the save date and time
+    /// (e.g. "Lufia_2026-10-03_14-05-22.sfc"). The opened ROM file is never overwritten, and
+    /// FilePath keeps pointing at it. Returns the path of the copy.
+    /// </summary>
+    public string SaveDatedCopy()
     {
-        File.WriteAllBytes(FilePath, _data);
+        string dir  = Path.GetDirectoryName(FilePath) ?? "";
+        string ext  = Path.GetExtension(FilePath);
+        // If the opened ROM is itself a dated copy, replace its stamp instead of stacking another.
+        string name = DatedSuffix.Replace(Path.GetFileNameWithoutExtension(FilePath), "");
+        string path = Path.Combine(dir, $"{name}_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}{ext}");
+
+        File.WriteAllBytes(path, _data);
         _isDirty = false;
+        return path;
     }
+
+    private static readonly System.Text.RegularExpressions.Regex DatedSuffix =
+        new(@"_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}$");
 
     /// <summary>Save the current buffer to a new path (Save As) and update FilePath.</summary>
     public void SaveToFile(string path)

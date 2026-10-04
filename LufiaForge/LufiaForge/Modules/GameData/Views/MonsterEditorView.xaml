@@ -1,0 +1,131 @@
+<UserControl x:Class="LufiaForge.Modules.GameData.Views.MonsterEditorView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="clr-namespace:LufiaForge.Modules.GameData.Views">
+    <UserControl.Resources>
+        <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="230"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <ListBox Grid.Column="0" Margin="12"
+                 Style="{StaticResource GdRecordList}"
+                 ItemsSource="{Binding Monsters}"
+                 SelectedIndex="{Binding SelectedIndex}"/>
+
+        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" Padding="0,12,0,0">
+            <WrapPanel Orientation="Horizontal">
+
+                <Border Style="{StaticResource GdCard}">
+                    <StackPanel>
+                        <TextBlock Text="STATS" Style="{StaticResource GdSection}"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/>
+                                <RowDefinition/><RowDefinition/><RowDefinition/>
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Text="Name" Style="{StaticResource GdFieldLabel}"/>
+                            <TextBox   Grid.Row="0" Grid.Column="1" Style="{StaticResource GdText}" Width="140"
+                                       HorizontalAlignment="Left" MaxLength="10"
+                                       Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
+                                       ToolTip="10 characters max. Use @ for a space between words."/>
+                            <TextBlock Grid.Row="1" Text="HP" Style="{StaticResource GdFieldLabel}"/>
+                            <TextBox   Grid.Row="1" Grid.Column="1" Style="{StaticResource GdNumber}" Text="{Binding Hp}"/>
+                            <TextBlock Grid.Row="2" Text="ATP" Style="{StaticResource GdFieldLabel}"/>
+                            <TextBox   Grid.Row="2" Grid.Column="1" Style="{StaticResource GdNumber}" Text="{Binding Atp}"/>
+                            <TextBlock Grid.Row="3" Text="DFP" Style="{StaticResource GdFieldLabel}"/>
+                            <TextBox   Grid.Row="3" Grid.Column="1" Style="{StaticResource GdNumber}" Text="{Binding Dfp}"/>
+                            <TextBlock Grid.Row="4" Text="Magic defense" Style="{StaticResource GdFieldLabel}"/>
+                            <TextBox   Grid.Row="4" Grid.Column="1" Style="{StaticResource GdNumber}" Text="{Binding MagicDefense}"/>
+                            <TextBlock Grid.Row="5" Text="AGL (speed)" Style="{StaticResource GdFieldLabel}"/>
+                            <TextBox   Grid.Row="5" Grid.Column="1" Style="{StaticResource GdNumber}" Text="{Binding Agl}"/>
+                            <TextBlock Grid.Row="6" Text="MGR" Style="{StaticResource GdFieldLabel}"/>
+                            <TextBox   Grid.Row="6" Grid.Column="1" Style="{StaticResource GdNumber}" Text="{Binding Mgr}"/>
+                        </Grid>
+                        <Button Content="🎲  Randomize stats" Style="{StaticResource LufiaButton}"
+                                Command="{Binding RandomizeStatsCommand}" HorizontalAlignment="Left" Margin="0,10,0,0"
+                                ToolTip="Roll HP/ATP/DFP/AGL/MGR to roughly 1x-2x their values (L1ME formula). Click Apply to keep."/>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource GdCard}">
+                    <StackPanel>
+                        <TextBlock Text="REWARDS" Style="{StaticResource GdSection}"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/>
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Text="EXP" Style="{StaticResource GdFieldLabel}"/>
+                            <TextBox   Grid.Row="0" Grid.Column="1" Style="{StaticResource GdNumber}" Text="{Binding Exp}"/>
+                            <TextBlock Grid.Row="1" Text="Gold" Style="{StaticResource GdFieldLabel}"/>
+                            <TextBox   Grid.Row="1" Grid.Column="1" Style="{StaticResource GdNumber}" Text="{Binding Gold}"/>
+                            <TextBlock Grid.Row="2" Text="Item dropped" Style="{StaticResource GdFieldLabel}"/>
+                            <ComboBox  Grid.Row="2" Grid.Column="1" Style="{StaticResource GdCombo}"
+                                       ItemsSource="{Binding ItemNames}" SelectedIndex="{Binding DropItem}"/>
+                            <TextBlock Grid.Row="3" Text="Drop rate (0-255)" Style="{StaticResource GdFieldLabel}"/>
+                            <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal">
+                                <TextBox Style="{StaticResource GdNumber}"
+                                         Text="{Binding DropRate, UpdateSourceTrigger=PropertyChanged}"/>
+                                <TextBlock Text="{Binding DropChanceText}" Style="{StaticResource GdFieldLabel}" Margin="10,0,0,0"/>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource GdCard}">
+                    <StackPanel>
+                        <TextBlock Text="TYPE &amp; GRAPHICS" Style="{StaticResource GdSection}"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/>
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Text="Type" Style="{StaticResource GdFieldLabel}"/>
+                            <ComboBox  Grid.Row="0" Grid.Column="1" Style="{StaticResource GdCombo}" MinWidth="160"
+                                       ItemsSource="{Binding MonsterTypeOptions}" DisplayMemberPath="Label"
+                                       SelectedValuePath="Value" SelectedValue="{Binding MonsterType}"/>
+                            <TextBlock Grid.Row="1" Text="Flags" Style="{StaticResource GdFieldLabel}"/>
+                            <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal">
+                                <CheckBox Content="0x40" Style="{StaticResource GdCheck}" IsChecked="{Binding Flag40}"/>
+                                <CheckBox Content="0x80" Style="{StaticResource GdCheck}" IsChecked="{Binding Flag80}"/>
+                            </StackPanel>
+                            <TextBlock Grid.Row="2" Text="Weak against" Style="{StaticResource GdFieldLabel}"/>
+                            <ComboBox  Grid.Row="2" Grid.Column="1" Style="{StaticResource GdCombo}" MinWidth="160"
+                                       ItemsSource="{Binding WeaknessOptions}" DisplayMemberPath="Label"
+                                       SelectedValuePath="Value" SelectedValue="{Binding Weakness}"/>
+                            <TextBlock Grid.Row="3" Text="Graphic #" Style="{StaticResource GdFieldLabel}"/>
+                            <TextBox   Grid.Row="3" Grid.Column="1" Style="{StaticResource GdNumber}" Text="{Binding Graphic}"/>
+                            <TextBlock Grid.Row="4" Text="Palette" Style="{StaticResource GdFieldLabel}"/>
+                            <TextBox   Grid.Row="4" Grid.Column="1" Style="{StaticResource GdNumber}" Text="{Binding Palette}"/>
+                        </Grid>
+                        <TextBlock Text="Unknown bytes +11 +13 +18 +19 +29 (hex)" Style="{StaticResource LufiaLabel}" Margin="0,10,0,2"/>
+                        <TextBox Style="{StaticResource GdText}" Width="160" HorizontalAlignment="Left"
+                                 Text="{Binding UnknownHex, UpdateSourceTrigger=PropertyChanged}"/>
+                    </StackPanel>
+                </Border>
+
+            </WrapPanel>
+        </ScrollViewer>
+
+        <v:EditorFooter Grid.Row="1" Grid.ColumnSpan="2"/>
+    </Grid>
+</UserControl>
