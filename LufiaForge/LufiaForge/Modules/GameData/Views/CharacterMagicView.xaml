@@ -1,0 +1,68 @@
+<UserControl x:Class="LufiaForge.Modules.GameData.Views.CharacterMagicView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="clr-namespace:LufiaForge.Modules.GameData.Views">
+    <UserControl.Resources>
+        <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="230"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Column="0" Margin="12">
+            <ListBox Style="{StaticResource GdRecordList}"
+                     ItemsSource="{Binding Casters}"
+                     SelectedIndex="{Binding SelectedIndex}"/>
+            <TextBlock Style="{StaticResource GdHint}" Margin="0,10,0,0"
+                       Text="Aguro doesn't learn magic. Entries are checked in order; keep levels ascending. Level 0 = known from the start."/>
+            <TextBlock Style="{StaticResource GdHint}" Margin="0,8,0,0"
+                       Text="Original-game bug: the Hero's first entry is level 1, which is never reached through a level-up, so that spell is never learned. Set it to 2 to fix."/>
+        </StackPanel>
+
+        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" Padding="0,12,0,0">
+            <Border Style="{StaticResource GdCard}" HorizontalAlignment="Left">
+                <StackPanel>
+                    <TextBlock Text="SPELLS LEARNED" Style="{StaticResource GdSection}"/>
+                    <Grid Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="50"/>
+                            <ColumnDefinition Width="100"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="#"     Style="{StaticResource LufiaLabel}"/>
+                        <TextBlock Grid.Column="1" Text="Level" Style="{StaticResource LufiaLabel}"/>
+                        <TextBlock Grid.Column="2" Text="Spell" Style="{StaticResource LufiaLabel}"/>
+                    </Grid>
+                    <ItemsControl ItemsSource="{Binding Slots}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="50"/>
+                                        <ColumnDefinition Width="100"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{Binding Number}" Style="{StaticResource GdFieldLabel}"/>
+                                    <TextBox Grid.Column="1" Style="{StaticResource GdNumber}" Width="70"
+                                             Text="{Binding Level}"/>
+                                    <ComboBox Grid.Column="2" Style="{StaticResource GdCombo}"
+                                              ItemsSource="{Binding DataContext.SpellNames, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                              SelectedIndex="{Binding Spell}"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+        </ScrollViewer>
+
+        <v:EditorFooter Grid.Row="1" Grid.ColumnSpan="2"/>
+    </Grid>
+</UserControl>

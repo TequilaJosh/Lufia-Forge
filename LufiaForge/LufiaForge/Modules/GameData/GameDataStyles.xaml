@@ -1,0 +1,65 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Shared layout styles for the Game Data editors (merged into each editor view). -->
+
+    <Style x:Key="GdFieldLabel" TargetType="TextBlock" BasedOn="{StaticResource LufiaLabel}">
+        <Setter Property="VerticalAlignment" Value="Center"/>
+        <Setter Property="Margin"            Value="0,0,10,0"/>
+    </Style>
+
+    <Style x:Key="GdHint" TargetType="TextBlock" BasedOn="{StaticResource LufiaLabel}">
+        <Setter Property="Foreground"   Value="{StaticResource TextSecondaryBrush}"/>
+        <Setter Property="Opacity"      Value="0.8"/>
+        <Setter Property="FontSize"     Value="11"/>
+        <Setter Property="TextWrapping" Value="Wrap"/>
+    </Style>
+
+    <Style x:Key="GdSection" TargetType="TextBlock" BasedOn="{StaticResource LufiaLabelGold}">
+        <Setter Property="Margin" Value="0,0,0,10"/>
+    </Style>
+
+    <Style x:Key="GdNumber" TargetType="TextBox" BasedOn="{StaticResource LufiaTextBox}">
+        <Setter Property="Width"             Value="90"/>
+        <Setter Property="HorizontalAlignment" Value="Left"/>
+        <Setter Property="Margin"            Value="0,3"/>
+    </Style>
+
+    <Style x:Key="GdText" TargetType="TextBox" BasedOn="{StaticResource LufiaTextBox}">
+        <Setter Property="Margin" Value="0,3"/>
+    </Style>
+
+    <Style x:Key="GdCombo" TargetType="ComboBox" BasedOn="{StaticResource LufiaComboBox}">
+        <Setter Property="Margin"   Value="0,3"/>
+        <Setter Property="MinWidth" Value="200"/>
+        <Setter Property="HorizontalAlignment" Value="Left"/>
+        <Setter Property="ItemsPanel">
+            <Setter.Value>
+                <ItemsPanelTemplate>
+                    <VirtualizingStackPanel/>
+                </ItemsPanelTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="GdCheck" TargetType="CheckBox" BasedOn="{StaticResource LufiaCheckBox}">
+        <Setter Property="Margin" Value="0,4,16,4"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+
+    <Style x:Key="GdCard" TargetType="Border">
+        <Setter Property="Background"      Value="{StaticResource SurfacePurpleBrush}"/>
+        <Setter Property="BorderBrush"     Value="{StaticResource BorderPurpleBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius"    Value="4"/>
+        <Setter Property="Padding"         Value="14,12"/>
+        <Setter Property="Margin"          Value="0,0,12,12"/>
+        <Setter Property="VerticalAlignment" Value="Top"/>
+    </Style>
+
+    <Style x:Key="GdRecordList" TargetType="ListBox" BasedOn="{StaticResource LufiaListBox}">
+        <Setter Property="ItemContainerStyle" Value="{StaticResource LufiaListBoxItem}"/>
+        <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True"/>
+    </Style>
+
+</ResourceDictionary>
