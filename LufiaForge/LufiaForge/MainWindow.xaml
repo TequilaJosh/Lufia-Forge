@@ -53,6 +53,7 @@ Title="{Binding WindowTitle}"
             </MenuItem>
 
             <MenuItem Header="_Help" Foreground="{StaticResource TextPrimaryBrush}">
+                <MenuItem Header="Check for Updates..." Click="CheckUpdatesMenuItem_Click" Foreground="Black"/>
                 <MenuItem Header="About Lufia Forge" Click="AboutMenuItem_Click" Foreground="Black"/>
             </MenuItem>
         </Menu>
