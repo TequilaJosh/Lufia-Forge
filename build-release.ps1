@@ -53,8 +53,11 @@ Write-Host "Installer: $(Join-Path $relDir 'LufiaForge-win-Setup.exe')" -Foregro
 
 # 5. Upload as a GitHub release; installed copies pick it up on their next start
 if ($Publish) {
+    # Tag the commit that was built (vpk otherwise tags the repo's default branch).
+    # Push your commits first so GitHub knows this commit.
+    $commit = (git -C $root rev-parse HEAD).Trim()
     vpk upload github --repoUrl $repoUrl --token $token --outputDir $relDir `
-        --publish --releaseName "Lufia Forge $version" --tag "v$version"
+        --publish --releaseName "Lufia Forge $version" --tag "v$version" --targetCommitish $commit
     if ($LASTEXITCODE -ne 0) { throw 'vpk upload failed' }
     Write-Host "Published v$version to $repoUrl/releases" -ForegroundColor Green
 }
