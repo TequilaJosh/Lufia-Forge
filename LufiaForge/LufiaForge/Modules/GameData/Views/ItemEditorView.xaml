@@ -1,0 +1,149 @@
+<UserControl x:Class="LufiaForge.Modules.GameData.Views.ItemEditorView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="clr-namespace:LufiaForge.Modules.GameData.Views">
+    <UserControl.Resources>
+        <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="230"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <ListBox Grid.Column="0" Margin="12"
+                 Style="{StaticResource GdRecordList}"
+                 ItemsSource="{Binding ItemNames}"
+                 SelectedIndex="{Binding SelectedIndex}"/>
+
+        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" Padding="0,12,0,0">
+            <WrapPanel Orientation="Horizontal">
+
+                <!-- General -->
+                <Border Style="{StaticResource GdCard}">
+                    <StackPanel>
+                        <TextBlock Text="GENERAL" Style="{StaticResource GdSection}"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/>
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Text="Name" Style="{StaticResource GdFieldLabel}"/>
+                            <TextBox   Grid.Row="0" Grid.Column="1" Style="{StaticResource GdText}" Width="160"
+                                       HorizontalAlignment="Left" MaxLength="12"
+                                       Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
+                                       ToolTip="12 characters max. Use @ for a space between words (e.g. Long@Sword)."/>
+                            <TextBlock Grid.Row="1" Text="Type" Style="{StaticResource GdFieldLabel}"/>
+                            <ComboBox  Grid.Row="1" Grid.Column="1" Style="{StaticResource GdCombo}"
+                                       ItemsSource="{Binding TypeOptions}" DisplayMemberPath="Label"
+                                       SelectedValuePath="Value" SelectedValue="{Binding Type}"/>
+                            <TextBlock Grid.Row="2" Text="Icon" Style="{StaticResource GdFieldLabel}"/>
+                            <ComboBox  Grid.Row="2" Grid.Column="1" Style="{StaticResource GdCombo}"
+                                       ItemsSource="{Binding IconOptions}" DisplayMemberPath="Label"
+                                       SelectedValuePath="Value" SelectedValue="{Binding Icon}"/>
+                            <TextBlock Grid.Row="3" Text="Price (GP)" Style="{StaticResource GdFieldLabel}"/>
+                            <TextBox   Grid.Row="3" Grid.Column="1" Style="{StaticResource GdNumber}" Text="{Binding Price}"/>
+                        </Grid>
+                        <TextBlock Style="{StaticResource GdHint}" MaxWidth="300" Margin="0,8,0,0"
+                                   Text="@ is the in-game space inside item names."/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Equipment -->
+                <Border Style="{StaticResource GdCard}">
+                    <StackPanel>
+                        <TextBlock Text="EQUIPMENT &amp; TARGETING" Style="{StaticResource GdSection}"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition/><RowDefinition/>
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Text="Slot" Style="{StaticResource GdFieldLabel}"/>
+                            <ComboBox  Grid.Row="0" Grid.Column="1" Style="{StaticResource GdCombo}"
+                                       ItemsSource="{Binding SlotOptions}" DisplayMemberPath="Label"
+                                       SelectedValuePath="Value" SelectedValue="{Binding Slot}"/>
+                            <TextBlock Grid.Row="1" Text="Target" Style="{StaticResource GdFieldLabel}"/>
+                            <ComboBox  Grid.Row="1" Grid.Column="1" Style="{StaticResource GdCombo}"
+                                       ItemsSource="{Binding TargetOptions}" DisplayMemberPath="Label"
+                                       SelectedValuePath="Value" SelectedValue="{Binding Target}"/>
+                        </Grid>
+                        <TextBlock Text="Can be equipped by" Style="{StaticResource LufiaLabel}" Margin="0,10,0,2"/>
+                        <WrapPanel>
+                            <CheckBox Content="Hero / Maxim"  Style="{StaticResource GdCheck}" IsChecked="{Binding EquipHero}"/>
+                            <CheckBox Content="Lufia / Selan" Style="{StaticResource GdCheck}" IsChecked="{Binding EquipLufia}"/>
+                            <CheckBox Content="Aguro / Guy"   Style="{StaticResource GdCheck}" IsChecked="{Binding EquipAguro}"/>
+                            <CheckBox Content="Jerin / Artea" Style="{StaticResource GdCheck}" IsChecked="{Binding EquipJerin}"/>
+                        </WrapPanel>
+                        <TextBlock Style="{StaticResource GdHint}" MaxWidth="320" Margin="0,6,0,0"
+                                   Text="The prologue party (Maxim, Selan, Guy, Artea) uses the same four equip flags as the main party."/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Properties -->
+                <Border Style="{StaticResource GdCard}">
+                    <StackPanel MinWidth="340">
+                        <TextBlock Text="PROPERTIES / EFFECT" Style="{StaticResource GdSection}"/>
+
+                        <StackPanel Visibility="{Binding HasPropertyList, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <Grid Margin="0,0,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="220"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Property" Style="{StaticResource LufiaLabel}"/>
+                                <TextBlock Grid.Column="1" Text="Value" Style="{StaticResource LufiaLabel}"/>
+                            </Grid>
+                            <ItemsControl ItemsSource="{Binding Properties}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <ComboBox Style="{StaticResource GdCombo}" MinWidth="200"
+                                                      ItemsSource="{Binding DataContext.PropertyOptions, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                      DisplayMemberPath="Label" SelectedValuePath="Value"
+                                                      SelectedValue="{Binding Id}"/>
+                                            <TextBox Grid.Column="1" Style="{StaticResource GdNumber}" Text="{Binding Value}"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Style="{StaticResource GdHint}" MaxWidth="340" Margin="0,6,0,0"
+                                       Text="Values are 16-bit (65535 = -1, 65526 = -10 for negative modifiers). The number of properties is fixed by the record size."/>
+                            <TextBlock Text="Raw data (read-only)" Style="{StaticResource LufiaLabel}" Margin="0,10,0,2"/>
+                            <TextBox Style="{StaticResource GdText}" IsReadOnly="True" TextWrapping="Wrap" MaxWidth="340"
+                                     Text="{Binding EffectHex, Mode=OneWay}"/>
+                        </StackPanel>
+
+                        <StackPanel Visibility="{Binding HasPropertyList, Converter={StaticResource InverseBoolToVisibilityConverter}}">
+                            <TextBlock Style="{StaticResource GdHint}" MaxWidth="340" Margin="0,0,0,4"
+                                       Text="This item uses an effect script (like spells) rather than a property list. Edit it as hex; the byte count must stay the same."/>
+                            <TextBox Style="{StaticResource GdText}" TextWrapping="Wrap" MaxWidth="340" AcceptsReturn="False"
+                                     Text="{Binding EffectHex, UpdateSourceTrigger=PropertyChanged}"/>
+                        </StackPanel>
+
+                        <TextBlock Text="Header bytes +18..+20 (hex)" Style="{StaticResource LufiaLabel}" Margin="0,10,0,2"/>
+                        <TextBox Style="{StaticResource GdText}" Width="120" HorizontalAlignment="Left"
+                                 Text="{Binding HeaderHex, UpdateSourceTrigger=PropertyChanged}"/>
+                    </StackPanel>
+                </Border>
+
+            </WrapPanel>
+        </ScrollViewer>
+
+        <v:EditorFooter Grid.Row="1" Grid.ColumnSpan="2"/>
+    </Grid>
+</UserControl>

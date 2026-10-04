@@ -1,0 +1,58 @@
+<UserControl x:Class="LufiaForge.Modules.GameData.Views.ShopEditorView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="clr-namespace:LufiaForge.Modules.GameData.Views">
+    <UserControl.Resources>
+        <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="230"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <ListBox Grid.Column="0" Margin="12"
+                 Style="{StaticResource GdRecordList}"
+                 ItemsSource="{Binding Shops}"
+                 SelectedIndex="{Binding SelectedIndex}"/>
+
+        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" Padding="0,12,0,0">
+            <Border Style="{StaticResource GdCard}" HorizontalAlignment="Left">
+                <StackPanel>
+                    <TextBlock Text="SHOP" Style="{StaticResource GdSection}"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                        <TextBlock Text="Type" Style="{StaticResource GdFieldLabel}"/>
+                        <ComboBox Style="{StaticResource GdCombo}"
+                                  ItemsSource="{Binding ShopTypeOptions}" DisplayMemberPath="Label"
+                                  SelectedValuePath="Value" SelectedValue="{Binding ShopType}"
+                                  IsEnabled="{Binding IsEditable}"/>
+                    </StackPanel>
+
+                    <ItemsControl ItemsSource="{Binding Slots}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding Number, StringFormat='Slot {0}'}" Width="60"
+                                               Style="{StaticResource GdFieldLabel}"/>
+                                    <ComboBox Style="{StaticResource GdCombo}" MinWidth="240"
+                                              ItemsSource="{Binding DataContext.ItemNames, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                              SelectedIndex="{Binding Item}"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock Style="{StaticResource GdHint}" MaxWidth="320" Margin="0,10,0,0"
+                               Text="Each shop keeps its original number of slots. Choosing 00 for a slot ends the list there (the shop sells fewer items)."/>
+                </StackPanel>
+            </Border>
+        </ScrollViewer>
+
+        <v:EditorFooter Grid.Row="1" Grid.ColumnSpan="2"/>
+    </Grid>
+</UserControl>

@@ -90,9 +90,10 @@ public partial class MainViewModel : ObservableObject
         if (RomBuffer == null) return;
         try
         {
-            RomBuffer.SaveToFile();
-            StatusMessage = "ROM saved.";
-            StatusDetail  = RomBuffer.FilePath;
+            // Never overwrite the opened ROM: each save writes a new date-stamped copy beside it.
+            string copyPath = RomBuffer.SaveDatedCopy();
+            StatusMessage = $"Saved copy: {Path.GetFileName(copyPath)} (original ROM unchanged).";
+            StatusDetail  = copyPath;
             OnPropertyChanged(nameof(WindowTitle));
         }
         catch (Exception ex)
