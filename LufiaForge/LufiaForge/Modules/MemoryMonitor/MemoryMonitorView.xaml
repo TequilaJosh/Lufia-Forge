@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:wf="clr-namespace:System.Windows.Forms.Integration;assembly=WindowsFormsIntegration"
              xmlns:local="clr-namespace:LufiaForge.Modules.MemoryMonitor"
+             xmlns:conv="clr-namespace:LufiaForge.Converters"
              Background="{StaticResource DeepPurpleBrush}">
 
     <Grid>
@@ -27,12 +28,35 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <Button Grid.Column="0"
-                        Content="Launch BizHawk"
-                        Style="{StaticResource LufiaButtonGold}"
-                        Command="{Binding LaunchBizHawkCommand}"
-                        Padding="14,6"
-                        Margin="0,0,12,0"/>
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Margin="0,0,12,0">
+                    <Button Content="Launch BizHawk"
+                            Style="{StaticResource LufiaButtonGold}"
+                            Command="{Binding LaunchBizHawkCommand}"
+                            Padding="14,6"
+                            Margin="0,0,6,0"/>
+                    <Button Style="{StaticResource LufiaButton}"
+                            Command="{Binding ToggleUndockCommand}"
+                            Padding="10,6"
+                            ToolTip="Float BizHawk as an always-on-top window, or dock it back here">
+                        <Button.IsEnabled>
+                            <Binding Path="IsBizHawkRunning"/>
+                        </Button.IsEnabled>
+                        <Button.Content>
+                            <TextBlock>
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Text" Value="Undock"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsBizHawkUndocked}" Value="True">
+                                                <Setter Property="Text" Value="Re-dock"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Button.Content>
+                    </Button>
+                </StackPanel>
 
                 <!-- Connection indicator -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
@@ -76,8 +100,57 @@
                     Background="#120C1C"
                     BorderBrush="{StaticResource BorderPurpleBrush}"
                     BorderThickness="0,0,1,0">
-                <wf:WindowsFormsHost x:Name="BizHawkFormsHost"
-                                     Background="#120C1C"/>
+                <Grid>
+                    <!-- Live embedded window — hidden while undocked -->
+                    <wf:WindowsFormsHost x:Name="BizHawkFormsHost"
+                                         Background="#120C1C">
+                        <wf:WindowsFormsHost.Visibility>
+                            <Binding Path="IsBizHawkUndocked">
+                                <Binding.Converter>
+                                    <conv:InverseBoolToVisibilityConverter/>
+                                </Binding.Converter>
+                            </Binding>
+                        </wf:WindowsFormsHost.Visibility>
+                    </wf:WindowsFormsHost>
+
+                    <!-- Placeholder shown while BizHawk is floating -->
+                    <Border Background="#120C1C"
+                            HorizontalAlignment="Stretch"
+                            VerticalAlignment="Stretch">
+                        <Border.Visibility>
+                            <Binding Path="IsBizHawkUndocked">
+                                <Binding.Converter>
+                                    <conv:BoolToVisibilityConverter/>
+                                </Binding.Converter>
+                            </Binding>
+                        </Border.Visibility>
+                        <StackPanel HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Opacity="0.55">
+                            <TextBlock Text="⬡"
+                                       FontSize="48"
+                                       Foreground="{StaticResource GoldDimBrush}"
+                                       HorizontalAlignment="Center"
+                                       Margin="0,0,0,12"/>
+                            <TextBlock Text="BizHawk is undocked"
+                                       Style="{StaticResource LufiaLabel}"
+                                       FontSize="14"
+                                       HorizontalAlignment="Center"
+                                       Margin="0,0,0,6"/>
+                            <TextBlock Text="The emulator window is floating above all other windows."
+                                       Style="{StaticResource LufiaLabel}"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       FontSize="11"
+                                       HorizontalAlignment="Center"
+                                       Margin="0,0,0,4"/>
+                            <TextBlock Text="Click &quot;Re-dock&quot; to embed it here again."
+                                       Style="{StaticResource LufiaLabel}"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       FontSize="11"
+                                       HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
             </Border>
 
             <!-- Splitter -->

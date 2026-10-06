@@ -84,7 +84,7 @@ public static class TextDecoder
     /// All MTE tables are read dynamically from the ROM; the decoder supports both
     /// the original US ROM and any expanded-MTE patched variant.
     /// </summary>
-    public static DecodeResult Decode(RomBuffer rom, int offset, bool expandMte = true)
+    public static DecodeResult Decode(RomBuffer rom, int offset, bool expandMte = true, bool stopAtPageBreak = false)
     {
         EnsureCache(rom);
 
@@ -115,6 +115,7 @@ public static class TextDecoder
                 tokens.Add(new TextToken(TextTokenKind.PageBreak, pos, 1, "\n--- [PAGE] ---\n"));
                 text.Append("\n[PAGE]\n");
                 pos++;
+                if (stopAtPageBreak) break;   // event-script text: 04 ends the box
                 continue;
             }
 
@@ -139,6 +140,19 @@ public static class TextDecoder
                     ? n : $"[CHAR:0x{charId:X2}]";
                 tokens.Add(new TextToken(TextTokenKind.CharName, pos, 2, label, charId));
                 text.Append(label);
+                pos += 2;
+                continue;
+            }
+
+            // ------------------------------------------------------------------
+            // 0x06 / 0x0F + 1 byte  control codes with an operand (event-script text)
+            // ------------------------------------------------------------------
+            if (b == 0x06 || b == 0x0F)
+            {
+                byte arg = pos + 1 < limit ? rom.ReadByte(pos + 1) : (byte)0;
+                string tag = $"[{b:X2}:{arg:X2}]";
+                tokens.Add(new TextToken(TextTokenKind.Control, pos, 2, tag, arg));
+                text.Append(tag);
                 pos += 2;
                 continue;
             }
@@ -467,7 +481,7 @@ public static class TextDecoder
                         case "SELAN":  bytes.Add(0x07); bytes.Add(0x05); break;
                         case "GUY":    bytes.Add(0x07); bytes.Add(0x06); break;
                         case "ARTEA":  bytes.Add(0x07); bytes.Add(0x07); break;
-                        default:       handled = false; break;
+                        default:       handled = TryEncodeRawTag(tag, bytes); break;
                     }
 
                     if (handled)
@@ -523,6 +537,26 @@ public static class TextDecoder
 
         bytes.Add(Lufia1Constants.CtrlEndString); // always terminate
         return bytes.ToArray();
+    }
+
+    /// <summary>
+    /// Raw tags written by the event editor: [ITEM:xx], [SPELL:xx], [TOWN:xx], [CHAR:xx], [xx], [xx:yy] (hex).
+    /// </summary>
+    private static bool TryEncodeRawTag(string tag, List<byte> bytes)
+    {
+        static bool Hex(string s, out byte v) =>
+            byte.TryParse(s, System.Globalization.NumberStyles.HexNumber, null, out v) && s.Length is 1 or 2;
+        var parts = tag.Split(':');
+        if (parts.Length == 2 && Hex(parts[1], out byte arg))
+        {
+            byte? code = parts[0] switch { "ITEM" => 0x09, "SPELL" => 0x0A, "TOWN" => 0x0B, "CHAR" => 0x07, _ => null };
+            if (code == null && Hex(parts[0], out byte c)) code = c;
+            if (code == null) return false;
+            bytes.Add(code.Value); bytes.Add(arg);
+            return true;
+        }
+        if (parts.Length == 1 && Hex(parts[0], out byte single)) { bytes.Add(single); return true; }
+        return false;
     }
 
     // -------------------------------------------------------------------------

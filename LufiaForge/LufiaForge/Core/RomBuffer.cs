@@ -8,7 +8,7 @@ namespace LufiaForge.Core;
 /// </summary>
 public class RomBuffer
 {
-    private readonly byte[] _data;
+    private byte[] _data;
     private bool _isDirty;
 
     public int Length => _data.Length;
@@ -162,6 +162,43 @@ public class RomBuffer
                 "ROM expansion is not supported in this version.");
         Array.Copy(newData, _data, newData.Length);
         _isDirty = true;
+    }
+
+    /// <summary>
+    /// Grow the ROM to <paramref name="newSize"/> bytes, filling the new space with <paramref name="fill"/>,
+    /// and update the SNES header's ROM size byte. Existing data is unchanged.
+    /// </summary>
+    public void Expand(int newSize, byte fill = 0xFF)
+    {
+        if (newSize <= _data.Length) return;
+        var grown = new byte[newSize];
+        Array.Copy(_data, grown, _data.Length);
+        Array.Fill(grown, fill, _data.Length, newSize - _data.Length);
+        _data = grown;
+        // Header ROM size byte: 2^n KB (0x0A = 1 MB, 0x0B = 2 MB)
+        int kb = newSize / 1024, n = 0;
+        while ((1 << n) < kb) n++;
+        _data[Lufia1Constants.SnesRomSizeOffset] = (byte)n;
+        _isDirty = true;
+    }
+
+    /// <summary>Recompute the SNES header checksum and complement for the current data.</summary>
+    public void FixChecksum()
+    {
+        Put16(Lufia1Constants.SnesComplementOffset, 0xFFFF);
+        Put16(Lufia1Constants.SnesChecksumOffset, 0x0000);
+        uint sum = 0;
+        foreach (byte b in _data) sum += b;
+        ushort checksum = (ushort)sum;
+        Put16(Lufia1Constants.SnesChecksumOffset, checksum);
+        Put16(Lufia1Constants.SnesComplementOffset, (ushort)(checksum ^ 0xFFFF));
+        _isDirty = true;
+    }
+
+    private void Put16(int offset, ushort value)
+    {
+        _data[offset] = (byte)value;
+        _data[offset + 1] = (byte)(value >> 8);
     }
 
     /// <summary>Mark the buffer clean (e.g., after exporting a patch).</summary>

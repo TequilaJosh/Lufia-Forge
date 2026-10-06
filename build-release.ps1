@@ -6,6 +6,7 @@
 .EXAMPLE
     ./build-release.ps1                 # build only -> out/releases/LufiaForge-win-Setup.exe
     ./build-release.ps1 -Publish        # build and upload a GitHub release (tag v<Version>)
+    ./build-release.ps1 -Publish -Prerelease   # upload as a GitHub pre-release (beta); stable installs ignore it
 
 .NOTES
     Requires the Velopack CLI:  dotnet tool install -g vpk
@@ -14,7 +15,8 @@
     installed copies only update to a higher version.
 #>
 param(
-    [switch]$Publish
+    [switch]$Publish,
+    [switch]$Prerelease
 )
 
 $ErrorActionPreference = 'Stop'
@@ -34,8 +36,13 @@ dotnet publish $project -c Release -r win-x64 --self-contained true -o $pubDir
 if ($LASTEXITCODE -ne 0) { throw 'dotnet publish failed' }
 
 # 2. Bundle BizHawk next to the exe (the Memory Monitor looks for BizHawk\EmuHawk.exe there)
-robocopy (Join-Path $root 'BizHawk') (Join-Path $pubDir 'BizHawk') /E /NFL /NDL /NJH /NJS /NP | Out-Null
+#    Personal files stay out: saves, savestates (they contain the ROM image), trace logs, the local config.
+robocopy (Join-Path $root 'BizHawk') (Join-Path $pubDir 'BizHawk') /E /NFL /NDL /NJH /NJS /NP `
+         /XD SaveRAM State `
+         /XF *.log *.State *.SaveRAM *.bak LufiaForge_Summary_*.txt LufiaForge_ScriptSummary*.txt config.ini | Out-Null
 if ($LASTEXITCODE -ge 8) { throw 'Copying BizHawk failed' }
+# ship the committed BizHawk config, not the one changed by local use
+git -C $root show HEAD:BizHawk/config.ini | Set-Content -Encoding utf8 (Join-Path $pubDir 'BizHawk/config.ini')
 
 # 3. Fetch the previous release so vpk can build a small delta update (ignored if none exists yet)
 $token = $null
@@ -56,8 +63,9 @@ if ($Publish) {
     # Tag the commit that was built (vpk otherwise tags the repo's default branch).
     # Push your commits first so GitHub knows this commit.
     $commit = (git -C $root rev-parse HEAD).Trim()
+    $pre = @(); if ($Prerelease) { $pre = @('--pre') }
     vpk upload github --repoUrl $repoUrl --token $token --outputDir $relDir `
-        --publish --releaseName "Lufia Forge $version" --tag "v$version" --targetCommitish $commit
+        --publish --releaseName "Lufia Forge $version" --tag "v$version" --targetCommitish $commit @pre
     if ($LASTEXITCODE -ne 0) { throw 'vpk upload failed' }
     Write-Host "Published v$version to $repoUrl/releases" -ForegroundColor Green
 }
