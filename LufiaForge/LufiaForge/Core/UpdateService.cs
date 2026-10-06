@@ -4,15 +4,21 @@ using Velopack.Sources;
 namespace LufiaForge.Core;
 
 /// <summary>
-/// Checks GitHub Releases of the Lufia Forge repository for a newer version and installs it.
+/// Checks the GitHub Releases of the release-only repository for a newer version and installs it.
+/// Beta builds (version with a suffix, e.g. 0.4.0-beta.2) also take pre-releases; stable builds only stable ones.
 /// Only works in the installed app (Setup.exe); in a dev build it reports that updates are unavailable.
 /// </summary>
 public static class UpdateService
 {
-    public const string RepoUrl = "https://github.com/TequilaJosh/Lufia-Forge";
+    public const string RepoUrl = "https://github.com/TequilaJosh/Lufia-Forge-Releases";
+
+    /// <summary>True for beta builds: their version has a pre-release suffix.</summary>
+    public static bool IsBeta =>
+        (System.Reflection.CustomAttributeExtensions.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(
+            typeof(UpdateService).Assembly)?.InformationalVersion ?? "").Split('+')[0].Contains('-');
 
     private static UpdateManager CreateManager() =>
-        new(new GithubSource(RepoUrl, accessToken: null, prerelease: false));
+        new(new GithubSource(RepoUrl, accessToken: null, prerelease: IsBeta));
 
     public static string CurrentVersion =>
         CreateManager().CurrentVersion?.ToString()
@@ -32,7 +38,7 @@ public static class UpdateService
             {
                 if (!silentIfNone)
                     MessageBox.Show("Automatic updates only work in the installed version of Lufia Forge " +
-                                    "(installed with LufiaForge-win-Setup.exe from the GitHub releases page).",
+                                    "(installed with LufiaForge-win-Setup.exe from github.com/TequilaJosh/Lufia-Forge-Releases).",
                                     "Check for Updates", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }

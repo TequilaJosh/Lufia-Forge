@@ -11,7 +11,7 @@
     <RootNamespace>LufiaForge</RootNamespace>
     <ApplicationIcon>Assets\icon.ico</ApplicationIcon>
     <!-- Bump before each release; the auto-updater compares against GitHub release versions. -->
-    <Version>0.4.0-beta.1</Version>
+    <Version>0.4.0-beta.2</Version>
     <!-- Custom Main (Program.cs) so Velopack can handle install/update hooks before WPF starts. -->
     <StartupObject>LufiaForge.Program</StartupObject>
   </PropertyGroup>
