@@ -55,6 +55,16 @@ public sealed class BizHawkHost : IDisposable
     private static extern bool SetForegroundWindow(IntPtr hWnd);
 
     [DllImport("user32.dll")]
+    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter,
+        int X, int Y, int cx, int cy, uint uFlags);
+
+    private static readonly IntPtr HWND_TOPMOST    = new(-1);
+    private static readonly IntPtr HWND_NOTOPMOST  = new(-2);
+    private const uint SWP_NOMOVE  = 0x0002;
+    private const uint SWP_NOSIZE  = 0x0001;
+    private const uint SWP_SHOWWINDOW = 0x0040;
+
+    [DllImport("user32.dll")]
     private static extern bool IsWindow(IntPtr hWnd);
 
     [DllImport("user32.dll")]
@@ -84,11 +94,13 @@ public sealed class BizHawkHost : IDisposable
 
     public IntPtr BizHawkHwnd => _bizHawkHwnd;
     public bool   IsRunning   => _bizHawkHwnd != IntPtr.Zero && IsWindow(_bizHawkHwnd);
+    public bool   IsUndocked  { get; private set; }
     public Panel? HostPanel   => _hostPanel;
 
     public event Action? Attached;
     public event Action? Exited;
     public event Action<string>? StatusChanged;
+    public event Action<bool>?   DockStateChanged;  // true = undocked
 
     /// <summary>
     /// Creates the WinForms Panel that will host the embedded BizHawk window.
@@ -292,6 +304,58 @@ public sealed class BizHawkHost : IDisposable
         if (!IsWindow(_bizHawkHwnd)) return;
 
         MoveWindow(_bizHawkHwnd, 0, 0, _hostPanel.Width, _hostPanel.Height, true);
+    }
+
+    // -------------------------------------------------------------------------
+    // Dock / Undock
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Detaches BizHawk from the host panel and turns it into a floating,
+    /// always-on-top window so it remains visible on any tab.
+    /// </summary>
+    public void Undock()
+    {
+        if (!IsRunning || IsUndocked) return;
+
+        // Restore full window chrome
+        uint style = GetWindowLong(_bizHawkHwnd, GWL_STYLE);
+        style &= ~(WS_CHILD);
+        style |= WS_CAPTION | WS_THICKFRAME | WS_SYSMENU | WS_MAXIMIZEBOX | WS_MINIMIZEBOX | WS_VISIBLE;
+        SetWindowLong(_bizHawkHwnd, GWL_STYLE, style);
+
+        uint exStyle = GetWindowLong(_bizHawkHwnd, GWL_EXSTYLE);
+        exStyle |= WS_EX_APPWINDOW;
+        SetWindowLong(_bizHawkHwnd, GWL_EXSTYLE, exStyle);
+
+        // Un-parent — makes it a top-level window again
+        SetParent(_bizHawkHwnd, IntPtr.Zero);
+
+        // Float always-on-top so it's visible over LufiaForge on any tab
+        SetWindowPos(_bizHawkHwnd, HWND_TOPMOST, 100, 100, 800, 600,
+                     SWP_SHOWWINDOW);
+
+        IsUndocked = true;
+        DockStateChanged?.Invoke(true);
+        StatusChanged?.Invoke("BizHawk undocked — floating window active.");
+    }
+
+    /// <summary>
+    /// Re-embeds BizHawk back into the host panel.
+    /// </summary>
+    public void Dock()
+    {
+        if (!IsRunning || !IsUndocked) return;
+
+        // Remove always-on-top before reparenting
+        SetWindowPos(_bizHawkHwnd, HWND_NOTOPMOST, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE);
+
+        ReparentWindow();
+
+        IsUndocked = false;
+        DockStateChanged?.Invoke(false);
+        StatusChanged?.Invoke("BizHawk re-docked.");
     }
 
     /// <summary>Give BizHawk keyboard/mouse focus.</summary>

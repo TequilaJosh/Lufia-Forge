@@ -14,6 +14,10 @@ public class DialogueEntry
     public string EditedText    { get; set;  }
     public bool   IsModified    => EditedText != DecodedText;
 
+    // Scene metadata (assigned after scan)
+    public int    SceneIndex    { get; set; }
+    public string SceneName     { get; set; } = "Battle / Menu";
+
     // For display
     public string OffsetHex     => $"0x{RomOffset:X6}";
     public string SnesAddress   => $"${Lufia1Constants.FileOffsetToSnesAddress(RomOffset):X6}";
@@ -122,6 +126,15 @@ public static class DialogueScanner
         }
 
         progress?.Report(100);
+
+        // Assign scene names to every entry based on ROM offset boundaries
+        foreach (var entry in results)
+        {
+            var scene        = LufiaSceneData.GetScene(entry.RomOffset);
+            entry.SceneIndex = scene.SceneIndex;
+            entry.SceneName  = scene.SceneName;
+        }
+
         return results;
     }
 

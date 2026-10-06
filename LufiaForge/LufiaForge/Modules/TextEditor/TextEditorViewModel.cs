@@ -1,243 +1,245 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LufiaForge.Core;
+using LufiaForge.Core.Maps;
+using LufiaForge.Modules.Common;
+using LufiaForge.ViewModels;
 using Microsoft.Win32;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 
 namespace LufiaForge.Modules.TextEditor;
 
+/// <summary>One dialogue box in the list.</summary>
+public partial class DialogueRow : ObservableObject
+{
+    public DialogueLine Line { get; init; } = null!;
+    public string MapLabel { get; init; } = "";
+    public ImageSource? Picture { get; init; }
+    public string Header => $"{MapLabel}" + (Line.Source.Length > 0 ? $"  ·  {Line.Source}" : $"  ·  event {Line.Event}");
+    public string SpeakerText => Line.Speaker;
+    [ObservableProperty] private string _preview = "";
+    [ObservableProperty] private bool _isEdited;
+}
+
+/// <summary>
+/// Text editor: every dialogue box of the game in one list (where it happens, who says it, with a picture
+/// of the character), and an editor for the selected box. Saving goes through the event script writer.
+/// </summary>
 public partial class TextEditorViewModel : ObservableObject
 {
     private RomBuffer? _rom;
+    private MainViewModel? _mainVm;
+    private List<DialogueRow> _all = new();
+    private readonly Dictionary<int, ImageSource?> _pictures = new();
+    private bool _loadingSelection;
 
-    // -------------------------------------------------------------------------
-    // Collections
-    // -------------------------------------------------------------------------
+    public ObservableCollection<DialogueRow> Rows { get; } = new();
+    public ObservableCollection<string> MapFilters { get; } = new();
+    private readonly List<int> _mapFilterIds = new();
 
-    public ObservableCollection<DialogueEntry> AllEntries      { get; } = new();
-    public ObservableCollection<DialogueEntry> FilteredEntries { get; } = new();
-    public ObservableCollection<(int Offset, string Word)> DictionaryWords { get; } = new();
+    [ObservableProperty] private DialogueRow? _selectedRow;
+    [ObservableProperty] private string _searchText = "";
+    [ObservableProperty] private int _mapFilterIndex;
+    [ObservableProperty] private bool _onlyCharacters;
+    [ObservableProperty] private string _editText = "";
+    [ObservableProperty] private string _locationText = "";
+    [ObservableProperty] private string _sizeText = "";
+    [ObservableProperty] private string _statusText = "Open a ROM to list the game's dialogue.";
+    [ObservableProperty] private bool _isBusy;
+    [ObservableProperty] private ImageSource? _selectedPicture;
 
-    // -------------------------------------------------------------------------
-    // Properties
-    // -------------------------------------------------------------------------
+    public bool HasSelection => SelectedRow != null;
 
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasEntries))]
-    [NotifyCanExecuteChangedFor(nameof(CommitEditCommand))]
-    [NotifyCanExecuteChangedFor(nameof(RevertEntryCommand))]
-    private DialogueEntry? _selectedEntry;
-
-    [ObservableProperty] private string  _searchText    = "";
-    [ObservableProperty] private string  _editBuffer    = "";
-    [ObservableProperty] private string  _statusText    = "Load a ROM, then click Scan.";
-    [ObservableProperty] private int     _scanProgress  = 0;
-    [ObservableProperty] private bool    _isScanning    = false;
-    [ObservableProperty] private bool    _showModifiedOnly = false;
-    [ObservableProperty] private int     _selectedTabIndex = 0; // 0=Dialogue, 1=Dictionary
-
-    public bool HasEntries => AllEntries.Count > 0;
-    public int  TotalCount    => AllEntries.Count;
-    public int  ModifiedCount => AllEntries.Count(e => e.IsModified);
-
-    // -------------------------------------------------------------------------
-    // Init
-    // -------------------------------------------------------------------------
-
-    public void SetRom(RomBuffer rom)
+    public void SetRom(RomBuffer rom, MainViewModel? mainVm = null)
     {
         _rom = rom;
-        AllEntries.Clear();
-        FilteredEntries.Clear();
-        DictionaryWords.Clear();
-        SelectedEntry = null;
-        StatusText    = "ROM loaded. Click 'Scan Dialogue' to find all text strings.";
+        _mainVm = mainVm ?? _mainVm;
+        TextDecoder.InvalidateDictionaryCache();
+        _ = BuildAsync();
     }
 
-    // -------------------------------------------------------------------------
-    // Commands
-    // -------------------------------------------------------------------------
-
-    [RelayCommand]
-    private async Task ScanDialogueAsync()
+    private async Task BuildAsync()
     {
         if (_rom == null) return;
-
-        IsScanning = true;
-        ScanProgress = 0;
-        StatusText = "Scanning ROM for dialogue strings...";
-        AllEntries.Clear();
-        FilteredEntries.Clear();
-
-        var progress = new Progress<int>(p =>
+        IsBusy = true;
+        StatusText = "Collecting every dialogue box in the game…";
+        var rom = _rom;
+        var maps = MapCatalog.ScanNamed(rom);
+        var lines = await Task.Run(() => DialogueIndex.Build(rom, maps.Select(m => m.MapId),
+            (i, n) => Application.Current?.Dispatcher.BeginInvoke(() => StatusText = $"Collecting dialogue… map {i + 1} of {n}")));
+        var labels = maps.ToDictionary(m => m.MapId, m => m.Label);
+        _all = lines.Select(l => new DialogueRow
         {
-            ScanProgress = p;
-            StatusText   = $"Scanning... {p}%";
-        });
+            Line = l,
+            MapLabel = labels.GetValueOrDefault(l.MapId, $"{l.MapId:X2}"),
+            Picture = PictureFor(l.Sprite),
+            Preview = Flatten(l.Text),
+        }).ToList();
 
-        try
+        MapFilters.Clear(); _mapFilterIds.Clear();
+        MapFilters.Add("All maps"); _mapFilterIds.Add(-1);
+        foreach (var m in maps.Where(m => lines.Any(l => l.MapId == m.MapId)))
         {
-            var cts    = new CancellationTokenSource();
-            var rom    = _rom;
-
-            var entries = await Task.Run(
-                () => DialogueScanner.ScanForDialogue(rom, progress, cts.Token));
-
-            foreach (var e in entries)
-                AllEntries.Add(e);
-
-            ApplyFilter();
-
-            // Also load dictionary
-            var words = DialogueScanner.ScanDictionary(rom);
-            foreach (var w in words)
-                DictionaryWords.Add(w);
-
-            StatusText = $"Found {AllEntries.Count} dialogue strings, {DictionaryWords.Count} dictionary words.";
+            MapFilters.Add(m.Label); _mapFilterIds.Add(m.MapId);
         }
-        catch (Exception ex)
-        {
-            StatusText = $"Scan error: {ex.Message}";
-        }
-        finally
-        {
-            IsScanning   = false;
-            ScanProgress = 100;
-            OnPropertyChanged(nameof(TotalCount));
-            OnPropertyChanged(nameof(ModifiedCount));
-        }
-    }
-
-    [RelayCommand(CanExecute = nameof(CanCommitEdit))]
-    private void CommitEdit()
-    {
-        if (SelectedEntry == null || _rom == null) return;
-
-        string newText = EditBuffer;
-        byte[] encoded = TextDecoder.Encode(newText, _rom);
-
-        if (encoded.Length > SelectedEntry.RawByteLength)
-        {
-            MessageBox.Show(
-                $"Encoded text is {encoded.Length} bytes but original was {SelectedEntry.RawByteLength} bytes.\n\n" +
-                $"Your new text is {encoded.Length - SelectedEntry.RawByteLength} bytes too long.\n\n" +
-                "Please shorten the text, or use dictionary words (e.g. [DICT:...]) to compress.\n" +
-                "Expanding dialogue beyond its original size requires pointer table editing (coming in a future update).",
-                "Text Too Long",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
-            return;
-        }
-
-        // Pad to original length with 0x00 if shorter (safe - 0x00 = string terminator)
-        if (encoded.Length < SelectedEntry.RawByteLength)
-        {
-            var padded = new byte[SelectedEntry.RawByteLength];
-            Array.Copy(encoded, padded, encoded.Length);
-            encoded = padded;
-        }
-
-        _rom.WriteBytes(SelectedEntry.RomOffset, encoded);
-        SelectedEntry.EditedText = newText;
-
-        OnPropertyChanged(nameof(ModifiedCount));
+        MapFilterIndex = 0;
         ApplyFilter();
-        StatusText = $"Committed edit at offset {SelectedEntry.OffsetHex}.";
+        IsBusy = false;
+        StatusText = $"{_all.Count} dialogue boxes on {MapFilters.Count - 1} maps. Pick one to edit it.";
     }
 
-    private bool CanCommitEdit() => SelectedEntry != null;
-
-    [RelayCommand(CanExecute = nameof(CanCommitEdit))]
-    private void RevertEntry()
+    private static string Flatten(string text)
     {
-        if (SelectedEntry == null || _rom == null) return;
-
-        // Re-decode from the live ROM bytes (in case of earlier writes)
-        var result = TextDecoder.Decode(_rom, SelectedEntry.RomOffset);
-        SelectedEntry.EditedText = result.Text;
-        EditBuffer = result.Text;
-
-        OnPropertyChanged(nameof(ModifiedCount));
-        StatusText = $"Reverted entry at {SelectedEntry.OffsetHex}.";
+        var t = text.Replace("\n", " ").Trim();
+        return t.Length > 140 ? t[..140] + "…" : t;
     }
 
-    [RelayCommand]
-    private void ExportScript()
+    private ImageSource? PictureFor(int sprite)
     {
-        if (AllEntries.Count == 0) return;
-
-        var dialog = new SaveFileDialog
+        if (_rom == null || sprite < 0) return null;
+        if (_pictures.TryGetValue(sprite, out var img)) return img;
+        if (NpcSprites.Render(_rom, sprite) is var (px, w, h))
         {
-            Title      = "Export Script as Text File",
-            Filter     = "Text files (*.txt)|*.txt|All files (*.*)|*.*",
-            FileName   = $"Lufia1_Script_{DateTime.Now:yyyyMMdd_HHmmss}.txt",
-            InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.Desktop)
-        };
-
-        if (dialog.ShowDialog() != true) return;
-
-        var lines = AllEntries.Select(e =>
-            $"[{e.Index:D4}] Offset: {e.OffsetHex}  SNES: {e.SnesAddress}  Bytes: {e.RawByteLength}\n" +
-            e.DecodedText + "\n" +
-            (e.IsModified ? $"--- EDITED ---\n{e.EditedText}\n" : "") +
-            new string('-', 60));
-
-        File.WriteAllLines(dialog.FileName, lines);
-        StatusText = $"Script exported to {dialog.FileName}";
-    }
-
-    [RelayCommand]
-    private void ExportDictionary()
-    {
-        if (DictionaryWords.Count == 0) return;
-
-        var dialog = new SaveFileDialog
-        {
-            Title      = "Export Dictionary",
-            Filter     = "Text files (*.txt)|*.txt",
-            FileName   = $"Lufia1_Dictionary_{DateTime.Now:yyyyMMdd_HHmmss}.txt",
-            InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.Desktop)
-        };
-
-        if (dialog.ShowDialog() != true) return;
-
-        var lines = DictionaryWords.Select(w => $"0x{w.Offset:X6}  (ptr: 0x{(w.Offset - Lufia1Constants.DictionaryBaseOffset):X4})  \"{w.Word}\"");
-        File.WriteAllLines(dialog.FileName, lines);
-        StatusText = $"Dictionary exported.";
-    }
-
-    // -------------------------------------------------------------------------
-    // Selection / filtering
-    // -------------------------------------------------------------------------
-
-    partial void OnSelectedEntryChanged(DialogueEntry? value)
-    {
-        if (value != null)
-        {
-            EditBuffer = value.EditedText;
-            StatusText = $"Entry #{value.Index}  |  {value.OffsetHex}  ({value.SnesAddress})  |  {value.RawByteLength} bytes";
+            var bmp = BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgra32, null, px, w * 4);
+            bmp.Freeze();
+            img = bmp;
         }
+        _pictures[sprite] = img;
+        return img;
     }
 
     partial void OnSearchTextChanged(string value) => ApplyFilter();
-    partial void OnShowModifiedOnlyChanged(bool value) => ApplyFilter();
+    partial void OnMapFilterIndexChanged(int value) => ApplyFilter();
+    partial void OnOnlyCharactersChanged(bool value) => ApplyFilter();
 
     private void ApplyFilter()
     {
-        FilteredEntries.Clear();
-        var source = AllEntries.AsEnumerable();
+        var keep = SelectedRow;
+        Rows.Clear();
+        int map = MapFilterIndex >= 0 && MapFilterIndex < _mapFilterIds.Count ? _mapFilterIds[MapFilterIndex] : -1;
+        string q = SearchText.Trim();
+        foreach (var r in _all)
+        {
+            if (map >= 0 && r.Line.MapId != map) continue;
+            if (OnlyCharacters && !r.Line.Source.StartsWith("Character") && !r.Line.Speaker.StartsWith("Character")) continue;
+            if (q.Length > 0 && !r.Line.Text.Contains(q, StringComparison.OrdinalIgnoreCase) &&
+                !r.Header.Contains(q, StringComparison.OrdinalIgnoreCase)) continue;
+            Rows.Add(r);
+        }
+        if (keep != null && Rows.Contains(keep)) SelectedRow = keep;
+        if (!IsBusy) StatusText = $"{Rows.Count} of {_all.Count} dialogue boxes shown.";
+    }
 
-        if (!string.IsNullOrWhiteSpace(SearchText))
-            source = source.Where(e =>
-                e.DecodedText.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ||
-                e.OffsetHex.Contains(SearchText, StringComparison.OrdinalIgnoreCase));
+    partial void OnSelectedRowChanged(DialogueRow? value)
+    {
+        OnPropertyChanged(nameof(HasSelection));
+        _loadingSelection = true;
+        EditText = value?.Line.Text ?? "";
+        _loadingSelection = false;
+        SelectedPicture = value?.Picture;
+        if (value == null) { LocationText = ""; SizeText = ""; return; }
+        var l = value.Line;
+        LocationText = $"{value.MapLabel} · event {l.Event}" + (l.Source.Length > 0 ? $" ({l.Source})" : "") +
+                       $" · line {l.Line + 1}" + (l.IsCodeView ? $" of the code at 0x{l.RegionStart:X6}" : "") +
+                       $"\n{l.Speaker} · ROM 0x{l.Offset:X6}";
+        UpdateSize();
+    }
 
-        if (ShowModifiedOnly)
-            source = source.Where(e => e.IsModified);
+    partial void OnEditTextChanged(string value)
+    {
+        if (_loadingSelection) return;
+        UpdateSize();
+    }
 
-        foreach (var e in source)
-            FilteredEntries.Add(e);
+    private EventScript? LoadScript(DialogueLine l) =>
+        _rom == null ? null
+        : l.IsCodeView ? EventScript.LoadAt(_rom, l.MapId, l.Event, l.RegionStart, l.JumpBase)
+        : EventScript.Load(_rom, l.MapId, l.Event);
+
+    private void UpdateSize()
+    {
+        if (SelectedRow == null || _rom == null) { SizeText = ""; return; }
+        var s = LoadScript(SelectedRow.Line);
+        if (s == null || SelectedRow.Line.Line >= s.Ops.Count) { SizeText = ""; return; }
+        var op = s.Ops[SelectedRow.Line.Line];
+        int was = op.RawLength - op.Bytes.Length;
+        int now = s.EncodeText(EditText, op.Terminator).Length;
+        SizeText = EditText.Replace("\r", "") == op.OriginalText ? $"{was} bytes"
+                 : now == was ? $"{now} bytes (same size: saved in place)"
+                 : $"{now} bytes (was {was}: the event will be moved{(SelectedRow.Line.IsCodeView ? " — not possible for this line, keep the same size" : "")})";
+    }
+
+    [RelayCommand]
+    private void Apply()
+    {
+        if (_rom == null || SelectedRow == null) return;
+        var row = SelectedRow;
+        var l = row.Line;
+        try
+        {
+            var s = LoadScript(l);
+            if (s == null || l.Line >= s.Ops.Count || !s.Ops[l.Line].IsText) { StatusText = "This line can't be found any more."; return; }
+            s.Ops[l.Line].Text = EditText.Replace("\r", "");
+            if (!s.IsModified) { StatusText = "Nothing changed."; return; }
+            bool fits = s.FitsInPlace();
+            bool expand = _rom.Length >= MapWriter.ExpandedSize;
+            if (!fits && !expand)
+            {
+                if (MessageBox.Show("The new text is a different length, so its event has to be moved. To store it, Lufia Forge needs " +
+                        "to expand the ROM from 1 MB to 2 MB. Expanded ROMs work in BizHawk, Snes9x and bsnes; savestates made before " +
+                        "the expansion undo anything in the new space, so continue from an in-game save. Continue?",
+                        "Expand ROM?", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+                { StatusText = "Not applied."; return; }
+                expand = true;
+            }
+            string result = s.Save(expand);
+            l.Text = EditText.Replace("\r", "");
+            row.Preview = Flatten(l.Text);
+            row.IsEdited = true;
+            string what = $"Dialogue: {row.MapLabel}, event {l.Event}, line {l.Line + 1}";
+            _mainVm?.NotifyRomModified(what);
+            StatusText = "✔ Written to the ROM. Use Save ROM to write a dated copy.";
+            UpdateSize();
+            InfoDialog.Show("Written to ROM", "✔ Dialogue written to the ROM",
+                result + "\n\nThe change is in the ROM loaded in Lufia Forge, but not on disk yet. Use File > Save ROM " +
+                "(or the button below) to write a new dated copy; the ROM you opened is never overwritten.",
+                path: _rom.FilePath, pathLabel: "ROM being edited (the copy is saved next to it)",
+                primaryText: _mainVm != null ? "💾 Save ROM now" : null, primary: () => _mainVm?.SaveNow());
+            if (!s.IsCodeView && !fits) _ = BuildAsync();   // the event moved: line offsets changed
+        }
+        catch (Exception ex)
+        {
+            StatusText = "Not applied: " + ex.Message;
+        }
+    }
+
+    [RelayCommand]
+    private void Revert()
+    {
+        if (SelectedRow == null) return;
+        _loadingSelection = true;
+        EditText = SelectedRow.Line.Text;
+        _loadingSelection = false;
+        UpdateSize();
+    }
+
+    [RelayCommand]
+    private void ExportAll()
+    {
+        if (_all.Count == 0) return;
+        var dlg = new SaveFileDialog { Title = "Export all dialogue", Filter = "Text file (*.txt)|*.txt", FileName = "Lufia dialogue.txt" };
+        if (dlg.ShowDialog() != true) return;
+        using var w = new StreamWriter(dlg.FileName);
+        foreach (var r in _all)
+        {
+            w.WriteLine($"== {r.Header} · {r.Line.Speaker} · ROM 0x{r.Line.Offset:X6}");
+            w.WriteLine(r.Line.Text);
+            w.WriteLine();
+        }
+        StatusText = $"Exported {_all.Count} dialogue boxes to {dlg.FileName}.";
     }
 }

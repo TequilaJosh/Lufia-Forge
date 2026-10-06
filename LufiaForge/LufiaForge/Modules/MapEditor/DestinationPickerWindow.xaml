@@ -1,0 +1,57 @@
+<Window x:Class="LufiaForge.Modules.MapEditor.DestinationPickerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Where does this exit lead?" Width="1100" Height="760" MinWidth="700" MinHeight="450"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{DynamicResource MidPurpleBrush}">
+    <Window.Resources>
+        <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
+    </Window.Resources>
+
+    <Grid Margin="12" Background="{DynamicResource MidPurpleBrush}">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="230"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Grid.ColumnSpan="2" Margin="0,0,0,8">
+            <TextBlock x:Name="HeaderText" Style="{StaticResource GdSection}" FontSize="15"/>
+            <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap"
+                       Text="1. Choose the destination map on the left.  2. Click an arrival point (cyan) on it — or tick &quot;Place a new arrival point&quot; and click where the party should appear.  3. Press Use this destination."/>
+            <WrapPanel Margin="0,6,0,0">
+                <CheckBox x:Name="NewArrivalCheck" Content="Place a new arrival point" Style="{StaticResource GdCheck}" Checked="NewArrival_Changed" Unchecked="NewArrival_Changed"/>
+                <Button Content="Zoom out" Style="{StaticResource LufiaButton}" Click="ZoomOut_Click" Margin="12,0,4,0"/>
+                <Button Content="Zoom in" Style="{StaticResource LufiaButton}" Click="ZoomIn_Click"/>
+            </WrapPanel>
+        </StackPanel>
+
+        <ListBox x:Name="MapList" Grid.Row="1" Grid.Column="0" Style="{StaticResource GdRecordList}" Margin="0,0,8,0"
+                 DisplayMemberPath="Label" SelectionChanged="MapList_SelectionChanged"/>
+
+        <ScrollViewer x:Name="Scroll" Grid.Row="1" Grid.Column="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
+                      Background="#FF101018">
+            <Grid x:Name="Surface" HorizontalAlignment="Left" VerticalAlignment="Top" Background="Transparent"
+                  MouseLeftButtonDown="Surface_MouseLeftButtonDown">
+                <Grid.LayoutTransform>
+                    <ScaleTransform x:Name="Zoom" ScaleX="1" ScaleY="1"/>
+                </Grid.LayoutTransform>
+                <Image x:Name="MapImage" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                <Canvas x:Name="Marks" IsHitTestVisible="False"/>
+            </Grid>
+        </ScrollViewer>
+
+        <DockPanel Grid.Row="2" Grid.ColumnSpan="2" Margin="0,10,0,0">
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <Button x:Name="OkButton" Content="✔ Use this destination" Style="{StaticResource LufiaButtonGold}" Click="Ok_Click" Margin="0,0,8,0" IsEnabled="False"/>
+                <Button Content="Cancel" Style="{StaticResource LufiaButton}" Click="Cancel_Click"/>
+            </StackPanel>
+            <TextBlock x:Name="ChoiceText" Style="{StaticResource LufiaLabel}" Foreground="{StaticResource GoldLightBrush}"
+                       VerticalAlignment="Center" TextWrapping="Wrap"/>
+        </DockPanel>
+    </Grid>
+</Window>
