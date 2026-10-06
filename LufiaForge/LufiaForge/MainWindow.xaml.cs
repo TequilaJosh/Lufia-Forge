@@ -1,6 +1,7 @@
 using LufiaForge.Core;
 using LufiaForge.Modules.Disassembler;
 using LufiaForge.Modules.GameData;
+using LufiaForge.Modules.MapEditor;
 using LufiaForge.Modules.MemoryMonitor;
 using LufiaForge.Modules.PatchManager;
 using LufiaForge.Modules.TextEditor;
@@ -48,11 +49,19 @@ public partial class MainWindow : Window
 
         // Text Editor
         if (TextEditorView.DataContext is TextEditorViewModel textVm)
-            textVm.SetRom(rom);
+            textVm.SetRom(rom, vm);
 
         // Game Data editors (characters, items, shops, spells, monsters, settings)
         if (GameDataView.DataContext is GameDataViewModel gameVm)
             gameVm.SetRom(rom, vm);
+
+        // Map Editor
+        if (MapEditorView.DataContext is MapEditorViewModel mapVm)
+            mapVm.SetRom(rom, vm);
+
+        // Events
+        if (EventsView.DataContext is LufiaForge.Modules.Events.EventsViewModel eventsVm)
+            eventsVm.SetRom(rom, vm);
 
         // Tile Viewer
         if (TileViewerView.DataContext is TileViewerViewModel tileVm)

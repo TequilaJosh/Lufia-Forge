@@ -1,0 +1,115 @@
+<UserControl x:Class="LufiaForge.Modules.Events.EventsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:me="clr-namespace:LufiaForge.Modules.MapEditor">
+    <UserControl.Resources>
+        <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
+    </UserControl.Resources>
+
+    <Grid Background="{StaticResource MidPurpleBrush}">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="250"/>
+            <ColumnDefinition Width="380"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- maps -->
+        <DockPanel Grid.Column="0" Margin="8">
+            <TextBlock DockPanel.Dock="Top" Text="MAPS" Style="{StaticResource GdSection}"/>
+            <ListBox Style="{StaticResource GdRecordList}" ItemsSource="{Binding Maps}" SelectedItem="{Binding SelectedMap}"
+                     DisplayMemberPath="Label"/>
+        </DockPanel>
+
+        <!-- events of the map / story flags -->
+        <TabControl Grid.Column="1" Margin="0,8,8,8" Style="{StaticResource LufiaTabControl}" SelectedIndex="{Binding MiddleTab}">
+            <TabItem Header="Events of this map" Style="{StaticResource LufiaTabItem}">
+                <DockPanel Margin="4">
+                    <StackPanel DockPanel.Dock="Top">
+                        <CheckBox Content="Also show events nothing on this map starts" IsChecked="{Binding ShowUnused}" Style="{StaticResource GdCheck}"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,4,0,6">
+                            <TextBlock Text="Open event number" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center"/>
+                            <TextBox Style="{StaticResource GdNumber}" Width="50" Text="{Binding GoToEventText, UpdateSourceTrigger=PropertyChanged}" Margin="6,0,6,0"/>
+                            <Button Content="Open" Style="{StaticResource LufiaButton}" Command="{Binding GoToEventCommand}"/>
+                        </StackPanel>
+                    </StackPanel>
+                    <ListBox Style="{StaticResource GdRecordList}" ItemsSource="{Binding Events}" SelectedItem="{Binding SelectedEvent}"
+                             SelectionChanged="ScrollSelectedIntoView"
+                             HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <DockPanel Margin="0,2">
+                                <Image DockPanel.Dock="Left" Source="{Binding Picture}" Width="24" Height="36" Margin="0,0,6,0" VerticalAlignment="Top"
+                                       RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Label}" Foreground="{StaticResource GoldLightBrush}" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Text="{Binding Hint}" Foreground="{StaticResource SuccessBrush}" FontSize="11" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding Preview}" Style="{StaticResource GdHint}" TextWrapping="Wrap" MaxHeight="34"/>
+                                </StackPanel>
+                                </DockPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </TabItem>
+            <TabItem Header="Story flags" Style="{StaticResource LufiaTabItem}">
+                <Grid Margin="4">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap"
+                                   Text="Story flags are switches the whole game shares (e.g. &quot;Lufia joined&quot;). Events set/clear them and check them to choose what happens; map setup scripts check them to change maps."/>
+                        <StackPanel Orientation="Horizontal" Margin="0,4,0,4">
+                            <TextBlock Text="Find" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center"/>
+                            <TextBox Style="{StaticResource GdText}" Width="180" Margin="6,0,0,0" Text="{Binding FlagFilter, UpdateSourceTrigger=PropertyChanged}"/>
+                        </StackPanel>
+                    </StackPanel>
+                    <ListBox Grid.Row="1" Style="{StaticResource GdRecordList}" ItemsSource="{Binding Flags}" SelectedItem="{Binding SelectedFlag}"
+                             SelectionChanged="ScrollSelectedIntoView"
+                             HorizontalContentAlignment="Stretch">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <DockPanel>
+                                    <TextBlock DockPanel.Dock="Right" Text="{Binding Summary}" Style="{StaticResource GdHint}" Margin="6,0,0,0"/>
+                                    <TextBlock Text="{Binding Label}" Foreground="{StaticResource GoldLightBrush}" TextTrimming="CharacterEllipsis"/>
+                                </DockPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <StackPanel Grid.Row="2" Margin="0,6,0,4">
+                        <TextBlock Text="Name of this flag (yours; kept for every ROM copy)" Style="{StaticResource GdFieldLabel}"/>
+                        <TextBox Style="{StaticResource GdText}" Text="{Binding FlagNameText}" HorizontalAlignment="Stretch" Width="Auto"/>
+                        <TextBlock Text="Where it's used (click to open; sets first)" Style="{StaticResource GdFieldLabel}" Margin="0,6,0,0"/>
+                    </StackPanel>
+                    <ListBox Grid.Row="3" Style="{StaticResource GdRecordList}" ItemsSource="{Binding FlagUses}" SelectedItem="{Binding SelectedFlagUse}"
+                             DisplayMemberPath="Label"/>
+                </Grid>
+            </TabItem>
+        </TabControl>
+
+        <!-- editor -->
+        <Border Grid.Column="2" Margin="0,8,8,8" BorderBrush="{StaticResource BorderPurpleBrush}" BorderThickness="1">
+            <Grid>
+                <me:EventEditorPanel x:Name="Editor" Visibility="Collapsed"/>
+                <TextBlock x:Name="EmptyText" Text="Pick an event on the left to see and edit it."
+                           Style="{StaticResource GdHint}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Grid>
+        </Border>
+
+        <!-- status -->
+        <Border Grid.Row="1" Grid.ColumnSpan="3" Background="{StaticResource DeepPurpleBrush}"
+                BorderBrush="{StaticResource BorderPurpleBrush}" BorderThickness="0,1,0,0" Padding="10,6">
+            <StackPanel>
+                <TextBlock Text="{Binding Status}" Style="{StaticResource LufiaLabel}" Foreground="{StaticResource GoldLightBrush}" TextTrimming="CharacterEllipsis"/>
+                <TextBlock Text="{Binding MapSummary}" Style="{StaticResource LufiaLabel}" Foreground="{StaticResource TextDisabledBrush}" FontSize="11" TextTrimming="CharacterEllipsis"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>
