@@ -49,7 +49,7 @@ public sealed class GameDataContext
             RefreshNames();
             NamesChanged?.Invoke();
         }
-        _mainVm?.NotifyRomModified();
+        _mainVm?.NotifyRomModified("Game data edit (characters / items / shops / spells / monsters)");
     }
 
     // ── Record locators ─────────────────────────────────────────────────────

@@ -8,6 +8,8 @@
         xmlns:pm="clr-namespace:LufiaForge.Modules.PatchManager"
         xmlns:dis="clr-namespace:LufiaForge.Modules.Disassembler"
         xmlns:gd="clr-namespace:LufiaForge.Modules.GameData"
+        xmlns:me="clr-namespace:LufiaForge.Modules.MapEditor"
+        xmlns:ev="clr-namespace:LufiaForge.Modules.Events"
 Title="{Binding WindowTitle}"
         Width="1280" Height="800"
         MinWidth="900" MinHeight="600"
@@ -164,13 +166,20 @@ Title="{Binding WindowTitle}"
                 </tv:TileViewerView>
             </TabItem>
 
-            <TabItem Header="🗺  Map Viewer"    Style="{StaticResource LufiaTabItem}">
-                <Border Background="{StaticResource MidPurpleBrush}" Padding="16">
-                    <TextBlock Text="Map Viewer - Phase 6"
-                               Style="{StaticResource LufiaLabelGold}"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center"/>
-                </Border>
+            <TabItem Header="🗺  Map Editor"    Style="{StaticResource LufiaTabItem}">
+                <me:MapEditorView x:Name="MapEditorView">
+                    <me:MapEditorView.DataContext>
+                        <me:MapEditorViewModel/>
+                    </me:MapEditorView.DataContext>
+                </me:MapEditorView>
+            </TabItem>
+
+            <TabItem Header="💬  Events"         Style="{StaticResource LufiaTabItem}">
+                <ev:EventsView x:Name="EventsView">
+                    <ev:EventsView.DataContext>
+                        <ev:EventsViewModel/>
+                    </ev:EventsView.DataContext>
+                </ev:EventsView>
             </TabItem>
 
             <TabItem Header="⚙  Disassembler"  Style="{StaticResource LufiaTabItem}">
