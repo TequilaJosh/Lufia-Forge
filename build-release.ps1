@@ -22,7 +22,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $root    = $PSScriptRoot
 $project = Join-Path $root 'LufiaForge/LufiaForge/LufiaForge.csproj'
-$repoUrl = 'https://github.com/TequilaJosh/Lufia-Forge'
+$repoUrl = 'https://github.com/TequilaJosh/Lufia-Forge-Releases'   # release-only repo (installers + update feed)
 $pubDir  = Join-Path $root 'out/publish'
 $relDir  = Join-Path $root 'out/releases'
 
@@ -60,12 +60,15 @@ Write-Host "Installer: $(Join-Path $relDir 'LufiaForge-win-Setup.exe')" -Foregro
 
 # 5. Upload as a GitHub release; installed copies pick it up on their next start
 if ($Publish) {
-    # Tag the commit that was built (vpk otherwise tags the repo's default branch).
-    # Push your commits first so GitHub knows this commit.
-    $commit = (git -C $root rev-parse HEAD).Trim()
+    # Releases live in the release-only repo, so the tag goes on its default branch; the release notes
+    # name the source commit that was built.
+    $commit = (git -C $root rev-parse --short HEAD).Trim()
     $pre = @(); if ($Prerelease) { $pre = @('--pre') }
     vpk upload github --repoUrl $repoUrl --token $token --outputDir $relDir `
-        --publish --releaseName "Lufia Forge $version" --tag "v$version" --targetCommitish $commit @pre
+        --publish --releaseName "Lufia Forge $version" --tag "v$version" @pre
     if ($LASTEXITCODE -ne 0) { throw 'vpk upload failed' }
+    gh release edit "v$version" --repo ($repoUrl -replace '^https://github.com/', '') `
+        --notes "Lufia Forge $version, built from TequilaJosh/Lufia-Forge@$commit.`n`nInstall with LufiaForge-win-Setup.exe; installed copies update themselves."
+    if ($LASTEXITCODE -ne 0) { throw 'Setting the release notes failed' }
     Write-Host "Published v$version to $repoUrl/releases" -ForegroundColor Green
 }
