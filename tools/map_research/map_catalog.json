@@ -1,0 +1,1172 @@
+[
+ {
+  "map": 1,
+  "res": 294,
+  "size": 60952,
+  "tileset": 110,
+  "w": 320,
+  "h": 256,
+  "exits": 110,
+  "npcs": 23
+ },
+ {
+  "map": 4,
+  "res": 182,
+  "size": 17934,
+  "tileset": 0,
+  "w": 112,
+  "h": 72,
+  "exits": 10,
+  "npcs": 32
+ },
+ {
+  "map": 5,
+  "res": 206,
+  "size": 5041,
+  "tileset": 2,
+  "w": 66,
+  "h": 34,
+  "exits": 2,
+  "npcs": 10
+ },
+ {
+  "map": 6,
+  "res": 183,
+  "size": 6017,
+  "tileset": 0,
+  "w": 51,
+  "h": 52,
+  "exits": 5,
+  "npcs": 12
+ },
+ {
+  "map": 7,
+  "res": 215,
+  "size": 17065,
+  "tileset": 3,
+  "w": 87,
+  "h": 92,
+  "exits": 25,
+  "npcs": 16
+ },
+ {
+  "map": 8,
+  "res": 184,
+  "size": 13901,
+  "tileset": 1,
+  "w": 101,
+  "h": 62,
+  "exits": 11,
+  "npcs": 32
+ },
+ {
+  "map": 9,
+  "res": 236,
+  "size": 1643,
+  "tileset": 6,
+  "w": 20,
+  "h": 30,
+  "exits": 6,
+  "npcs": 0
+ },
+ {
+  "map": 10,
+  "res": 185,
+  "size": 1335,
+  "tileset": 0,
+  "w": 32,
+  "h": 16,
+  "exits": 1,
+  "npcs": 3
+ },
+ {
+  "map": 11,
+  "res": 186,
+  "size": 18906,
+  "tileset": 1,
+  "w": 112,
+  "h": 78,
+  "exits": 13,
+  "npcs": 32
+ },
+ {
+  "map": 12,
+  "res": 187,
+  "size": 7765,
+  "tileset": 0,
+  "w": 65,
+  "h": 53,
+  "exits": 11,
+  "npcs": 21
+ },
+ {
+  "map": 13,
+  "res": 188,
+  "size": 5802,
+  "tileset": 0,
+  "w": 50,
+  "h": 51,
+  "exits": 4,
+  "npcs": 17
+ },
+ {
+  "map": 14,
+  "res": 207,
+  "size": 6595,
+  "tileset": 2,
+  "w": 56,
+  "h": 53,
+  "exits": 2,
+  "npcs": 9
+ },
+ {
+  "map": 15,
+  "res": 237,
+  "size": 3077,
+  "tileset": 6,
+  "w": 39,
+  "h": 33,
+  "exits": 2,
+  "npcs": 2
+ },
+ {
+  "map": 16,
+  "res": 238,
+  "size": 1004,
+  "tileset": 6,
+  "w": 18,
+  "h": 17,
+  "exits": 0,
+  "npcs": 9
+ },
+ {
+  "map": 17,
+  "res": 189,
+  "size": 5651,
+  "tileset": 0,
+  "w": 61,
+  "h": 41,
+  "exits": 8,
+  "npcs": 13
+ },
+ {
+  "map": 18,
+  "res": 190,
+  "size": 3469,
+  "tileset": 0,
+  "w": 40,
+  "h": 38,
+  "exits": 4,
+  "npcs": 8
+ },
+ {
+  "map": 19,
+  "res": 239,
+  "size": 1572,
+  "tileset": 6,
+  "w": 18,
+  "h": 30,
+  "exits": 2,
+  "npcs": 4
+ },
+ {
+  "map": 20,
+  "res": 240,
+  "size": 1068,
+  "tileset": 6,
+  "w": 18,
+  "h": 17,
+  "exits": 3,
+  "npcs": 1
+ },
+ {
+  "map": 21,
+  "res": 191,
+  "size": 7193,
+  "tileset": 0,
+  "w": 56,
+  "h": 59,
+  "exits": 6,
+  "npcs": 14
+ },
+ {
+  "map": 22,
+  "res": 192,
+  "size": 8012,
+  "tileset": 0,
+  "w": 79,
+  "h": 46,
+  "exits": 5,
+  "npcs": 17
+ },
+ {
+  "map": 23,
+  "res": 279,
+  "size": 12678,
+  "tileset": 7,
+  "w": 83,
+  "h": 69,
+  "exits": 43,
+  "npcs": 1
+ },
+ {
+  "map": 24,
+  "res": 229,
+  "size": 4439,
+  "tileset": 5,
+  "w": 43,
+  "h": 45,
+  "exits": 1,
+  "npcs": 9
+ },
+ {
+  "map": 25,
+  "res": 241,
+  "size": 5721,
+  "tileset": 6,
+  "w": 58,
+  "h": 43,
+  "exits": 11,
+  "npcs": 0
+ },
+ {
+  "map": 26,
+  "res": 242,
+  "size": 5685,
+  "tileset": 6,
+  "w": 49,
+  "h": 47,
+  "exits": 26,
+  "npcs": 1
+ },
+ {
+  "map": 27,
+  "res": 280,
+  "size": 12046,
+  "tileset": 7,
+  "w": 65,
+  "h": 80,
+  "exits": 61,
+  "npcs": 3
+ },
+ {
+  "map": 28,
+  "res": 193,
+  "size": 5587,
+  "tileset": 1,
+  "w": 56,
+  "h": 45,
+  "exits": 1,
+  "npcs": 7
+ },
+ {
+  "map": 29,
+  "res": 208,
+  "size": 4582,
+  "tileset": 2,
+  "w": 51,
+  "h": 39,
+  "exits": 2,
+  "npcs": 4
+ },
+ {
+  "map": 30,
+  "res": 194,
+  "size": 6691,
+  "tileset": 0,
+  "w": 76,
+  "h": 40,
+  "exits": 8,
+  "npcs": 12
+ },
+ {
+  "map": 31,
+  "res": 298,
+  "size": 7931,
+  "tileset": 9,
+  "w": 69,
+  "h": 47,
+  "exits": 5,
+  "npcs": 0
+ },
+ {
+  "map": 32,
+  "res": 299,
+  "size": 14289,
+  "tileset": 9,
+  "w": 94,
+  "h": 68,
+  "exits": 7,
+  "npcs": 0
+ },
+ {
+  "map": 33,
+  "res": 300,
+  "size": 10751,
+  "tileset": 9,
+  "w": 75,
+  "h": 62,
+  "exits": 4,
+  "npcs": 0
+ },
+ {
+  "map": 34,
+  "res": 209,
+  "size": 5337,
+  "tileset": 2,
+  "w": 45,
+  "h": 52,
+  "exits": 6,
+  "npcs": 8
+ },
+ {
+  "map": 35,
+  "res": 301,
+  "size": 13913,
+  "tileset": 9,
+  "w": 87,
+  "h": 71,
+  "exits": 8,
+  "npcs": 0
+ },
+ {
+  "map": 36,
+  "res": 243,
+  "size": 4777,
+  "tileset": 6,
+  "w": 59,
+  "h": 36,
+  "exits": 4,
+  "npcs": 0
+ },
+ {
+  "map": 37,
+  "res": 222,
+  "size": 15150,
+  "tileset": 4,
+  "w": 126,
+  "h": 56,
+  "exits": 14,
+  "npcs": 5
+ },
+ {
+  "map": 38,
+  "res": 244,
+  "size": 1499,
+  "tileset": 6,
+  "w": 20,
+  "h": 28,
+  "exits": 2,
+  "npcs": 0
+ },
+ {
+  "map": 39,
+  "res": 245,
+  "size": 2459,
+  "tileset": 6,
+  "w": 36,
+  "h": 26,
+  "exits": 5,
+  "npcs": 2
+ },
+ {
+  "map": 40,
+  "res": 195,
+  "size": 6622,
+  "tileset": 0,
+  "w": 90,
+  "h": 31,
+  "exits": 12,
+  "npcs": 16
+ },
+ {
+  "map": 41,
+  "res": 196,
+  "size": 7881,
+  "tileset": 1,
+  "w": 61,
+  "h": 59,
+  "exits": 5,
+  "npcs": 18
+ },
+ {
+  "map": 42,
+  "res": 281,
+  "size": 29964,
+  "tileset": 7,
+  "w": 175,
+  "h": 78,
+  "exits": 97,
+  "npcs": 7
+ },
+ {
+  "map": 43,
+  "res": 230,
+  "size": 1423,
+  "tileset": 5,
+  "w": 24,
+  "h": 23,
+  "exits": 4,
+  "npcs": 1
+ },
+ {
+  "map": 44,
+  "res": 246,
+  "size": 1253,
+  "tileset": 6,
+  "w": 25,
+  "h": 17,
+  "exits": 2,
+  "npcs": 0
+ },
+ {
+  "map": 45,
+  "res": 197,
+  "size": 4906,
+  "tileset": 1,
+  "w": 46,
+  "h": 46,
+  "exits": 3,
+  "npcs": 9
+ },
+ {
+  "map": 46,
+  "res": 282,
+  "size": 11210,
+  "tileset": 7,
+  "w": 91,
+  "h": 55,
+  "exits": 34,
+  "npcs": 3
+ },
+ {
+  "map": 47,
+  "res": 210,
+  "size": 4352,
+  "tileset": 2,
+  "w": 48,
+  "h": 40,
+  "exits": 1,
+  "npcs": 3
+ },
+ {
+  "map": 48,
+  "res": 198,
+  "size": 6521,
+  "tileset": 1,
+  "w": 62,
+  "h": 48,
+  "exits": 4,
+  "npcs": 12
+ },
+ {
+  "map": 49,
+  "res": 216,
+  "size": 15524,
+  "tileset": 3,
+  "w": 88,
+  "h": 81,
+  "exits": 25,
+  "npcs": 12
+ },
+ {
+  "map": 50,
+  "res": 247,
+  "size": 5119,
+  "tileset": 6,
+  "w": 50,
+  "h": 42,
+  "exits": 15,
+  "npcs": 0
+ },
+ {
+  "map": 51,
+  "res": 248,
+  "size": 8941,
+  "tileset": 6,
+  "w": 99,
+  "h": 37,
+  "exits": 50,
+  "npcs": 0
+ },
+ {
+  "map": 52,
+  "res": 249,
+  "size": 4995,
+  "tileset": 6,
+  "w": 45,
+  "h": 47,
+  "exits": 5,
+  "npcs": 1
+ },
+ {
+  "map": 53,
+  "res": 199,
+  "size": 6913,
+  "tileset": 0,
+  "w": 74,
+  "h": 42,
+  "exits": 10,
+  "npcs": 16
+ },
+ {
+  "map": 54,
+  "res": 223,
+  "size": 6794,
+  "tileset": 4,
+  "w": 27,
+  "h": 111,
+  "exits": 8,
+  "npcs": 9
+ },
+ {
+  "map": 55,
+  "res": 250,
+  "size": 6598,
+  "tileset": 6,
+  "w": 53,
+  "h": 52,
+  "exits": 24,
+  "npcs": 1
+ },
+ {
+  "map": 56,
+  "res": 251,
+  "size": 5047,
+  "tileset": 6,
+  "w": 52,
+  "h": 42,
+  "exits": 6,
+  "npcs": 0
+ },
+ {
+  "map": 57,
+  "res": 252,
+  "size": 6231,
+  "tileset": 6,
+  "w": 57,
+  "h": 46,
+  "exits": 17,
+  "npcs": 1
+ },
+ {
+  "map": 58,
+  "res": 231,
+  "size": 8783,
+  "tileset": 5,
+  "w": 65,
+  "h": 64,
+  "exits": 11,
+  "npcs": 1
+ },
+ {
+  "map": 59,
+  "res": 232,
+  "size": 6219,
+  "tileset": 5,
+  "w": 71,
+  "h": 40,
+  "exits": 14,
+  "npcs": 0
+ },
+ {
+  "map": 60,
+  "res": 283,
+  "size": 13301,
+  "tileset": 7,
+  "w": 83,
+  "h": 69,
+  "exits": 47,
+  "npcs": 12
+ },
+ {
+  "map": 61,
+  "res": 302,
+  "size": 2555,
+  "tileset": 9,
+  "w": 18,
+  "h": 33,
+  "exits": 2,
+  "npcs": 1
+ },
+ {
+  "map": 62,
+  "res": 200,
+  "size": 6303,
+  "tileset": 1,
+  "w": 69,
+  "h": 39,
+  "exits": 15,
+  "npcs": 23
+ },
+ {
+  "map": 63,
+  "res": 201,
+  "size": 5738,
+  "tileset": 0,
+  "w": 57,
+  "h": 44,
+  "exits": 10,
+  "npcs": 6
+ },
+ {
+  "map": 64,
+  "res": 303,
+  "size": 2561,
+  "tileset": 9,
+  "w": 18,
+  "h": 33,
+  "exits": 2,
+  "npcs": 1
+ },
+ {
+  "map": 65,
+  "res": 202,
+  "size": 5891,
+  "tileset": 0,
+  "w": 52,
+  "h": 52,
+  "exits": 3,
+  "npcs": 11
+ },
+ {
+  "map": 66,
+  "res": 253,
+  "size": 3291,
+  "tileset": 6,
+  "w": 27,
+  "h": 49,
+  "exits": 6,
+  "npcs": 0
+ },
+ {
+  "map": 67,
+  "res": 254,
+  "size": 3298,
+  "tileset": 6,
+  "w": 42,
+  "h": 33,
+  "exits": 3,
+  "npcs": 0
+ },
+ {
+  "map": 68,
+  "res": 255,
+  "size": 2538,
+  "tileset": 6,
+  "w": 38,
+  "h": 27,
+  "exits": 2,
+  "npcs": 1
+ },
+ {
+  "map": 69,
+  "res": 224,
+  "size": 8727,
+  "tileset": 4,
+  "w": 68,
+  "h": 57,
+  "exits": 6,
+  "npcs": 17
+ },
+ {
+  "map": 72,
+  "res": 256,
+  "size": 3788,
+  "tileset": 6,
+  "w": 52,
+  "h": 29,
+  "exits": 13,
+  "npcs": 0
+ },
+ {
+  "map": 76,
+  "res": 257,
+  "size": 6210,
+  "tileset": 6,
+  "w": 47,
+  "h": 59,
+  "exits": 10,
+  "npcs": 0
+ },
+ {
+  "map": 77,
+  "res": 258,
+  "size": 4148,
+  "tileset": 6,
+  "w": 44,
+  "h": 37,
+  "exits": 22,
+  "npcs": 0
+ },
+ {
+  "map": 79,
+  "res": 295,
+  "size": 9362,
+  "tileset": 8,
+  "w": 50,
+  "h": 78,
+  "exits": 3,
+  "npcs": 1
+ },
+ {
+  "map": 85,
+  "res": 291,
+  "size": 3182,
+  "tileset": 7,
+  "w": 32,
+  "h": 40,
+  "exits": 17,
+  "npcs": 0
+ },
+ {
+  "map": 86,
+  "res": 284,
+  "size": 15821,
+  "tileset": 7,
+  "w": 190,
+  "h": 39,
+  "exits": 34,
+  "npcs": 0
+ },
+ {
+  "map": 89,
+  "res": 285,
+  "size": 7301,
+  "tileset": 7,
+  "w": 78,
+  "h": 43,
+  "exits": 15,
+  "npcs": 0
+ },
+ {
+  "map": 90,
+  "res": 286,
+  "size": 13391,
+  "tileset": 7,
+  "w": 147,
+  "h": 42,
+  "exits": 28,
+  "npcs": 0
+ },
+ {
+  "map": 92,
+  "res": 287,
+  "size": 1394,
+  "tileset": 7,
+  "w": 24,
+  "h": 17,
+  "exits": 1,
+  "npcs": 4
+ },
+ {
+  "map": 100,
+  "res": 259,
+  "size": 3887,
+  "tileset": 6,
+  "w": 46,
+  "h": 37,
+  "exits": 7,
+  "npcs": 2
+ },
+ {
+  "map": 101,
+  "res": 260,
+  "size": 4437,
+  "tileset": 6,
+  "w": 46,
+  "h": 40,
+  "exits": 17,
+  "npcs": 0
+ },
+ {
+  "map": 102,
+  "res": 217,
+  "size": 18819,
+  "tileset": 3,
+  "w": 98,
+  "h": 91,
+  "exits": 22,
+  "npcs": 14
+ },
+ {
+  "map": 111,
+  "res": 203,
+  "size": 8366,
+  "tileset": 1,
+  "w": 68,
+  "h": 56,
+  "exits": 7,
+  "npcs": 14
+ },
+ {
+  "map": 115,
+  "res": 261,
+  "size": 5011,
+  "tileset": 6,
+  "w": 54,
+  "h": 40,
+  "exits": 5,
+  "npcs": 0
+ },
+ {
+  "map": 117,
+  "res": 218,
+  "size": 17463,
+  "tileset": 3,
+  "w": 101,
+  "h": 81,
+  "exits": 25,
+  "npcs": 4
+ },
+ {
+  "map": 119,
+  "res": 233,
+  "size": 16343,
+  "tileset": 5,
+  "w": 104,
+  "h": 73,
+  "exits": 37,
+  "npcs": 1
+ },
+ {
+  "map": 120,
+  "res": 262,
+  "size": 6320,
+  "tileset": 6,
+  "w": 56,
+  "h": 49,
+  "exits": 20,
+  "npcs": 0
+ },
+ {
+  "map": 121,
+  "res": 263,
+  "size": 6126,
+  "tileset": 6,
+  "w": 70,
+  "h": 37,
+  "exits": 25,
+  "npcs": 0
+ },
+ {
+  "map": 122,
+  "res": 264,
+  "size": 4705,
+  "tileset": 6,
+  "w": 52,
+  "h": 35,
+  "exits": 20,
+  "npcs": 6
+ },
+ {
+  "map": 123,
+  "res": 211,
+  "size": 2395,
+  "tileset": 2,
+  "w": 32,
+  "h": 32,
+  "exits": 0,
+  "npcs": 0
+ },
+ {
+  "map": 124,
+  "res": 288,
+  "size": 12098,
+  "tileset": 7,
+  "w": 87,
+  "h": 63,
+  "exits": 37,
+  "npcs": 0
+ },
+ {
+  "map": 125,
+  "res": 289,
+  "size": 10767,
+  "tileset": 7,
+  "w": 68,
+  "h": 68,
+  "exits": 48,
+  "npcs": 2
+ },
+ {
+  "map": 126,
+  "res": 290,
+  "size": 17140,
+  "tileset": 7,
+  "w": 127,
+  "h": 62,
+  "exits": 39,
+  "npcs": 2
+ },
+ {
+  "map": 127,
+  "res": 212,
+  "size": 3683,
+  "tileset": 2,
+  "w": 43,
+  "h": 37,
+  "exits": 4,
+  "npcs": 8
+ },
+ {
+  "map": 128,
+  "res": 219,
+  "size": 19402,
+  "tileset": 3,
+  "w": 122,
+  "h": 76,
+  "exits": 19,
+  "npcs": 11
+ },
+ {
+  "map": 129,
+  "res": 225,
+  "size": 3895,
+  "tileset": 4,
+  "w": 75,
+  "h": 23,
+  "exits": 6,
+  "npcs": 4
+ },
+ {
+  "map": 130,
+  "res": 265,
+  "size": 8198,
+  "tileset": 6,
+  "w": 71,
+  "h": 51,
+  "exits": 8,
+  "npcs": 2
+ },
+ {
+  "map": 131,
+  "res": 266,
+  "size": 1835,
+  "tileset": 6,
+  "w": 23,
+  "h": 28,
+  "exits": 6,
+  "npcs": 0
+ },
+ {
+  "map": 132,
+  "res": 226,
+  "size": 3365,
+  "tileset": 4,
+  "w": 39,
+  "h": 39,
+  "exits": 4,
+  "npcs": 0
+ },
+ {
+  "map": 135,
+  "res": 267,
+  "size": 1525,
+  "tileset": 6,
+  "w": 18,
+  "h": 32,
+  "exits": 0,
+  "npcs": 0
+ },
+ {
+  "map": 136,
+  "res": 268,
+  "size": 1383,
+  "tileset": 6,
+  "w": 20,
+  "h": 24,
+  "exits": 1,
+  "npcs": 1
+ },
+ {
+  "map": 137,
+  "res": 269,
+  "size": 3098,
+  "tileset": 6,
+  "w": 28,
+  "h": 39,
+  "exits": 4,
+  "npcs": 2
+ },
+ {
+  "map": 138,
+  "res": 270,
+  "size": 4050,
+  "tileset": 6,
+  "w": 47,
+  "h": 32,
+  "exits": 14,
+  "npcs": 0
+ },
+ {
+  "map": 139,
+  "res": 271,
+  "size": 3313,
+  "tileset": 6,
+  "w": 37,
+  "h": 33,
+  "exits": 8,
+  "npcs": 0
+ },
+ {
+  "map": 140,
+  "res": 272,
+  "size": 5015,
+  "tileset": 6,
+  "w": 47,
+  "h": 41,
+  "exits": 22,
+  "npcs": 1
+ },
+ {
+  "map": 141,
+  "res": 273,
+  "size": 5112,
+  "tileset": 6,
+  "w": 46,
+  "h": 44,
+  "exits": 12,
+  "npcs": 0
+ },
+ {
+  "map": 142,
+  "res": 274,
+  "size": 5872,
+  "tileset": 6,
+  "w": 54,
+  "h": 45,
+  "exits": 14,
+  "npcs": 0
+ },
+ {
+  "map": 143,
+  "res": 275,
+  "size": 5194,
+  "tileset": 6,
+  "w": 58,
+  "h": 39,
+  "exits": 7,
+  "npcs": 0
+ },
+ {
+  "map": 144,
+  "res": 276,
+  "size": 3244,
+  "tileset": 6,
+  "w": 39,
+  "h": 34,
+  "exits": 8,
+  "npcs": 0
+ },
+ {
+  "map": 145,
+  "res": 304,
+  "size": 7328,
+  "tileset": 9,
+  "w": 53,
+  "h": 55,
+  "exits": 11,
+  "npcs": 0
+ },
+ {
+  "map": 146,
+  "res": 305,
+  "size": 8187,
+  "tileset": 9,
+  "w": 60,
+  "h": 57,
+  "exits": 4,
+  "npcs": 0
+ },
+ {
+  "map": 147,
+  "res": 308,
+  "size": 5974,
+  "tileset": 10,
+  "w": 67,
+  "h": 40,
+  "exits": 13,
+  "npcs": 0
+ },
+ {
+  "map": 148,
+  "res": 309,
+  "size": 6769,
+  "tileset": 10,
+  "w": 45,
+  "h": 41,
+  "exits": 10,
+  "npcs": 0
+ },
+ {
+  "map": 149,
+  "res": 310,
+  "size": 5611,
+  "tileset": 10,
+  "w": 33,
+  "h": 78,
+  "exits": 6,
+  "npcs": 4
+ },
+ {
+  "map": 150,
+  "res": 311,
+  "size": 2834,
+  "tileset": 10,
+  "w": 31,
+  "h": 39,
+  "exits": 4,
+  "npcs": 0
+ },
+ {
+  "map": 151,
+  "res": 312,
+  "size": 2176,
+  "tileset": 10,
+  "w": 18,
+  "h": 31,
+  "exits": 0,
+  "npcs": 11
+ },
+ {
+  "map": 152,
+  "res": 313,
+  "size": 5929,
+  "tileset": 10,
+  "w": 67,
+  "h": 40,
+  "exits": 13,
+  "npcs": 0
+ },
+ {
+  "map": 153,
+  "res": 314,
+  "size": 6769,
+  "tileset": 10,
+  "w": 45,
+  "h": 41,
+  "exits": 10,
+  "npcs": 0
+ },
+ {
+  "map": 154,
+  "res": 315,
+  "size": 5943,
+  "tileset": 10,
+  "w": 33,
+  "h": 78,
+  "exits": 6,
+  "npcs": 8
+ },
+ {
+  "map": 155,
+  "res": 316,
+  "size": 2310,
+  "tileset": 10,
+  "w": 18,
+  "h": 31,
+  "exits": 0,
+  "npcs": 11
+ }
+]

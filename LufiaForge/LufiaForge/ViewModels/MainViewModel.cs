@@ -95,6 +95,17 @@ public partial class MainViewModel : ObservableObject
             StatusMessage = $"Saved copy: {Path.GetFileName(copyPath)} (original ROM unchanged).";
             StatusDetail  = copyPath;
             OnPropertyChanged(nameof(WindowTitle));
+
+            var changes = _pendingChanges.Count == 0
+                ? "All edits made so far are in this file."
+                : "Included in this save:\n  • " + string.Join("\n  • ", _pendingChanges.Distinct());
+            _pendingChanges.Clear();
+            Modules.Common.InfoDialog.Show("ROM saved", "✔ ROM saved to a new file",
+                $"Your edits were written to a new dated copy ({new FileInfo(copyPath).Length / 1024} KB). " +
+                $"The ROM you opened ({Path.GetFileName(RomBuffer.FilePath)}) was not changed.\n\n{changes}\n\n" +
+                "Load the new file in your emulator to play with the changes. Start from an in-game save rather than " +
+                "an old savestate (savestates carry the old ROM contents).",
+                path: copyPath, pathLabel: "Saved to");
         }
         catch (Exception ex)
         {
@@ -124,6 +135,9 @@ public partial class MainViewModel : ObservableObject
             StatusMessage = "ROM saved as new file.";
             StatusDetail  = dialog.FileName;
             OnPropertyChanged(nameof(WindowTitle));
+            _pendingChanges.Clear();
+            Modules.Common.InfoDialog.Show("ROM saved", "✔ ROM saved",
+                "All edits were written to the file below.", path: dialog.FileName, pathLabel: "Saved to");
         }
         catch (Exception ex)
         {
@@ -139,9 +153,24 @@ public partial class MainViewModel : ObservableObject
     // Called by child modules when they modify the ROM
     // -------------------------------------------------------------------------
 
-    public void NotifyRomModified()
+    private readonly List<string> _pendingChanges = new();
+
+    /// <summary>Edits written to the ROM in memory since the last save (shown when saving).</summary>
+    public IReadOnlyList<string> PendingChanges => _pendingChanges;
+
+    /// <param name="what">Short description of the change, listed in the save confirmation.</param>
+    public void NotifyRomModified(string? what = null)
     {
+        if (!string.IsNullOrWhiteSpace(what)) _pendingChanges.Add(what);
         OnPropertyChanged(nameof(WindowTitle));
-        StatusMessage = "ROM modified (unsaved changes).";
+        StatusMessage = what == null
+            ? "ROM modified (unsaved changes)."
+            : $"Written to ROM (not saved to disk yet): {what}";
+    }
+
+    /// <summary>Save a dated copy now (used by "Save ROM now" buttons in confirmations).</summary>
+    public void SaveNow()
+    {
+        if (SaveRomCommand.CanExecute(null)) SaveRomCommand.Execute(null);
     }
 }
