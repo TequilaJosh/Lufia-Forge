@@ -28,6 +28,11 @@ public sealed class MapOverlay
     public double Thickness { get; init; } = 2;
     public string Label { get; init; } = "";
     public string Kind { get; init; } = "";
+    /// <summary>Draw a line from (X, Y) by (LineDx, LineDy) instead of a box (exit → arrival link).</summary>
+    public bool IsLine { get; init; }
+    public bool IsBox => !IsLine;
+    public double LineDx { get; init; }
+    public double LineDy { get; init; }
     public int Index { get; init; }
 }
 
@@ -156,7 +161,10 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
     [ObservableProperty] private int _npcY;
 
     private const string SelectHint =
-        "Click a character (yellow), exit (red), arrival point (cyan) or treasure (gold = chest, pink = hidden item).";
+        "With Select / move: click a character (yellow), exit (red), arrival point (cyan) or treasure (gold = chest, " +
+        "pink = hidden item) to edit it here — exits: where they lead and their size; arrival points: their position. " +
+        "Drag to move. When things overlap, click the same block again to pick the next one. Ctrl + click picks a block " +
+        "for painting. Exits leading to \"this map (00)\" are doors/stairs inside the map; the dotted line shows where each goes.";
 
     public bool IsSelectTool { get => Tool == MapTool.Select; set { if (value) Tool = MapTool.Select; } }
     public bool IsPaintTool  { get => Tool == MapTool.Paint;  set { if (value) Tool = MapTool.Paint; } }
@@ -179,7 +187,19 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
 
     private string CompositeText(int mt) =>
         _tileset?.CompositeParts(mt) is var (g, o) ? $"   = ground {g:X3} + overlay {o:X3}" : "";
-    partial void OnBrushChanged(int value) => OnPropertyChanged(nameof(BrushText));
+    partial void OnBrushChanged(int value)
+    {
+        OnPropertyChanged(nameof(BrushText));
+        OnPropertyChanged(nameof(BrushBoxX));
+        OnPropertyChanged(nameof(BrushBoxY));
+    }
+
+    /// <summary>Where the brush's block sits in the palette image (16 blocks per row), for its highlight box.</summary>
+    public double BrushBoxX => Brush % 16 * 16;
+    public double BrushBoxY => Brush / 16 * 16;
+
+    /// <summary>Zoom of the block palette on the right.</summary>
+    [ObservableProperty] private double _paletteZoom = 2.0;
 
     public void SetRom(RomBuffer rom, MainViewModel mainVm)
     {
@@ -371,6 +391,19 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
                     Stroke = Brushes.Red, Thickness = 3,
                     Label = LeadsHere(e) ? $"E{e.Index}→A{e.Arrival}" : $"E{e.Index}→{e.DestMap:X2}:A{e.Arrival}",
                 });
+        if (ShowExits && ShowArrivals)
+            foreach (var e in _map.Exits.Where(e => !e.IsUnused && LeadsHere(e) && e.Arrival < _map.Arrivals.Count))
+            {
+                var to = _map.Arrivals[e.Arrival];
+                double sx = (e.X1 + Math.Max(1, e.X2 - e.X1) / 2.0) * 16, sy = (e.Y1 + Math.Max(1, e.Y2 - e.Y1) / 2.0) * 16;
+                double tx = to.X * 16 + 8, ty = to.Y * 16 + 8;
+                if (Math.Abs(tx - sx) + Math.Abs(ty - sy) < 4) continue;
+                Overlays.Add(new MapOverlay
+                {
+                    Kind = "link", IsLine = true, X = sx, Y = sy, LineDx = tx - sx, LineDy = ty - sy,
+                    Stroke = Brushes.Orange, Thickness = 1.5,
+                });
+            }
         if (ShowArrivals)
             foreach (var a in _map.Arrivals)
                 Overlays.Add(new MapOverlay
@@ -435,6 +468,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
         HoverTip = leftDown ? "" : DescribeAt(x, y);
 
         if (!leftDown) return;
+        if (_picking) { Brush = mt; return; }   // Ctrl held: keep sampling the block under the cursor
         if (Tool == MapTool.Paint) PaintAt(x, y);
         else if (_dragStart is { } start && _dragMode != null)
         {
@@ -478,11 +512,19 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
     private static bool Inside(int x, int y, int x1, int y1, int x2, int y2) =>
         x >= x1 && x < Math.Max(x2, x1 + 1) && y >= y1 && y < Math.Max(y2, y1 + 1);
 
-    public void OnMouseDown(double px, double py)
+    public void OnMouseDown(double px, double py, bool ctrl = false)
     {
         if (_map == null) return;
         int x = (int)(px / 16), y = (int)(py / 16);
         if (x < 0 || y < 0 || x >= _map.Width || y >= _map.Height) return;
+        if (ctrl)
+        {
+            _picking = true;   // eyedropper: no painting until the button is released
+            Brush = _map.GetTile(x, y) & 0x3FF;
+            Status = $"Picked block {Brush:X3} from ({x}, {y}). Paint with it, or Ctrl + click another block.";
+            if (Tool != MapTool.Paint) Tool = MapTool.Paint;
+            return;
+        }
         switch (Tool)
         {
             case MapTool.Pick:
@@ -531,8 +573,11 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
         }
     }
 
+    private bool _picking;
+
     public void OnMouseUp()
     {
+        _picking = false;
         if (_stroke is { Count: > 0 }) _undo.Push(_stroke);
         _stroke = null;
         bool clickedNpc = _dragStart != null && !_dragMoved && _dragMode == "npc";
@@ -657,19 +702,34 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
 
     // ── Selection ──────────────────────────────────────────────────────────
 
+    private (int X, int Y)? _lastClick;
+
     private void SelectAt(int x, int y)
     {
         if (_map == null) return;
-        var npc = ShowNpcs ? _map.Npcs.LastOrDefault(n => !n.IsUnused && n.X == x && n.Y == y) : null;
-        if (npc != null) { SelectNpc(npc); return; }
-        var arr = ShowArrivals ? _map.Arrivals.LastOrDefault(a => a.X == x && a.Y == y) : null;
-        if (arr != null) { SelectArrival(arr); return; }
-        var spot = ShowItems ? _map.Spots.LastOrDefault(s => IsTreasureSpot(s) && Inside(x, y, s.X1, s.Y1, s.X2, s.Y2)) : null;
-        if (spot != null) { SelectSpot(spot); return; }
-        var ex = ShowExits ? _map.Exits.LastOrDefault(e => !e.IsUnused && Inside(x, y, e.X1, e.Y1, e.X2, e.Y2)) : null;
-        if (ex != null) { SelectExit(ex); return; }
-        ClearSelection();
-        RebuildOverlays();
+        // everything on this block, in click order; clicking the same block again picks the next one
+        var here = new List<(string Kind, int Index)>();
+        if (ShowNpcs) here.AddRange(_map.Npcs.Where(n => !n.IsUnused && n.X == x && n.Y == y).Reverse().Select(n => ("npc", n.Index)));
+        if (ShowArrivals) here.AddRange(_map.Arrivals.Where(a => a.X == x && a.Y == y).Reverse().Select(a => ("arrival", a.Index)));
+        if (ShowItems) here.AddRange(_map.Spots.Where(s => IsTreasureSpot(s) && Inside(x, y, s.X1, s.Y1, s.X2, s.Y2)).Reverse().Select(s => ("spot", s.Index)));
+        if (ShowExits) here.AddRange(_map.Exits.Where(e => !e.IsUnused && Inside(x, y, e.X1, e.Y1, e.X2, e.Y2)).Reverse().Select(e => ("exit", e.Index)));
+        if (here.Count == 0) { _lastClick = (x, y); ClearSelection(); RebuildOverlays(); return; }
+        int pick = 0;
+        if (_lastClick == (x, y) && _selection is { } cur)
+        {
+            int i = here.IndexOf((cur.kind, cur.index));
+            if (i >= 0) pick = (i + 1) % here.Count;
+        }
+        _lastClick = (x, y);
+        var (kind, index) = here[pick];
+        switch (kind)
+        {
+            case "npc": SelectNpc(_map.Npcs[index]); break;
+            case "arrival": SelectArrival(_map.Arrivals[index]); break;
+            case "spot": SelectSpot(_map.Spots[index]); break;
+            default: SelectExit(_map.Exits[index]); break;
+        }
+        if (here.Count > 1) Status = $"{here.Count} things on this block; click it again for the next one ({pick + 1} of {here.Count}).";
     }
 
     private void ClearSelection()
@@ -1156,6 +1216,6 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
         Status = "Reverted to the map stored in the ROM.";
     }
 
-    [RelayCommand] private void ZoomIn()  => Zoom = Math.Min(4, Zoom * 1.5);
+    [RelayCommand] private void ZoomIn()  => Zoom = Math.Min(6, Zoom * 1.5);
     [RelayCommand] private void ZoomOut() => Zoom = Math.Max(0.25, Zoom / 1.5);
 }

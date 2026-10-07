@@ -1,6 +1,7 @@
 <UserControl x:Class="LufiaForge.Modules.MapEditor.EventEditorPanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:me="clr-namespace:LufiaForge.Modules.MapEditor"
              Background="{DynamicResource MidPurpleBrush}">
     <UserControl.Resources>
         <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
@@ -16,21 +17,29 @@
         <StackPanel Grid.Row="0" Margin="0,0,0,10">
             <DockPanel>
                 <Button DockPanel.Dock="Right" Content="＋ Insert at start…" Style="{StaticResource LufiaButton}" Click="InsertAtStart_Click"/>
+                <ToggleButton x:Name="StageToggle" DockPanel.Dock="Right" Content="🎬 Stage" Margin="0,0,8,0" Padding="10,2"
+                              Click="StageToggle_Click" ToolTip="Show the cutscene stage: the map with the characters, walks and camera at the selected line"/>
                 <Button x:Name="BackButton" DockPanel.Dock="Left" Content="◀ Back" Style="{StaticResource LufiaButton}" Click="Back_Click"
                         Margin="0,0,10,0" Visibility="Collapsed"/>
                 <TextBlock x:Name="HeaderText" Style="{StaticResource GdSection}" FontSize="15" VerticalAlignment="Center"/>
             </DockPanel>
             <TextBlock x:Name="InfoText" Style="{StaticResource GdHint}" TextWrapping="Wrap"/>
-            <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0"
+            <TextBlock x:Name="HelpText" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0"
                        Text="Dialogue: Enter = new line in the box. Tags: [Hero] [Lufia] [Aguro] [Jerin] [Maxim] [Selan] [Guy] [Artea], [ITEM:xx] [SPELL:xx] [TOWN:xx], and [xx] / [xx:yy] for other codes. Commands: change the command byte or its values (hex), pick jump targets by line, ＋ inserts below, ✕ deletes. Story flags are shared by the whole game, so change them with care."/>
         </StackPanel>
 
-        <Border Grid.Row="1" Style="{StaticResource GdCard}" Margin="0" Padding="6">
+        <Grid Grid.Row="1">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition x:Name="LinesColumn" Width="*" MinWidth="320"/>
+            <ColumnDefinition x:Name="SplitterColumn" Width="0"/>
+            <ColumnDefinition x:Name="StageColumn" Width="0"/>
+        </Grid.ColumnDefinitions>
+        <Border Grid.Column="0" Style="{StaticResource GdCard}" Margin="0" Padding="6">
             <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                 <ItemsControl x:Name="Lines">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Border BorderThickness="0,0,0,1" Padding="0,5">
+                            <Border BorderThickness="0,0,0,1" Padding="0,5" PreviewMouseLeftButtonDown="Line_MouseDown">
                                 <Border.Style>
                                     <Style TargetType="Border">
                                         <Setter Property="BorderBrush" Value="{StaticResource BorderPurpleBrush}"/>
@@ -74,7 +83,9 @@
                                             <WrapPanel>
                                                 <TextBlock Text="Command" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,4,0"/>
                                                 <TextBox Text="{Binding OpcodeHex, UpdateSourceTrigger=LostFocus}" Style="{StaticResource GdNumber}" Width="38"
-                                                         FontFamily="Consolas" Margin="0,0,10,0"/>
+                                                         FontFamily="Consolas" Margin="0,0,6,0" ToolTip="Command byte (hex)"/>
+                                                <TextBlock Text="{Binding CommandName}" Foreground="{StaticResource GoldLightBrush}" FontWeight="SemiBold"
+                                                           VerticalAlignment="Center" Margin="0,0,12,0"/>
                                                 <ItemsControl ItemsSource="{Binding Params}">
                                                     <ItemsControl.ItemsPanel>
                                                         <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
@@ -101,6 +112,7 @@
                                                 </ItemsControl>
                                             </WrapPanel>
                                             <TextBlock Text="{Binding Description}" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                            <TextBlock Text="{Binding WaitsText}" Style="{StaticResource GdHint}" Margin="0,1,0,0"/>
                                         </StackPanel>
                                         <TextBlock Text="{Binding ErrorText}" Foreground="{StaticResource ErrorBrush}" TextWrapping="Wrap"/>
                                     </StackPanel>
@@ -116,6 +128,9 @@
                 </ItemsControl>
             </ScrollViewer>
         </Border>
+        <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="Transparent"/>
+        <me:CutsceneStageView x:Name="Stage" Grid.Column="2" Visibility="Collapsed"/>
+        </Grid>
 
         <DockPanel Grid.Row="2" Margin="0,10,0,0" LastChildFill="True">
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">

@@ -83,6 +83,8 @@ public partial class EventsViewModel : ObservableObject, IEventHost
         Maps.Clear();
         foreach (var m in MapCatalog.ScanNamed(rom)) Maps.Add(m);
         EventScript.FlagName = StoryFlags.NameOf;
+        var labels = Maps.ToDictionary(m => m.MapId, m => m.Label);
+        EventScript.MapLabel = id => labels.TryGetValue(id, out var l) ? l : $"map {id:X2}";
         BuildFlagIndex();
         Status = $"{Maps.Count} maps, {Flags.Count} story flags in use. Pick a map, then an event.";
         SelectedMap = Maps.FirstOrDefault(m => m.MapId == 0x04) ?? Maps.FirstOrDefault();

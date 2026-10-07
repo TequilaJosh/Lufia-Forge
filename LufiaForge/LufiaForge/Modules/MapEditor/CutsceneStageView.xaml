@@ -1,0 +1,111 @@
+<UserControl x:Class="LufiaForge.Modules.MapEditor.CutsceneStageView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="{DynamicResource MidPurpleBrush}">
+    <UserControl.Resources>
+        <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- toolbar -->
+        <WrapPanel Grid.Row="0" Margin="0,0,0,6">
+            <Button x:Name="PlayButton" Content="▶ Play" Style="{StaticResource LufiaButtonGold}" Click="Play_Click" Margin="0,0,6,4"
+                    ToolTip="Play the event from the selected line (follows the lines in order, without taking branches)"/>
+            <Button Content="■ Stop" Style="{StaticResource LufiaButton}" Click="Stop_Click" Margin="0,0,12,4"/>
+            <TextBlock Text="Party" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,4,4"/>
+            <ComboBox x:Name="PartyBox" Style="{StaticResource GdCombo}" Width="190" Margin="0,0,10,4" SelectionChanged="Party_Changed"/>
+            <Button Content="📍 Party start…" Style="{StaticResource LufiaButton}" Click="PickStart_Click" Margin="0,0,10,4"
+                    ToolTip="Click a tile on the stage where the party stands when the event begins"/>
+            <TextBlock Text="Zoom" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,4,4"/>
+            <Slider x:Name="ZoomSlider" Minimum="0.5" Maximum="6" Value="1.5" Width="90" VerticalAlignment="Center" Margin="0,0,10,4"
+                    ValueChanged="Zoom_Changed" ToolTip="Or Ctrl + mouse wheel on the stage; hold the middle mouse button to drag the map"/>
+            <CheckBox x:Name="ShowCameraBox" Content="Camera" IsChecked="True" Foreground="{StaticResource TextPrimaryBrush}"
+                      VerticalAlignment="Center" Margin="0,0,8,4" Click="Redraw_Click"/>
+            <CheckBox x:Name="ShowAllPathsBox" Content="All paths" Foreground="{StaticResource TextPrimaryBrush}"
+                      VerticalAlignment="Center" Margin="0,0,8,4" Click="Redraw_Click"/>
+        </WrapPanel>
+
+        <!-- stage -->
+        <Border Grid.Row="1" Style="{StaticResource GdCard}" Margin="0" Padding="0" ClipToBounds="True">
+            <ScrollViewer x:Name="Scroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="#FF120A1E"
+                          RenderOptions.BitmapScalingMode="NearestNeighbor" UseLayoutRounding="True">
+                <Grid x:Name="StageRoot" HorizontalAlignment="Left" VerticalAlignment="Top">
+                    <Grid.LayoutTransform>
+                        <ScaleTransform x:Name="Zoom" ScaleX="1.5" ScaleY="1.5"/>
+                    </Grid.LayoutTransform>
+                    <Image x:Name="MapImage" RenderOptions.BitmapScalingMode="NearestNeighbor" Stretch="None"/>
+                    <Canvas x:Name="Overlay" Background="Transparent" MouseLeftButtonDown="Stage_MouseDown" MouseRightButtonDown="Stage_RightDown" MouseMove="Stage_MouseMove"/>
+                </Grid>
+            </ScrollViewer>
+        </Border>
+
+        <!-- dialogue box of the current line -->
+        <Border x:Name="TextBox" Grid.Row="1" VerticalAlignment="Bottom" Margin="20,0,20,16" Padding="10,6"
+                Background="#E0101860" BorderBrush="#FFE8E8F8" BorderThickness="2" CornerRadius="3" Visibility="Collapsed"
+                IsHitTestVisible="False">
+            <StackPanel>
+                <TextBlock x:Name="SpeakerText" Foreground="{StaticResource GoldLightBrush}" FontWeight="SemiBold" FontSize="12"/>
+                <TextBlock x:Name="DialogueText" Foreground="White" FontFamily="Consolas" FontSize="14" TextWrapping="Wrap"/>
+            </StackPanel>
+        </Border>
+
+        <TextBlock x:Name="StageInfo" Grid.Row="2" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+
+        <!-- path editor -->
+        <Border x:Name="PathPanel" Grid.Row="3" Style="{StaticResource GdCard}" Margin="0,6,0,0" Padding="8" Visibility="Collapsed">
+            <StackPanel>
+                <DockPanel>
+                    <Button DockPanel.Dock="Right" Content="💾 Write paths to ROM" Style="{StaticResource LufiaButtonGold}" Click="SavePaths_Click"/>
+                    <TextBlock x:Name="PathHeader" Style="{StaticResource GdSection}" VerticalAlignment="Center"/>
+                </DockPanel>
+                <WrapPanel Margin="0,6,0,0">
+                    <TextBlock Text="Path" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                    <ComboBox x:Name="PathBox" Style="{StaticResource GdCombo}" Width="210" Margin="0,0,6,0" SelectionChanged="PathBox_Changed"/>
+                    <Button Content="＋ New path" Style="{StaticResource LufiaButton}" Click="NewPath_Click" Margin="0,0,12,0"
+                            ToolTip="Add a path to this map, starting where the character stands, and use it on this line"/>
+                    <CheckBox x:Name="WaitBox" Content="Event waits" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" Margin="0,0,8,0" Click="PathFlags_Click"/>
+                    <CheckBox x:Name="RepeatBox" Content="Repeat forever" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" Margin="0,0,8,0" Click="PathFlags_Click"/>
+                    <CheckBox x:Name="CameraBox" Content="Camera follows" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" Margin="0,0,8,0" Click="PathFlags_Click"/>
+                    <CheckBox x:Name="WalkStartBox" Content="Walk to the start" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" Click="PathFlags_Click"
+                              ToolTip="Walk from where the character stands to the start (otherwise it appears at the start)"/>
+                </WrapPanel>
+                <WrapPanel Margin="0,6,0,0">
+                    <TextBlock Text="Start" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                    <TextBox x:Name="StartXBox" Style="{StaticResource GdNumber}" Width="44" LostFocus="Start_LostFocus"/>
+                    <TextBox x:Name="StartYBox" Style="{StaticResource GdNumber}" Width="44" Margin="4,0,8,0" LostFocus="Start_LostFocus"/>
+                    <ToggleButton x:Name="DrawToggle" Content="✎ Draw steps on the stage" Margin="0,0,8,0" Padding="8,2"
+                                  ToolTip="Click tiles on the stage: each click walks there from the end of the path (sideways first, then up/down)"/>
+                    <Button Content="Set start on stage…" Style="{StaticResource LufiaButton}" Click="PickPathStart_Click" Margin="0,0,8,0"/>
+                    <Button Content="＋ Step" Style="{StaticResource LufiaButton}" Click="AddStep_Click" Margin="0,0,8,0"/>
+                    <Button Content="Clear steps" Style="{StaticResource LufiaButton}" Click="ClearSteps_Click"/>
+                </WrapPanel>
+                <ItemsControl x:Name="StepList" Margin="0,6,0,0">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal" Margin="0,1">
+                                <TextBlock Text="{Binding Number}" Width="26" Foreground="{StaticResource TextDisabledBrush}" VerticalAlignment="Center"/>
+                                <TextBlock Text="walk" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                <TextBox Text="{Binding Tiles, UpdateSourceTrigger=LostFocus}" Style="{StaticResource GdNumber}" Width="40"/>
+                                <TextBlock Text="tiles" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="4,0,4,0"/>
+                                <ComboBox ItemsSource="{Binding Directions}" SelectedIndex="{Binding Direction}" Style="{StaticResource GdCombo}" Width="70"/>
+                                <TextBlock Text="speed" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="8,0,4,0"/>
+                                <ComboBox ItemsSource="{Binding Speeds}" SelectedIndex="{Binding Speed}" Style="{StaticResource GdCombo}" Width="100"/>
+                                <TextBlock Text="facing" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="8,0,4,0"/>
+                                <ComboBox ItemsSource="{Binding Facings}" SelectedIndex="{Binding Facing}" Style="{StaticResource GdCombo}" Width="130"/>
+                                <Button Content="✕" Style="{StaticResource LufiaButton}" Padding="6,0" Margin="6,0,0,0" Click="RemoveStep_Click"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock x:Name="PathStatus" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>
