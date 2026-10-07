@@ -15,6 +15,9 @@ public partial class MapEditorView : UserControl
     public MapEditorView()
     {
         InitializeComponent();
+        // Ctrl + wheel zooms around the mouse, middle button drags the map
+        LufiaForge.Modules.Common.MapNavigation.Attach(MapScroll, () => Vm?.Zoom ?? 1, z => { if (Vm != null) Vm.Zoom = z; }, 0.25, 6);
+        LufiaForge.Modules.Common.MapNavigation.Attach(PaletteScroll, () => Vm?.PaletteZoom ?? 2, z => { if (Vm != null) Vm.PaletteZoom = z; }, 1, 4);
         _tip.PlacementTarget = MapSurface;
         DataContextChanged += (_, _) => HookVm();
         HookVm();
@@ -92,11 +95,13 @@ public partial class MapEditorView : UserControl
         var p = e.GetPosition(MapSurface);
         if (e.ClickCount == 2) { Vm?.OnDoubleClick(p.X, p.Y); return; }
         MapSurface.CaptureMouse();
-        Vm?.OnMouseDown(p.X, p.Y);
+        Vm?.OnMouseDown(p.X, p.Y, (Keyboard.Modifiers & ModifierKeys.Control) != 0);
     }
 
     private void MapSurface_MouseMove(object sender, MouseEventArgs e)
     {
+        // eyedropper cursor while Ctrl is held
+        MapSurface.Cursor = (Keyboard.Modifiers & ModifierKeys.Control) != 0 ? System.Windows.Input.Cursors.Cross : null;
         var p = e.GetPosition(MapSurface);
         Vm?.OnMouseMove(p.X, p.Y, e.LeftButton == MouseButtonState.Pressed);
     }

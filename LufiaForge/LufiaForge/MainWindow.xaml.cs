@@ -63,9 +63,9 @@ public partial class MainWindow : Window
         if (EventsView.DataContext is LufiaForge.Modules.Events.EventsViewModel eventsVm)
             eventsVm.SetRom(rom, vm);
 
-        // Tile Viewer
-        if (TileViewerView.DataContext is TileViewerViewModel tileVm)
-            tileVm.SetRom(rom);
+        // Cutscenes (stage editor; took the Tile Viewer's place)
+        if (CutscenesView.DataContext is LufiaForge.Modules.Cutscenes.CutscenesViewModel cutVm)
+            cutVm.SetRom(rom, vm);
 
         // Patch Manager (also needs reference to MainViewModel for NotifyRomModified)
         if (PatchManagerView.DataContext is PatchManagerViewModel patchVm)
