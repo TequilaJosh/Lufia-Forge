@@ -9,6 +9,7 @@ public partial class GameDataViewModel : ObservableObject
 {
     public CharacterEditorViewModel Characters     { get; } = new();
     public CharacterMagicViewModel  CharacterMagic { get; } = new();
+    public GrowthEditorViewModel    Growth         { get; } = new();
     public ItemEditorViewModel      Items          { get; } = new();
     public PartyItemsViewModel      PartyItems     { get; } = new();
     public ShopEditorViewModel      Shops          { get; } = new();
@@ -22,7 +23,7 @@ public partial class GameDataViewModel : ObservableObject
     {
         var ctx = new GameDataContext(rom, mainVm);
         foreach (var editor in new GameDataEditorBase[]
-                 { Characters, CharacterMagic, Items, PartyItems, Shops, Spells, Monsters, Settings })
+                 { Characters, CharacterMagic, Growth, Items, PartyItems, Shops, Spells, Monsters, Settings })
             editor.Attach(ctx);
         IsRomLoaded = true;
     }

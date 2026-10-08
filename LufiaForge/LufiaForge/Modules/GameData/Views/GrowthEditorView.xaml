@@ -1,0 +1,110 @@
+<UserControl x:Class="LufiaForge.Modules.GameData.Views.GrowthEditorView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="clr-namespace:LufiaForge.Modules.GameData.Views">
+    <UserControl.Resources>
+        <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="170"/>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <ListBox Grid.Column="0" Margin="12" Style="{StaticResource GdRecordList}"
+                 ItemsSource="{Binding Characters}" SelectedIndex="{Binding SelectedIndex}"/>
+
+        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" Padding="0,12,0,0">
+            <StackPanel>
+                <Border Style="{StaticResource GdCard}">
+                    <StackPanel>
+                        <TextBlock Text="EXP CURVE" Style="{StaticResource GdSection}"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
+                            <TextBlock Text="First level-up at EXP" Style="{StaticResource GdFieldLabel}"/>
+                            <TextBox Grid.Column="1" Style="{StaticResource GdNumber}" Width="90" Text="{Binding FirstLevelExp, UpdateSourceTrigger=PropertyChanged}"/>
+                            <TextBlock Grid.Row="1" Text="EXP step (starting)" Style="{StaticResource GdFieldLabel}"/>
+                            <TextBox Grid.Row="1" Grid.Column="1" Style="{StaticResource GdNumber}" Width="90" Text="{Binding Increment, UpdateSourceTrigger=PropertyChanged}"
+                                     ToolTip="The EXP between level-ups. After each level-up the step grows (see the thresholds)."/>
+                            <TextBlock Grid.Row="2" Text="Growth counter at start" Style="{StaticResource GdFieldLabel}"/>
+                            <TextBox Grid.Row="2" Grid.Column="1" Style="{StaticResource GdNumber}" Width="90" Text="{Binding Counter, UpdateSourceTrigger=PropertyChanged}"
+                                     ToolTip="Counts level-ups: picks the band of 16 the stats grow by, and is what the thresholds compare with. Usually 0."/>
+                        </Grid>
+                        <TextBlock Text="Step growth thresholds" Style="{StaticResource GdFieldLabel}" Margin="0,8,0,2"/>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBox Style="{StaticResource GdNumber}" Width="42" Text="{Binding T1, UpdateSourceTrigger=PropertyChanged}"/>
+                            <TextBox Style="{StaticResource GdNumber}" Width="42" Text="{Binding T2, UpdateSourceTrigger=PropertyChanged}"/>
+                            <TextBox Style="{StaticResource GdNumber}" Width="42" Text="{Binding T3, UpdateSourceTrigger=PropertyChanged}"/>
+                            <TextBox Style="{StaticResource GdNumber}" Width="42" Text="{Binding T4, UpdateSourceTrigger=PropertyChanged}"/>
+                            <TextBox Style="{StaticResource GdNumber}" Width="42" Text="{Binding T5, UpdateSourceTrigger=PropertyChanged}"/>
+                        </StackPanel>
+                        <TextBlock Style="{StaticResource GdHint}" MaxWidth="330" TextWrapping="Wrap" Margin="0,6,0,0"
+                                   Text="After every level-up the EXP step grows: by itself before the first threshold, then by half, a quarter, an eighth, a sixteenth; past the last threshold it stops growing. Thresholds count level-ups (growth counter + 1)."/>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource GdCard}">
+                    <StackPanel>
+                        <TextBlock Text="STAT GROWTH PER 16 LEVEL-UPS" Style="{StaticResource GdSection}"/>
+                        <ItemsControl ItemsSource="{Binding Growth}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal" Margin="0,1">
+                                        <TextBlock Text="{Binding Stat}" Style="{StaticResource GdFieldLabel}" Width="38"/>
+                                        <TextBox Style="{StaticResource GdNumber}" Width="40" Text="{Binding B1, UpdateSourceTrigger=PropertyChanged}"/>
+                                        <TextBox Style="{StaticResource GdNumber}" Width="40" Text="{Binding B2, UpdateSourceTrigger=PropertyChanged}"/>
+                                        <TextBox Style="{StaticResource GdNumber}" Width="40" Text="{Binding B3, UpdateSourceTrigger=PropertyChanged}"/>
+                                        <TextBox Style="{StaticResource GdNumber}" Width="40" Text="{Binding B4, UpdateSourceTrigger=PropertyChanged}"/>
+                                        <TextBox Style="{StaticResource GdNumber}" Width="40" Text="{Binding B5, UpdateSourceTrigger=PropertyChanged}"/>
+                                        <TextBox Style="{StaticResource GdNumber}" Width="40" Text="{Binding B6, UpdateSourceTrigger=PropertyChanged}"/>
+                                        <TextBox Style="{StaticResource GdNumber}" Width="40" Text="{Binding B7, UpdateSourceTrigger=PropertyChanged}"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Style="{StaticResource GdHint}" MaxWidth="330" TextWrapping="Wrap" Margin="0,6,0,0"
+                                   Text="Columns: level-ups 1-16, 17-32, 33-48, 49-64, 65-80, 81-96, 97+. Each number (0-255) is what the stat gains over those 16 level-ups, spread evenly; every level-up also adds a random -2..+2. Starting stats are on the Characters tab."/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <DockPanel Grid.Column="2" Margin="0,12,12,8">
+            <TextBlock DockPanel.Dock="Top" Text="PREVIEW (without the random -2..+2)" Style="{StaticResource GdSection}"/>
+            <TextBlock DockPanel.Dock="Top" Text="{Binding Summary}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,6"/>
+            <DataGrid ItemsSource="{Binding Preview}" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
+                      GridLinesVisibility="Horizontal" Background="#120C1C" Foreground="#C8DCFF" RowBackground="#120C1C"
+                      AlternatingRowBackground="#1A1230" BorderThickness="0" FontFamily="Cascadia Code, Consolas" FontSize="11"
+                      HeadersVisibility="Column" HorizontalGridLinesBrush="#2D1B4E" ColumnHeaderHeight="24">
+                <DataGrid.ColumnHeaderStyle>
+                    <Style TargetType="DataGridColumnHeader">
+                        <Setter Property="Background" Value="#2D1B4E"/>
+                        <Setter Property="Foreground" Value="#E8B84B"/>
+                        <Setter Property="Padding" Value="6,3"/>
+                        <Setter Property="BorderBrush" Value="#3D2466"/>
+                        <Setter Property="BorderThickness" Value="0,0,1,1"/>
+                    </Style>
+                </DataGrid.ColumnHeaderStyle>
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Level" Binding="{Binding Level}" Width="50"/>
+                    <DataGridTextColumn Header="EXP to reach" Binding="{Binding Exp}" Width="110"/>
+                    <DataGridTextColumn Header="HP" Binding="{Binding Hp}" Width="55"/>
+                    <DataGridTextColumn Header="MP" Binding="{Binding Mp}" Width="55"/>
+                    <DataGridTextColumn Header="STR" Binding="{Binding Str}" Width="55"/>
+                    <DataGridTextColumn Header="INT" Binding="{Binding Int}" Width="55"/>
+                    <DataGridTextColumn Header="AGL" Binding="{Binding Agl}" Width="55"/>
+                    <DataGridTextColumn Header="MGR" Binding="{Binding Mgr}" Width="55"/>
+                </DataGrid.Columns>
+            </DataGrid>
+        </DockPanel>
+
+        <v:EditorFooter Grid.Row="1" Grid.ColumnSpan="3"/>
+    </Grid>
+</UserControl>
