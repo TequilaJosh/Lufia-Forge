@@ -81,6 +81,9 @@ public partial class EventsViewModel : ObservableObject, IEventHost
     [ObservableProperty] private string _flagDescription = "";
     private bool _fillingFlag;
 
+    /// <summary>Live story-flag tracker (reads the running game through BizHawk).</summary>
+    public LiveFlagsViewModel LiveFlags { get; } = new();
+
     public void SetRom(RomBuffer rom, MainViewModel mainVm)
     {
         _rom = rom; _mainVm = mainVm;
@@ -91,6 +94,7 @@ public partial class EventsViewModel : ObservableObject, IEventHost
         EventScript.MapLabel = id => labels.TryGetValue(id, out var l) ? l : $"map {id:X2}";
         EventCommands.EventBase = id => LufiaMap.EventBase(rom, id);
         BuildFlagIndex();
+        LiveFlags.SetRom(rom);
         Status = $"{Maps.Count} maps, {Flags.Count} story flags in use. Pick a map, then an event.";
         SelectedMap = Maps.FirstOrDefault(m => m.MapId == 0x04) ?? Maps.FirstOrDefault();
     }
