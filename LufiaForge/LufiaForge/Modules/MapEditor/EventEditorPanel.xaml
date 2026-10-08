@@ -17,6 +17,12 @@
         <StackPanel Grid.Row="0" Margin="0,0,0,10">
             <DockPanel>
                 <Button DockPanel.Dock="Right" Content="＋ Insert at start…" Style="{StaticResource LufiaButton}" Click="InsertAtStart_Click"/>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="0,0,12,0" VerticalAlignment="Center">
+                    <RadioButton x:Name="ViewLines" Content="☰ Lines" IsChecked="True" GroupName="EventView" Foreground="{StaticResource TextPrimaryBrush}"
+                                 Margin="0,0,10,0" Click="ViewMode_Click" ToolTip="Edit line by line"/>
+                    <RadioButton x:Name="ViewBytes" Content="⬚ Bytes" GroupName="EventView" Foreground="{StaticResource TextPrimaryBrush}"
+                                 Margin="0,0,10,0" Click="ViewMode_Click" ToolTip="The raw bytes of every line, colour-coded and editable as hex"/>
+                </StackPanel>
                 <ToggleButton x:Name="StageToggle" DockPanel.Dock="Right" Content="🎬 Stage" Margin="0,0,8,0" Padding="10,2"
                               Click="StageToggle_Click" ToolTip="Show the cutscene stage: the map with the characters, walks and camera at the selected line"/>
                 <Button x:Name="BackButton" DockPanel.Dock="Left" Content="◀ Back" Style="{StaticResource LufiaButton}" Click="Back_Click"
@@ -34,7 +40,7 @@
             <ColumnDefinition x:Name="SplitterColumn" Width="0"/>
             <ColumnDefinition x:Name="StageColumn" Width="0"/>
         </Grid.ColumnDefinitions>
-        <Border Grid.Column="0" Style="{StaticResource GdCard}" Margin="0" Padding="6">
+        <Border x:Name="LinesCard" Grid.Column="0" Style="{StaticResource GdCard}" Margin="0" Padding="6">
             <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                 <ItemsControl x:Name="Lines">
                     <ItemsControl.ItemTemplate>
@@ -144,6 +150,9 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
             </ScrollViewer>
+        </Border>
+        <Border x:Name="BytesCard" Grid.Column="0" Style="{StaticResource GdCard}" Margin="0" Padding="6" Visibility="Collapsed">
+            <me:RawBytesView x:Name="Bytes"/>
         </Border>
         <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="Transparent"/>
         <me:CutsceneStageView x:Name="Stage" Grid.Column="2" Visibility="Collapsed"/>

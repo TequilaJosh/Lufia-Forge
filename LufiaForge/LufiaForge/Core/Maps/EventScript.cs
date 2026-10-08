@@ -654,7 +654,8 @@ public sealed class EventScript
 
     /// <param name="pieces">When given, lines keep their original ROM offsets (in-place save of a script with several
     /// regions) and every line's bytes are returned with its offset.</param>
-    private byte[] Build(int newStart, int newBase, out bool layoutUnchanged, List<(int Offset, byte[] Bytes)>? pieces)
+    private byte[] Build(int newStart, int newBase, out bool layoutUnchanged, List<(int Offset, byte[] Bytes)>? pieces,
+                         List<(ScriptOp Op, int Offset, byte[] Bytes)>? layout = null)
     {
         var encoded = new List<byte[]>();
         var newPos = new Dictionary<ScriptOp, int>();
@@ -697,6 +698,7 @@ public sealed class EventScript
             }
             outBytes.AddRange(b);
             pieces?.Add((newPos[o], b));
+            layout?.Add((o, newPos[o], b));
         }
         // Decoding stopped early, or the event no longer ends: continue with the original code.
         if (StopReason != null || Ops.Count == 0 || !Ops[^1].EndsFlow)
@@ -707,6 +709,23 @@ public sealed class EventScript
         }
         return outBytes.ToArray();
     }
+
+    /// <summary>
+    /// Every line's bytes as they would be written with the lines laid out from the event's start (jumps already
+    /// recalculated), or null when the event can't be built yet (e.g. a jump lands inside a command).
+    /// </summary>
+    public List<(ScriptOp Op, int Offset, byte[] Bytes)>? PreviewLayout()
+    {
+        var layout = new List<(ScriptOp Op, int Offset, byte[] Bytes)>();
+        try { Build(Start, BlockBase, out _, null, layout); return layout; }
+        catch (InvalidOperationException) { return null; }
+    }
+
+    /// <summary>Total size of the event as it would be written.</summary>
+    public int BuiltLength() { try { return Build(Start, BlockBase, out _).Length; } catch (InvalidOperationException) { return -1; } }
+
+    /// <summary>The line at an absolute jump target, or null.</summary>
+    public ScriptOp? OpAtJumpValue(int value) { int abs = JumpBase + value; return Ops.FirstOrDefault(o => o.Offset == abs && !o.IsNew); }
 
     /// <summary>True when the edits keep every line the same size (no ROM expansion needed).</summary>
     public bool FitsInPlace()
