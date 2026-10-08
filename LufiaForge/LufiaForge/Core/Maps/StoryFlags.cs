@@ -22,8 +22,65 @@ public sealed record FlagUse(int Flag, int MapId, int Event, int Line, int Offse
 /// </summary>
 public static class StoryFlags
 {
+    /// <summary>Flags some event or map setup script uses (from the last <see cref="BuildIndex"/>), or null before that.</summary>
+    public static HashSet<int>? UsedByScripts { get; private set; }
+
+    private static RomBuffer? _codeRom;
+    private static HashSet<int> _codeFlags = new();
+
+    /// <summary>
+    /// Flags the game's own code reads or writes directly (absolute addressing of $1296-$12B5: all 8 flags of
+    /// that byte). A plain byte scan, so a few data bytes may count as code: it errs on the side of "in use".
+    /// Indexed access through the general flag routines (what event commands use) isn't counted here.
+    /// </summary>
+    public static HashSet<int> UsedByCode(RomBuffer rom)
+    {
+        if (ReferenceEquals(rom, _codeRom)) return _codeFlags;
+        var flags = new HashSet<int>();
+        // absolute (3-byte) and long (4-byte, bank $00 or $7E) forms of loads, stores, compares, bit ops, inc/dec
+        int[] abs = { 0xAD, 0x8D, 0x0D, 0x2D, 0x4D, 0x6D, 0xCD, 0xED, 0x2C, 0x0C, 0x1C, 0x9C, 0xEE, 0xCE, 0xAE, 0xAC, 0x8E, 0x8C, 0xEC, 0xCC };
+        int[] lng = { 0xAF, 0x8F, 0x0F, 0x2F, 0x4F, 0x6F, 0xCF, 0xEF };
+        var absSet = abs.ToHashSet(); var lngSet = lng.ToHashSet();
+        int end = Math.Min(rom.Length, 0x100000);
+        for (int i = 0; i + 3 < end; i++)
+        {
+            int op = rom.ReadByte(i);
+            if (!absSet.Contains(op) && !lngSet.Contains(op)) continue;
+            int addr = rom.ReadByte(i + 1) | rom.ReadByte(i + 2) << 8;
+            if (addr < 0x1296 || addr > 0x12B5) continue;
+            if (lngSet.Contains(op) && rom.ReadByte(i + 3) is not (0x00 or 0x7E or 0x80)) continue;
+            int b = addr - 0x1296;
+            for (int k = 0; k < 8; k++) flags.Add(b * 8 + k);
+        }
+        _codeRom = rom; _codeFlags = flags;
+        return flags;
+    }
+
+    /// <summary>
+    /// A flag nothing in the game uses: no event, no map setup script, no direct access in the game's code, and
+    /// not one of F0-FF (the short-form flags and FF, where commands report results). Safe for your own quests.
+    /// </summary>
+    public static bool IsFree(RomBuffer rom, int flag) =>
+        flag is >= 0 and < 0xF0 && UsedByScripts != null && !UsedByScripts.Contains(flag) && !UsedByCode(rom).Contains(flag);
+
+    /// <summary>All 256 flags for a picker: number, name, and whether it's free.</summary>
+    public static List<(int Value, string Label)> Choices(RomBuffer rom) =>
+        Enumerable.Range(0, 256).Select(f =>
+        {
+            string name = DisplayName(f) ?? "";
+            string free = IsFree(rom, f) ? (NameOf(f) != null ? "  (your flag)" : "  (free)") : "";
+            return (f, $"{f:X2} {name}{free}".TrimEnd());
+        }).ToList();
+
     /// <summary>Every use of every flag. Decodes each distinct event script once.</summary>
     public static List<FlagUse> BuildIndex(RomBuffer rom, IEnumerable<int> mapIds)
+    {
+        var result = BuildIndexCore(rom, mapIds);
+        UsedByScripts = result.Select(u => u.Flag).ToHashSet();
+        return result;
+    }
+
+    private static List<FlagUse> BuildIndexCore(RomBuffer rom, IEnumerable<int> mapIds)
     {
         var uses = new List<FlagUse>();
         var seenStarts = new HashSet<int>();
