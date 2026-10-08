@@ -10,8 +10,8 @@ Built in C# WPF (.NET 8). Each phase below has its own checklist file.
 | # | Phase | Status |
 |---|-------|--------|
 | [1](./phase-01-foundation.md) | ROM Loader, Core Infrastructure, IPS Handler | ✅ Complete |
-| [2](./phase-02-text-editor.md) | Text Editor + Dictionary Expansion | ✅ Complete |
-| [3](./phase-03-emulator.md) | Embedded Emulator + Live Memory Viewer | 🔲 Not Started |
+| [2](./phase-02-text-editor.md) | Text Editor + Dictionary Expansion | ✅ Complete (redesigned: every dialogue box listed by map and speaker) |
+| [3](./phase-03-emulator.md) | Embedded Emulator + Live Memory Viewer | 🔄 Partial: docked BizHawk, live WRAM, watchlist, value search (VRAM/CGRAM views, research notes to do) |
 | [4](./phase-04-disassembler.md) | 65816 Disassembler + Research Tools | ✅ Complete |
 | [5](./phase-05-tile-viewer.md) | Tile & Sprite Viewer | 🔲 Not Started |
 | [6](./phase-06-script-event-editor.md) | Script Editor, Event Editor, Cutscene Sequencer | 🔄 Every event command decoded; Events tab (hints, flags with descriptions) and Cutscenes tab (stage, walks, playback, reordering) |
@@ -64,6 +64,7 @@ LufiaForge/
 - 🔄 In progress
 - ⚠️ Blocked / needs research
 
+<img width="1264" height="789" alt="image" src="https://github.com/user-attachments/assets/a17aee8c-9aa3-4813-84a4-ae132ccaf8fb" />
 
 <img width="1254" height="791" alt="Screenshot 2026-03-30 202722" src="https://github.com/user-attachments/assets/a6dbbdbc-8975-438f-ab30-795a64e8416b" />
 
