@@ -26,6 +26,9 @@
             <TextBlock Text="Zoom" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,4,4"/>
             <Slider x:Name="ZoomSlider" Minimum="0.5" Maximum="6" Value="1.5" Width="90" VerticalAlignment="Center" Margin="0,0,10,4"
                     ValueChanged="Zoom_Changed" ToolTip="Or Ctrl + mouse wheel on the stage; hold the middle mouse button to drag the map"/>
+            <CheckBox x:Name="SoundBox" Content="♪ Sound" Foreground="{StaticResource TextPrimaryBrush}"
+                      VerticalAlignment="Center" Margin="0,0,8,4" Click="Sound_Click"
+                      ToolTip="Play the music while previewing: the game's own sound driver on an emulated SNES sound chip"/>
             <CheckBox x:Name="ShowCameraBox" Content="Camera" IsChecked="True" Foreground="{StaticResource TextPrimaryBrush}"
                       VerticalAlignment="Center" Margin="0,0,8,4" Click="Redraw_Click"/>
             <CheckBox x:Name="ShowAllPathsBox" Content="All paths" Foreground="{StaticResource TextPrimaryBrush}"

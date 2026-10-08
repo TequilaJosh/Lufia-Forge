@@ -22,4 +22,10 @@
     <PackageReference Include="Velopack" Version="1.2.161" />
   </ItemGroup>
 
+  <!-- SNES sound chip emulator for the cutscene music (native/spc, LGPL 2.1; rebuild with native/spc/build.cmd) -->
+  <ItemGroup>
+    <None Include="lufia_spc.dll" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\native\spc\LICENSE-LGPL-2.1.txt" Link="licenses\lufia_spc-LGPL-2.1.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

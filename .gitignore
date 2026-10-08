@@ -51,3 +51,5 @@ BizHawk/SNES/State/
 BizHawk/*.log
 BizHawk/LufiaForge_Summary_*.txt
 BizHawk/LufiaForge_ScriptSummary*.txt
+LufiaForge/native/spc/obj/
+!LufiaForge/LufiaForge/lufia_spc.dll
