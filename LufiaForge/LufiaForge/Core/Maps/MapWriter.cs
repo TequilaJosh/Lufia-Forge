@@ -52,7 +52,8 @@ public static class MapWriter
             expanded = true;
         }
 
-        int offset = FindFreeSpace(rom, stream.Length);
+        var space = ExpansionSpace.Load(rom);
+        int offset = space.Allocate(stream.Length, ExpansionSpace.Kind.MapData, map.ResourceId);
         rom.WriteBytes(offset, stream);
 
         // Point the resource at its new home (LoROM: file offset -> bank:addr, FastROM mirror $80+).
@@ -60,19 +61,12 @@ public static class MapWriter
         int addr = (offset % 0x8000) | 0x8000;
         int p = LufiaCompression.ResourceTable + map.ResourceId * 3;
         rom.WriteBytes(p, new[] { (byte)addr, (byte)(addr >> 8), (byte)bank });
+        // the previous copy above 1 MB isn't used any more
+        if (map.CompressedOffset >= ExpansionStart && map.CompressedOffset != offset) space.Free(map.CompressedOffset);
+        space.Save();
         rom.FixChecksum();
         return new MapSaveResult(stream.Length, map.CompressedSize, offset, true, expanded);
     }
 
-    /// <summary>First run of unused (0xFF) bytes above 1 MB that can hold <paramref name="size"/> bytes.</summary>
-    public static int FindFreeSpace(RomBuffer rom, int size)
-    {
-        int end = rom.Length;
-        int last = end - 1;
-        while (last >= ExpansionStart && rom.ReadByte(last) == 0xFF) last--;
-        int start = Math.Max(ExpansionStart, last + 1 + 16);   // small gap after the previous block
-        if (start + size > end)
-            throw new InvalidOperationException("Not enough free space left in the expanded ROM.");
-        return start;
-    }
+
 }

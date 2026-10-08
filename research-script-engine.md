@@ -266,6 +266,15 @@ Live actor table: WRAM `$0800`, 32 bytes per actor; party in slots 0-3; tile x/y
 - Lufia Forge Map Editor: gold/pink boxes for chests/hidden items, hover tooltip with item names, exit labels
   `E2→A1`, arrival labels `A1←E2`, linked ends outlined in green on selection.
 
+## Event command reference (session 10, 2026-10-06)
+
+Every command (00-6D, 80-FF) is decoded in [research-event-commands.md](research-event-commands.md): operands, what it does,
+whether the event waits, RAM it uses, plus the actor table (`$07DE`, $20 per actor: 1 = leader, 2-5 followers, 6 vehicle,
+7+n = map character n), camera structs and the movement path format (map data section G, `$7F` base `$07AE`).
+The intro is map `4F` event 8 (jumps to the narration at `0x034F9D`); the prologue is maps `93`-`96`.
+Event lists skip table entries that point into the pointer table, into another event's dialogue, or that decode into
+6E-7F or jump outside the map's script block (1029 real events remain).
+
 ## Other routines found
 
 | Address | Role |

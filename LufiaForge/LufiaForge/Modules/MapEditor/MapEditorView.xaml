@@ -34,7 +34,7 @@
                 <CheckBox Content="Arrival points" IsChecked="{Binding ShowArrivals}" Style="{StaticResource GdCheck}"/>
                 <CheckBox Content="Treasure" IsChecked="{Binding ShowItems}" Style="{StaticResource GdCheck}"/>
                 <Button Content="Zoom out" Style="{StaticResource LufiaButton}" Command="{Binding ZoomOutCommand}" Margin="8,0,4,0"/>
-                <Button Content="Zoom in" Style="{StaticResource LufiaButton}" Command="{Binding ZoomInCommand}" Margin="0,0,12,0"/>
+                <Button Content="Zoom in" Style="{StaticResource LufiaButton}" Command="{Binding ZoomInCommand}" Margin="0,0,12,0" ToolTip="Or Ctrl + mouse wheel on the map; hold the middle mouse button to drag the map"/>
                 <Button Content="↶ Undo paint" Style="{StaticResource LufiaButton}" Command="{Binding UndoCommand}" Margin="0,0,8,0"/>
                 <Button Content="✔ Apply to ROM" Style="{StaticResource LufiaButtonGold}" Command="{Binding ApplyToRomCommand}" Margin="0,0,8,0"/>
                 <Button Content="↺ Revert map" Style="{StaticResource LufiaButton}" Command="{Binding RevertMapCommand}"/>
@@ -64,7 +64,7 @@
 
         <!-- Map canvas -->
         <ScrollViewer x:Name="MapScroll" Grid.Row="1" Grid.Column="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
-                      Background="#FF101018">
+                      Background="#FF101018" RenderOptions.BitmapScalingMode="NearestNeighbor" UseLayoutRounding="True">
             <Grid x:Name="MapSurface" HorizontalAlignment="Left" VerticalAlignment="Top"
                   MouseLeftButtonDown="MapSurface_MouseLeftButtonDown"
                   MouseLeftButtonUp="MapSurface_MouseLeftButtonUp"
@@ -90,10 +90,15 @@
                         <DataTemplate>
                             <Grid>
                                 <Rectangle Width="{Binding W}" Height="{Binding H}" Stroke="{Binding Stroke}"
-                                           StrokeThickness="{Binding Thickness}"/>
+                                           StrokeThickness="{Binding Thickness}"
+                                           Visibility="{Binding IsBox, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                <Line X1="0" Y1="0" X2="{Binding LineDx}" Y2="{Binding LineDy}" Stroke="{Binding Stroke}"
+                                      StrokeThickness="{Binding Thickness}" StrokeDashArray="2 2" StrokeEndLineCap="Triangle" Opacity="0.7"
+                                      Visibility="{Binding IsLine, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                 <TextBlock Text="{Binding Label}" Foreground="White" FontSize="9" FontWeight="Bold"
                                            Margin="2,1,0,0" Background="#80000000"
-                                           HorizontalAlignment="Left" VerticalAlignment="Top"/>
+                                           HorizontalAlignment="Left" VerticalAlignment="Top"
+                                           Visibility="{Binding IsBox, Converter={StaticResource BoolToVisibilityConverter}}"/>
                             </Grid>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
@@ -194,12 +199,30 @@
             <Border Grid.Row="1" Style="{StaticResource GdCard}" Margin="0" VerticalAlignment="Stretch">
                 <DockPanel>
                     <TextBlock DockPanel.Dock="Top" Text="BLOCKS (click to choose a brush)" Style="{StaticResource GdSection}"/>
+                    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4">
+                        <TextBlock Text="Zoom" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <Slider Minimum="1" Maximum="4" Value="{Binding PaletteZoom}" VerticalAlignment="Center"
+                                ToolTip="Or Ctrl + mouse wheel over the blocks; hold the middle mouse button to drag"/>
+                    </DockPanel>
                     <TextBlock DockPanel.Dock="Top" Text="{Binding BrushText}" Style="{StaticResource LufiaLabel}"
                                Foreground="{StaticResource GoldLightBrush}" Margin="0,0,0,6"/>
-                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                        <Image x:Name="PaletteImage" Source="{Binding PaletteImage}" Stretch="None" HorizontalAlignment="Left"
-                               RenderOptions.BitmapScalingMode="NearestNeighbor"
-                               MouseLeftButtonDown="PaletteImage_MouseLeftButtonDown" Cursor="Hand"/>
+                    <ScrollViewer x:Name="PaletteScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                                  RenderOptions.BitmapScalingMode="NearestNeighbor" UseLayoutRounding="True">
+                        <Grid HorizontalAlignment="Left" VerticalAlignment="Top">
+                            <Grid.LayoutTransform>
+                                <ScaleTransform ScaleX="{Binding PaletteZoom}" ScaleY="{Binding PaletteZoom}"/>
+                            </Grid.LayoutTransform>
+                            <Image x:Name="PaletteImage" Source="{Binding PaletteImage}" Stretch="None" HorizontalAlignment="Left"
+                                   RenderOptions.BitmapScalingMode="NearestNeighbor"
+                                   MouseLeftButtonDown="PaletteImage_MouseLeftButtonDown" Cursor="Hand"/>
+                            <Canvas IsHitTestVisible="False">
+                                <!-- the brush's block -->
+                                <Rectangle Canvas.Left="{Binding BrushBoxX}" Canvas.Top="{Binding BrushBoxY}" Width="16" Height="16"
+                                           Stroke="Gold" StrokeThickness="1.5"/>
+                                <Rectangle Canvas.Left="{Binding BrushBoxX}" Canvas.Top="{Binding BrushBoxY}" Width="16" Height="16"
+                                           Stroke="Black" StrokeThickness="0.5" Margin="-1" Opacity="0.8"/>
+                            </Canvas>
+                        </Grid>
                     </ScrollViewer>
                 </DockPanel>
             </Border>

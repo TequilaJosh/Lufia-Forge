@@ -51,6 +51,35 @@ public static class Cpu65816
 
     private static readonly OpcodeInfo[] Table = BuildTable();
 
+    /// <summary>
+    /// Base cycle count of every opcode (WDC 65C816 datasheet, 8-bit registers, direct page aligned).
+    /// Add 1 per extra byte moved with a 16-bit accumulator/index, 1 when the direct page register's low byte
+    /// isn't 0, 1 when indexing crosses a page, and 1-2 for taken branches.
+    /// </summary>
+    private static readonly byte[] Cycles =
+    {
+        //  0  1  2  3  4  5  6  7  8  9  A  B  C  D  E  F
+            7, 6, 7, 4, 5, 3, 5, 6, 3, 2, 2, 4, 6, 4, 6, 5,   // 0x
+            2, 5, 5, 7, 5, 4, 6, 6, 2, 4, 2, 2, 6, 4, 7, 5,   // 1x
+            6, 6, 8, 4, 3, 3, 5, 6, 4, 2, 2, 5, 4, 4, 6, 5,   // 2x
+            2, 5, 5, 7, 4, 4, 6, 6, 2, 4, 2, 2, 4, 4, 7, 5,   // 3x
+            6, 6, 2, 4, 7, 3, 5, 6, 3, 2, 2, 3, 3, 4, 6, 5,   // 4x
+            2, 5, 5, 7, 7, 4, 6, 6, 2, 4, 3, 2, 4, 4, 7, 5,   // 5x
+            6, 6, 6, 4, 3, 3, 5, 6, 4, 2, 2, 6, 5, 4, 6, 5,   // 6x
+            2, 5, 5, 7, 4, 4, 6, 6, 2, 4, 4, 2, 6, 4, 7, 5,   // 7x
+            3, 6, 4, 4, 3, 3, 3, 6, 2, 2, 2, 3, 4, 4, 4, 5,   // 8x
+            2, 6, 5, 7, 4, 4, 4, 6, 2, 5, 2, 2, 4, 5, 5, 5,   // 9x
+            2, 6, 2, 4, 3, 3, 3, 6, 2, 2, 2, 4, 4, 4, 4, 5,   // Ax
+            2, 5, 5, 7, 4, 4, 4, 6, 2, 4, 2, 2, 4, 4, 4, 5,   // Bx
+            2, 6, 3, 4, 3, 3, 5, 6, 2, 2, 2, 3, 4, 4, 6, 5,   // Cx
+            2, 5, 5, 7, 6, 4, 6, 6, 2, 4, 3, 3, 6, 4, 7, 5,   // Dx
+            2, 6, 3, 4, 3, 3, 5, 6, 2, 2, 2, 3, 4, 4, 6, 5,   // Ex
+            2, 5, 5, 7, 5, 4, 6, 6, 2, 4, 4, 2, 8, 4, 7, 5,   // Fx
+    };
+
+    /// <summary>Base cycle count of an opcode (see <see cref="Cycles"/> for what adds to it).</summary>
+    public static int BaseCycles(byte opcode) => Cycles[opcode];
+
     private static OpcodeInfo[] BuildTable()
     {
         var t = new OpcodeInfo[256];
@@ -433,6 +462,7 @@ public static class Cpu65816
             IsReturn      = isReturn,
             IsConditional = isCond,
             StateAfter    = stateAfter,
+            BaseCycles    = Cycles[opcode],
         };
     }
 

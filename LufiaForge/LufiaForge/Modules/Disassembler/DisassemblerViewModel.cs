@@ -158,7 +158,7 @@ public partial class DisassemblerViewModel : ObservableObject
         }
 
         var initialState = new CpuState { M = FlagM, X = FlagX };
-        var lines = LinearDisassembler.Disassemble(_rom, fileOffset, byteCount, initialState);
+        var lines = LinearDisassembler.Disassemble(_rom, fileOffset, byteCount, initialState, _bookmarks.DataRegionAtFile);
 
         _bookmarks.AnnotateLines(lines);
 
@@ -272,7 +272,7 @@ public partial class DisassemblerViewModel : ObservableObject
                 string raw     = line.RawBytesHex.PadRight(10);
                 string mnem    = line.Mnemonic.PadRight(5);
                 string operand = line.Operand.PadRight(14);
-                string comment = line.Comment != null ? $"  {line.Comment}" : "";
+                string comment = (line.Comment != null ? $"  {line.Comment}" : "") + $"  ; {line.BaseCycles} cyc";
 
                 sb.AppendLine($"{addr}  {raw}  {mnem} {operand}{comment}");
             }
@@ -354,10 +354,12 @@ public partial class DisassemblerViewModel : ObservableObject
     private void MarkAsData(DisassemblyLine? line)
     {
         if (line == null) return;
-        // Add a bookmark flagged as "data region" so XRef builder skips it
-        _bookmarks.Add(line.SnesAddress, $"DATA_{line.SnesAddress:X6}", "Marked as data", "#C0392B");
+        // a data region (joined with one right before/after): shown as .db lines and skipped by the XRef builder
+        _bookmarks.MarkData(line.SnesAddress, Math.Max(1, line.RawBytes.Length));
         RefreshBookmarkList();
-        StatusText = $"${line.SnesAddress:X6} marked as data.";
+        Disassemble();
+        StatusText = $"${line.SnesAddress:X6} marked as data ({Math.Max(1, line.RawBytes.Length)} bytes). Mark the next line too to grow the region; " +
+                     "remove its DATA_ bookmark to undo.";
     }
 
     // -------------------------------------------------------------------------
@@ -444,7 +446,8 @@ public partial class DisassemblerViewModel : ObservableObject
             await _xref.BuildAsync(_rom, _bookmarks, progress);
             IsXrefBuilt    = true;
             IsXrefBuilding = false;
-            StatusText     = $"Cross-reference complete — {_xref.Xref.Count:N0} unique targets indexed.";
+            StatusText     = $"Cross-reference complete — {_xref.Xref.Count:N0} unique targets indexed; " +
+                             $"{_xref.Unresolved.Count:N0} indirect jumps/calls can't be resolved statically (live PC tracking shows where they go).";
             RefreshXrefPanel();
         }
         catch (OperationCanceledException)

@@ -97,15 +97,13 @@ public partial class PatchManagerViewModel : ObservableObject
         {
             byte[] patched = IpsHandler.ApplyPatch(_rom, _loadedPatchPath);
 
-            if (patched.Length != _rom.Length)
-            {
+            if (patched.Length != _rom.Length &&
                 MessageBox.Show(
-                    $"This patch would change the ROM size from {_rom.Length:N0} to {patched.Length:N0} bytes.\n\n" +
-                    "ROM expansion is not supported in this version. The patch cannot be applied.",
-                    "Size Mismatch",
-                    MessageBoxButton.OK, MessageBoxImage.Error);
+                    $"This patch changes the ROM size from {_rom.Length:N0} to {patched.Length:N0} bytes " +
+                    $"({_rom.Length / 1024 / 1024.0:0.#} MB → {patched.Length / 1024 / 1024.0:0.#} MB). Patches that add new " +
+                    "data (for example ones made by Lufia Forge from an edited ROM) do this. Continue?",
+                    "ROM size changes", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
                 return;
-            }
 
             var confirm = MessageBox.Show(
                 $"Apply \"{LoadedPatchName}\" to the ROM?\n\n" +

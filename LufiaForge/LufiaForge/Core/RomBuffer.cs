@@ -156,12 +156,11 @@ public class RomBuffer
     /// </summary>
     public void ReplaceAll(byte[] newData)
     {
-        if (newData.Length != _data.Length)
-            throw new InvalidOperationException(
-                $"New data length {newData.Length} does not match ROM size {_data.Length}. " +
-                "ROM expansion is not supported in this version.");
+        // a patch may expand (or shrink) the ROM: take its size
+        if (newData.Length != _data.Length) _data = new byte[newData.Length];
         Array.Copy(newData, _data, newData.Length);
         _isDirty = true;
+        Maps.ExpansionSpace.Forget(this);
     }
 
     /// <summary>

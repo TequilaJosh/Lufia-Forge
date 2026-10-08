@@ -11,6 +11,8 @@ namespace LufiaForge.Core;
 ///   Records: [3-byte offset][2-byte size][size bytes of data]
 ///            If size == 0: RLE record [2-byte run length][1 byte fill value]
 ///   EOF:     "EOF" (3 bytes)
+///   Optional truncate extension: 3 more bytes after EOF = final file size (Lunar IPS / Flips). Written whenever the
+///   patched ROM's size differs from the original (e.g. a ROM expanded to 2 MB), and honoured when applying.
 /// </summary>
 public static class IpsHandler
 {
@@ -36,9 +38,16 @@ public static class IpsHandler
         int pos = 5; // skip "PATCH"
         while (pos + 3 <= patchData.Length)
         {
-            // Check for EOF marker
+            // Check for EOF marker (and the optional final-size extension after it)
             if (patchData[pos] == 'E' && patchData[pos + 1] == 'O' && patchData[pos + 2] == 'F')
+            {
+                if (pos + 6 <= patchData.Length)
+                {
+                    int finalSize = (patchData[pos + 3] << 16) | (patchData[pos + 4] << 8) | patchData[pos + 5];
+                    if (finalSize > 0) Array.Resize(ref romCopy, finalSize);
+                }
                 break;
+            }
 
             // Need 5 bytes minimum: 3 for offset + 2 for size
             if (pos + 5 > patchData.Length) break;
@@ -97,6 +106,19 @@ public static class IpsHandler
         // Walk both arrays and collect changed regions
         int i = 0;
         int len = Math.Min(original.Length, modified.Length);
+        void Record(int start, int count)
+        {
+            writer.Write((byte)(start >> 16)); writer.Write((byte)(start >> 8)); writer.Write((byte)start);
+            writer.Write((byte)(count >> 8)); writer.Write((byte)count);
+            writer.Write(modified, start, count);
+        }
+        void Rle(int start, int count, byte value)
+        {
+            writer.Write((byte)(start >> 16)); writer.Write((byte)(start >> 8)); writer.Write((byte)start);
+            writer.Write((byte)0); writer.Write((byte)0);
+            writer.Write((byte)(count >> 8)); writer.Write((byte)count);
+            writer.Write(value);
+        }
 
         while (i < len)
         {
@@ -111,17 +133,35 @@ public static class IpsHandler
                 chunkLen++;
 
             // Write IPS record: [3-byte offset][2-byte size][data]
-            writer.Write((byte)(start >> 16));
-            writer.Write((byte)(start >> 8));
-            writer.Write((byte)(start));
-            writer.Write((byte)(chunkLen >> 8));
-            writer.Write((byte)(chunkLen));
-            writer.Write(modified, start, chunkLen);
+            Record(start, chunkLen);
 
             i = start + chunkLen;
         }
 
+        // Bytes past the end of the original (an expanded ROM): runs of one value as RLE records, the rest as data.
+        // Everything is written, including the FF filler, so any patcher builds exactly the same ROM.
+        while (i < modified.Length)
+        {
+            int run = 1;
+            while (i + run < modified.Length && run < 0xFFFF && modified[i + run] == modified[i]) run++;
+            if (run >= 8) { Rle(i, run, modified[i]); i += run; continue; }
+            int start = i, count = 0;
+            while (i < modified.Length && count < 0xFFFF)
+            {
+                int same = 1;
+                while (i + same < modified.Length && same < 8 && modified[i + same] == modified[i]) same++;
+                if (same >= 8) break;
+                i++; count++;
+            }
+            if (count > 0) Record(start, count);
+        }
+
         writer.Write(IpsEof);
+        if (modified.Length != original.Length)
+        {
+            // truncate/size extension: the patched file is exactly this long
+            writer.Write((byte)(modified.Length >> 16)); writer.Write((byte)(modified.Length >> 8)); writer.Write((byte)modified.Length);
+        }
     }
 
     // -------------------------------------------------------------------------
