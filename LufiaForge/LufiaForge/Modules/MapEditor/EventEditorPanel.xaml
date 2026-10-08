@@ -120,6 +120,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
+            <RowDefinition x:Name="TimelineRow" Height="0"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
@@ -136,6 +137,8 @@
                     <RadioButton x:Name="ViewBytes" Content="⬚ Bytes" GroupName="EventView" Foreground="{StaticResource TextPrimaryBrush}"
                                  Margin="0,0,10,0" Click="ViewMode_Click" ToolTip="The raw bytes of every line, colour-coded and editable as hex"/>
                 </StackPanel>
+                <ToggleButton x:Name="TimelineToggle" DockPanel.Dock="Right" Content="⏱ Timeline" Margin="0,0,8,0" Padding="10,2"
+                              Click="TimelineToggle_Click" ToolTip="Show the lines on a timeline: tracks per character, camera, dialogue, screen, sound"/>
                 <ToggleButton x:Name="StageToggle" DockPanel.Dock="Right" Content="🎬 Stage" Margin="0,0,8,0" Padding="10,2"
                               Click="StageToggle_Click" ToolTip="Show the cutscene stage: the map with the characters, walks and camera at the selected line"/>
                 <Button x:Name="BackButton" DockPanel.Dock="Left" Content="◀ Back" Style="{StaticResource LufiaButton}" Click="Back_Click"
@@ -189,7 +192,10 @@
         <me:CutsceneStageView x:Name="Stage" Grid.Column="2" Visibility="Collapsed"/>
         </Grid>
 
-        <DockPanel Grid.Row="2" Margin="0,10,0,0" LastChildFill="True">
+        <Border x:Name="TimelineCard" Grid.Row="2" Style="{StaticResource GdCard}" Margin="0,8,0,0" Padding="6" Visibility="Collapsed">
+            <me:CutsceneTimelineView x:Name="Timeline"/>
+        </Border>
+        <DockPanel Grid.Row="3" Margin="0,10,0,0" LastChildFill="True">
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                 <Button x:Name="UndoButton" Content="↶ Undo" Style="{StaticResource LufiaButton}" Click="Undo_Click" Margin="0,0,4,0" IsEnabled="False"/>
                 <Button x:Name="RedoButton" Content="↷ Redo" Style="{StaticResource LufiaButton}" Click="Redo_Click" Margin="0,0,12,0" IsEnabled="False"/>

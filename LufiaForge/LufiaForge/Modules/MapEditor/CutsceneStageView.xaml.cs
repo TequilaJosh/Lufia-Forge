@@ -128,8 +128,10 @@ public partial class CutsceneStageView : UserControl
         if (_map == null || _panel == null) return;
         _initial = CutsceneStage.Initial(_map, Party, _startX, _startY);
         _states = CutsceneStage.Simulate(_map, _panel.Script, Party, _startX, _startY);
+        try { _timeline = CutsceneTimeline.Build(_panel.Script, _states); } catch { _timeline = new(); }
         bool first = _line < 0;
         ShowLine(_line < 0 ? 0 : Math.Min(_line, _states.Count - 1), scroll: first);
+        Resimulated?.Invoke();
     }
 
     /// <summary>Show the stage after line <paramref name="index"/>.</summary>
@@ -692,6 +694,38 @@ public partial class CutsceneStageView : UserControl
     private Point? _camFrom, _camTo;
     private int _camStart, _camFrames;
 
+    private List<TimelineItem> _timeline = new();
+    private int _lineTotal;
+
+    /// <summary>The stage after every line, the map shown, and the lines placed in time (for the timeline).</summary>
+    public IReadOnlyList<StageState> States => _states;
+    public LufiaMap? StageMap => _map;
+    public IReadOnlyList<TimelineItem> TimelineItems => _timeline;
+    public bool IsPlaying => _timer.IsEnabled;
+
+    /// <summary>Raised after the stage was recomputed (edits, party/start changes).</summary>
+    public event Action? Resimulated;
+    /// <summary>Raised every frame while playing: (line, frames into the line).</summary>
+    public event Action<int, int>? PlaybackProgress;
+    public event Action? PlaybackStopped;
+
+    /// <summary>Play from a line (the timeline's play / rewind).</summary>
+    public void PlayFrom(int line)
+    {
+        _line = Math.Clamp(line, 0, Math.Max(0, _states.Count - 1));
+        Play_Click(this, new RoutedEventArgs());
+    }
+
+    public void Stop() { if (_timer.IsEnabled) StopPlayback(); }
+
+    /// <summary>Set the speed of every step of a path (timeline resize of a walk).</summary>
+    public void SetPathSpeed(int pathNumber, int speed)
+    {
+        if (_map == null || pathNumber < 1 || pathNumber > _map.Paths.Count) return;
+        foreach (var st in _map.Paths[pathNumber - 1].Steps) st.Speed = speed;
+        PathEdited();
+    }
+
     private void Play_Click(object sender, RoutedEventArgs e)
     {
         if (_states.Count == 0) return;
@@ -707,6 +741,7 @@ public partial class CutsceneStageView : UserControl
     private void StopPlayback()
     {
         _timer.Stop();
+        PlaybackStopped?.Invoke();
         PlayButton.IsEnabled = true;
         _anims.Clear();
         ShowLine(Math.Min(_playLine, _states.Count - 1), scroll: false);
@@ -734,14 +769,18 @@ public partial class CutsceneStageView : UserControl
         _camTo = new Point(st.CameraX * 16, st.CameraY * 16);
         _camStart = _frame;
         _camFrames = Math.Max(1, st.WaitFrames > 0 && (before.CameraX != st.CameraX || before.CameraY != st.CameraY) ? st.WaitFrames : blocking);
-        int text = st.Text != null ? Math.Clamp(st.Text.Length * 3, 90, 360) : 0;
-        _lineFrames = Math.Max(1, Math.Max(blocking, st.WaitFrames) + text);
+        // same timing as the timeline: blocking lines take their duration, others one frame
+        var item = _timeline.FirstOrDefault(t => t.Line == _playLine);
+        _lineFrames = item != null ? (item.Blocking ? Math.Max(1, item.Duration) : 1)
+                                   : Math.Max(1, Math.Max(blocking, st.WaitFrames) + (st.Text != null ? CutsceneTimeline.TextFrames(st.Text) : 0));
+        _lineTotal = _lineFrames;
         ShowText(st);
     }
 
     private void Tick()
     {
         _frame++;
+        PlaybackProgress?.Invoke(_playLine, _lineTotal - _lineFrames);
         if (--_lineFrames <= 0)
         {
             if (_states[_playLine].Leaves != null || _playLine + 1 >= _states.Count) { StopPlayback(); return; }

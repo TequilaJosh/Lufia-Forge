@@ -338,6 +338,8 @@ public partial class EventEditorPanel : UserControl
         _selectedLine = -1;
         bool cutscene = script.Ops.Any(CutsceneStage.IsStageCommand);
         if (_cutsceneMode || StageToggle.IsChecked == true || (cutscene && !_stageChosen)) ShowStage(true);
+        if (_cutsceneMode && !_timelineChosen) ShowTimeline(true);
+        else if (TimelineCard.Visibility == Visibility.Visible) Timeline.Bind(this, Stage);
         else if (Stage.Visibility == Visibility.Visible) Stage.Bind(rom, this);
     }
 
@@ -388,6 +390,7 @@ public partial class EventEditorPanel : UserControl
     }
 
     private bool _stageChosen;
+    private bool _timelineChosen;
     private bool _cutsceneMode;
 
     /// <summary>
@@ -419,6 +422,20 @@ public partial class EventEditorPanel : UserControl
     {
         _stageChosen = true;
         ShowStage(StageToggle.IsChecked == true);
+    }
+
+    private void TimelineToggle_Click(object sender, RoutedEventArgs e) { _timelineChosen = true; ShowTimeline(TimelineToggle.IsChecked == true); }
+
+    /// <summary>Show or hide the timeline (it needs the stage, which it turns on).</summary>
+    public void ShowTimeline(bool show)
+    {
+        TimelineToggle.IsChecked = show;
+        TimelineCard.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        TimelineRow.Height = show ? new GridLength(240) : new GridLength(0);
+        if (!show) return;
+        if (Stage.Visibility != Visibility.Visible) ShowStage(true);
+        Timeline.Bind(this, Stage);
+        if (_selectedLine >= 0) Timeline.SelectLine(_selectedLine);
     }
 
     private void ShowStage(bool show)
@@ -527,6 +544,7 @@ public partial class EventEditorPanel : UserControl
         if (Stage.Visibility == Visibility.Visible) Stage.ShowLine(index);
         if (!fromBytes && BytesCard.Visibility == Visibility.Visible) Bytes.Select(index);
         if (!fromBytes && FlowCard.Visibility == Visibility.Visible) Flow.SelectLine(index);
+        if (TimelineCard.Visibility == Visibility.Visible) Timeline.SelectLine(index);
     }
 
     /// <summary>Lines were added/removed/changed outside the Lines view (raw bytes): rebuild the rows and select one.</summary>
