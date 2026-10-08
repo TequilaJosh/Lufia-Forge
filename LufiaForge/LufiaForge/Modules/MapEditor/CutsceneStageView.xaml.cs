@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using LufiaForge.Core;
+using LufiaForge.Core.Audio;
 using LufiaForge.Core.Maps;
 using System.Collections.ObjectModel;
 using System.Globalization;
@@ -79,6 +80,8 @@ public partial class CutsceneStageView : UserControl
         LufiaForge.Modules.Common.MapNavigation.Attach(Scroller, () => Zoom.ScaleX, z => ZoomSlider.Value = z, ZoomSlider.Minimum, ZoomSlider.Maximum);
         foreach (var p in CutsceneStage.Parties) PartyBox.Items.Add(p.Name);
         StepList.ItemsSource = _steps;
+        SoundBox.IsChecked = SoundOn;
+        if (!SpcNative.Available) { SoundBox.IsEnabled = false; SoundBox.ToolTip = "lufia_spc.dll is missing, so the music can't be played"; }
         _timer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(1000.0 / 60) };
         _timer.Tick += (_, _) => Tick();
     }
@@ -87,6 +90,7 @@ public partial class CutsceneStageView : UserControl
     public void Bind(RomBuffer rom, EventEditorPanel panel)
     {
         _rom = rom; _panel = panel;
+        MusicSync.UseRom(rom);   // unmeasured songs' sync points come from the game's sound driver
         var script = panel.Script;
         if (script.MapId != _mapId || _map == null)
         {
@@ -750,10 +754,61 @@ public partial class CutsceneStageView : UserControl
         _playStart = _timeline.Where(t => t.Line >= _playLine).Select(t => t.Start).DefaultIfEmpty(0).Min();
         _playEnd = CutsceneFrame.Length(_states, _timeline);
         _frame = _playStart;
+        StartMusic(_playStart);
         _clock.Restart();
         _timer.Start();
         PlayButton.IsEnabled = false;
         Tick();
+    }
+
+    // ── music ───────────────────────────────────────────────────────────────
+
+    private CutsceneMusic? _music;
+    private AudioOut? _audio;
+
+    private static readonly string SoundPrefs = System.IO.Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "LufiaForge", "cutscenesound.txt");
+
+    /// <summary>Play the music while previewing (remembered; on by default).</summary>
+    private static bool SoundOn
+    {
+        get { try { return !System.IO.File.Exists(SoundPrefs) || System.IO.File.ReadAllText(SoundPrefs).Trim() != "0"; } catch { return true; } }
+        set { try { System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(SoundPrefs)!); System.IO.File.WriteAllText(SoundPrefs, value ? "1" : "0"); } catch { } }
+    }
+
+    private void Sound_Click(object sender, RoutedEventArgs e)
+    {
+        SoundOn = SoundBox.IsChecked == true;
+        if (!_timer.IsEnabled) return;
+        // switch while playing: carry on from the frame on screen
+        int at = _frame;
+        StopMusic();
+        _playStart = at; _clock.Restart();
+        StartMusic(at);
+    }
+
+    /// <summary>The cutscene's songs from <paramref name="frame"/> on, played by the game's sound driver.</summary>
+    private void StartMusic(int frame)
+    {
+        StopMusic();
+        if (SoundBox.IsChecked != true || _rom == null || _panel == null || !SpcNative.Available) return;
+        var cues = CutsceneMusic.Cues(_rom, _panel.Script, _timeline);
+        if (cues.Count == 0) return;
+        try
+        {
+            _music = new CutsceneMusic(_rom, cues);
+            _music.Seek(frame);
+            var music = _music;
+            _audio = new AudioOut(LufiaSound.SampleRate, (buf, pairs) => { lock (music) music.Render(buf, pairs); });
+            if (!_audio.Start()) StopMusic();
+        }
+        catch { StopMusic(); }
+    }
+
+    private void StopMusic()
+    {
+        _audio?.Dispose(); _audio = null;
+        if (_music != null) { lock (_music) _music.Dispose(); _music = null; }
     }
 
     private void Stop_Click(object sender, RoutedEventArgs e) => StopPlayback();
@@ -762,6 +817,7 @@ public partial class CutsceneStageView : UserControl
     {
         _timer.Stop();
         _clock.Stop();
+        StopMusic();
         PlaybackStopped?.Invoke();
         PlayButton.IsEnabled = true;
         ShowLine(Math.Min(_playLine, _states.Count - 1), scroll: false);
@@ -774,7 +830,10 @@ public partial class CutsceneStageView : UserControl
     private void Tick()
     {
         if (_panel == null || _initial == null) return;
-        _frame = _playStart + (int)(_clock.Elapsed.TotalSeconds * ConsoleFps);
+        // with music the sound device is the clock (what has been heard), so picture and sound stay together
+        _frame = _audio != null
+            ? _playStart + (int)(_audio.PlayedPairs / CutsceneMusic.SamplesPerFrame)
+            : _playStart + (int)(_clock.Elapsed.TotalSeconds * ConsoleFps);
         if (_frame >= _playEnd) { StopPlayback(); return; }
         var v = CutsceneFrame.At(_initial, _states, _timeline, _panel.Script, _frame);
         if (v.Line != _playLine) { _playLine = v.Line; _line = v.Line; _panel.HighlightLine(v.Line); }
