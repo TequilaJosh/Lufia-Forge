@@ -69,7 +69,10 @@
                         <StackPanel Orientation="Horizontal" Margin="0,4,0,4">
                             <TextBlock Text="Find" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center"/>
                             <TextBox Style="{StaticResource GdText}" Width="180" Margin="6,0,0,0" Text="{Binding FlagFilter, UpdateSourceTrigger=PropertyChanged}"/>
+                            <CheckBox Content="Show free flags" IsChecked="{Binding ShowFreeFlags}" Style="{StaticResource GdCheck}" Margin="12,0,0,0" VerticalAlignment="Center"
+                                      ToolTip="Flags nothing in the game uses (no event, map setup or game code). Pick one, give it a name below, and use it in your events with Set / Check story flag."/>
                         </StackPanel>
+                        <TextBlock Text="{Binding FreeFlagsText}" Style="{StaticResource GdHint}"/>
                     </StackPanel>
                     <ListBox Grid.Row="1" Style="{StaticResource GdRecordList}" ItemsSource="{Binding Flags}" SelectedItem="{Binding SelectedFlag}"
                              SelectionChanged="ScrollSelectedIntoView"

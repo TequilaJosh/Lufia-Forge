@@ -202,26 +202,42 @@ public partial class EventsViewModel : ObservableObject, IEventHost
         _flagIndex = StoryFlags.BuildIndex(_rom, Maps.Select(m => m.MapId));
         FillFlags();
         if (keep != null) SelectedFlag = Flags.FirstOrDefault(f => f.Flag == keep);
+        OnPropertyChanged(nameof(FreeFlagsText));
     }
 
     private void FillFlags()
     {
         Flags.Clear();
         string q = FlagFilter.Trim();
-        foreach (var g in _flagIndex.GroupBy(u => u.Flag).OrderBy(g => g.Key))
+        var groups = _flagIndex.GroupBy(u => u.Flag).ToDictionary(g => g.Key, g => g.ToList());
+        // free flags (nothing in the game uses them) can be listed too, to pick one for your own quest
+        var flagNumbers = ShowFreeFlags && _rom != null
+            ? Enumerable.Range(0, 256).Where(f => groups.ContainsKey(f) || StoryFlags.IsFree(_rom, f))
+            : groups.Keys.OrderBy(k => k);
+        foreach (int flag in flagNumbers)
         {
+            var g = groups.TryGetValue(flag, out var list) ? list : new List<FlagUse>();
+            bool free = _rom != null && StoryFlags.IsFree(_rom, flag);
             var row = new FlagRow
             {
-                Flag = g.Key, Name = StoryFlags.NameOf(g.Key) ?? "", AutoName = StoryFlags.DisplayName(g.Key) ?? "",
+                Flag = flag, Name = StoryFlags.NameOf(flag) ?? "", AutoName = StoryFlags.DisplayName(flag) ?? (free ? "free - not used by the game" : ""),
                 Sets = g.Count(u => u.Action == "sets"), Clears = g.Count(u => u.Action == "clears"),
                 Checks = g.Count(u => !u.Sets),
             };
-            if (q.Length > 0 && !row.Label.Contains(q, StringComparison.OrdinalIgnoreCase) && !$"{g.Key:X2}".Equals(q, StringComparison.OrdinalIgnoreCase)) continue;
+            if (q.Length > 0 && !row.Label.Contains(q, StringComparison.OrdinalIgnoreCase) && !$"{flag:X2}".Equals(q, StringComparison.OrdinalIgnoreCase)) continue;
             Flags.Add(row);
         }
     }
 
     partial void OnFlagFilterChanged(string value) => FillFlags();
+
+    /// <summary>List the flags nothing in the game uses, so one can be named and used for a new quest.</summary>
+    [ObservableProperty] private bool _showFreeFlags;
+    partial void OnShowFreeFlagsChanged(bool value) => FillFlags();
+
+    /// <summary>Free flags left (not used by the game, not named by you yet).</summary>
+    public string FreeFlagsText => _rom == null || StoryFlags.UsedByScripts == null ? "" :
+        $"{Enumerable.Range(0, 256).Count(f => StoryFlags.IsFree(_rom, f) && StoryFlags.NameOf(f) == null)} free flags left for your own quests";
 
     partial void OnSelectedFlagChanged(FlagRow? value)
     {
@@ -251,6 +267,7 @@ public partial class EventsViewModel : ObservableObject, IEventHost
         StoryFlags.SetName(SelectedFlag.Flag, value);
         int f = SelectedFlag.Flag;
         FillFlags();
+        OnPropertyChanged(nameof(FreeFlagsText));
         _fillingFlag = true;
         SelectedFlag = Flags.FirstOrDefault(r => r.Flag == f);
         _fillingFlag = false;

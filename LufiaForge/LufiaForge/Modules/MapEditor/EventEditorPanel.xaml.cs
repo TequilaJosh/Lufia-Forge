@@ -263,6 +263,9 @@ public partial class EventLineVm : ObservableObject
                 continue;
             }
             var choices = Owner.ChoicesFor(d.Kind);
+            // short-form flag commands (C0-FF) hold F0-FF as 0-F
+            if (d.Kind == ParamKind.Flag && d.Max < 0xFF && choices != null)
+                choices = choices.Where(c => c.Value >= 0xF0).Select(c => (c.Value - 0xF0, c.Label)).ToList();
             Params.Add(new ParamVm(this)
             {
                 Label = d.Label, Def = d,

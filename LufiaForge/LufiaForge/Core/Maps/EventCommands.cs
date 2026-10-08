@@ -369,6 +369,7 @@ public static class EventCommands
         ParamKind.KeyItem => Enumerable.Range(1, 16).Select(n => (n, $"{n}: {MapSetupScript.ItemName(rom, 0xF0 + n - 1)}")).ToList(),
         ParamKind.Map when mapLabel != null => Enumerable.Range(0, 256).Select(m => (m, m == 0 ? "00 (this map / none)" : mapLabel(m))).ToList(),
         ParamKind.FlashKind => new List<(int, string)> { (0, "White, with thunder"), (1, "Silent") },
+        ParamKind.Flag => StoryFlags.Choices(rom),
         _ => null,
     };
 
