@@ -4,47 +4,11 @@
              xmlns:me="clr-namespace:LufiaForge.Modules.MapEditor"
              Background="{DynamicResource MidPurpleBrush}">
     <UserControl.Resources>
-        <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
-    </UserControl.Resources>
-
-    <Grid Margin="14" Background="{DynamicResource MidPurpleBrush}">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
-
-        <StackPanel Grid.Row="0" Margin="0,0,0,10">
-            <DockPanel>
-                <Button DockPanel.Dock="Right" Content="＋ Insert at start…" Style="{StaticResource LufiaButton}" Click="InsertAtStart_Click"/>
-                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="0,0,12,0" VerticalAlignment="Center">
-                    <RadioButton x:Name="ViewLines" Content="☰ Lines" IsChecked="True" GroupName="EventView" Foreground="{StaticResource TextPrimaryBrush}"
-                                 Margin="0,0,10,0" Click="ViewMode_Click" ToolTip="Edit line by line"/>
-                    <RadioButton x:Name="ViewBytes" Content="⬚ Bytes" GroupName="EventView" Foreground="{StaticResource TextPrimaryBrush}"
-                                 Margin="0,0,10,0" Click="ViewMode_Click" ToolTip="The raw bytes of every line, colour-coded and editable as hex"/>
-                </StackPanel>
-                <ToggleButton x:Name="StageToggle" DockPanel.Dock="Right" Content="🎬 Stage" Margin="0,0,8,0" Padding="10,2"
-                              Click="StageToggle_Click" ToolTip="Show the cutscene stage: the map with the characters, walks and camera at the selected line"/>
-                <Button x:Name="BackButton" DockPanel.Dock="Left" Content="◀ Back" Style="{StaticResource LufiaButton}" Click="Back_Click"
-                        Margin="0,0,10,0" Visibility="Collapsed"/>
-                <TextBlock x:Name="HeaderText" Style="{StaticResource GdSection}" FontSize="15" VerticalAlignment="Center"/>
-            </DockPanel>
-            <TextBlock x:Name="InfoText" Style="{StaticResource GdHint}" TextWrapping="Wrap"/>
-            <TextBlock x:Name="HelpText" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0"
-                       Text="Dialogue: Enter = new line in the box. Tags: [Hero] [Lufia] [Aguro] [Jerin] [Maxim] [Selan] [Guy] [Artea], [ITEM:xx] [SPELL:xx] [TOWN:xx], and [xx] / [xx:yy] for other codes. Commands: change the command byte or its values (hex), pick jump targets by line, ＋ inserts below, ✕ deletes. Story flags are shared by the whole game, so change them with care."/>
-        </StackPanel>
-
-        <Grid Grid.Row="1">
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition x:Name="LinesColumn" Width="*" MinWidth="320"/>
-            <ColumnDefinition x:Name="SplitterColumn" Width="0"/>
-            <ColumnDefinition x:Name="StageColumn" Width="0"/>
-        </Grid.ColumnDefinitions>
-        <Border x:Name="LinesCard" Grid.Column="0" Style="{StaticResource GdCard}" Margin="0" Padding="6">
-            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                <ItemsControl x:Name="Lines">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+<DataTemplate x:Key="LineTemplate">
                             <Border BorderThickness="0,0,0,1" Padding="0,5" PreviewMouseLeftButtonDown="Line_MouseDown"
                                     AllowDrop="True" DragOver="Line_DragOver" DragLeave="Line_DragLeave" Drop="Line_Drop">
                                 <Border.Style>
@@ -147,9 +111,72 @@
                                 </Grid>
                             </Border>
                         </DataTemplate>
-                    </ItemsControl.ItemTemplate>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <Grid Margin="14" Background="{DynamicResource MidPurpleBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,10">
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Content="＋ Insert at start…" Style="{StaticResource LufiaButton}" Click="InsertAtStart_Click"/>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="0,0,12,0" VerticalAlignment="Center">
+                    <RadioButton x:Name="ViewLines" Content="☰ Lines" IsChecked="True" GroupName="EventView" Foreground="{StaticResource TextPrimaryBrush}"
+                                 Margin="0,0,10,0" Click="ViewMode_Click" ToolTip="Edit line by line"/>
+                    <RadioButton x:Name="ViewFlow" Content="⟲ Flow" GroupName="EventView" Foreground="{StaticResource TextPrimaryBrush}"
+                                 Margin="0,0,10,0" Click="ViewMode_Click" ToolTip="The event as a graph: cards for runs of lines, arrows for jumps"/>
+                    <RadioButton x:Name="ViewBytes" Content="⬚ Bytes" GroupName="EventView" Foreground="{StaticResource TextPrimaryBrush}"
+                                 Margin="0,0,10,0" Click="ViewMode_Click" ToolTip="The raw bytes of every line, colour-coded and editable as hex"/>
+                </StackPanel>
+                <ToggleButton x:Name="StageToggle" DockPanel.Dock="Right" Content="🎬 Stage" Margin="0,0,8,0" Padding="10,2"
+                              Click="StageToggle_Click" ToolTip="Show the cutscene stage: the map with the characters, walks and camera at the selected line"/>
+                <Button x:Name="BackButton" DockPanel.Dock="Left" Content="◀ Back" Style="{StaticResource LufiaButton}" Click="Back_Click"
+                        Margin="0,0,10,0" Visibility="Collapsed"/>
+                <TextBlock x:Name="HeaderText" Style="{StaticResource GdSection}" FontSize="15" VerticalAlignment="Center"/>
+            </DockPanel>
+            <TextBlock x:Name="InfoText" Style="{StaticResource GdHint}" TextWrapping="Wrap"/>
+            <TextBlock x:Name="HelpText" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0"
+                       Text="Dialogue: Enter = new line in the box. Tags: [Hero] [Lufia] [Aguro] [Jerin] [Maxim] [Selan] [Guy] [Artea], [ITEM:xx] [SPELL:xx] [TOWN:xx], and [xx] / [xx:yy] for other codes. Commands: change the command byte or its values (hex), pick jump targets by line, ＋ inserts below, ✕ deletes. Story flags are shared by the whole game, so change them with care."/>
+        </StackPanel>
+
+        <Grid Grid.Row="1">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition x:Name="LinesColumn" Width="*" MinWidth="320"/>
+            <ColumnDefinition x:Name="SplitterColumn" Width="0"/>
+            <ColumnDefinition x:Name="StageColumn" Width="0"/>
+        </Grid.ColumnDefinitions>
+        <Border x:Name="LinesCard" Grid.Column="0" Style="{StaticResource GdCard}" Margin="0" Padding="6">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <ItemsControl x:Name="Lines" ItemTemplate="{StaticResource LineTemplate}">
                 </ItemsControl>
             </ScrollViewer>
+        </Border>
+        <Border x:Name="FlowCard" Grid.Column="0" Style="{StaticResource GdCard}" Margin="0" Padding="6" Visibility="Collapsed">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="3*"/>
+                    <RowDefinition Height="6"/>
+                    <RowDefinition Height="2*"/>
+                </Grid.RowDefinitions>
+                <DockPanel Margin="0,0,0,4">
+                    <Button DockPanel.Dock="Right" Content="⟲ Auto-layout" Style="{StaticResource LufiaButton}" Click="FlowAutoLayout_Click"/>
+                    <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" VerticalAlignment="Center"
+                               Text="Cards are runs of lines; gold arrows are jumps, grey arrows run on. Click a card to edit its lines below, drag cards to arrange them, drag a gold port onto a card to change where that jump goes, right-click for more. Middle mouse drags, Ctrl+wheel zooms."/>
+                </DockPanel>
+                <me:FlowGraphView x:Name="Flow" Grid.Row="1"/>
+                <GridSplitter Grid.Row="2" Height="6" HorizontalAlignment="Stretch" Background="Transparent"/>
+                <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel>
+                        <TextBlock x:Name="FlowLinesHeader" Style="{StaticResource GdSection}" Margin="0,4,0,4" Text="Pick a card to edit its lines."/>
+                        <ItemsControl x:Name="FlowLines" ItemTemplate="{StaticResource LineTemplate}"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
         </Border>
         <Border x:Name="BytesCard" Grid.Column="0" Style="{StaticResource GdCard}" Margin="0" Padding="6" Visibility="Collapsed">
             <me:RawBytesView x:Name="Bytes"/>
