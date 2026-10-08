@@ -21,7 +21,8 @@
         <DataTemplate x:Key="DisassemblyRowTemplate" DataType="{x:Type local:DisassemblyLine}">
             <Border x:Name="RowBorder"
                     Background="Transparent"
-                    Padding="2,1">
+                    Padding="2,1"
+                    ToolTip="{Binding CyclesText}">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="80"/>   <!-- SNES address -->

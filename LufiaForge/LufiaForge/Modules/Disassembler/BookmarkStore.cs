@@ -75,6 +75,7 @@ public sealed class BookmarkStore
     public void Remove(int snesAddress)
     {
         _map.Remove(snesAddress);
+        _regions = null;
         Save();
     }
 
@@ -86,6 +87,56 @@ public sealed class BookmarkStore
 
     public bool HasAddress(int snesAddress)
         => _map.ContainsKey(snesAddress);
+
+    // -------------------------------------------------------------------------
+    // Data regions
+    // -------------------------------------------------------------------------
+
+    private List<(int Start, int End, int Snes)>? _regions;
+
+    private List<(int Start, int End, int Snes)> Regions => _regions ??= _map.Values
+        .Where(b => b.DataLength > 0)
+        .Select(b => { int fo = LufiaForge.Core.Lufia1Constants.SnesAddressToFileOffset(b.SnesAddress); return (fo, fo + b.DataLength, b.SnesAddress); })
+        .Where(r => r.Item1 >= 0)
+        .OrderBy(r => r.Item1).ToList();
+
+    /// <summary>The data region (file offsets, end exclusive) containing <paramref name="fileOffset"/>, or null.</summary>
+    public (int Start, int End)? DataRegionAtFile(int fileOffset)
+    {
+        foreach (var r in Regions)
+        {
+            if (r.Start > fileOffset) break;
+            if (fileOffset < r.End) return (r.Start, r.End);
+        }
+        return null;
+    }
+
+    /// <summary>Mark bytes as data. Joins a region that ends right before them or starts right after them.</summary>
+    public void MarkData(int snesAddress, int length)
+    {
+        int fo = LufiaForge.Core.Lufia1Constants.SnesAddressToFileOffset(snesAddress);
+        if (fo < 0 || length <= 0) return;
+        var before = Regions.FirstOrDefault(r => r.End == fo);
+        var after = Regions.FirstOrDefault(r => r.Start == fo + length);
+        Bookmark target;
+        if (before.End == fo && before.End != 0 && _map.TryGetValue(before.Snes, out var prev))
+        {
+            prev.DataLength += length;
+            target = prev;
+        }
+        else
+        {
+            target = new Bookmark { SnesAddress = snesAddress, Label = $"DATA_{snesAddress:X6}", Comment = "Marked as data", ColorHex = "#C0392B", DataLength = length };
+            _map[snesAddress] = target;
+        }
+        if (after.Start == fo + length && after.End != 0 && _map.TryGetValue(after.Snes, out var next) && next != target)
+        {
+            target.DataLength += next.DataLength;
+            _map.Remove(after.Snes);
+        }
+        _regions = null;
+        Save();
+    }
 
     // -------------------------------------------------------------------------
     // Annotation helper
