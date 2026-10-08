@@ -75,16 +75,28 @@ public partial class CutscenesViewModel : ObservableObject, IEventHost
         var maps = MapCatalog.ScanNamed(rom);
         var labels = maps.ToDictionary(m => m.MapId, m => m.Label);
         EventScript.MapLabel ??= id => labels.TryGetValue(id, out var l) ? l : $"map {id:X2}";
+        EventCommands.EventBase = id => LufiaMap.EventBase(rom, id);
         var list = await Task.Run(() =>
         {
             var found = new List<CutsceneEntry>();
+            // events other events continue with (command 51): not reached by a character or area, so find them first
+            var chained = new HashSet<(int Map, int Ev)>();
+            foreach (var m in maps)
+                foreach (int ev in EventScript.PlausibleEvents(rom, m.MapId))
+                {
+                    var s0 = EventScript.Load(rom, m.MapId, ev);
+                    if (s0 == null) continue;
+                    foreach (var o in s0.Ops.Where(o => !o.IsText && o.Bytes.Length == 3 && o.Bytes[0] == 0x51))
+                        chained.Add((o.Bytes[1], EventCommands.ChainedEvent(o.Bytes)));
+                }
             foreach (var m in maps)
             {
                 LufiaMap? map = null;
                 try { map = LufiaMap.Load(rom, m.MapId); } catch { }
                 // known cutscenes the game starts from code (the intro) aren't reached by a character or area
                 var events = EventScript.PlausibleEvents(rom, m.MapId)
-                    .Concat(KnownNames.Keys.Where(k => k.Map == m.MapId).Select(k => k.Ev)).Distinct().OrderBy(e => e);
+                    .Concat(KnownNames.Keys.Where(k => k.Map == m.MapId).Select(k => k.Ev))
+                    .Concat(chained.Where(c => c.Map == m.MapId).Select(c => c.Ev)).Distinct().OrderBy(e => e);
                 foreach (int ev in events)
                 {
                     EventScript? s;

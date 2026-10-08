@@ -246,7 +246,7 @@ public static class CutsceneStage
             case >= 0x80 and <= 0x87: st.WaitFrames = EventCommands.ShortWaitFrames[o & 7]; break;
             case 0x0B: st.WaitFrames = (b[1] * 4) & 0xFF; break;
             case 0x4C or 0x5B: st.Leaves = b[1] == 0 ? $"moves the party to arrival point {b[2]}" : $"warps to map {b[1]:X2}"; break;
-            case 0x51: st.Leaves = $"continues with event {b[2]} of map {b[1]:X2}"; break;
+            case 0x51: st.Leaves = $"continues with event {EventCommands.ChainedEvent(b)} of map {b[1]:X2}"; break;
         }
     }
 }
