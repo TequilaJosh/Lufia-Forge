@@ -197,6 +197,10 @@ public partial class EventLineVm : ObservableObject
     }
 
     // ── commands ──
+    /// <summary>Show the command byte (hex) on each line (off by default; see the "Show bytes" box).</summary>
+    public bool ShowBytes => EventEditorPanel.ShowCommandBytes;
+    public void RefreshShowBytes() => OnPropertyChanged(nameof(ShowBytes));
+
     public string OpcodeHex
     {
         get => Op.Bytes.Length > 0 ? Op.Bytes[0].ToString("X2") : "";
@@ -308,6 +312,7 @@ public partial class EventEditorPanel : UserControl
     public EventEditorPanel()
     {
         InitializeComponent();
+        ShowBytesBox.IsChecked = ShowCommandBytes;
         Lines.ItemsSource = _lines;
     }
 
@@ -534,6 +539,29 @@ public partial class EventEditorPanel : UserControl
     }
 
     private bool _flowHooked;
+
+    private static readonly string PrefsPath = System.IO.Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "LufiaForge", "eventeditor.txt");
+
+    /// <summary>Show command bytes in the Lines view (remembered between sessions).</summary>
+    public static bool ShowCommandBytes { get; private set; } = LoadShowBytes();
+
+    private static bool LoadShowBytes()
+    {
+        try { return System.IO.File.Exists(PrefsPath) && System.IO.File.ReadAllText(PrefsPath).Contains("showbytes=1"); } catch { return false; }
+    }
+
+    private void ShowBytes_Click(object sender, RoutedEventArgs e)
+    {
+        ShowCommandBytes = ShowBytesBox.IsChecked == true;
+        try
+        {
+            System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(PrefsPath)!);
+            System.IO.File.WriteAllText(PrefsPath, ShowCommandBytes ? "showbytes=1" : "showbytes=0");
+        }
+        catch { }
+        foreach (var l in _lines) l.RefreshShowBytes();
+    }
 
     private void ViewMode_Click(object sender, RoutedEventArgs e)
     {
