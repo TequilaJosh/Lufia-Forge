@@ -290,7 +290,7 @@ public static class EventCommands
         Add(0x54, 0x54, "Play sound effect", Snd, (b, _) => $"Play sound effect {b[1]:X2}", new byte[] { 0x54, 0x10 }, "", P("sound", ParamKind.Sound, 1));
         Add(0x3A, 0x3A, "Set the text sound", Snd, (b, _) => $"Text prints with sound {b[1]:X2}", new byte[] { 0x3A, 4 }, "", P("sound", ParamKind.Sound, 1));
         Add(0x3B, 0x3B, "Silent text", Snd, (_, _) => "Text prints without sound", new byte[] { 0x3B });
-        Add(0x6C, 0x6C, "Wait for the music", Snd, (b, _) => $"Wait until the music reaches point {b[1]}", new byte[] { 0x6C, 1 }, "until the music reaches that point",
+        Add(0x6C, 0x6C, "Wait for the music", Snd, (b, _) => $"Wait until the music reaches point {b[1]} (about {b[1] * 1.5:0.#} s into the song)", new byte[] { 0x6C, 1 }, "until the music reaches that point",
             P("music point", ParamKind.Number, 1));
 
         // ── timing ──

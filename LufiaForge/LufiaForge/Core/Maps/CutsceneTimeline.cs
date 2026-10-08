@@ -14,6 +14,12 @@ public static class CutsceneTimeline
 {
     public static readonly string[] FixedTracks = { "Dialogue", "Camera", "Screen", "Sound", "Wait", "Logic", "Other" };
 
+    /// <summary>
+    /// Frames per music "point" (command 6C waits until the music reaches point n). Measured in the game on the
+    /// intro: point n is reached n × 90 frames (1.5 s, one bar) after the song starts.
+    /// </summary>
+    public const int FramesPerMusicPoint = 90;
+
     /// <summary>Frames a dialogue box is assumed to stay open.</summary>
     public static int TextFrames(string text) => Math.Clamp(text.Length * 3, 90, 360);
 
@@ -38,7 +44,8 @@ public static class CutsceneTimeline
     public static List<TimelineItem> Build(EventScript script, IReadOnlyList<StageState> states)
     {
         var items = new List<TimelineItem>();
-        int t = 0, fadeEnd = 0;
+        int t = 0, fadeEnd = 0, musicStart = 0;
+        int autoText = 0;   // command 69: boxes close by themselves after this many frames (0 = the player closes them)   // music is assumed to start with the event unless a line starts it
         for (int i = 0; i < script.Ops.Count && i < states.Count; i++)
         {
             var op = script.Ops[i];
@@ -52,7 +59,7 @@ public static class CutsceneTimeline
                 track = "Dialogue"; kind = "text";
                 string who = st.Speaker >= 0 ? Name(st.Speaker) : EventScript.SpeakerName(op.Bytes);
                 label = $"{who}: {op.Text.Replace("\n", " ")}";
-                dur = TextFrames(op.Text); blocking = true;
+                dur = autoText > 0 ? autoText : TextFrames(op.Text); blocking = true;
             }
             else
             {
@@ -92,8 +99,18 @@ public static class CutsceneTimeline
                     case 0x5A: track = "Screen"; kind = "wait"; dur = Math.Max(1, fadeEnd - t); blocking = true; break;
                     case 0x50 when b.Length > 1 && b[1] is 0x05 or 0x06 or 0x08: track = "Screen"; kind = "screen"; dur = 32; blocking = true; break;
                     case >= 0x60 and <= 0x68: track = "Screen"; kind = "screen"; break;
-                    case 0x0A or 0x54 or 0x3A or 0x3B: track = "Sound"; kind = "sound"; break;
-                    case 0x6C: track = "Sound"; kind = "wait"; dur = 60; blocking = true; break;
+                    case 0x0A:
+                        track = "Sound"; kind = "sound";
+                        if (b.Length > 1 && b[1] != 0xFF) musicStart = t;
+                        break;
+                    case 0x54 or 0x3A or 0x3B: track = "Sound"; kind = "sound"; break;
+                    case 0x69 when b.Length > 1: track = "Other"; kind = "other"; autoText = b[1] * 8 + 1; break;
+                    case 0x6A: track = "Other"; kind = "other"; autoText = 0; break;
+                    case 0x6C:
+                        // until the music reaches point n
+                        track = "Sound"; kind = "wait"; blocking = true;
+                        dur = Math.Max(1, musicStart + b[1] * FramesPerMusicPoint - t);
+                        break;
                     case >= 0x80 and <= 0x87 or 0x0B: track = "Wait"; kind = "wait"; dur = Math.Max(1, st.WaitFrames); blocking = true; break;
                     case <= 0x07 or >= 0xC0 or 0x51 or >= 0x45 and <= 0x4F when def?.Category is "Flow" or "Story flags":
                         track = "Logic"; kind = "logic"; break;
