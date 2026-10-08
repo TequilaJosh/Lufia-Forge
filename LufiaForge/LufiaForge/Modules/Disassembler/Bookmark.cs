@@ -17,6 +17,10 @@ public sealed class Bookmark
     /// <summary>Gutter color for this bookmark (serialized as ARGB hex string).</summary>
     public string ColorHex { get; set; } = "#C8942A"; // default: gold
 
+    /// <summary>Bytes of data starting at this address (0 = an ordinary label). Data regions show as .db lines and are
+    /// skipped by the cross-reference builder.</summary>
+    public int DataLength { get; set; }
+
     /// <summary>Formatted SNES address for display.</summary>
     public string SnesAddressHex => $"${SnesAddress:X6}";
 

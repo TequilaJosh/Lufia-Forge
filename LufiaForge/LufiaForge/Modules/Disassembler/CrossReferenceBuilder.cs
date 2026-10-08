@@ -15,6 +15,9 @@ public sealed class CrossReferenceBuilder
     /// <summary>Target → callers.  Populated after <see cref="Build"/> completes.</summary>
     public Dictionary<int, List<int>> Xref { get; } = new();
 
+    /// <summary>Indirect jumps/calls (JMP (a), JMP (a,X), JML [a], JSR (a,X)) whose target depends on RAM/registers.</summary>
+    public List<int> Unresolved { get; } = new();
+
     /// <summary>
     /// Run the sweep on a background thread.
     /// </summary>
@@ -38,6 +41,7 @@ public sealed class CrossReferenceBuilder
         CancellationToken ct)
     {
         Xref.Clear();
+        Unresolved.Clear();
 
         // Walk ROM byte-by-byte in 32KB (LoROM) bank increments.
         // For each position, attempt to decode one instruction and collect targets.
@@ -61,6 +65,9 @@ public sealed class CrossReferenceBuilder
                 lastPct = pct;
             }
 
+            // skip regions the user marked as data
+            if (bookmarks.DataRegionAtFile(offset) is { } data) { offset = data.End; continue; }
+
             var line = Cpu65816.DecodeInstruction(rom, offset, state);
 
             // Propagate flag changes (REP/SEP)
@@ -71,6 +78,9 @@ public sealed class CrossReferenceBuilder
             int bankStart = (offset / 0x8000) * 0x8000;
             if (offset == bankStart && offset > 0)
                 state = CpuState.Default;
+
+            if (!line.IsData && line.RawBytes.Length > 0 && line.RawBytes[0] is 0x6C or 0x7C or 0xDC or 0xFC)
+                Unresolved.Add(line.SnesAddress);
 
             // Collect cross-reference entries for instructions with a resolved target
             if (!line.IsData && line.JumpTarget.HasValue)

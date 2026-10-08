@@ -29,7 +29,8 @@ public static class LinearDisassembler
         RomBuffer rom,
         int       startOffset,
         int       byteCount,
-        CpuState  initialState)
+        CpuState  initialState,
+        Func<int, (int Start, int End)?>? dataRegion = null)
     {
         var lines = new List<DisassemblyLine>();
         var state = initialState;
@@ -39,7 +40,44 @@ public static class LinearDisassembler
 
         while (offset < end)
         {
+            // marked data: show the bytes, 8 per line, instead of decoding them
+            if (dataRegion?.Invoke(offset) is { } region)
+            {
+                int stop = Math.Min(region.End, end);
+                while (offset < stop)
+                {
+                    int n = Math.Min(8, stop - offset);
+                    var bytes = rom.ReadBytes(offset, n);
+                    lines.Add(new DisassemblyLine
+                    {
+                        FileOffset = offset,
+                        SnesAddress = Core.Lufia1Constants.FileOffsetToSnesAddress(offset),
+                        RawBytes = bytes,
+                        Mnemonic = ".db",
+                        Operand = string.Join(",", bytes.Select(b => $"${b:X2}")),
+                        Comment = "; data",
+                        IsData = true,
+                    });
+                    offset += n;
+                }
+                continue;
+            }
+
             var line = Cpu65816.DecodeInstruction(rom, offset, state);
+
+            // an instruction that would run into marked data: show its bytes up to the data instead
+            int overlap = dataRegion == null ? 0 : Enumerable.Range(1, Math.Max(0, line.RawBytes.Length - 1)).FirstOrDefault(k => dataRegion(offset + k) != null);
+            if (overlap > 0)
+            {
+                var bytes = rom.ReadBytes(offset, overlap);
+                lines.Add(new DisassemblyLine
+                {
+                    FileOffset = offset, SnesAddress = line.SnesAddress, RawBytes = bytes, Mnemonic = ".db",
+                    Operand = string.Join(",", bytes.Select(b => $"${b:X2}")), Comment = "; runs into data", IsData = true,
+                });
+                offset += overlap;
+                continue;
+            }
             lines.Add(line);
 
             // Advance by the size of the decoded instruction (or 1 on data lines)
