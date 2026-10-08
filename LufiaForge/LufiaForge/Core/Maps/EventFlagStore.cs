@@ -21,9 +21,9 @@ public sealed class EventFlag
 /// </summary>
 public sealed class EventFlagStore
 {
-    public const int StoryFlagBase = 0x1296;
+    public const int StoryFlagBase = Lufia1Constants.RamStoryFlags;
     /// <summary>WRAM table of bit masks the engine uses for flag bits (filled at boot).</summary>
-    public const int BitMaskTable = 0x032B;
+    public const int BitMaskTable = Lufia1Constants.RamFlagBitMasks;
 
     private readonly List<EventFlag> _user = new();
     private string? _path;

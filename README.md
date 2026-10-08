@@ -14,7 +14,7 @@ Built in C# WPF (.NET 8). Each phase below has its own checklist file.
 | [3](./phase-03-emulator.md) | Embedded Emulator + Live Memory Viewer | 🔄 Partial: docked BizHawk, live WRAM, watchlist, value search (VRAM/CGRAM views, research notes to do) |
 | [4](./phase-04-disassembler.md) | 65816 Disassembler + Research Tools | ✅ Complete |
 | [5](./phase-05-tile-viewer.md) | Tile & Sprite Viewer | 🔲 Not Started |
-| [6](./phase-06-script-event-editor.md) | Script Editor, Event Editor, Cutscene Sequencer | 🔄 Every event command decoded; Events tab (hints, flags with descriptions) and Cutscenes tab (stage, walks, playback, reordering) |
+| [6](./phase-06-script-event-editor.md) | Script Editor, Event Editor, Cutscene Sequencer | ✅ Complete: every command decoded; Lines / Flow / Bytes views, undo/redo, stage, timeline, live flag tracker |
 | [7](./phase-07-map-maker.md) | Map Viewer, Map Editor, Map Creator | 🔄 Viewer + editor for every map incl. the world map: blocks, exits/arrivals (add, move, link), treasure, map names |
 | [8](./phase-08-character-editor.md) | Character Editor, Sprite Swapper | 🔲 Not Started |
 | [9](./phase-09-patch-manager.md) | IPS Patch Manager UI | 🔲 Not Started |
