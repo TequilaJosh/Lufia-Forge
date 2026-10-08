@@ -33,6 +33,14 @@
                 <CheckBox Content="Exits" IsChecked="{Binding ShowExits}" Style="{StaticResource GdCheck}"/>
                 <CheckBox Content="Arrival points" IsChecked="{Binding ShowArrivals}" Style="{StaticResource GdCheck}"/>
                 <CheckBox Content="Treasure" IsChecked="{Binding ShowItems}" Style="{StaticResource GdCheck}"/>
+                <StackPanel Orientation="Horizontal" Visibility="{Binding IsWorldMap, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <CheckBox Content="Battle zones" IsChecked="{Binding ShowZones}" Style="{StaticResource GdCheck}"
+                              ToolTip="The world map's random-battle zones (4x4 blocks each). While on, clicking paints the group below; Ctrl + click picks a zone's group."/>
+                    <TextBox Style="{StaticResource GdNumber}" Width="34" Text="{Binding ZoneBrushText, UpdateSourceTrigger=PropertyChanged}" Margin="2,0,4,0"
+                             ToolTip="Battle group to paint (hex, see Game Data > Encounters; 00 = no battles)"/>
+                    <Button Content="Write zones" Style="{StaticResource LufiaButton}" Command="{Binding WriteZonesCommand}" Margin="0,0,8,0"
+                            IsEnabled="{Binding ZonesDirty}"/>
+                </StackPanel>
                 <Button Content="Zoom out" Style="{StaticResource LufiaButton}" Command="{Binding ZoomOutCommand}" Margin="8,0,4,0"/>
                 <Button Content="Zoom in" Style="{StaticResource LufiaButton}" Command="{Binding ZoomInCommand}" Margin="0,0,12,0" ToolTip="Or Ctrl + mouse wheel on the map; hold the middle mouse button to drag the map"/>
                 <Button Content="↶ Undo paint" Style="{StaticResource LufiaButton}" Command="{Binding UndoCommand}" Margin="0,0,8,0"/>
@@ -76,6 +84,9 @@
                     <ScaleTransform ScaleX="{Binding Zoom}" ScaleY="{Binding Zoom}"/>
                 </Grid.LayoutTransform>
                 <Image Source="{Binding MapImage}" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                <Image Source="{Binding ZoneImage}" Stretch="Fill" Width="{Binding ZoneImageWidth}" Height="{Binding ZoneImageHeight}"
+                       HorizontalAlignment="Left" VerticalAlignment="Top" RenderOptions.BitmapScalingMode="NearestNeighbor" IsHitTestVisible="False"
+                       Visibility="{Binding ShowZones, Converter={StaticResource BoolToVisibilityConverter}}"/>
                 <ItemsControl ItemsSource="{Binding Overlays}" IsHitTestVisible="False">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate><Canvas/></ItemsPanelTemplate>

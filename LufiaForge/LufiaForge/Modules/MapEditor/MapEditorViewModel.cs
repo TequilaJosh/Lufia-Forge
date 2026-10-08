@@ -138,6 +138,87 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
     [ObservableProperty] private bool _showExits = true;
     [ObservableProperty] private bool _showArrivals = true;
     [ObservableProperty] private bool _showItems = true;
+
+    // ── world map encounter zones (resource B0: one battle group per 4x4 blocks) ──
+    /// <summary>Show (and paint) the world map's encounter zones.</summary>
+    [ObservableProperty] private bool _showZones;
+    /// <summary>The battle group zone painting puts down (hex text).</summary>
+    [ObservableProperty] private string _zoneBrushText = "01";
+    [ObservableProperty] private WriteableBitmap? _zoneImage;
+    [ObservableProperty] private bool _zonesDirty;
+    public bool IsWorldMap => _map?.IsWorld == true;
+    public double ZoneImageWidth => (_map?.Width ?? 0) * 16;
+    public double ZoneImageHeight => (_map?.Height ?? 0) * 16;
+    private byte[] _zones = Array.Empty<byte>();
+    private const int ZoneCell = 4;   // blocks per zone cell
+
+    private void LoadZones()
+    {
+        OnPropertyChanged(nameof(IsWorldMap)); OnPropertyChanged(nameof(ZoneImageWidth)); OnPropertyChanged(nameof(ZoneImageHeight));
+        ZonesDirty = false;
+        if (_rom == null || _map?.IsWorld != true) { ZoneImage = null; _zones = Array.Empty<byte>(); return; }
+        try { _zones = Core.Battle.Encounters.ReadZones(_rom); } catch { _zones = Array.Empty<byte>(); }
+        DrawZones();
+    }
+
+    private static uint ZoneColour(int g)
+    {
+        if (g == 0) return 0;
+        double h = (g * 47 % 360) / 60.0; double x = 1 - Math.Abs(h % 2 - 1);
+        (double r, double gg, double b) = h switch
+        {
+            < 1 => (1.0, x, 0.0), < 2 => (x, 1.0, 0.0), < 3 => (0.0, 1.0, x),
+            < 4 => (0.0, x, 1.0), < 5 => (x, 0.0, 1.0), _ => (1.0, 0.0, x),
+        };
+        return 0x70000000u | (uint)(r * 255) << 16 | (uint)(gg * 255) << 8 | (uint)(b * 255);
+    }
+
+    private void DrawZones()
+    {
+        int w = Core.Battle.Encounters.ZoneWidth, h = Core.Battle.Encounters.ZoneHeight;
+        if (_zones.Length < w * h) { ZoneImage = null; return; }
+        var px = new uint[w * h];
+        for (int i = 0; i < px.Length; i++) px[i] = ZoneColour(_zones[i]);
+        var bmp = new WriteableBitmap(w, h, 96, 96, PixelFormats.Bgra32, null);
+        bmp.WritePixels(new Int32Rect(0, 0, w, h), px, w * 4, 0);
+        ZoneImage = bmp;
+    }
+
+    private int ZoneAt(int x, int y)
+    {
+        int cx = x / ZoneCell, cy = y / ZoneCell, w = Core.Battle.Encounters.ZoneWidth;
+        return cx < w && cy * w + cx < _zones.Length ? cy * w + cx : -1;
+    }
+
+    /// <summary>Paints the zone under the block with the brush group; true when it handled the click.</summary>
+    private bool PaintZone(int x, int y)
+    {
+        if (!ShowZones || !IsWorldMap) return false;
+        int i = ZoneAt(x, y);
+        if (i < 0) return true;
+        if (!int.TryParse(ZoneBrushText, System.Globalization.NumberStyles.HexNumber, null, out int g) || g < 0 || g > 255)
+        { Status = "Zone brush: a battle group number in hex (00 = no battles)."; return true; }
+        if (_zones[i] != g) { _zones[i] = (byte)g; ZonesDirty = true; DrawZones(); }
+        return true;
+    }
+
+    [RelayCommand]
+    private void WriteZones()
+    {
+        if (_rom == null || !IsWorldMap || _zones.Length == 0) return;
+        try
+        {
+            bool allow = _rom.Length >= MapWriter.ExpandedSize;
+            var size = LufiaCompression.Compress(_zones).Length;
+            LufiaCompression.Decompress(_rom, LufiaCompression.ResourceOffset(_rom, Core.Battle.Encounters.ZoneResource), out int slot);
+            if (size > slot && !allow && !ConfirmExpand("The edited encounter zones don't fit in their original space.")) return;
+            var r = Core.Battle.Encounters.WriteZones(_rom, _zones, allowExpand: true);
+            ZonesDirty = false;
+            _mainVm?.NotifyRomModified("World map encounter zones");
+            Status = r.Moved ? $"Encounter zones written at 0x{r.FileOffset:X6} (moved; {r.CompressedSize} bytes)." : $"Encounter zones written in place ({r.CompressedSize} of {r.SlotSize} bytes).";
+        }
+        catch (Exception ex) { Status = "Couldn't write the zones: " + ex.Message; }
+    }
     /// <summary>Text for the floating tooltip over the map (what's under the mouse).</summary>
     [ObservableProperty] private string _hoverTip = "";
     [ObservableProperty] private MapTool _tool = MapTool.Select;
@@ -258,6 +339,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
             var bmp = new WriteableBitmap(w, h, 96, 96, PixelFormats.Bgra32, null);
             bmp.WritePixels(new Int32Rect(0, 0, w, h), _pixels, w * 4, 0);
             MapImage = bmp;
+            LoadZones();
             BuildPalette();
             Brush = 0;
             IsMapLoaded = true;
@@ -464,7 +546,9 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
         int x = (int)(px / 16), y = (int)(py / 16);
         if (x < 0 || y < 0 || x >= _map.Width || y >= _map.Height) { HoverText = ""; HoverTip = ""; return; }
         int mt = _map.GetTile(x, y) & 0x3FF;
-        HoverText = $"Block ({x}, {y})   metatile {mt:X3}   attribute {_tileset.Attribute(mt):X2}{CompositeText(mt)}";
+        HoverText = $"Block ({x}, {y})   metatile {mt:X3}   attribute {_tileset.Attribute(mt):X2}{CompositeText(mt)}" +
+                    (ShowZones && IsWorldMap && ZoneAt(x, y) is >= 0 and var zi ? $"   battle group {_zones[zi]:X2}" : "");
+        if (leftDown && PaintZone(x, y)) return;
         HoverTip = leftDown ? "" : DescribeAt(x, y);
 
         if (!leftDown) return;
@@ -517,6 +601,11 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
         if (_map == null) return;
         int x = (int)(px / 16), y = (int)(py / 16);
         if (x < 0 || y < 0 || x >= _map.Width || y >= _map.Height) return;
+        if (ShowZones && IsWorldMap)
+        {
+            if (ctrl && ZoneAt(x, y) is >= 0 and var zi) { ZoneBrushText = _zones[zi].ToString("X2"); Status = $"Zone brush: group {ZoneBrushText}."; return; }
+            if (PaintZone(x, y)) return;
+        }
         if (ctrl)
         {
             _picking = true;   // eyedropper: no painting until the button is released
