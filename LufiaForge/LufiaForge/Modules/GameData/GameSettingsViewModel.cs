@@ -14,6 +14,21 @@ public partial class GameSettingsViewModel : GameDataEditorBase
     [ObservableProperty] private int    _maxLevelActual;
     [ObservableProperty] private string _internalTitle = "";
     [ObservableProperty] private string _regionText = "";
+    [ObservableProperty] private int    _encounterRate;
+    [ObservableProperty] private int    _safeSteps;
+    [ObservableProperty] private string _encounterText = "";
+
+    partial void OnEncounterRateChanged(int value) => UpdateEncounterText();
+    partial void OnSafeStepsChanged(int value) => UpdateEncounterText();
+
+    private void UpdateEncounterText()
+    {
+        // chance per step = random(128) < 128 x rate / 128 = rate; halved away from the world map
+        if (EncounterRate <= 0) { EncounterText = "No random battles."; return; }
+        double world = 128.0 / Math.Min(128, EncounterRate), other = 128.0 / Math.Min(128, EncounterRate / 2.0);
+        EncounterText = $"About 1 battle every {world:0.#} steps on the world map and every {other:0.#} in dungeons, " +
+                        $"never in the first {SafeSteps} steps after one. Game default: rate 10, 4 safe steps.";
+    }
 
     protected override void OnRomLoaded() => LoadSelected();
 
@@ -27,6 +42,8 @@ public partial class GameSettingsViewModel : GameDataEditorBase
         SwampDamage       = rom.ReadUInt16Le(GameDataOffsets.SwampDamage);
         MaxLevelDisplayed = rom.ReadByte(GameDataOffsets.MaxLevelDisplay);
         MaxLevelActual    = rom.ReadByte(GameDataOffsets.MaxLevelActual);
+        EncounterRate     = rom.ReadByte(LufiaForge.Core.Battle.Encounters.RateOffset);
+        SafeSteps         = rom.ReadByte(LufiaForge.Core.Battle.Encounters.SafeStepsOffset);
         InternalTitle     = rom.ReadAscii(GameDataOffsets.InternalTitle, GameDataOffsets.InternalTitleLen).TrimEnd();
         RegionText = rom.ReadByte(GameDataOffsets.RegionByte) switch
         {
@@ -52,6 +69,8 @@ public partial class GameSettingsViewModel : GameDataEditorBase
             rom.WriteUInt16Le(GameDataOffsets.SwampDamage, (ushort)Clamp(SwampDamage, 0, 999));
             rom.WriteByte(GameDataOffsets.MaxLevelDisplay, (byte)Clamp(MaxLevelDisplayed, 1, 255));
             rom.WriteByte(GameDataOffsets.MaxLevelActual,  (byte)Clamp(MaxLevelActual,    1, 255));
+            rom.WriteByte(LufiaForge.Core.Battle.Encounters.RateOffset, (byte)Clamp(EncounterRate, 0, 255));
+            rom.WriteByte(LufiaForge.Core.Battle.Encounters.SafeStepsOffset, (byte)Clamp(SafeSteps, 0, 255));
 
             // The title is 21 bytes; the next header byte (0x7FD5) is the map mode and must not be touched.
             var title = new byte[GameDataOffsets.InternalTitleLen];

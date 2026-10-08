@@ -23,7 +23,7 @@ public sealed class ExpansionSpace
     private const int MaxEntries = (TableSize - 8) / EntrySize;
     private static readonly byte[] Magic = "LFAL"u8.ToArray();
 
-    public enum Kind : byte { Unknown = 0, MapData = 1, ScriptBlock = 2 }
+    public enum Kind : byte { Unknown = 0, MapData = 1, ScriptBlock = 2, Resource = 3 }
 
     public sealed record Entry(int Start, int Length, Kind Kind, int Id)
     {
