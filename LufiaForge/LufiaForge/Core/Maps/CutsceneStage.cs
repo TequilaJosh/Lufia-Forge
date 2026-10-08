@@ -17,7 +17,7 @@ public sealed class StageActor
 }
 
 /// <summary>A walk drawn on the stage for one line (tiles in order).</summary>
-public sealed record StageWalk(int Actor, IReadOnlyList<(int X, int Y)> Points, int PathNumber, bool Waits, int Speed);
+public sealed record StageWalk(int Actor, IReadOnlyList<(int X, int Y)> Points, int PathNumber, bool Waits, int Speed, bool CameraFollows = false);
 
 /// <summary>Where everything is after one line of an event.</summary>
 public sealed class StageState
@@ -106,7 +106,8 @@ public static class CutsceneStage
     {
         var st = new StageState { CameraX = startX, CameraY = startY };
         foreach (var n in map.Npcs.Where(n => !n.IsUnused))
-            st.Actors[7 + n.Index] = new StageActor { Id = 7 + n.Index, Name = $"Character {n.Index}", Sprite = n.Sprite, X = n.X, Y = n.Y };
+            // command "character k" = actor 7 + k = the map's record k - 1
+            st.Actors[8 + n.Index] = new StageActor { Id = 8 + n.Index, Name = $"Character {n.Index + 1}", Sprite = n.Sprite, X = n.X, Y = n.Y };
         for (int i = 0; i < party.Characters.Length; i++)
         {
             int c = party.Characters[i];
@@ -117,6 +118,53 @@ public static class CutsceneStage
         }
 
         return st;
+    }
+
+    /// <summary>
+    /// Walks the cutscene doesn't wait for keep going while later lines run (the intro's camera pans this way):
+    /// place the walking character (and the camera, when it follows) where it is at the end of each later line,
+    /// using the line times from the timeline. A later command that moves the same character ends the walk.
+    /// </summary>
+    public static void ApplyTime(IReadOnlyList<StageState> states, IReadOnlyList<TimelineItem> timeline)
+    {
+        var at = timeline.ToDictionary(t => t.Line);
+        int EndOf(int line) => at.TryGetValue(line, out var t) ? t.Start + (t.Blocking ? t.Duration : 0) : 0;
+        for (int w = 0; w < states.Count; w++)
+        {
+            foreach (var walk in states[w].Walks.Where(x => !x.Waits))
+            {
+                int fpt = FramesPerTile(walk.Speed);
+                int start = at.TryGetValue(w, out var tw) ? tw.Start : 0;
+                int tiles = 0;
+                for (int k = 1; k < walk.Points.Count; k++) tiles += Math.Abs(walk.Points[k].X - walk.Points[k - 1].X) + Math.Abs(walk.Points[k].Y - walk.Points[k - 1].Y);
+                for (int j = w; j < states.Count; j++)
+                {
+                    if (j > w && states[j].Walks.Any(x => x.Actor == walk.Actor)) break;   // a new walk takes over
+                    int elapsed = Math.Max(0, EndOf(j) - start);
+                    if (elapsed >= tiles * fpt) break;                                     // finished: the line's final position stands
+                    var (x, y) = PointAlong(walk.Points, elapsed / (double)fpt);
+                    if (states[j].Actors.TryGetValue(walk.Actor, out var a)) { a.X = x; a.Y = y; }
+                    if (walk.CameraFollows) { states[j].CameraX = x; states[j].CameraY = y; states[j].CameraFixed = true; }
+                }
+            }
+        }
+    }
+
+    /// <summary>The tile reached after walking <paramref name="tiles"/> tiles along a path.</summary>
+    public static (int X, int Y) PointAlong(IReadOnlyList<(int X, int Y)> pts, double tiles)
+    {
+        double done = 0;
+        for (int i = 1; i < pts.Count; i++)
+        {
+            double len = Math.Abs(pts[i].X - pts[i - 1].X) + Math.Abs(pts[i].Y - pts[i - 1].Y);
+            if (tiles < done + len)
+            {
+                double f = len == 0 ? 1 : (tiles - done) / len;
+                return ((int)Math.Round(pts[i - 1].X + (pts[i].X - pts[i - 1].X) * f), (int)Math.Round(pts[i - 1].Y + (pts[i].Y - pts[i - 1].Y) * f));
+            }
+            done += len;
+        }
+        return pts[^1];
     }
 
     /// <summary>Where the party most likely stands when the event starts (next to the character it belongs to).</summary>
@@ -190,7 +238,7 @@ public static class CutsceneStage
                     a.Facing = s.Facing is >= 1 and <= 4 ? s.Facing - 1 : s.Facing == 5 ? a.Facing : s.Direction;
                 }
                 if (path.CameraFollows) { st.CameraX = a.X; st.CameraY = a.Y; st.CameraFixed = true; }
-                st.Walks.Add(new StageWalk(id, walk, n, !path.NoWait, path.Steps.Count > 0 ? path.Steps[0].Speed : 4));
+                st.Walks.Add(new StageWalk(id, walk, n, !path.NoWait, path.Steps.Count > 0 ? path.Steps[0].Speed : 4, path.CameraFollows));
                 break;
             }
             case 0x3C:

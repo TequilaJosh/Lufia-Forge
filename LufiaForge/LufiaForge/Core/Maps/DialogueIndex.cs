@@ -56,12 +56,13 @@ public static class DialogueIndex
                         var o = s.Ops[i];
                         if (o.IsText && o.Text.Trim().Length > 0)
                         {
-                            // "Actor N says": actor slots 7+ are the map's characters (slot n+7 = character n)
+                            // "Actor N says": actor 7 + k is "character k", the map's record k - 1
                             string speaker = EventScript.SpeakerName(o.Bytes);
                             int lineSprite = sprite;
                             int op = o.Bytes[0];
                             int actor = op is >= 0x88 and <= 0x8F ? op - 0x88 : op is >= 0x90 and <= 0xAF ? op - 0x90 + 8 : -1;
-                            if (actor >= 7 && npcs.TryGetValue(actor - 7, out int ns)) { speaker = $"Character {actor - 7} says"; lineSprite = ns; }
+                            if (actor >= 8 && npcs.TryGetValue(actor - 8, out int ns)) { speaker = $"Character {actor - 7} says"; lineSprite = ns; }
+                            else if (actor >= 7) { speaker = $"Character {actor - 7} says"; }
                             else if (actor is >= 0 and < 7) { speaker = $"Party actor {actor} says"; lineSprite = -1; }
                             lines.Add(new DialogueLine
                             {

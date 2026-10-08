@@ -116,7 +116,7 @@ public partial class EventsViewModel : ObservableObject, IEventHost
         try
         {
             var map = LufiaMap.Load(_rom, mapId);
-            foreach (var n in map.Npcs.Where(n => !n.IsUnused)) { Add(n.Index, $"Character {n.Index} (talk)"); npcSprites[n.Index] = n.Sprite; }
+            foreach (var n in map.Npcs.Where(n => !n.IsUnused)) { Add(n.Index, $"Character {n.Index + 1} (talk)"); npcSprites[n.Index] = n.Sprite; }
         }
         catch { /* map without objects */ }
         foreach (var (area, ev, cond, _) in MapSetupScript.ReadTriggers(_rom, mapId))

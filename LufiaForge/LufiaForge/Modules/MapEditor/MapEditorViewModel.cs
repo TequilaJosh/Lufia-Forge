@@ -505,7 +505,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
             }
         if (ShowNpcs)
             foreach (var n in _map.Npcs.Where(n => !n.IsUnused && n.X == x && n.Y == y))
-                lines.Add($"Character {n.Index} (talking runs event {n.Index})");
+                lines.Add($"Character {n.Index + 1} (talking runs event {n.Index})");
         return string.Join("\n", lines);
     }
 
@@ -621,10 +621,10 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
         var script = EventScript.Load(_rom, _map.MapId, sel.index);
         if (script == null || script.Ops.Count == 0 || (script.Ops.Count == 1 && script.Ops[0].Bytes is [0x00]))
         {
-            Status = $"Character {sel.index} has no event script.";
+            Status = $"Character {sel.index + 1} has no event script (talking runs event {sel.index}).";
             return;
         }
-        EventEditorRequested?.Invoke(script, $"Map {_map.MapId:X2} - character {sel.index} (event {sel.index})");
+        EventEditorRequested?.Invoke(script, $"Map {_map.MapId:X2} - character {sel.index + 1} (talking runs event {sel.index})");
     }
 
     /// <summary>
@@ -752,7 +752,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
         NpcX = n.X; NpcY = n.Y;
         _populating = false;
         int script = LufiaMap.EventScriptOffset(_rom, _map.MapId, n.Index);
-        SelectionTitle = $"Character {n.Index}";
+        SelectionTitle = $"Character {n.Index + 1}";
         SelectionDetails =
             $"Sprite {n.Sprite:X2}   flags {n.Flags:X2}\n" +
             $"Position ({n.X}, {n.Y})   walking area ({n.BoxX1},{n.BoxY1})-({n.BoxX2},{n.BoxY2})\n" +

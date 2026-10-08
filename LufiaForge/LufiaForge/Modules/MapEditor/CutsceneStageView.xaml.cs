@@ -128,7 +128,7 @@ public partial class CutsceneStageView : UserControl
         if (_map == null || _panel == null) return;
         _initial = CutsceneStage.Initial(_map, Party, _startX, _startY);
         _states = CutsceneStage.Simulate(_map, _panel.Script, Party, _startX, _startY);
-        try { _timeline = CutsceneTimeline.Build(_panel.Script, _states); } catch { _timeline = new(); }
+        try { _timeline = CutsceneTimeline.Build(_panel.Script, _states); CutsceneStage.ApplyTime(_states, _timeline); } catch { _timeline = new(); }
         bool first = _line < 0;
         ShowLine(_line < 0 ? 0 : Math.Min(_line, _states.Count - 1), scroll: first);
         Resimulated?.Invoke();
@@ -216,7 +216,7 @@ public partial class CutsceneStageView : UserControl
         // lower on screen in front; on a shared tile the leader is drawn last (in front of its followers)
         foreach (var a in st.Actors.Values.OrderBy(a => a.Y).ThenByDescending(a => a.Id))
         {
-            if (!a.Visible && moving?.ContainsKey(a.Id) != true) continue;
+            if (!a.Visible) continue;   // hidden characters stay hidden while they walk (the intro's camera actor)
             var pos = moving != null && moving.TryGetValue(a.Id, out var p) ? p : new Point(a.X * 16, a.Y * 16);
             var img = Sprite(a.Sprite);
             double w = img?.PixelWidth ?? 16, h = img?.PixelHeight ?? 24;
@@ -690,7 +690,7 @@ public partial class CutsceneStageView : UserControl
 
     private readonly DispatcherTimer _timer;
     private int _playLine, _lineFrames, _frame;
-    private readonly List<(int Actor, List<Point> Pts, int FramesPerTile, int Start)> _anims = new();
+    private readonly List<(int Actor, List<Point> Pts, int FramesPerTile, int Start, bool CameraFollows)> _anims = new();
     private Point? _camFrom, _camTo;
     private int _camStart, _camFrames;
 
@@ -760,7 +760,7 @@ public partial class CutsceneStageView : UserControl
             var pts = w.Points.Select(p => new Point(p.X * 16, p.Y * 16)).ToList();
             int fpt = CutsceneStage.FramesPerTile(w.Speed);
             _anims.RemoveAll(a => a.Actor == w.Actor);
-            _anims.Add((w.Actor, pts, fpt, _frame));
+            _anims.Add((w.Actor, pts, fpt, _frame, w.CameraFollows));
             int tiles = 0;
             for (int i = 1; i < w.Points.Count; i++) tiles += Math.Abs(w.Points[i].X - w.Points[i - 1].X) + Math.Abs(w.Points[i].Y - w.Points[i - 1].Y);
             if (w.Waits) blocking = Math.Max(blocking, tiles * fpt);
@@ -789,7 +789,7 @@ public partial class CutsceneStageView : UserControl
         }
         var st = _states[_playLine];
         var moving = new Dictionary<int, Point>();
-        foreach (var (actor, pts, fpt, start) in _anims.ToList())
+        foreach (var (actor, pts, fpt, start, _) in _anims.ToList())
         {
             double t = (_frame - start) / (double)fpt;   // tiles walked so far
             double done = 0;
@@ -810,7 +810,10 @@ public partial class CutsceneStageView : UserControl
             if (finished) _anims.RemoveAll(a => a.Actor == actor && a.Start == start);
             else moving[actor] = pos;
         }
-        if (_camFrom is { } cf && _camTo is { } ct)
+        // a walk the camera follows moves it (the intro's pan); otherwise camera commands ease it along
+        var follow = _anims.FirstOrDefault(a => a.CameraFollows && moving.ContainsKey(a.Actor));
+        if (follow.Pts != null) moving[-1] = moving[follow.Actor];
+        else if (_camFrom is { } cf && _camTo is { } ct)
         {
             double f = Math.Min(1, (_frame - _camStart) / (double)_camFrames);
             moving[-1] = new Point(cf.X + (ct.X - cf.X) * f, cf.Y + (ct.Y - cf.Y) * f);
