@@ -365,6 +365,7 @@ public partial class EventEditorPanel : UserControl
 
     private void Fill()
     {
+        ResetUndo();
         _lines.Clear();
         for (int i = 0; i < Script.Ops.Count; i++) _lines.Add(new EventLineVm(this, Script.Ops[i], i));
         int texts = Script.Ops.Count(o => o.IsText);
@@ -534,10 +535,101 @@ public partial class EventEditorPanel : UserControl
         _lines[index].SetBytes(bytes);
     }
 
+    // ── undo / redo ──
+    private const int UndoLimit = 50;
+    private readonly LinkedList<ScriptSnapshot> _undo = new();
+    private readonly Stack<ScriptSnapshot> _redo = new();
+    private ScriptSnapshot? _baseline;
+    private DateTime _lastTextEdit;
+    private bool _restoring;
+
+    private void ResetUndo()
+    {
+        _undo.Clear(); _redo.Clear();
+        _baseline = Script?.TakeSnapshot();
+        UpdateUndoButtons();
+    }
+
+    /// <summary>Remember the state before this edit (typing in one box within 2 s counts as one step).</summary>
+    private void RecordUndo(bool textEdit)
+    {
+        if (_restoring || Script == null) return;
+        var now = Script.TakeSnapshot();
+        if (_baseline != null && !now.SameAs(_baseline))
+        {
+            bool merge = textEdit && (DateTime.Now - _lastTextEdit).TotalSeconds < 2 && _undo.Count > 0;
+            if (!merge)
+            {
+                _undo.AddLast(_baseline);
+                if (_undo.Count > UndoLimit) _undo.RemoveFirst();
+            }
+            _redo.Clear();
+        }
+        _lastTextEdit = textEdit ? DateTime.Now : DateTime.MinValue;
+        _baseline = now;
+        UpdateUndoButtons();
+    }
+
+    private void UpdateUndoButtons()
+    {
+        UndoButton.IsEnabled = _undo.Count > 0;
+        RedoButton.IsEnabled = _redo.Count > 0;
+        UndoButton.ToolTip = $"Undo ({_undo.Count} step{(_undo.Count == 1 ? "" : "s")}) — Ctrl+Z";
+        RedoButton.ToolTip = $"Redo ({_redo.Count}) — Ctrl+Y";
+    }
+
+    public void Undo()
+    {
+        if (_undo.Count == 0 || Script == null) return;
+        _redo.Push(Script.TakeSnapshot());
+        var s = _undo.Last!.Value; _undo.RemoveLast();
+        RestoreSnapshot(s);
+    }
+
+    public void Redo()
+    {
+        if (_redo.Count == 0 || Script == null) return;
+        _undo.AddLast(Script.TakeSnapshot());
+        RestoreSnapshot(_redo.Pop());
+    }
+
+    private void RestoreSnapshot(ScriptSnapshot s)
+    {
+        _restoring = true;
+        try
+        {
+            int keep = _selectedLine;
+            Script.Restore(s);
+            _lines.Clear();
+            for (int i = 0; i < Script.Ops.Count; i++) _lines.Add(new EventLineVm(this, Script.Ops[i], i));
+            Changed();
+            _baseline = Script.TakeSnapshot();
+            if (keep >= 0 && _lines.Count > 0) SelectLine(Math.Min(keep, _lines.Count - 1));
+        }
+        finally { _restoring = false; }
+        UpdateUndoButtons();
+    }
+
+    private void Undo_Click(object sender, RoutedEventArgs e) => Undo();
+    private void Redo_Click(object sender, RoutedEventArgs e) => Redo();
+
+    protected override void OnPreviewKeyDown(System.Windows.Input.KeyEventArgs e)
+    {
+        // inside a text box its own undo applies
+        if (System.Windows.Input.Keyboard.FocusedElement is not System.Windows.Controls.TextBox && (System.Windows.Input.Keyboard.Modifiers & System.Windows.Input.ModifierKeys.Control) != 0)
+        {
+            bool shift = (System.Windows.Input.Keyboard.Modifiers & System.Windows.Input.ModifierKeys.Shift) != 0;
+            if (e.Key == System.Windows.Input.Key.Z && !shift) { Undo(); e.Handled = true; }
+            else if (e.Key == System.Windows.Input.Key.Y || (e.Key == System.Windows.Input.Key.Z && shift)) { Redo(); e.Handled = true; }
+        }
+        base.OnPreviewKeyDown(e);
+    }
+
     /// <summary>Called after any edit: renumber lines and refresh descriptions / jump pickers.</summary>
     public void Changed(bool rebuild = true)
     {
         if (_refreshing) return;
+        RecordUndo(textEdit: !rebuild);
         _refreshing = true;
         try
         {

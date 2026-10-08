@@ -55,8 +55,44 @@ public sealed class ScriptOp
 /// working), the rewritten event is appended to the copy, and the map's script table entry
 /// (0x18200 + map*5) points at the copy.
 /// </summary>
+/// <summary>The editable state of every line of a script at one moment (for undo/redo).</summary>
+public sealed class ScriptSnapshot
+{
+    internal List<(ScriptOp Op, byte[] Bytes, string Text, (ScriptOp? Op, int Absolute)[] Targets)> Items { get; } = new();
+
+    /// <summary>Same lines, order, bytes, text and jump targets.</summary>
+    public bool SameAs(ScriptSnapshot other) =>
+        Items.Count == other.Items.Count && Items.Zip(other.Items).All(p =>
+            ReferenceEquals(p.First.Op, p.Second.Op) && p.First.Bytes.AsSpan().SequenceEqual(p.Second.Bytes) && p.First.Text == p.Second.Text &&
+            p.First.Targets.Length == p.Second.Targets.Length &&
+            p.First.Targets.Zip(p.Second.Targets).All(t => ReferenceEquals(t.First.Op, t.Second.Op) && t.First.Absolute == t.Second.Absolute));
+}
+
 public sealed class EventScript
 {
+    /// <summary>Record the editable state of every line.</summary>
+    public ScriptSnapshot TakeSnapshot()
+    {
+        var s = new ScriptSnapshot();
+        foreach (var o in Ops)
+            s.Items.Add((o, (byte[])o.Bytes.Clone(), o.Text, o.Targets.Select(t => (t.Op, t.Absolute)).ToArray()));
+        return s;
+    }
+
+    /// <summary>Put every line back the way a snapshot recorded it (lines added since are dropped, removed ones come back).</summary>
+    public void Restore(ScriptSnapshot s)
+    {
+        Ops.Clear();
+        foreach (var (op, bytes, text, targets) in s.Items)
+        {
+            op.Bytes = (byte[])bytes.Clone();
+            op.Text = text;
+            op.Targets.Clear();
+            foreach (var (t, abs) in targets) op.Targets.Add(new JumpRef { Op = t, Absolute = abs });
+            Ops.Add(op);
+        }
+    }
+
     public int MapId { get; }
     public int Event { get; }
     public int BlockBase { get; }
