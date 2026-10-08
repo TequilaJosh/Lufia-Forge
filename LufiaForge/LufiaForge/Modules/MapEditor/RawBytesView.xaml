@@ -1,0 +1,55 @@
+<UserControl x:Class="LufiaForge.Modules.MapEditor.RawBytesView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
+    </UserControl.Resources>
+    <DockPanel>
+        <Border DockPanel.Dock="Top" Padding="6,4" Margin="0,0,0,4" BorderThickness="0,0,0,1" BorderBrush="{StaticResource BorderPurpleBrush}">
+            <StackPanel>
+                <TextBlock x:Name="SizeText" Foreground="{StaticResource GoldLightBrush}" FontWeight="SemiBold"/>
+                <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap"
+                           Text="Bytes as they will be written (jumps already recalculated). Gold = command, white = text, light gold = text codes, cyan underlined = jump target, orange = unknown command. Edit a command's hex and press Enter: several commands split the line, empty deletes it, a new jump value moves the jump to the line at that offset. Dialogue is edited in Lines."/>
+            </StackPanel>
+        </Border>
+        <ListBox x:Name="Rows" Background="Transparent" BorderThickness="0" HorizontalContentAlignment="Stretch"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True"
+                 SelectionChanged="Rows_SelectionChanged">
+            <ListBox.ItemContainerStyle>
+                <Style TargetType="ListBoxItem">
+                    <Setter Property="Padding" Value="2,1"/>
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="ListBoxItem">
+                                <Border x:Name="Bd" Background="Transparent" BorderThickness="0,0,0,1" BorderBrush="#22FFFFFF" Padding="{TemplateBinding Padding}">
+                                    <ContentPresenter/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsSelected" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#33FFD700"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </ListBox.ItemContainerStyle>
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="34"/>
+                            <ColumnDefinition Width="64"/>
+                            <ColumnDefinition Width="2*"/>
+                            <ColumnDefinition Width="3*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{Binding LineText}" FontFamily="Consolas" Foreground="{StaticResource TextDisabledBrush}"/>
+                        <TextBlock Grid.Column="1" Text="{Binding OffsetText}" FontFamily="Consolas" Foreground="{StaticResource TextSecondaryBrush}"/>
+                        <ContentControl Grid.Column="2" Content="{Binding HexView}" Margin="0,0,8,0"/>
+                        <TextBlock Grid.Column="3" Text="{Binding Decoded}" Foreground="{StaticResource TextPrimaryBrush}" TextWrapping="Wrap"/>
+                    </Grid>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+    </DockPanel>
+</UserControl>

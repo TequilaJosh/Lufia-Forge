@@ -366,6 +366,7 @@ public partial class EventEditorPanel : UserControl
     private void Fill()
     {
         ResetUndo();
+        if (BytesCard.Visibility == Visibility.Visible) Dispatcher.BeginInvoke(() => Bytes.Bind(this));
         _lines.Clear();
         for (int i = 0; i < Script.Ops.Count; i++) _lines.Add(new EventLineVm(this, Script.Ops[i], i));
         int texts = Script.Ops.Count(o => o.IsText);
@@ -510,13 +511,34 @@ public partial class EventEditorPanel : UserControl
     }
 
     /// <summary>Select a line: outline it and show the stage at that point.</summary>
-    public void SelectLine(int index)
+    public void SelectLine(int index) => SelectLine(index, fromBytes: false);
+
+    public void SelectLine(int index, bool fromBytes)
     {
         if (index < 0) return;
         _selectedLine = index;
         foreach (var l in _lines) l.IsHighlighted = false;
         if (index < _lines.Count) _lines[index].IsHighlighted = true;
         if (Stage.Visibility == Visibility.Visible) Stage.ShowLine(index);
+        if (!fromBytes && BytesCard.Visibility == Visibility.Visible) Bytes.Select(index);
+    }
+
+    /// <summary>Lines were added/removed/changed outside the Lines view (raw bytes): rebuild the rows and select one.</summary>
+    public void LinesChangedExternally(int select)
+    {
+        _lines.Clear();
+        for (int i = 0; i < Script.Ops.Count; i++) _lines.Add(new EventLineVm(this, Script.Ops[i], i));
+        Changed();
+        if (_lines.Count > 0) SelectLine(Math.Clamp(select, 0, _lines.Count - 1));
+    }
+
+    private void ViewMode_Click(object sender, RoutedEventArgs e)
+    {
+        bool bytes = ViewBytes.IsChecked == true;
+        LinesCard.Visibility = bytes ? Visibility.Collapsed : Visibility.Visible;
+        BytesCard.Visibility = bytes ? Visibility.Visible : Visibility.Collapsed;
+        if (bytes) { Bytes.Bind(this); if (_selectedLine >= 0) Bytes.Select(_selectedLine); }
+        else if (_selectedLine >= 0) HighlightLine(_selectedLine);
     }
 
     /// <summary>Insert a command after line <paramref name="after"/> (-1 = at the start) and select it.</summary>
@@ -639,6 +661,7 @@ public partial class EventEditorPanel : UserControl
                 ? (Script.FitsInPlace() ? "Edited (same size: will be written in place)." : "Edited (size changed: the event will be moved when applied).")
                 : "";
             if (Stage.Visibility == Visibility.Visible) { Stage.Resimulate(); if (_selectedLine >= 0) Stage.ShowLine(_selectedLine, scroll: false); }
+            if (rebuild && BytesCard.Visibility == Visibility.Visible) Bytes.Refresh();
         }
         catch (Exception ex) { StatusText.Text = ex.Message; }
         finally { _refreshing = false; }
