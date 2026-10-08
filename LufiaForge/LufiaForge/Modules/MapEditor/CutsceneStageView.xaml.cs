@@ -55,6 +55,8 @@ public partial class CutsceneStageView : UserControl
     private RomBuffer? _rom;
     private EventEditorPanel? _panel;
     private LufiaMap? _map;
+    /// <summary>Draws the game's screen (both map layers, sprites, narration, fades) for playback and the playhead.</summary>
+    private StageScreen? _screen;
     private int _mapId = -1;
     private List<StageState> _states = new();
     private StageState? _initial;
@@ -96,8 +98,10 @@ public partial class CutsceneStageView : UserControl
             try
             {
                 _map = LufiaMap.Load(rom, _mapId);
-                var tiles = MapTileset.ForMap(rom, _map);
+                // the intro shows its map in another palette than the map's own (set by the intro's setup code)
+                var tiles = MapTileset.ForMap(rom, _map, IntroScene.PaletteFor(rom, _map));
                 var px = tiles.RenderMap(_map);
+                _screen = new StageScreen(tiles, _map, rom);
                 int w = _map.Width * 16, h = _map.Height * 16;
                 var bmp = new WriteableBitmap(w, h, 96, 96, PixelFormats.Bgra32, null);
                 bmp.WritePixels(new Int32Rect(0, 0, w, h), px, w * 4, 0);
@@ -128,7 +132,7 @@ public partial class CutsceneStageView : UserControl
         if (_map == null || _panel == null) return;
         _initial = CutsceneStage.Initial(_map, Party, _startX, _startY);
         _states = CutsceneStage.Simulate(_map, _panel.Script, Party, _startX, _startY);
-        try { _timeline = CutsceneTimeline.Build(_panel.Script, _states); CutsceneStage.ApplyTime(_states, _timeline); } catch { _timeline = new(); }
+        try { _timeline = CutsceneTimeline.Build(_panel.Script, _states); CutsceneStage.ApplyTime(_states, _timeline, _panel.Script); } catch { _timeline = new(); }
         bool first = _line < 0;
         ShowLine(_line < 0 ? 0 : Math.Min(_line, _states.Count - 1), scroll: first);
         Resimulated?.Invoke();
@@ -174,10 +178,19 @@ public partial class CutsceneStageView : UserControl
 
     private void ShowText(StageState st)
     {
-        if (st.Text == null) { TextBox.Visibility = Visibility.Collapsed; return; }
+        // a box that closed by itself stays on screen until it's replaced or cleared (the intro's narration)
+        string? text = st.Text ?? st.ShownText;
+        int speaker = st.Text != null ? st.Speaker : st.ShownSpeaker;
+        if (text == null) { TextBox.Visibility = Visibility.Collapsed; return; }
+        if (st.TextWindow is { } win && speaker < 0)
+        {
+            TextBox.Visibility = Visibility.Collapsed;
+            DrawNarration(text, CutsceneText.Printed(text), win, st.CameraX, st.CameraY);
+            return;
+        }
         TextBox.Visibility = Visibility.Visible;
-        SpeakerText.Text = st.Speaker < 0 ? "" : st.Actors.TryGetValue(st.Speaker, out var a) ? a.Name : EventCommands.Actor(st.Speaker);
-        DialogueText.Text = st.Text;
+        SpeakerText.Text = speaker < 0 ? "" : st.Actors.TryGetValue(speaker, out var a) ? a.Name : EventCommands.Actor(speaker);
+        DialogueText.Text = text;
     }
 
     // ── drawing ─────────────────────────────────────────────────────────────
@@ -202,7 +215,10 @@ public partial class CutsceneStageView : UserControl
     private static readonly Brush SelectedBrush = new SolidColorBrush(Color.FromArgb(255, 255, 80, 80));
 
     /// <param name="moving">Pixel positions of actors in mid-walk (playback), or null.</param>
-    private void Draw(StageState st, Dictionary<int, Point>? moving)
+    /// <param name="darkness">Fade level while playing (0 = full brightness, 1 = black), or -1 to show the line's state.</param>
+    /// <param name="gameScreen">Playback / playhead: the camera's screen is drawn as the game shows it (see
+    /// <see cref="DrawScreen"/>), so characters, darkness and flash aren't drawn here.</param>
+    private void Draw(StageState st, Dictionary<int, Point>? moving, double darkness = -1, bool gameScreen = false)
     {
         Overlay.Children.Clear();
         if (_map == null) return;
@@ -214,7 +230,7 @@ public partial class CutsceneStageView : UserControl
 
         int selActor = SelectedActor();
         // lower on screen in front; on a shared tile the leader is drawn last (in front of its followers)
-        foreach (var a in st.Actors.Values.OrderBy(a => a.Y).ThenByDescending(a => a.Id))
+        foreach (var a in gameScreen ? Enumerable.Empty<StageActor>() : st.Actors.Values.OrderBy(a => a.Y).ThenByDescending(a => a.Id))
         {
             if (!a.Visible) continue;   // hidden characters stay hidden while they walk (the intro's camera actor)
             var pos = moving != null && moving.TryGetValue(a.Id, out var p) ? p : new Point(a.X * 16, a.Y * 16);
@@ -268,15 +284,18 @@ public partial class CutsceneStageView : UserControl
             {
                 Width = CutsceneStage.ScreenTilesX * 16, Height = CutsceneStage.ScreenTilesY * 16,
                 Stroke = CameraBrush, StrokeThickness = 2, StrokeDashArray = new DoubleCollection { 4, 3 }, IsHitTestVisible = false,
-                Fill = st.Black ? new SolidColorBrush(Color.FromArgb(150, 0, 0, 0)) : null,
+                Fill = gameScreen ? null
+                     : darkness > 0 ? new SolidColorBrush(Color.FromArgb((byte)Math.Round(230 * darkness), 0, 0, 0))
+                     : darkness < 0 && st.Black ? new SolidColorBrush(Color.FromArgb(150, 0, 0, 0)) : null,
             };
             Point c = moving != null && moving.TryGetValue(-1, out var cp) ? cp : new Point(st.CameraX * 16, st.CameraY * 16);
             Canvas.SetLeft(cam, c.X - 7 * 16); Canvas.SetTop(cam, c.Y - 7 * 16);
             Overlay.Children.Add(cam);
         }
-        else if (st.Black)
+        else if (!gameScreen && (darkness > 0 || (darkness < 0 && st.Black)))
         {
-            var dark = new Rectangle { Width = Overlay.Width, Height = Overlay.Height, Fill = new SolidColorBrush(Color.FromArgb(120, 0, 0, 0)), IsHitTestVisible = false };
+            byte alpha = darkness >= 0 ? (byte)Math.Round(230 * darkness) : (byte)120;
+            var dark = new Rectangle { Width = Overlay.Width, Height = Overlay.Height, Fill = new SolidColorBrush(Color.FromArgb(alpha, 0, 0, 0)), IsHitTestVisible = false };
             Overlay.Children.Add(dark);
         }
     }
@@ -689,13 +708,10 @@ public partial class CutsceneStageView : UserControl
     // ── playback ────────────────────────────────────────────────────────────
 
     private readonly DispatcherTimer _timer;
-    private int _playLine, _lineFrames, _frame;
-    private readonly List<(int Actor, List<Point> Pts, int FramesPerTile, int Start, bool CameraFollows)> _anims = new();
-    private Point? _camFrom, _camTo;
-    private int _camStart, _camFrames;
+    private int _playLine, _frame, _playStart, _playEnd;
+    private readonly System.Diagnostics.Stopwatch _clock = new();
 
     private List<TimelineItem> _timeline = new();
-    private int _lineTotal;
 
     /// <summary>The stage after every line, the map shown, and the lines placed in time (for the timeline).</summary>
     public IReadOnlyList<StageState> States => _states;
@@ -728,12 +744,16 @@ public partial class CutsceneStageView : UserControl
 
     private void Play_Click(object sender, RoutedEventArgs e)
     {
-        if (_states.Count == 0) return;
+        if (_states.Count == 0 || _initial == null || _panel == null) return;
         _playLine = Math.Max(0, _line);
-        _frame = 0; _anims.Clear();
-        StartLine();
+        // start where the line starts in the timeline; the frame counter then runs at the console's rate
+        _playStart = _timeline.Where(t => t.Line >= _playLine).Select(t => t.Start).DefaultIfEmpty(0).Min();
+        _playEnd = CutsceneFrame.Length(_states, _timeline);
+        _frame = _playStart;
+        _clock.Restart();
         _timer.Start();
         PlayButton.IsEnabled = false;
+        Tick();
     }
 
     private void Stop_Click(object sender, RoutedEventArgs e) => StopPlayback();
@@ -741,88 +761,142 @@ public partial class CutsceneStageView : UserControl
     private void StopPlayback()
     {
         _timer.Stop();
+        _clock.Stop();
         PlaybackStopped?.Invoke();
         PlayButton.IsEnabled = true;
-        _anims.Clear();
         ShowLine(Math.Min(_playLine, _states.Count - 1), scroll: false);
         _panel?.HighlightLine(Math.Min(_playLine, _states.Count - 1));
     }
 
-    private void StartLine()
-    {
-        var st = _states[_playLine];
-        var before = _playLine > 0 ? _states[_playLine - 1] : _initial!;
-        _panel?.HighlightLine(_playLine);
-        _line = _playLine;
-        int blocking = 0;
-        foreach (var w in st.Walks)
-        {
-            var pts = w.Points.Select(p => new Point(p.X * 16, p.Y * 16)).ToList();
-            int fpt = CutsceneStage.FramesPerTile(w.Speed);
-            _anims.RemoveAll(a => a.Actor == w.Actor);
-            _anims.Add((w.Actor, pts, fpt, _frame, w.CameraFollows));
-            int tiles = 0;
-            for (int i = 1; i < w.Points.Count; i++) tiles += Math.Abs(w.Points[i].X - w.Points[i - 1].X) + Math.Abs(w.Points[i].Y - w.Points[i - 1].Y);
-            if (w.Waits) blocking = Math.Max(blocking, tiles * fpt);
-        }
-        _camFrom = new Point(before.CameraX * 16, before.CameraY * 16);
-        _camTo = new Point(st.CameraX * 16, st.CameraY * 16);
-        _camStart = _frame;
-        _camFrames = Math.Max(1, st.WaitFrames > 0 && (before.CameraX != st.CameraX || before.CameraY != st.CameraY) ? st.WaitFrames : blocking);
-        // same timing as the timeline: blocking lines take their duration, others one frame
-        var item = _timeline.FirstOrDefault(t => t.Line == _playLine);
-        _lineFrames = item != null ? (item.Blocking ? Math.Max(1, item.Duration) : 1)
-                                   : Math.Max(1, Math.Max(blocking, st.WaitFrames) + (st.Text != null ? CutsceneTimeline.TextFrames(st.Text) : 0));
-        _lineTotal = _lineFrames;
-        ShowText(st);
-    }
+    /// <summary>SNES (NTSC) frames per second: playback runs in game frames, not timer ticks.</summary>
+    private const double ConsoleFps = 60.0988;
 
     private void Tick()
     {
-        _frame++;
-        PlaybackProgress?.Invoke(_playLine, _lineTotal - _lineFrames);
-        if (--_lineFrames <= 0)
-        {
-            if (_states[_playLine].Leaves != null || _playLine + 1 >= _states.Count) { StopPlayback(); return; }
-            _playLine++;
-            StartLine();
-        }
-        var st = _states[_playLine];
-        var moving = new Dictionary<int, Point>();
-        foreach (var (actor, pts, fpt, start, _) in _anims.ToList())
-        {
-            double t = (_frame - start) / (double)fpt;   // tiles walked so far
-            double done = 0;
-            Point pos = pts[^1];
-            bool finished = true;
-            for (int i = 1; i < pts.Count; i++)
-            {
-                double len = (Math.Abs(pts[i].X - pts[i - 1].X) + Math.Abs(pts[i].Y - pts[i - 1].Y)) / 16;
-                if (t < done + len)
-                {
-                    double f = len == 0 ? 1 : (t - done) / len;
-                    pos = new Point(pts[i - 1].X + (pts[i].X - pts[i - 1].X) * f, pts[i - 1].Y + (pts[i].Y - pts[i - 1].Y) * f);
-                    finished = false;
-                    break;
-                }
-                done += len;
-            }
-            if (finished) _anims.RemoveAll(a => a.Actor == actor && a.Start == start);
-            else moving[actor] = pos;
-        }
-        // a walk the camera follows moves it (the intro's pan); otherwise camera commands ease it along
-        var follow = _anims.FirstOrDefault(a => a.CameraFollows && moving.ContainsKey(a.Actor));
-        if (follow.Pts != null) moving[-1] = moving[follow.Actor];
-        else if (_camFrom is { } cf && _camTo is { } ct)
-        {
-            double f = Math.Min(1, (_frame - _camStart) / (double)_camFrames);
-            moving[-1] = new Point(cf.X + (ct.X - cf.X) * f, cf.Y + (ct.Y - cf.Y) * f);
-        }
-        Draw(st, moving);
-        var cam = moving[-1];
+        if (_panel == null || _initial == null) return;
+        _frame = _playStart + (int)(_clock.Elapsed.TotalSeconds * ConsoleFps);
+        if (_frame >= _playEnd) { StopPlayback(); return; }
+        var v = CutsceneFrame.At(_initial, _states, _timeline, _panel.Script, _frame);
+        if (v.Line != _playLine) { _playLine = v.Line; _line = v.Line; _panel.HighlightLine(v.Line); }
+        if (v.State.Leaves != null && _timeline.Where(t => t.Line == v.Line).All(t => _frame >= t.Start + Math.Max(1, t.VisibleLength))) { StopPlayback(); return; }
+
+        RenderFrame(v, _frame);
+        var item = _timeline.FirstOrDefault(t => t.Line == v.Line);
+        PlaybackProgress?.Invoke(v.Line, item == null ? 0 : _frame - item.Start);
         double z = Zoom.ScaleX;
-        Scroller.ScrollToHorizontalOffset(Math.Max(0, cam.X * z - Scroller.ViewportWidth / 2));
-        Scroller.ScrollToVerticalOffset(Math.Max(0, cam.Y * z - Scroller.ViewportHeight / 2));
-        StageInfo.Text = $"Playing line {_playLine + 1} of {_states.Count}…";
+        Scroller.ScrollToHorizontalOffset(Math.Max(0, (v.CamX * 16 + 8) * z - Scroller.ViewportWidth / 2));
+        Scroller.ScrollToVerticalOffset(Math.Max(0, (v.CamY * 16 + 8) * z - Scroller.ViewportHeight / 2));
+        StageInfo.Text = $"Playing line {v.Line + 1} of {_states.Count} · frame {_frame} ({_frame / ConsoleFps:0.0} s)";
+    }
+
+    /// <summary>Show the stage at one frame of the cutscene (the timeline's playhead), as the game has it then.</summary>
+    public void ShowFrame(int frame)
+    {
+        if (_panel == null || _initial == null || _states.Count == 0) return;
+        if (_timer.IsEnabled) StopPlayback();
+        var v = CutsceneFrame.At(_initial, _states, _timeline, _panel.Script, Math.Max(0, frame));
+        _line = v.Line;
+        _panel.HighlightLine(v.Line);
+        RenderFrame(v, Math.Max(0, frame));
+        double z = Zoom.ScaleX;
+        Scroller.ScrollToHorizontalOffset(Math.Max(0, (v.CamX * 16 + 8) * z - Scroller.ViewportWidth / 2));
+        Scroller.ScrollToVerticalOffset(Math.Max(0, (v.CamY * 16 + 8) * z - Scroller.ViewportHeight / 2));
+        StageInfo.Text = $"Frame {frame} ({frame / ConsoleFps:0.0} s) · line {v.Line + 1} · camera on ({v.CamX:0.##}, {v.CamY:0.##})";
+    }
+
+    /// <summary>The stage at a frame: the map, editor marks, and the camera's screen exactly as the game draws it.</summary>
+    private void RenderFrame(FrameView v, int frame)
+    {
+        var moving = v.Positions.ToDictionary(kv => kv.Key, kv => new Point(kv.Value.X * 16, kv.Value.Y * 16));
+        moving[-1] = new Point(v.CamX * 16, v.CamY * 16);
+        if (_screen == null || _rom == null || _map == null || _panel == null || _initial == null)
+        {
+            Draw(v.State, moving, v.Darkness);
+            DrawFlash(v.Flash, v.CamX, v.CamY);
+            ShowFrameText(v);
+            return;
+        }
+        Draw(v.State, moving, v.Darkness, gameScreen: true);
+        var prev = frame > 0 ? CutsceneFrame.At(_initial, _states, _timeline, _panel.Script, frame - 1) : v;
+        DrawScreen(v, prev);
+        // dialogue boxes (not narration) still use the box under the stage
+        if (v.Text != null && !(v.TextWindow != null && v.Speaker < 0)) ShowFrameText(v);
+        else TextBox.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// The camera's 256x224 screen as the console shows it on this frame: the map's two layers in the cutscene's
+    /// palette, the characters, the narration being typed, the palette fade and the lightning flash.
+    /// </summary>
+    private void DrawScreen(FrameView v, FrameView prev)
+    {
+        var (left, top) = StageScreen.Origin(prev.CamX, prev.CamY);
+        var (bx, by) = IntroScene.Layer2Scroll(_map!, v.FieldFrames);
+        var sprites = new List<(uint[] Px, int W, int H, int X, int Y)>();
+        foreach (var a in v.State.Actors.Values.Where(a => a.Visible).OrderBy(a => v.Positions.TryGetValue(a.Id, out var p) ? p.Y : a.Y).ThenByDescending(a => a.Id))
+        {
+            if (NpcSprites.Render(_rom!, a.Sprite) is not var (px, w, h)) continue;
+            var (ax, ay) = v.Positions.TryGetValue(a.Id, out var pos) ? pos : (a.X, a.Y);
+            sprites.Add((px, w, h, (int)Math.Round(ax * 16 + 8 - w / 2.0) - left, (int)Math.Round(ay * 16 + 16 - h) - top));
+        }
+        var lines = v.Text != null && v.TextWindow is { } win && v.Speaker < 0
+            ? CutsceneText.Layout(v.Text, v.TypedText ?? "", win.Column, win.Row) : null;
+        var pixels = _screen!.Render(left, top, bx, by, v.FadeLevel, v.FlashAdd, sprites, lines);
+        var bmp = new WriteableBitmap(StageScreen.Width, StageScreen.Height, 96, 96, PixelFormats.Bgra32, null);
+        bmp.WritePixels(new Int32Rect(0, 0, StageScreen.Width, StageScreen.Height), pixels, StageScreen.Width * 4, 0);
+        var img = new Image { Source = bmp, Width = StageScreen.Width, Height = StageScreen.Height, IsHitTestVisible = false };
+        RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.NearestNeighbor);
+        Canvas.SetLeft(img, left); Canvas.SetTop(img, top);
+        Overlay.Children.Insert(0, img);   // under the editor's marks
+    }
+
+    private void ShowFrameText(FrameView v)
+    {
+        if (v.Text == null) { TextBox.Visibility = Visibility.Collapsed; return; }
+        // narration placed with 6B is printed straight on the screen, as the game types it
+        if (v.TextWindow is { } win && v.Speaker < 0)
+        {
+            TextBox.Visibility = Visibility.Collapsed;
+            DrawNarration(v.Text, v.TypedText ?? "", win, v.CamX, v.CamY);
+            return;
+        }
+        TextBox.Visibility = Visibility.Visible;
+        SpeakerText.Text = v.Speaker < 0 ? "" : v.State.Actors.TryGetValue(v.Speaker, out var a) ? a.Name : EventCommands.Actor(v.Speaker);
+        DialogueText.Text = CutsceneText.Printed(v.TypedText ?? v.Text);
+    }
+
+    private static readonly Brush NarrationShadow = new SolidColorBrush(Color.FromRgb(0x18, 0x20, 0x88));
+
+    /// <summary>Narration text on the stage: 8x16 pixel characters at the 6B window, relative to the camera's screen.</summary>
+    private void DrawNarration(string full, string shown, (int Column, int Row) window, double camX, double camY)
+    {
+        double left = (camX - 7) * 16, top = (camY - 7) * 16;   // the screen's top-left corner on the map
+        foreach (var (line, x, y) in CutsceneText.Layout(full, shown, window.Column, window.Row))
+        {
+            if (line.Length == 0) continue;
+            foreach (var (brush, d) in new[] { (NarrationShadow, 1.0), ((Brush)Brushes.White, 0.0) })
+            {
+                var tb = new TextBlock
+                {
+                    Text = line, Foreground = brush, FontFamily = new System.Windows.Media.FontFamily("Consolas"), FontSize = 14.55,   // 8 pixels per character
+                    IsHitTestVisible = false,
+                };
+                Canvas.SetLeft(tb, left + x + d); Canvas.SetTop(tb, top + y + d - 2);
+                Overlay.Children.Add(tb);
+            }
+        }
+    }
+
+    /// <summary>Lightning flash: the screen washes to white.</summary>
+    private void DrawFlash(double flash, double camX, double camY)
+    {
+        if (flash <= 0) return;
+        var white = new Rectangle
+        {
+            Width = CutsceneStage.ScreenTilesX * 16, Height = CutsceneStage.ScreenTilesY * 16, IsHitTestVisible = false,
+            Fill = new SolidColorBrush(Color.FromArgb((byte)Math.Round(255 * flash), 255, 255, 255)),
+        };
+        Canvas.SetLeft(white, (camX - 7) * 16); Canvas.SetTop(white, (camY - 7) * 16);
+        Overlay.Children.Add(white);
     }
 }

@@ -20,6 +20,8 @@ public sealed class MapTileset
     public byte[] Blocks { get; }
     /// <summary>128 BGRA colors (palette rows 0-7).</summary>
     public uint[] Palette { get; }
+    /// <summary>The same 128 colours as the console stores them (BGR555).</summary>
+    public ushort[] Palette555 { get; } = new ushort[128];
     public int MetatileCount => Blocks.Length / MetatileSize;
     /// <summary>First composite metatile (see <see cref="LufiaMap.CompositeThreshold"/>), or -1.</summary>
     public int CompositeThreshold { get; }
@@ -42,10 +44,11 @@ public sealed class MapTileset
 
         Palette = new uint[128];
         for (int i = 0; i < 32; i++)
-            Palette[i] = SnesPalette.Bgr555ToArgb32(rom.ReadUInt16Le(LufiaMap.SharedPaletteRows + i * 2));
+            Palette555[i] = rom.ReadUInt16Le(LufiaMap.SharedPaletteRows + i * 2);
         int rows = LufiaMap.MapPaletteTable + (paletteIndex + 1) * 0xC0;
         for (int i = 0; i < 96; i++)
-            Palette[32 + i] = SnesPalette.Bgr555ToArgb32(rom.ReadUInt16Le(rows + i * 2));
+            Palette555[32 + i] = rom.ReadUInt16Le(rows + i * 2);
+        for (int i = 0; i < 128; i++) Palette[i] = SnesPalette.Bgr555ToArgb32(Palette555[i]);
 
         int ptr = LufiaMap.CompositeTable + tileset * 3;
         int snes = rom.ReadByte(ptr) | (rom.ReadByte(ptr + 1) << 8) | (rom.ReadByte(ptr + 2) << 16);
@@ -73,10 +76,11 @@ public sealed class MapTileset
     }
 
     /// <summary>The graphics for a map (town/dungeon tileset, or the world map's own blocks).</summary>
-    public static MapTileset ForMap(RomBuffer rom, LufiaMap map) =>
+    /// <param name="paletteIndex">Palette to draw with instead of the map's own (the intro shows map 4F in palette 18).</param>
+    public static MapTileset ForMap(RomBuffer rom, LufiaMap map, int? paletteIndex = null) =>
         map.IsWorld
             ? new MapTileset(rom, LufiaMap.WorldTilesResource, map.WorldBlocks, map.PaletteIndex)
-            : new MapTileset(rom, map.Tileset, map.PaletteIndex, map.CompositeThreshold);
+            : new MapTileset(rom, map.Tileset, paletteIndex ?? map.PaletteIndex, map.CompositeThreshold);
 
     /// <summary>
     /// The ground and overlay metatiles the game shows for a composite metatile, or null if the
@@ -126,6 +130,40 @@ public sealed class MapTileset
         }
         _metatileCache[metatile] = px;
         return px;
+    }
+
+    private readonly Dictionary<int, byte[]> _indexCache = new();
+
+    /// <summary>16x16 colour indices of a metatile (palette row * 16 + colour; 0 = transparent).</summary>
+    public byte[] MetatileIndices(int metatile)
+    {
+        metatile &= 0x3FF;
+        if (_indexCache.TryGetValue(metatile, out var cached)) return cached;
+        var px = new byte[256];
+        if (CompositeParts(metatile) is var (ground, overlay)) { IndexRecord(px, ground); IndexRecord(px, overlay); }
+        else IndexRecord(px, metatile);
+        _indexCache[metatile] = px;
+        return px;
+    }
+
+    private void IndexRecord(byte[] px, int metatile)
+    {
+        int rec = metatile * MetatileSize;
+        if (rec + 8 > Blocks.Length) return;
+        for (int q = 0; q < 4; q++)
+        {
+            int entry = Blocks[rec + q * 2] | (Blocks[rec + q * 2 + 1] << 8);
+            int qx = q >= 2 ? 8 : 0, qy = (q & 1) == 1 ? 8 : 0;
+            var tile = TilePixels(entry & 0x3FF);
+            int pal = (entry >> 10) & 7;
+            bool hf = (entry & 0x4000) != 0, vf = (entry & 0x8000) != 0;
+            for (int y = 0; y < 8; y++)
+                for (int x = 0; x < 8; x++)
+                {
+                    int c = tile[(vf ? 7 - y : y) * 8 + (hf ? 7 - x : x)];
+                    if (c != 0) px[(qy + y) * 16 + qx + x] = (byte)(pal * 16 + c);
+                }
+        }
     }
 
     /// <summary>Draw a raw metatile record's non-transparent pixels over a 16x16 buffer.</summary>
