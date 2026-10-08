@@ -17,9 +17,14 @@ public partial class EventsView : UserControl
 
     private void Hook()
     {
-        if (_hooked != null) _hooked.OpenRequested -= Open;
+        if (_hooked != null) { _hooked.OpenRequested -= Open; _hooked.LiveFlags.Logged -= ScrollLog; }
         _hooked = DataContext as EventsViewModel;
-        if (_hooked != null) _hooked.OpenRequested += Open;
+        if (_hooked != null) { _hooked.OpenRequested += Open; _hooked.LiveFlags.Logged += ScrollLog; }
+    }
+
+    private void ScrollLog(FlagLogEntry entry)
+    {
+        if (_hooked?.LiveFlags.AutoScroll == true) FlagLogList.ScrollIntoView(entry);
     }
 
     private void ScrollSelectedIntoView(object sender, System.Windows.Controls.SelectionChangedEventArgs e)

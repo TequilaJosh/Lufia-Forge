@@ -96,6 +96,90 @@
                              DisplayMemberPath="Label"/>
                 </Grid>
             </TabItem>
+            <TabItem Header="Live flags" Style="{StaticResource LufiaTabItem}" DataContext="{Binding LiveFlags}">
+                <Grid Margin="4">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="3*"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="2*"/>
+                    </Grid.RowDefinitions>
+                    <StackPanel>
+                        <TextBlock Text="{Binding Status}" Foreground="{StaticResource GoldLightBrush}" TextWrapping="Wrap"/>
+                        <TextBlock Text="{Binding Running}" Style="{StaticResource GdHint}" TextWrapping="Wrap"/>
+                        <DockPanel Margin="0,4,0,4">
+                            <ComboBox DockPanel.Dock="Left" Style="{StaticResource GdCombo}" Width="160" ItemsSource="{Binding Filters}" SelectedIndex="{Binding FilterIndex}" Margin="0,0,6,0"/>
+                            <Button DockPanel.Dock="Right" Content="Import names (CSV)…" Style="{StaticResource LufiaButton}" Command="{Binding ImportCsvCommand}" Margin="6,0,0,0"
+                                    ToolTip="Lines &quot;flag,name,description&quot; (flag in hex) name story flags; &quot;$address,bit,name&quot; adds flags to watch"/>
+                            <TextBox Style="{StaticResource GdText}" Text="{Binding Search, UpdateSourceTrigger=PropertyChanged}" Width="Auto" HorizontalAlignment="Stretch" ToolTip="Find by number or name"/>
+                        </DockPanel>
+                    </StackPanel>
+                    <ListBox Grid.Row="1" Style="{StaticResource GdRecordList}" ItemsSource="{Binding Rows}" HorizontalContentAlignment="Stretch"
+                             VirtualizingPanel.IsVirtualizing="True">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Border Padding="2,1" CornerRadius="2">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Background" Value="Transparent"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding FlashOn}" Value="True"><Setter Property="Background" Value="#6632CD32"/></DataTrigger>
+                                                <DataTrigger Binding="{Binding FlashOff}" Value="True"><Setter Property="Background" Value="#66DC3C3C"/></DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="34"/>
+                                            <ColumnDefinition Width="26"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="92"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="{Binding IdText}" FontFamily="Consolas" Foreground="{StaticResource GoldLightBrush}"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding ValueText}"/>
+                                        <TextBlock Grid.Column="2" Text="{Binding Name}" Foreground="{StaticResource TextPrimaryBrush}" TextTrimming="CharacterEllipsis"
+                                                   ToolTip="{Binding Description}"/>
+                                        <TextBlock Grid.Column="3" Text="{Binding RamText}" FontFamily="Consolas" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,6,0,0">
+                        <TextBlock Text="Watch" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center"/>
+                        <TextBox Style="{StaticResource GdNumber}" Width="64" Text="{Binding NewAddress}" Margin="4,0,2,0" ToolTip="WRAM address (hex), e.g. 1296 or 7E1296"/>
+                        <TextBlock Text="bit" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center"/>
+                        <TextBox Style="{StaticResource GdNumber}" Width="28" Text="{Binding NewBit}" Margin="2,0,4,0"/>
+                        <TextBox Style="{StaticResource GdText}" Width="110" Text="{Binding NewName}" Margin="0,0,4,0" ToolTip="Name"/>
+                        <Button Content="＋ Add" Style="{StaticResource LufiaButton}" Command="{Binding AddFlagCommand}"/>
+                    </StackPanel>
+                    <DockPanel Grid.Row="3" Margin="0,8,0,4">
+                        <Button DockPanel.Dock="Right" Content="Clear" Style="{StaticResource LufiaButton}" Command="{Binding ClearLogCommand}" Margin="4,0,0,0"/>
+                        <Button DockPanel.Dock="Right" Content="Export CSV…" Style="{StaticResource LufiaButton}" Command="{Binding ExportLogCommand}" Margin="4,0,0,0"/>
+                        <CheckBox DockPanel.Dock="Right" Content="Auto-scroll" IsChecked="{Binding AutoScroll}" Style="{StaticResource GdCheck}" Margin="4,0,0,0"/>
+                        <TextBlock Text="Event log (flag changes while playing)" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center"/>
+                    </DockPanel>
+                    <ListBox x:Name="FlagLogList" Grid.Row="4" Style="{StaticResource GdRecordList}" ItemsSource="{Binding Log}" HorizontalContentAlignment="Stretch">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="70"/>
+                                        <ColumnDefinition Width="80"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="70"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{Binding Frame}" FontFamily="Consolas" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding TimeText}" FontFamily="Consolas" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                    <TextBlock Grid.Column="2" Text="{Binding Flag}" Foreground="{StaticResource TextPrimaryBrush}" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Grid.Column="3" Text="{Binding Change}" Foreground="{StaticResource GoldLightBrush}"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+            </TabItem>
         </TabControl>
 
         <!-- editor -->
