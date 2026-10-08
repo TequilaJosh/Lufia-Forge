@@ -330,6 +330,17 @@ public sealed class EventScript
         _ => $"Text ({string.Join(" ", opener.Select(x => x.ToString("X2")))})",
     };
 
+    /// <summary>Short name of a jump's target line, so the jump reads the same wherever that line moves.</summary>
+    private string TargetName(ScriptOp o)
+    {
+        if (o.IsText)
+        {
+            var t = o.Text.Replace("\n", " ").Trim();
+            return "\"" + (t.Length > 28 ? t[..28].TrimEnd() + "…" : t) + "\"";
+        }
+        return o.Bytes.Length > 0 && EventCommands.Find(o.Bytes[0]) is { } d ? d.Name : $"command {(o.Bytes.Length > 0 ? o.Bytes[0] : 0):X2}";
+    }
+
     private static string ActorSays(int actor)
     {
         var who = EventCommands.Actor(actor);
@@ -347,7 +358,7 @@ public sealed class EventScript
             if (i >= op.Targets.Count) return "?";
             var t = op.Targets[i];
             int line = t.Op != null ? Ops.IndexOf(t.Op) : -1;
-            return line >= 0 ? $"line {line + 1}" : DescribeOutside(t.Absolute);
+            return line >= 0 ? $"line {line + 1} ({TargetName(t.Op!)})" : DescribeOutside(t.Absolute);
         }
         var def = EventCommands.Find(b[0]);
         if (def == null || b.Length < CommandLength(b[0], b.Length > 1 ? b[1] : 0)) return $"Command {b[0]:X2} (unknown)";
@@ -432,10 +443,35 @@ public sealed class EventScript
             Ops.Add(sop);
             p += sop.Length;
 
-            // Keep decoding past an end only when a jump in this event lands right here.
-            if (sop.EndsFlow && !targets.Contains(p)) break;
+            // Keep decoding past an end only when a jump in this event lands right here, or a little further on
+            // with whole commands in between (lines after a goto that the editor laid out; jumps skip over them).
+            if (sop.EndsFlow && !targets.Contains(p) && !ContinuesTo(p, targets)) break;
         }
         Regions.Add((from, p));
+    }
+
+    /// <summary>
+    /// True when a pending jump target lies shortly after <paramref name="p"/> and the bytes up to it decode as whole
+    /// commands landing exactly on it, and <paramref name="p"/> isn't another event's start.
+    /// </summary>
+    /// <summary>Decode past an end to a nearby jump target (see <see cref="ContinuesTo"/>); off only for comparisons in tests.</summary>
+    public static bool DecodePastEnds { get; set; } = true;
+
+    private bool ContinuesTo(int p, SortedSet<int> targets)
+    {
+        if (!DecodePastEnds) return false;
+        int t = targets.FirstOrDefault(x => x > p, -1);
+        if (t < 0 || t - p > 0x800 || EventStartingAt(p) >= 0) return false;
+        int q = p;
+        for (int guard = 0; guard < 2000 && q < t; guard++)
+        {
+            int op = _rom.ReadByte(q);
+            int len = CommandLength(op, q + 1 < _rom.Length ? _rom.ReadByte(q + 1) : 0);
+            if (len == 0) return false;
+            if (len < 0) { var (_, raw, _) = DecodeText(_rom, q - len); q += -len + raw; }
+            else q += len;
+        }
+        return q == t;
     }
 
     /// <summary>
@@ -538,6 +574,17 @@ public sealed class EventScript
         return null;
     }
 
+    /// <summary>
+    /// Move a line to another position (the index it ends up at). Jumps keep pointing at the same lines, wherever they go.
+    /// </summary>
+    public void Move(ScriptOp op, int toIndex)
+    {
+        int from = Ops.IndexOf(op);
+        if (from < 0) return;
+        Ops.RemoveAt(from);
+        Ops.Insert(Math.Clamp(toIndex, 0, Ops.Count), op);
+    }
+
     /// <summary>Remove a line. Jumps that pointed at it move to the following line.</summary>
     public string? Remove(ScriptOp op)
     {
@@ -626,8 +673,32 @@ public sealed class EventScript
     /// <summary>True when the edits keep every line the same size (no ROM expansion needed).</summary>
     public bool FitsInPlace()
     {
-        Build(Start, BlockBase, out bool same);
-        return same;
+        var bytes = Build(Start, BlockBase, out bool same);
+        return same || SameLengthInPlace(bytes);
+    }
+
+    /// <summary>Lines were reordered (or swapped for others) but the event is exactly as long as before: it can be rewritten where it is.</summary>
+    private bool SameLengthInPlace(byte[] built) => Regions.Count <= 1 && built.Length == End - Start && !OthersJumpInside();
+
+    private bool? _othersJumpInside;
+
+    /// <summary>Another event of this map jumps into the middle of this one (then its lines must keep their offsets).</summary>
+    private bool OthersJumpInside()
+    {
+        if (_othersJumpInside is bool known) return known;
+        bool found = false;
+        try
+        {
+            foreach (int ev in PlausibleEvents(_rom, MapId))
+            {
+                var other = Load(_rom, MapId, ev);
+                if (other == null || other.Start == Start) continue;
+                if (other.Ops.Any(o => o.Targets.Any(t => t.Absolute > Start && t.Absolute < End))) { found = true; break; }
+            }
+        }
+        catch { found = true; }
+        _othersJumpInside = found;
+        return found;
     }
 
     /// <summary>Write the edited event to the ROM. Returns a description of what was done and where.</summary>
@@ -645,7 +716,7 @@ public sealed class EventScript
             }
         }
         var inPlace = Build(Start, BlockBase, out bool same);
-        if (same && Regions.Count <= 1)
+        if ((same || SameLengthInPlace(inPlace)) && Regions.Count <= 1)
         {
             // drop the continuation goto that Build may add; the original bytes after the event are still there
             _rom.WriteBytes(Start, inPlace.AsSpan(0, End - Start).ToArray());

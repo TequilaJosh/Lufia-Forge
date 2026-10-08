@@ -84,7 +84,11 @@
                         </ListBox.ItemTemplate>
                     </ListBox>
                     <StackPanel Grid.Row="2" Margin="0,6,0,4">
-                        <TextBlock Text="Name of this flag (yours; kept for every ROM copy)" Style="{StaticResource GdFieldLabel}"/>
+                        <TextBlock Text="What it is and does" Style="{StaticResource GdFieldLabel}"/>
+                        <ScrollViewer MaxHeight="190" VerticalScrollBarVisibility="Auto">
+                            <TextBlock Text="{Binding FlagDescription}" Foreground="{StaticResource TextPrimaryBrush}" TextWrapping="Wrap" FontSize="12"/>
+                        </ScrollViewer>
+                        <TextBlock Text="Name of this flag (yours; kept for every ROM copy — leave empty for the automatic name)" Style="{StaticResource GdFieldLabel}" Margin="0,6,0,0"/>
                         <TextBox Style="{StaticResource GdText}" Text="{Binding FlagNameText}" HorizontalAlignment="Stretch" Width="Auto"/>
                         <TextBlock Text="Where it's used (click to open; sets first)" Style="{StaticResource GdFieldLabel}" Margin="0,6,0,0"/>
                     </StackPanel>

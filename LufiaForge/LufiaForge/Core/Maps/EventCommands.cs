@@ -108,6 +108,12 @@ public static class EventCommands
     }
 
     public static readonly string[] Directions = { "right", "left", "down", "up" };
+
+    /// <summary>Event base of a map (set by the app when a ROM is loaded; command 51 counts from it).</summary>
+    public static Func<int, int> EventBase { get; set; } = _ => 0;
+
+    /// <summary>The event number command 51 (<paramref name="b"/> = its bytes) runs on its map.</summary>
+    public static int ChainedEvent(byte[] b) => (EventBase(b[1]) + b[2]) & 0xFF;
     public static readonly int[] ShortWaitFrames = { 4, 8, 12, 20, 40, 60, 80, 100 };
     public static readonly int[] ScrollSpeeds = { 0x10, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80 };
 
@@ -169,9 +175,16 @@ public static class EventCommands
         Add(0x03, 0x03, "Choice targets (for the next text box)", Flow,
             (b, w) => $"The next text box asks a question: " + string.Join(", ", Enumerable.Range(0, b[1]).Select(k => $"answer {k + 1} → {w.Jump(k)}")),
             new byte[] { 0x03, 2, 0, 0, 0, 0 });
+        // the event number is counted from the target map's event base (byte 4 of its $03:8200 entry)
         Add(0x51, 0x51, "Run an event of another map", Flow,
-            (b, w) => $"Continue with event {b[2]} of {w.Map(b[1])} (does not come back)", new byte[] { 0x51, 0, 0 }, "",
-            P("map", ParamKind.Map, 1), P("event", ParamKind.Number, 2));
+            (b, w) => $"Continue with event {ChainedEvent(b)} of {w.Map(b[1])} (does not come back)", new byte[] { 0x51, 0, 0 }, "",
+            P("map", ParamKind.Map, 1),
+            new ParamDef
+            {
+                Label = "event", Kind = ParamKind.Number, Max = 255,
+                Get = b => ChainedEvent(b),
+                Set = (b, v) => b[2] = (byte)((v - EventBase(b[1])) & 0xFF),
+            });
         Add(0x1E, 0x1E, "Church menu", Serv, (_, _) => "Church menu (revive, cure, save)", new byte[] { 0x1E });
 
         // ── conditions ──

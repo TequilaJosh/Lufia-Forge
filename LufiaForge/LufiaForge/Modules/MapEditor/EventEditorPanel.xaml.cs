@@ -8,6 +8,10 @@ using System.Windows.Controls;
 using Button = System.Windows.Controls.Button;
 using ContextMenu = System.Windows.Controls.ContextMenu;
 using MenuItem = System.Windows.Controls.MenuItem;
+using DragEventArgs = System.Windows.DragEventArgs;
+using DataObject = System.Windows.DataObject;
+using DragDrop = System.Windows.DragDrop;
+using DragDropEffects = System.Windows.DragDropEffects;
 
 namespace LufiaForge.Modules.MapEditor;
 
@@ -112,6 +116,8 @@ public partial class EventLineVm : ObservableObject
 
     [ObservableProperty] private string _errorText = "";
     [ObservableProperty] private bool _isHighlighted;
+    [ObservableProperty] private bool _dropAbove;
+    [ObservableProperty] private bool _dropBelow;
     public ObservableCollection<ParamVm> Params { get; } = new();
 
     public EventLineVm(EventEditorPanel owner, ScriptOp op, int index)
@@ -124,6 +130,10 @@ public partial class EventLineVm : ObservableObject
     public string OffsetText => Op.IsNew ? "new line" : $"ROM 0x{Op.Offset:X6}";
     public bool IsText => Op.IsText;
     public string Description => Owner.Script.Describe(Op);
+    /// <summary>A "continue with event N of map M" line (51): its target can be opened.</summary>
+    public bool CanOpenChained => !Op.IsText && Op.Bytes.Length == 3 && Op.Bytes[0] == 0x51;
+    public string OpenChainedText => CanOpenChained ? $"▶ Open event {EventCommands.ChainedEvent(Op.Bytes)} of map {Op.Bytes[1]:X2}" : "";
+
     public string CommandName => Op.IsText || Op.Bytes.Length == 0 ? "" : EventCommands.Find(Op.Bytes[0])?.Name ?? "Unknown command";
     public string WaitsText => Op.IsText || Op.Bytes.Length == 0 ? ""
         : EventCommands.Find(Op.Bytes[0])?.Waits is { Length: > 0 } w ? "⏸ waits " + w : "";
@@ -266,6 +276,8 @@ public partial class EventLineVm : ObservableObject
         OnPropertyChanged(nameof(SizeText));
         OnPropertyChanged(nameof(OpcodeHex));
         OnPropertyChanged(nameof(CommandName));
+        OnPropertyChanged(nameof(CanOpenChained));
+        OnPropertyChanged(nameof(OpenChainedText));
         OnPropertyChanged(nameof(WaitsText));
         foreach (var p in Params.Where(p => p.IsJump)) p.Choices = Owner.JumpChoices(Op, p.JumpIndex);
         var copy = Params.ToList();
@@ -414,6 +426,81 @@ public partial class EventEditorPanel : UserControl
             Stage.Bind(_rom, this);
             if (_selectedLine >= 0) Stage.ShowLine(_selectedLine);
         }
+    }
+
+    // ── reordering ──
+
+    /// <summary>Move a line to a new index (jumps keep their targets).</summary>
+    public void MoveLine(int from, int to)
+    {
+        if (from < 0 || from >= _lines.Count) return;
+        to = Math.Clamp(to, 0, _lines.Count - 1);
+        if (to == from) return;
+        var line = _lines[from];
+        Script.Move(line.Op, to);
+        _lines.Move(from, to);
+        Changed();
+        SelectLine(to);
+    }
+
+    private void MoveUp_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: EventLineVm l }) { int i = _lines.IndexOf(l); MoveLine(i, i - 1); }
+    }
+
+    private void MoveDown_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: EventLineVm l }) { int i = _lines.IndexOf(l); MoveLine(i, i + 1); }
+    }
+
+    private System.Windows.Point _gripStart;
+    private EventLineVm? _gripLine;
+
+    private void Grip_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        _gripStart = e.GetPosition(this);
+        _gripLine = (sender as FrameworkElement)?.DataContext as EventLineVm;
+    }
+
+    private void Grip_MouseMove(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        if (_gripLine == null || e.LeftButton != System.Windows.Input.MouseButtonState.Pressed) return;
+        var p = e.GetPosition(this);
+        if (Math.Abs(p.Y - _gripStart.Y) < 4 && Math.Abs(p.X - _gripStart.X) < 4) return;
+        var line = _gripLine;
+        _gripLine = null;
+        DragDrop.DoDragDrop((DependencyObject)sender, new DataObject(typeof(EventLineVm), line), DragDropEffects.Move);
+        foreach (var l in _lines) { l.DropAbove = false; l.DropBelow = false; }
+    }
+
+    /// <summary>Upper half of a line = drop above it, lower half = below it.</summary>
+    private static bool DropsAbove(object sender, DragEventArgs e) =>
+        sender is FrameworkElement fe && e.GetPosition(fe).Y < fe.ActualHeight / 2;
+
+    private void Line_DragOver(object sender, DragEventArgs e)
+    {
+        if (!e.Data.GetDataPresent(typeof(EventLineVm)) || sender is not FrameworkElement { DataContext: EventLineVm target }) return;
+        e.Effects = DragDropEffects.Move;
+        bool above = DropsAbove(sender, e);
+        foreach (var l in _lines) { l.DropAbove = l == target && above; l.DropBelow = l == target && !above; }
+        e.Handled = true;
+    }
+
+    private void Line_DragLeave(object sender, DragEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: EventLineVm target }) { target.DropAbove = false; target.DropBelow = false; }
+    }
+
+    private void Line_Drop(object sender, DragEventArgs e)
+    {
+        foreach (var l in _lines) { l.DropAbove = false; l.DropBelow = false; }
+        if (e.Data.GetData(typeof(EventLineVm)) is not EventLineVm moving || sender is not FrameworkElement { DataContext: EventLineVm target }) return;
+        int from = _lines.IndexOf(moving), at = _lines.IndexOf(target);
+        if (from < 0 || at < 0 || moving == target) return;
+        int to = DropsAbove(sender, e) ? at : at + 1;   // position in the list before removing the moved line
+        if (from < to) to--;
+        MoveLine(from, to);
+        e.Handled = true;
     }
 
     private void Line_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
@@ -589,6 +676,25 @@ public partial class EventEditorPanel : UserControl
         _history.Push((Script, _title));
         Show(_rom, target, title, _owner);
         HighlightLine(0);
+    }
+
+    /// <summary>Open the event a "run an event of another map" line continues with (◀ Back returns here).</summary>
+    public void OpenChained(ScriptOp op)
+    {
+        if (op.IsText || op.Bytes.Length != 3 || op.Bytes[0] != 0x51) return;
+        int map = op.Bytes[1], ev = EventCommands.ChainedEvent(op.Bytes);
+        var target = EventScript.LoadWhole(_rom, map, ev);
+        if (target == null || target.Ops.Count == 0) { StatusText.Text = $"Event {ev} of map {map:X2} has no script."; return; }
+        if (!ConfirmDiscard()) return;
+        _history.Push((Script, _title));
+        string name = EventScript.MapLabel?.Invoke(map) ?? $"map {map:X2}";
+        Show(_rom, target, $"{name} – event {ev} (continued from event {Script.Event} of map {Script.MapId:X2})", _owner);
+        SelectLine(0);
+    }
+
+    private void OpenChained_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: EventLineVm line }) OpenChained(line.Op);
     }
 
     /// <summary>Show where a story flag is used (if the host supports it).</summary>
