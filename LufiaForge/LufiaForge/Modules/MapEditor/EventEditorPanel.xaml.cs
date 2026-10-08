@@ -521,6 +521,7 @@ public partial class EventEditorPanel : UserControl
         if (index < _lines.Count) _lines[index].IsHighlighted = true;
         if (Stage.Visibility == Visibility.Visible) Stage.ShowLine(index);
         if (!fromBytes && BytesCard.Visibility == Visibility.Visible) Bytes.Select(index);
+        if (!fromBytes && FlowCard.Visibility == Visibility.Visible) Flow.SelectLine(index);
     }
 
     /// <summary>Lines were added/removed/changed outside the Lines view (raw bytes): rebuild the rows and select one.</summary>
@@ -532,13 +533,72 @@ public partial class EventEditorPanel : UserControl
         if (_lines.Count > 0) SelectLine(Math.Clamp(select, 0, _lines.Count - 1));
     }
 
+    private bool _flowHooked;
+
     private void ViewMode_Click(object sender, RoutedEventArgs e)
     {
-        bool bytes = ViewBytes.IsChecked == true;
-        LinesCard.Visibility = bytes ? Visibility.Collapsed : Visibility.Visible;
+        bool bytes = ViewBytes.IsChecked == true, flow = ViewFlow.IsChecked == true;
+        LinesCard.Visibility = bytes || flow ? Visibility.Collapsed : Visibility.Visible;
         BytesCard.Visibility = bytes ? Visibility.Visible : Visibility.Collapsed;
+        FlowCard.Visibility = flow ? Visibility.Visible : Visibility.Collapsed;
         if (bytes) { Bytes.Bind(this); if (_selectedLine >= 0) Bytes.Select(_selectedLine); }
+        else if (flow)
+        {
+            if (!_flowHooked) { Flow.BlockSelected += ShowFlowBlock; _flowHooked = true; }
+            Flow.Bind(this);
+            if (_selectedLine >= 0) Flow.SelectLine(_selectedLine);
+        }
         else if (_selectedLine >= 0) HighlightLine(_selectedLine);
+    }
+
+    private (int Start, int End) _flowRange = (-1, -1);
+
+    /// <summary>Show the lines of the picked card in the editor under the graph.</summary>
+    private void ShowFlowBlock(FlowBlock? b)
+    {
+        if (b == null) { FlowLines.ItemsSource = null; _flowRange = (-1, -1); FlowLinesHeader.Text = "Pick a card to edit its lines."; return; }
+        if (_flowRange == (b.Start, b.End) && FlowLines.ItemsSource != null) return;   // keep focus while editing
+        _flowRange = (b.Start, b.End);
+        FlowLines.ItemsSource = _lines.Skip(b.Start).Take(b.End - b.Start).ToList();
+        FlowLinesHeader.Text = $"Lines {b.Start + 1}{(b.End - b.Start > 1 ? $"–{b.End}" : "")}";
+    }
+
+    private void FlowAutoLayout_Click(object sender, RoutedEventArgs e) => Flow.AutoLayout();
+
+    /// <summary>Open the add-line menu at a position (used by the flow graph).</summary>
+    public void ShowInsertMenuAt(FrameworkElement anchor, int insertAt) => ShowInsertMenu(anchor, Math.Clamp(insertAt, 0, _lines.Count));
+
+    /// <summary>Copy lines [start, end) and insert the copies right after them.</summary>
+    public void DuplicateLines(int start, int end)
+    {
+        int at = end;
+        for (int i = start; i < end; i++)
+        {
+            var src = Script.Ops[i];
+            ScriptOp copy;
+            if (src.IsText) { copy = Script.NewText(src.Bytes[0], src.Text, at); copy.Bytes = (byte[])src.Bytes.Clone(); }
+            else
+            {
+                copy = Script.NewCommand((byte[])src.Bytes.Clone(), at);
+                copy.Targets.Clear();
+                foreach (var t in src.Targets) copy.Targets.Add(new JumpRef { Op = t.Op, Absolute = t.Absolute });
+            }
+            at++;
+        }
+        LinesChangedExternally(end);
+    }
+
+    /// <summary>Delete lines [start, end) after asking.</summary>
+    public void DeleteLines(int start, int end)
+    {
+        if (MessageBox.Show($"Delete lines {start + 1}–{end}? Jumps to them move to the line after.", "Delete lines",
+                MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        for (int i = end - 1; i >= start; i--)
+        {
+            var err = Script.Remove(Script.Ops[i]);
+            if (err != null) { StatusText.Text = err; break; }
+        }
+        LinesChangedExternally(Math.Max(0, start - 1));
     }
 
     /// <summary>Insert a command after line <paramref name="after"/> (-1 = at the start) and select it.</summary>
@@ -662,12 +722,18 @@ public partial class EventEditorPanel : UserControl
                 : "";
             if (Stage.Visibility == Visibility.Visible) { Stage.Resimulate(); if (_selectedLine >= 0) Stage.ShowLine(_selectedLine, scroll: false); }
             if (rebuild && BytesCard.Visibility == Visibility.Visible) Bytes.Refresh();
+            if (rebuild && FlowCard.Visibility == Visibility.Visible)
+            {
+                _flowRange = (-1, -1);
+                Flow.Rebuild();
+                ShowFlowBlock(Flow.Selected);
+            }
         }
         catch (Exception ex) { StatusText.Text = ex.Message; }
         finally { _refreshing = false; }
     }
 
-    private void ShowInsertMenu(Button anchor, int insertAt)
+    private void ShowInsertMenu(FrameworkElement anchor, int insertAt)
     {
         var menu = new ContextMenu { PlacementTarget = anchor };
         void AddText(string name, byte opener)
