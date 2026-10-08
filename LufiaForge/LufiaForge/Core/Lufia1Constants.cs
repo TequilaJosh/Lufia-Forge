@@ -234,4 +234,30 @@ public static class Lufia1Constants
     // -------------------------------------------------------------------------
     public const int TileByteSize     = 32;
     public const int Tile8bppByteSize = 64;
+
+    // -------------------------------------------------------------------------
+    // Event-script engine (confirmed in code and in game; see research-script-engine.md and
+    // research-event-commands.md)
+    // -------------------------------------------------------------------------
+    // ROM (file offsets)
+    public const int EventCommandTable   = 0x0C78C;  // bank $01: 128 handler words for commands 00-6D (6E-7F overlap the next table)
+    public const int EventRangeTable     = 0x0C868;  // bank $01: (bound, handler) triples for commands 80-FF
+    public const int TextControlTable    = 0x0C75C;  // bank $01: handlers for text control codes 00-0F
+    public const int ScriptBankBase      = 0x18000;  // script offset T -> file 0x18000 + T
+    public const int MapScriptTable      = 0x18200;  // 5 bytes per map: script block (u24), ?, event base
+    public const int SpriteRecordTable   = 0x0E25F;  // bank $01: sprite id -> 17-byte record pointer
+    public const int ShortWaitTable      = 0x0DDB5;  // commands 80-87: wait × 4 frames
+    // WRAM ($7E:xxxx)
+    public const int RamStoryFlags       = 0x1296;   // 256 story flags, flag f at $1296 + f/8
+    public const int RamFlagBitMasks     = 0x032B;   // 8 bit masks the engine uses for flag bits
+    public const int RamMapLocalFlags    = 0x1336;   // "first time" flags (command 02), index + $0D0C
+    public const int RamActorTable       = 0x07DE;   // $20 bytes per actor: 1 leader, 2-5 followers, 6 vehicle, 7+n map character n
+    public const int ActorRecordSize     = 0x20;
+    public const int RamEventBase        = 0x0D0F;   // u24: start of the running event (jump base)
+    public const int RamScriptPointer    = 0x0D12;   // u24 T of the running script ($0D14 = FF: none)
+    public const int RamCurrentMap       = 0x0D15;
+    public const int RamSpeakerActor     = 0x0D0D;
+    public const int RamWaitFrames       = 0x0D26;   // frames left in a script wait
+    public const int RamScriptBlocked    = 0x07B4;   // FF while the script waits
+    public const int RamFadeState        = 0x077B;   // non-zero while the screen fades
 }
