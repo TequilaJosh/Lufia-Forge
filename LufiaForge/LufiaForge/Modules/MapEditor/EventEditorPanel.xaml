@@ -64,8 +64,10 @@
                                         <!-- command -->
                                         <StackPanel Visibility="{Binding IsText, Converter={StaticResource InverseBoolToVisibilityConverter}}">
                                             <WrapPanel>
-                                                <TextBlock Text="Command" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                                <TextBlock Text="Command" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,4,0"
+                                                           Visibility="{Binding ShowBytes, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                                 <TextBox Text="{Binding OpcodeHex, UpdateSourceTrigger=LostFocus}" Style="{StaticResource GdNumber}" Width="38"
+                                                         Visibility="{Binding ShowBytes, Converter={StaticResource BoolToVisibilityConverter}}"
                                                          FontFamily="Consolas" Margin="0,0,6,0" ToolTip="Command byte (hex)"/>
                                                 <TextBlock Text="{Binding CommandName}" Foreground="{StaticResource GoldLightBrush}" FontWeight="SemiBold"
                                                            VerticalAlignment="Center" Margin="0,0,12,0"/>
@@ -125,6 +127,8 @@
             <DockPanel>
                 <Button DockPanel.Dock="Right" Content="＋ Insert at start…" Style="{StaticResource LufiaButton}" Click="InsertAtStart_Click"/>
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="0,0,12,0" VerticalAlignment="Center">
+                    <CheckBox x:Name="ShowBytesBox" Content="Show bytes" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"
+                              Margin="0,0,14,0" Click="ShowBytes_Click" ToolTip="Show each command's byte (hex) in the Lines view"/>
                     <RadioButton x:Name="ViewLines" Content="☰ Lines" IsChecked="True" GroupName="EventView" Foreground="{StaticResource TextPrimaryBrush}"
                                  Margin="0,0,10,0" Click="ViewMode_Click" ToolTip="Edit line by line"/>
                     <RadioButton x:Name="ViewFlow" Content="⟲ Flow" GroupName="EventView" Foreground="{StaticResource TextPrimaryBrush}"
