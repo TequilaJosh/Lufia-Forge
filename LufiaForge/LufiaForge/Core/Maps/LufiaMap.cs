@@ -169,6 +169,16 @@ public sealed class LufiaMap
     /// <summary>Metatile layer, Width*Height entries (low 10 bits = metatile number).</summary>
     public ushort[] Layer { get; }
 
+    /// <summary>
+    /// Second metatile layer drawn on BG2 behind the map (the intro's clouds; header 0x16/0x18 = its size,
+    /// 0x2C = its offset), or null. Uses the same tileset as <see cref="Layer"/>. Read-only: saving keeps it as loaded.
+    /// </summary>
+    public ushort[]? Layer2 { get; }
+    public int Layer2Width { get; }
+    public int Layer2Height { get; }
+    /// <summary>Header byte 0x23: how the second layer behaves (2 = drifts diagonally, the intro's clouds).</summary>
+    public int Layer2Mode { get; }
+
     public List<MapExit>    Exits    { get; } = new();
     public List<MapArrival> Arrivals { get; } = new();
     public List<MapNpc>     Npcs     { get; } = new();
@@ -226,6 +236,13 @@ public sealed class LufiaMap
                 ? U16(data, 0x1E) : -1;
             for (int i = 0; i < Layer.Length; i++)
                 Layer[i] = (ushort)U16(data, LayerOffset + i * 2);
+            int l2 = (int)U32(data, 0x2C), w2 = U16(data, 0x16), h2 = U16(data, 0x18);
+            if (l2 != LayerOffset && w2 > 0 && h2 > 0 && l2 >= LayerOffset + Layer.Length * 2 && l2 + w2 * h2 * 2 <= ObjectsOffset)
+            {
+                Layer2Width = w2; Layer2Height = h2; Layer2Mode = data[0x23];
+                Layer2 = new ushort[w2 * h2];
+                for (int i = 0; i < Layer2.Length; i++) Layer2[i] = (ushort)U16(data, l2 + i * 2);
+            }
         }
 
         ParseObjects(data);

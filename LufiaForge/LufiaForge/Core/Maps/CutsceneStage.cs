@@ -17,7 +17,21 @@ public sealed class StageActor
 }
 
 /// <summary>A walk drawn on the stage for one line (tiles in order).</summary>
-public sealed record StageWalk(int Actor, IReadOnlyList<(int X, int Y)> Points, int PathNumber, bool Waits, int Speed, bool CameraFollows = false);
+/// <param name="SegmentSpeeds">Speed index of each leg (Points[k-1] → Points[k]); null = <paramref name="Speed"/> everywhere.</param>
+public sealed record StageWalk(int Actor, IReadOnlyList<(int X, int Y)> Points, int PathNumber, bool Waits, int Speed, bool CameraFollows = false,
+                               IReadOnlyList<int>? SegmentSpeeds = null)
+{
+    public int SpeedOf(int leg) => SegmentSpeeds != null && leg < SegmentSpeeds.Count ? SegmentSpeeds[leg] : Speed;
+
+    /// <summary>Frames the whole walk takes.</summary>
+    public int Frames()
+    {
+        int f = 0;
+        for (int k = 1; k < Points.Count; k++)
+            f += (Math.Abs(Points[k].X - Points[k - 1].X) + Math.Abs(Points[k].Y - Points[k - 1].Y)) * CutsceneStage.FramesPerTile(SpeedOf(k - 1));
+        return f;
+    }
+}
 
 /// <summary>Where everything is after one line of an event.</summary>
 public sealed class StageState
@@ -29,6 +43,8 @@ public sealed class StageState
     /// <summary>True once a camera command ran (otherwise the camera follows the leader).</summary>
     public bool CameraFixed { get; set; }
     public bool Black { get; set; }
+    /// <summary>Where command 6B put the text window (column 20+ = centred), or null for the usual dialogue box.</summary>
+    public (int Column, int Row)? TextWindow { get; set; }
     public int Music { get; set; } = -1;
     public bool Shaking { get; set; }
     /// <summary>Walks this line starts (paths run by 14/15, the party gathering by 3C).</summary>
@@ -36,6 +52,11 @@ public sealed class StageState
     /// <summary>Text this line shows (dialogue), with its speaker actor or -1.</summary>
     public string? Text { get; set; }
     public int Speaker { get; set; } = -1;
+    /// <summary>Text boxes close by themselves (command 69): the last box stays on screen until it's replaced or cleared.</summary>
+    public bool AutoText { get; set; }
+    /// <summary>Text still on screen from an earlier line (while <see cref="AutoText"/> is on), or null.</summary>
+    public string? ShownText { get; set; }
+    public int ShownSpeaker { get; set; } = -1;
     /// <summary>Frames this line waits (waits and fades), for playback.</summary>
     public int WaitFrames { get; set; }
     /// <summary>Set when the event leaves the map here (warp / another map's event).</summary>
@@ -46,6 +67,7 @@ public sealed class StageState
         var c = new StageState
         {
             CameraX = CameraX, CameraY = CameraY, CameraFixed = CameraFixed, Black = Black, Music = Music, Shaking = Shaking,
+            AutoText = AutoText, ShownText = ShownText, ShownSpeaker = ShownSpeaker, TextWindow = TextWindow,
         };
         foreach (var kv in Actors) c.Actors[kv.Key] = kv.Value.Clone();
         return c;
@@ -90,6 +112,7 @@ public static class CutsceneStage
     public static List<StageState> Simulate(LufiaMap map, EventScript script, StageParty party, int startX, int startY)
     {
         var st = Initial(map, party, startX, startY);
+        st.Black = StartsBlack(script);
         var states = new List<StageState>();
         foreach (var op in script.Ops)
         {
@@ -99,6 +122,22 @@ public static class CutsceneStage
             states.Add(st);
         }
         return states;
+    }
+
+    /// <summary>
+    /// True when the event fades the screen in before it ever fades it out: it starts on a black screen (the intro,
+    /// events run right after a warp that left the screen black).
+    /// </summary>
+    public static bool StartsBlack(EventScript script)
+    {
+        foreach (var op in script.Ops)
+        {
+            if (op.IsText || op.Bytes.Length == 0) continue;
+            var b = op.Bytes;
+            if (b[0] == 0x18 || (b[0] == 0x50 && b.Length > 1 && b[1] == 0x06)) return true;
+            if (b[0] == 0x19 || (b[0] == 0x50 && b.Length > 1 && b[1] is 0x05 or 0x08)) return false;
+        }
+        return false;
     }
 
     /// <summary>The stage before the first line: map characters where the map puts them, the party at the start tile.</summary>
@@ -125,9 +164,10 @@ public static class CutsceneStage
     /// place the walking character (and the camera, when it follows) where it is at the end of each later line,
     /// using the line times from the timeline. A later command that moves the same character ends the walk.
     /// </summary>
-    public static void ApplyTime(IReadOnlyList<StageState> states, IReadOnlyList<TimelineItem> timeline)
+    public static void ApplyTime(IReadOnlyList<StageState> states, IReadOnlyList<TimelineItem> timeline, EventScript? script = null)
     {
-        var at = timeline.ToDictionary(t => t.Line);
+        var slow = script != null ? CutsceneTimeline.SlowSpans(script, timeline) : new();
+        var at = timeline.GroupBy(t => t.Line).ToDictionary(g => g.Key, g => g.First());
         int EndOf(int line) => at.TryGetValue(line, out var t) ? t.Start + (t.Blocking ? t.Duration : 0) : 0;
         for (int w = 0; w < states.Count; w++)
         {
@@ -140,14 +180,33 @@ public static class CutsceneStage
                 for (int j = w; j < states.Count; j++)
                 {
                     if (j > w && states[j].Walks.Any(x => x.Actor == walk.Actor)) break;   // a new walk takes over
-                    int elapsed = Math.Max(0, EndOf(j) - start);
-                    if (elapsed >= tiles * fpt) break;                                     // finished: the line's final position stands
-                    var (x, y) = PointAlong(walk.Points, elapsed / (double)fpt);
+                    double elapsed = Math.Max(0, CutsceneTimeline.WalkProgress(start, EndOf(j) - start, slow));
+                    if (elapsed >= walk.Frames()) break;                                    // finished: the line's final position stands
+                    var (x, y) = PointAlongFrames(walk, elapsed);
                     if (states[j].Actors.TryGetValue(walk.Actor, out var a)) { a.X = x; a.Y = y; }
                     if (walk.CameraFollows) { states[j].CameraX = x; states[j].CameraY = y; states[j].CameraFixed = true; }
                 }
             }
         }
+    }
+
+    /// <summary>The tile reached after <paramref name="frames"/> frames of walking (each leg at its own speed).</summary>
+    public static (int X, int Y) PointAlongFrames(StageWalk w, double frames)
+    {
+        double left = frames;
+        for (int k = 1; k < w.Points.Count; k++)
+        {
+            var (ax, ay) = w.Points[k - 1]; var (bx, by) = w.Points[k];
+            int fpt = FramesPerTile(w.SpeedOf(k - 1));
+            double legFrames = (Math.Abs(bx - ax) + Math.Abs(by - ay)) * fpt;
+            if (left < legFrames)
+            {
+                double f = legFrames == 0 ? 1 : left / legFrames;
+                return ((int)Math.Round(ax + (bx - ax) * f), (int)Math.Round(ay + (by - ay) * f));
+            }
+            left -= legFrames;
+        }
+        return w.Points[^1];
     }
 
     /// <summary>The tile reached after walking <paramref name="tiles"/> tiles along a path.</summary>
@@ -198,6 +257,7 @@ public static class CutsceneStage
                 0x0F or 0x30 or 0x32 or 0x34 or 0x36 when b.Length > 1 => b[1] + 7,
                 _ => -1,
             };
+            if (st.AutoText) { st.ShownText = st.Text; st.ShownSpeaker = st.Speaker; } else st.ShownText = null;
             return;
         }
         if (b.Length == 0) return;
@@ -238,7 +298,10 @@ public static class CutsceneStage
                     a.Facing = s.Facing is >= 1 and <= 4 ? s.Facing - 1 : s.Facing == 5 ? a.Facing : s.Direction;
                 }
                 if (path.CameraFollows) { st.CameraX = a.X; st.CameraY = a.Y; st.CameraFixed = true; }
-                st.Walks.Add(new StageWalk(id, walk, n, !path.NoWait, path.Steps.Count > 0 ? path.Steps[0].Speed : 4, path.CameraFollows));
+                var speeds = new List<int>();
+                if (path.WalkToStart) speeds.Add(path.Steps.Count > 0 ? path.Steps[0].Speed : 4);
+                speeds.AddRange(path.Steps.Select(x => x.Speed));
+                st.Walks.Add(new StageWalk(id, walk, n, !path.NoWait, path.Steps.Count > 0 ? path.Steps[0].Speed : 4, path.CameraFollows, speeds));
                 break;
             }
             case 0x3C:
@@ -284,8 +347,12 @@ public static class CutsceneStage
                 break;
             }
             case 0x18: st.Black = false; break;   // fade in
-            case 0x19: st.Black = true; break;    // fade to black
-            case 0x50 when b[1] is 0x05 or 0x08: st.Black = true; st.WaitFrames = 32; break;
+            case 0x19: st.Black = true; st.ShownText = null; break;    // fade to black
+            case 0x50 when b[1] is 0x05 or 0x08: st.Black = true; st.WaitFrames = 32; st.ShownText = null; break;
+            case 0x50 when b[1] is 0x09 or 0x14: st.ShownText = null; break;   // close the text overlay
+            case 0x69: st.AutoText = true; break;
+            case 0x6B when b.Length > 2: st.TextWindow = (b[1], b[2]); break;
+            case 0x6A: st.AutoText = false; st.ShownText = null; break;
             case 0x50 when b[1] == 0x06: st.Black = false; st.WaitFrames = 32; break;
             case 0x5A: st.WaitFrames = 32; break;
             case 0x0A: st.Music = b[1]; break;

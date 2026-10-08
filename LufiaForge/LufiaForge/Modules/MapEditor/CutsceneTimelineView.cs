@@ -146,7 +146,7 @@ public sealed class CutsceneTimelineView : DockPanel
         _canvas.Children.Clear();
         _names.Children.Clear();
         if (_items.Count == 0) { _info.Text = "No lines to place in time."; return; }
-        int total = _items.Max(i => i.Start + Math.Max(1, i.Duration));
+        int total = _items.Max(i => i.Start + Math.Max(1, i.VisibleLength));
         double width = X(total) + 80, height = RulerH + _tracks.Count * TrackH + 10;
         _canvas.Width = width; _canvas.Height = height; _names.Height = height + 20;
 
@@ -178,7 +178,7 @@ public sealed class CutsceneTimelineView : DockPanel
         {
             int k = _tracks.IndexOf(it.Track);
             if (k < 0) continue;
-            double w = Math.Max(6, it.Duration * Ppf);
+            double w = Math.Max(6, it.VisibleLength * Ppf);
             var block = new Border
             {
                 Width = w, Height = TrackH - 6, CornerRadius = new CornerRadius(3), Tag = it, Cursor = Cursors.SizeWE,
@@ -232,6 +232,7 @@ public sealed class CutsceneTimelineView : DockPanel
         if (p.X < LabelW) return;
         _playFrame = Math.Max(0, (int)((p.X - LabelW) / Ppf));
         PlacePlayhead();
+        _stage?.ShowFrame(_playFrame);   // the stage shows that exact frame
     }
 
     private void Canvas_MouseMove(object sender, MouseEventArgs e)
