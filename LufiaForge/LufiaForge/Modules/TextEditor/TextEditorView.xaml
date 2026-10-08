@@ -26,6 +26,22 @@
                              HorizontalAlignment="Stretch" Width="Auto" ToolTip="Words in the text, a map name or a character number"/>
                 </DockPanel>
                 <DockPanel Margin="0,4,0,0">
+                    <TextBlock Text="Character" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <ComboBox Style="{StaticResource GdCombo}" ItemsSource="{Binding CharacterFilters}" SelectedItem="{Binding CharacterFilter}"
+                              HorizontalAlignment="Stretch" Width="Auto" MaxDropDownHeight="520"
+                              ToolTip="Everything one character says, on every map (characters are recognised by their sprite)">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <Image Source="{Binding Picture}" Width="16" Height="24" Margin="0,0,6,0" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                                    <TextBlock Text="{Binding Label}" Foreground="{StaticResource GoldLightBrush}" VerticalAlignment="Center" MinWidth="110"/>
+                                    <TextBlock Text="{Binding Detail}" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" FontSize="11"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                </DockPanel>
+                <DockPanel Margin="0,4,0,0">
                     <TextBlock Text="Map" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,20,0"/>
                     <CheckBox DockPanel.Dock="Right" Content="Characters only" IsChecked="{Binding OnlyCharacters}" Style="{StaticResource GdCheck}" Margin="8,0,0,0"/>
                     <ComboBox Style="{StaticResource GdCombo}" ItemsSource="{Binding MapFilters}" SelectedIndex="{Binding MapFilterIndex}"
@@ -82,6 +98,8 @@
                         <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,8"
                                    Text="Enter = new line in the box. Tags: [Hero] [Lufia] [Aguro] [Jerin] [Maxim] [Selan] [Guy] [Artea], [ITEM:xx] [SPELL:xx] [TOWN:xx], and [xx] / [xx:yy] for other codes (keep the ones already there). To change who speaks or what happens around this line, use the Events tab."/>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button Content="Open the event…" Style="{StaticResource LufiaButton}" Command="{Binding OpenEventCommand}" Margin="0,0,8,0"
+                                    ToolTip="The whole script this line is part of, in the event editor"/>
                             <Button Content="Export all dialogue…" Style="{StaticResource LufiaButton}" Command="{Binding ExportAllCommand}" Margin="0,0,16,0"/>
                             <Button Content="↺ Revert" Style="{StaticResource LufiaButton}" Command="{Binding RevertCommand}" Margin="0,0,8,0"/>
                             <Button Content="✔ Apply to ROM" Style="{StaticResource LufiaButtonGold}" Command="{Binding ApplyCommand}"/>
