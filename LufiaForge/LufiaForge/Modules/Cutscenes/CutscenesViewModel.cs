@@ -58,6 +58,8 @@ public partial class CutscenesViewModel : ObservableObject, IEventHost
     {
         [(0x4F, 8)] = "Opening intro (before the title)",
         [(0x93, 2)] = "Prologue: the heroes enter the Fortress of Doom",
+        [(0x2D, 12)] = "Ending (after the final battle)",
+        [(0x2D, 13)] = "Ending credits (staff roll, THE END)",
     };
 
     public void SetRom(RomBuffer rom, MainViewModel mainVm)
@@ -123,7 +125,10 @@ public partial class CutscenesViewModel : ObservableObject, IEventHost
             }
             return found;
         });
-        _all = list.OrderByDescending(c => c.Title.Length > 0).ThenBy(c => c.MapId).ThenBy(c => c.Event).ToList();
+        // known cutscenes first, in story order (intro, prologue, ending, credits), then the rest by map
+        var order = KnownNames.Keys.ToList();
+        _all = list.OrderBy(c => order.IndexOf((c.MapId, c.Event)) is var i && i >= 0 ? i : int.MaxValue)
+                   .ThenBy(c => c.MapId).ThenBy(c => c.Event).ToList();
         MapFilters.Clear(); _mapFilterIds.Clear();
         MapFilters.Add("All maps"); _mapFilterIds.Add(-1);
         foreach (var id in _all.Select(c => c.MapId).Distinct().OrderBy(i => i)) { MapFilters.Add(labels[id]); _mapFilterIds.Add(id); }
