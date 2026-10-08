@@ -1,0 +1,56 @@
+<UserControl x:Class="LufiaForge.Modules.Cutscenes.CutscenesView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:me="clr-namespace:LufiaForge.Modules.MapEditor"
+             Background="{DynamicResource DeepPurpleBrush}">
+    <UserControl.Resources>
+        <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="300" MinWidth="220"/>
+            <ColumnDefinition Width="6"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- cutscene list -->
+        <DockPanel Grid.Column="0" Margin="8">
+            <StackPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+                <TextBlock Text="🎬 Cutscenes" Style="{StaticResource GdSection}" FontSize="15"/>
+                <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,2,0,6"
+                           Text="Every event that moves characters, the camera or the screen. Pick one to edit it on the stage."/>
+                <TextBox Style="{StaticResource GdText}" Text="{Binding Search, UpdateSourceTrigger=PropertyChanged}" HorizontalAlignment="Stretch" Width="Auto"
+                         ToolTip="Search names and what the cutscene does"/>
+                <ComboBox Style="{StaticResource GdCombo}" ItemsSource="{Binding MapFilters}" SelectedIndex="{Binding MapFilterIndex}"
+                          Margin="0,6,0,0" HorizontalAlignment="Stretch" Width="Auto"/>
+                <CheckBox Content="Only bigger scenes (6+ stage commands)" IsChecked="{Binding OnlyBig}" Style="{StaticResource GdCheck}" Margin="0,6,0,0"/>
+            </StackPanel>
+            <TextBlock DockPanel.Dock="Bottom" Text="{Binding Status}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+            <ListBox Style="{StaticResource GdRecordList}" ItemsSource="{Binding Cutscenes}" SelectedItem="{Binding Selected}"
+                     HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <DockPanel Margin="0,3">
+                            <Image DockPanel.Dock="Left" Source="{Binding Picture}" Width="24" Height="36" Margin="0,0,6,0" VerticalAlignment="Top"
+                                   RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                            <StackPanel>
+                                <TextBlock Text="{Binding Label}" Foreground="{StaticResource GoldLightBrush}" TextWrapping="Wrap"/>
+                                <TextBlock Text="{Binding Hint}" Foreground="{StaticResource SuccessBrush}" FontSize="11" TextWrapping="Wrap"/>
+                                <TextBlock Text="{Binding Details}" Style="{StaticResource GdHint}" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </DockPanel>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </DockPanel>
+
+        <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="Transparent"/>
+
+        <Grid Grid.Column="2">
+            <TextBlock x:Name="EmptyText" Text="Pick a cutscene on the left." Style="{StaticResource GdHint}" FontSize="14"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            <me:EventEditorPanel x:Name="Editor" Visibility="Collapsed"/>
+        </Grid>
+    </Grid>
+</UserControl>

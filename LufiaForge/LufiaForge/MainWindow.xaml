@@ -4,7 +4,7 @@
         xmlns:vm="clr-namespace:LufiaForge.ViewModels"
         xmlns:mm="clr-namespace:LufiaForge.Modules.MemoryMonitor"
         xmlns:te="clr-namespace:LufiaForge.Modules.TextEditor"
-        xmlns:tv="clr-namespace:LufiaForge.Modules.TileViewer"
+        xmlns:cs="clr-namespace:LufiaForge.Modules.Cutscenes"
         xmlns:pm="clr-namespace:LufiaForge.Modules.PatchManager"
         xmlns:dis="clr-namespace:LufiaForge.Modules.Disassembler"
         xmlns:gd="clr-namespace:LufiaForge.Modules.GameData"
@@ -158,12 +158,12 @@ Title="{Binding WindowTitle}"
                 </gd:GameDataView>
             </TabItem>
 
-            <TabItem Header="🎨  Tile Viewer"   Style="{StaticResource LufiaTabItem}">
-                <tv:TileViewerView x:Name="TileViewerView">
-                    <tv:TileViewerView.DataContext>
-                        <tv:TileViewerViewModel/>
-                    </tv:TileViewerView.DataContext>
-                </tv:TileViewerView>
+            <TabItem Header="🎬  Cutscenes"     Style="{StaticResource LufiaTabItem}">
+                <cs:CutscenesView x:Name="CutscenesView">
+                    <cs:CutscenesView.DataContext>
+                        <cs:CutscenesViewModel/>
+                    </cs:CutscenesView.DataContext>
+                </cs:CutscenesView>
             </TabItem>
 
             <TabItem Header="🗺  Map Editor"    Style="{StaticResource LufiaTabItem}">

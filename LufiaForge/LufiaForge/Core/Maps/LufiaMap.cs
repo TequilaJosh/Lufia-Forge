@@ -44,6 +44,55 @@ public sealed class MapSpot
     public int Y2 { get; init; }
 }
 
+/// <summary>
+/// A movement path (object section G): 6-byte header [flags, step count, start X (u16), start Y (u16)] then 3-byte steps.
+/// Run by event commands 14/15 ("character walks path n", 1-based). Decoded from $01:9D62-$9F41.
+/// </summary>
+public sealed class MovePath
+{
+    /// <summary>Header flags: bit 0 = the event doesn't wait, bit 1 = repeat forever, bits 2-3 = camera follows,
+    /// bit 4 = walk to the start instead of appearing there.</summary>
+    public int Flags { get; set; }
+    public int StartX { get; set; }
+    public int StartY { get; set; }
+    public List<MoveStep> Steps { get; } = new();
+
+    public bool NoWait { get => (Flags & 1) != 0; set => Flags = value ? Flags | 1 : Flags & ~1; }
+    public bool Repeat { get => (Flags & 2) != 0; set => Flags = value ? Flags | 2 : Flags & ~2; }
+    public bool CameraFollows { get => (Flags & 0x0C) != 0; set => Flags = value ? Flags | 0x04 : Flags & ~0x0C; }
+    public bool WalkToStart { get => (Flags & 0x10) != 0; set => Flags = value ? Flags | 0x10 : Flags & ~0x10; }
+
+    /// <summary>Tiles visited: the start, then the end of every step.</summary>
+    public List<(int X, int Y)> Points()
+    {
+        var list = new List<(int, int)> { (StartX, StartY) };
+        int x = StartX, y = StartY;
+        foreach (var st in Steps)
+        {
+            (int dx, int dy) = st.Direction switch { 0 => (1, 0), 1 => (-1, 0), 2 => (0, 1), _ => (0, -1) };
+            x += dx * st.Tiles; y += dy * st.Tiles;
+            list.Add((x, y));
+        }
+        return list;
+    }
+}
+
+/// <summary>One step of a path: walk <see cref="Tiles"/> tiles in <see cref="Direction"/>.</summary>
+public sealed class MoveStep
+{
+    /// <summary>Byte 0: bit 0 = layer, bits 2-4 = facing (0 = face the way it walks, 1-4 = face right/left/down/up, 5 = don't turn),
+    /// bits 5-7 = speed (index into the speed table $01:E237).</summary>
+    public int Mode { get; set; }
+    /// <summary>Byte 1 (bits 0-1 = direction: 0 right, 1 left, 2 down, 3 up; other bits kept).</summary>
+    public int DirByte { get; set; }
+    public int Tiles { get; set; }
+
+    public int Direction { get => DirByte & 3; set => DirByte = (DirByte & ~3) | (value & 3); }
+    public int Speed { get => (Mode >> 5) & 7; set => Mode = (Mode & 0x1F) | ((value & 7) << 5); }
+    public int Facing { get => (Mode >> 2) & 7; set => Mode = (Mode & ~0x1C) | ((value & 7) << 2); }
+    public bool UpperLayer { get => (Mode & 1) != 0; set => Mode = value ? Mode | 1 : Mode & ~1; }
+}
+
 /// <summary>An NPC (object section C, 14 bytes). NPC n runs event n of the map's script block.</summary>
 public sealed class MapNpc
 {
@@ -124,6 +173,8 @@ public sealed class LufiaMap
     public List<MapArrival> Arrivals { get; } = new();
     public List<MapNpc>     Npcs     { get; } = new();
     public List<MapSpot>    Spots    { get; } = new();
+    /// <summary>Movement paths (section G); path n of commands 14/15 is Paths[n - 1].</summary>
+    public List<MovePath>   Paths    { get; } = new();
 
     /// <summary>Counts and offsets of the 8 object sections (relative to the object block), as loaded.</summary>
     public int[] SectionCounts  { get; } = new int[8];
@@ -255,6 +306,17 @@ public sealed class LufiaMap
         int e = ob + SectionOffsets[4];
         for (int i = 0; i < SectionCounts[4] && e + 12 <= d.Length; i++, e += 12)
             Spots.Add(new MapSpot { Index = i, X1 = U16(d, e + 4), Y1 = U16(d, e + 6), X2 = U16(d, e + 8), Y2 = U16(d, e + 10) });
+
+        int g = ob + SectionOffsets[6];
+        for (int i = 0; i < SectionCounts[6] && g + 6 <= d.Length; i++)
+        {
+            var path = new MovePath { Flags = d[g], StartX = U16(d, g + 2), StartY = U16(d, g + 4) };
+            int steps = d[g + 1];
+            g += 6;
+            for (int k = 0; k < steps && g + 3 <= d.Length; k++, g += 3)
+                path.Steps.Add(new MoveStep { Mode = d[g], DirByte = d[g + 1], Tiles = d[g + 2] });
+            Paths.Add(path);
+        }
     }
 
     /// <summary>Exit records (section A) of an object block at <paramref name="ob"/>.</summary>
@@ -434,9 +496,17 @@ public sealed class LufiaMap
             Set16(c, p + 6, n.BoxX1); Set16(c, p + 8, n.BoxY1); Set16(c, p + 10, n.BoxX2); Set16(c, p + 12, n.BoxY2);
         }
 
-        var sections = new[] { a.ToArray(), b.ToArray(), c.ToArray(), raw[3], raw[4], raw[5], raw[6], raw[7] };
+        var g = new List<byte>();
+        foreach (var path in Paths)
+        {
+            if (path.Steps.Count > 255) throw new InvalidOperationException("A path can have at most 255 steps.");
+            g.Add((byte)path.Flags); g.Add((byte)path.Steps.Count); Add16(g, path.StartX); Add16(g, path.StartY);
+            foreach (var st in path.Steps) { g.Add((byte)st.Mode); g.Add((byte)st.DirByte); g.Add((byte)st.Tiles); }
+        }
+        var sections = new[] { a.ToArray(), b.ToArray(), c.ToArray(), raw[3], raw[4], raw[5], g.ToArray(), raw[7] };
         var counts = new[] { Exits.Count, Arrivals.Count, SectionCounts[2], SectionCounts[3], SectionCounts[4],
-                             SectionCounts[5], SectionCounts[6], SectionCounts[7] };
+                             SectionCounts[5], Paths.Count, SectionCounts[7] };
+        if (Paths.Count > 255) throw new InvalidOperationException("A map can have at most 255 paths.");
         if (counts[0] > 255 || counts[1] > 255) throw new InvalidOperationException("A map can have at most 255 exits and 255 arrival points.");
 
         var block = new List<byte>();

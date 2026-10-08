@@ -8,51 +8,77 @@ using System.Windows.Controls;
 using Button = System.Windows.Controls.Button;
 using ContextMenu = System.Windows.Controls.ContextMenu;
 using MenuItem = System.Windows.Controls.MenuItem;
+using DragEventArgs = System.Windows.DragEventArgs;
+using DataObject = System.Windows.DataObject;
+using DragDrop = System.Windows.DragDrop;
+using DragDropEffects = System.Windows.DragDropEffects;
 
 namespace LufiaForge.Modules.MapEditor;
 
-/// <summary>An editable value of a command: a hex/decimal field, an item, or a jump target line.</summary>
+/// <summary>An editable value of a command: a number, a choice (who, direction, item, map…), or a jump target line.</summary>
 public partial class ParamVm : ObservableObject
 {
     private readonly EventLineVm _line;
     public string Label { get; init; } = "";
-    /// <summary>Byte position in the command (field / item), or -1 for a jump.</summary>
+    /// <summary>The field (null = the answer count of command 03 or a raw byte, see <see cref="Position"/>).</summary>
+    public ParamDef? Def { get; init; }
+    /// <summary>Byte position for raw fields without a definition, or -1.</summary>
     public int Position { get; init; } = -1;
     /// <summary>Index into the command's jump targets, or -1.</summary>
     public int JumpIndex { get; init; } = -1;
     public bool Decimal { get; init; }
-    public bool IsItem { get; init; }
-    /// <summary>This value is a story flag number (shows a "uses" button).</summary>
-    public bool IsFlag { get; init; }
-    public string FlagNameText => IsFlag && Position < _line.Op.Bytes.Length && EventScript.FlagName?.Invoke(_line.Op.Bytes[Position]) is { } n ? n : "";
+    /// <summary>Values behind <see cref="Choices"/> (null for jumps and plain fields).</summary>
+    public IReadOnlyList<int>? ChoiceValues { get; init; }
+
+    public bool IsFlag => Def?.Kind == ParamKind.Flag;
+    public string FlagNameText => IsFlag && EventScript.FlagName?.Invoke(Raw) is { } n ? n : "";
 
     public void Follow() { if (IsJump) _line.Owner.FollowJump(_line.Op, JumpIndex); }
-    public void ShowFlagUses() { if (IsFlag && Position < _line.Op.Bytes.Length) _line.Owner.ShowFlag(_line.Op.Bytes[Position]); }
+    public void ShowFlagUses() { if (IsFlag) _line.Owner.ShowFlag(Raw); }
 
     public bool IsJump => JumpIndex >= 0;
-    public bool IsChoice => IsJump || IsItem;
+    public bool IsChoice => IsJump || ChoiceValues != null;
     public bool IsField => !IsChoice;
     public IReadOnlyList<string> Choices { get; set; } = Array.Empty<string>();
 
     public ParamVm(EventLineVm line) { _line = line; }
 
-    public string Value
+    private int Raw
     {
         get
         {
-            if (Position < 0 || Position >= _line.Op.Bytes.Length) return "";
-            byte b = _line.Op.Bytes[Position];
-            return Decimal ? b.ToString() : b.ToString("X2");
+            var b = _line.Op.Bytes;
+            if (Def != null) { try { return Def.Get(b); } catch { return 0; } }
+            return Position >= 0 && Position < b.Length ? b[Position] : 0;
         }
+    }
+
+    private bool Hex => Def != null
+        ? Def.Kind is ParamKind.Hex or ParamKind.Flag or ParamKind.Music or ParamKind.Sound or ParamKind.Formation
+        : !Decimal;
+
+    private void Store(int v)
+    {
+        var bytes = (byte[])_line.Op.Bytes.Clone();
+        if (Def != null) Def.Set(bytes, v);
+        else if (Position >= 0 && Position < bytes.Length) bytes[Position] = (byte)v;
+        _line.SetBytes(bytes, resizeChoices: Def == null && Position == 1 && bytes[0] == 0x03);
+    }
+
+    public string Value
+    {
+        get => Hex ? Raw.ToString(Raw > 0xFF ? "X4" : "X2") : Raw.ToString();
         set
         {
-            var style = Decimal ? NumberStyles.Integer : NumberStyles.HexNumber;
-            if (!int.TryParse(value?.Trim(), style, CultureInfo.InvariantCulture, out int v) || v is < 0 or > 255)
+            int min = Def?.Min ?? 0, max = Def?.Max ?? 255;
+            var style = Hex ? NumberStyles.HexNumber : NumberStyles.Integer;
+            if (!int.TryParse(value?.Trim(), style, CultureInfo.InvariantCulture, out int v) || v < min || v > max)
             {
-                _line.ErrorText = $"{Label}: enter {(Decimal ? "a number 0-255" : "a hex byte 00-FF")}.";
+                string lo = Hex ? min.ToString("X2") : min.ToString(), hi = Hex ? max.ToString("X2") : max.ToString();
+                _line.ErrorText = $"{Label}: enter {(Hex ? "a hex value" : "a number")} from {lo} to {hi}.";
                 return;
             }
-            _line.SetByte(Position, (byte)v);
+            Store(v);
         }
     }
 
@@ -60,7 +86,7 @@ public partial class ParamVm : ObservableObject
     {
         get
         {
-            if (IsItem) return Position >= 0 && Position < _line.Op.Bytes.Length ? _line.Op.Bytes[Position] : -1;
+            if (ChoiceValues != null) return ChoiceValues.ToList().IndexOf(Raw);
             if (!IsJump) return -1;   // plain value field: its (hidden) dropdown has nothing to select
             var t = JumpIndex < _line.Op.Targets.Count ? _line.Op.Targets[JumpIndex] : null;
             if (t?.Op == null) return Choices.Count - 1;          // the "outside this event" entry
@@ -69,7 +95,7 @@ public partial class ParamVm : ObservableObject
         set
         {
             if (value < 0) return;
-            if (IsItem) { _line.SetByte(Position, (byte)value); return; }
+            if (ChoiceValues != null) { if (value < ChoiceValues.Count && ChoiceValues[value] != Raw) Store(ChoiceValues[value]); return; }
             if (!IsJump) return;
             var ops = _line.Owner.Script.Ops;
             if (value < ops.Count && JumpIndex < _line.Op.Targets.Count)
@@ -90,6 +116,8 @@ public partial class EventLineVm : ObservableObject
 
     [ObservableProperty] private string _errorText = "";
     [ObservableProperty] private bool _isHighlighted;
+    [ObservableProperty] private bool _dropAbove;
+    [ObservableProperty] private bool _dropBelow;
     public ObservableCollection<ParamVm> Params { get; } = new();
 
     public EventLineVm(EventEditorPanel owner, ScriptOp op, int index)
@@ -102,13 +130,24 @@ public partial class EventLineVm : ObservableObject
     public string OffsetText => Op.IsNew ? "new line" : $"ROM 0x{Op.Offset:X6}";
     public bool IsText => Op.IsText;
     public string Description => Owner.Script.Describe(Op);
+    /// <summary>A "continue with event N of map M" line (51): its target can be opened.</summary>
+    public bool CanOpenChained => !Op.IsText && Op.Bytes.Length == 3 && Op.Bytes[0] == 0x51;
+    public string OpenChainedText => CanOpenChained ? $"▶ Open event {EventCommands.ChainedEvent(Op.Bytes)} of map {Op.Bytes[1]:X2}" : "";
+
+    public string CommandName => Op.IsText || Op.Bytes.Length == 0 ? "" : EventCommands.Find(Op.Bytes[0])?.Name ?? "Unknown command";
+    public string WaitsText => Op.IsText || Op.Bytes.Length == 0 ? ""
+        : EventCommands.Find(Op.Bytes[0])?.Waits is { Length: > 0 } w ? "⏸ waits " + w : "";
 
     // ── dialogue ──
     public static readonly IReadOnlyList<string> Speakers = BuildSpeakers();
     private static IReadOnlyList<string> BuildSpeakers()
     {
         var l = new List<string> { "Narration (0C)", "Text box (0D)" };
-        for (int n = 0; n < 40; n++) l.Add($"Actor {n} says ({(n < 8 ? 0x88 + n : 0x90 + n - 8):X2})");
+        for (int n = 0; n < 40; n++)
+        {
+            string who = EventCommands.Actor(n);
+            l.Add($"{char.ToUpper(who[0]) + who[1..]} says ({(n < 8 ? 0x88 + n : 0x90 + n - 8):X2})");
+        }
         return l;
     }
     public IReadOnlyList<string> SpeakerChoices => Speakers;
@@ -174,15 +213,12 @@ public partial class EventLineVm : ObservableObject
         }
     }
 
-    public void SetByte(int pos, byte v)
+    public void SetBytes(byte[] bytes, bool resizeChoices = false)
     {
-        var bytes = (byte[])Op.Bytes.Clone();
-        if (pos >= bytes.Length) return;
-        bytes[pos] = v;
-        if (bytes[0] == 0x03 && pos == 1)
+        if (resizeChoices)
         {
-            // choice count: resize the target list
-            var resized = new byte[2 + 2 * v];
+            // answer count: resize the target list
+            var resized = new byte[2 + 2 * bytes[1]];
             Array.Copy(bytes, resized, Math.Min(bytes.Length, resized.Length));
             bytes = resized;
         }
@@ -203,23 +239,32 @@ public partial class EventLineVm : ObservableObject
         Params.Clear();
         if (Op.IsText || Op.Bytes.Length == 0) return;
         var b = Op.Bytes;
-        void Field(string label, int pos, bool dec = false) => Params.Add(new ParamVm(this) { Label = label, Position = pos, Decimal = dec, IsFlag = label == "flag" });
-        void Jump(string label, int k) => Params.Add(new ParamVm(this) { Label = label, JumpIndex = k, Choices = Owner.JumpChoices(Op, k) });
-        switch (b[0])
+        if (b[0] == 0x03)
         {
-            case 0x01: Jump("go to", 0); break;
-            case 0x02: Field("flag", 1); Jump("first time", 0); Jump("later", 1); break;
-            case 0x03: Field("choices", 1, dec: true); for (int k = 0; k < b[1]; k++) Jump($"#{k + 1}", k); break;
-            case 0x04: case 0x05: Field("flag", 1); Jump("go to", 0); break;
-            case 0x06: case 0x07: Field("flag", 1); break;
-            case 0x3E:
-                Params.Add(new ParamVm(this) { Label = "item", Position = 1, IsItem = true, Choices = Owner.ItemChoices });
-                Field("qty", 2, dec: true);
-                break;
-            case 0x6C: Field("frames", 1, dec: true); break;
-            default:
-                for (int i = 1; i < b.Length; i++) Field($"byte {i}", i);
-                break;
+            Params.Add(new ParamVm(this) { Label = "answers", Position = 1, Decimal = true });
+            for (int k = 0; k < b[1]; k++) Params.Add(new ParamVm(this) { Label = $"#{k + 1}", JumpIndex = k, Choices = Owner.JumpChoices(Op, k) });
+            return;
+        }
+        var def = EventCommands.Find(b[0]);
+        if (def == null || b.Length != EventScript.CommandLength(b[0], b.Length > 1 ? b[1] : 0))
+        {
+            for (int i = 1; i < b.Length; i++) Params.Add(new ParamVm(this) { Label = $"byte {i}", Position = i });
+            return;
+        }
+        foreach (var d in def.Params)
+        {
+            if (d.Kind == ParamKind.Jump)
+            {
+                Params.Add(new ParamVm(this) { Label = d.Label, Def = d, JumpIndex = d.JumpIndex, Choices = Owner.JumpChoices(Op, d.JumpIndex) });
+                continue;
+            }
+            var choices = Owner.ChoicesFor(d.Kind);
+            Params.Add(new ParamVm(this)
+            {
+                Label = d.Label, Def = d,
+                ChoiceValues = choices?.Select(c => c.Value).ToList(),
+                Choices = choices?.Select(c => c.Label).ToList() ?? (IReadOnlyList<string>)Array.Empty<string>(),
+            });
         }
     }
 
@@ -230,6 +275,10 @@ public partial class EventLineVm : ObservableObject
         OnPropertyChanged(nameof(SpeakerIndex));
         OnPropertyChanged(nameof(SizeText));
         OnPropertyChanged(nameof(OpcodeHex));
+        OnPropertyChanged(nameof(CommandName));
+        OnPropertyChanged(nameof(CanOpenChained));
+        OnPropertyChanged(nameof(OpenChainedText));
+        OnPropertyChanged(nameof(WaitsText));
         foreach (var p in Params.Where(p => p.IsJump)) p.Choices = Owner.JumpChoices(Op, p.JumpIndex);
         var copy = Params.ToList();
         Params.Clear();
@@ -246,28 +295,15 @@ public partial class EventEditorPanel : UserControl
     private bool _refreshing;
 
     public EventScript Script { get; private set; } = null!;
-    public IReadOnlyList<string> ItemChoices { get; private set; } = Array.Empty<string>();
+
+    /// <summary>The screen that opened the editor (confirmations, save list).</summary>
+    public IEventHost Host => _owner;
+    private int _selectedLine = -1;
 
     /// <summary>Raised by the Close button (only shown when the panel sits in its own window).</summary>
     public event Action? CloseRequested;
     public bool ShowCloseButton { set => CloseButton.Visibility = value ? Visibility.Visible : Visibility.Collapsed; }
     public bool IsLoadedScript => Script != null;
-
-    private static readonly (string Name, byte[] Bytes, bool Text)[] Templates =
-    {
-        ("Dialogue: narration", new byte[] { 0x0C }, true),
-        ("Dialogue: actor 0 speaks", new byte[] { 0x88 }, true),
-        ("Give item", new byte[] { 0x3E, 0x94, 0x01 }, false),
-        ("Set story flag", new byte[] { 0x06, 0x00 }, false),
-        ("Clear story flag", new byte[] { 0x07, 0x00 }, false),
-        ("If flag is set, go to…", new byte[] { 0x04, 0x00, 0x00, 0x00 }, false),
-        ("If flag is not set, go to…", new byte[] { 0x05, 0x00, 0x00, 0x00 }, false),
-        ("Go to…", new byte[] { 0x01, 0x00, 0x00 }, false),
-        ("Wait (frames)", new byte[] { 0x6C, 0x3C }, false),
-        ("Learn spell", new byte[] { 0x3D, 0x00, 0x00 }, false),
-        ("End", new byte[] { 0x00 }, false),
-        ("Other command (edit its byte)", new byte[] { 0x84 }, false),
-    };
 
     public EventEditorPanel()
     {
@@ -291,10 +327,25 @@ public partial class EventEditorPanel : UserControl
         BackButton.Visibility = _history.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         _rom = rom; Script = script; _owner = host;
         _mapId = script.MapId; _event = script.Event;
-        if (ItemChoices.Count == 0)
-            ItemChoices = Enumerable.Range(0, 256).Select(i => $"{i:X2} {MapSetupScript.ItemName(rom, i)}").ToList();
+        if (!ReferenceEquals(rom, _choiceRom)) { _choiceCache.Clear(); _choiceRom = rom; }
         HeaderText.Text = title;
         Fill();
+        _selectedLine = -1;
+        bool cutscene = script.Ops.Any(CutsceneStage.IsStageCommand);
+        if (_cutsceneMode || StageToggle.IsChecked == true || (cutscene && !_stageChosen)) ShowStage(true);
+        else if (Stage.Visibility == Visibility.Visible) Stage.Bind(rom, this);
+    }
+
+    private readonly Dictionary<ParamKind, IReadOnlyList<(int Value, string Label)>?> _choiceCache = new();
+    private RomBuffer? _choiceRom;
+
+    /// <summary>Dropdown entries for a field kind (null = plain number).</summary>
+    public IReadOnlyList<(int Value, string Label)>? ChoicesFor(ParamKind kind)
+    {
+        if (_choiceCache.TryGetValue(kind, out var c)) return c;
+        c = EventCommands.Choices(kind, _rom, EventScript.MapLabel);
+        _choiceCache[kind] = c;
+        return c;
     }
 
     /// <summary>Jump target choices: every line, plus the original outside target when there is one.</summary>
@@ -329,6 +380,160 @@ public partial class EventEditorPanel : UserControl
         StatusText.Text = "";
     }
 
+    private bool _stageChosen;
+    private bool _cutsceneMode;
+
+    /// <summary>
+    /// Cutscene editor layout (the Cutscenes tab): the stage is always shown and gets most of the room,
+    /// the lines become the cutscene's timeline.
+    /// </summary>
+    public bool CutsceneMode
+    {
+        get => _cutsceneMode;
+        set
+        {
+            _cutsceneMode = value;
+            StageToggle.Visibility = value ? Visibility.Collapsed : Visibility.Visible;
+            LinesColumn.Width = value ? new GridLength(1, GridUnitType.Star) : new GridLength(1, GridUnitType.Star);
+            HelpText.Text = value
+                ? "The lines on the left are the cutscene's timeline; click one to see the stage at that moment, ▶ Play to watch from there. " +
+                  "＋ adds a command below a line (Characters, Camera & screen, Music & sound, Timing…). On the stage, click a tile to move the " +
+                  "selected \"Place a character\" / \"Move the camera\" line there; walks are edited under the stage. ✔ Apply writes the cutscene, 💾 the walks."
+                : DefaultHelp;
+        }
+    }
+
+    private const string DefaultHelp =
+        "Dialogue: Enter = new line in the box. Tags: [Hero] [Lufia] [Aguro] [Jerin] [Maxim] [Selan] [Guy] [Artea], [ITEM:xx] [SPELL:xx] [TOWN:xx], " +
+        "and [xx] / [xx:yy] for other codes. Commands: pick values from the lists, jump targets by line, ＋ inserts below, ✕ deletes. " +
+        "Story flags are shared by the whole game, so change them with care.";
+
+    private void StageToggle_Click(object sender, RoutedEventArgs e)
+    {
+        _stageChosen = true;
+        ShowStage(StageToggle.IsChecked == true);
+    }
+
+    private void ShowStage(bool show)
+    {
+        StageToggle.IsChecked = show;
+        Stage.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        SplitterColumn.Width = new GridLength(show ? 6 : 0);
+        StageColumn.Width = show ? new GridLength(_cutsceneMode ? 1.7 : 1.2, GridUnitType.Star) : new GridLength(0);
+        if (show)
+        {
+            if (Window.GetWindow(this) is Window w && w.Width < 1400 && w.WindowState == WindowState.Normal && w is EventEditorWindow) w.Width = 1400;
+            Stage.Bind(_rom, this);
+            if (_selectedLine >= 0) Stage.ShowLine(_selectedLine);
+        }
+    }
+
+    // ── reordering ──
+
+    /// <summary>Move a line to a new index (jumps keep their targets).</summary>
+    public void MoveLine(int from, int to)
+    {
+        if (from < 0 || from >= _lines.Count) return;
+        to = Math.Clamp(to, 0, _lines.Count - 1);
+        if (to == from) return;
+        var line = _lines[from];
+        Script.Move(line.Op, to);
+        _lines.Move(from, to);
+        Changed();
+        SelectLine(to);
+    }
+
+    private void MoveUp_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: EventLineVm l }) { int i = _lines.IndexOf(l); MoveLine(i, i - 1); }
+    }
+
+    private void MoveDown_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: EventLineVm l }) { int i = _lines.IndexOf(l); MoveLine(i, i + 1); }
+    }
+
+    private System.Windows.Point _gripStart;
+    private EventLineVm? _gripLine;
+
+    private void Grip_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        _gripStart = e.GetPosition(this);
+        _gripLine = (sender as FrameworkElement)?.DataContext as EventLineVm;
+    }
+
+    private void Grip_MouseMove(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        if (_gripLine == null || e.LeftButton != System.Windows.Input.MouseButtonState.Pressed) return;
+        var p = e.GetPosition(this);
+        if (Math.Abs(p.Y - _gripStart.Y) < 4 && Math.Abs(p.X - _gripStart.X) < 4) return;
+        var line = _gripLine;
+        _gripLine = null;
+        DragDrop.DoDragDrop((DependencyObject)sender, new DataObject(typeof(EventLineVm), line), DragDropEffects.Move);
+        foreach (var l in _lines) { l.DropAbove = false; l.DropBelow = false; }
+    }
+
+    /// <summary>Upper half of a line = drop above it, lower half = below it.</summary>
+    private static bool DropsAbove(object sender, DragEventArgs e) =>
+        sender is FrameworkElement fe && e.GetPosition(fe).Y < fe.ActualHeight / 2;
+
+    private void Line_DragOver(object sender, DragEventArgs e)
+    {
+        if (!e.Data.GetDataPresent(typeof(EventLineVm)) || sender is not FrameworkElement { DataContext: EventLineVm target }) return;
+        e.Effects = DragDropEffects.Move;
+        bool above = DropsAbove(sender, e);
+        foreach (var l in _lines) { l.DropAbove = l == target && above; l.DropBelow = l == target && !above; }
+        e.Handled = true;
+    }
+
+    private void Line_DragLeave(object sender, DragEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: EventLineVm target }) { target.DropAbove = false; target.DropBelow = false; }
+    }
+
+    private void Line_Drop(object sender, DragEventArgs e)
+    {
+        foreach (var l in _lines) { l.DropAbove = false; l.DropBelow = false; }
+        if (e.Data.GetData(typeof(EventLineVm)) is not EventLineVm moving || sender is not FrameworkElement { DataContext: EventLineVm target }) return;
+        int from = _lines.IndexOf(moving), at = _lines.IndexOf(target);
+        if (from < 0 || at < 0 || moving == target) return;
+        int to = DropsAbove(sender, e) ? at : at + 1;   // position in the list before removing the moved line
+        if (from < to) to--;
+        MoveLine(from, to);
+        e.Handled = true;
+    }
+
+    private void Line_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: EventLineVm line }) SelectLine(_lines.IndexOf(line));
+    }
+
+    /// <summary>Select a line: outline it and show the stage at that point.</summary>
+    public void SelectLine(int index)
+    {
+        if (index < 0) return;
+        _selectedLine = index;
+        foreach (var l in _lines) l.IsHighlighted = false;
+        if (index < _lines.Count) _lines[index].IsHighlighted = true;
+        if (Stage.Visibility == Visibility.Visible) Stage.ShowLine(index);
+    }
+
+    /// <summary>Insert a command after line <paramref name="after"/> (-1 = at the start) and select it.</summary>
+    public int InsertCommand(int after, byte[] bytes)
+    {
+        int at = Math.Clamp(after + 1, 0, _lines.Count);
+        InsertOp(Script.NewCommand(bytes, at), at);
+        SelectLine(at);
+        return at;
+    }
+
+    /// <summary>Replace the bytes of a command line (used by the stage: clicked positions, chosen path).</summary>
+    public void SetLineBytes(int index, byte[] bytes)
+    {
+        if (index < 0 || index >= _lines.Count) return;
+        _lines[index].SetBytes(bytes);
+    }
+
     /// <summary>Called after any edit: renumber lines and refresh descriptions / jump pickers.</summary>
     public void Changed(bool rebuild = true)
     {
@@ -341,6 +546,7 @@ public partial class EventEditorPanel : UserControl
             StatusText.Text = Script.IsModified
                 ? (Script.FitsInPlace() ? "Edited (same size: will be written in place)." : "Edited (size changed: the event will be moved when applied).")
                 : "";
+            if (Stage.Visibility == Visibility.Visible) { Stage.Resimulate(); if (_selectedLine >= 0) Stage.ShowLine(_selectedLine, scroll: false); }
         }
         catch (Exception ex) { StatusText.Text = ex.Message; }
         finally { _refreshing = false; }
@@ -349,18 +555,39 @@ public partial class EventEditorPanel : UserControl
     private void ShowInsertMenu(Button anchor, int insertAt)
     {
         var menu = new ContextMenu { PlacementTarget = anchor };
-        foreach (var t in Templates)
+        void AddText(string name, byte opener)
         {
-            var item = new MenuItem { Header = t.Name };
-            item.Click += (_, _) =>
-            {
-                var op = t.Text ? Script.NewText(t.Bytes[0], "New text", insertAt) : Script.NewCommand((byte[])t.Bytes.Clone(), insertAt);
-                _lines.Insert(insertAt, new EventLineVm(this, op, insertAt));
-                Changed();
-            };
+            var item = new MenuItem { Header = name };
+            item.Click += (_, _) => InsertOp(Script.NewText(opener, "New text", insertAt), insertAt);
             menu.Items.Add(item);
         }
+        AddText("Dialogue: narration", 0x0C);
+        AddText("Dialogue: text box", 0x0D);
+        AddText("Dialogue: the leader speaks", 0x89);
+        AddText("Dialogue: character 1 speaks", 0x90);
+        menu.Items.Add(new Separator());
+        foreach (var group in EventCommands.Definitions.Where(d => d.Template != null).GroupBy(d => d.Category))
+        {
+            var sub = new MenuItem { Header = group.Key };
+            foreach (var d in group)
+            {
+                var item = new MenuItem { Header = d.Name, ToolTip = d.Waits.Length > 0 ? "The event waits here " + d.Waits + "." : null };
+                item.Click += (_, _) => InsertOp(Script.NewCommand((byte[])d.Template!.Clone(), insertAt), insertAt);
+                sub.Items.Add(item);
+            }
+            menu.Items.Add(sub);
+        }
+        var raw = new MenuItem { Header = "Other command (type its bytes)" };
+        raw.Click += (_, _) => InsertOp(Script.NewCommand(new byte[] { 0x84 }, insertAt), insertAt);
+        menu.Items.Add(raw);
         menu.IsOpen = true;
+    }
+
+    private void InsertOp(ScriptOp op, int insertAt)
+    {
+        _lines.Insert(insertAt, new EventLineVm(this, op, insertAt));
+        Changed();
+        HighlightLine(insertAt);
     }
 
     private void Insert_Click(object sender, RoutedEventArgs e)
@@ -384,7 +611,7 @@ public partial class EventEditorPanel : UserControl
 
     private void Apply_Click(object sender, RoutedEventArgs e)
     {
-        if (!Script.IsModified) { StatusText.Text = "Nothing changed."; return; }
+        if (!Script.IsModified && !Stage.HasPathChanges) { StatusText.Text = "Nothing changed."; return; }
         try
         {
             bool fits = Script.FitsInPlace();
@@ -398,12 +625,12 @@ public partial class EventEditorPanel : UserControl
                 }
                 allowExpand = true;
             }
-            string result = Script.Save(allowExpand);
+            string? walks = Stage.Visibility == Visibility.Visible ? Stage.SavePathsWithEvent() : null;
+            string result = Script.Save(allowExpand) + (walks != null ? "\n\n" + walks : "");
             _owner.EventSaved($"Map {_mapId:X2} event {_event}: dialogue/commands");
-            Script = Script.IsCodeView
-                ? EventScript.LoadAt(_rom, _mapId, _event, Script.Start, Script.JumpBase)
-                : EventScript.Load(_rom, _mapId, _event) ?? Script;
+            Script = EventScript.Reload(_rom, Script) ?? Script;
             Fill();
+            if (Stage.Visibility == Visibility.Visible) { Stage.Bind(_rom, this); if (_selectedLine >= 0) SelectLine(Math.Min(_selectedLine, _lines.Count - 1)); }
             StatusText.Text = "✔ Written to the ROM. Use Save ROM to write a dated copy.";
             _owner.ConfirmWritten($"Event {_event} of map {_mapId:X2} written to the ROM", result);
         }
@@ -451,6 +678,25 @@ public partial class EventEditorPanel : UserControl
         HighlightLine(0);
     }
 
+    /// <summary>Open the event a "run an event of another map" line continues with (◀ Back returns here).</summary>
+    public void OpenChained(ScriptOp op)
+    {
+        if (op.IsText || op.Bytes.Length != 3 || op.Bytes[0] != 0x51) return;
+        int map = op.Bytes[1], ev = EventCommands.ChainedEvent(op.Bytes);
+        var target = EventScript.LoadWhole(_rom, map, ev);
+        if (target == null || target.Ops.Count == 0) { StatusText.Text = $"Event {ev} of map {map:X2} has no script."; return; }
+        if (!ConfirmDiscard()) return;
+        _history.Push((Script, _title));
+        string name = EventScript.MapLabel?.Invoke(map) ?? $"map {map:X2}";
+        Show(_rom, target, $"{name} – event {ev} (continued from event {Script.Event} of map {Script.MapId:X2})", _owner);
+        SelectLine(0);
+    }
+
+    private void OpenChained_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: EventLineVm line }) OpenChained(line.Op);
+    }
+
     /// <summary>Show where a story flag is used (if the host supports it).</summary>
     public void ShowFlag(int flag) => _owner.ShowFlag(flag);
 
@@ -458,9 +704,7 @@ public partial class EventEditorPanel : UserControl
     {
         if (_history.Count == 0 || !ConfirmDiscard()) return;
         var (script, title) = _history.Pop();
-        var fresh = script.IsCodeView
-            ? EventScript.LoadAt(_rom, script.MapId, script.Event, script.Start, script.JumpBase)
-            : EventScript.Load(_rom, script.MapId, script.Event) ?? script;
+        var fresh = EventScript.Reload(_rom, script) ?? script;
         Show(_rom, fresh, title, _owner);
     }
 
@@ -482,9 +726,7 @@ public partial class EventEditorPanel : UserControl
 
     private void Revert_Click(object sender, RoutedEventArgs e)
     {
-        Script = Script.IsCodeView
-            ? EventScript.LoadAt(_rom, _mapId, _event, Script.Start, Script.JumpBase)
-            : EventScript.Load(_rom, _mapId, _event) ?? Script;
+        Script = EventScript.Reload(_rom, Script) ?? Script;
         Fill();
         StatusText.Text = "Reverted to the event stored in the ROM.";
     }

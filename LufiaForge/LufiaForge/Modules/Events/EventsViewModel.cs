@@ -33,7 +33,9 @@ public sealed class FlagRow
     public int Sets { get; init; }
     public int Clears { get; init; }
     public int Checks { get; init; }
-    public string Label => $"Flag {Flag:X2}  {(Name.Length > 0 ? Name : "")}";
+    /// <summary>Automatic short name (where it is set) when the user hasn't named it.</summary>
+    public string AutoName { get; init; } = "";
+    public string Label => $"Flag {Flag:X2}  {(Name.Length > 0 ? Name : AutoName)}";
     public string Summary => $"set {Sets}×, cleared {Clears}×, checked {Checks}×";
 }
 
@@ -75,6 +77,8 @@ public partial class EventsViewModel : ObservableObject, IEventHost
     [ObservableProperty] private FlagRow? _selectedFlag;
     [ObservableProperty] private FlagUseRow? _selectedFlagUse;
     [ObservableProperty] private string _flagNameText = "";
+    /// <summary>What the selected flag is and does (worked out from its uses).</summary>
+    [ObservableProperty] private string _flagDescription = "";
     private bool _fillingFlag;
 
     public void SetRom(RomBuffer rom, MainViewModel mainVm)
@@ -82,7 +86,10 @@ public partial class EventsViewModel : ObservableObject, IEventHost
         _rom = rom; _mainVm = mainVm;
         Maps.Clear();
         foreach (var m in MapCatalog.ScanNamed(rom)) Maps.Add(m);
-        EventScript.FlagName = StoryFlags.NameOf;
+        EventScript.FlagName = StoryFlags.DisplayName;
+        var labels = Maps.ToDictionary(m => m.MapId, m => m.Label);
+        EventScript.MapLabel = id => labels.TryGetValue(id, out var l) ? l : $"map {id:X2}";
+        EventCommands.EventBase = id => LufiaMap.EventBase(rom, id);
         BuildFlagIndex();
         Status = $"{Maps.Count} maps, {Flags.Count} story flags in use. Pick a map, then an event.";
         SelectedMap = Maps.FirstOrDefault(m => m.MapId == 0x04) ?? Maps.FirstOrDefault();
@@ -201,7 +208,7 @@ public partial class EventsViewModel : ObservableObject, IEventHost
         {
             var row = new FlagRow
             {
-                Flag = g.Key, Name = StoryFlags.NameOf(g.Key) ?? "",
+                Flag = g.Key, Name = StoryFlags.NameOf(g.Key) ?? "", AutoName = StoryFlags.DisplayName(g.Key) ?? "",
                 Sets = g.Count(u => u.Action == "sets"), Clears = g.Count(u => u.Action == "clears"),
                 Checks = g.Count(u => !u.Sets),
             };
@@ -218,8 +225,9 @@ public partial class EventsViewModel : ObservableObject, IEventHost
         _fillingFlag = true;
         FlagNameText = value?.Name ?? "";
         _fillingFlag = false;
-        if (value == null) return;
+        if (value == null) { FlagDescription = ""; return; }
         string MapLabel(int id) => Maps.FirstOrDefault(m => m.MapId == id)?.Label ?? $"{id:X2}";
+        FlagDescription = StoryFlags.Describe(value.Flag, _flagIndex.Where(u => u.Flag == value.Flag).ToList(), MapLabel);
         foreach (var u in _flagIndex.Where(u => u.Flag == value.Flag)
                      .OrderBy(u => u.Sets ? 0 : 1).ThenBy(u => u.MapId).ThenBy(u => u.Event))
             FlagUses.Add(new FlagUseRow

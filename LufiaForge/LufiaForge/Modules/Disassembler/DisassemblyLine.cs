@@ -47,6 +47,10 @@ public sealed partial class DisassemblyLine : ObservableObject
     /// </summary>
     public CpuState? StateAfter { get; init; }
 
+    /// <summary>Base cycle count of the instruction (0 for data lines); 16-bit registers and page crossings add more.</summary>
+    public int BaseCycles { get; init; }
+    public string CyclesText => IsData || BaseCycles == 0 ? "" : $"{BaseCycles} cycles (base; +1 per 16-bit byte, direct page not aligned or page crossed)";
+
     // -------------------------------------------------------------------------
     // Mutable live-tracking state
     // -------------------------------------------------------------------------
