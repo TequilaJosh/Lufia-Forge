@@ -171,6 +171,8 @@ public sealed class EventScript
         }
         int block = BlockOffset(rom, mapId);
         int end = _blockEnds.TryGetValue(block, out int e) ? e : block + 0x8000;
+        // a block moved above 1 MB: its exact length is in the space table
+        if (block >= MapWriter.ExpansionStart && ExpansionSpace.Load(rom).At(block) is { } moved && moved.Start == block) end = moved.End;
         int npcs = 0, areas = 0;
         try { var m = LufiaMap.Load(rom, mapId); npcs = m.Npcs.Count; areas = Math.Max(m.SectionCounts[3], m.SectionCounts[4]); } catch { }
         int max = Math.Max(npcs - 1, LufiaMap.EventBase(rom, mapId) + areas + 1);
@@ -185,7 +187,7 @@ public sealed class EventScript
             probe.Decode();
             if (probe.StopReason?.StartsWith("unknown command") == true) continue;
             // jumps are relative to the event; real ones stay inside the map's script block (or the expanded area)
-            if (probe.Ops.Any(op => op.Targets.Any(t => (t.Absolute < block || t.Absolute >= end) && t.Absolute < MapWriter.ExpansionStart))) continue;
+            if (probe.Ops.Any(op => op.Targets.Any(t => t.Absolute < block || t.Absolute >= end))) continue;
             list.Add(ev);
             foreach (var op in probe.Ops.Where(op => op.IsText)) texts.Add((op.Offset, op.Offset + op.RawLength, ev));
         }
@@ -733,23 +735,17 @@ public sealed class EventScript
         bool expanded = false;
         if (_rom.Length < MapWriter.ExpandedSize) { _rom.Expand(MapWriter.ExpandedSize); expanded = true; }
 
-        int newBase, newStart, copyLen;
-        if (BlockBase >= MapWriter.ExpansionStart && IsLastRegion(out int regionEnd))
-        {
-            // Block was already moved and nothing follows it: append the event to it.
-            newBase = BlockBase; newStart = regionEnd; copyLen = 0;
-        }
-        else
-        {
-            copyLen = BlockLength();
-            if (copyLen < End - BlockBase) copyLen = End - BlockBase;
-            int size = Build(0, 0, out _).Length;   // only the length matters here
-            if (copyLen + size > 0xFFF0)
-                throw new InvalidOperationException("This map's script block is too large to copy.");
-            newBase = MapWriter.FindFreeSpace(_rom, copyLen + size + 1);
-            newStart = newBase + copyLen;
-            _rom.WriteBytes(newBase, _rom.ReadBytes(BlockBase, copyLen));
-        }
+        // Copy the map's whole script block (other events jump into it) to a new block above 1 MB, add the
+        // rewritten event after it, and repoint the map. The space table knows exact block lengths.
+        var space = ExpansionSpace.Load(_rom);
+        int copyLen = BlockLength();
+        if (copyLen < End - BlockBase) copyLen = End - BlockBase;
+        int size = Build(0, 0, out _).Length;   // only the length matters here
+        if (copyLen + size > 0xFFF0)
+            throw new InvalidOperationException("This map's script block is too large to copy.");
+        int newBase = space.Allocate(copyLen + size + 1, ExpansionSpace.Kind.ScriptBlock, MapId);
+        int newStart = newBase + copyLen;
+        _rom.WriteBytes(newBase, _rom.ReadBytes(BlockBase, copyLen));
         var code = Build(newStart, newBase, out _);
         if (newStart + code.Length + 1 > _rom.Length || newStart + code.Length - newBase > 0xFFFF)
             throw new InvalidOperationException("Not enough room for the edited event.");
@@ -761,19 +757,32 @@ public sealed class EventScript
         int t = newBase - 0x18000;
         int p = LufiaMap.MapScriptTable + MapId * 5;
         _rom.WriteBytes(p, new[] { (byte)t, (byte)(t >> 8), (byte)(t >> 16) });
+
+        // the previous copy above 1 MB is free again, unless another map still uses it
+        bool oldFreed = false;
+        if (BlockBase >= MapWriter.ExpansionStart && space.At(BlockBase)?.Start == BlockBase &&
+            !MapCatalog.Scan(_rom).Any(m => m.MapId != MapId && BlockOffset(_rom, m.MapId) == BlockBase))
+        {
+            space.Free(BlockBase);
+            oldFreed = true;
+        }
+        space.Save();
         _rom.FixChecksum();
-        return copyLen == 0
-            ? $"Event {Event} of map {MapId:X2} changed size, so it was added to the map's already-moved script block: " +
-              $"new event at ROM offset 0x{newStart:X6} ({code.Length} bytes)."
-            : $"Event {Event} of map {MapId:X2} changed size, so the map's script block was copied to ROM offset 0x{newBase:X6}" +
-              $"{(expanded ? " in the newly expanded 2 MB ROM" : "")} and the event added at 0x{newStart:X6} ({code.Length} bytes). " +
-              "The old copy is left untouched.";
+        return $"Event {Event} of map {MapId:X2} changed size, so the map's script block was copied to ROM offset 0x{newBase:X6}" +
+               $"{(expanded ? " in the newly expanded 2 MB ROM" : "")} and the event added at 0x{newStart:X6} ({code.Length} bytes). " +
+               (oldFreed ? "The block's previous copy above 1 MB was freed." : "The original block is left untouched.");
     }
 
     /// <summary>Bytes from this block's start to the next map's script block (blocks are contiguous).</summary>
     private int BlockLength()
     {
-        if (BlockBase >= MapWriter.ExpansionStart) return RegionEnd() - BlockBase;
+        if (BlockBase >= MapWriter.ExpansionStart)
+        {
+            // exact length from the space table (rebuilt for ROMs from earlier versions)
+            var entry = ExpansionSpace.Load(_rom).At(BlockBase);
+            if (entry != null) return entry.End - BlockBase;
+            return Math.Min(0xC000, ExpansionSpace.TableStart - BlockBase);
+        }
         int next = int.MaxValue;
         foreach (var m in MapCatalog.Scan(_rom))
         {
@@ -784,24 +793,4 @@ public sealed class EventScript
         return Math.Min(next, limit) - BlockBase;
     }
 
-    /// <summary>End of a block in the expanded area: regions there are separated by at least 16 unused (FF) bytes.</summary>
-    private int RegionEnd()
-    {
-        int p = Math.Max(End, BlockBase + 2);
-        int run = 0;
-        for (; p < _rom.Length; p++)
-        {
-            run = _rom.ReadByte(p) == 0xFF ? run + 1 : 0;
-            if (run == 16) return p - 15;
-        }
-        return _rom.Length;
-    }
-
-    private bool IsLastRegion(out int regionEnd)
-    {
-        regionEnd = RegionEnd();
-        for (int p = regionEnd; p < _rom.Length; p++)
-            if (_rom.ReadByte(p) != 0xFF) return false;
-        return true;
-    }
 }
