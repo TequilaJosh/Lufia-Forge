@@ -26,6 +26,18 @@ public partial class DialogueRow : ObservableObject
 }
 
 /// <summary>
+/// One entry of the character picker: everyone who speaks, recognised by their sprite (the same character keeps
+/// their sprite on every map) or as a party member.
+/// </summary>
+public sealed class CharacterOption
+{
+    public string Key { get; init; } = "";
+    public string Label { get; init; } = "";
+    public string Detail { get; init; } = "";
+    public ImageSource? Picture { get; init; }
+}
+
+/// <summary>
 /// Text editor: every dialogue box of the game in one list (where it happens, who says it, with a picture
 /// of the character), and an editor for the selected box. Saving goes through the event script writer.
 /// </summary>
@@ -39,6 +51,9 @@ public partial class TextEditorViewModel : ObservableObject
 
     public ObservableCollection<DialogueRow> Rows { get; } = new();
     public ObservableCollection<string> MapFilters { get; } = new();
+    /// <summary>Everyone who speaks; picking one lists all their lines on every map.</summary>
+    public ObservableCollection<CharacterOption> CharacterFilters { get; } = new();
+    [ObservableProperty] private CharacterOption? _characterFilter;
     private readonly List<int> _mapFilterIds = new();
 
     [ObservableProperty] private DialogueRow? _selectedRow;
@@ -87,6 +102,7 @@ public partial class TextEditorViewModel : ObservableObject
             MapFilters.Add(m.Label); _mapFilterIds.Add(m.MapId);
         }
         MapFilterIndex = 0;
+        BuildCharacterFilters();
         ApplyFilter();
         IsBusy = false;
         StatusText = $"{_all.Count} dialogue boxes on {MapFilters.Count - 1} maps. Pick one to edit it.";
@@ -115,6 +131,43 @@ public partial class TextEditorViewModel : ObservableObject
     partial void OnSearchTextChanged(string value) => ApplyFilter();
     partial void OnMapFilterIndexChanged(int value) => ApplyFilter();
     partial void OnOnlyCharactersChanged(bool value) => ApplyFilter();
+    partial void OnCharacterFilterChanged(CharacterOption? value) => ApplyFilter();
+
+    /// <summary>Who a line belongs to: the sprite of the character speaking, or the party member.</summary>
+    private static string CharacterKey(DialogueLine l)
+    {
+        if (l.Speaker.StartsWith("Party actor ") && int.TryParse(l.Speaker.AsSpan(12, 1), out int a)) return $"party:{a}";
+        return l.Sprite >= 0 ? $"sprite:{l.Sprite}" : "";
+    }
+
+    private static string PartyName(int actor) => actor switch
+    {
+        0 or 1 => "Party leader",
+        _ => $"Party member {actor}",
+    };
+
+    private void BuildCharacterFilters()
+    {
+        CharacterFilters.Clear();
+        CharacterFilters.Add(new CharacterOption { Key = "", Label = "Everyone", Detail = $"{_all.Count} lines" });
+        var groups = _all.GroupBy(r => CharacterKey(r.Line)).Where(g => g.Key.Length > 0)
+                         .OrderBy(g => g.Key.StartsWith("party") ? 0 : 1).ThenByDescending(g => g.Count());
+        foreach (var g in groups)
+        {
+            int maps = g.Select(r => r.Line.MapId).Distinct().Count();
+            int events = g.Select(r => (r.Line.MapId, r.Line.Event)).Distinct().Count();
+            bool party = g.Key.StartsWith("party");
+            int n = int.Parse(g.Key[(g.Key.IndexOf(':') + 1)..]);
+            CharacterFilters.Add(new CharacterOption
+            {
+                Key = g.Key,
+                Label = party ? PartyName(n) : $"Sprite {n:X2}",
+                Detail = $"{g.Count()} lines · {events} events · {maps} maps",
+                Picture = party ? null : g.First().Picture,
+            });
+        }
+        CharacterFilter = CharacterFilters[0];
+    }
 
     private void ApplyFilter()
     {
@@ -126,6 +179,7 @@ public partial class TextEditorViewModel : ObservableObject
         {
             if (map >= 0 && r.Line.MapId != map) continue;
             if (OnlyCharacters && !r.Line.Source.StartsWith("Character") && !r.Line.Speaker.StartsWith("Character")) continue;
+            if (CharacterFilter is { Key.Length: > 0 } cf && CharacterKey(r.Line) != cf.Key) continue;
             if (q.Length > 0 && !r.Line.Text.Contains(q, StringComparison.OrdinalIgnoreCase) &&
                 !r.Header.Contains(q, StringComparison.OrdinalIgnoreCase)) continue;
             Rows.Add(r);
@@ -171,6 +225,34 @@ public partial class TextEditorViewModel : ObservableObject
         SizeText = EditText.Replace("\r", "") == op.OriginalText ? $"{was} bytes"
                  : now == was ? $"{now} bytes (same size: saved in place)"
                  : $"{now} bytes (was {was}: the event will be moved{(SelectedRow.Line.IsCodeView ? " — not possible for this line, keep the same size" : "")})";
+    }
+
+    /// <summary>The whole event the selected line is part of, in the event editor.</summary>
+    [RelayCommand]
+    private void OpenEvent()
+    {
+        if (_rom == null || SelectedRow == null) return;
+        var l = SelectedRow.Line;
+        EventScript? script = null;
+        try { script = EventScript.Load(_rom, l.MapId, l.Event); } catch { }
+        if (script == null) { StatusText = "This line's event couldn't be opened."; return; }
+        var win = new LufiaForge.Modules.MapEditor.EventEditorWindow(_rom, script, $"{SelectedRow.MapLabel} · event {l.Event}", new Host(this))
+        { Owner = Application.Current?.MainWindow };
+        win.Show();
+    }
+
+    /// <summary>What the event editor needs when it's opened from here.</summary>
+    private sealed class Host : LufiaForge.Modules.MapEditor.IEventHost
+    {
+        private readonly TextEditorViewModel _vm;
+        public Host(TextEditorViewModel vm) { _vm = vm; }
+        public bool ConfirmExpand(string what) =>
+            MessageBox.Show($"{what}\n\nTo store it, Lufia Forge needs to expand the ROM from 1 MB to 2 MB and use the new space. Continue?",
+                "Expand ROM?", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
+        public void EventSaved(string what) { _vm._mainVm?.NotifyRomModified(what); _ = _vm.BuildAsync(); }
+        public void ConfirmWritten(string heading, string details) =>
+            InfoDialog.Show("Written to ROM", "✔ " + heading, details + "\n\nUse File > Save ROM to write it to disk.",
+                path: _vm._rom?.FilePath, pathLabel: "ROM being edited");
     }
 
     [RelayCommand]
