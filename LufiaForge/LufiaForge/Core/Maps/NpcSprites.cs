@@ -67,6 +67,84 @@ public static class NpcSprites
         return result;
     }
 
+    /// <summary>First tile of each of the 8 frames (record bytes 9-16).</summary>
+    public static int[] FrameTiles(RomBuffer rom, int sprite)
+    {
+        int rec = 0x8000 + (rom.ReadUInt16Le(RecordTable + sprite * 2) - 0x8000);
+        return Enumerable.Range(0, 8).Select(f => (int)rom.ReadByte(rec + 9 + f)).ToArray();
+    }
+
+    /// <summary>All 8 frames side by side (BGRA, alpha 0 = transparent).</summary>
+    public static (uint[] Px, int W, int H)? RenderSheet(RomBuffer rom, int sprite)
+    {
+        if (Info(rom, sprite) is not { } s) return null;
+        _palette ??= LoadPalette(rom);
+        int fw = s.Width * 8, h = s.Height * 8, w = fw * 8;
+        var px = new uint[w * h];
+        var frames = FrameTiles(rom, sprite);
+        for (int f = 0; f < 8; f++)
+            for (int t = 0; t < s.Width * s.Height; t++)
+            {
+                int off = s.GraphicsOffset + (frames[f] + t) * 32;
+                if (off + 32 > rom.Length) break;
+                var tile = Modules.TileViewer.SnesTileDecoder.DecodeTile(rom.ReadBytes(off, 32), 0, Modules.TileViewer.BitDepth.Bpp4);
+                int tx = f * fw + t % s.Width * 8, ty = t / s.Width * 8;
+                for (int y = 0; y < 8; y++)
+                    for (int x = 0; x < 8; x++)
+                        if (tile[y * 8 + x] is var c and not 0) px[(ty + y) * w + tx + x] = _palette[s.Palette * 16 + c];
+            }
+        return (px, w, h);
+    }
+
+    /// <summary>
+    /// Draws a sheet (same layout as <see cref="RenderSheet"/>: 8 frames side by side) into the sprite's graphics,
+    /// in its palette row: transparent pixels become colour 0, others the nearest of colours 1-15. The size can't
+    /// change (the graphics are stored uncompressed, packed with other sprites). Frames that share tiles take the
+    /// last frame drawn there.
+    /// </summary>
+    public static int ImportSheet(RomBuffer rom, int sprite, uint[] px, int w, int h)
+    {
+        if (Info(rom, sprite) is not { } s) throw new InvalidOperationException("Not a character sprite.");
+        int fw = s.Width * 8;
+        if (w != fw * 8 || h != s.Height * 8)
+            throw new InvalidOperationException($"The sheet must be {fw * 8} x {s.Height * 8} pixels: 8 frames of {fw} x {s.Height * 8}.");
+        var raw = LufiaCompression.DecompressResource(rom, PaletteResource, out _);
+        var pal = Enumerable.Range(0, 16).Select(c => raw[(s.Palette * 16 + c) * 2] | raw[(s.Palette * 16 + c) * 2 + 1] << 8).ToArray();
+        var frames = FrameTiles(rom, sprite);
+        int written = 0;
+        for (int f = 0; f < 8; f++)
+            for (int t = 0; t < s.Width * s.Height; t++)
+            {
+                var tile = new byte[32];
+                int tx = f * fw + t % s.Width * 8, ty = t / s.Width * 8;
+                for (int y = 0; y < 8; y++)
+                    for (int x = 0; x < 8; x++)
+                    {
+                        uint p = px[(ty + y) * w + tx + x];
+                        int c = 0;
+                        if (p >> 24 >= 128)
+                        {
+                            int r = (int)(p >> 16 & 255) >> 3, g = (int)(p >> 8 & 255) >> 3, b = (int)(p & 255) >> 3;
+                            long best = long.MaxValue;
+                            for (int k = 1; k < 16; k++)
+                            {
+                                int dr = r - (pal[k] & 31), dg = g - (pal[k] >> 5 & 31), db = b - (pal[k] >> 10 & 31);
+                                long e = dr * dr * 3 + dg * dg * 4 + db * db * 2;
+                                if (e < best) { best = e; c = k; }
+                            }
+                        }
+                        int bit = 7 - x;
+                        tile[y * 2] |= (byte)((c & 1) << bit); tile[y * 2 + 1] |= (byte)((c >> 1 & 1) << bit);
+                        tile[16 + y * 2] |= (byte)((c >> 2 & 1) << bit); tile[16 + y * 2 + 1] |= (byte)((c >> 3 & 1) << bit);
+                    }
+                int off = s.GraphicsOffset + (frames[f] + t) * 32;
+                if (off + 32 > rom.Length) continue;
+                rom.WriteBytes(off, tile); written++;
+            }
+        Cache.Clear();
+        return written;
+    }
+
     private static uint[] LoadPalette(RomBuffer rom)
     {
         var raw = LufiaCompression.DecompressResource(rom, PaletteResource, out _);
