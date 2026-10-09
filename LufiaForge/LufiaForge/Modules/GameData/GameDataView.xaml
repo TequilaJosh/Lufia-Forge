@@ -16,6 +16,9 @@
             <TabItem Header="Growth &amp; EXP" Style="{StaticResource LufiaTabItem}">
                 <v:GrowthEditorView DataContext="{Binding Growth}"/>
             </TabItem>
+            <TabItem Header="Sprites" Style="{StaticResource LufiaTabItem}">
+                <v:SpriteEditorView DataContext="{Binding Sprites}"/>
+            </TabItem>
             <TabItem Header="Items" Style="{StaticResource LufiaTabItem}">
                 <v:ItemEditorView DataContext="{Binding Items}"/>
             </TabItem>

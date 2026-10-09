@@ -1,0 +1,53 @@
+<UserControl x:Class="LufiaForge.Modules.GameData.Views.SpriteEditorView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="clr-namespace:LufiaForge.Modules.GameData.Views">
+    <UserControl.Resources>
+        <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="230"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <ListBox Grid.Column="0" Margin="12" Style="{StaticResource GdRecordList}" ItemsSource="{Binding Sprites}" SelectedItem="{Binding Selected}">
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <StackPanel Orientation="Horizontal">
+                        <Image Source="{Binding Picture}" Width="24" Height="32" Stretch="Uniform" RenderOptions.BitmapScalingMode="NearestNeighbor" Margin="0,0,8,0"/>
+                        <TextBlock Text="{Binding Label}" VerticalAlignment="Center" Foreground="{StaticResource TextPrimaryBrush}"/>
+                    </StackPanel>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+        <StackPanel Grid.Column="1" Margin="0,12,12,0">
+            <Border Style="{StaticResource GdCard}" HorizontalAlignment="Left">
+                <StackPanel>
+                    <TextBlock Text="MAP SPRITE (8 FRAMES)" Style="{StaticResource GdSection}"/>
+                    <Border Background="#40000000" HorizontalAlignment="Left" Padding="6">
+                        <Image Source="{Binding Sheet}" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor">
+                            <Image.LayoutTransform><ScaleTransform ScaleX="3" ScaleY="3"/></Image.LayoutTransform>
+                        </Image>
+                    </Border>
+                    <TextBlock Text="{Binding Info}" Style="{StaticResource GdHint}" TextWrapping="Wrap" MaxWidth="620" HorizontalAlignment="Left" Margin="0,8,0,0"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                        <Button Content="Export sheet…" Style="{StaticResource LufiaButton}" Command="{Binding ExportCommand}" Margin="0,0,8,0"/>
+                        <Button Content="Import sheet…" Style="{StaticResource LufiaButtonGold}" Command="{Binding ImportCommand}"
+                                ToolTip="A picture the same size as the exported sheet. Colours are matched to the sprite's palette row; transparent pixels stay see-through."/>
+                    </StackPanel>
+                    <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" MaxWidth="620" HorizontalAlignment="Left" Margin="0,8,0,0"
+                               Text="These are the sprites walking around on the maps: the party members and every character. Export the sheet, draw over it in any paint program, and import it back - importing writes to the ROM right away (unsaved until File > Save ROM)."/>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+
+        <v:EditorFooter Grid.Row="1" Grid.ColumnSpan="2"/>
+    </Grid>
+</UserControl>
