@@ -202,6 +202,66 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
         return true;
     }
 
+    // ── custom graphics: a picture into the tileset's blocks ──────────────────
+
+    /// <summary>Redraw blocks from a picture: picture block k goes to block Brush + k.</summary>
+    [RelayCommand]
+    private void ImportOverBlocks() => ImportPicture(addNew: false);
+
+    /// <summary>Add the picture as new blocks at the end of the tileset.</summary>
+    [RelayCommand]
+    private void ImportNewBlocks() => ImportPicture(addNew: true);
+
+    private void ImportPicture(bool addNew)
+    {
+        if (_rom == null || _map == null || _tileset == null || _map.IsWorld)
+        { Status = "Open a town or dungeon map first (the world map's graphics work differently)."; return; }
+        if (HasUnappliedChanges) { Status = "Apply or revert this map's changes first: importing reloads the map."; return; }
+        var dlg = new Microsoft.Win32.OpenFileDialog { Title = "Picture to import (multiple of 16 x 16 pixels)", Filter = "Pictures (*.png;*.bmp;*.gif)|*.png;*.bmp;*.gif" };
+        if (dlg.ShowDialog() != true) return;
+        uint[] px; int w, h;
+        try
+        {
+            var src = new BitmapImage(new Uri(dlg.FileName));
+            var bgra = new FormatConvertedBitmap(src, PixelFormats.Bgra32, null, 0);
+            w = bgra.PixelWidth; h = bgra.PixelHeight; px = new uint[w * h];
+            bgra.CopyPixels(px, w * 4, 0);
+        }
+        catch (Exception ex) { Status = "Couldn't read the picture: " + ex.Message; return; }
+        if (w % 16 != 0 || h % 16 != 0) { Status = $"The picture is {w}x{h}: it must be a multiple of 16 x 16 pixels (one block each)."; return; }
+        int count = w / 16 * (h / 16);
+        try
+        {
+            var import = new TileImport(_rom, _map, _tileset);
+            List<int> targets;
+            if (addNew)
+            {
+                if (!import.CanAppendBlocks)
+                { Status = "This tileset has composite blocks after its normal ones, so blocks can't be added at the end. Redraw unused blocks instead."; return; }
+                targets = Enumerable.Repeat(int.MaxValue, count).ToList();
+            }
+            else
+            {
+                targets = Enumerable.Range(Brush, count).ToList();
+                int limit = _map.CompositeThreshold >= 0 ? _map.CompositeThreshold : import.BlockCount;
+                if (targets[^1] >= limit) { Status = $"Blocks {Brush:X3}-{targets[^1]:X3} run past the last normal block ({limit - 1:X3})."; return; }
+                if (MessageBox.Show($"Redraw {count} block{(count == 1 ? "" : "s")} starting at {Brush:X3} with this picture?\n\n" +
+                                    $"Every map that uses tileset {_map.Tileset} shows the new graphics wherever these blocks are placed.",
+                                    "Import picture", MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;
+            }
+            byte attr = _tileset.Attribute(Brush);
+            var r = import.Draw(px, w, h, targets, attr);
+            if (import.NeedsMoreSpace() && _rom.Length < MapWriter.ExpandedSize && !ConfirmExpand("The tileset's graphics or blocks no longer fit in their original space.")) return;
+            string where = import.Save(allowExpand: true);
+            int id = _map.MapId, firstNew = addNew ? import.BlockCount : Brush;
+            LoadMap(id);
+            if (addNew) Brush = Math.Min(firstNew, (_tileset?.MetatileCount ?? 1) - 1);
+            _mainVm?.NotifyRomModified($"Tileset {_map?.Tileset} graphics");
+            Status = r.Report + " " + where + (addNew ? $" New blocks start at {firstNew:X3} (new blocks copy the walkability of the brush block)." : "");
+        }
+        catch (Exception ex) { Status = "Import failed: " + ex.Message; }
+    }
+
     [RelayCommand]
     private void WriteZones()
     {

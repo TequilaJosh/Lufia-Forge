@@ -217,6 +217,12 @@
                     </DockPanel>
                     <TextBlock DockPanel.Dock="Top" Text="{Binding BrushText}" Style="{StaticResource LufiaLabel}"
                                Foreground="{StaticResource GoldLightBrush}" Margin="0,0,0,6"/>
+                    <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+                        <Button Content="🖼 Redraw blocks…" Style="{StaticResource LufiaButton}" Command="{Binding ImportOverBlocksCommand}" Margin="0,0,6,0"
+                                ToolTip="Draw a picture (multiple of 16x16 pixels) over the brush block and the ones after it. Colours are matched to the map's palette."/>
+                        <Button Content="＋ Add blocks…" Style="{StaticResource LufiaButton}" Command="{Binding ImportNewBlocksCommand}"
+                                ToolTip="Add a picture (multiple of 16x16 pixels) as new blocks at the end of the tileset (tilesets without composite blocks)."/>
+                    </WrapPanel>
                     <ScrollViewer x:Name="PaletteScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
                                   RenderOptions.BitmapScalingMode="NearestNeighbor" UseLayoutRounding="True">
                         <Grid HorizontalAlignment="Left" VerticalAlignment="Top">
