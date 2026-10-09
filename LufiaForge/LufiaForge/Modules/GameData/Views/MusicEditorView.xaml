@@ -1,0 +1,57 @@
+<UserControl x:Class="LufiaForge.Modules.GameData.Views.MusicEditorView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="clr-namespace:LufiaForge.Modules.GameData.Views">
+    <UserControl.Resources>
+        <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="260"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <ListBox Grid.Column="0" Margin="12" Style="{StaticResource GdRecordList}" ItemsSource="{Binding Songs}" SelectedIndex="{Binding SelectedIndex}"/>
+
+        <StackPanel Grid.Column="1" Margin="0,12,12,0">
+            <Border Style="{StaticResource GdCard}" HorizontalAlignment="Left" MaxWidth="680">
+                <StackPanel>
+                    <TextBlock Text="LISTEN" Style="{StaticResource GdSection}"/>
+                    <StackPanel Orientation="Horizontal">
+                        <Button Content="▶ Play" Style="{StaticResource LufiaButtonGold}" Command="{Binding PlayCommand}" Margin="0,0,8,0"/>
+                        <Button Content="■ Stop" Style="{StaticResource LufiaButton}" Command="{Binding StopCommand}" Margin="0,0,8,0"/>
+                        <Button Content="Save as WAV…" Style="{StaticResource LufiaButton}" Command="{Binding SaveWavCommand}"/>
+                    </StackPanel>
+                    <TextBlock Text="{Binding Info}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,8,0,0"/>
+                </StackPanel>
+            </Border>
+            <Border Style="{StaticResource GdCard}" HorizontalAlignment="Left" MaxWidth="680">
+                <StackPanel>
+                    <TextBlock Text="INSTRUMENTS THIS SONG LOADS" Style="{StaticResource GdSection}"/>
+                    <TextBox Style="{StaticResource GdText}" Width="240" HorizontalAlignment="Left" Text="{Binding InstrumentsText, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTip="Up to 8 hex numbers, 10-37. Apply to ROM, then Play to hear the change."/>
+                    <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0"
+                               Text="Each song plays its notes with the instruments in this list, in order. Swapping one for another changes how the song sounds (e.g. a different lead)."/>
+                </StackPanel>
+            </Border>
+            <Border Style="{StaticResource GdCard}" HorizontalAlignment="Left" MaxWidth="680">
+                <StackPanel>
+                    <TextBlock Text="CUSTOM MUSIC" Style="{StaticResource GdSection}"/>
+                    <StackPanel Orientation="Horizontal">
+                        <Button Content="Export song…" Style="{StaticResource LufiaButton}" Command="{Binding ExportCommand}" Margin="0,0,8,0"/>
+                        <Button Content="Import song…" Style="{StaticResource LufiaButtonGold}" Command="{Binding ImportCommand}"/>
+                    </StackPanel>
+                    <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,6,0,0"
+                               Text="A .lfsong file is a song exactly as the game stores it. Import one into any slot to replace that song everywhere it plays (e.g. use a different song for battles, or bring in a song shared by someone else). Which song a map or event plays is set in the Events tab (command 0A)."/>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+
+        <v:EditorFooter Grid.Row="1" Grid.ColumnSpan="2"/>
+    </Grid>
+</UserControl>
