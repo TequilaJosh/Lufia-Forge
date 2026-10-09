@@ -54,6 +54,8 @@ public partial class EncounterEditorViewModel : GameDataEditorBase
     [ObservableProperty] private string _roomText = "";
     [ObservableProperty] private string _whereText = "";
     [ObservableProperty] private int _addChoice = -1;
+    [ObservableProperty] private string _limitText = "";
+    [ObservableProperty] private bool _canPatch;
 
     private List<List<int>> _groups = new();
     private Dictionary<int, string> _mapLabels = new();
@@ -99,12 +101,42 @@ public partial class EncounterEditorViewModel : GameDataEditorBase
             _entryNumbers.Add(f);
         }
         BuildSubgroupChoices();
+        var rom = Ctx!.Rom;
+        bool patched = SubgroupPatch.IsApplied(rom);
+        CanPatch = !patched && SubgroupPatch.IsOriginal(rom);
+        int used = _groups.SelectMany(g => g).Distinct().Count();
+        LimitText = patched
+            ? $"Subgroups: {used} in use of {Encounters.SubgroupCount(rom)} (more-subgroups patch applied; the group lists have {Encounters.GroupRoom(rom)} bytes)."
+            : $"Subgroups: {used} in use of the game's {Encounters.SubgroupCount(rom)}. The patch raises this to {SubgroupPatch.MaxSubgroups} and gives the group lists {Encounters.Bosses - Encounters.GroupPointers - Encounters.GroupRoom(rom)} more bytes.";
+    }
+
+    [RelayCommand]
+    private void PatchSubgroups()
+    {
+        if (Ctx == null || !CanPatch) return;
+        var rom = Ctx.Rom;
+        string expand = rom.Length < MapWriter.ExpandedSize ? "\n\nThe ROM will be expanded to 2 MB (the patch lives in the new space)." : "";
+        if (System.Windows.MessageBox.Show(
+                $"Allow up to {SubgroupPatch.MaxSubgroups} subgroups?\n\nThis changes a small piece of the game's battle code so it reads the subgroups from a bigger table, " +
+                "and frees the old table's space for longer group lists. Battles work as before." + expand,
+                "More subgroups", System.Windows.MessageBoxButton.YesNo) != System.Windows.MessageBoxResult.Yes) return;
+        StashRows();
+        var pending = new Dictionary<int, int[]>(_pending);
+        bool ok = false;
+        Commit("More-subgroups patch", () => { SubgroupPatch.Apply(rom); ok = true; });
+        if (!ok) return;
+        foreach (var (s, m) in pending) _pending[s] = m;
+        int keep = SelectedIndex;
+        BuildEntries();
+        SelectedIndex = -1; SelectedIndex = keep;
+        foreach (var (s, m) in pending) _pending[s] = m;
+        Status = $"Patched: up to {SubgroupPatch.MaxSubgroups} subgroups and {Encounters.GroupRoom(rom)} bytes for group lists (unsaved until File > Save ROM).";
     }
 
     private void BuildSubgroupChoices()
     {
         SubgroupChoices.Clear();
-        for (int s = 1; s <= Encounters.SubgroupCount; s++)
+        for (int s = 1; s <= Encounters.SubgroupCount(Ctx!.Rom); s++)
         {
             var names = Monsters(s).Where(m => m != 0xFF).Select(MonsterName).ToList();
             int users = _groups.Count(g => g.Contains(s));
@@ -197,7 +229,7 @@ public partial class EncounterEditorViewModel : GameDataEditorBase
         int total = subs.Count;
         foreach (int s in subs.Distinct())
         {
-            if (s < 1 || s > Encounters.SubgroupCount) continue;
+            if (s < 1 || s > Encounters.SubgroupCount(Ctx!.Rom)) continue;
             int times = subs.Count(x => x == s);
             var users = _groups.Select((g, i) => (g, i)).Where(x => x.g.Contains(s) && x.i + 1 != SelectedGroup).Select(x => $"{x.i + 1:X2}").ToList();
             string shared = users.Count == 0 ? "only in this group" : "also in group" + (users.Count > 1 ? "s " : " ") + string.Join(" ", users) + " (changing its monsters changes them too)";
@@ -228,12 +260,12 @@ public partial class EncounterEditorViewModel : GameDataEditorBase
 
     private List<int> CurrentList() => ParseSubgroups(SubgroupsText) ?? (SelectedGroup > 0 ? _groups[SelectedGroup - 1].ToList() : new List<int>());
 
-    private static List<int>? ParseSubgroups(string text)
+    private List<int>? ParseSubgroups(string text)
     {
         var list = new List<int>();
         foreach (var part in text.Split(new[] { ' ', ',' }, StringSplitOptions.RemoveEmptyEntries))
         {
-            if (!int.TryParse(part, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int v) || v < 1 || v > Encounters.SubgroupCount) return null;
+            if (!int.TryParse(part, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int v) || v < 1 || v > Encounters.SubgroupCount(Ctx!.Rom)) return null;
             list.Add(v);
         }
         return list.Count is >= 1 and <= 255 ? list : null;
@@ -251,8 +283,8 @@ public partial class EncounterEditorViewModel : GameDataEditorBase
     {
         if (Ctx == null) return;
         int used = Encounters.GroupBytes(GroupsWithEdit());
-        int free = Encounters.GroupRoom - used;
-        RoomText = $"Each battle picks one entry of this list at random. Group lists use {used} of {Encounters.GroupRoom} bytes" +
+        int free = Encounters.GroupRoom(Ctx!.Rom) - used;
+        RoomText = $"Each battle picks one entry of this list at random. Group lists use {used} of {Encounters.GroupRoom(Ctx!.Rom)} bytes" +
                    (free >= 0 ? $" ({free} free: each extra entry takes 1, a new group 4)." : $" - {-free} too many: remove some entries.");
     }
 
@@ -296,7 +328,7 @@ public partial class EncounterEditorViewModel : GameDataEditorBase
     private int FreeSubgroup()
     {
         var used = GroupsWithEdit().SelectMany(g => g).ToHashSet();
-        for (int s = 1; s <= Encounters.SubgroupCount; s++) if (!used.Contains(s)) return s;
+        for (int s = 1; s <= Encounters.SubgroupCount(Ctx!.Rom); s++) if (!used.Contains(s)) return s;
         return 0;
     }
 
@@ -307,7 +339,7 @@ public partial class EncounterEditorViewModel : GameDataEditorBase
         int s = FreeSubgroup();
         if (s == 0)
         {
-            Status = $"All {Encounters.SubgroupCount} subgroups are listed by some group. Remove a subgroup from the groups that don't need it (it becomes free), or add an existing one instead.";
+            Status = $"All {Encounters.SubgroupCount(Ctx!.Rom)} subgroups are listed by some group. Remove a subgroup from the groups that don't need it (it becomes free), or add an existing one instead.";
             return;
         }
         // start from the first monsters of this group so it isn't empty
@@ -327,9 +359,9 @@ public partial class EncounterEditorViewModel : GameDataEditorBase
         int first = IsGroup && SelectedGroup > 0 ? groups[SelectedGroup - 1][0] : 1;
         groups.Add(new List<int> { first });
         if (groups.Count > Encounters.MaxGroups) { Status = $"The game allows at most {Encounters.MaxGroups:X2} groups."; return; }
-        if (Encounters.GroupBytes(groups) > Encounters.GroupRoom)
+        if (Encounters.GroupBytes(groups) > Encounters.GroupRoom(Ctx!.Rom))
         {
-            Status = $"No room for a new group: it needs 4 bytes and {Encounters.GroupRoom - Encounters.GroupBytes(GroupsWithEdit())} are free. Remove a duplicate entry from some group first.";
+            Status = $"No room for a new group: it needs 4 bytes and {Encounters.GroupRoom(Ctx!.Rom) - Encounters.GroupBytes(GroupsWithEdit())} are free. Remove a duplicate entry from some group first.";
             return;
         }
         int n = groups.Count;
@@ -374,7 +406,7 @@ public partial class EncounterEditorViewModel : GameDataEditorBase
         int n = _entryNumbers[SelectedIndex];
         if (IsGroup && ParseSubgroups(SubgroupsText) == null)
         {
-            Status = $"Subgroups: hex numbers 01-{Encounters.SubgroupCount:X2} separated by spaces.";
+            Status = $"Subgroups: hex numbers 01-{Encounters.SubgroupCount(Ctx!.Rom):X2} separated by spaces.";
             return;
         }
         StashRows();

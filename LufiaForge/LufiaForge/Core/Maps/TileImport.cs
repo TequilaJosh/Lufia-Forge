@@ -198,7 +198,7 @@ public sealed class TileImport
         if (_newBlocks.Length == 0) return false;
         bool Over(int res, byte[] data)
         {
-            LufiaCompression.Decompress(_rom, LufiaCompression.ResourceOffset(_rom, res), out int slot);
+            int slot = ResourceWriter.SlotSize(_rom, res);
             return LufiaCompression.Compress(data).Length > slot;
         }
         return Over(_ts.TilesResource, _tiles) || Over(_ts.BlocksResource, _newBlocks);

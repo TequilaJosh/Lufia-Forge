@@ -19,7 +19,9 @@ namespace LufiaForge.Core.Battle;
 public static class Encounters
 {
     public const int GroupPointers = 0x45A60;   // $08:DA60
-    public const int Subgroups = 0x45BE2;       // $08:DBE2
+    /// <summary>The game's subgroup table ($08:DBE2, 67 entries); a patched ROM reads <see cref="SubgroupPatch"/>'s table instead.</summary>
+    public const int OldSubgroups = 0x45BE2;    // $08:DBE2
+    public const int OldSubgroupCount = (0x45CEE - OldSubgroups) / 4;
     public const int Bosses = 0x45CEE;          // $08:DCEE
     public const int FirstBoss = 0xE6, LastBoss = 0xFA;
     public const int ZoneResource = 0xB0, ZoneWidth = 80, ZoneHeight = 64;
@@ -27,8 +29,12 @@ public static class Encounters
     public const int SafeStepsOffset = 0x8858;  // CMP #$04 in $01:8857
 
     public static int GroupCount(RomBuffer rom) => (rom.ReadUInt16Le(GroupPointers) - 0xDA60) / 2;
-    /// <summary>Subgroups fill the space between the subgroup table and the boss table.</summary>
-    public static int SubgroupCount => (Bosses - Subgroups) / 4;
+    /// <summary>How many subgroups the ROM can hold: 67, or 255 with <see cref="SubgroupPatch"/>.</summary>
+    public static int SubgroupCount(RomBuffer rom) => SubgroupPatch.IsApplied(rom) ? SubgroupPatch.MaxSubgroups : OldSubgroupCount;
+
+    /// <summary>File offset of subgroup s's 4 monster ids.</summary>
+    public static int SubgroupOffset(RomBuffer rom, int s) =>
+        (SubgroupPatch.IsApplied(rom) ? SubgroupPatch.TableOffset(rom) : OldSubgroups) + 4 * (s - 1);
 
     private static int Bank8(int addr) => 0x40000 + (addr & 0x7FFF);
 
@@ -40,11 +46,11 @@ public static class Encounters
     }
 
     public static int[] SubgroupMonsters(RomBuffer rom, int sub) =>
-        Enumerable.Range(0, 4).Select(i => (int)rom.ReadByte(Subgroups + 4 * (sub - 1) + i)).ToArray();
+        Enumerable.Range(0, 4).Select(i => (int)rom.ReadByte(SubgroupOffset(rom, sub) + i)).ToArray();
 
     public static void SetSubgroupMonsters(RomBuffer rom, int sub, int[] monsters)
     {
-        for (int i = 0; i < 4; i++) rom.WriteByte(Subgroups + 4 * (sub - 1) + i, (byte)monsters[i]);
+        for (int i = 0; i < 4; i++) rom.WriteByte(SubgroupOffset(rom, sub) + i, (byte)monsters[i]);
     }
 
     public static int[] BossMonsters(RomBuffer rom, int formation) =>
@@ -61,8 +67,14 @@ public static class Encounters
     /// <summary>Bytes the group pointers and lists need: 2 per pointer, then [count][subgroups] per group.</summary>
     public static int GroupBytes(IReadOnlyList<IReadOnlyCollection<int>> groups) => groups.Sum(g => 3 + g.Count);
 
-    /// <summary>Bytes from the pointer table to the subgroup table, where pointers and lists must fit.</summary>
-    public const int GroupRoom = Subgroups - GroupPointers;
+    /// <summary>
+    /// Where the group pointers and lists must end: at the game's subgroup table, or, once the subgroups are read
+    /// from the patch's table, at the boss formations (the old subgroup table's bytes are free then).
+    /// </summary>
+    public static int GroupAreaEnd(RomBuffer rom) => SubgroupPatch.IsApplied(rom) ? Bosses : OldSubgroups;
+
+    /// <summary>Bytes from the pointer table to <see cref="GroupAreaEnd"/>.</summary>
+    public static int GroupRoom(RomBuffer rom) => GroupAreaEnd(rom) - GroupPointers;
 
     /// <summary>
     /// Rewrites the group pointer table and every group list, packed in the game's space ($08:DA60 up to the
@@ -74,9 +86,10 @@ public static class Encounters
         int n = groups.Count;
         if (n < 1 || n > MaxGroups) throw new ArgumentException($"There must be 1-{MaxGroups} groups.");
         if (groups.Any(g => g.Count is < 1 or > 255)) throw new ArgumentException("Every group needs 1-255 subgroups.");
-        if (groups.Any(g => g.Any(s => s < 1 || s > SubgroupCount))) throw new ArgumentException($"Subgroups are 01-{SubgroupCount:X2}.");
+        int max = SubgroupCount(rom), room = GroupRoom(rom), end = GroupAreaEnd(rom);
+        if (groups.Any(g => g.Any(s => s < 1 || s > max))) throw new ArgumentException($"Subgroups are 01-{max:X2}.");
         int need = GroupBytes(groups);
-        if (need > GroupRoom) throw new InvalidOperationException($"The groups need {need} bytes but only {GroupRoom} are available; remove some entries (e.g. a subgroup listed twice).");
+        if (need > room) throw new InvalidOperationException($"The groups need {need} bytes but only {room} are available; remove some entries (e.g. a subgroup listed twice).");
         int at = GroupPointers + 2 * n;
         for (int g = 0; g < n; g++)
         {
@@ -84,10 +97,10 @@ public static class Encounters
             rom.WriteByte(at++, (byte)groups[g].Count);
             foreach (int s in groups[g]) rom.WriteByte(at++, (byte)s);
         }
-        while (at < Subgroups) rom.WriteByte(at++, 0);
+        while (at < end) rom.WriteByte(at++, 0);
     }
 
-    public static int RoomForGroups(RomBuffer rom) => Subgroups - Bank8(rom.ReadUInt16Le(GroupPointers));
+    public static int RoomForGroups(RomBuffer rom) => GroupAreaEnd(rom) - Bank8(rom.ReadUInt16Le(GroupPointers));
 
     /// <summary>
     /// A subgroup with no monster at all would hang the game: the battle code keeps looking for a monster

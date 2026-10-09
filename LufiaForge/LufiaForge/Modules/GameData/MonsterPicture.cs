@@ -174,7 +174,7 @@ public partial class MonsterEditorViewModel
         ResourceWriter.Result? result = null;
         Commit($"Monster picture {graphic:X2}", () =>
         {
-            LufiaCompression.Decompress(Ctx.Rom, LufiaCompression.ResourceOffset(Ctx.Rom, MonsterGraphics.Resource(graphic)), out int slot);
+            int slot = ResourceWriter.SlotSize(Ctx.Rom, MonsterGraphics.Resource(graphic));
             bool big = LufiaCompression.Compress(data).Length > slot;
             if (big && Ctx.Rom.Length < Core.Maps.MapWriter.ExpandedSize &&
                 MessageBox.Show("The new picture does not fit in the original space. Expand the ROM to 2 MB?", "Expand ROM?",
