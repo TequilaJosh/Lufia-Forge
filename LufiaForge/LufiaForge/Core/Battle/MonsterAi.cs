@@ -22,17 +22,53 @@ public static class MonsterAi
         (1, "Use an ability (if it has the MP)", true),            // 07 $CD01
         (3, "Special attack", true),                               // 08 $CE25
         (2, "Go to", false),                                       // 09 $CC66
-        (3, "If HP is below a share, go to", false),               // 0A $CE6A
+        (3, "If HP is above a share of max HP, go to", false),     // 0A $CE6A
         (0, "Guard", false),                                       // 0B $CF5B
         (0, "Target itself", false),                               // 0C $CF68
         (0, "Target a random monster on its side", false),         // 0D $CF6E
         (0, "Next action makes no sound", false),                  // 0E $CF8E
         (1, "Show battle message", false),                         // 0F $CF95
-        (3, "If MP is below a share, go to", false),               // 10 $CE8B
+        (3, "If MP is above a share of max MP, go to", false),     // 10 $CE8B
         (0, "Run away", true),                                     // 11 $CEBB
-        (2, "Set the HP check value", false),                      // 12 $CEC8
-        (2, "Set the MP check value", false),                      // 13 $CEE6
+        (2, "Set its HP", false),                                  // 12 $CEC8
+        (2, "Set its MP", false),                                  // 13 $CEE6
     };
+
+    /// <summary>
+    /// The command in plain words. <paramref name="step"/> turns a jump offset into a step number.
+    /// From the handlers: 0A/10 compare max HP/MP x share / 256 with the current HP/MP (battle record +11/+13 and
+    /// +42/+44) and jump while the current value is above it; 12/13 set the current HP/MP.
+    /// </summary>
+    public static string Plain(Command c, Func<int, string> step, Func<int, string>? spellName = null)
+    {
+        var a = c.Args;
+        string Pct(int share) => $"{share * 100 / 256}%";
+        int Word(int i) => a[i] | a[i + 1] << 8;
+        return c.Op switch
+        {
+            0x00 => "End of the script.",
+            0x01 => "Pick a random party member to target.",
+            0x02 => "Pick a party member to target (another way of choosing).",
+            0x03 => "Call for help: another monster of its kind joins in an empty spot." + (a[0] != 0 ? $" (Shows battle message {a[0]:X2}.)" : ""),
+            0x04 => $"{Pct(a[0])} of the time, skip to {step(Word(1))}. Otherwise carry on.",
+            0x05 => "Attack." + (a[0] != 0 ? $" (Shows battle message {a[0]:X2}.)" : ""),
+            0x06 => $"Cast {spellName?.Invoke(a[0]) ?? $"spell {a[0]:X2}"}.",
+            0x07 => $"Use ability {a[0]:X2}. If it doesn't have enough MP, carry on to the next step instead.",
+            0x08 => $"Special attack {a[0]:X2} with power {a[1]}." + (a[2] != 0 ? $" (Shows battle message {a[2]:X2}.)" : ""),
+            0x09 => $"Go to {step(Word(0))}.",
+            0x0A => $"If its HP is still above {Pct(a[0])} of its max HP, go to {step(Word(1))}. Otherwise carry on.",
+            0x0B => "Guard (defend).",
+            0x0C => "Target itself.",
+            0x0D => "Target a random monster on its own side.",
+            0x0E => "Make its next action silent (no sound).",
+            0x0F => $"Show battle message {a[0]:X2}.",
+            0x10 => $"If its MP is still above {Pct(a[0])} of its max MP, go to {step(Word(1))}. Otherwise carry on.",
+            0x11 => "Run away.",
+            0x12 => $"Set its HP to {Word(0)}.",
+            0x13 => $"Set its MP to {Word(0)}.",
+            _ => c.Text,
+        } + (c.EndsTurn && c.Op != 0x07 ? "  -> its turn ends here." : "");
+    }
 
     public static int ScriptOffset(RomBuffer rom, int record) => rom.ReadUInt16Le(record + 0x22);
 
@@ -66,8 +102,8 @@ public static class MonsterAi
                 {
                     case 0x04: jump = args[1] | args[2] << 8; text = $"With chance {args[0]}/256 ({args[0] * 100 / 256}%), go to +{jump:X2}"; break;
                     case 0x09: jump = args[0] | args[1] << 8; text = $"Go to +{jump:X2}"; break;
-                    case 0x0A: jump = args[1] | args[2] << 8; text = $"If HP is below share {args[0]}, go to +{jump:X2}"; break;
-                    case 0x10: jump = args[1] | args[2] << 8; text = $"If MP is below share {args[0]}, go to +{jump:X2}"; break;
+                    case 0x0A: jump = args[1] | args[2] << 8; text = $"If HP > max HP x {args[0]}/256, go to +{jump:X2}"; break;
+                    case 0x10: jump = args[1] | args[2] << 8; text = $"If MP > max MP x {args[0]}/256, go to +{jump:X2}"; break;
                     case 0x05: text = args[0] == 0 ? "Attack" : $"Attack (message {args[0]:X2})"; break;
                     case 0x06: text = $"Cast {spellName?.Invoke(args[0]) ?? $"spell {args[0]:X2}"}"; break;
                     case 0x07: text = $"Use ability {args[0]:X2} (if it has the MP)"; break;
