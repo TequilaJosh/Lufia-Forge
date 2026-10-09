@@ -11,16 +11,44 @@ public static class ResourceWriter
 {
     public sealed record Result(int CompressedSize, int SlotSize, int FileOffset, bool Moved, bool Expanded);
 
+    /// <summary>
+    /// Bytes the resource may use where it is. A smaller stream written in place leaves the rest of its old room
+    /// filled with FF (see <see cref="Save"/>), so the room runs on to the next resource's start when every byte
+    /// in between is FF: that gives back what an earlier smaller write left unused. Anything else after a stream
+    /// (in the original game: other data or code) is never counted. Above 1 MB the space table knows the block.
+    /// </summary>
+    public static int SlotSize(RomBuffer rom, int resourceId)
+    {
+        int at = LufiaCompression.ResourceOffset(rom, resourceId);
+        LufiaCompression.Decompress(rom, at, out int used);
+        if (at >= MapWriter.ExpansionStart)
+        {
+            var block = rom.Length >= MapWriter.ExpandedSize ? ExpansionSpace.Load(rom).At(at) : null;
+            return block != null ? Math.Max(used, block.End - at) : used;
+        }
+        int next = int.MaxValue;
+        for (int id = 0; id < 0x200; id++)
+        {
+            int o = LufiaCompression.ResourceOffset(rom, id);
+            if (o > at && o < next) next = o;
+        }
+        if (next == int.MaxValue || next - at <= used || next - at - used >= 0x8000) return used;
+        for (int i = at + used; i < next; i++) if (rom.ReadByte(i) != 0xFF) return used;
+        return next - at;
+    }
+
     public static Result Save(RomBuffer rom, int resourceId, byte[] data, bool allowExpand)
     {
         int at = LufiaCompression.ResourceOffset(rom, resourceId);
-        LufiaCompression.Decompress(rom, at, out int slot);
+        int slot = SlotSize(rom, resourceId);
         var stream = LufiaCompression.Compress(data);
         if (!LufiaCompression.Decompress(stream).AsSpan().SequenceEqual(data))
             throw new InvalidOperationException("Compression self-check failed; nothing was written.");
         if (stream.Length <= slot)
         {
             rom.WriteBytes(at, stream);
+            // the unused rest of the room becomes FF, so a later, bigger write can have it back (SlotSize)
+            if (slot > stream.Length) rom.WriteBytes(at + stream.Length, Enumerable.Repeat((byte)0xFF, slot - stream.Length).ToArray());
             return new Result(stream.Length, slot, at, false, false);
         }
         if (!allowExpand && rom.Length < MapWriter.ExpandedSize)

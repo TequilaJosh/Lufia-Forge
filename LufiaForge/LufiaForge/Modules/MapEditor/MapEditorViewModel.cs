@@ -270,7 +270,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
         {
             bool allow = _rom.Length >= MapWriter.ExpandedSize;
             var size = LufiaCompression.Compress(_zones).Length;
-            LufiaCompression.Decompress(_rom, LufiaCompression.ResourceOffset(_rom, Core.Battle.Encounters.ZoneResource), out int slot);
+            int slot = Core.ResourceWriter.SlotSize(_rom, Core.Battle.Encounters.ZoneResource);
             if (size > slot && !allow && !ConfirmExpand("The edited encounter zones don't fit in their original space.")) return;
             var r = Core.Battle.Encounters.WriteZones(_rom, _zones, allowExpand: true);
             ZonesDirty = false;

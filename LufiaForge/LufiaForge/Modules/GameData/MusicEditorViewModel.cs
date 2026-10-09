@@ -142,7 +142,7 @@ public partial class MusicEditorViewModel : GameDataEditorBase
 
     private int SlotSize(int song)
     {
-        LufiaCompression.Decompress(Ctx!.Rom, LufiaCompression.ResourceOffset(Ctx.Rom, song), out int slot);
+        int slot = ResourceWriter.SlotSize(Ctx!.Rom, song);
         return slot;
     }
 

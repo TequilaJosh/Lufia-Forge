@@ -3,6 +3,9 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:v="clr-namespace:LufiaForge.Modules.GameData.Views"
              x:Name="Root">
+    <UserControl.InputBindings>
+        <KeyBinding Key="Z" Modifiers="Control" Command="{Binding UndoZonesCommand}"/>
+    </UserControl.InputBindings>
     <UserControl.Resources>
         <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
     </UserControl.Resources>
@@ -46,6 +49,12 @@
                                     <Button Content="＋ New subgroup" Style="{StaticResource LufiaButtonGold}" Command="{Binding NewSubgroupCommand}" Margin="0,0,6,4"
                                             ToolTip="Uses a free subgroup slot (one no group lists) for a new set of monsters."/>
                                 </WrapPanel>
+                                <DockPanel Margin="0,4,0,0">
+                                    <Button DockPanel.Dock="Right" Content="Allow more subgroups..." Style="{StaticResource LufiaButton}" Command="{Binding PatchSubgroupsCommand}"
+                                            Visibility="{Binding CanPatch, Converter={StaticResource BoolToVisibilityConverter}}"
+                                            ToolTip="Patches the battle code to read up to 255 subgroups from a table in the expanded ROM (2 MB)."/>
+                                    <TextBlock Text="{Binding LimitText}" Style="{StaticResource GdHint}" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                                </DockPanel>
                                 <Expander Header="Advanced: the list as numbers" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,4,0,0">
                                     <TextBox Style="{StaticResource GdText}" Width="320" HorizontalAlignment="Left" Margin="0,4,0,0" Text="{Binding SubgroupsText, UpdateSourceTrigger=PropertyChanged}"
                                              ToolTip="Hex subgroup numbers separated by spaces, e.g. 04 05 05 (05 is twice as likely)"/>
@@ -101,6 +110,8 @@
                                       ToolTip="Paint or fill zones with no random battles (deletes an area)."/>
                             <CheckBox Content="Colour every group" Style="{StaticResource GdCheck}" IsChecked="{Binding ShowAllZones}" Margin="0,0,8,4"
                                       ToolTip="Off: only the selected group is shown (yellow)."/>
+                            <Button Content="↶ Undo" Style="{StaticResource LufiaButton}" Command="{Binding UndoZonesCommand}" Margin="0,0,6,4"
+                                    IsEnabled="{Binding CanUndo}" ToolTip="Take back the last paint, fill or rectangle (Ctrl+Z)."/>
                             <Button Content="Write zones" Style="{StaticResource LufiaButtonGold}" Command="{Binding WriteZonesCommand}" Margin="0,0,6,4"
                                     IsEnabled="{Binding ZonesDirty}"/>
                             <Button Content="Revert" Style="{StaticResource LufiaButton}" Command="{Binding RevertZonesCommand}" Margin="0,0,6,4"
@@ -109,7 +120,7 @@
                         <TextBlock Text="{Binding HoverText}" Foreground="{StaticResource GoldLightBrush}" Margin="0,2,0,2" MinHeight="18"/>
                         <TextBlock Text="{Binding WorldStatus}" Style="{StaticResource GdHint}"/>
                         <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,4"
-                                   Text="Yellow = the group selected on the left. Pick a zone to open its group; paint or fill to change areas (select the group first). Unmarked land has no random battles. Write zones saves them to the ROM."/>
+                                   Text="Yellow = the group selected on the left. Pick a zone to open its group; paint, fill or drag a rectangle to change areas (select the group first). 'No battles' land joins up across the map, so to put a group where another was, use Rectangle or Paint (or Fill the old group's area before erasing it). Unmarked land has no random battles. Write zones saves them to the ROM."/>
                     </StackPanel>
                     <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="#20000000">
                         <Grid x:Name="WorldGrid" Width="{Binding WorldPixelWidth}" Height="{Binding WorldPixelHeight}" HorizontalAlignment="Left" VerticalAlignment="Top"

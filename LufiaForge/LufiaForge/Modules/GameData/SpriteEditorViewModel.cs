@@ -216,7 +216,7 @@ public partial class SpriteEditorViewModel : GameDataEditorBase
 
     private int SlotSize()
     {
-        LufiaCompression.Decompress(Ctx!.Rom, LufiaCompression.ResourceOffset(Ctx.Rom, BattleSheetResource), out int slot);
+        int slot = ResourceWriter.SlotSize(Ctx!.Rom, BattleSheetResource);
         return slot;
     }
 }

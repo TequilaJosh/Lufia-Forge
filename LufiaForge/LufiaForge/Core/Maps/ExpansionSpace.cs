@@ -23,7 +23,7 @@ public sealed class ExpansionSpace
     private const int MaxEntries = (TableSize - 8) / EntrySize;
     private static readonly byte[] Magic = "LFAL"u8.ToArray();
 
-    public enum Kind : byte { Unknown = 0, MapData = 1, ScriptBlock = 2, Resource = 3 }
+    public enum Kind : byte { Unknown = 0, MapData = 1, ScriptBlock = 2, Resource = 3, Patch = 4 }
 
     public sealed record Entry(int Start, int Length, Kind Kind, int Id)
     {
@@ -135,6 +135,30 @@ public sealed class ExpansionSpace
             if (e.End <= pos) continue;
             if (e.Start - pos >= size) break;
             pos = Math.Max(pos, e.End);
+        }
+        if (pos + size > TableStart)
+            throw new InvalidOperationException($"Not enough free space left in the expanded ROM for {size} bytes.");
+        _entries.Add(new Entry(pos, size, kind, id));
+        _entries.Sort((a, b) => a.Start.CompareTo(b.Start));
+        return pos;
+    }
+
+    /// <summary>
+    /// Reserve <paramref name="size"/> bytes that stay inside one 32 KB ROM bank (code and tables read with
+    /// a bank byte plus a 16-bit index can't run over a bank's end).
+    /// </summary>
+    public int AllocateInOneBank(int size, Kind kind, int id)
+    {
+        if (_rom.Length < MapWriter.ExpandedSize) throw new InvalidOperationException("The ROM isn't expanded.");
+        if (_entries.Count >= MaxEntries) throw new InvalidOperationException("The expanded ROM's space table is full.");
+        if (size > 0x8000) throw new ArgumentOutOfRangeException(nameof(size));
+        int pos = FirstUsable;
+        while (true)
+        {
+            if ((pos & 0x7FFF) + size > 0x8000) pos = (pos | 0x7FFF) + 1;   // would run over the bank end: next bank
+            var clash = _entries.Where(e => e.Start < pos + size && e.End > pos).OrderBy(e => e.End).LastOrDefault();
+            if (clash == null) break;
+            pos = clash.End;
         }
         if (pos + size > TableStart)
             throw new InvalidOperationException($"Not enough free space left in the expanded ROM for {size} bytes.");

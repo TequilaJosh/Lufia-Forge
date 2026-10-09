@@ -22,7 +22,7 @@ public partial class EncounterEditorView : UserControl
         _down = true;
         WorldGrid.CaptureMouse();
         var (x, y) = Cell(e);
-        Vm.UseTool(x, y, dragging: false);
+        Vm.BeginStroke(x, y);
     }
 
     private void World_MouseMove(object sender, MouseEventArgs e)
@@ -30,11 +30,12 @@ public partial class EncounterEditorView : UserControl
         if (Vm == null) return;
         var (x, y) = Cell(e);
         Vm.HoverCell(x, y);
-        if (_down && e.LeftButton == MouseButtonState.Pressed) Vm.UseTool(x, y, dragging: true);
+        if (_down && e.LeftButton == MouseButtonState.Pressed) Vm.DragStroke(x, y);
     }
 
     private void World_MouseUp(object sender, MouseButtonEventArgs e)
     {
+        if (_down && Vm != null) { var (x, y) = Cell(e); Vm.EndStroke(x, y); }
         _down = false;
         WorldGrid.ReleaseMouseCapture();
     }
