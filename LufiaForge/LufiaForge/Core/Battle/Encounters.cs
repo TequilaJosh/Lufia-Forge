@@ -55,19 +55,29 @@ public static class Encounters
         for (int i = 0; i < 4; i++) rom.WriteByte(Bosses + 4 * (formation - FirstBoss) + i, (byte)monsters[i]);
     }
 
+    /// <summary>Groups above this would read as boss formations (the battle code treats $142D >= E6 as one).</summary>
+    public const int MaxGroups = FirstBoss - 1;
+
+    /// <summary>Bytes the group pointers and lists need: 2 per pointer, then [count][subgroups] per group.</summary>
+    public static int GroupBytes(IReadOnlyList<IReadOnlyCollection<int>> groups) => groups.Sum(g => 3 + g.Count);
+
+    /// <summary>Bytes from the pointer table to the subgroup table, where pointers and lists must fit.</summary>
+    public const int GroupRoom = Subgroups - GroupPointers;
+
     /// <summary>
-    /// Rewrites every group record, packed in the space the game's records use (from the first record to the
-    /// subgroup table), with the pointers updated. Fails if they no longer fit.
+    /// Rewrites the group pointer table and every group list, packed in the game's space ($08:DA60 up to the
+    /// subgroup table): the pointers first (their count is the number of groups, as the game and
+    /// <see cref="GroupCount"/> read it), then the lists. Fails if they don't fit.
     /// </summary>
     public static void WriteGroups(RomBuffer rom, IReadOnlyList<List<int>> groups)
     {
-        int n = GroupCount(rom);
-        if (groups.Count != n) throw new ArgumentException("Every group must be given.");
-        int start = Bank8(rom.ReadUInt16Le(GroupPointers));
-        int room = Subgroups - start;
-        int need = groups.Sum(g => 1 + g.Count);
-        if (need > room) throw new InvalidOperationException($"The groups need {need} bytes but only {room} are available; remove some entries.");
-        int at = start;
+        int n = groups.Count;
+        if (n < 1 || n > MaxGroups) throw new ArgumentException($"There must be 1-{MaxGroups} groups.");
+        if (groups.Any(g => g.Count is < 1 or > 255)) throw new ArgumentException("Every group needs 1-255 subgroups.");
+        if (groups.Any(g => g.Any(s => s < 1 || s > SubgroupCount))) throw new ArgumentException($"Subgroups are 01-{SubgroupCount:X2}.");
+        int need = GroupBytes(groups);
+        if (need > GroupRoom) throw new InvalidOperationException($"The groups need {need} bytes but only {GroupRoom} are available; remove some entries (e.g. a subgroup listed twice).");
+        int at = GroupPointers + 2 * n;
         for (int g = 0; g < n; g++)
         {
             rom.WriteUInt16Le(GroupPointers + 2 * g, (ushort)(0x8000 | ((at - 0x40000) & 0x7FFF)));
@@ -78,6 +88,12 @@ public static class Encounters
     }
 
     public static int RoomForGroups(RomBuffer rom) => Subgroups - Bank8(rom.ReadUInt16Le(GroupPointers));
+
+    /// <summary>
+    /// A subgroup with no monster at all would hang the game: the battle code keeps looking for a monster
+    /// in it ($08:DA38 loop), so every subgroup needs at least one.
+    /// </summary>
+    public static bool HasMonster(int[] monsters) => monsters.Any(m => m != 0xFF);
 
     // ── maps ────────────────────────────────────────────────────────────────
 

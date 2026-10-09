@@ -9,9 +9,9 @@
 
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="330"/>
+            <ColumnDefinition Width="300"/>
             <ColumnDefinition Width="*"/>
-            <ColumnDefinition Width="330"/>
+            <ColumnDefinition Width="300"/>
         </Grid.ColumnDefinitions>
         <Grid.RowDefinitions>
             <RowDefinition Height="*"/>
@@ -21,48 +21,112 @@
         <DockPanel Grid.Column="0" Margin="12">
             <TextBlock DockPanel.Dock="Top" Text="BATTLE GROUPS" Style="{StaticResource GdSection}"/>
             <TextBlock DockPanel.Dock="Top" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,6"
-                       Text="Random battles use the group of the map (or of the world map zone). Boss formations are the scripted battles of event command 1F."/>
+                       Text="A group is the set of monsters you can meet in one area. Boss formations are the scripted battles of event command 1F."/>
+            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,6,0,0">
+                <Button Content="＋ New group" Style="{StaticResource LufiaButton}" Command="{Binding NewGroupCommand}" Margin="0,0,6,0"
+                        ToolTip="Adds a group at the end of the list (4 bytes of the group space). Give it subgroups, then paint it on the world map or give it to a map."/>
+                <Button Content="Delete group" Style="{StaticResource LufiaButton}" Command="{Binding DeleteGroupCommand}"
+                        ToolTip="Deletes the last group, if no map or world map zone uses it."/>
+            </StackPanel>
             <ListBox Style="{StaticResource GdRecordList}" ItemsSource="{Binding Entries}" SelectedIndex="{Binding SelectedIndex}"/>
         </DockPanel>
 
-        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" Padding="0,12,8,0">
-            <StackPanel>
-                <Border Style="{StaticResource GdCard}" Visibility="{Binding IsGroup, Converter={StaticResource BoolToVisibilityConverter}}">
+        <TabControl Grid.Column="1" Margin="0,12,8,0" Background="Transparent" BorderThickness="0">
+            <TabItem Header="Monsters">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,8,0,0">
                     <StackPanel>
-                        <TextBlock Text="SUBGROUPS THIS GROUP CAN ROLL" Style="{StaticResource GdSection}"/>
-                        <TextBox Style="{StaticResource GdText}" Width="320" HorizontalAlignment="Left" Text="{Binding SubgroupsText, UpdateSourceTrigger=PropertyChanged}"
-                                 ToolTip="Hex subgroup numbers separated by spaces, e.g. 04 05 05"/>
-                        <TextBlock Text="{Binding RoomText}" Style="{StaticResource GdHint}" TextWrapping="Wrap" MaxWidth="460" HorizontalAlignment="Left" Margin="0,4,0,0"/>
+                        <Border Style="{StaticResource GdCard}" Visibility="{Binding IsGroup, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <StackPanel>
+                                <TextBlock Text="SUBGROUPS THIS GROUP CAN ROLL" Style="{StaticResource GdSection}"/>
+                                <TextBlock Text="{Binding RoomText}" Style="{StaticResource GdHint}" TextWrapping="Wrap" MaxWidth="560" HorizontalAlignment="Left"/>
+                                <WrapPanel Margin="0,8,0,0">
+                                    <ComboBox Style="{StaticResource GdCombo}" Width="300" Margin="0,0,6,4" ItemsSource="{Binding SubgroupChoices}" SelectedIndex="{Binding AddChoice}"
+                                              ToolTip="Every subgroup and its monsters. 'free' = no group lists it."/>
+                                    <Button Content="Add this subgroup" Style="{StaticResource LufiaButton}" Command="{Binding AddExistingCommand}" Margin="0,0,6,4"/>
+                                    <Button Content="＋ New subgroup" Style="{StaticResource LufiaButtonGold}" Command="{Binding NewSubgroupCommand}" Margin="0,0,6,4"
+                                            ToolTip="Uses a free subgroup slot (one no group lists) for a new set of monsters."/>
+                                </WrapPanel>
+                                <Expander Header="Advanced: the list as numbers" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,4,0,0">
+                                    <TextBox Style="{StaticResource GdText}" Width="320" HorizontalAlignment="Left" Margin="0,4,0,0" Text="{Binding SubgroupsText, UpdateSourceTrigger=PropertyChanged}"
+                                             ToolTip="Hex subgroup numbers separated by spaces, e.g. 04 05 05 (05 is twice as likely)"/>
+                                </Expander>
+                            </StackPanel>
+                        </Border>
+                        <ItemsControl ItemsSource="{Binding Rows}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Style="{StaticResource GdCard}">
+                                        <StackPanel>
+                                            <DockPanel>
+                                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Visibility="{Binding InGroup, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                    <Button Content="More likely" Style="{StaticResource LufiaButton}" Margin="0,0,4,0" Padding="6,2"
+                                                            Command="{Binding DataContext.MoreLikelyCommand, ElementName=Root}" CommandParameter="{Binding}"
+                                                            ToolTip="List it once more in this group (1 byte)."/>
+                                                    <Button Content="Less likely" Style="{StaticResource LufiaButton}" Margin="0,0,4,0" Padding="6,2"
+                                                            Command="{Binding DataContext.LessLikelyCommand, ElementName=Root}" CommandParameter="{Binding}"/>
+                                                    <Button Content="✕ Remove" Style="{StaticResource LufiaButton}" Padding="6,2"
+                                                            Command="{Binding DataContext.RemoveSubgroupCommand, ElementName=Root}" CommandParameter="{Binding}"
+                                                            ToolTip="Take it out of this group. Other groups keep it; if none lists it, its slot becomes free."/>
+                                                </StackPanel>
+                                                <TextBlock Text="{Binding Title}" Style="{StaticResource GdSection}"/>
+                                            </DockPanel>
+                                            <TextBlock Text="{Binding Chance}" Foreground="{StaticResource GoldLightBrush}" Margin="0,0,0,2"/>
+                                            <TextBlock Text="{Binding UsedBy}" Style="{StaticResource GdHint}" Margin="0,0,0,4" TextWrapping="Wrap"/>
+                                            <WrapPanel>
+                                                <ComboBox Style="{StaticResource GdCombo}" Width="160" Margin="0,0,6,4" ItemsSource="{Binding DataContext.MonsterChoices, ElementName=Root}" SelectedIndex="{Binding M1}"/>
+                                                <ComboBox Style="{StaticResource GdCombo}" Width="160" Margin="0,0,6,4" ItemsSource="{Binding DataContext.MonsterChoices, ElementName=Root}" SelectedIndex="{Binding M2}"/>
+                                                <ComboBox Style="{StaticResource GdCombo}" Width="160" Margin="0,0,6,4" ItemsSource="{Binding DataContext.MonsterChoices, ElementName=Root}" SelectedIndex="{Binding M3}"/>
+                                                <ComboBox Style="{StaticResource GdCombo}" Width="160" Margin="0,0,6,4" ItemsSource="{Binding DataContext.MonsterChoices, ElementName=Root}" SelectedIndex="{Binding M4}"/>
+                                            </WrapPanel>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Text="{Binding WhereText}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="12,4,12,0"/>
+                        <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="12,6,12,0"
+                                   Text="A battle picks one subgroup, then the monsters come from its 4 slots (FF = empty slot; every subgroup needs at least one monster). A subgroup is shared by every group that lists it. Click Apply to write the changes."/>
                     </StackPanel>
-                </Border>
-                <ItemsControl ItemsSource="{Binding Rows}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Border Style="{StaticResource GdCard}">
-                                <StackPanel>
-                                    <TextBlock Text="{Binding Title}" Style="{StaticResource GdSection}"/>
-                                    <TextBlock Text="{Binding UsedBy}" Style="{StaticResource GdHint}" Margin="0,0,0,4"/>
-                                    <WrapPanel>
-                                        <ComboBox Style="{StaticResource GdCombo}" Width="170" Margin="0,0,6,4" ItemsSource="{Binding DataContext.MonsterChoices, ElementName=Root}" SelectedIndex="{Binding M1}"/>
-                                        <ComboBox Style="{StaticResource GdCombo}" Width="170" Margin="0,0,6,4" ItemsSource="{Binding DataContext.MonsterChoices, ElementName=Root}" SelectedIndex="{Binding M2}"/>
-                                        <ComboBox Style="{StaticResource GdCombo}" Width="170" Margin="0,0,6,4" ItemsSource="{Binding DataContext.MonsterChoices, ElementName=Root}" SelectedIndex="{Binding M3}"/>
-                                        <ComboBox Style="{StaticResource GdCombo}" Width="170" Margin="0,0,6,4" ItemsSource="{Binding DataContext.MonsterChoices, ElementName=Root}" SelectedIndex="{Binding M4}"/>
-                                    </WrapPanel>
-                                </StackPanel>
-                            </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-                <TextBlock Text="{Binding WhereText}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="12,4,12,0"/>
-                <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="12,6,12,0"
-                           Text="A subgroup is shared by every group that lists it: changing its monsters changes it everywhere. Monster stats, graphics and drops are on the Monsters tab; the encounter rate is on Game Settings."/>
-            </StackPanel>
-        </ScrollViewer>
+                </ScrollViewer>
+            </TabItem>
+            <TabItem Header="World map">
+                <DockPanel Margin="0,8,0,0">
+                    <StackPanel DockPanel.Dock="Top">
+                        <WrapPanel>
+                            <ComboBox Style="{StaticResource GdCombo}" Width="290" Margin="0,0,8,4" ItemsSource="{Binding Tools}" SelectedIndex="{Binding ToolIndex}"/>
+                            <TextBlock Text="Brush" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,4,4"/>
+                            <ComboBox Style="{StaticResource GdCombo}" Width="56" Margin="0,0,8,4" ItemsSource="{Binding BrushSizes}" SelectedItem="{Binding BrushSize}"
+                                      ToolTip="Brush size in zones (one zone = 4x4 tiles)."/>
+                            <CheckBox Content="Paint 'no battles'" Style="{StaticResource GdCheck}" IsChecked="{Binding EraseZones}" Margin="0,0,8,4"
+                                      ToolTip="Paint or fill zones with no random battles (deletes an area)."/>
+                            <CheckBox Content="Colour every group" Style="{StaticResource GdCheck}" IsChecked="{Binding ShowAllZones}" Margin="0,0,8,4"
+                                      ToolTip="Off: only the selected group is shown (yellow)."/>
+                            <Button Content="Write zones" Style="{StaticResource LufiaButtonGold}" Command="{Binding WriteZonesCommand}" Margin="0,0,6,4"
+                                    IsEnabled="{Binding ZonesDirty}"/>
+                            <Button Content="Revert" Style="{StaticResource LufiaButton}" Command="{Binding RevertZonesCommand}" Margin="0,0,6,4"
+                                    IsEnabled="{Binding ZonesDirty}"/>
+                        </WrapPanel>
+                        <TextBlock Text="{Binding HoverText}" Foreground="{StaticResource GoldLightBrush}" Margin="0,2,0,2" MinHeight="18"/>
+                        <TextBlock Text="{Binding WorldStatus}" Style="{StaticResource GdHint}"/>
+                        <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,4"
+                                   Text="Yellow = the group selected on the left. Pick a zone to open its group; paint or fill to change areas (select the group first). Unmarked land has no random battles. Write zones saves them to the ROM."/>
+                    </StackPanel>
+                    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="#20000000">
+                        <Grid x:Name="WorldGrid" Width="{Binding WorldPixelWidth}" Height="{Binding WorldPixelHeight}" HorizontalAlignment="Left" VerticalAlignment="Top"
+                              Background="Transparent" Cursor="Cross"
+                              MouseLeftButtonDown="World_MouseDown" MouseMove="World_MouseMove" MouseLeftButtonUp="World_MouseUp" MouseLeave="World_MouseLeave">
+                            <Image Source="{Binding WorldImage}" Stretch="Fill" RenderOptions.BitmapScalingMode="LowQuality"/>
+                            <Image Source="{Binding ZoneImage}" Stretch="Fill" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                        </Grid>
+                    </ScrollViewer>
+                </DockPanel>
+            </TabItem>
+        </TabControl>
 
         <DockPanel Grid.Column="2" Margin="0,12,12,8">
             <TextBlock DockPanel.Dock="Top" Text="GROUP OF EACH MAP" Style="{StaticResource GdSection}"/>
             <TextBlock DockPanel.Dock="Top" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,6"
-                       Text="Maps choose their group in their setup script (command 0D). Maps not listed have no random battles. The world map uses zones instead."/>
+                       Text="Towns, caves and towers choose their group in their setup script (command 0D). Maps not listed have no random battles. The world map uses zones instead (World map page)."/>
             <ListBox Style="{StaticResource GdRecordList}" ItemsSource="{Binding MapGroups}" HorizontalContentAlignment="Stretch">
                 <ListBox.ItemTemplate>
                     <DataTemplate>
