@@ -178,14 +178,18 @@ public partial class MonsterEditorViewModel : GameDataEditorBase
     [RelayCommand]
     private void RandomizeStats()
     {
-        // Same formula as L1ME: each stat becomes a random value between about 1x and 2x its current value.
-        int Roll(int stat, int max) => Clamp((int)((stat + 4.5 / 1.25) * Random.Shared.NextDouble() + stat + 2), 0, max);
-        Hp  = Roll(Hp,  0xFFFF);
-        Atp = Roll(Atp, 0xFFFF);
-        Dfp = Roll(Dfp, 0xFFFF);
-        Agl = Roll(Agl, 255);
-        Mgr = Roll(Mgr, 255);
-        Status = "Stats randomized (not yet applied).";
+        // Each stat becomes a random value between half and one and a half times the monster's value in the ROM.
+        // Rolled from the ROM each click (not from the boxes), so clicking again re-rolls instead of piling up.
+        if (Ctx == null || SelectedIndex < 0) return;
+        var rom = Ctx.Rom;
+        int o   = _recordOffset;
+        int Roll(int stat, int max) => Clamp((int)Math.Round(stat * (0.5 + Random.Shared.NextDouble())), stat > 0 ? 1 : 0, max);
+        Hp  = Roll(rom.ReadUInt16Le(o + 16), 0xFFFF);
+        Atp = Roll(rom.ReadUInt16Le(o + 20), 0xFFFF);
+        Dfp = Roll(rom.ReadUInt16Le(o + 22), 0xFFFF);
+        Agl = Roll(rom.ReadByte(o + 25), 255);
+        Mgr = Roll(rom.ReadByte(o + 26), 255);
+        Status = "Stats randomized to 50-150% of the monster's current ROM values (not yet applied; click again to re-roll).";
     }
 
     protected override void OnNamesChanged()

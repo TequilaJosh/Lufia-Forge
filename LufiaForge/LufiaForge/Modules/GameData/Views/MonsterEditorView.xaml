@@ -56,7 +56,7 @@
                         </Grid>
                         <Button Content="🎲  Randomize stats" Style="{StaticResource LufiaButton}"
                                 Command="{Binding RandomizeStatsCommand}" HorizontalAlignment="Left" Margin="0,10,0,0"
-                                ToolTip="Roll HP/ATP/DFP/AGL/MGR to roughly 1x-2x their values (L1ME formula). Click Apply to keep."/>
+                                ToolTip="Roll HP/ATP/DFP/AGL/MGR to a random value between 50% and 150% of the values in the ROM. Each click re-rolls; click Apply to keep."/>
                     </StackPanel>
                 </Border>
 
