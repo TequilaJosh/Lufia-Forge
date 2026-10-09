@@ -27,7 +27,8 @@
             </ListBox.ItemTemplate>
         </ListBox>
 
-        <StackPanel Grid.Column="1" Margin="0,12,12,0">
+        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="0,12,12,0">
             <Border Style="{StaticResource GdCard}" HorizontalAlignment="Left">
                 <StackPanel>
                     <TextBlock Text="MAP SPRITE (8 FRAMES)" Style="{StaticResource GdSection}"/>
@@ -46,7 +47,28 @@
                                Text="These are the sprites walking around on the maps: the party members and every character. Export the sheet, draw over it in any paint program, and import it back - importing writes to the ROM right away (unsaved until File > Save ROM)."/>
                 </StackPanel>
             </Border>
+            <Border Style="{StaticResource GdCard}" HorizontalAlignment="Left">
+                <StackPanel>
+                    <TextBlock Text="BATTLE SPRITES (PARTY POSES, COMMAND ICONS, NUMBERS)" Style="{StaticResource GdSection}"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                        <TextBlock Text="View in palette" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <ComboBox Style="{StaticResource GdCombo}" Width="90" ItemsSource="{Binding BattleRows}" SelectedIndex="{Binding BattleRow}"/>
+                    </StackPanel>
+                    <Border Background="#40000000" HorizontalAlignment="Left" Padding="6">
+                        <Image Source="{Binding BattleSheet}" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor">
+                            <Image.LayoutTransform><ScaleTransform ScaleX="2" ScaleY="2"/></Image.LayoutTransform>
+                        </Image>
+                    </Border>
+                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                        <Button Content="Export sheet..." Style="{StaticResource LufiaButton}" Command="{Binding ExportBattleCommand}" Margin="0,0,8,0"/>
+                        <Button Content="Import sheet..." Style="{StaticResource LufiaButtonGold}" Command="{Binding ImportBattleCommand}"/>
+                    </StackPanel>
+                    <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" MaxWidth="620" HorizontalAlignment="Left" Margin="0,8,0,0"
+                               Text="Resource 13D: the party's battle poses, the command ring icons (the selector), damage digits and status icons. Each sprite is drawn in its own palette row in battle, so the sheet is exported as an indexed (16-colour) picture: keep it indexed and every sprite keeps its colours. A full-colour picture is matched to the palette row chosen above."/>
+                </StackPanel>
+            </Border>
         </StackPanel>
+        </ScrollViewer>
 
         <v:EditorFooter Grid.Row="1" Grid.ColumnSpan="2"/>
     </Grid>
