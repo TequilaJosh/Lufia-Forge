@@ -123,6 +123,25 @@
                     </StackPanel>
                 </Border>
 
+                <Border Style="{StaticResource GdCard}">
+                    <StackPanel MaxWidth="560">
+                        <TextBlock Text="AI SCRIPT (WHAT IT DOES IN BATTLE)" Style="{StaticResource GdSection}"/>
+                        <ItemsControl ItemsSource="{Binding AiLines}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding}" FontFamily="Consolas" Foreground="{StaticResource TextPrimaryBrush}" TextWrapping="Wrap"/>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Text="Script bytes (hex)" Style="{StaticResource LufiaLabel}" Margin="0,8,0,2"/>
+                        <TextBox Style="{StaticResource GdText}" Width="520" HorizontalAlignment="Left" TextWrapping="Wrap"
+                                 Text="{Binding AiHex, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBlock Text="{Binding AiNote}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                        <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0"
+                                   Text="Commands: 01/02 aa bb cc choose target · 03 mm call a friend · 04 nn oooo n/256 chance go to · 05 mm attack · 06 ss cast spell · 07 xx ability · 08 aa pp mm special attack · 09 oooo go to · 0A pp oooo if HP low go to · 0B guard · 0C target self · 0D target ally · 0F mm message · 10 pp oooo if MP low go to · 11 run away · 00 end. Offsets oooo are little-endian, from the record start."/>
+                    </StackPanel>
+                </Border>
+
             </WrapPanel>
         </ScrollViewer>
 

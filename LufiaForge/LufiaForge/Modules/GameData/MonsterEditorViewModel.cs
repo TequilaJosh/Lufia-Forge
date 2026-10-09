@@ -32,6 +32,12 @@ public partial class MonsterEditorViewModel : GameDataEditorBase
     [ObservableProperty] private int    _dropItem;
     [ObservableProperty] private int    _dropRate;
     [ObservableProperty] private string _unknownHex = "";
+    /// <summary>The monster's AI script, one decoded command per line ("+27  With chance ...").</summary>
+    public System.Collections.ObjectModel.ObservableCollection<string> AiLines { get; } = new();
+    /// <summary>The script's bytes (hex), edited in place: same length.</summary>
+    [ObservableProperty] private string _aiHex = "";
+    [ObservableProperty] private string _aiNote = "";
+    private int _aiStart, _aiLength;
     [ObservableProperty] private string _offsetText = "";
 
     public ByteOption[] MonsterTypeOptions => GameDataLabels.MonsterTypes;
@@ -96,9 +102,29 @@ public partial class MonsterEditorViewModel : GameDataEditorBase
         DropItem     = rom.ReadByte(o + 32);
         DropRate     = rom.ReadByte(o + 33);
         UnknownHex   = ItemEditorViewModel.ToHex(UnknownFields.Select(f => rom.ReadByte(o + f)).ToArray());
+        LoadAi(rom, o);
 
         OffsetText = $"Record at 0x{o:X6}  (pointer at 0x{GameDataOffsets.MonsterPointerTable + SelectedIndex * 2:X6}). " +
-                     "Bytes after +34 are the monster's battle script and are not edited here.";
+                     "Its AI script is decoded below.";
+    }
+
+    private void LoadAi(LufiaForge.Core.RomBuffer rom, int record)
+    {
+        AiLines.Clear();
+        var cmds = LufiaForge.Core.Battle.MonsterAi.Decode(rom, record,
+            id => id < SpellNames.Count ? SpellNames[id][3..].Trim() : $"spell {id:X2}");
+        if (cmds.Count == 0)
+        {
+            _aiStart = _aiLength = 0; AiHex = "";
+            AiNote = "No AI script: this monster just attacks.";
+            return;
+        }
+        foreach (var c in cmds) AiLines.Add($"+{c.Offset:X2}  {c.Text}{(c.EndsTurn ? "   (ends the turn)" : "")}");
+        _aiStart = cmds.Min(c => c.Offset);
+        _aiLength = cmds.Max(c => c.Offset + 1 + c.Args.Length) - _aiStart;
+        AiHex = ItemEditorViewModel.ToHex(Enumerable.Range(0, _aiLength).Select(k => rom.ReadByte(record + _aiStart + k)).ToArray());
+        AiNote = $"Script at record +{_aiStart:X2}, {_aiLength} bytes. Each turn the battle runs it from the top until a command picks the action. " +
+                 "Offsets (+xx) count from the start of the monster's record; edit the bytes in place (same length).";
     }
 
     [RelayCommand]
@@ -108,6 +134,13 @@ public partial class MonsterEditorViewModel : GameDataEditorBase
         if (!ItemEditorViewModel.TryParseHex(UnknownHex, out var unknown) || unknown.Length != UnknownFields.Length)
         {
             Status = $"Unknown bytes must be exactly {UnknownFields.Length} hex bytes (+11 +13 +18 +19 +29).";
+            return;
+        }
+
+        byte[] ai = Array.Empty<byte>();
+        if (_aiLength > 0 && (!ItemEditorViewModel.TryParseHex(AiHex, out ai) || ai.Length != _aiLength))
+        {
+            Status = $"AI script: exactly {_aiLength} hex bytes (edit in place; the length can't change).";
             return;
         }
 
@@ -135,6 +168,7 @@ public partial class MonsterEditorViewModel : GameDataEditorBase
             rom.WriteByte(o + 33, (byte)Clamp(DropRate, 0, 255));
             for (int i = 0; i < UnknownFields.Length; i++)
                 rom.WriteByte(o + UnknownFields[i], unknown[i]);
+            for (int i = 0; i < ai.Length; i++) rom.WriteByte(o + _aiStart + i, ai[i]);
         });
 
         if (renamed) RefreshList();
