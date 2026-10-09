@@ -124,6 +124,25 @@
                 </Border>
 
                 <Border Style="{StaticResource GdCard}">
+                    <StackPanel MaxWidth="420">
+                        <TextBlock Text="BATTLE PICTURE" Style="{StaticResource GdSection}"/>
+                        <Border Background="#40000000" HorizontalAlignment="Left" Padding="6">
+                            <Image Source="{Binding Picture}" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor">
+                                <Image.LayoutTransform><ScaleTransform ScaleX="2" ScaleY="2"/></Image.LayoutTransform>
+                            </Image>
+                        </Border>
+                        <TextBlock Text="{Binding PictureInfo}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,8,0,0"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                            <Button Content="Export picture..." Style="{StaticResource LufiaButton}" Command="{Binding ExportPictureCommand}" Margin="0,0,8,0"/>
+                            <Button Content="Import picture..." Style="{StaticResource LufiaButtonGold}" Command="{Binding ImportPictureCommand}"
+                                    ToolTip="Width and height in multiples of 16 pixels, up to 128 x 112. Transparent = see-through. Written to the ROM right away (unsaved until File > Save ROM)."/>
+                        </StackPanel>
+                        <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,8,0,0"
+                                   Text="The picture is exported as an indexed 16-colour PNG. Draw over it and keep it indexed: its palette becomes the monster's colours. A full-colour picture is matched to the palette (or, with up to 15 colours, can make a new one). Palette 1 is the recoloured twin (e.g. Red Wolf)."/>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource GdCard}">
                     <StackPanel MaxWidth="560">
                         <TextBlock Text="AI SCRIPT (WHAT IT DOES IN BATTLE)" Style="{StaticResource GdSection}"/>
                         <ItemsControl ItemsSource="{Binding AiLines}">
