@@ -119,12 +119,17 @@ public partial class MonsterEditorViewModel : GameDataEditorBase
             AiNote = "No AI script: this monster just attacks.";
             return;
         }
-        foreach (var c in cmds) AiLines.Add($"+{c.Offset:X2}  {c.Text}{(c.EndsTurn ? "   (ends the turn)" : "")}");
+        // numbered steps in script order; jumps name the step they land on
+        var stepOf = cmds.Select((c, i) => (c.Offset, i + 1)).ToDictionary(t => t.Offset, t => t.Item2);
+        string Step(int offset) => stepOf.TryGetValue(offset, out int n) ? $"step {n}" : $"+{offset:X2}";
+        Func<int, string> spell = id => id < SpellNames.Count ? SpellNames[id][3..].Trim() : $"spell {id:X2}";
+        for (int i = 0; i < cmds.Count; i++)
+            AiLines.Add($"{i + 1,2}.  {LufiaForge.Core.Battle.MonsterAi.Plain(cmds[i], Step, spell)}");
         _aiStart = cmds.Min(c => c.Offset);
         _aiLength = cmds.Max(c => c.Offset + 1 + c.Args.Length) - _aiStart;
         AiHex = ItemEditorViewModel.ToHex(Enumerable.Range(0, _aiLength).Select(k => rom.ReadByte(record + _aiStart + k)).ToArray());
-        AiNote = $"Script at record +{_aiStart:X2}, {_aiLength} bytes. Each turn the battle runs it from the top until a command picks the action. " +
-                 "Offsets (+xx) count from the start of the monster's record; edit the bytes in place (same length).";
+        AiNote = "Every turn the monster starts at step 1 and works down the list until a step chooses what it does (attack, spell, ability...). " +
+                 $"The bytes below are the script itself ({_aiLength} bytes at record +{_aiStart:X2}); edit them in place, the length can't change.";
     }
 
     [RelayCommand]

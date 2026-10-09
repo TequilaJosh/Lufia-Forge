@@ -104,9 +104,11 @@
                                        ItemsSource="{Binding MonsterTypeOptions}" DisplayMemberPath="Label"
                                        SelectedValuePath="Value" SelectedValue="{Binding MonsterType}"/>
                             <TextBlock Grid.Row="1" Text="Flags" Style="{StaticResource GdFieldLabel}"/>
-                            <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal">
-                                <CheckBox Content="0x40" Style="{StaticResource GdCheck}" IsChecked="{Binding Flag40}"/>
-                                <CheckBox Content="0x80" Style="{StaticResource GdCheck}" IsChecked="{Binding Flag80}"/>
+                            <StackPanel Grid.Row="1" Grid.Column="1">
+                                <CheckBox Content="Boss: stays on screen when defeated" Style="{StaticResource GdCheck}" IsChecked="{Binding Flag40}"
+                                          ToolTip="Flag 0x40 (Sinistrals and story bosses). When beaten the monster does not fade out and the defeat sound is not played; in a boss battle the game plays its boss-defeat effect instead. Leave off for normal monsters, or they stay on screen after dying."/>
+                                <CheckBox Content="Doesn't shake when hit" Style="{StaticResource GdCheck}" IsChecked="{Binding Flag80}"
+                                          ToolTip="Flag 0x80 (big monsters and bosses: Dragon, Hydra, Troll, Efreet, the Sinistrals...). The picture stays still instead of jittering when hit or defeated."/>
                             </StackPanel>
                             <TextBlock Grid.Row="2" Text="Weak against" Style="{StaticResource GdFieldLabel}"/>
                             <ComboBox  Grid.Row="2" Grid.Column="1" Style="{StaticResource GdCombo}" MinWidth="160"
@@ -144,7 +146,7 @@
 
                 <Border Style="{StaticResource GdCard}">
                     <StackPanel MaxWidth="560">
-                        <TextBlock Text="AI SCRIPT (WHAT IT DOES IN BATTLE)" Style="{StaticResource GdSection}"/>
+                        <TextBlock Text="AI SCRIPT (WHAT IT DOES EACH TURN)" Style="{StaticResource GdSection}"/>
                         <ItemsControl ItemsSource="{Binding AiLines}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
@@ -157,7 +159,7 @@
                                  Text="{Binding AiHex, UpdateSourceTrigger=PropertyChanged}"/>
                         <TextBlock Text="{Binding AiNote}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0"/>
                         <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0"
-                                   Text="Commands: 01/02 aa bb cc choose target · 03 mm call a friend · 04 nn oooo n/256 chance go to · 05 mm attack · 06 ss cast spell · 07 xx ability · 08 aa pp mm special attack · 09 oooo go to · 0A pp oooo if HP low go to · 0B guard · 0C target self · 0D target ally · 0F mm message · 10 pp oooo if MP low go to · 11 run away · 00 end. Offsets oooo are little-endian, from the record start."/>
+                                   Text="Byte guide for editing: 00 end - 01 aa bb cc / 02 aa bb cc pick a target - 03 mm call for help - 04 cc ssss chance cc/256 to skip to ssss - 05 mm attack - 06 ss cast spell ss - 07 xx use ability xx - 08 aa pp mm special attack - 09 ssss go to - 0A pp ssss if HP above pp/256 of max go to - 0B guard - 0C target itself - 0D target an ally - 0E silent - 0F mm battle message - 10 pp ssss if MP above pp/256 of max go to - 11 run away - 12 hhhh set HP - 13 hhhh set MP. Two-byte values are low byte first; ssss counts from the start of the monster record (the +xx number)."/>
                     </StackPanel>
                 </Border>
 
