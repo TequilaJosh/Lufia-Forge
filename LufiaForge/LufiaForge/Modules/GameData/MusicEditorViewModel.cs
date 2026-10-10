@@ -12,7 +12,8 @@ namespace LufiaForge.Modules.GameData;
 
 /// <summary>
 /// The game's 37 songs (resources 00-24): listen to them on the emulated sound chip, change which instruments a
-/// song loads, export a song to a file and import one (yours, or from another ROM) into any song slot.
+/// song loads, export a song to a file and import one (yours, or from another ROM) into any song slot, or as MIDI
+/// (export, edit in any MIDI editor, import; see <see cref="SongCodec"/>).
 ///
 /// Song data (unpacked): [length - 2 (u16)] "SFC" + a byte + the song's internal name (to 0x12), channel
 /// table, 8 channel pointers at 0x22 (sound RAM, the song is loaded at $2800), the instruments to load at 0x32
@@ -175,6 +176,68 @@ public partial class MusicEditorViewModel : GameDataEditorBase
         if (MessageBox.Show($"Replace song {Songs[SelectedIndex]} with \"{Tag(d)}\" from {Path.GetFileName(dlg.FileName)}?\n\nEverywhere the game plays this song, it plays the new one.",
                 "Import song", MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;
         Write(d, $"Song {SelectedIndex:X2} replaced");
+    }
+
+    // ── MIDI ────────────────────────────────────────────────────────────────
+
+    [RelayCommand]
+    private void ExportMidi()
+    {
+        if (Ctx == null || SelectedIndex < 0) return;
+        var dlg = new SaveFileDialog { Title = "Export song as MIDI", Filter = "MIDI file (*.mid)|*.mid", FileName = $"{Songs[SelectedIndex][4..].Trim()}.mid" };
+        if (dlg.ShowDialog() != true) return;
+        try { Status = ExportMidiTo(dlg.FileName); }
+        catch (Exception ex) { Status = "Not exported: " + ex.Message; }
+    }
+
+    /// <summary>Writes the selected song as a MIDI file; returns a summary.</summary>
+    public string ExportMidiTo(string path)
+    {
+        var d = LufiaCompression.DecompressResource(Ctx!.Rom, SelectedIndex, out _);
+        var song = SongCodec.Decode(d);
+        File.WriteAllBytes(path, SongCodec.ToMidi(song, Songs[SelectedIndex][4..].Trim()));
+        int used = song.Channels.Count(c => c.Any(e => e.Kind == SongCodec.Kind.Note && e.B > 0));
+        return $"Saved {Path.GetFileName(path)}: {used} channels (one track each), tempo {60_000_000.0 / song.MicrosPerQuarter:0.#} BPM. " +
+               "Program numbers are the game's instrument numbers; the loop is marked with loopStart/loopEnd markers.";
+    }
+
+    [RelayCommand]
+    private void ImportMidi()
+    {
+        if (Ctx == null || SelectedIndex < 0) return;
+        var dlg = new OpenFileDialog { Title = "Import MIDI", Filter = "MIDI file (*.mid;*.midi)|*.mid;*.midi" };
+        if (dlg.ShowDialog() != true) return;
+        byte[] data; List<string> warnings;
+        try { (data, warnings) = SongFromMidi(File.ReadAllBytes(dlg.FileName)); }
+        catch (Exception ex) { Status = "Not imported: " + ex.Message; return; }
+        string notes = warnings.Count == 0 ? "" : "\n\n" + string.Join("\n", warnings.Select(w => "• " + w));
+        if (MessageBox.Show($"Replace song {Songs[SelectedIndex]} with {Path.GetFileName(dlg.FileName)} ({data.Length:N0} bytes)?{notes}",
+                "Import MIDI", MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;
+        Write(data, $"Song {SelectedIndex:X2} from MIDI");
+        Status = $"Imported {Path.GetFileName(dlg.FileName)} into song {SelectedIndex:X2}." + (warnings.Count > 0 ? " " + string.Join(" ", warnings) : "");
+    }
+
+    /// <summary>
+    /// Song data for the selected slot from a MIDI file: the slot keeps its name, channel voices and instrument list;
+    /// instruments the MIDI uses that aren't always loaded are added to the list.
+    /// </summary>
+    public (byte[] Data, List<string> Warnings) SongFromMidi(byte[] midi)
+    {
+        var current = LufiaCompression.DecompressResource(Ctx!.Rom, SelectedIndex, out _);
+        var header = current.Skip(2).Take(0x40).ToArray();
+        var song = SongCodec.FromMidi(midi, out var warnings);
+        if (!song.Channels.Any(c => c.Any(e => e.Kind == SongCodec.Kind.Note))) throw new InvalidDataException("the MIDI has no notes");
+        // instruments 10-2F are only there when the song loads them
+        var load = header.Skip(0x30).Take(8).TakeWhile(b => b != 0).Select(b => (int)b).ToList();
+        var missing = song.Channels.SelectMany(c => c).Where(e => e.Kind == SongCodec.Kind.Program && e.A is >= 0x10 and < 0x30)
+                          .Select(e => e.A).Distinct().Where(i => !load.Contains(i)).OrderBy(i => i).ToList();
+        foreach (int i in missing)
+        {
+            if (load.Count < 8) load.Add(i);
+            else warnings.Add($"Instrument {i:X2} isn't loaded (a song loads at most 8 of 10-37); its notes play with whatever is there.");
+        }
+        for (int k = 0; k < 8; k++) header[0x30 + k] = (byte)(k < load.Count ? load[k] : 0);
+        return (SongCodec.Encode(song, header), warnings);
     }
 
     [RelayCommand]
