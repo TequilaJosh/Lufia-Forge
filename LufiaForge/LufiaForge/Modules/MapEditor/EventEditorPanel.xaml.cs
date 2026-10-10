@@ -67,9 +67,32 @@ public partial class ParamVm : ObservableObject
 
     public string Value
     {
-        get => Hex ? Raw.ToString(Raw > 0xFF ? "X4" : "X2") : Raw.ToString();
+        get
+        {
+            if (Def?.Kind == ParamKind.Name)
+            {
+                var b = _line.Op.Bytes;
+                return b.Length >= 7 && b[2] == 0xFF ? "*" : EventCommands.NameText(b);
+            }
+            return Hex ? Raw.ToString(Raw > 0xFF ? "X4" : "X2") : Raw.ToString();
+        }
         set
         {
+            if (Def?.Kind == ParamKind.Name)
+            {
+                string t = (value ?? "").Trim();
+                var bytes = (byte[])_line.Op.Bytes.Clone();
+                if (bytes.Length < 7) return;
+                if (t == "*") { bytes[2] = 0xFF; for (int i = 3; i < 7; i++) bytes[i] = 0; }
+                else
+                {
+                    if (t.Length > 5 || t.Any(c => c < 0x20 || c > 0x7E))
+                    { _line.ErrorText = $"{Label}: up to 5 letters (plain letters, digits, punctuation), or * for the normal name."; return; }
+                    for (int i = 0; i < 5; i++) bytes[2 + i] = i < t.Length ? (byte)t[i] : (byte)0;
+                }
+                _line.SetBytes(bytes, resizeChoices: false);
+                return;
+            }
             int min = Def?.Min ?? 0, max = Def?.Max ?? 255;
             var style = Hex ? NumberStyles.HexNumber : NumberStyles.Integer;
             if (!int.TryParse(value?.Trim(), style, CultureInfo.InvariantCulture, out int v) || v < min || v > max)
@@ -263,6 +286,8 @@ public partial class EventLineVm : ObservableObject
                 continue;
             }
             var choices = Owner.ChoicesFor(d.Kind);
+            // a field with a smaller range than its list (rename: characters 0-7 only)
+            if (choices != null && d.Kind == ParamKind.Character) choices = choices.Where(c => c.Value >= d.Min && c.Value <= d.Max).ToList();
             // short-form flag commands (C0-FF) hold F0-FF as 0-F
             if (d.Kind == ParamKind.Flag && d.Max < 0xFF && choices != null)
                 choices = choices.Where(c => c.Value >= 0xF0).Select(c => (c.Value - 0xF0, c.Label)).ToList();

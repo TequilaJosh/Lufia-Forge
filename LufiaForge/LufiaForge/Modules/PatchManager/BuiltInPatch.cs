@@ -51,6 +51,12 @@ public partial class BuiltInPatch : ObservableObject
         },
         new()
         {
+            Name = "Rename command for events",
+            Description = "Adds event command 6E \"Rename a party member\" (Events editor, Characters): e.g. show Maxim's name during a flashback, then give the Hero's own name back. Added by itself the first time an event uses it.",
+            IsApplied = RenamePatch.IsApplied, IsOriginal = RenamePatch.IsOriginal, Apply = RenamePatch.Apply, Remove = RenamePatch.Remove,
+        },
+        new()
+        {
             Name = "More than 67 encounter subgroups",
             Description = "Room for up to 255 monster subgroups in the Encounters tab (the game has room for 67).",
             IsApplied = SubgroupPatch.IsApplied, IsOriginal = SubgroupPatch.IsOriginal, Apply = SubgroupPatch.Apply,

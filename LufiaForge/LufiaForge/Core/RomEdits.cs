@@ -44,6 +44,7 @@ public static class RomEdits
         else if (RetargetPatch.RoutineOffset(rom) > 0) patches.Add("party members retarget (older version: single targets only - add it again in the Patch Manager for group spells too)");
         if (EncounterPatch.IsApplied(rom)) patches.Add("hold L to avoid battles");
         if (SubgroupPatch.IsApplied(rom)) patches.Add("more than 67 encounter subgroups");
+        if (RenamePatch.IsApplied(rom)) patches.Add("rename command for events");
         list.Add(("Built-in patches:", patches.Count == 0 ? "none" : string.Join(", ", patches)));
 
         try
