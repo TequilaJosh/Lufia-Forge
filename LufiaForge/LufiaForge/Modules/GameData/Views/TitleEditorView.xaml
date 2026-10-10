@@ -1,0 +1,53 @@
+<UserControl x:Class="LufiaForge.Modules.GameData.Views.TitleEditorView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="clr-namespace:LufiaForge.Modules.GameData.Views">
+    <UserControl.Resources>
+        <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <WrapPanel Margin="12,12,12,0">
+                <Border Style="{StaticResource GdCard}">
+                    <StackPanel>
+                        <TextBlock Text="TITLE SCREEN (AS THE GAME SHOWS IT)" Style="{StaticResource GdSection}"/>
+                        <Image Source="{Binding Preview}" Width="512" Height="448" Stretch="Fill" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                        <TextBlock Text="● changes not written yet - click Apply" Foreground="{StaticResource WarningBrush}" Margin="0,6,0,0"
+                                   Visibility="{Binding Dirty, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource GdCard}">
+                    <StackPanel Width="380">
+                        <TextBlock Text="LAYERS" Style="{StaticResource GdSection}"/>
+                        <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,8"
+                                   Text="The title is two layers. The front layer is a black screen with the letters cut out (see-through) and the subtitle; the back layer is the rainbow that shows through the letters. Export a layer, draw on it, import it back."/>
+                        <TextBlock Text="Front layer (letters, black cover, subtitle)" Style="{StaticResource GdFieldLabel}"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,4,0,10">
+                            <Button Content="Export..." Style="{StaticResource LufiaButton}" Command="{Binding ExportFrontCommand}" Margin="0,0,8,0"/>
+                            <Button Content="Import..." Style="{StaticResource LufiaButtonGold}" Command="{Binding ImportFrontCommand}"/>
+                        </StackPanel>
+                        <TextBlock Text="Back layer (the colours behind the letters)" Style="{StaticResource GdFieldLabel}"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,4,0,10">
+                            <Button Content="Export..." Style="{StaticResource LufiaButton}" Command="{Binding ExportBackCommand}" Margin="0,0,8,0"/>
+                            <Button Content="Import..." Style="{StaticResource LufiaButtonGold}" Command="{Binding ImportBackCommand}"/>
+                        </StackPanel>
+                        <Button Content="Export the whole screen (picture)..." Style="{StaticResource LufiaButton}" Command="{Binding ExportScreenCommand}" HorizontalAlignment="Left"/>
+                        <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,10,0,0"
+                                   Text="Layer pictures are 288 x 256 (the screen shows x 16-271, y 1-224) and indexed: colour number = 16 x row + colour, 0 of a row = see-through. Every 8x8 square may use one row only. Keep the picture indexed and its colours (rows 2-7) become the title's colours - recolour the rainbow by editing the palette. A full-colour picture is matched to the current colours instead. Up to 512 different 8x8 tiles and 256 different 16x16 blocks."/>
+                        <TextBlock Text="COLOURS (ROWS 0-7)" Style="{StaticResource GdSection}" Margin="0,12,0,4"/>
+                        <Image Source="{Binding Swatches}" Width="256" Height="128" Stretch="Fill" HorizontalAlignment="Left" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                        <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0"
+                                   Text="Rows 0-1 are shared with the rest of the game and aren't changed here; rows 2-7 belong to the title (map palette 19)."/>
+                        <TextBlock Text="{Binding Info}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,8,0,0"/>
+                    </StackPanel>
+                </Border>
+            </WrapPanel>
+        </ScrollViewer>
+        <v:EditorFooter Grid.Row="1"/>
+    </Grid>
+</UserControl>
