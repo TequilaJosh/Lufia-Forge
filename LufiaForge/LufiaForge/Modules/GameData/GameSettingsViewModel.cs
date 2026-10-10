@@ -21,6 +21,9 @@ public partial class GameSettingsViewModel : GameDataEditorBase
     [ObservableProperty] private bool _holdLPatch;
     [ObservableProperty] private bool _canHoldLPatch;
     [ObservableProperty] private int _ratePreset = -1;
+    /// <summary>Party members retarget when their target group is gone (<see cref="LufiaForge.Core.Battle.RetargetPatch"/>).</summary>
+    [ObservableProperty] private bool _retargetFix;
+    [ObservableProperty] private bool _canRetargetFix;
 
     /// <summary>Encounter presets: (label, rate); the last is "custom".</summary>
     public static readonly (string Label, int Rate)[] Presets =
@@ -71,6 +74,8 @@ public partial class GameSettingsViewModel : GameDataEditorBase
         SafeSteps         = rom.ReadByte(LufiaForge.Core.Battle.Encounters.SafeStepsOffset(rom));
         HoldLPatch        = LufiaForge.Core.Battle.EncounterPatch.IsApplied(rom);
         CanHoldLPatch     = HoldLPatch || LufiaForge.Core.Battle.EncounterPatch.IsOriginal(rom);
+        RetargetFix       = LufiaForge.Core.Battle.RetargetPatch.IsApplied(rom);
+        CanRetargetFix    = RetargetFix || LufiaForge.Core.Battle.RetargetPatch.IsOriginal(rom);
         InternalTitle     = rom.ReadAscii(GameDataOffsets.InternalTitle, GameDataOffsets.InternalTitleLen).TrimEnd();
         RegionText = rom.ReadByte(GameDataOffsets.RegionByte) switch
         {
@@ -86,8 +91,9 @@ public partial class GameSettingsViewModel : GameDataEditorBase
         if (Ctx == null) return;
         var rom = Ctx.Rom;
         bool patchWanted = HoldLPatch, patched = LufiaForge.Core.Battle.EncounterPatch.IsApplied(rom);
-        if (patchWanted && !patched && rom.Length < Core.Maps.MapWriter.ExpandedSize &&
-            System.Windows.MessageBox.Show("'Hold L to avoid random battles' adds a small routine to the expanded part of the ROM. Expand the ROM to 2 MB?",
+        bool fixWanted = RetargetFix, fixed_ = LufiaForge.Core.Battle.RetargetPatch.IsApplied(rom);
+        if ((patchWanted && !patched || fixWanted && !fixed_) && rom.Length < Core.Maps.MapWriter.ExpandedSize &&
+            System.Windows.MessageBox.Show("The patches you ticked add small routines to the expanded part of the ROM. Expand the ROM to 2 MB?",
                 "Expand ROM?", System.Windows.MessageBoxButton.YesNo) != System.Windows.MessageBoxResult.Yes)
         { Status = "Not applied: the ROM was not expanded."; return; }
 
@@ -95,6 +101,8 @@ public partial class GameSettingsViewModel : GameDataEditorBase
         {
             if (patchWanted && !patched) LufiaForge.Core.Battle.EncounterPatch.Apply(rom);
             if (!patchWanted && patched) LufiaForge.Core.Battle.EncounterPatch.Remove(rom);
+            if (fixWanted && !fixed_) LufiaForge.Core.Battle.RetargetPatch.Apply(rom);
+            if (!fixWanted && fixed_) LufiaForge.Core.Battle.RetargetPatch.Remove(rom);
             rom.WriteByte(GameDataOffsets.WalkSpeed, (byte)(FastWalk ? 0x20 : 0x10));
             rom.WriteBytes(GameDataOffsets.WalkSpeedPatch,
                 FastWalk ? GameDataOffsets.WalkPatchFast : GameDataOffsets.WalkPatchNormal);

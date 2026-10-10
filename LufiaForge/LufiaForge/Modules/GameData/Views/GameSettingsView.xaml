@@ -55,6 +55,9 @@
                 <Border Style="{StaticResource GdCard}" Width="360">
                     <StackPanel>
                         <TextBlock Text="BALANCE" Style="{StaticResource GdSection}"/>
+                        <CheckBox Content="Party members retarget instead of missing" Style="{StaticResource GdCheck}" IsChecked="{Binding RetargetFix}"
+                                  IsEnabled="{Binding CanRetargetFix}" Margin="0,0,0,6"
+                                  ToolTip="Fix: when a party member's target group is already beaten, the attack or spell goes to another monster instead of missing. Needs the 2 MB expanded ROM. Untick and Apply to remove it."/>
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
