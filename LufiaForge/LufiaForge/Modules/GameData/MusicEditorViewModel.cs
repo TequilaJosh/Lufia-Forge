@@ -45,6 +45,21 @@ public partial class MusicEditorViewModel : GameDataEditorBase
     private LufiaSound? _sound;
     private AudioOut? _audio;
 
+    /// <summary>The note editor (Notes tab) for the selected song.</summary>
+    public NoteEditorViewModel Notes { get; }
+    private readonly System.Windows.Threading.DispatcherTimer _playhead;
+    /// <summary>Where the playing song started in the editor (ticks), for the playhead; -1 = playing the ROM's song.</summary>
+    private int _playFrom = -1;
+    private (int Start, int End)? _playLoop;
+    private int _playTempo = 83;
+
+    public MusicEditorViewModel()
+    {
+        Notes = new NoteEditorViewModel(this);
+        _playhead = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(30) };
+        _playhead.Tick += (_, _) => UpdatePlayhead();
+    }
+
     protected override void OnRomLoaded() { Fill(); SelectedIndex = -1; SelectedIndex = 0; }
 
     private static string Tag(byte[] d) => new string(d.Skip(6).Take(12).Select(b => b is >= 32 and < 127 ? (char)b : ' ').ToArray()).Trim();
@@ -63,7 +78,22 @@ public partial class MusicEditorViewModel : GameDataEditorBase
         SelectedIndex = keep;
     }
 
-    partial void OnSelectedIndexChanged(int value) { StopPlaying(); LoadSelected(); }
+    /// <summary>0 = Song tab, 1 = Notes tab (the footer's Apply writes what that tab edits).</summary>
+    [ObservableProperty] private int _tabIndex;
+    private bool _goingBack;
+
+    partial void OnSelectedIndexChanged(int oldValue, int newValue)
+    {
+        if (_goingBack) return;
+        if (Notes.Dirty && oldValue >= 0 && newValue >= 0 && newValue != oldValue &&
+            MessageBox.Show($"Song {oldValue:X2} has note changes that aren't written to the ROM. Throw them away?", "Note editor",
+                MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+        {
+            System.Windows.Application.Current?.Dispatcher.BeginInvoke(() => { _goingBack = true; SelectedIndex = oldValue; _goingBack = false; });
+            return;
+        }
+        StopPlaying(); LoadSelected();
+    }
 
     protected override void LoadSelected()
     {
@@ -73,6 +103,7 @@ public partial class MusicEditorViewModel : GameDataEditorBase
         Info = $"Internal name \"{Tag(d)}\", {d.Length:N0} bytes ({packed:N0} packed) of the {MaxSongBytes:N0} the sound driver has room for. " +
                "Instruments 00-0F and 30-3F are always loaded; a song adds up to 8 more (10-37).";
         OffsetText = $"Resource {SelectedIndex:X2} at 0x{LufiaCompression.ResourceOffset(Ctx.Rom, SelectedIndex):X6}";
+        try { Notes.Load(d); } catch (Exception ex) { Status = "The note editor couldn't read this song: " + ex.Message; }
     }
 
     // ── listening ───────────────────────────────────────────────────────────
@@ -101,9 +132,98 @@ public partial class MusicEditorViewModel : GameDataEditorBase
 
     private void StopPlaying()
     {
+        _playhead.Stop();
         _audio?.Dispose(); _audio = null;
         if (_sound != null) { lock (_sound) _sound.Dispose(); _sound = null; }
         IsPlaying = false;
+        _playFrom = -1;
+        Notes.PlayheadTick = -1;
+    }
+
+    /// <summary>Starts the sound chip on song data (not the ROM's); true when it plays.</summary>
+    private bool StartData(byte[] data)
+    {
+        StopPlaying();
+        if (Ctx == null || !SpcNative.Available) { Status = "The sound chip emulator (lufia_spc.dll) isn't available."; return false; }
+        _sound = LufiaSound.Create(Ctx.Rom);
+        if (_sound == null) { Status = "The sound driver couldn't start."; return false; }
+        _sound.PlaySongData(data);
+        var snd = _sound;
+        _audio = new AudioOut(LufiaSound.SampleRate, (buf, pairs) => { lock (snd) snd.Render(buf, pairs * 2); });
+        if (!_audio.Start()) { StopPlaying(); Status = "No sound device."; return false; }
+        IsPlaying = true;
+        return true;
+    }
+
+    /// <summary>Plays the note editor's song from a tick (what's set before it - instrument, volume... - carries over).</summary>
+    public void PlayEdited(int fromTick)
+    {
+        if (Ctx == null || SelectedIndex < 0) return;
+        byte[] data;
+        try { data = BuildSongData(Notes.ToSongFrom(fromTick), out _); }
+        catch (Exception ex) { Status = "Can't play: " + ex.Message; return; }
+        if (!StartData(data)) return;
+        _playFrom = fromTick;
+        var loop = Notes.SongLoop();
+        _playLoop = loop is { } l && l.End > fromTick ? (Math.Max(l.Start, fromTick), l.End) : null;
+        _playTempo = Notes.Tempo;
+        _playhead.Start();
+        Status = fromTick == 0 ? "Playing the edited song (not written to the ROM yet)." : $"Playing the edited song from {NoteEditorViewModel.TimeText(fromTick)}.";
+    }
+
+    private void UpdatePlayhead()
+    {
+        if (_audio == null || _playFrom < 0) { Notes.PlayheadTick = -1; return; }
+        double secs = _audio.PlayedPairs / (double)LufiaSound.SampleRate;
+        double t = _playFrom + secs * 1_000_000 / (_playTempo * 125.0);
+        if (_playLoop is { } l && t >= l.End) t = l.Start + (t - l.Start) % (l.End - l.Start);
+        Notes.PlayheadTick = t;
+    }
+
+    /// <summary>One note on its own, with the channel's instrument, volume and pan at that point.</summary>
+    public void PreviewNote(int channel, int pitch, int tick)
+    {
+        if (Ctx == null || SelectedIndex < 0 || _playFrom >= 0 && IsPlaying) return;   // not while the song plays
+        var ch = Notes.Channels[channel];
+        var song = new SongCodec.Song { Tempo = 100 };
+        song.Drum[0] = ch.Drum;
+        var list = song.Channels[0];
+        foreach (var k in new[] { SongCodec.Kind.Program, SongCodec.Kind.Volume, SongCodec.Kind.Pan })
+            if (ch.Others.Where(e => e.Kind == k && e.Tick <= tick).OrderBy(e => e.Tick).LastOrDefault() is { } last) list.Add(last with { Tick = 0 });
+        list.Add(new SongCodec.Event(0, SongCodec.Kind.Note, pitch, 30, Math.Clamp(Notes.NewVelocity, 1, 127)));
+        list.Add(new SongCodec.Event(40, SongCodec.Kind.End));
+        try { if (StartData(BuildSongData(song, out _))) Status = $"{NoteEditorViewModel.NoteName(pitch)}"; }
+        catch (Exception ex) { Status = "Can't preview: " + ex.Message; }
+    }
+
+    /// <summary>Instruments the selected song loads (10-37), in order.</summary>
+    public List<int> LoadedInstruments()
+    {
+        if (Ctx == null || SelectedIndex < 0) return new List<int>();
+        var d = LufiaCompression.DecompressResource(Ctx.Rom, SelectedIndex, out _);
+        return d.Skip(0x32).Take(8).TakeWhile(b => b != 0).Select(b => (int)b).ToList();
+    }
+
+    /// <summary>Writes the note editor's song to the selected slot.</summary>
+    public void ApplyNotes()
+    {
+        if (Ctx == null || SelectedIndex < 0) return;
+        byte[] data; List<string> warnings;
+        try { data = BuildSongData(Notes.ToSong(), out warnings); }
+        catch (Exception ex) { Status = "Not written: " + ex.Message; return; }
+        StopPlaying();
+        Notes.Dirty = false;
+        Write(data, $"Song {SelectedIndex:X2} notes");
+        Status = $"Song {SelectedIndex:X2} written ({data.Length - 2:N0} bytes)." + (warnings.Count > 0 ? " " + string.Join(" ", warnings) : "");
+    }
+
+    /// <summary>Throws away the note editor's changes.</summary>
+    public void ReloadNotes()
+    {
+        if (Ctx == null || SelectedIndex < 0) return;
+        StopPlaying();
+        Notes.Load(LufiaCompression.DecompressResource(Ctx.Rom, SelectedIndex, out _));
+        Status = "Notes reloaded from the ROM.";
     }
 
     // ── instruments ─────────────────────────────────────────────────────────
@@ -111,6 +231,7 @@ public partial class MusicEditorViewModel : GameDataEditorBase
     [RelayCommand]
     private void Apply()
     {
+        if (TabIndex == 1) { ApplyNotes(); return; }
         if (Ctx == null || SelectedIndex < 0) return;
         var ids = new List<int>();
         foreach (var part in InstrumentsText.Split(new[] { ' ', ',' }, StringSplitOptions.RemoveEmptyEntries))
@@ -223,10 +344,22 @@ public partial class MusicEditorViewModel : GameDataEditorBase
     /// </summary>
     public (byte[] Data, List<string> Warnings) SongFromMidi(byte[] midi)
     {
-        var current = LufiaCompression.DecompressResource(Ctx!.Rom, SelectedIndex, out _);
-        var header = current.Skip(2).Take(0x40).ToArray();
         var song = SongCodec.FromMidi(midi, out var warnings);
         if (!song.Channels.Any(c => c.Any(e => e.Kind == SongCodec.Kind.Note))) throw new InvalidDataException("the MIDI has no notes");
+        var data = BuildSongData(song, out var more);
+        warnings.AddRange(more);
+        return (data, warnings);
+    }
+
+    /// <summary>
+    /// Song data for the selected slot: keeps the slot's name and instrument list; instruments the song uses that
+    /// aren't always loaded are added to the list.
+    /// </summary>
+    public byte[] BuildSongData(SongCodec.Song song, out List<string> warnings)
+    {
+        warnings = new List<string>();
+        var current = LufiaCompression.DecompressResource(Ctx!.Rom, SelectedIndex, out _);
+        var header = current.Skip(2).Take(0x40).ToArray();
         // instruments 10-2F are only there when the song loads them
         var load = header.Skip(0x30).Take(8).TakeWhile(b => b != 0).Select(b => (int)b).ToList();
         var missing = song.Channels.SelectMany(c => c).Where(e => e.Kind == SongCodec.Kind.Program && e.A is >= 0x10 and < 0x30)
@@ -237,7 +370,7 @@ public partial class MusicEditorViewModel : GameDataEditorBase
             else warnings.Add($"Instrument {i:X2} isn't loaded (a song loads at most 8 of 10-37); its notes play with whatever is there.");
         }
         for (int k = 0; k < 8; k++) header[0x30 + k] = (byte)(k < load.Count ? load[k] : 0);
-        return (SongCodec.Encode(song, header), warnings);
+        return SongCodec.Encode(song, header);
     }
 
     [RelayCommand]
