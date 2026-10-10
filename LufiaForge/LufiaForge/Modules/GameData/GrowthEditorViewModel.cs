@@ -32,6 +32,9 @@ public sealed record GrowthPreviewRow(int Level, string Exp, int Hp, int Mp, int
 /// </summary>
 public partial class GrowthEditorViewModel : GameDataEditorBase
 {
+    /// <summary>(The editor footer shows a ROM offset; this editor has none of its own.)</summary>
+    public string OffsetText => "";
+
     public ObservableCollection<string> Characters { get; } = new();
     public ObservableCollection<GrowthRow> Growth { get; } = new();
     public ObservableCollection<GrowthPreviewRow> Preview { get; } = new();

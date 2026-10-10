@@ -18,6 +18,9 @@ public sealed class CreditCardRow
 /// <summary>The staff roll at the end of the game (see <see cref="CreditsRoll"/>): one card at a time, with a preview.</summary>
 public partial class CreditsEditorViewModel : GameDataEditorBase
 {
+    /// <summary>(The editor footer shows a ROM offset; this editor has none of its own.)</summary>
+    public string OffsetText => "";
+
     public ObservableCollection<CreditCardRow> Cards { get; } = new();
     [ObservableProperty] private CreditCardRow? _selected;
     [ObservableProperty] private string _editText = "";

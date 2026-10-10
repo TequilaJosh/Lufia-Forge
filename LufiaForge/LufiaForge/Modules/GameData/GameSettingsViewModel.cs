@@ -6,6 +6,9 @@ namespace LufiaForge.Modules.GameData;
 /// <summary>Global tweaks: movement speeds, swamp damage, level cap and the ROM's internal title.</summary>
 public partial class GameSettingsViewModel : GameDataEditorBase
 {
+    /// <summary>(The editor footer shows a ROM offset; this editor has none of its own.)</summary>
+    public string OffsetText => "";
+
     [ObservableProperty] private bool   _fastWalk;
     [ObservableProperty] private bool   _fastShip;
     [ObservableProperty] private bool   _fastAirship;

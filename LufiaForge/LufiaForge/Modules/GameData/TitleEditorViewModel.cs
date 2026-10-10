@@ -30,6 +30,9 @@ public partial class TitleSwatch : ObservableObject
 /// </summary>
 public partial class TitleEditorViewModel : GameDataEditorBase
 {
+    /// <summary>(The editor footer shows a ROM offset; this editor has none of its own.)</summary>
+    public string OffsetText => "";
+
     public enum Tool { Pencil, Line, Box, Fill, Eraser, Picker }
 
     private TitleScreen? _title;

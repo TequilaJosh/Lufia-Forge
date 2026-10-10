@@ -89,6 +89,9 @@ public static class Encounters
         if (groups.Any(g => g.Count is < 1 or > 255)) throw new ArgumentException("Every group needs 1-255 subgroups.");
         int max = SubgroupCount(rom), room = GroupRoom(rom), end = GroupAreaEnd(rom);
         if (groups.Any(g => g.Any(s => s < 1 || s > max))) throw new ArgumentException($"Subgroups are 01-{max:X2}.");
+        // nothing changed: leave the game's own layout (it shares some lists) as it is
+        var current = Enumerable.Range(1, GroupCount(rom)).Select(g => GroupSubgroups(rom, g)).ToList();
+        if (current.Count == n && current.Zip(groups).All(p => p.First.SequenceEqual(p.Second))) return;
         int need = GroupBytes(groups);
         if (need > room) throw new InvalidOperationException($"The groups need {need} bytes but only {room} are available; remove some entries (e.g. a subgroup listed twice).");
         int at = GroupPointers + 2 * n;
