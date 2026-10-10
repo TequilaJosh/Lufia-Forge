@@ -15,7 +15,7 @@ using Color = System.Windows.Media.Color;
 
 namespace LufiaForge.Modules.MapEditor;
 
-public enum MapTool { Select, Paint, Pick, AddExit, AddArrival }
+public enum MapTool { Select, Paint, Pick, AddExit, AddArrival, Area }
 
 /// <summary>A rectangle drawn over the map (NPC, exit, arrival point, selection).</summary>
 public sealed class MapOverlay
@@ -319,6 +319,9 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
         OnPropertyChanged(nameof(IsPickTool));
         OnPropertyChanged(nameof(IsAddExitTool));
         OnPropertyChanged(nameof(IsAddArrivalTool));
+        OnPropertyChanged(nameof(IsAreaTool));
+        if (value != MapTool.Paint) CancelStamp();
+        if (value == MapTool.Area) Status = "Area: drag a rectangle of blocks, then Copy / Cut / Fill (or Ctrl+C, Ctrl+X, Del). Paste (Ctrl+V) stamps copied blocks.";
         if (value == MapTool.AddExit) Status = "Add exit: drag a rectangle on the map where the party should leave.";
         if (value == MapTool.AddArrival) Status = "Add arrival point: click where the party should appear.";
     }
@@ -333,6 +336,8 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
         OnPropertyChanged(nameof(BrushText));
         OnPropertyChanged(nameof(BrushBoxX));
         OnPropertyChanged(nameof(BrushBoxY));
+        OnPropertyChanged(nameof(PaletteBoxX));
+        OnPropertyChanged(nameof(PaletteBoxY));
     }
 
     /// <summary>Where the brush's block sits in the palette image (16 blocks per row), for its highlight box.</summary>
@@ -387,6 +392,8 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
     {
         if (_rom == null) return;
         ClearSelection();
+        CancelStamp();
+        ClearAreaSelection();
         _undo.Clear();
         HasUnappliedChanges = false;
         try
@@ -608,6 +615,8 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
         int mt = _map.GetTile(x, y) & 0x3FF;
         HoverText = $"Block ({x}, {y})   metatile {mt:X3}   attribute {_tileset.Attribute(mt):X2}{CompositeText(mt)}" +
                     (ShowZones && IsWorldMap && ZoneAt(x, y) is >= 0 and var zi ? $"   battle group {_zones[zi]:X2}" : "");
+        if (_stamp != null) { StampHover(x, y); HoverTip = ""; return; }
+        if (leftDown && Tool == MapTool.Area) { AreaDrag(x, y); return; }
         if (leftDown && PaintZone(x, y)) return;
         HoverTip = leftDown ? "" : DescribeAt(x, y);
 
@@ -666,6 +675,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
             if (ctrl && ZoneAt(x, y) is >= 0 and var zi) { ZoneBrushText = _zones[zi].ToString("X2"); Status = $"Zone brush: group {ZoneBrushText}."; return; }
             if (PaintZone(x, y)) return;
         }
+        if (_stamp != null) { StampAt(x, y); return; }
         if (ctrl)
         {
             _picking = true;   // eyedropper: no painting until the button is released
@@ -676,6 +686,9 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
         }
         switch (Tool)
         {
+            case MapTool.Area:
+                AreaDown(x, y);
+                break;
             case MapTool.Pick:
                 Brush = _map.GetTile(x, y) & 0x3FF;
                 Tool = MapTool.Paint;
@@ -726,6 +739,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
 
     public void OnMouseUp()
     {
+        AreaUp();
         _picking = false;
         if (_stroke is { Count: > 0 }) _undo.Push(_stroke);
         _stroke = null;

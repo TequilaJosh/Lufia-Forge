@@ -25,6 +25,8 @@
                 <RadioButton Content="Select / move" IsChecked="{Binding IsSelectTool}" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,12,0" VerticalAlignment="Center"/>
                 <RadioButton Content="Paint" IsChecked="{Binding IsPaintTool}" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,12,0" VerticalAlignment="Center"/>
                 <RadioButton Content="Pick block" IsChecked="{Binding IsPickTool}" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,12,0" VerticalAlignment="Center"/>
+                <RadioButton Content="Area" IsChecked="{Binding IsAreaTool}" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,12,0" VerticalAlignment="Center"
+                             ToolTip="Drag a rectangle of blocks to copy, cut or fill it (Ctrl+C, Ctrl+X, Del)"/>
                 <RadioButton Content="＋ Exit" IsChecked="{Binding IsAddExitTool}" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,12,0" VerticalAlignment="Center"
                              ToolTip="Drag a rectangle on the map to add an exit"/>
                 <RadioButton Content="＋ Arrival point" IsChecked="{Binding IsAddArrivalTool}" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,20,0" VerticalAlignment="Center"
@@ -43,6 +45,10 @@
                 </StackPanel>
                 <Button Content="Zoom out" Style="{StaticResource LufiaButton}" Command="{Binding ZoomOutCommand}" Margin="8,0,4,0"/>
                 <Button Content="Zoom in" Style="{StaticResource LufiaButton}" Command="{Binding ZoomInCommand}" Margin="0,0,12,0" ToolTip="Or Ctrl + mouse wheel on the map; hold the middle mouse button to drag the map"/>
+                <Button Content="Copy" Style="{StaticResource LufiaButton}" Command="{Binding CopyAreaCommand}" Margin="0,0,4,0" ToolTip="Copy the selected area (Ctrl+C)"/>
+                <Button Content="Cut" Style="{StaticResource LufiaButton}" Command="{Binding CutAreaCommand}" Margin="0,0,4,0" ToolTip="Copy the area, then fill it with the brush block (Ctrl+X)"/>
+                <Button Content="Paste" Style="{StaticResource LufiaButton}" Command="{Binding PasteCommand}" Margin="0,0,4,0" ToolTip="Stamp the copied blocks: click on the map, Esc to stop (Ctrl+V)"/>
+                <Button Content="Fill area" Style="{StaticResource LufiaButton}" Command="{Binding FillAreaCommand}" Margin="0,0,8,0" ToolTip="Fill the selected area with the brush block"/>
                 <Button Content="↶ Undo paint" Style="{StaticResource LufiaButton}" Command="{Binding UndoCommand}" Margin="0,0,8,0"/>
                 <Button Content="✔ Apply to ROM" Style="{StaticResource LufiaButtonGold}" Command="{Binding ApplyToRomCommand}" Margin="0,0,8,0"/>
                 <Button Content="↺ Revert map" Style="{StaticResource LufiaButton}" Command="{Binding RevertMapCommand}"/>
@@ -76,6 +82,7 @@
             <Grid x:Name="MapSurface" HorizontalAlignment="Left" VerticalAlignment="Top"
                   MouseLeftButtonDown="MapSurface_MouseLeftButtonDown"
                   MouseLeftButtonUp="MapSurface_MouseLeftButtonUp"
+                  MouseRightButtonDown="MapSurface_MouseRightButtonDown"
                   MouseMove="MapSurface_MouseMove"
                   MouseLeave="MapSurface_MouseLeave"
                   Focusable="True" KeyDown="MapSurface_KeyDown"
@@ -87,6 +94,14 @@
                 <Image Source="{Binding ZoneImage}" Stretch="Fill" Width="{Binding ZoneImageWidth}" Height="{Binding ZoneImageHeight}"
                        HorizontalAlignment="Left" VerticalAlignment="Top" RenderOptions.BitmapScalingMode="NearestNeighbor" IsHitTestVisible="False"
                        Visibility="{Binding ShowZones, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                <Canvas IsHitTestVisible="False">
+                    <Image Source="{Binding StampImage}" Canvas.Left="{Binding StampX}" Canvas.Top="{Binding StampY}" Opacity="0.7"
+                           Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor"
+                           Visibility="{Binding StampVisible, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                    <Rectangle Canvas.Left="{Binding AreaX}" Canvas.Top="{Binding AreaY}" Width="{Binding AreaW}" Height="{Binding AreaH}"
+                               Stroke="White" StrokeThickness="1.5" StrokeDashArray="3 2" Fill="#2000BFFF"
+                               Visibility="{Binding AreaVisible, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                </Canvas>
                 <ItemsControl ItemsSource="{Binding Overlays}" IsHitTestVisible="False">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate><Canvas/></ItemsPanelTemplate>
@@ -231,12 +246,14 @@
                             </Grid.LayoutTransform>
                             <Image x:Name="PaletteImage" Source="{Binding PaletteImage}" Stretch="None" HorizontalAlignment="Left"
                                    RenderOptions.BitmapScalingMode="NearestNeighbor"
-                                   MouseLeftButtonDown="PaletteImage_MouseLeftButtonDown" Cursor="Hand"/>
+                                   MouseLeftButtonDown="PaletteImage_MouseLeftButtonDown" MouseMove="PaletteImage_MouseMove"
+                                   MouseLeftButtonUp="PaletteImage_MouseLeftButtonUp" Cursor="Hand"
+                                   ToolTip="Click a block to paint with it; drag a rectangle for a multi-block brush"/>
                             <Canvas IsHitTestVisible="False">
                                 <!-- the brush's block -->
-                                <Rectangle Canvas.Left="{Binding BrushBoxX}" Canvas.Top="{Binding BrushBoxY}" Width="16" Height="16"
+                                <Rectangle Canvas.Left="{Binding PaletteBoxX}" Canvas.Top="{Binding PaletteBoxY}" Width="{Binding BrushBoxW}" Height="{Binding BrushBoxH}"
                                            Stroke="Gold" StrokeThickness="1.5"/>
-                                <Rectangle Canvas.Left="{Binding BrushBoxX}" Canvas.Top="{Binding BrushBoxY}" Width="16" Height="16"
+                                <Rectangle Canvas.Left="{Binding PaletteBoxX}" Canvas.Top="{Binding PaletteBoxY}" Width="{Binding BrushBoxW}" Height="{Binding BrushBoxH}"
                                            Stroke="Black" StrokeThickness="0.5" Margin="-1" Opacity="0.8"/>
                             </Canvas>
                         </Grid>
