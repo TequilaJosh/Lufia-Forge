@@ -1,0 +1,61 @@
+<UserControl x:Class="LufiaForge.Modules.GameData.Views.CreditsEditorView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="clr-namespace:LufiaForge.Modules.GameData.Views">
+    <UserControl.Resources>
+        <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="300"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <DockPanel Grid.Column="0" Margin="12">
+            <TextBlock DockPanel.Dock="Top" Text="CREDIT CARDS (IN ENDING ORDER)" Style="{StaticResource GdSection}"/>
+            <ListBox Style="{StaticResource GdRecordList}" ItemsSource="{Binding Cards}" SelectedItem="{Binding Selected}">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel Margin="0,2">
+                            <TextBlock Text="{Binding Label}" Foreground="{StaticResource GoldLightBrush}"/>
+                            <TextBlock Text="{Binding Where}" Style="{StaticResource GdHint}"/>
+                        </StackPanel>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </DockPanel>
+
+        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
+            <WrapPanel Margin="0,12,12,0">
+                <Border Style="{StaticResource GdCard}">
+                    <StackPanel Width="340">
+                        <TextBlock Text="TEXT" Style="{StaticResource GdSection}"/>
+                        <TextBox Text="{Binding EditText, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" FontFamily="Consolas" FontSize="14"
+                                 MinHeight="160" Style="{StaticResource GdText}" Width="320" HorizontalAlignment="Left" VerticalContentAlignment="Top"
+                                 TextWrapping="NoWrap"/>
+                        <TextBlock Text="{Binding Warning}" Foreground="{StaticResource WarningBrush}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                            <Button Content="Centre the lines" Style="{StaticResource LufiaButton}" Command="{Binding CentreCommand}" Margin="0,0,8,0"
+                                    ToolTip="Pads each line with spaces so it sits in the middle under the longest line"/>
+                        </StackPanel>
+                        <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,8,0,0"
+                                   Text="Each card is narration text in one of the ending's scenes. The window is as wide as the longest line and centred on the screen; leading spaces centre the shorter lines. Names in brackets like [Hero] print the character's name. Apply writes the card (a longer text moves its event, which may expand the ROM)."/>
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource GdCard}">
+                    <StackPanel>
+                        <TextBlock Text="PREVIEW (AS ON THE SCREEN)" Style="{StaticResource GdSection}"/>
+                        <Image Source="{Binding Preview}" Width="512" Height="448" Stretch="Fill" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                    </StackPanel>
+                </Border>
+            </WrapPanel>
+        </ScrollViewer>
+
+        <v:EditorFooter Grid.Row="1" Grid.ColumnSpan="2"/>
+    </Grid>
+</UserControl>
