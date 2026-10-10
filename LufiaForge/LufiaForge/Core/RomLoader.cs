@@ -114,11 +114,7 @@ public static class RomLoader
     /// </summary>
     private static ushort ComputeChecksum(byte[] rom)
     {
-        uint sum = 0;
-        foreach (byte b in rom) sum += b;
-        // Subtract the stored checksum and complement bytes themselves (they're included in the range
-        // but the SNES spec stores 0xFF/0x00 there during calculation).
-        // Simple approach: just sum everything - it's close enough for validation purposes.
-        return (ushort)(sum & 0xFFFF);
+        // (the stored checksum and complement add up to the same as FFFF/0000, so they can stay in the sum)
+        return RomBuffer.SnesChecksum(rom);
     }
 }

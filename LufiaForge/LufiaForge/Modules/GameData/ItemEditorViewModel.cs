@@ -41,11 +41,19 @@ public partial class ItemEditorViewModel : GameDataEditorBase
     public ObservableCollection<ItemProperty> Properties { get; } = new();
     public ByteOption[] PropertyOptions => GameDataLabels.ItemProperties;
 
+    // item descriptions (only in ROMs with the Restored hack, see ItemDescriptions)
+    [ObservableProperty] private bool   _hasDescriptions;
+    [ObservableProperty] private string _description = "";
+    [ObservableProperty] private string _descriptionInfo = "";
+    private Core.ItemDescriptions? _descriptions;
+
     private int _recordOffset;
     private int _tailLength;   // bytes from +21 to the end of the record (incl. terminator)
 
     protected override void OnRomLoaded()
     {
+        _descriptions = Ctx == null ? null : Core.ItemDescriptions.Find(Ctx.Rom);
+        HasDescriptions = _descriptions != null;
         SelectedIndex = -1;
         SelectedIndex = 1;
     }
@@ -119,6 +127,13 @@ public partial class ItemEditorViewModel : GameDataEditorBase
         EffectHex = _tailLength > 0 ? ToHex(rom.ReadBytes(o + 21, _tailLength)) : "";
 
         OffsetText = $"Record at 0x{o:X6}, {next - o} bytes  (pointer at 0x{GameDataOffsets.ItemPointerTable + SelectedIndex * 2:X6})";
+
+        if (_descriptions != null)
+        {
+            Description = _descriptions.Read(SelectedIndex);
+            DescriptionInfo = $"Shown when X is pressed on the item (added by the Restored hack). Up to {Core.ItemDescriptions.MaxLines} lines of {Core.ItemDescriptions.MaxLineLength} characters; " +
+                              $"{_descriptions.Free(AllDescriptions()):N0} bytes of room left for longer texts.";
+        }
     }
 
     [RelayCommand]
@@ -149,6 +164,14 @@ public partial class ItemEditorViewModel : GameDataEditorBase
             return;
         }
 
+        string? newDescription = null;
+        string typed = Description.Replace("\r", "");
+        if (_descriptions != null && typed != _descriptions.Read(SelectedIndex))
+        {
+            if (Core.ItemDescriptions.Problem(typed) is string bad) { Status = "Description: " + bad + "."; return; }
+            newDescription = typed;
+        }
+
         bool renamed = Name != Ctx.ReadName(o, GameDataOffsets.ItemNameLen);
         Commit($"Item {SelectedIndex:X2}", () =>
         {
@@ -174,10 +197,19 @@ public partial class ItemEditorViewModel : GameDataEditorBase
             {
                 rom.WriteBytes(o + 21, effect);
             }
+            if (newDescription != null)
+            {
+                var all = AllDescriptions();
+                all[SelectedIndex] = newDescription;
+                _descriptions!.WriteAll(all);
+            }
         }, namesChanged: renamed);
 
         if (!renamed) LoadSelected();
     }
+
+    private List<string> AllDescriptions() =>
+        Enumerable.Range(0, Core.ItemDescriptions.Count).Select(i => _descriptions!.Read(i)).ToList();
 
     internal static string ToHex(byte[] bytes) => string.Join(" ", bytes.Select(b => b.ToString("X2")));
 

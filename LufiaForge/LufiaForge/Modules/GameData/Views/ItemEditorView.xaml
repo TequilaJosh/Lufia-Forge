@@ -57,6 +57,17 @@
                     </StackPanel>
                 </Border>
 
+                <!-- Description (Restored hack) -->
+                <Border Style="{StaticResource GdCard}" Visibility="{Binding HasDescriptions, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <StackPanel Width="300">
+                        <TextBlock Text="DESCRIPTION" Style="{StaticResource GdSection}"/>
+                        <TextBox Style="{StaticResource GdText}" AcceptsReturn="True" TextWrapping="NoWrap" Height="46" FontFamily="Consolas"
+                                 Text="{Binding Description, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="Press Enter for the second line"/>
+                        <TextBlock Text="{Binding DescriptionInfo}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                    </StackPanel>
+                </Border>
+
                 <!-- Equipment -->
                 <Border Style="{StaticResource GdCard}">
                     <StackPanel>
