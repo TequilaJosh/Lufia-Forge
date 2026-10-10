@@ -86,7 +86,35 @@ public partial class MapEditorView : UserControl
 
     private void MapSurface_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
-        if (e.Key == Key.Delete) { Vm?.DeleteSelectedCommand.Execute(null); e.Handled = true; }
+        if (Vm == null) return;
+        bool ctrl = (Keyboard.Modifiers & ModifierKeys.Control) != 0;
+        if (e.Key == Key.Escape) { Vm.CancelStamp(); Vm.ClearAreaSelection(); e.Handled = true; }
+        else if (ctrl && e.Key == Key.C) { Vm.CopyAreaCommand.Execute(null); e.Handled = true; }
+        else if (ctrl && e.Key == Key.X) { Vm.CutAreaCommand.Execute(null); e.Handled = true; }
+        else if (ctrl && e.Key == Key.V) { Vm.PasteCommand.Execute(null); e.Handled = true; }
+        else if (ctrl && e.Key == Key.Z) { Vm.UndoCommand.Execute(null); e.Handled = true; }
+        else if (e.Key == Key.Delete)
+        {
+            if (Vm.IsAreaTool && Vm.HasArea) Vm.ClearAreaCommand.Execute(null);
+            else Vm.DeleteSelectedCommand.Execute(null);
+            e.Handled = true;
+        }
+    }
+
+    private void MapSurface_MouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (Vm?.IsStamping == true) { Vm.CancelStamp(); e.Handled = true; }
+    }
+
+    private void PaletteImage_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton == MouseButtonState.Pressed) { var p = e.GetPosition(PaletteImage); Vm?.PaletteDrag(p.X, p.Y); }
+    }
+
+    private void PaletteImage_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        PaletteImage.ReleaseMouseCapture();
+        Vm?.PaletteUp();
     }
 
     private void MapSurface_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -117,6 +145,7 @@ public partial class MapEditorView : UserControl
     private void PaletteImage_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         var p = e.GetPosition(PaletteImage);
-        Vm?.PickBrushFromPalette(p.X, p.Y);
+        PaletteImage.CaptureMouse();
+        Vm?.PaletteDown(p.X, p.Y);
     }
 }
