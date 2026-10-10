@@ -17,8 +17,33 @@ public partial class GameSettingsViewModel : GameDataEditorBase
     [ObservableProperty] private int    _encounterRate;
     [ObservableProperty] private int    _safeSteps;
     [ObservableProperty] private string _encounterText = "";
+    /// <summary>Hold L to avoid random battles (<see cref="LufiaForge.Core.Battle.EncounterPatch"/>).</summary>
+    [ObservableProperty] private bool _holdLPatch;
+    [ObservableProperty] private bool _canHoldLPatch;
+    [ObservableProperty] private int _ratePreset = -1;
 
-    partial void OnEncounterRateChanged(int value) => UpdateEncounterText();
+    /// <summary>Encounter presets: (label, rate); the last is "custom".</summary>
+    public static readonly (string Label, int Rate)[] Presets =
+    {
+        ("Off: no random battles", 0), ("Rare (a quarter)", 3), ("Fewer (half)", 5), ("Normal (the game's)", 10), ("More (one and a half)", 15), ("Custom", -1),
+    };
+    public string[] PresetLabels { get; } = Presets.Select(p => p.Label).ToArray();
+    private bool _syncingPreset;
+
+    partial void OnRatePresetChanged(int value)
+    {
+        if (_syncingPreset || value < 0 || value >= Presets.Length || Presets[value].Rate < 0) return;
+        EncounterRate = Presets[value].Rate;
+    }
+
+    partial void OnEncounterRateChanged(int value)
+    {
+        UpdateEncounterText();
+        _syncingPreset = true;
+        int i = Array.FindIndex(Presets, p => p.Rate == value);
+        RatePreset = i >= 0 ? i : Presets.Length - 1;
+        _syncingPreset = false;
+    }
     partial void OnSafeStepsChanged(int value) => UpdateEncounterText();
 
     private void UpdateEncounterText()
@@ -43,7 +68,9 @@ public partial class GameSettingsViewModel : GameDataEditorBase
         MaxLevelDisplayed = rom.ReadByte(GameDataOffsets.MaxLevelDisplay);
         MaxLevelActual    = rom.ReadByte(GameDataOffsets.MaxLevelActual);
         EncounterRate     = rom.ReadByte(LufiaForge.Core.Battle.Encounters.RateOffset);
-        SafeSteps         = rom.ReadByte(LufiaForge.Core.Battle.Encounters.SafeStepsOffset);
+        SafeSteps         = rom.ReadByte(LufiaForge.Core.Battle.Encounters.SafeStepsOffset(rom));
+        HoldLPatch        = LufiaForge.Core.Battle.EncounterPatch.IsApplied(rom);
+        CanHoldLPatch     = HoldLPatch || LufiaForge.Core.Battle.EncounterPatch.IsOriginal(rom);
         InternalTitle     = rom.ReadAscii(GameDataOffsets.InternalTitle, GameDataOffsets.InternalTitleLen).TrimEnd();
         RegionText = rom.ReadByte(GameDataOffsets.RegionByte) switch
         {
@@ -58,9 +85,16 @@ public partial class GameSettingsViewModel : GameDataEditorBase
     {
         if (Ctx == null) return;
         var rom = Ctx.Rom;
+        bool patchWanted = HoldLPatch, patched = LufiaForge.Core.Battle.EncounterPatch.IsApplied(rom);
+        if (patchWanted && !patched && rom.Length < Core.Maps.MapWriter.ExpandedSize &&
+            System.Windows.MessageBox.Show("'Hold L to avoid random battles' adds a small routine to the expanded part of the ROM. Expand the ROM to 2 MB?",
+                "Expand ROM?", System.Windows.MessageBoxButton.YesNo) != System.Windows.MessageBoxResult.Yes)
+        { Status = "Not applied: the ROM was not expanded."; return; }
 
         Commit("Game settings", () =>
         {
+            if (patchWanted && !patched) LufiaForge.Core.Battle.EncounterPatch.Apply(rom);
+            if (!patchWanted && patched) LufiaForge.Core.Battle.EncounterPatch.Remove(rom);
             rom.WriteByte(GameDataOffsets.WalkSpeed, (byte)(FastWalk ? 0x20 : 0x10));
             rom.WriteBytes(GameDataOffsets.WalkSpeedPatch,
                 FastWalk ? GameDataOffsets.WalkPatchFast : GameDataOffsets.WalkPatchNormal);
@@ -70,7 +104,7 @@ public partial class GameSettingsViewModel : GameDataEditorBase
             rom.WriteByte(GameDataOffsets.MaxLevelDisplay, (byte)Clamp(MaxLevelDisplayed, 1, 255));
             rom.WriteByte(GameDataOffsets.MaxLevelActual,  (byte)Clamp(MaxLevelActual,    1, 255));
             rom.WriteByte(LufiaForge.Core.Battle.Encounters.RateOffset, (byte)Clamp(EncounterRate, 0, 255));
-            rom.WriteByte(LufiaForge.Core.Battle.Encounters.SafeStepsOffset, (byte)Clamp(SafeSteps, 0, 255));
+            rom.WriteByte(LufiaForge.Core.Battle.Encounters.SafeStepsOffset(rom), (byte)Clamp(SafeSteps, 0, 255));
 
             // The title is 21 bytes; the next header byte (0x7FD5) is the map mode and must not be touched.
             var title = new byte[GameDataOffsets.InternalTitleLen];
