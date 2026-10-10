@@ -41,8 +41,9 @@ public sealed class ExpansionSpace
     /// <summary>The space table of an expanded ROM (read, or rebuilt for ROMs from earlier versions). Not written until <see cref="Save"/>.</summary>
     public static ExpansionSpace Load(RomBuffer rom)
     {
+        if (rom.Length < MapWriter.ExpandedSize) return new ExpansionSpace(rom, new());   // (not cached: it may be expanded next)
         if (Cache.TryGetValue(rom, out var cached)) return cached;
-        var space = new ExpansionSpace(rom, rom.Length < MapWriter.ExpandedSize ? new() : Read(rom) ?? Rebuild(rom));
+        var space = new ExpansionSpace(rom, Read(rom) ?? Rebuild(rom));
         Cache.AddOrUpdate(rom, space);
         return space;
     }
@@ -100,6 +101,9 @@ public sealed class ExpansionSpace
 
         // anything else used above 1 MB (old moved copies, other tools' data) stays reserved
         var all = new List<Entry>(live);
+        // a ROM that another hack had already made bigger (e.g. 1.5 MB): all of that is the hack's, whatever the bytes
+        if (rom.SizeBeforeExpansion > MapWriter.ExpansionStart)
+            all.Add(new Entry(MapWriter.ExpansionStart, rom.SizeBeforeExpansion - MapWriter.ExpansionStart, Kind.Unknown, 0xFFFE));
         int pos = MapWriter.ExpansionStart;
         while (pos <= lastUsed)
         {
@@ -112,7 +116,8 @@ public sealed class ExpansionSpace
             int runStart = pos, runEnd = pos, ff = 0;
             for (; pos <= lastUsed && !live.Any(e => pos >= e.Start && pos < e.End); pos++)
             {
-                if (rom.ReadByte(pos) == 0xFF) { if (++ff >= 16) break; }
+                // (only a long run of FF counts as free space: other tools' graphics and tables have short ones)
+                if (rom.ReadByte(pos) == 0xFF) { if (++ff >= 256) break; }
                 else { ff = 0; runEnd = pos + 1; }
             }
             all.Add(new Entry(runStart, runEnd - runStart, Kind.Unknown, 0));

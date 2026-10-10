@@ -163,6 +163,9 @@ public class RomBuffer
         Maps.ExpansionSpace.Forget(this);
     }
 
+    /// <summary>The ROM's size before Lufia Forge first expanded it in this session (0 = not expanded).</summary>
+    public int SizeBeforeExpansion { get; private set; }
+
     /// <summary>
     /// Grow the ROM to <paramref name="newSize"/> bytes, filling the new space with <paramref name="fill"/>,
     /// and update the SNES header's ROM size byte. Existing data is unchanged.
@@ -170,6 +173,9 @@ public class RomBuffer
     public void Expand(int newSize, byte fill = 0xFF)
     {
         if (newSize <= _data.Length) return;
+        // a ROM another hack already made bigger than 1 MB: everything it put there must stay where it is
+        if (SizeBeforeExpansion == 0) SizeBeforeExpansion = _data.Length;
+        Maps.ExpansionSpace.Forget(this);
         var grown = new byte[newSize];
         Array.Copy(_data, grown, _data.Length);
         Array.Fill(grown, fill, _data.Length, newSize - _data.Length);
@@ -186,12 +192,26 @@ public class RomBuffer
     {
         Put16(Lufia1Constants.SnesComplementOffset, 0xFFFF);
         Put16(Lufia1Constants.SnesChecksumOffset, 0x0000);
-        uint sum = 0;
-        foreach (byte b in _data) sum += b;
-        ushort checksum = (ushort)sum;
+        ushort checksum = SnesChecksum(_data);
         Put16(Lufia1Constants.SnesChecksumOffset, checksum);
         Put16(Lufia1Constants.SnesComplementOffset, (ushort)(checksum ^ 0xFFFF));
         _isDirty = true;
+    }
+
+    /// <summary>
+    /// The SNES header checksum: the sum of all bytes, where a size that isn't a power of two (e.g. 1.5 MB) counts
+    /// its last part repeated up to the next power of two, as the console mirrors it (1 MB + 2 x 512 KB).
+    /// </summary>
+    public static ushort SnesChecksum(byte[] rom)
+    {
+        int p = 1;
+        while (p * 2 <= rom.Length) p *= 2;
+        uint low = 0, high = 0;
+        for (int i = 0; i < p; i++) low += rom[i];
+        for (int i = p; i < rom.Length; i++) high += rom[i];
+        int rest = rom.Length - p;
+        uint repeats = rest > 0 && p % rest == 0 ? (uint)(p / rest) : 1;
+        return (ushort)(low + high * repeats);
     }
 
     private void Put16(int offset, ushort value)
