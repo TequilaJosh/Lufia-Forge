@@ -120,7 +120,8 @@ public sealed class ExpansionSpace
                 if (rom.ReadByte(pos) == 0xFF) { if (++ff >= 256) break; }
                 else { ff = 0; runEnd = pos + 1; }
             }
-            all.Add(new Entry(runStart, runEnd - runStart, Kind.Unknown, 0));
+            if (!all.Any(e => e.Kind == Kind.Unknown && runStart >= e.Start && runEnd <= e.End))   // (already reserved whole)
+                all.Add(new Entry(runStart, runEnd - runStart, Kind.Unknown, 0));
         }
         if (!tableAreaFree) all.Add(new Entry(TableStart, TableSize, Kind.Unknown, 0xFFFF));
         // a 4 MB ROM without a table (another tool's): anything used above 2 MB stays reserved
