@@ -75,7 +75,7 @@ public partial class SpellEditorViewModel : GameDataEditorBase
 
     protected override void LoadSelected()
     {
-        if (Ctx == null || SelectedIndex < 0) return;
+        if (Ctx == null || SelectedIndex < 0 || SelectedIndex >= GameDataOffsets.SpellOffsets.Length) return;
         var rom = Ctx.Rom;
         var offsets = GameDataOffsets.SpellOffsets;
         int o   = _recordOffset = offsets[SelectedIndex];

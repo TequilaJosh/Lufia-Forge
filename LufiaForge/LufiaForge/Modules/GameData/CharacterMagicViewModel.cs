@@ -47,7 +47,7 @@ public partial class CharacterMagicViewModel : GameDataEditorBase
         int keep = SelectedIndex;
         Casters.Clear();
         foreach (var (slot, _) in Lists) Casters.Add(Ctx.CharacterName(slot));
-        SelectedIndex = keep;
+        SelectedIndex = keep < Lists.Length ? keep : 0;
     }
 
     partial void OnSelectedIndexChanged(int value) => LoadSelected();
@@ -55,7 +55,7 @@ public partial class CharacterMagicViewModel : GameDataEditorBase
     protected override void LoadSelected()
     {
         Slots.Clear();
-        if (Ctx == null || SelectedIndex < 0) return;
+        if (Ctx == null || SelectedIndex < 0 || SelectedIndex >= Lists.Length) return;
 
         int start = Lists[SelectedIndex].Offset;
         int o = start;
@@ -69,7 +69,7 @@ public partial class CharacterMagicViewModel : GameDataEditorBase
     [RelayCommand]
     private void Apply()
     {
-        if (Ctx == null || SelectedIndex < 0) return;
+        if (Ctx == null || SelectedIndex < 0 || SelectedIndex >= Lists.Length) return;
         int start = Lists[SelectedIndex].Offset;
 
         Commit($"{Casters[SelectedIndex]}'s spell list", () =>

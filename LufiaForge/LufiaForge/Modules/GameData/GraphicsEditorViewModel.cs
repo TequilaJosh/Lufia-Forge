@@ -27,6 +27,9 @@ public sealed class GraphicsSource
 /// </summary>
 public partial class GraphicsEditorViewModel : GameDataEditorBase
 {
+    /// <summary>(The editor footer shows a ROM offset; this editor has none of its own.)</summary>
+    public string OffsetText => "";
+
     public ObservableCollection<GraphicsSource> Sources { get; } = new();
     [ObservableProperty] private GraphicsSource? _selectedSource;
     [ObservableProperty] private bool _rawMode;
