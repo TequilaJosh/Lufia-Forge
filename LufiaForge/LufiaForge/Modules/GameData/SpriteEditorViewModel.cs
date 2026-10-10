@@ -151,10 +151,7 @@ public partial class SpriteEditorViewModel : GameDataEditorBase
         var pal = BattleColours(BattleRow);
         var dlg = new SaveFileDialog { Title = "Export battle sprites", Filter = "PNG picture (*.png)|*.png", FileName = "battle sprites.png" };
         if (dlg.ShowDialog() != true) return;
-        var colours = pal.Select((c, i) => i == 0 ? System.Windows.Media.Color.FromArgb(0, 0, 0, 0) : System.Windows.Media.Color.FromRgb((byte)(c >> 16), (byte)(c >> 8), (byte)c)).ToList();
-        var bmp = BitmapSource.Create(w, h, 96, 96, PixelFormats.Indexed8, new BitmapPalette(colours), idx, w);
-        var enc = new PngBitmapEncoder(); enc.Frames.Add(BitmapFrame.Create(bmp));
-        using (var fs = File.Create(dlg.FileName)) enc.Save(fs);
+        IndexedPng.Save(dlg.FileName, w, h, idx, pal, firstTransparent: true);
         Status = $"Saved {dlg.FileName}: an indexed picture (16 colours). Keep it indexed when editing so every sprite keeps its own colours.";
     }
 
@@ -164,21 +161,21 @@ public partial class SpriteEditorViewModel : GameDataEditorBase
         if (Ctx == null) return;
         var dlg = new OpenFileDialog { Title = "Import battle sprites", Filter = "Pictures (*.png;*.bmp;*.gif)|*.png;*.bmp;*.gif" };
         if (dlg.ShowDialog() != true) return;
-        var src = new BitmapImage(new Uri(dlg.FileName));
+        var ip = IndexedPng.TryLoad(dlg.FileName);
+        BitmapSource? src = ip == null ? new BitmapImage(new Uri(dlg.FileName)) : null;
         BattleIndices(out int w, out int h);
-        if (src.PixelWidth != w || src.PixelHeight != h) { Status = $"The picture must be {w} x {h} pixels (the exported size)."; return; }
+        if ((ip?.Width ?? src!.PixelWidth) != w || (ip?.Height ?? src!.PixelHeight) != h) { Status = $"The picture must be {w} x {h} pixels (the exported size)."; return; }
         byte[] idx = new byte[w * h];
-        if (src.Format == PixelFormats.Indexed8 || src.Format == PixelFormats.Indexed4)
+        if (ip is { } png)
         {
             // colour numbers as they are (the way it was exported)
-            BitmapSource conv = src.Format == PixelFormats.Indexed8 ? src : new FormatConvertedBitmap(src, PixelFormats.Indexed8, src.Palette, 0);
-            conv.CopyPixels(idx, w, 0);
+            idx = png.Indices;
             if (idx.Any(i => i > 15)) { Status = "The picture uses more than 16 colours."; return; }
         }
         else
         {
             // a full-colour picture: nearest colour of the chosen row
-            var bgra = new FormatConvertedBitmap(src, PixelFormats.Bgra32, null, 0);
+            var bgra = new FormatConvertedBitmap(src!, PixelFormats.Bgra32, null, 0);
             var px = new uint[w * h]; bgra.CopyPixels(px, w * 4, 0);
             var pal = BattleColours(BattleRow);
             for (int i = 0; i < px.Length; i++)

@@ -20,6 +20,7 @@ public partial class GameDataViewModel : ObservableObject
     public MusicEditorViewModel     Music          { get; } = new();
     public CreditsEditorViewModel   Credits        { get; } = new();
     public TitleEditorViewModel     Title          { get; } = new();
+    public GraphicsEditorViewModel  Graphics       { get; } = new();
     public GameSettingsViewModel    Settings       { get; } = new();
 
     [ObservableProperty] private bool _isRomLoaded;
@@ -28,7 +29,7 @@ public partial class GameDataViewModel : ObservableObject
     {
         var ctx = new GameDataContext(rom, mainVm);
         foreach (var editor in new GameDataEditorBase[]
-                 { Characters, CharacterMagic, Growth, Sprites, Items, PartyItems, Shops, Spells, Monsters, Encounters, Music, Credits, Title, Settings })
+                 { Characters, CharacterMagic, Growth, Sprites, Items, PartyItems, Shops, Spells, Monsters, Encounters, Music, Credits, Title, Graphics, Settings })
             editor.Attach(ctx);
         IsRomLoaded = true;
     }
