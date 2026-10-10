@@ -48,6 +48,11 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
+                    <TextBlock Text="ROM SIZE" Style="{StaticResource LufiaLabel}" Margin="0,0,0,6"/>
+                    <TextBlock Text="{Binding RomSizeText}" Style="{StaticResource LufiaLabel}" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                    <Button Content="Expand to 4 MB" Style="{StaticResource LufiaButton}" HorizontalAlignment="Left" MinWidth="120"
+                            Command="{Binding ExpandTo4MbCommand}" IsEnabled="{Binding CanExpandTo4Mb}" Margin="0,0,0,14"/>
+
                     <Separator Style="{StaticResource LufiaSeparator}" Margin="0,0,0,12"/>
 
                     <!-- LOAD PATCH section -->

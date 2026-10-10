@@ -798,7 +798,7 @@ public sealed class EventScript
         int size = Build(0, 0, out _).Length;   // only the length matters here
         if (copyLen + size > 0xFFF0)
             throw new InvalidOperationException("This map's script block is too large to copy.");
-        int newBase = space.Allocate(copyLen + size + 1, ExpansionSpace.Kind.ScriptBlock, MapId);
+        int newBase = space.Allocate(copyLen + size + 1, ExpansionSpace.Kind.ScriptBlock, MapId, ScriptLimit);
         int newStart = newBase + copyLen;
         _rom.WriteBytes(newBase, _rom.ReadBytes(BlockBase, copyLen));
         var code = Build(newStart, newBase, out _);
@@ -827,6 +827,12 @@ public sealed class EventScript
                $"{(expanded ? " in the newly expanded 2 MB ROM" : "")} and the event added at 0x{newStart:X6} ({code.Length} bytes). " +
                (oldFreed ? "The block's previous copy above 1 MB was freed." : "The original block is left untouched.");
     }
+
+    /// <summary>
+    /// Scripts are read at bank 3 + (offset from 0x18000) / 32 KB ($01:C292): in a 4 MB ROM the last 64 KB would be
+    /// banks 7E-7F, the console's work RAM, so script blocks end before file 0x3F0000.
+    /// </summary>
+    public const int ScriptLimit = 0x3F0000;
 
     /// <summary>Bytes from this block's start to the next map's script block (blocks are contiguous).</summary>
     private int BlockLength()

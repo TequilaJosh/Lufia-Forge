@@ -18,6 +18,8 @@ public sealed record MapSaveResult(int CompressedSize, int OriginalSlotSize, int
 public static class MapWriter
 {
     public const int ExpandedSize = 0x200000;
+    /// <summary>The largest ROM Lufia Forge makes: 4 MB LoROM (banks 80-FF; above 2 MB = banks C0-FF).</summary>
+    public const int MaxSize = 0x400000;
     public const int ExpansionStart = 0x100000;
 
     /// <summary>True when the edited map would not fit in its current slot.</summary>

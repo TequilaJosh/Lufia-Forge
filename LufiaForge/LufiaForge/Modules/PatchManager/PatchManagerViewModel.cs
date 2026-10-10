@@ -42,7 +42,7 @@ public partial class PatchManagerViewModel : ObservableObject
         _rom    = rom;
         _mainVm = mainVm;
         StatusText = "ROM loaded. Load an IPS patch file or export a patch from your current edits.";
-        foreach (var p in BuiltInPatches) p.Refresh(rom);
+        RefreshBuiltIn();
     }
 
     // -------------------------------------------------------------------------
@@ -65,11 +65,53 @@ public partial class PatchManagerViewModel : ObservableObject
             StatusText = (adding ? "Added: " : "Removed: ") + patch.Name + ". Save the ROM to keep it.";
         }
         catch (Exception ex) { StatusText = "Not changed: " + ex.Message; }
-        foreach (var p in BuiltInPatches) p.Refresh(_rom);
+        RefreshBuiltIn();
     }
 
     /// <summary>Re-reads which built-in patches the ROM has (other tabs can add them too).</summary>
-    public void RefreshBuiltIn() { foreach (var p in BuiltInPatches) p.Refresh(_rom); }
+    public void RefreshBuiltIn()
+    {
+        foreach (var p in BuiltInPatches) p.Refresh(_rom);
+        RefreshSize();
+    }
+
+    // -------------------------------------------------------------------------
+    // ROM size
+    // -------------------------------------------------------------------------
+
+    [ObservableProperty] private string _romSizeText = "";
+    [ObservableProperty] private bool _canExpandTo4Mb;
+
+    private void RefreshSize()
+    {
+        if (_rom == null) { RomSizeText = ""; CanExpandTo4Mb = false; return; }
+        double mb = _rom.Length / 1048576.0;
+        string free = "";
+        if (_rom.Length >= Core.Maps.MapWriter.ExpandedSize)
+        {
+            var space = Core.Maps.ExpansionSpace.Load(_rom);
+            long used = space.Entries.Sum(e => (long)e.Length);
+            long room = _rom.Length - Core.Maps.ExpansionSpace.FirstUsable - Core.Maps.ExpansionSpace.TableSize;
+            free = $" About {Math.Max(0, room - used) / 1024:N0} KB of the added space is still free.";
+        }
+        RomSizeText = $"This ROM is {mb:0.#} MB.{free} Lufia Forge grows it by itself when edits need room (1 MB → 2 MB → 4 MB); " +
+                      "4 MB is the most a Lufia (LoROM) cartridge can address.";
+        CanExpandTo4Mb = _rom.Length < Core.Maps.MapWriter.MaxSize;
+    }
+
+    [RelayCommand]
+    private void ExpandTo4Mb()
+    {
+        if (_rom == null || _rom.Length >= Core.Maps.MapWriter.MaxSize) return;
+        if (MessageBox.Show("Expand the ROM to 4 MB now? The game plays the same; the new space is used for maps, events, text, music and graphics you add.",
+                "Expand to 4 MB", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        _rom.Expand(Core.Maps.MapWriter.MaxSize);
+        Core.Maps.ExpansionSpace.Load(_rom).Save();
+        _rom.FixChecksum();
+        _mainVm?.NotifyRomModified("ROM expanded to 4 MB");
+        StatusText = "ROM expanded to 4 MB. Save the ROM to keep it.";
+        RefreshBuiltIn();
+    }
 
     // -------------------------------------------------------------------------
     // Load Patch
