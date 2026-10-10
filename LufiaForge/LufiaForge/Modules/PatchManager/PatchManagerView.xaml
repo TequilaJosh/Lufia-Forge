@@ -17,10 +17,38 @@
                 <StackPanel Margin="16">
 
                     <!-- Title -->
-                    <TextBlock Text="🩹  IPS Patch Manager"
+                    <TextBlock Text="🩹  Patch Manager"
                                Style="{StaticResource LufiaLabelGold}"
                                FontSize="15"
                                Margin="0,4,0,18"/>
+
+                    <!-- BUILT-IN PATCHES section -->
+                    <TextBlock Text="BUILT-IN PATCHES"
+                               Style="{StaticResource LufiaLabel}"
+                               Margin="0,0,0,6"/>
+                    <TextBlock TextWrapping="Wrap" Style="{StaticResource LufiaLabel}" Margin="0,0,0,8"
+                               Text="Fixes and features Lufia Forge can add to your ROM with one click. Save the ROM afterwards to keep them."/>
+                    <ItemsControl ItemsSource="{Binding BuiltInPatches}" Margin="0,0,0,14">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="{StaticResource MidPurpleBrush}" BorderBrush="{StaticResource BorderPurpleBrush}"
+                                        BorderThickness="1" CornerRadius="3" Padding="8,6" Margin="0,0,0,8">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Name}" Style="{StaticResource LufiaLabelGold}" TextWrapping="Wrap"/>
+                                        <TextBlock Text="{Binding Description}" Style="{StaticResource LufiaLabel}" TextWrapping="Wrap" Margin="0,3,0,4"/>
+                                        <TextBlock Text="{Binding State}" Style="{StaticResource LufiaLabel}" Foreground="{StaticResource TextPrimaryBrush}"
+                                                   TextWrapping="Wrap" Margin="0,0,0,6"/>
+                                        <Button Content="{Binding ButtonText}" Style="{StaticResource LufiaButtonGold}" HorizontalAlignment="Left" MinWidth="90"
+                                                IsEnabled="{Binding CanClick}"
+                                                Command="{Binding DataContext.ToggleBuiltInCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}"/>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <Separator Style="{StaticResource LufiaSeparator}" Margin="0,0,0,12"/>
 
                     <!-- LOAD PATCH section -->
                     <TextBlock Text="LOAD PATCH"
