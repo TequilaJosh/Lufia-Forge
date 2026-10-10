@@ -30,6 +30,11 @@
                     <StackPanel MaxWidth="320">
                         <TextBlock Text="RANDOM BATTLES" Style="{StaticResource GdSection}"/>
                         <StackPanel Orientation="Horizontal" Margin="0,2">
+                            <TextBlock Text="Battles" Style="{StaticResource GdFieldLabel}" Width="110"/>
+                            <ComboBox Style="{StaticResource GdCombo}" Width="180" ItemsSource="{Binding PresetLabels}" SelectedIndex="{Binding RatePreset}"
+                                      ToolTip="Quick settings for the encounter rate below."/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,2">
                             <TextBlock Text="Encounter rate" Style="{StaticResource GdFieldLabel}" Width="110"/>
                             <TextBox Style="{StaticResource GdNumber}" Text="{Binding EncounterRate, UpdateSourceTrigger=PropertyChanged}"
                                      ToolTip="0 = no random battles. Each step: chance rate/128 on the world map, half that elsewhere (the game's code at $01:8876)."/>
@@ -40,6 +45,9 @@
                                      ToolTip="Steps after a battle (or entering a map) with no battle."/>
                         </StackPanel>
                         <TextBlock Text="{Binding EncounterText}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                        <CheckBox Content="Hold L to avoid random battles" Style="{StaticResource GdCheck}" IsChecked="{Binding HoldLPatch}" Margin="0,8,0,0"
+                                  IsEnabled="{Binding CanHoldLPatch}"
+                                  ToolTip="Patch: while the L button is held there are no random battles (boss and story battles still happen). Needs the 2 MB expanded ROM. Untick and Apply to remove it."/>
                         <TextBlock Text="Which monsters appear where: the Encounters tab." Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0"/>
                     </StackPanel>
                 </Border>

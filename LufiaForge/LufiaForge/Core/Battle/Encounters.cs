@@ -26,7 +26,8 @@ public static class Encounters
     public const int FirstBoss = 0xE6, LastBoss = 0xFA;
     public const int ZoneResource = 0xB0, ZoneWidth = 80, ZoneHeight = 64;
     public const int RateOffset = 0x8877;       // LDA #$0A in $01:8876
-    public const int SafeStepsOffset = 0x8858;  // CMP #$04 in $01:8857
+    /// <summary>The safe-steps number (CMP #$04 in $01:8857), or inside <see cref="EncounterPatch"/>'s routine once applied.</summary>
+    public static int SafeStepsOffset(RomBuffer rom) => EncounterPatch.SafeStepsOffset(rom);
 
     public static int GroupCount(RomBuffer rom) => (rom.ReadUInt16Le(GroupPointers) - 0xDA60) / 2;
     /// <summary>How many subgroups the ROM can hold: 67, or 255 with <see cref="SubgroupPatch"/>.</summary>
