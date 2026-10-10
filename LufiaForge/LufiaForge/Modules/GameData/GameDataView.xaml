@@ -40,6 +40,9 @@
             <TabItem Header="Music" Style="{StaticResource LufiaTabItem}">
                 <v:MusicEditorView DataContext="{Binding Music}"/>
             </TabItem>
+            <TabItem Header="Credits" Style="{StaticResource LufiaTabItem}">
+                <v:CreditsEditorView DataContext="{Binding Credits}"/>
+            </TabItem>
             <TabItem Header="Game Settings" Style="{StaticResource LufiaTabItem}">
                 <v:GameSettingsView DataContext="{Binding Settings}"/>
             </TabItem>
