@@ -1,9 +1,47 @@
 <UserControl x:Class="LufiaForge.Modules.GameData.Views.TitleEditorView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:v="clr-namespace:LufiaForge.Modules.GameData.Views">
+             xmlns:v="clr-namespace:LufiaForge.Modules.GameData.Views"
+             xmlns:gd="clr-namespace:LufiaForge.Modules.GameData">
     <UserControl.Resources>
-        <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+            <Style x:Key="ToolButton" TargetType="RadioButton">
+                <Setter Property="Margin" Value="0,0,4,4"/>
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="RadioButton">
+                            <Border x:Name="b" Padding="8,4" CornerRadius="3" BorderThickness="1"
+                                    BorderBrush="{StaticResource BorderPurpleBrush}" Background="{StaticResource SurfacePurpleBrush}">
+                                <TextBlock x:Name="t" Text="{TemplateBinding Content}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsChecked" Value="True">
+                                    <Setter TargetName="b" Property="Background" Value="{StaticResource GoldBrush}"/>
+                                    <Setter TargetName="b" Property="BorderBrush" Value="{StaticResource GoldBrush}"/>
+                                    <Setter TargetName="t" Property="Foreground" Value="{StaticResource DeepPurpleBrush}"/>
+                                    <Setter TargetName="t" Property="FontWeight" Value="Bold"/>
+                                </Trigger>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="b" Property="BorderBrush" Value="{StaticResource GoldBrush}"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+            <Style x:Key="TsSmall" TargetType="Button" BasedOn="{StaticResource LufiaButton}">
+                <Setter Property="Padding" Value="8,3"/>
+                <Setter Property="Margin" Value="0,0,4,4"/>
+                <Setter Property="MinWidth" Value="0"/>
+            </Style>
+            <Style x:Key="TsLabel" TargetType="TextBlock" BasedOn="{StaticResource GdFieldLabel}">
+                <Setter Property="VerticalAlignment" Value="Center"/>
+            </Style>
+        </ResourceDictionary>
     </UserControl.Resources>
 
     <Grid>
@@ -11,43 +49,171 @@
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
-        <ScrollViewer VerticalScrollBarVisibility="Auto">
-            <WrapPanel Margin="12,12,12,0">
-                <Border Style="{StaticResource GdCard}">
-                    <StackPanel>
-                        <TextBlock Text="TITLE SCREEN (AS THE GAME SHOWS IT)" Style="{StaticResource GdSection}"/>
-                        <Image Source="{Binding Preview}" Width="512" Height="448" Stretch="Fill" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
-                        <TextBlock Text="● changes not written yet - click Apply" Foreground="{StaticResource WarningBrush}" Margin="0,6,0,0"
-                                   Visibility="{Binding Dirty, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                    </StackPanel>
-                </Border>
-                <Border Style="{StaticResource GdCard}">
-                    <StackPanel Width="380">
-                        <TextBlock Text="LAYERS" Style="{StaticResource GdSection}"/>
-                        <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,8"
-                                   Text="The title is two layers. The front layer is a black screen with the letters cut out (see-through) and the subtitle; the back layer is the rainbow that shows through the letters. Export a layer, draw on it, import it back."/>
-                        <TextBlock Text="Front layer (letters, black cover, subtitle)" Style="{StaticResource GdFieldLabel}"/>
-                        <StackPanel Orientation="Horizontal" Margin="0,4,0,10">
-                            <Button Content="Export..." Style="{StaticResource LufiaButton}" Command="{Binding ExportFrontCommand}" Margin="0,0,8,0"/>
-                            <Button Content="Import..." Style="{StaticResource LufiaButtonGold}" Command="{Binding ImportFrontCommand}"/>
-                        </StackPanel>
-                        <TextBlock Text="Back layer (the colours behind the letters)" Style="{StaticResource GdFieldLabel}"/>
-                        <StackPanel Orientation="Horizontal" Margin="0,4,0,10">
-                            <Button Content="Export..." Style="{StaticResource LufiaButton}" Command="{Binding ExportBackCommand}" Margin="0,0,8,0"/>
-                            <Button Content="Import..." Style="{StaticResource LufiaButtonGold}" Command="{Binding ImportBackCommand}"/>
-                        </StackPanel>
-                        <Button Content="Export the whole screen (picture)..." Style="{StaticResource LufiaButton}" Command="{Binding ExportScreenCommand}" HorizontalAlignment="Left"/>
-                        <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,10,0,0"
-                                   Text="Layer pictures are 288 x 256 (the screen shows x 16-271, y 1-224) and indexed: colour number = 16 x row + colour, 0 of a row = see-through. Every 8x8 square may use one row only. Keep the picture indexed and its colours (rows 2-7) become the title's colours - recolour the rainbow by editing the palette. A full-colour picture is matched to the current colours instead. Up to 512 different 8x8 tiles and 256 different 16x16 blocks."/>
-                        <TextBlock Text="COLOURS (ROWS 0-7)" Style="{StaticResource GdSection}" Margin="0,12,0,4"/>
-                        <Image Source="{Binding Swatches}" Width="256" Height="128" Stretch="Fill" HorizontalAlignment="Left" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
-                        <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0"
-                                   Text="Rows 0-1 are shared with the rest of the game and aren't changed here; rows 2-7 belong to the title (map palette 19)."/>
-                        <TextBlock Text="{Binding Info}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,8,0,0"/>
-                    </StackPanel>
-                </Border>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="370"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- ═══ the canvas ═══ -->
+        <Grid Margin="12,12,8,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <WrapPanel Margin="0,0,0,6">
+                <RadioButton Content="Front layer (letters)" Style="{StaticResource ToolButton}" GroupName="layer" IsChecked="{Binding EditFront}"
+                             ToolTip="The black cover with the letters cut out, and the subtitle"/>
+                <RadioButton x:Name="BackLayer" Content="Back layer (behind the letters)" Style="{StaticResource ToolButton}" GroupName="layer"
+                             ToolTip="The colours that show through the letters"/>
+                <CheckBox Content="Show both layers" Style="{StaticResource GdCheck}" IsChecked="{Binding ShowBoth}" VerticalAlignment="Center" Margin="8,0,8,4"
+                          ToolTip="Off: only the layer you paint on, with see-through parts checkered"/>
+                <CheckBox Content="8x8 grid" Style="{StaticResource GdCheck}" IsChecked="{Binding ShowGrid}" VerticalAlignment="Center" Margin="0,0,8,4"
+                          ToolTip="Each 8x8 square can use colours of one palette row only"/>
+                <TextBlock Text="Zoom" Style="{StaticResource TsLabel}" Margin="0,0,4,4"/>
+                <ComboBox Style="{StaticResource GdCombo}" Width="64" MinWidth="0" SelectedIndex="{Binding Zoom, Converter={x:Static v:TitleZoomConverter.Instance}}" Margin="0,0,0,4">
+                    <ComboBoxItem Content="1x"/>
+                    <ComboBoxItem Content="2x"/>
+                    <ComboBoxItem Content="3x"/>
+                    <ComboBoxItem Content="4x"/>
+                </ComboBox>
             </WrapPanel>
+            <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="#FF15101F">
+                <Grid HorizontalAlignment="Left" VerticalAlignment="Top">
+                    <Image x:Name="Paper" Source="{Binding Canvas}" Stretch="Fill" RenderOptions.BitmapScalingMode="NearestNeighbor" Cursor="Pen"
+                           MouseDown="Paper_MouseDown" MouseMove="Paper_MouseMove" MouseUp="Paper_MouseUp"/>
+                    <!-- what the screen shows -->
+                    <Rectangle x:Name="ScreenFrame" Stroke="{StaticResource GoldBrush}" StrokeThickness="1" StrokeDashArray="4 3" IsHitTestVisible="False"
+                               HorizontalAlignment="Left" VerticalAlignment="Top"/>
+                </Grid>
+            </ScrollViewer>
+        </Grid>
+
+        <!-- ═══ tools ═══ -->
+        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" Margin="0,12,12,0">
+            <StackPanel>
+                <Border Style="{StaticResource GdCard}" Margin="0,0,0,8">
+                    <StackPanel>
+                        <TextBlock Text="PAINT" Style="{StaticResource GdSection}"/>
+                        <WrapPanel>
+                            <RadioButton Content="✏ Pencil" Style="{StaticResource ToolButton}" GroupName="tool" IsChecked="{Binding CurrentTool, Converter={x:Static v:TitleToolConverter.Instance}, ConverterParameter=Pencil}"/>
+                            <RadioButton Content="╱ Line" Style="{StaticResource ToolButton}" GroupName="tool" IsChecked="{Binding CurrentTool, Converter={x:Static v:TitleToolConverter.Instance}, ConverterParameter=Line}"/>
+                            <RadioButton Content="▬ Box" Style="{StaticResource ToolButton}" GroupName="tool" IsChecked="{Binding CurrentTool, Converter={x:Static v:TitleToolConverter.Instance}, ConverterParameter=Box}"/>
+                            <RadioButton Content="◍ Fill" Style="{StaticResource ToolButton}" GroupName="tool" IsChecked="{Binding CurrentTool, Converter={x:Static v:TitleToolConverter.Instance}, ConverterParameter=Fill}"/>
+                            <RadioButton Content="⌫ Eraser" Style="{StaticResource ToolButton}" GroupName="tool" IsChecked="{Binding CurrentTool, Converter={x:Static v:TitleToolConverter.Instance}, ConverterParameter=Eraser}"
+                                         ToolTip="Makes pixels see-through (on the front layer the back layer shows there)"/>
+                            <RadioButton Content="◉ Pick colour" Style="{StaticResource ToolButton}" GroupName="tool" IsChecked="{Binding CurrentTool, Converter={x:Static v:TitleToolConverter.Instance}, ConverterParameter=Picker}"
+                                         ToolTip="Click a pixel to take its colour (right-click does this with any tool)"/>
+                        </WrapPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,4,0,4">
+                            <TextBlock Text="Brush size" Style="{StaticResource TsLabel}" Width="80"/>
+                            <Slider Minimum="1" Maximum="8" Width="140" IsSnapToTickEnabled="True" TickFrequency="1" Value="{Binding BrushSize}" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding BrushSize}" Style="{StaticResource TsLabel}" Margin="8,0,0,0"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="↶ Undo" Style="{StaticResource TsSmall}" Command="{Binding UndoCommand}" ToolTip="Ctrl+Z"/>
+                            <Button Content="↷ Redo" Style="{StaticResource TsSmall}" Command="{Binding RedoCommand}" ToolTip="Ctrl+Y"/>
+                        </StackPanel>
+                        <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0"
+                                   Text="Left-click/drag paints, right-click picks a colour. The SNES gives every 8x8 square one row of 16 colours: painting with a colour from another row moves that square to the new row (its other pixels get that row's closest colours) - turn on the 8x8 grid to see the squares."/>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource GdCard}" Margin="0,0,0,8">
+                    <StackPanel>
+                        <TextBlock Text="COLOURS" Style="{StaticResource GdSection}"/>
+                        <ItemsControl ItemsSource="{Binding Swatches}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><UniformGrid Columns="16"/></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type gd:TitleSwatch}">
+                                    <Border x:Name="sw" Width="19" Height="19" Margin="1" Background="{Binding Fill}" BorderThickness="1" BorderBrush="#40000000"
+                                            Cursor="Hand" ToolTip="{Binding Tip}" MouseLeftButtonDown="Swatch_Click"/>
+                                    <DataTemplate.Triggers>
+                                        <DataTrigger Binding="{Binding Selected}" Value="True">
+                                            <Setter TargetName="sw" Property="BorderBrush" Value="White"/>
+                                            <Setter TargetName="sw" Property="BorderThickness" Value="2"/>
+                                        </DataTrigger>
+                                    </DataTemplate.Triggers>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Text="{Binding ColourInfo}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,4"/>
+                        <StackPanel IsEnabled="{Binding ColourEditable}">
+                            <StackPanel Orientation="Horizontal" Margin="0,1">
+                                <TextBlock Text="Red" Style="{StaticResource TsLabel}" Width="44"/>
+                                <Slider Minimum="0" Maximum="31" Width="200" IsSnapToTickEnabled="True" TickFrequency="1" Value="{Binding Red}" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding Red}" Style="{StaticResource TsLabel}" Margin="8,0,0,0"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,1">
+                                <TextBlock Text="Green" Style="{StaticResource TsLabel}" Width="44"/>
+                                <Slider Minimum="0" Maximum="31" Width="200" IsSnapToTickEnabled="True" TickFrequency="1" Value="{Binding Green}" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding Green}" Style="{StaticResource TsLabel}" Margin="8,0,0,0"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,1">
+                                <TextBlock Text="Blue" Style="{StaticResource TsLabel}" Width="44"/>
+                                <Slider Minimum="0" Maximum="31" Width="200" IsSnapToTickEnabled="True" TickFrequency="1" Value="{Binding Blue}" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding Blue}" Style="{StaticResource TsLabel}" Margin="8,0,0,0"/>
+                            </StackPanel>
+                        </StackPanel>
+                        <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0"
+                                   Text="Rows 0-1 are shared with the rest of the game (you can paint with them, not change them); rows 2-7 belong to the title. Colour 0 of a row is see-through."/>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource GdCard}" Margin="0,0,0,8">
+                    <StackPanel>
+                        <TextBlock Text="ANIMATION" Style="{StaticResource GdSection}"/>
+                        <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,6"
+                                   Text="The game can cycle the colours of palette rows 2 and 3 (it does this for water in towns): colours 1 to N of the row move one step every few frames, so whatever is painted with them shimmers or flows."/>
+                        <StackPanel Orientation="Horizontal" Margin="0,2">
+                            <CheckBox Content="Row 2" Style="{StaticResource GdCheck}" IsChecked="{Binding Cycle2}" Width="66" VerticalAlignment="Center"/>
+                            <TextBlock Text="colours 1 to" Style="{StaticResource TsLabel}" Margin="0,0,4,0"/>
+                            <TextBox Style="{StaticResource GdNumber}" Width="36" Text="{Binding Count2, UpdateSourceTrigger=PropertyChanged}" ToolTip="2-15"/>
+                            <TextBlock Text="every" Style="{StaticResource TsLabel}" Margin="6,0,4,0"/>
+                            <TextBox Style="{StaticResource GdNumber}" Width="36" Text="{Binding Delay2, UpdateSourceTrigger=PropertyChanged}" ToolTip="Frames per step (60 frames = 1 second)"/>
+                            <TextBlock Text="frames" Style="{StaticResource TsLabel}" Margin="4,0,0,0"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,2">
+                            <CheckBox Content="Row 3" Style="{StaticResource GdCheck}" IsChecked="{Binding Cycle3}" Width="66" VerticalAlignment="Center"/>
+                            <TextBlock Text="colours 1 to" Style="{StaticResource TsLabel}" Margin="0,0,4,0"/>
+                            <TextBox Style="{StaticResource GdNumber}" Width="36" Text="{Binding Count3, UpdateSourceTrigger=PropertyChanged}" ToolTip="2-15"/>
+                            <TextBlock Text="every" Style="{StaticResource TsLabel}" Margin="6,0,4,0"/>
+                            <TextBox Style="{StaticResource GdNumber}" Width="36" Text="{Binding Delay3, UpdateSourceTrigger=PropertyChanged}" ToolTip="Frames per step (60 frames = 1 second)"/>
+                            <TextBlock Text="frames" Style="{StaticResource TsLabel}" Margin="4,0,0,0"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                            <ToggleButton Content="▶ Play animation" IsChecked="{Binding Animating}" Style="{StaticResource {x:Type ToggleButton}}" Padding="8,3" Margin="0,0,6,0"/>
+                            <Button Content="🌈 Make the rainbow flow" Style="{StaticResource LufiaButtonGold}" Command="{Binding MakeRainbowFlowCommand}" Padding="8,3"
+                                    ToolTip="Moves the rainbow behind the letters into row 3 (14 colours by hue) and cycles row 3"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource GdCard}" Margin="0,0,0,8">
+                    <StackPanel>
+                        <TextBlock Text="PICTURE FILES" Style="{StaticResource GdSection}"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                            <TextBlock Text="Front layer" Style="{StaticResource TsLabel}" Width="80"/>
+                            <Button Content="Export…" Style="{StaticResource TsSmall}" Command="{Binding ExportFrontCommand}"/>
+                            <Button Content="Import…" Style="{StaticResource TsSmall}" Command="{Binding ImportFrontCommand}"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                            <TextBlock Text="Back layer" Style="{StaticResource TsLabel}" Width="80"/>
+                            <Button Content="Export…" Style="{StaticResource TsSmall}" Command="{Binding ExportBackCommand}"/>
+                            <Button Content="Import…" Style="{StaticResource TsSmall}" Command="{Binding ImportBackCommand}"/>
+                        </StackPanel>
+                        <Button Content="Export the whole screen (picture)…" Style="{StaticResource TsSmall}" Command="{Binding ExportScreenCommand}" HorizontalAlignment="Left"/>
+                        <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,6,0,0"
+                                   Text="Layer pictures are 288 x 256 and indexed (colour number = 16 x row + colour). Keep a picture indexed and its colours become the title's colours; a full-colour picture is matched to the current colours instead. Up to 512 different 8x8 tiles and 256 different 16x16 blocks."/>
+                        <TextBlock Text="{Binding Info}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                    </StackPanel>
+                </Border>
+                <TextBlock Text="● changes not written yet - click Apply" Foreground="{StaticResource WarningBrush}" Margin="4,0,0,8"
+                           Visibility="{Binding Dirty, Converter={StaticResource BoolToVisibilityConverter}}"/>
+            </StackPanel>
         </ScrollViewer>
-        <v:EditorFooter Grid.Row="1"/>
+
+        <v:EditorFooter Grid.Row="1" Grid.ColumnSpan="2"/>
     </Grid>
 </UserControl>

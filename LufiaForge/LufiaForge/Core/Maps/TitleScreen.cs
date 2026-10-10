@@ -8,6 +8,11 @@ namespace LufiaForge.Core.Maps;
 /// black screen with the letters cut out (so the gradient shows through them) and the subtitle in white.
 /// Measured: drawn from these pieces it matches the console's title screen (screen at map pixel 16, 1).
 /// Nothing else in the game uses B1 or palette 19.
+///
+/// Animation: like every map, the title can cycle colours (the water on town maps does this). When a map loads,
+/// $01:C015 reads a record at map data [dword 0x30] + 0x18 (+ 0x08 when the word at 0x3E is below 3376): bit 2
+/// of its first word cycles colours 1..n of palette row 2, bit 3 those of row 3; the words at +6 and +8 hold
+/// n - 1 and the frames per step. The frame interrupt ($00:848B) then rotates those colours.
 /// </summary>
 public sealed class TitleScreen
 {
@@ -31,12 +36,37 @@ public sealed class TitleScreen
 
     private TitleScreen(LufiaMap map, byte[] tiles, byte[] blocks) { Map = map; Tiles = tiles; Blocks = blocks; }
 
+    /// <summary>Colour cycling of palette rows 2 and 3 (index 0 = row 2): on, how many colours from colour 1, frames per step.</summary>
+    public (bool On, int Count, int Delay)[] Cycles { get; } = new (bool, int, int)[2];
+
+    /// <summary>Offset in the map data of the colour-cycle record (see the class notes).</summary>
+    public static int CycleRecord(byte[] d)
+    {
+        int section = d[0x30] | d[0x31] << 8 | d[0x32] << 16;
+        int alt = d[0x3E] | d[0x3F] << 8;
+        return section + (alt >= 0x3376 ? 0x18 : 0x08);
+    }
+
+    private void ReadCycles()
+    {
+        var d = Map.Original;
+        int r = CycleRecord(d);
+        if (r + 10 > d.Length) return;
+        int flags = d[r] | d[r + 1] << 8;
+        for (int k = 0; k < 2; k++)
+        {
+            bool on = (flags >> (2 + k) & 1) != 0;
+            Cycles[k] = (on, on ? Math.Clamp(d[r + 6 + k * 2] + 1, 2, 15) : 15, on ? Math.Max(1, (int)d[r + 7 + k * 2]) : 8);
+        }
+    }
+
     public static TitleScreen Load(RomBuffer rom)
     {
         var map = LufiaMap.Load(rom, MapId);
         var d = map.Original;
         int n = d[0x1E] | d[0x1F] << 8;
         var t = new TitleScreen(map, LufiaCompression.DecompressResource(rom, TilesResource, out _), d.AsSpan(BlocksOffset, n * 9).ToArray());
+        t.ReadCycles();
         for (int i = 0; i < 32; i++) t.Palette555[i] = rom.ReadUInt16Le(LufiaMap.SharedPaletteRows + i * 2);
         for (int i = 0; i < 96; i++) t.Palette555[32 + i] = rom.ReadUInt16Le(PaletteRows + i * 2);
         return t;
@@ -88,9 +118,11 @@ public sealed class TitleScreen
     }
 
     /// <summary>The screen as the game shows it (back layer, then front layer), 256 x 224 BGRA.</summary>
-    public uint[] RenderScreen()
+    public uint[] RenderScreen() => RenderScreen(LayerIndices(true), LayerIndices(false), Palette555);
+
+    /// <summary>The screen from layer pictures (colour numbers, Width*16 x Height*16) and colours, 256 x 224 BGRA.</summary>
+    public uint[] RenderScreen(byte[] front, byte[] back, ushort[] palette)
     {
-        var back = LayerIndices(false); var front = LayerIndices(true);
         int W = Width * 16;
         var px = new uint[ScreenW * ScreenH];
         for (int y = 0; y < ScreenH; y++)
@@ -98,9 +130,23 @@ public sealed class TitleScreen
             {
                 int i = (y + ScreenY) * W + x + ScreenX;
                 int c = front[i] != 0 ? front[i] : back[i];
-                px[y * ScreenW + x] = c == 0 ? 0xFF000000u : Argb(Palette555[c]);
+                px[y * ScreenW + x] = c == 0 ? 0xFF000000u : Argb(palette[c]);
             }
         return px;
+    }
+
+    /// <summary>The colours as the game shows them <paramref name="frames"/> frames after the title appears (cycling rows 2-3).</summary>
+    public ushort[] PaletteAt(long frames)
+    {
+        var p = (ushort[])Palette555.Clone();
+        for (int k = 0; k < 2; k++)
+        {
+            var (on, count, delay) = Cycles[k];
+            if (!on) continue;
+            int start = (2 + k) * 16 + 1, phase = (int)(frames / Math.Max(1, delay) % count);
+            for (int j = 0; j < count; j++) p[start + j] = Palette555[start + (j + phase) % count];
+        }
+        return p;
     }
 
     // ── import ──
@@ -208,6 +254,18 @@ public sealed class TitleScreen
         {
             int l2 = (int)(d[0x2C] | d[0x2D] << 8 | d[0x2E] << 16 | (uint)d[0x2F] << 24);
             for (int i = 0; i < Map.Layer2.Length; i++) { d[l2 + i * 2] = (byte)Map.Layer2[i]; d[l2 + i * 2 + 1] = (byte)(Map.Layer2[i] >> 8); }
+        }
+        int r = CycleRecord(d);
+        if (r + 10 <= d.Length)
+        {
+            int flags = d[r] | d[r + 1] << 8;
+            for (int k = 0; k < 2; k++)
+            {
+                var (on, count, delay) = Cycles[k];
+                flags = on ? flags | 4 << k : flags & ~(4 << k);
+                if (on) { d[r + 6 + k * 2] = (byte)(Math.Clamp(count, 2, 15) - 1); d[r + 7 + k * 2] = (byte)Math.Clamp(delay, 1, 255); }
+            }
+            d[r] = (byte)flags; d[r + 1] = (byte)(flags >> 8);
         }
         return d;
     }
