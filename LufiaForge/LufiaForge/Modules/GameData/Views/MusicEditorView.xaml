@@ -50,6 +50,17 @@
                                Text="A .lfsong file is a song exactly as the game stores it. Import one into any slot to replace that song everywhere it plays (e.g. use a different song for battles, or bring in a song shared by someone else). Which song a map or event plays is set in the Events tab (command 0A)."/>
                 </StackPanel>
             </Border>
+            <Border Style="{StaticResource GdCard}" HorizontalAlignment="Left" MaxWidth="680">
+                <StackPanel>
+                    <TextBlock Text="MIDI" Style="{StaticResource GdSection}"/>
+                    <StackPanel Orientation="Horizontal">
+                        <Button Content="Export MIDI…" Style="{StaticResource LufiaButton}" Command="{Binding ExportMidiCommand}" Margin="0,0,8,0"/>
+                        <Button Content="Import MIDI…" Style="{StaticResource LufiaButtonGold}" Command="{Binding ImportMidiCommand}"/>
+                    </StackPanel>
+                    <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,6,0,0"
+                               Text="Export a song, change it in any MIDI editor, import it back (into this or any other slot). Each of the 8 game channels is one track and plays one note at a time; program numbers are the game's instrument numbers. Keep the loopStart / loopEnd markers to say where the song repeats (without them the whole song repeats). Lufia-only settings (echo, tuning, ties) travel as 'lufia:' text events - leave them in place."/>
+                </StackPanel>
+            </Border>
         </StackPanel>
 
         <v:EditorFooter Grid.Row="1" Grid.ColumnSpan="2"/>
