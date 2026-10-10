@@ -123,30 +123,22 @@ public sealed class ExpansionSpace
             all.Add(new Entry(runStart, runEnd - runStart, Kind.Unknown, 0));
         }
         if (!tableAreaFree) all.Add(new Entry(TableStart, TableSize, Kind.Unknown, 0xFFFF));
+        // a 4 MB ROM without a table (another tool's): anything used above 2 MB stays reserved
+        if (rom.Length > TableStart + TableSize)
+        {
+            int last = rom.Length - 1;
+            while (last >= TableStart + TableSize && rom.ReadByte(last) == 0xFF) last--;
+            if (last >= TableStart + TableSize) all.Add(new Entry(TableStart + TableSize, last + 1 - (TableStart + TableSize), Kind.Unknown, 0xFFFD));
+        }
         return all.OrderBy(e => e.Start).ToList();
     }
 
     /// <summary>The block containing <paramref name="offset"/>, or null.</summary>
     public Entry? At(int offset) => _entries.FirstOrDefault(e => offset >= e.Start && offset < e.End);
 
-    /// <summary>Reserve <paramref name="size"/> bytes in the first gap that fits.</summary>
-    public int Allocate(int size, Kind kind, int id)
-    {
-        if (_rom.Length < MapWriter.ExpandedSize) throw new InvalidOperationException("The ROM isn't expanded.");
-        if (_entries.Count >= MaxEntries) throw new InvalidOperationException("The expanded ROM's space table is full.");
-        int pos = FirstUsable;
-        foreach (var e in _entries.OrderBy(e => e.Start))
-        {
-            if (e.End <= pos) continue;
-            if (e.Start - pos >= size) break;
-            pos = Math.Max(pos, e.End);
-        }
-        if (pos + size > TableStart)
-            throw new InvalidOperationException($"Not enough free space left in the expanded ROM for {size} bytes.");
-        _entries.Add(new Entry(pos, size, kind, id));
-        _entries.Sort((a, b) => a.Start.CompareTo(b.Start));
-        return pos;
-    }
+    /// <summary>Reserve <paramref name="size"/> bytes in the first gap that fits (a 2 MB ROM that is full grows to 4 MB).</summary>
+    /// <param name="limit">Where the block must end by (event scripts: their bank number is 3 + offset / 32 KB, so they can't reach banks 7E-7F, which are work RAM).</param>
+    public int Allocate(int size, Kind kind, int id, int limit = int.MaxValue) => Reserve(size, kind, id, oneBank: false, limit);
 
     /// <summary>
     /// Reserve <paramref name="size"/> bytes that stay inside one 32 KB ROM bank (code and tables read with
@@ -154,22 +146,42 @@ public sealed class ExpansionSpace
     /// </summary>
     public int AllocateInOneBank(int size, Kind kind, int id)
     {
+        if (size > 0x8000) throw new ArgumentOutOfRangeException(nameof(size));
+        return Reserve(size, kind, id, oneBank: true, int.MaxValue);
+    }
+
+    private int Reserve(int size, Kind kind, int id, bool oneBank, int limit)
+    {
         if (_rom.Length < MapWriter.ExpandedSize) throw new InvalidOperationException("The ROM isn't expanded.");
         if (_entries.Count >= MaxEntries) throw new InvalidOperationException("The expanded ROM's space table is full.");
-        if (size > 0x8000) throw new ArgumentOutOfRangeException(nameof(size));
-        int pos = FirstUsable;
-        while (true)
+        int pos = Find(size, oneBank, limit);
+        if (pos < 0 && _rom.Length < MapWriter.MaxSize)
         {
-            if ((pos & 0x7FFF) + size > 0x8000) pos = (pos | 0x7FFF) + 1;   // would run over the bank end: next bank
-            var clash = _entries.Where(e => e.Start < pos + size && e.End > pos).OrderBy(e => e.End).LastOrDefault();
-            if (clash == null) break;
-            pos = clash.End;
+            // 2 MB is full: the ROM grows to 4 MB (banks C0-FF), the same way 1 MB grew to 2 MB
+            _rom.Expand(MapWriter.MaxSize);
+            Cache.AddOrUpdate(_rom, this);   // (Expand forgets the cached table; this one is still the live one)
+            pos = Find(size, oneBank, limit);
         }
-        if (pos + size > TableStart)
+        if (pos < 0)
             throw new InvalidOperationException($"Not enough free space left in the expanded ROM for {size} bytes.");
         _entries.Add(new Entry(pos, size, kind, id));
         _entries.Sort((a, b) => a.Start.CompareTo(b.Start));
         return pos;
+    }
+
+    /// <summary>The first free spot for <paramref name="size"/> bytes (never the table's own 4 KB), or -1.</summary>
+    private int Find(int size, bool oneBank, int limit)
+    {
+        var taken = _entries.Append(new Entry(TableStart, TableSize, Kind.Unknown, 0xFFFF)).ToList();
+        int pos = FirstUsable;
+        while (true)
+        {
+            if (oneBank && (pos & 0x7FFF) + size > 0x8000) pos = (pos | 0x7FFF) + 1;   // would run over the bank end: next bank
+            if (pos + size > Math.Min(_rom.Length, limit)) return -1;
+            var clash = taken.Where(e => e.Start < pos + size && e.End > pos).OrderBy(e => e.End).LastOrDefault();
+            if (clash == null) return pos;
+            pos = clash.End;
+        }
     }
 
     /// <summary>Free the block that starts at <paramref name="start"/> (its bytes are reset to FF).</summary>
