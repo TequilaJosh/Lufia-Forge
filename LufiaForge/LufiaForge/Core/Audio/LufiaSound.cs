@@ -209,9 +209,16 @@ public sealed class LufiaSound : IDisposable
     public double PlaySong(int song)
     {
         if (song < 0 || song >= SongCount) return 0;
+        double frames = PlaySongData(LufiaCompression.DecompressResource(_rom, song, out _));
+        Song = song;
+        return frames;
+    }
+
+    /// <summary>Loads and starts song data that isn't in the ROM (unpacked, with its length word): the note editor's preview.</summary>
+    public double PlaySongData(byte[] data)
+    {
         long start = Clock;
         Command(0x03);
-        var data = LufiaCompression.DecompressResource(_rom, song, out _);
         Write16(0, _freeAddress); Command(0x0D);
         for (int i = 0; i < 8 && 0x32 + i < data.Length; i++)
         {
@@ -228,7 +235,7 @@ public sealed class LufiaSound : IDisposable
         Write(2, 0xFF);
         Stream(new SnesReader(data, 2), len);
         Command(0x02);
-        Song = song;
+        Song = -1;
         return UnpackFrames + (Clock - start) / ClocksPerFrame * UploadSlowdown;
     }
 

@@ -3,12 +3,25 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:v="clr-namespace:LufiaForge.Modules.GameData.Views">
     <UserControl.Resources>
-        <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+            <Style x:Key="NeSmall" TargetType="Button" BasedOn="{StaticResource LufiaButton}">
+                <Setter Property="Padding" Value="7,3"/>
+                <Setter Property="Margin" Value="0,0,4,4"/>
+                <Setter Property="MinWidth" Value="0"/>
+            </Style>
+            <Style x:Key="NeLabel" TargetType="TextBlock" BasedOn="{StaticResource GdFieldLabel}">
+                <Setter Property="Width" Value="62"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
+            </Style>
+        </ResourceDictionary>
     </UserControl.Resources>
 
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="260"/>
+            <ColumnDefinition Width="210"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
         <Grid.RowDefinitions>
@@ -18,50 +31,237 @@
 
         <ListBox Grid.Column="0" Margin="12" Style="{StaticResource GdRecordList}" ItemsSource="{Binding Songs}" SelectedIndex="{Binding SelectedIndex}"/>
 
-        <StackPanel Grid.Column="1" Margin="0,12,12,0">
-            <Border Style="{StaticResource GdCard}" HorizontalAlignment="Left" MaxWidth="680">
-                <StackPanel>
-                    <TextBlock Text="LISTEN" Style="{StaticResource GdSection}"/>
-                    <StackPanel Orientation="Horizontal">
-                        <Button Content="▶ Play" Style="{StaticResource LufiaButtonGold}" Command="{Binding PlayCommand}" Margin="0,0,8,0"/>
-                        <Button Content="■ Stop" Style="{StaticResource LufiaButton}" Command="{Binding StopCommand}" Margin="0,0,8,0"/>
-                        <Button Content="Save as WAV…" Style="{StaticResource LufiaButton}" Command="{Binding SaveWavCommand}"/>
+        <TabControl Grid.Column="1" Margin="0,8,8,0" Style="{StaticResource LufiaTabControl}" SelectedIndex="{Binding TabIndex}">
+            <!-- ═══ SONG: listen, instruments, files ═══ -->
+            <TabItem Header="Song" Style="{StaticResource LufiaTabItem}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="4,8,4,0">
+                        <Border Style="{StaticResource GdCard}" HorizontalAlignment="Left" MaxWidth="680">
+                            <StackPanel>
+                                <TextBlock Text="LISTEN" Style="{StaticResource GdSection}"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="▶ Play" Style="{StaticResource LufiaButtonGold}" Command="{Binding PlayCommand}" Margin="0,0,8,0"/>
+                                    <Button Content="■ Stop" Style="{StaticResource LufiaButton}" Command="{Binding StopCommand}" Margin="0,0,8,0"/>
+                                    <Button Content="Save as WAV…" Style="{StaticResource LufiaButton}" Command="{Binding SaveWavCommand}"/>
+                                </StackPanel>
+                                <TextBlock Text="{Binding Info}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,8,0,0"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource GdCard}" HorizontalAlignment="Left" MaxWidth="680">
+                            <StackPanel>
+                                <TextBlock Text="INSTRUMENTS THIS SONG LOADS" Style="{StaticResource GdSection}"/>
+                                <TextBox Style="{StaticResource GdText}" Width="240" HorizontalAlignment="Left" Text="{Binding InstrumentsText, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="Up to 8 hex numbers, 10-37. Apply to ROM, then Play to hear the change."/>
+                                <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0"
+                                           Text="Each song plays its notes with the instruments in this list, in order. Swapping one for another changes how the song sounds (e.g. a different lead). Instruments 00-0F and 30-3F are always there."/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource GdCard}" HorizontalAlignment="Left" MaxWidth="680">
+                            <StackPanel>
+                                <TextBlock Text="CUSTOM MUSIC" Style="{StaticResource GdSection}"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="Export song…" Style="{StaticResource LufiaButton}" Command="{Binding ExportCommand}" Margin="0,0,8,0"/>
+                                    <Button Content="Import song…" Style="{StaticResource LufiaButtonGold}" Command="{Binding ImportCommand}"/>
+                                </StackPanel>
+                                <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,6,0,0"
+                                           Text="A .lfsong file is a song exactly as the game stores it. Import one into any slot to replace that song everywhere it plays (e.g. use a different song for battles, or bring in a song shared by someone else). Which song a map or event plays is set in the Events tab (command 0A). To change the notes themselves, use the Notes tab."/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource GdCard}" HorizontalAlignment="Left" MaxWidth="680">
+                            <StackPanel>
+                                <TextBlock Text="MIDI" Style="{StaticResource GdSection}"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="Export MIDI…" Style="{StaticResource LufiaButton}" Command="{Binding ExportMidiCommand}" Margin="0,0,8,0"/>
+                                    <Button Content="Import MIDI…" Style="{StaticResource LufiaButtonGold}" Command="{Binding ImportMidiCommand}"/>
+                                </StackPanel>
+                                <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,6,0,0"
+                                           Text="Export a song, change it in any MIDI editor, import it back (into this or any other slot). Each of the 8 game channels is one track and plays one note at a time; program numbers are the game's instrument numbers. Keep the loopStart / loopEnd markers to say where the song repeats (without them the whole song repeats). Lufia-only settings (echo, tuning, ties) travel as 'lufia:' text events - leave them in place."/>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
-                    <TextBlock Text="{Binding Info}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,8,0,0"/>
-                </StackPanel>
-            </Border>
-            <Border Style="{StaticResource GdCard}" HorizontalAlignment="Left" MaxWidth="680">
-                <StackPanel>
-                    <TextBlock Text="INSTRUMENTS THIS SONG LOADS" Style="{StaticResource GdSection}"/>
-                    <TextBox Style="{StaticResource GdText}" Width="240" HorizontalAlignment="Left" Text="{Binding InstrumentsText, UpdateSourceTrigger=PropertyChanged}"
-                             ToolTip="Up to 8 hex numbers, 10-37. Apply to ROM, then Play to hear the change."/>
-                    <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0"
-                               Text="Each song plays its notes with the instruments in this list, in order. Swapping one for another changes how the song sounds (e.g. a different lead)."/>
-                </StackPanel>
-            </Border>
-            <Border Style="{StaticResource GdCard}" HorizontalAlignment="Left" MaxWidth="680">
-                <StackPanel>
-                    <TextBlock Text="CUSTOM MUSIC" Style="{StaticResource GdSection}"/>
-                    <StackPanel Orientation="Horizontal">
-                        <Button Content="Export song…" Style="{StaticResource LufiaButton}" Command="{Binding ExportCommand}" Margin="0,0,8,0"/>
-                        <Button Content="Import song…" Style="{StaticResource LufiaButtonGold}" Command="{Binding ImportCommand}"/>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ═══ NOTES: the piano roll ═══ -->
+            <TabItem Header="Notes" Style="{StaticResource LufiaTabItem}">
+                <Grid DataContext="{Binding Notes}" Margin="0,6,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- channels -->
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,4">
+                        <TextBlock Text="Channel" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <ListBox ItemsSource="{Binding ChannelLabels}" SelectedIndex="{Binding CurrentChannel}" Background="Transparent" BorderThickness="0"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <ListBox.ItemsPanel>
+                                <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                            </ListBox.ItemsPanel>
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem">
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="ListBoxItem">
+                                                <Border x:Name="b" Padding="9,3" Margin="0,0,4,0" CornerRadius="3" BorderThickness="1"
+                                                        BorderBrush="{StaticResource BorderPurpleBrush}" Background="{StaticResource SurfacePurpleBrush}">
+                                                    <TextBlock x:Name="t" Text="{Binding Label}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12"/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsSelected" Value="True">
+                                                        <Setter TargetName="b" Property="BorderBrush" Value="{StaticResource GoldBrush}"/>
+                                                        <Setter TargetName="b" Property="Background" Value="{StaticResource GoldBrush}"/>
+                                                        <Setter TargetName="t" Property="Foreground" Value="{StaticResource DeepPurpleBrush}"/>
+                                                        <Setter TargetName="t" Property="FontWeight" Value="Bold"/>
+                                                    </Trigger>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="t" Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+                        </ListBox>
+                        <CheckBox Content="Drums" Style="{StaticResource GdCheck}" IsChecked="{Binding CurrentDrum}" VerticalAlignment="Center" Margin="8,0,0,0"
+                                  ToolTip="A drum channel: each note picks a drum sound instead of a pitch."/>
                     </StackPanel>
-                    <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,6,0,0"
-                               Text="A .lfsong file is a song exactly as the game stores it. Import one into any slot to replace that song everywhere it plays (e.g. use a different song for battles, or bring in a song shared by someone else). Which song a map or event plays is set in the Events tab (command 0A)."/>
-                </StackPanel>
-            </Border>
-            <Border Style="{StaticResource GdCard}" HorizontalAlignment="Left" MaxWidth="680">
-                <StackPanel>
-                    <TextBlock Text="MIDI" Style="{StaticResource GdSection}"/>
-                    <StackPanel Orientation="Horizontal">
-                        <Button Content="Export MIDI…" Style="{StaticResource LufiaButton}" Command="{Binding ExportMidiCommand}" Margin="0,0,8,0"/>
-                        <Button Content="Import MIDI…" Style="{StaticResource LufiaButtonGold}" Command="{Binding ImportMidiCommand}"/>
-                    </StackPanel>
-                    <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,6,0,0"
-                               Text="Export a song, change it in any MIDI editor, import it back (into this or any other slot). Each of the 8 game channels is one track and plays one note at a time; program numbers are the game's instrument numbers. Keep the loopStart / loopEnd markers to say where the song repeats (without them the whole song repeats). Lufia-only settings (echo, tuning, ties) travel as 'lufia:' text events - leave them in place."/>
-                </StackPanel>
-            </Border>
-        </StackPanel>
+
+                    <!-- toolbar -->
+                    <WrapPanel Grid.Row="1" Margin="0,0,0,6">
+                        <Button Content="▶ Play" Style="{StaticResource NeSmall}" Command="{Binding PlayFromStartCommand}" ToolTip="Play the edited song from the start"/>
+                        <Button Content="▶ From cursor" Style="{StaticResource NeSmall}" Command="{Binding PlayFromCursorCommand}" ToolTip="Play from the blue cursor (Space)"/>
+                        <Button Content="■ Stop" Style="{StaticResource NeSmall}" Command="{Binding StopPlayingCommand}" Margin="0,0,12,4"/>
+                        <TextBlock Text="Snap" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,4,4"/>
+                        <ComboBox Style="{StaticResource GdCombo}" Width="100" ItemsSource="{Binding SnapLabels}" SelectedIndex="{Binding SnapIndex}" Margin="0,0,8,4"
+                                  ToolTip="Notes start, move and stretch in these steps"/>
+                        <TextBlock Text="New note" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,4,4"/>
+                        <ComboBox Style="{StaticResource GdCombo}" Width="100" ItemsSource="{Binding LengthLabels}" SelectedIndex="{Binding LengthIndex}" Margin="0,0,8,4"
+                                  ToolTip="Length of a clicked note (drag while clicking to make it longer)"/>
+                        <TextBlock Text="Velocity" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,4,4"/>
+                        <TextBox Style="{StaticResource GdNumber}" Width="44" Text="{Binding NewVelocity, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,8,4"
+                                 ToolTip="Loudness of new notes, 1-127"/>
+                        <TextBlock Text="Tempo" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,4,4"/>
+                        <TextBox Style="{StaticResource GdNumber}" Width="44" Text="{Binding Tempo, UpdateSourceTrigger=LostFocus}" Margin="0,0,4,4"
+                                 ToolTip="The game's tempo number (1-255): a tick lasts tempo x 125 µs, so smaller = faster"/>
+                        <TextBlock Text="{Binding BpmText}" Style="{StaticResource GdHint}" VerticalAlignment="Center" Margin="0,0,12,4"/>
+                        <Button Content="↶ Undo" Style="{StaticResource NeSmall}" Command="{Binding UndoCommand}" ToolTip="Ctrl+Z"/>
+                        <Button Content="↷ Redo" Style="{StaticResource NeSmall}" Command="{Binding RedoCommand}" ToolTip="Ctrl+Y" Margin="0,0,12,4"/>
+                        <Button Content="✔ Write notes to ROM" Style="{StaticResource LufiaButtonGold}" Command="{Binding WriteToRomCommand}" Padding="10,3" Margin="0,0,4,4"/>
+                        <Button Content="↺ Reload" Style="{StaticResource NeSmall}" Command="{Binding RevertNotesCommand}" ToolTip="Throw away the changes and read the song from the ROM again"/>
+                        <TextBlock Text="{Binding SizeText}" Style="{StaticResource GdHint}" VerticalAlignment="Center" Margin="6,0,0,4"/>
+                    </WrapPanel>
+
+                    <Grid Grid.Row="2">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="262"/>
+                        </Grid.ColumnDefinitions>
+                        <Border BorderBrush="{StaticResource BorderPurpleBrush}" BorderThickness="1">
+                            <v:PianoRoll x:Name="Roll" Model="{Binding}"/>
+                        </Border>
+
+                        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" Margin="8,0,0,0">
+                            <StackPanel>
+                                <Border Style="{StaticResource GdCard}" Margin="0,0,0,8">
+                                    <StackPanel>
+                                        <TextBlock Text="SELECTED NOTES" Style="{StaticResource GdSection}"/>
+                                        <TextBlock Text="{Binding SelInfo}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,4"/>
+                                        <StackPanel Orientation="Horizontal" Margin="0,1">
+                                            <TextBlock Text="Pitch" Style="{StaticResource NeLabel}"/>
+                                            <TextBox Style="{StaticResource GdText}" Width="70" Text="{Binding SelPitch, UpdateSourceTrigger=LostFocus}" ToolTip="C4, F#5, A3... (or a number, 60 = C4)"/>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" Margin="0,1">
+                                            <TextBlock Text="Start" Style="{StaticResource NeLabel}"/>
+                                            <TextBox Style="{StaticResource GdText}" Width="70" Text="{Binding SelStart, UpdateSourceTrigger=LostFocus}" ToolTip="bar.beat.tick (48 ticks per beat)"/>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" Margin="0,1">
+                                            <TextBlock Text="Length" Style="{StaticResource NeLabel}"/>
+                                            <TextBox Style="{StaticResource GdText}" Width="70" Text="{Binding SelLength, UpdateSourceTrigger=LostFocus}" ToolTip="Ticks, 1-255 (48 = a quarter note)"/>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" Margin="0,1,0,6">
+                                            <TextBlock Text="Velocity" Style="{StaticResource NeLabel}"/>
+                                            <TextBox Style="{StaticResource GdText}" Width="70" Text="{Binding SelVelocity, UpdateSourceTrigger=LostFocus}" ToolTip="Loudness, 1-127"/>
+                                        </StackPanel>
+                                        <WrapPanel>
+                                            <Button Content="▲" Style="{StaticResource NeSmall}" Command="{Binding TransposeUpCommand}" ToolTip="Up a semitone (↑)"/>
+                                            <Button Content="▼" Style="{StaticResource NeSmall}" Command="{Binding TransposeDownCommand}" ToolTip="Down a semitone (↓)"/>
+                                            <Button Content="Oct ▲" Style="{StaticResource NeSmall}" Command="{Binding OctaveUpCommand}" ToolTip="Up an octave (Shift+↑)"/>
+                                            <Button Content="Oct ▼" Style="{StaticResource NeSmall}" Command="{Binding OctaveDownCommand}" ToolTip="Down an octave (Shift+↓)"/>
+                                            <Button Content="Quantize" Style="{StaticResource NeSmall}" Command="{Binding QuantizeCommand}" ToolTip="Move starts and lengths onto the snap grid"/>
+                                            <Button Content="Copy" Style="{StaticResource NeSmall}" Command="{Binding CopyCommand}" ToolTip="Ctrl+C"/>
+                                            <Button Content="Paste" Style="{StaticResource NeSmall}" Command="{Binding PasteCommand}" ToolTip="Ctrl+V: at the cursor, into this channel"/>
+                                            <Button Content="Delete" Style="{StaticResource NeSmall}" Command="{Binding DeleteSelectedCommand}" ToolTip="Delete key"/>
+                                        </WrapPanel>
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Style="{StaticResource GdCard}" Margin="0,0,0,8">
+                                    <StackPanel>
+                                        <TextBlock Text="INSTRUMENT, VOLUME, PAN" Style="{StaticResource GdSection}"/>
+                                        <ListBox ItemsSource="{Binding Others}" SelectedItem="{Binding SelectedOther}" Height="130" Style="{StaticResource LufiaListBox}">
+                                            <ListBox.ItemTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Text="{Binding When}" Width="56" FontFamily="Consolas" FontSize="11" Foreground="{StaticResource GoldLightBrush}"/>
+                                                        <TextBlock Text="{Binding What}" FontSize="11" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ListBox.ItemTemplate>
+                                        </ListBox>
+                                        <StackPanel Orientation="Horizontal" Margin="0,6,0,2">
+                                            <TextBlock Text="Kind" Style="{StaticResource NeLabel}"/>
+                                            <ComboBox Style="{StaticResource GdCombo}" Width="120" MinWidth="0" ItemsSource="{Binding OtherKindLabels}" SelectedIndex="{Binding OtherKind}"/>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" Margin="0,2">
+                                            <TextBlock Text="Value" Style="{StaticResource NeLabel}"/>
+                                            <TextBox Style="{StaticResource GdText}" Width="70" Text="{Binding OtherValue, UpdateSourceTrigger=PropertyChanged}"
+                                                     ToolTip="Instrument: hex 00-3F. Volume: 0-127. Pan: 0-127 (64 = centre)."/>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" Margin="0,2">
+                                            <TextBlock Text="When" Style="{StaticResource NeLabel}"/>
+                                            <TextBox Style="{StaticResource GdText}" Width="70" Text="{Binding OtherWhen, UpdateSourceTrigger=PropertyChanged}"
+                                                     ToolTip="bar.beat.tick - Update moves the selected event here (Add puts it at the cursor)"/>
+                                        </StackPanel>
+                                        <WrapPanel Margin="0,4,0,0">
+                                            <Button Content="Add at cursor" Style="{StaticResource NeSmall}" Command="{Binding AddOtherCommand}"/>
+                                            <Button Content="Update" Style="{StaticResource NeSmall}" Command="{Binding UpdateOtherCommand}"/>
+                                            <Button Content="Remove" Style="{StaticResource NeSmall}" Command="{Binding RemoveOtherCommand}"/>
+                                        </WrapPanel>
+                                        <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,2,0,0"
+                                                   Text="The channel plays with the last instrument set before each note. Instruments 10-2F are added to the song's load list when you write it."/>
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Style="{StaticResource GdCard}" Margin="0,0,0,8">
+                                    <StackPanel>
+                                        <TextBlock Text="LOOP" Style="{StaticResource GdSection}"/>
+                                        <TextBlock Text="{Binding LoopText}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,4"/>
+                                        <WrapPanel>
+                                            <Button Content="Loop from cursor" Style="{StaticResource NeSmall}" Command="{Binding LoopStartHereCommand}"/>
+                                            <Button Content="Jump back at cursor" Style="{StaticResource NeSmall}" Command="{Binding LoopEndHereCommand}"/>
+                                            <Button Content="Stop at cursor" Style="{StaticResource NeSmall}" Command="{Binding StopHereCommand}" ToolTip="The song ends there instead of repeating"/>
+                                        </WrapPanel>
+                                        <CheckBox Content="Same loop for every channel" Style="{StaticResource GdCheck}" IsChecked="{Binding LoopAllChannels}" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Style="{StaticResource GdCard}">
+                                    <StackPanel>
+                                        <CheckBox Content="Hear notes when clicked" Style="{StaticResource GdCheck}" IsChecked="{Binding PreviewNotes}"/>
+                                        <CheckBox Content="Follow the playhead" Style="{StaticResource GdCheck}" IsChecked="{Binding FollowPlayhead}" Margin="0,4,0,6"/>
+                                        <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap"
+                                                   Text="Click = new note (drag right to lengthen). Drag a note to move it, its right edge to resize. Right-click = delete. Shift+drag = select a box, Ctrl+click = add to selection. Click the ruler to move the cursor; drag the green/red flags to move the loop. Arrows move the selection, Delete deletes, Ctrl+C/V copy/paste, Ctrl+Z undo, Space play/stop. Wheel scrolls (Shift = sideways, Ctrl = zoom). Click a piano key to hear it."/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
+                </Grid>
+            </TabItem>
+        </TabControl>
 
         <v:EditorFooter Grid.Row="1" Grid.ColumnSpan="2"/>
     </Grid>
