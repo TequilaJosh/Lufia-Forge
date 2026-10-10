@@ -21,6 +21,9 @@ public partial class PatchManagerViewModel : ObservableObject
 
     public ObservableCollection<IpsPatchRecord> PatchRecords { get; } = new();
 
+    /// <summary>Fixes and features Lufia Forge adds with one click.</summary>
+    public List<BuiltInPatch> BuiltInPatches { get; } = BuiltInPatch.All();
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasRecords))]
     private string _loadedPatchName = "(no patch loaded)";
@@ -39,7 +42,34 @@ public partial class PatchManagerViewModel : ObservableObject
         _rom    = rom;
         _mainVm = mainVm;
         StatusText = "ROM loaded. Load an IPS patch file or export a patch from your current edits.";
+        foreach (var p in BuiltInPatches) p.Refresh(rom);
     }
+
+    // -------------------------------------------------------------------------
+    // Built-in patches
+    // -------------------------------------------------------------------------
+
+    [RelayCommand]
+    private void ToggleBuiltIn(BuiltInPatch? patch)
+    {
+        if (_rom == null || patch == null) return;
+        bool adding = !patch.IsApplied(_rom);
+        if (adding && _rom.Length < Core.Maps.MapWriter.ExpandedSize &&
+            MessageBox.Show($"\"{patch.Name}\" adds a small routine to the expanded part of the ROM. Expand the ROM to 2 MB (the game plays the same)?",
+                "Expand ROM?", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+        { StatusText = "Not added: the ROM wasn't expanded."; return; }
+        try
+        {
+            if (adding) patch.Apply(_rom); else patch.Remove!(_rom);
+            _mainVm?.NotifyRomModified((adding ? "Added: " : "Removed: ") + patch.Name);
+            StatusText = (adding ? "Added: " : "Removed: ") + patch.Name + ". Save the ROM to keep it.";
+        }
+        catch (Exception ex) { StatusText = "Not changed: " + ex.Message; }
+        foreach (var p in BuiltInPatches) p.Refresh(_rom);
+    }
+
+    /// <summary>Re-reads which built-in patches the ROM has (other tabs can add them too).</summary>
+    public void RefreshBuiltIn() { foreach (var p in BuiltInPatches) p.Refresh(_rom); }
 
     // -------------------------------------------------------------------------
     // Load Patch
