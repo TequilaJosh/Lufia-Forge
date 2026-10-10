@@ -109,8 +109,17 @@ public partial class MainWindow : Window
             new("Dict Start:",         $"0x{Lufia1Constants.DictionaryStartOffset:X6}"),
             new("Dict End:",           $"0x{Lufia1Constants.DictionaryEndOffset:X6}"),
         };
+        // how this ROM has been edited (read from the ROM itself, the same in every session)
+        try { foreach (var (label, value) in RomEdits.Describe(rom)) items.Add(new(label, value)); }
+        catch (System.Exception ex) { items.Add(new("Edits:", "couldn't be read: " + ex.Message)); }
 
         RomInfoItems.ItemsSource = items;
+        try
+        {
+            string summary = RomEdits.Summary(rom);
+            if (summary.Length > 0) vm.StatusDetail = summary;
+        }
+        catch { }
     }
 
     protected override void OnClosed(System.EventArgs e)
