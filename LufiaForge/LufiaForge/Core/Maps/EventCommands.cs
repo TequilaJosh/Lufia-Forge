@@ -19,6 +19,7 @@ public enum ParamKind
     ShortWait,   // 80-87 wait lengths
     SystemCall,  // 50 sub-function
     KeyItem,     // 1-based key item (F0 + n - 1)
+    Name,        // 5 letters from this byte on (FF = the character's normal name)
     FlashKind,
 }
 
@@ -134,6 +135,10 @@ public static class EventCommands
         "Trade E3/E4 pairs for item 7F", "Special screen sequence", "Level up every member twice", "Mark the game as completed",
         "Set $0D1E", "Give the selected item", "Test $0D9E", "Switch to screen 12", "Nothing",
     };
+
+    /// <summary>The 5-letter name in a rename command (6E), as typed.</summary>
+    public static string NameText(byte[] b) =>
+        b.Length < 7 ? "" : new string(b.Skip(2).Take(5).TakeWhile(c => c != 0).Select(c => (char)c).ToArray());
 
     public static string Who(int v) => v >= 0x100 ? $"character {v - 0x100}" : Actor(v);
 
@@ -251,6 +256,12 @@ public static class EventCommands
         Add(0x1A, 0x1A, "Character joins", Chars,
             (b, _) => $"{CharacterNames[b[1] & 15]} joins the party (appears at {(b[2] == 0 ? "the leader" : $"character {b[2]}")})",
             new byte[] { 0x1A, 1, 0 }, "", P("character", ParamKind.Character, 1, 0, 15), P("appears at (0 = leader)", ParamKind.Npc, 2));
+        Add(0x6E, 0x6E, "Rename a party member", Chars,
+            (b, _) => b.Length >= 7 && b[2] == 0xFF
+                ? $"{CharacterNames[b[1] & 7]} gets their normal name back{((b[1] & 7) == 0 ? " (the name the player chose)" : "")}"
+                : $"Rename {CharacterNames[b[1] & 7]} (party slot {(b[1] & 3) + 1}) to \"{NameText(b)}\"",
+            new byte[] { 0x6E, 4, (byte)'M', (byte)'a', (byte)'x', (byte)'i', (byte)'m' }, "",
+            P("character", ParamKind.Character, 1, 0, 7), new ParamDef { Label = "name (5 letters, * = normal name)", Kind = ParamKind.Name, Get = b => 0, Set = (_, _) => { } });
         Add(0x1B, 0x1B, "Character leaves", Chars, (b, _) => $"{CharacterNames[b[1] & 15]} leaves the party (the last follower disappears)",
             new byte[] { 0x1B, 1 }, "", P("character", ParamKind.Character, 1, 0, 15));
 
