@@ -70,6 +70,21 @@ public static class SnesTileDecoder
 
         return pixels;
     }
+
+    /// <summary>The planar bytes of one 8x8 tile (the reverse of <see cref="DecodeTile"/>).</summary>
+    public static byte[] EncodeTile(byte[] pixels, BitDepth depth)
+    {
+        int bpp = (int)depth;
+        var data = new byte[BytesPerTile(depth)];
+        for (int row = 0; row < TileHeight; row++)
+            for (int col = 0; col < TileWidth; col++)
+            {
+                int c = pixels[row * TileWidth + col], bit = 7 - col;
+                for (int plane = 0; plane < bpp; plane++)
+                    data[plane / 2 * 16 + row * 2 + plane % 2] |= (byte)(((c >> plane) & 1) << bit);
+            }
+        return data;
+    }
 }
 
 /// <summary>SNES tile bit depth options.</summary>

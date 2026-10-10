@@ -1,0 +1,78 @@
+<UserControl x:Class="LufiaForge.Modules.GameData.Views.GraphicsEditorView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="clr-namespace:LufiaForge.Modules.GameData.Views">
+    <UserControl.Resources>
+        <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="320"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <DockPanel Grid.Column="0" Margin="12">
+            <TextBlock DockPanel.Dock="Top" Text="GRAPHICS IN THE ROM" Style="{StaticResource GdSection}"/>
+            <CheckBox DockPanel.Dock="Top" Content="Raw bytes at an offset instead" IsChecked="{Binding RawMode}" Style="{StaticResource GdCheck}" Margin="0,0,0,4"/>
+            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6"
+                        Visibility="{Binding RawMode, Converter={StaticResource BoolToVisibilityConverter}}">
+                <TextBlock Text="Offset" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                <TextBox Style="{StaticResource GdText}" Width="90" Text="{Binding RawOffsetText, UpdateSourceTrigger=PropertyChanged}"/>
+                <TextBlock Text="Tiles" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="8,0,4,0"/>
+                <TextBox Style="{StaticResource GdNumber}" Width="50" Text="{Binding RawTiles, UpdateSourceTrigger=PropertyChanged}"/>
+            </StackPanel>
+            <TextBlock DockPanel.Dock="Top" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,6"
+                       Text="Packed graphics resources (named when the game's tables say what they are). Monster pictures are on the Monsters tab, map sprites on Sprites, the title on Title screen."/>
+            <ListBox Style="{StaticResource GdRecordList}" ItemsSource="{Binding Sources}" SelectedItem="{Binding SelectedSource}" DisplayMemberPath="Label"
+                     Visibility="{Binding RawMode, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+        </DockPanel>
+
+        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+            <StackPanel Margin="0,12,12,0">
+                <Border Style="{StaticResource GdCard}">
+                    <WrapPanel>
+                        <TextBlock Text="Depth" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,4,4"/>
+                        <ComboBox Style="{StaticResource GdCombo}" Width="150" ItemsSource="{Binding Depths}" SelectedIndex="{Binding DepthIndex}" Margin="0,0,12,4"/>
+                        <TextBlock Text="Tiles per row" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,4,4"/>
+                        <TextBox Style="{StaticResource GdNumber}" Width="44" Text="{Binding TilesPerRow, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,12,4"/>
+                        <TextBlock Text="Colours" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,4,4"/>
+                        <ComboBox Style="{StaticResource GdCombo}" Width="170" ItemsSource="{Binding PaletteModes}" SelectedIndex="{Binding PaletteMode}" Margin="0,0,8,4"/>
+                        <TextBlock Text="palette" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,4,4"/>
+                        <TextBox Style="{StaticResource GdNumber}" Width="40" Text="{Binding MapPalette, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,8,4"
+                                 ToolTip="Map palette number (see the Map Editor's map summary)"/>
+                        <TextBlock Text="row" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,4,4"/>
+                        <TextBox Style="{StaticResource GdNumber}" Width="40" Text="{Binding PaletteRow, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,8,4"
+                                 ToolTip="Colour row 0-7 (rows 0-1 are shared by the whole game)"/>
+                        <TextBlock Text="offset" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,4,4"/>
+                        <TextBox Style="{StaticResource GdText}" Width="90" Text="{Binding PaletteOffsetText, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,8,4"
+                                 ToolTip="For 'Colours at a ROM offset': where the BGR555 colours are"/>
+                    </WrapPanel>
+                </Border>
+                <Border Style="{StaticResource GdCard}" HorizontalAlignment="Left">
+                    <StackPanel>
+                        <Border Background="#40000000" Padding="6" HorizontalAlignment="Left">
+                            <Image Source="{Binding Picture}" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor">
+                                <Image.LayoutTransform><ScaleTransform ScaleX="2" ScaleY="2"/></Image.LayoutTransform>
+                            </Image>
+                        </Border>
+                        <TextBlock Text="{Binding Info}" Style="{StaticResource GdHint}" Margin="0,6,0,0"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                            <Button Content="Export picture..." Style="{StaticResource LufiaButton}" Command="{Binding ExportCommand}" Margin="0,0,8,0"/>
+                            <Button Content="Import picture..." Style="{StaticResource LufiaButtonGold}" Command="{Binding ImportCommand}"
+                                    ToolTip="Same size as exported with the same settings. Indexed pictures keep their colour numbers; full-colour ones are matched to the colours shown."/>
+                        </StackPanel>
+                        <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" MaxWidth="640" HorizontalAlignment="Left" Margin="0,8,0,0"
+                                   Text="Export with the depth and colours that look right, draw on the picture in any paint program (keep it indexed to keep exact colour numbers), and import it with the same settings. Packed resources are repacked (moved to the expanded ROM if they grow); raw graphics are written in place."/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <v:EditorFooter Grid.Row="1" Grid.ColumnSpan="2"/>
+    </Grid>
+</UserControl>

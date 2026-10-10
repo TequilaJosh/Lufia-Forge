@@ -74,11 +74,7 @@ public partial class MonsterEditorViewModel
             FileName = $"monster {Ctx!.ReadName(Ctx.MonsterOffset(SelectedIndex), GameDataOffsets.MonsterNameLen).Replace('@', ' ').Trim()}.png"
         };
         if (dlg.ShowDialog() != true) return;
-        var pal = MonsterGraphics.Colours(p, Palette);
-        var colours = pal.Select((c, i) => i == 0 ? Color.FromArgb(0, 0, 0, 0) : Color.FromRgb((byte)(c >> 16), (byte)(c >> 8), (byte)c)).ToList();
-        var bmp = BitmapSource.Create(p.PixelWidth, p.PixelHeight, 96, 96, PixelFormats.Indexed8, new BitmapPalette(colours), MonsterGraphics.Indices(p), p.PixelWidth);
-        var enc = new PngBitmapEncoder(); enc.Frames.Add(BitmapFrame.Create(bmp));
-        using (var fs = File.Create(dlg.FileName)) enc.Save(fs);
+        IndexedPng.Save(dlg.FileName, p.PixelWidth, p.PixelHeight, MonsterGraphics.Indices(p), MonsterGraphics.Colours(p, Palette), firstTransparent: true);
         Status = $"Saved {dlg.FileName}: an indexed picture (16 colours, colour 0 = see-through). Keep it indexed when editing; " +
                  "changing the colours of the palette changes the monster's colours.";
     }
@@ -90,10 +86,12 @@ public partial class MonsterEditorViewModel
         var dlg = new OpenFileDialog { Title = "Import monster picture", Filter = "Pictures (*.png;*.bmp;*.gif)|*.png;*.bmp;*.gif" };
         if (dlg.ShowDialog() != true) return;
 
-        BitmapSource src;
-        try { src = new BitmapImage(new Uri(dlg.FileName)); }
-        catch (Exception ex) { Status = $"Could not read the picture: {ex.Message}"; return; }
-        int w = src.PixelWidth, h = src.PixelHeight;
+        var ip = IndexedPng.TryLoad(dlg.FileName);
+        BitmapSource? src = null;
+        if (ip == null)
+            try { src = new BitmapImage(new Uri(dlg.FileName)); }
+            catch (Exception ex) { Status = $"Could not read the picture: {ex.Message}"; return; }
+        int w = ip?.Width ?? src!.PixelWidth, h = ip?.Height ?? src!.PixelHeight;
         if (w % 16 != 0 || h % 16 != 0 || w > MonsterGraphics.MaxWidth * 16 || h > MonsterGraphics.MaxHeight * 16)
         {
             Status = $"The picture must be a multiple of 16 pixels wide and high, at most {MonsterGraphics.MaxWidth * 16} x {MonsterGraphics.MaxHeight * 16} " +
@@ -105,24 +103,20 @@ public partial class MonsterEditorViewModel
         var palettes = old.Data.Take(0x40).ToArray();
         var idx = new byte[w * h];
         string how;
-        bool indexed = src.Format == PixelFormats.Indexed8 || src.Format == PixelFormats.Indexed4 ||
-                       src.Format == PixelFormats.Indexed2 || src.Format == PixelFormats.Indexed1;
-        if (indexed && src.Palette != null && src.Palette.Colors.Count <= 16)
+        if (ip is { } png && png.Palette.Length <= 16)
         {
             // colour numbers as they are; the picture's palette becomes the monster's palette
-            BitmapSource conv = src.Format == PixelFormats.Indexed8 ? src : new FormatConvertedBitmap(src, PixelFormats.Indexed8, src.Palette, 0);
-            conv.CopyPixels(idx, w, 0);
-            var cols = src.Palette.Colors;
+            idx = png.Indices;
             for (int i = 1; i < 16; i++)
             {
-                var c = i < cols.Count ? cols[i] : Colors.Black;
-                ushort v = MonsterGraphics.ToBgr555((uint)(c.R << 16 | c.G << 8 | c.B));
+                ushort v = MonsterGraphics.ToBgr555(i < png.Palette.Length ? png.Palette[i] : 0xFF000000u);
                 palettes[row * 32 + i * 2] = (byte)v; palettes[row * 32 + i * 2 + 1] = (byte)(v >> 8);
             }
             how = "colour numbers kept, palette taken from the picture";
         }
         else
         {
+            if (src == null) try { src = new BitmapImage(new Uri(dlg.FileName)); } catch (Exception ex) { Status = $"Could not read the picture: {ex.Message}"; return; }
             var bgra = new FormatConvertedBitmap(src, PixelFormats.Bgra32, null, 0);
             var px = new uint[w * h]; bgra.CopyPixels(px, w * 4, 0);
             var current = MonsterGraphics.Colours(old, row);

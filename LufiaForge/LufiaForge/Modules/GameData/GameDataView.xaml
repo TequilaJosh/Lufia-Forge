@@ -46,6 +46,9 @@
             <TabItem Header="Title screen" Style="{StaticResource LufiaTabItem}">
                 <v:TitleEditorView DataContext="{Binding Title}"/>
             </TabItem>
+            <TabItem Header="Graphics" Style="{StaticResource LufiaTabItem}">
+                <v:GraphicsEditorView DataContext="{Binding Graphics}"/>
+            </TabItem>
             <TabItem Header="Game Settings" Style="{StaticResource LufiaTabItem}">
                 <v:GameSettingsView DataContext="{Binding Settings}"/>
             </TabItem>

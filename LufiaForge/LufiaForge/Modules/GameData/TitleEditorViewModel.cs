@@ -1,3 +1,4 @@
+using LufiaForge.Core;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LufiaForge.Core.Maps;
@@ -77,9 +78,7 @@ public partial class TitleEditorViewModel : GameDataEditorBase
         if (_title == null) return;
         var dlg = new { FileName = path };
         int w = _title.Width * 16, h = _title.Height * 16;
-        var bmp = BitmapSource.Create(w, h, 96, 96, PixelFormats.Indexed8, new BitmapPalette(PngPalette()), _title.LayerIndices(front), w);
-        var enc = new PngBitmapEncoder(); enc.Frames.Add(BitmapFrame.Create(bmp));
-        using (var fs = File.Create(dlg.FileName)) enc.Save(fs);
+        IndexedPng.Save(dlg.FileName, w, h, _title.LayerIndices(front), Enumerable.Range(0, 128).Select(i => TitleScreen.Argb(_title.Palette555[i])).ToArray(), firstTransparent: true);
         Status = $"Saved {dlg.FileName} ({w} x {h}; the screen shows x {TitleScreen.ScreenX}-{TitleScreen.ScreenX + 255}, y {TitleScreen.ScreenY}-{TitleScreen.ScreenY + 223}). " +
                  "Keep it indexed: colour numbers 16 x row + colour, transparent = 0 of each row.";
     }
@@ -109,24 +108,25 @@ public partial class TitleEditorViewModel : GameDataEditorBase
     {
         if (_title == null) return;
         int w = _title.Width * 16, h = _title.Height * 16;
-        BitmapSource src;
-        try { src = new BitmapImage(new Uri(path)); } catch (Exception ex) { Status = "Can't read the picture: " + ex.Message; return; }
-        if (src.PixelWidth != w || src.PixelHeight != h) { Status = $"The layer picture must be {w} x {h} pixels (as exported)."; return; }
+        var ip = IndexedPng.TryLoad(path);
+        BitmapSource? src = null;
+        if (ip == null) try { src = new BitmapImage(new Uri(path)); } catch (Exception ex) { Status = "Can't read the picture: " + ex.Message; return; }
+        int pw = ip?.Width ?? src!.PixelWidth, ph = ip?.Height ?? src!.PixelHeight;
+        if (pw != w || ph != h) { Status = $"The layer picture must be {w} x {h} pixels (as exported)."; return; }
         var idx = new byte[w * h];
         string how;
-        if (src.Format == PixelFormats.Indexed8 && src.Palette != null)
+        if (ip is { } png)
         {
-            src.CopyPixels(idx, w, 0);
+            idx = png.Indices;
             if (idx.Any(i => i >= 128)) { Status = "The picture uses colour numbers above 127; only rows 0-7 (128 colours) exist."; return; }
             // the picture's colours of rows 2-7 become the title's colours
-            var cols = src.Palette.Colors;
-            for (int i = 32; i < Math.Min(128, cols.Count); i++)
-                if (i % 16 != 0) _title.Palette555[i] = Bgr555(cols[i]);
+            for (int i = 32; i < Math.Min(128, png.Palette.Length); i++)
+                if (i % 16 != 0) _title.Palette555[i] = MonsterGraphicsBgr(png.Palette[i]);
             how = "colour numbers kept, colours of rows 2-7 taken from the picture";
         }
         else
         {
-            var bgra = new FormatConvertedBitmap(src, PixelFormats.Bgra32, null, 0);
+            var bgra = new FormatConvertedBitmap(src!, PixelFormats.Bgra32, null, 0);
             var px = new uint[w * h]; bgra.CopyPixels(px, w * 4, 0);
             idx = MatchColours(px, w, h);
             how = "colours matched to the title's palette (each 8x8 tile to its best row)";
@@ -141,6 +141,8 @@ public partial class TitleEditorViewModel : GameDataEditorBase
         }
         catch (InvalidOperationException ex) { Status = "Not imported: " + ex.Message; LoadSelected(); }
     }
+
+    private static ushort MonsterGraphicsBgr(uint argb) => Core.Battle.MonsterGraphics.ToBgr555(argb);
 
     private static ushort Bgr555(Color c) => (ushort)((c.R >> 3) | (c.G >> 3) << 5 | (c.B >> 3) << 10);
 
