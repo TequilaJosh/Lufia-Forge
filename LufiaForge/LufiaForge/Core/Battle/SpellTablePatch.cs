@@ -42,26 +42,30 @@ public static class SpellTablePatch
         0x18, 0x69, 0x00, 0xDB,    // 15 CLC / ADC #$DB00
         0xAA,                      // 19 TAX
         0x6B,                      // 20 RTL
-        0xC9, 0x80,                // 21 new: CMP #$80
-        0x90, 0x02,                // 23 BCC ok
-        0xA9, 0x38,                // 25 LDA #$38           (out of range: the first new entry)
-        0x38, 0xE9, 0x38,          // 27 ok: SEC / SBC #$38
-        0xC2, 0x20,                // 30 REP #$20
-        0x29, 0xFF, 0x00,          // 32 AND #$00FF
-        0x48,                      // 35 PHA
-        0x0A,                      // 36 ASL
-        0x18, 0x63, 0x01,          // 37 CLC / ADC 1,S      x 3
-        0xAA,                      // 40 TAX
-        0x68,                      // 41 PLA
-        0xE2, 0x20,                // 42 SEP #$20
-        0xBF, 0x00, 0x00, 0x00,    // 44 LDA table+2,X      the record's bank
-        0x48,                      // 48 PHA
-        0xAB,                      // 49 PLB
-        0xC2, 0x20,                // 50 REP #$20
-        0xBF, 0x00, 0x00, 0x00,    // 52 LDA table,X
-        0xAA,                      // 56 TAX
-        0x6B,                      // 57 RTL
+        0x22, 0x00, 0x00, 0x00,    // 21 new: JSL ensure     (spell memory in the new format before $15CF is used)
+        0x38, 0xE9, 0x38,          // 25 SEC / SBC #$38
+        0xC2, 0x30,                // 28 REP #$30
+        0x29, 0xFF, 0x00,          // 30 AND #$00FF
+        0x48,                      // 33 PHA
+        0x0A,                      // 34 ASL
+        0x18, 0x63, 0x01,          // 35 CLC / ADC 1,S      x 3
+        0xAA,                      // 38 TAX
+        0x68,                      // 39 PLA
+        0xBF, 0x00, 0x00, 0x00,    // 40 LDA table,X        the record (in this block's bank)
+        0xAA,                      // 44 TAX
+        0xA0, 0xCF, 0x15,          // 45 LDY #$15CF         work RAM, seen through bank 1F
+        0xA9, 0x1E, 0x00,          // 48 LDA #$001E         31 bytes
+        0x8B,                      // 51 PHB
+        0x54, 0x00, 0x00,          // 52 MVN $00, block     (MVN sets DB)
+        0xAB,                      // 55 PLB                DB = 1F again
+        0xA2, 0xCF, 0x15,          // 56 LDX #$15CF
+        0x6B,                      // 59 RTL
     };
+    private const int EnsureOperand = 22, TableOperand = 41, MvnSource = 54;
+    /// <summary>The record of an added spell is copied here when it is looked up ($15CF-$15ED: free work RAM after the
+    /// spell memory's bits). Bank 1F reads $0000-$1FFF from work RAM, so the game's code (which reads the record and a
+    /// pointer into it, $179E, from bank 1F) sees it as if it were one of its own records.</summary>
+    public const int RecordBuffer = 0x15CF;
 
     private static int FileOffset(int snes) => (snes >> 16 & 0x7F) * 0x8000 + (snes & 0x7FFF);
     private static int SnesAddress(int file) => (file / 0x8000 | 0x80) << 16 | (file % 0x8000 | 0x8000);
@@ -70,7 +74,38 @@ public static class SpellTablePatch
         (rom.ReadBytes(LookupSite, LookupOriginal.Length).SequenceEqual(LookupOriginal) || OldTrickster(rom) > 0 || BlockOffset(rom) > 0) &&
         (SpellMemory.SitesOriginal(rom) || SpellMemory.Installed(rom) || SpellMemory.OldBlock(rom) > 0);
     /// <summary>The spell table and the 64-per-character spell memory are both in.</summary>
-    public static bool IsApplied(RomBuffer rom) => BlockOffset(rom) > 0 && SpellMemory.Installed(rom);
+    public static bool IsApplied(RomBuffer rom) => BlockOffset(rom) > 0 && SpellMemory.Installed(rom) && CurrentLookup(rom);
+
+    /// <summary>The block's lookup is this version's (copies added spells to <see cref="RecordBuffer"/>) and calls the
+    /// spell memory's ensure. The first version switched DB to the record's bank, which the effect code (reading
+    /// through $179E in bank 1F) didn't follow: casting some added spells froze the game.</summary>
+    private static bool CurrentLookup(RomBuffer rom)
+    {
+        int b = BlockOffset(rom), m = SpellMemory.BlockOffset(rom);
+        if (b == 0 || m == 0) return false;
+        int ensure = SpellMemory.EnsureAddress(rom);
+        return rom.ReadByte(b + 21) == 0x22 && rom.ReadByte(b + 52) == 0x54 &&
+               (rom.ReadByte(b + EnsureOperand) | rom.ReadByte(b + EnsureOperand + 1) << 8 | rom.ReadByte(b + EnsureOperand + 2) << 16) == ensure;
+    }
+
+    /// <summary>Writes this version's lookup into an existing block (keeping its spells) and links it to the spell
+    /// memory.</summary>
+    private static void UpdateLookup(RomBuffer rom)
+    {
+        int b = BlockOffset(rom);
+        var code = (byte[])Routine.Clone();
+        int table = SnesAddress(b) + Table, ensure = SpellMemory.EnsureAddress(rom);
+        code[TableOperand] = (byte)table; code[TableOperand + 1] = (byte)(table >> 8); code[TableOperand + 2] = (byte)(table >> 16);
+        code[EnsureOperand] = (byte)ensure; code[EnsureOperand + 1] = (byte)(ensure >> 8); code[EnsureOperand + 2] = (byte)(ensure >> 16);
+        code[MvnSource] = (byte)(SnesAddress(b) >> 16);
+        rom.WriteBytes(b, code);
+        // unused entries pointed at spell 00 in bank 1F: now at their own (empty) slot in this bank
+        for (int i = NewCount(rom); i < NewSlots; i++)
+        {
+            int a = SnesAddress(b + Records + i * SlotSize);
+            rom.WriteBytes(b + Table + i * 3, new[] { (byte)a, (byte)(a >> 8), (byte)(a >> 16) });
+        }
+    }
 
     /// <summary>
     /// The first version (a 0.4.0-beta.7 test build): only spell 38 Trickstr, its record at $1F:D040 and a 39-byte
@@ -88,6 +123,9 @@ public static class SpellTablePatch
     /// lists) is in the ROM: Add (Update) brings it up to date, keeping its spells and lists.</summary>
     public static bool NeedsUpdate(RomBuffer rom) =>
         !IsApplied(rom) && (OldTrickster(rom) > 0 || BlockOffset(rom) > 0 || SpellMemory.Installed(rom) || SpellMemory.OldBlock(rom) > 0);
+
+    /// <summary>Links the lookup to the spell memory (for test copies placed by hand).</summary>
+    public static void Link(RomBuffer rom) => UpdateLookup(rom);
 
     /// <summary>File offset of the patch's block, or 0.</summary>
     public static int BlockOffset(RomBuffer rom)
@@ -132,6 +170,7 @@ public static class SpellTablePatch
         if (rom.Length < MapWriter.ExpandedSize) rom.Expand(MapWriter.ExpandedSize);
         if (BlockOffset(rom) == 0) ApplyTable(rom);
         if (!SpellMemory.Installed(rom)) SpellMemory.Install(rom);
+        UpdateLookup(rom);
         rom.FixChecksum();
     }
 
@@ -168,10 +207,10 @@ public static class SpellTablePatch
         Routine.CopyTo(block, 0);
         int table = SnesAddress(at) + Table;
         void Long(int o, int a) { block[o] = (byte)a; block[o + 1] = (byte)(a >> 8); block[o + 2] = (byte)(a >> 16); }
-        Long(45, table + 2);
-        Long(53, table);
+        Long(TableOperand, table);
+        block[MvnSource] = (byte)(SnesAddress(at) >> 16);
         "LFSP"u8.ToArray().CopyTo(block, Magic);
-        for (int i = 0; i < NewSlots; i++) Long(Table + i * 3, 0x1F0000 | (GameDataSpells.Offsets[0] & 0x7FFF | 0x8000));   // spell 00
+        for (int i = 0; i < NewSlots; i++) Long(Table + i * 3, SnesAddress(at + Records + i * SlotSize));   // each slot (empty: zeros)
         rom.WriteBytes(at, block);
         int r = SnesAddress(at);
         var hook = Enumerable.Repeat((byte)0xEA, LookupOriginal.Length).ToArray();
@@ -188,7 +227,7 @@ public static class SpellTablePatch
         int n = NewCount(rom);
         if (n >= NewSlots) throw new InvalidOperationException($"The ROM already has {MaxSpells} spells.");
         int len = SpellLength(rom, template);
-        if (len < 20 || len > SlotSize) throw new InvalidOperationException($"Spell {template:X2}'s record can't be copied.");
+        if (len < 20 || len > 31) throw new InvalidOperationException($"Spell {template:X2}'s record can't be copied.");
         var rec = rom.ReadBytes(SpellOffset(rom, template), len);
         var nm = (name ?? "").PadRight(8).Substring(0, 8);
         for (int i = 0; i < 8; i++) rec[i] = (byte)(nm[i] == ' ' ? 0x20 : nm[i]);
@@ -208,8 +247,6 @@ public static class SpellTablePatch
         if (b == 0 || n == 0) return;
         int id = FirstNew + n - 1;
         ForgetSpells(rom, s => s == id);
-        int sp0 = 0x1F0000 | (GameDataSpells.Offsets[0] & 0x7FFF | 0x8000);
-        rom.WriteBytes(b + Table + (n - 1) * 3, new[] { (byte)sp0, (byte)(sp0 >> 8), (byte)(sp0 >> 16) });
         rom.WriteBytes(b + Records + (n - 1) * SlotSize, new byte[SlotSize]);
         rom.WriteByte(b + Lengths + n - 1, 0);
         rom.WriteByte(b + Count, (byte)(n - 1));
@@ -225,7 +262,7 @@ public static class SpellTablePatch
         int b = BlockOffset(rom);
         if (b == 0 || id < FirstNew || id >= SpellCount(rom)) throw new InvalidOperationException("Only spells added with the patch (38 and up) can change what they do.");
         int len = SpellLength(rom, template);
-        if (len < 20 || len > SlotSize) throw new InvalidOperationException($"Spell {template:X2}'s record can't be copied.");
+        if (len < 20 || len > 31) throw new InvalidOperationException($"Spell {template:X2}'s record can't be copied.");
         int at = SpellOffset(rom, id);
         var name = rom.ReadBytes(at, 8);
         byte mp = rom.ReadByte(at + 11);
