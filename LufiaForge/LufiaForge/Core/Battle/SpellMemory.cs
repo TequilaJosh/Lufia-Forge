@@ -585,6 +585,9 @@ public static class SpellMemory
 
     public static bool Installed(RomBuffer rom) => BlockOffset(rom) > 0;
 
+    /// <summary>SNES address of the routine that converts old spell memory (A8 X16; DB with work RAM; keeps A X Y).</summary>
+    public static int EnsureAddress(RomBuffer rom) => SnesAddress(BlockOffset(rom) + Ensure);
+
     /// <summary>The game's own code at every site (nothing else changed it).</summary>
     public static bool SitesOriginal(RomBuffer rom) =>
         Same(rom, LearnSite, LearnOriginal) && Same(rom, LevelUpSite, LevelUpOriginal) && Same(rom, JoinSite, JoinOriginal) &&
