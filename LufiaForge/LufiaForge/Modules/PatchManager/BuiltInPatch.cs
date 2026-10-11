@@ -17,6 +17,8 @@ public partial class BuiltInPatch : ObservableObject
     public required Action<RomBuffer> Apply { get; init; }
     /// <summary>Null when the patch can't be taken out again.</summary>
     public Action<RomBuffer>? Remove { get; init; }
+    /// <summary>When it returns true, an older version of the patch is in the ROM and Add brings it up to date.</summary>
+    public Func<RomBuffer, bool>? NeedsUpdate { get; init; }
 
     [ObservableProperty] private bool _added;
     [ObservableProperty] private bool _canClick;
@@ -29,8 +31,10 @@ public partial class BuiltInPatch : ObservableObject
         Added = IsApplied(rom);
         bool original = IsOriginal(rom);
         CanClick = Added ? Remove != null : original;
-        ButtonText = Added ? (Remove != null ? "Remove" : "Added") : "Add";
+        bool update = !Added && NeedsUpdate?.Invoke(rom) == true;
+        ButtonText = Added ? (Remove != null ? "Remove" : "Added") : update ? "Update" : "Add";
         State = Added ? "✔ In this ROM." + (Remove == null ? " (It stays in: it can't be taken out again.)" : "")
+              : update ? "An older version is in this ROM: click Update to fix it."
               : original ? "Not added."
               : "Can't be added: the game code it changes was already changed (by another patch?).";
     }
@@ -54,6 +58,7 @@ public partial class BuiltInPatch : ObservableObject
             Name = "Spells and MP for Guy / Aguro",
             Description = "Aguro (and Guy in the prologue) gets MP and learns spells like the others: a tank/bruiser list (Shield, Strong, Bravery, Drain, Protect, Stronger, Trickstr, Courage, Dread, Mirror, Champion), editable in Character Magic. The Hero keeps up to 19 spells, Aguro up to 11.",
             IsApplied = AguroMagicPatch.IsApplied, IsOriginal = AguroMagicPatch.IsOriginal, Apply = AguroMagicPatch.Apply, Remove = AguroMagicPatch.Remove,
+            NeedsUpdate = AguroMagicPatch.NeedsFieldFix,
         },
         new()
         {
