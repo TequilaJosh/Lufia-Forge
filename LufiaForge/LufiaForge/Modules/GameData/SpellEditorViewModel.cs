@@ -45,6 +45,9 @@ public partial class SpellEditorViewModel : GameDataEditorBase
     [ObservableProperty] private string _rawHex = "";
     [ObservableProperty] private string _offsetText = "";
     [ObservableProperty] private string _newSpellText = "";
+    /// <summary>An added spell (38 and up): what it does can be changed with "Works like".</summary>
+    [ObservableProperty] private bool _isNewSpell;
+    [ObservableProperty] private int _worksLike = 1;
 
     public ObservableCollection<AilmentFlag> Ailments { get; } = new(
         GameDataLabels.Ailments.Select((n, i) => new AilmentFlag { Name = n, Bit = 1 << i }));
@@ -132,6 +135,7 @@ public partial class SpellEditorViewModel : GameDataEditorBase
         HasNoParameters = !(IsCure || IsAilment || IsStat || IsElement || IsTeleport);
 
         IsEditable = SelectedIndex > 0;   // spell 00 is the "Nothing" placeholder
+        IsNewSpell = SelectedIndex >= Core.Battle.SpellTablePatch.FirstNew;
         int added = Core.Battle.SpellTablePatch.NewCount(rom);
         NewSpellText = Core.Battle.SpellTablePatch.IsApplied(rom)
             ? $"{added} new spells, room for {Core.Battle.SpellTablePatch.NewSlots - added} more. A new spell is a copy of the selected one (effect, animation, numbers): rename it and change its numbers."
@@ -154,6 +158,16 @@ public partial class SpellEditorViewModel : GameDataEditorBase
             rom.FixChecksum();
         }, namesChanged: true);
         if (id >= 0) { SelectedIndex = id; Status = $"Spell {id:X2} added (a copy of {template:X2}). Rename it and change its numbers, then Apply. Unsaved."; }
+    }
+
+    [RelayCommand]
+    private void ApplyWorksLike()
+    {
+        if (Ctx == null || !IsNewSpell || WorksLike <= 0 || WorksLike >= Core.Battle.SpellTablePatch.SpellCount(Ctx.Rom)) return;
+        int id = SelectedIndex, template = WorksLike;
+        Commit($"Spell {id:X2} works like {template:X2}", () => { Core.Battle.SpellTablePatch.SetWorksLike(Ctx.Rom, id, template); Ctx.Rom.FixChecksum(); });
+        LoadSelected();
+        Status = $"Spell {id:X2} now works like {SpellNames[template][3..].Trim()} (effect, numbers, animation, usage and target); it keeps its name and MP. Change its numbers below, then Apply. Unsaved.";
     }
 
     [RelayCommand]
