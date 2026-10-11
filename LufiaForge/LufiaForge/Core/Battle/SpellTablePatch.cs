@@ -63,8 +63,22 @@ public static class SpellTablePatch
     private static int FileOffset(int snes) => (snes >> 16 & 0x7F) * 0x8000 + (snes & 0x7FFF);
     private static int SnesAddress(int file) => (file / 0x8000 | 0x80) << 16 | (file % 0x8000 | 0x8000);
 
-    public static bool IsOriginal(RomBuffer rom) => rom.ReadBytes(LookupSite, LookupOriginal.Length).SequenceEqual(LookupOriginal);
+    public static bool IsOriginal(RomBuffer rom) => rom.ReadBytes(LookupSite, LookupOriginal.Length).SequenceEqual(LookupOriginal) || OldTrickster(rom) > 0;
     public static bool IsApplied(RomBuffer rom) => BlockOffset(rom) > 0;
+
+    /// <summary>
+    /// The first version (a 0.4.0-beta.7 test build): only spell 38 Trickstr, its record at $1F:D040 and a 39-byte
+    /// lookup whose new-spell branch starts SBC #$38. Returns that lookup's file offset, or 0. Add updates it.
+    /// </summary>
+    public static int OldTrickster(RomBuffer rom)
+    {
+        if (rom.ReadByte(LookupSite) != 0x08 || rom.ReadByte(LookupSite + 1) != 0x22) return 0;
+        int r = FileOffset(rom.ReadByte(LookupSite + 2) | rom.ReadByte(LookupSite + 3) << 8 | rom.ReadByte(LookupSite + 4) << 16);
+        return r > 0 && r + 39 <= rom.Length && rom.ReadByte(r) == 0xC9 && rom.ReadByte(r + 1) == FirstNew &&
+               rom.ReadByte(r + 21) == 0xE9 && rom.ReadByte(r + 22) == 0x38 ? r : 0;
+    }
+    private const int OldRecord = 0xFD040, OldRecordLength = 27;
+    public static bool NeedsUpdate(RomBuffer rom) => OldTrickster(rom) > 0;
 
     /// <summary>File offset of the patch's block, or 0.</summary>
     public static int BlockOffset(RomBuffer rom)
@@ -76,7 +90,7 @@ public static class SpellTablePatch
     }
 
     /// <summary>How many spells were added (0-72).</summary>
-    public static int NewCount(RomBuffer rom) { int b = BlockOffset(rom); return b == 0 ? 0 : Math.Min((int)rom.ReadByte(b + Count), NewSlots); }
+    public static int NewCount(RomBuffer rom) { int b = BlockOffset(rom); return b == 0 ? (OldTrickster(rom) > 0 ? 1 : 0) : Math.Min((int)rom.ReadByte(b + Count), NewSlots); }
 
     /// <summary>How many spells the ROM has: 56, plus the ones added with this patch.</summary>
     public static int SpellCount(RomBuffer rom) => FirstNew + NewCount(rom);
@@ -86,13 +100,19 @@ public static class SpellTablePatch
     {
         if (id < FirstNew) return GameDataSpells.Offsets[id];
         int b = BlockOffset(rom);
+        if (b == 0 && id == FirstNew && OldTrickster(rom) > 0) return OldRecord;
         return b == 0 ? GameDataSpells.Offsets[0] : b + Records + (id - FirstNew) * SlotSize;
     }
 
     /// <summary>Size of spell <paramref name="id"/>'s record (the last of the game's own is taken as 22).</summary>
     public static int SpellLength(RomBuffer rom, int id)
     {
-        if (id >= FirstNew) { int b = BlockOffset(rom); return b == 0 ? 0 : rom.ReadByte(b + Lengths + id - FirstNew); }
+        if (id >= FirstNew)
+        {
+            int b = BlockOffset(rom);
+            if (b == 0) return id == FirstNew && OldTrickster(rom) > 0 ? OldRecordLength : 0;
+            return rom.ReadByte(b + Lengths + id - FirstNew);
+        }
         return id + 1 < FirstNew ? GameDataSpells.Offsets[id + 1] - GameDataSpells.Offsets[id] : 22;
     }
 
@@ -102,8 +122,27 @@ public static class SpellTablePatch
         if (!IsOriginal(rom)) throw new InvalidOperationException("The game's spell lookup ($08:FABD) isn't the original, so the spell table can't be enlarged safely.");
         if (rom.Length < MapWriter.ExpandedSize) rom.Expand(MapWriter.ExpandedSize);
         var space = ExpansionSpace.Load(rom);
+        // the first version: keep Trickstr as spell 38 (characters and monsters keep it), drop its lookup and record
+        byte[]? trick = null;
+        int old = OldTrickster(rom);
+        if (old > 0)
+        {
+            trick = rom.ReadBytes(OldRecord, OldRecordLength);
+            rom.WriteBytes(OldRecord, Enumerable.Repeat((byte)0xFF, OldRecordLength).ToArray());
+            if (space.At(old) is { } e && e.Start == old) space.Free(old);
+            rom.WriteBytes(LookupSite, LookupOriginal);
+        }
         WriteAt(rom, space.AllocateInOneBank(BlockSize, ExpansionSpace.Kind.Patch, 8));
         space.Save();
+        if (trick != null)
+        {
+            int b = BlockOffset(rom), at = b + Records;
+            rom.WriteBytes(at, trick);
+            rom.WriteByte(b + Lengths, OldRecordLength);
+            int a = SnesAddress(at);
+            rom.WriteBytes(b + Table, new[] { (byte)a, (byte)(a >> 8), (byte)(a >> 16) });
+            rom.WriteByte(b + Count, 1);
+        }
         rom.FixChecksum();
     }
 

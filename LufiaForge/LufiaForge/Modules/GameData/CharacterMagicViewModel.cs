@@ -24,7 +24,16 @@ public partial class CharacterMagicViewModel : GameDataEditorBase
         (3, GameDataOffsets.JerinSpellList),
     };
     private static readonly (int Slot, int Offset)[] PatchedLists = { (0, 0), (1, 0), (2, 0), (3, 0) };
-    private (int Slot, int Offset)[] Current => Ctx != null && AguroMagicPatch.IsApplied(Ctx.Rom) ? PatchedLists : Lists;
+    private (int Slot, int Offset)[] Current => Ctx != null && AguroMagicPatch.HasLists(Ctx.Rom) ? PatchedLists : Lists;
+
+    /// <summary>The Patch Manager can add the Guy / Aguro patch (or new spells) while this editor is open: when it is
+    /// shown again, it switches lists if that changed.</summary>
+    public override void Recheck()
+    {
+        base.Recheck();
+        if (Ctx == null) return;
+        if (Casters.Count != Current.Length) { RefreshCasters(); LoadSelected(); }
+    }
 
     public ObservableCollection<string>    Casters { get; } = new();
     public ObservableCollection<SpellSlot> Slots   { get; } = new();

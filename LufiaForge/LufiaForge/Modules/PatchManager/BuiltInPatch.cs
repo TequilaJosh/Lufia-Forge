@@ -65,6 +65,7 @@ public partial class BuiltInPatch : ObservableObject
             Name = "Up to 128 spells",
             Description = "Room for 72 new spells (38-7F) next to the game's 56: make them in Spells (\"New spell\" copies the selected one, then rename and edit it), teach them in Character Magic, give them to monsters and bosses in Monsters. The Guy / Aguro magic patch adds it with a first new spell, Trickstr (Trick on the whole party).",
             IsApplied = SpellTablePatch.IsApplied, IsOriginal = SpellTablePatch.IsOriginal, Apply = SpellTablePatch.Apply, Remove = SpellTablePatch.Remove,
+            NeedsUpdate = SpellTablePatch.NeedsUpdate,
         },
         new()
         {

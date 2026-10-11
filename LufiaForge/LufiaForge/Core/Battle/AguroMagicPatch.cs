@@ -180,6 +180,9 @@ public static class AguroMagicPatch
         FieldSlot2(rom) == FieldSlot2Original
         || NeedsFieldFix(rom);
 
+    /// <summary>The patch's spell lists are in the ROM (any version of it).</summary>
+    public static bool HasLists(RomBuffer rom) => rom.ReadByte(LevelUpSite) == 0x22 && BlockOffset(rom) > 0;
+
     public static bool IsApplied(RomBuffer rom) => rom.ReadByte(LevelUpSite) == 0x22 && BlockOffset(rom) > 0 && FieldFixed(rom);
 
     /// <summary>An earlier version of the patch (before 0.4.0-beta.7) that left the field Magic menu empty for Guy /
