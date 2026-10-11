@@ -17,6 +17,9 @@ namespace LufiaForge.Core.Battle;
 ///
 /// Block (one bank, in the added ROM space): the lookup, then "LFSP", the number of new spells, their record
 /// lengths, the pointer table (unused entries point at spell 00) and 72 record slots of 32 bytes.
+///
+/// The patch also installs <see cref="SpellMemory"/>: every character can learn up to 64 spells, and the four learn
+/// lists move to the added space (Character Magic can make them longer).
 /// </summary>
 public static class SpellTablePatch
 {
@@ -63,8 +66,11 @@ public static class SpellTablePatch
     private static int FileOffset(int snes) => (snes >> 16 & 0x7F) * 0x8000 + (snes & 0x7FFF);
     private static int SnesAddress(int file) => (file / 0x8000 | 0x80) << 16 | (file % 0x8000 | 0x8000);
 
-    public static bool IsOriginal(RomBuffer rom) => rom.ReadBytes(LookupSite, LookupOriginal.Length).SequenceEqual(LookupOriginal) || OldTrickster(rom) > 0;
-    public static bool IsApplied(RomBuffer rom) => BlockOffset(rom) > 0;
+    public static bool IsOriginal(RomBuffer rom) =>
+        (rom.ReadBytes(LookupSite, LookupOriginal.Length).SequenceEqual(LookupOriginal) || OldTrickster(rom) > 0 || BlockOffset(rom) > 0) &&
+        (SpellMemory.SitesOriginal(rom) || SpellMemory.Installed(rom) || SpellMemory.OldBlock(rom) > 0);
+    /// <summary>The spell table and the 64-per-character spell memory are both in.</summary>
+    public static bool IsApplied(RomBuffer rom) => BlockOffset(rom) > 0 && SpellMemory.Installed(rom);
 
     /// <summary>
     /// The first version (a 0.4.0-beta.7 test build): only spell 38 Trickstr, its record at $1F:D040 and a 39-byte
@@ -78,7 +84,10 @@ public static class SpellTablePatch
                rom.ReadByte(r + 21) == 0xE9 && rom.ReadByte(r + 22) == 0x38 ? r : 0;
     }
     private const int OldRecord = 0xFD040, OldRecordLength = 27;
-    public static bool NeedsUpdate(RomBuffer rom) => OldTrickster(rom) > 0;
+    /// <summary>An earlier version (the first Trickstr, a table without the spell memory, or the earlier Guy / Aguro
+    /// lists) is in the ROM: Add (Update) brings it up to date, keeping its spells and lists.</summary>
+    public static bool NeedsUpdate(RomBuffer rom) =>
+        !IsApplied(rom) && (OldTrickster(rom) > 0 || BlockOffset(rom) > 0 || SpellMemory.Installed(rom) || SpellMemory.OldBlock(rom) > 0);
 
     /// <summary>File offset of the patch's block, or 0.</summary>
     public static int BlockOffset(RomBuffer rom)
@@ -119,8 +128,15 @@ public static class SpellTablePatch
     public static void Apply(RomBuffer rom)
     {
         if (IsApplied(rom)) return;
-        if (!IsOriginal(rom)) throw new InvalidOperationException("The game's spell lookup ($08:FABD) isn't the original, so the spell table can't be enlarged safely.");
+        if (!IsOriginal(rom)) throw new InvalidOperationException("The game's spell code isn't the original (another patch changed it), so spells can't be expanded safely.");
         if (rom.Length < MapWriter.ExpandedSize) rom.Expand(MapWriter.ExpandedSize);
+        if (BlockOffset(rom) == 0) ApplyTable(rom);
+        if (!SpellMemory.Installed(rom)) SpellMemory.Install(rom);
+        rom.FixChecksum();
+    }
+
+    private static void ApplyTable(RomBuffer rom)
+    {
         var space = ExpansionSpace.Load(rom);
         // the first version: keep Trickstr as spell 38 (characters and monsters keep it), drop its lookup and record
         byte[]? trick = null;
@@ -143,7 +159,6 @@ public static class SpellTablePatch
             rom.WriteBytes(b + Table, new[] { (byte)a, (byte)(a >> 8), (byte)(a >> 16) });
             rom.WriteByte(b + Count, 1);
         }
-        rom.FixChecksum();
     }
 
     /// <summary>Writes an empty block (no new spells) at <paramref name="at"/> and hooks the game's lookup.</summary>
@@ -223,12 +238,17 @@ public static class SpellTablePatch
     public static void Remove(RomBuffer rom)
     {
         int b = BlockOffset(rom);
-        if (b == 0) return;
+        if (b == 0 && !SpellMemory.Installed(rom)) return;
+        if (AguroMagicPatch.IsApplied(rom)) AguroMagicPatch.Remove(rom);
         ForgetSpells(rom, s => s >= FirstNew);
-        rom.WriteBytes(LookupSite, LookupOriginal);
-        var space = ExpansionSpace.Load(rom);
-        space.Free(b);
-        space.Save();
+        SpellMemory.Remove(rom);   // the game's own lists come back (as they are in the ROM)
+        if (b > 0)
+        {
+            rom.WriteBytes(LookupSite, LookupOriginal);
+            var space = ExpansionSpace.Load(rom);
+            space.Free(b);
+            space.Save();
+        }
         rom.FixChecksum();
     }
 
@@ -236,10 +256,10 @@ public static class SpellTablePatch
     /// Aguro patch), the prologue party's spells, and monsters' "cast spell" steps (which become "attack").</summary>
     private static void ForgetSpells(RomBuffer rom, Func<int, bool> gone)
     {
-        if (AguroMagicPatch.IsApplied(rom))
+        if (SpellMemory.Installed(rom))
         {
-            var lists = AguroMagicPatch.ReadLists(rom);
-            if (lists.Sum(l => l.RemoveAll(e => gone(e.Spell))) > 0) AguroMagicPatch.WriteLists(rom, lists);
+            var lists = SpellMemory.ReadLists(rom);
+            if (lists.Sum(l => l.RemoveAll(e => gone(e.Spell))) > 0) SpellMemory.WriteLists(rom, lists);
         }
         try
         {
