@@ -839,10 +839,11 @@ public sealed class EventScript
     }
 
     /// <summary>
-    /// Scripts are read at bank 3 + (offset from 0x18000) / 32 KB ($01:C292): in a 4 MB ROM the last 64 KB would be
-    /// banks 7E-7F, the console's work RAM, so script blocks end before file 0x3F0000.
+    /// Scripts run with the data bank set to their own bank (3 + offset from 0x18000 / 32 KB = file offset / 32 KB,
+    /// $01:C292), and the command handlers reach RAM through it ($0Dxx, $158F,X...). Only banks 00-3F mirror the
+    /// work RAM, so event script blocks must stay below 2 MB (file 0x200000), even in a 4 MB ROM.
     /// </summary>
-    public const int ScriptLimit = 0x3F0000;
+    public const int ScriptLimit = MapWriter.ExpandedSize;
 
     /// <summary>Bytes from this block's start to the next map's script block (blocks are contiguous).</summary>
     private int BlockLength()

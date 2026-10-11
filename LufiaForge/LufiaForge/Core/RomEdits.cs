@@ -45,6 +45,8 @@ public static class RomEdits
         if (EncounterPatch.IsApplied(rom)) patches.Add("hold L to avoid battles");
         if (SubgroupPatch.IsApplied(rom)) patches.Add("more than 67 encounter subgroups");
         if (RenamePatch.IsApplied(rom)) patches.Add("rename command for events");
+        if (AguroMagicPatch.IsApplied(rom)) patches.Add("spells and MP for Guy / Aguro");
+        if (TricksterPatch.IsApplied(rom)) patches.Add("new spell Trickstr");
         list.Add(("Built-in patches:", patches.Count == 0 ? "none" : string.Join(", ", patches)));
 
         try

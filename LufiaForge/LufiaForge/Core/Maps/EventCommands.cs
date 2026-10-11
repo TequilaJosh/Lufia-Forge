@@ -367,7 +367,7 @@ public static class EventCommands
     public static IReadOnlyList<(int Value, string Label)>? Choices(ParamKind kind, RomBuffer rom, Func<int, string>? mapLabel = null) => kind switch
     {
         ParamKind.Item => Enumerable.Range(0, 256).Select(i => (i, $"{i:X2} {MapSetupScript.ItemName(rom, i)}")).ToList(),
-        ParamKind.Spell => Enumerable.Range(0, GameDataOffsets.SpellOffsets.Length).Select(i => (i, $"{i:X2} {SpellName(rom, i)}")).ToList(),
+        ParamKind.Spell => Enumerable.Range(0, Battle.TricksterPatch.SpellCount(rom)).Select(i => (i, $"{i:X2} {SpellName(rom, i)}")).ToList(),
         ParamKind.Character => CharacterNames.Select((n, i) => (i, n)).ToList(),
         ParamKind.Direction => Directions.Select((d, i) => (i, d)).ToList(),
         ParamKind.ShortWait => ShortWaitFrames.Select((f, i) => (i, Frames(f))).ToList(),
@@ -386,8 +386,8 @@ public static class EventCommands
 
     public static string SpellName(RomBuffer rom, int id)
     {
-        if (id < 0 || id >= GameDataOffsets.SpellOffsets.Length) return $"spell {id:X2}";
-        var chars = rom.ReadBytes(GameDataOffsets.SpellOffsets[id], GameDataOffsets.SpellNameLen).Select(b => b == (byte)'@' ? ' ' : (char)b);
+        if (id < 0 || id >= Battle.TricksterPatch.SpellCount(rom)) return $"spell {id:X2}";
+        var chars = rom.ReadBytes(Battle.TricksterPatch.SpellOffset(rom, id), GameDataOffsets.SpellNameLen).Select(b => b == (byte)'@' ? ' ' : (char)b);
         string name = new string(chars.ToArray()).TrimEnd(' ', '\0');
         return name.Length == 0 ? $"spell {id:X2}" : name;
     }
