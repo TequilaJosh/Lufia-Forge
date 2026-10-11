@@ -23,6 +23,12 @@ public static class AguroMagicPatch
 {
     public const int LevelUpSite = 0x4665E, JoinSite = 0x46C07, ClearSite = 0x46AEC, KnowsSite = 0xD2A7;
     public const int LearnTable = 0x4684C, MenuTable = 0x43D3F, MenuSkip = 0x43D04, MenuSite = 0x43D07;
+    /// <summary>The field menu's spell memory pointers ($00:9CAD, one word per slot: $158F $15AF $14B5 $15CF); it
+    /// counts and lists each slot's spells from there. Slot 2's pointed at unrelated RAM ($14B5).</summary>
+    public const int FieldPointers = 0x1CAD;
+    private const int FieldSlot2Original = 0x14B5;
+    private static int FieldSlot2(RomBuffer rom) => rom.ReadUInt16Le(FieldPointers + 4);
+    private static bool FieldFixed(RomBuffer rom) => FieldSlot2(rom) == 0x158F + SpellOffset[2];
     private static readonly byte[] LevelUpOriginal = Convert.FromHexString("8AC902F0210AA8B9EBE7A8B90DEEF012C9FFF012DD6F15D009B90EEE85D82229E808C8C880E5");
     private static readonly byte[] JoinOriginal = Convert.FromHexString("C902F01DAA0AA8B9EBE7A8B90DEEC9FFF00F0900D007B90EEE2229E808C8C880EA");
     private static readonly byte[] ClearOriginal = Convert.FromHexString("ACF114C002F00CBE4CE8A0209E8F15E888D0F9");
@@ -170,9 +176,16 @@ public static class AguroMagicPatch
         rom.ReadBytes(JoinSite, JoinOriginal.Length).SequenceEqual(JoinOriginal) &&
         rom.ReadBytes(ClearSite, ClearOriginal.Length).SequenceEqual(ClearOriginal) &&
         rom.ReadBytes(KnowsSite, KnowsOriginal.Length).SequenceEqual(KnowsOriginal) &&
-        rom.ReadBytes(MenuSite, MenuOriginal.Length).SequenceEqual(MenuOriginal);
+        rom.ReadBytes(MenuSite, MenuOriginal.Length).SequenceEqual(MenuOriginal) &&
+        FieldSlot2(rom) == FieldSlot2Original
+        || NeedsFieldFix(rom);
 
-    public static bool IsApplied(RomBuffer rom) => rom.ReadByte(LevelUpSite) == 0x22 && BlockOffset(rom) > 0;
+    public static bool IsApplied(RomBuffer rom) => rom.ReadByte(LevelUpSite) == 0x22 && BlockOffset(rom) > 0 && FieldFixed(rom);
+
+    /// <summary>An earlier version of the patch (before 0.4.0-beta.7) that left the field Magic menu empty for Guy /
+    /// Aguro: adding the patch again only fixes that.</summary>
+    public static bool NeedsFieldFix(RomBuffer rom) =>
+        rom.ReadByte(LevelUpSite) == 0x22 && BlockOffset(rom) > 0 && FieldSlot2(rom) == FieldSlot2Original;
 
     /// <summary>File offset of the routines and lists, or 0.</summary>
     public static int BlockOffset(RomBuffer rom)
@@ -229,6 +242,7 @@ public static class AguroMagicPatch
     public static void Apply(RomBuffer rom)
     {
         if (IsApplied(rom)) return;
+        if (NeedsFieldFix(rom)) { rom.WriteUInt16Le(FieldPointers + 4, (ushort)(0x158F + SpellOffset[2])); rom.FixChecksum(); return; }
         if (!IsOriginal(rom)) throw new InvalidOperationException("The game's magic code for Aguro's party slot isn't the original, so this patch can't be applied safely.");
         if (rom.Length < MapWriter.ExpandedSize) rom.Expand(MapWriter.ExpandedSize);
         if (!SpellTablePatch.IsApplied(rom) && SpellTablePatch.IsOriginal(rom)) SpellTablePatch.Apply(rom);
@@ -275,6 +289,7 @@ public static class AguroMagicPatch
         rom.WriteByte(LearnTable + 2, (byte)SpellOffset[2]);
         rom.WriteByte(MenuTable + 2, (byte)SpellOffset[2]);
         rom.WriteByte(MenuSkip, 0xFF);
+        rom.WriteUInt16Le(FieldPointers + 4, (ushort)(0x158F + SpellOffset[2]));   // the field Magic menu
         WriteLists(rom, lists);
     }
 
@@ -316,6 +331,7 @@ public static class AguroMagicPatch
         rom.WriteByte(LearnTable + 2, 0x00);
         rom.WriteByte(MenuTable + 2, 0x00);
         rom.WriteByte(MenuSkip, 0x02);
+        rom.WriteUInt16Le(FieldPointers + 4, FieldSlot2Original);
         TakeGuySpells(rom);
         var space = ExpansionSpace.Load(rom);
         space.Free(block);
