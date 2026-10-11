@@ -51,6 +51,18 @@ public partial class BuiltInPatch : ObservableObject
         },
         new()
         {
+            Name = "Spells and MP for Guy / Aguro",
+            Description = "Aguro (and Guy in the prologue) gets MP and learns spells like the others: a tank/bruiser list (Shield, Strong, Bravery, Drain, Protect, Stronger, Trickstr, Courage, Dread, Mirror, Champion), editable in Character Magic. The Hero keeps up to 19 spells, Aguro up to 11.",
+            IsApplied = AguroMagicPatch.IsApplied, IsOriginal = AguroMagicPatch.IsOriginal, Apply = AguroMagicPatch.Apply, Remove = AguroMagicPatch.Remove,
+        },
+        new()
+        {
+            Name = "New spell: Trickstr",
+            Description = "Adds spell 38 \"Trickstr\": Trick (raises attack) on the whole party, 9 MP. Edit it in Spells; give it to anyone in Character Magic. Added with the Guy / Aguro magic patch, which teaches it to Aguro at level 24.",
+            IsApplied = TricksterPatch.IsApplied, IsOriginal = TricksterPatch.IsOriginal, Apply = TricksterPatch.Apply, Remove = TricksterPatch.Remove,
+        },
+        new()
+        {
             Name = "Rename command for events",
             Description = "Adds event command 6E \"Rename a party member\" (Events editor, Characters): e.g. show Maxim's name during a flashback, then give the Hero's own name back. Added by itself the first time an event uses it.",
             IsApplied = RenamePatch.IsApplied, IsOriginal = RenamePatch.IsOriginal, Apply = RenamePatch.Apply, Remove = RenamePatch.Remove,

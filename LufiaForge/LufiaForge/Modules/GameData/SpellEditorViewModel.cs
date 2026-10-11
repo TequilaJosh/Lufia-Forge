@@ -75,11 +75,10 @@ public partial class SpellEditorViewModel : GameDataEditorBase
 
     protected override void LoadSelected()
     {
-        if (Ctx == null || SelectedIndex < 0 || SelectedIndex >= GameDataOffsets.SpellOffsets.Length) return;
+        if (Ctx == null || SelectedIndex < 0 || SelectedIndex >= Core.Battle.TricksterPatch.SpellCount(Ctx.Rom)) return;
         var rom = Ctx.Rom;
-        var offsets = GameDataOffsets.SpellOffsets;
-        int o   = _recordOffset = offsets[SelectedIndex];
-        int end = SelectedIndex + 1 < offsets.Length ? offsets[SelectedIndex + 1] : o + 22;
+        int o   = _recordOffset = Core.Battle.TricksterPatch.SpellOffset(rom, SelectedIndex);
+        int end = o + Core.Battle.TricksterPatch.SpellLength(SelectedIndex);
 
         Name = Ctx.ReadName(o, GameDataOffsets.SpellNameLen);
 
