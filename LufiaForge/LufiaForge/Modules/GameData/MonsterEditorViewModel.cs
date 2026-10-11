@@ -4,11 +4,27 @@ using System.Collections.ObjectModel;
 
 namespace LufiaForge.Modules.GameData;
 
+/// <summary>A "cast spell" step of a monster's AI script (op 07), edited with a spell list.</summary>
+public partial class AiSpellStep : ObservableObject
+{
+    public int Offset { get; init; }
+    public int Original { get; init; }
+    public string Label { get; init; } = "";
+    [ObservableProperty] private int _spell;
+}
+
+/// <summary>One spell of the "give spells" builder: the share of turns it is tried.</summary>
+public partial class GiveSpellRow : ObservableObject
+{
+    [ObservableProperty] private int _percent = 25;
+    [ObservableProperty] private int _spell = 1;
+}
+
 /// <summary>Monster names, stats, rewards, drops, weakness and graphics.</summary>
 public partial class MonsterEditorViewModel : GameDataEditorBase
 {
     // Bytes in the fixed part of the record whose meaning is unknown; shown raw so they can be edited.
-    private static readonly int[] UnknownFields = { 11, 13, 18, 19, 29 };
+    private static readonly int[] UnknownFields = { 11, 13, 29 };
 
     public ObservableCollection<string> Monsters { get; } = new();
 
@@ -22,6 +38,7 @@ public partial class MonsterEditorViewModel : GameDataEditorBase
     [ObservableProperty] private int    _graphic;
     [ObservableProperty] private int    _palette;
     [ObservableProperty] private int    _hp;
+    [ObservableProperty] private int    _mp;
     [ObservableProperty] private int    _atp;
     [ObservableProperty] private int    _dfp;
     [ObservableProperty] private int    _magicDefense;
@@ -39,6 +56,11 @@ public partial class MonsterEditorViewModel : GameDataEditorBase
     [ObservableProperty] private string _aiNote = "";
     private int _aiStart, _aiLength;
     [ObservableProperty] private string _offsetText = "";
+    /// <summary>The script's "cast spell" steps, each with a spell list.</summary>
+    public ObservableCollection<AiSpellStep> SpellSteps { get; } = new();
+    /// <summary>The "give spells" builder's rows.</summary>
+    public ObservableCollection<GiveSpellRow> GiveSpells { get; } = new();
+    [ObservableProperty] private string _giveSpellsNote = "";
 
     public ByteOption[] MonsterTypeOptions => GameDataLabels.MonsterTypes;
 
@@ -92,6 +114,7 @@ public partial class MonsterEditorViewModel : GameDataEditorBase
         Graphic      = rom.ReadByte(o + 14);
         Palette      = rom.ReadByte(o + 15);
         Hp           = rom.ReadUInt16Le(o + 16);
+        Mp           = rom.ReadUInt16Le(o + 18);
         Atp          = rom.ReadUInt16Le(o + 20);
         Dfp          = rom.ReadUInt16Le(o + 22);
         MagicDefense = rom.ReadByte(o + 24);
@@ -111,20 +134,32 @@ public partial class MonsterEditorViewModel : GameDataEditorBase
     private void LoadAi(LufiaForge.Core.RomBuffer rom, int record)
     {
         AiLines.Clear();
+        SpellSteps.Clear();
+        GiveSpells.Clear();
+        GiveSpellsNote = "Writes a new AI script: each spell is tried that share of turns (a monster needs MP for it, or it attacks instead), the rest of the turns it attacks. " +
+                         "Its old script (calling for help, special attacks...) is replaced. It fits in place when the old script is long enough, otherwise it goes in the free space at the end of bank 0.";
         var cmds = LufiaForge.Core.Battle.MonsterAi.Decode(rom, record,
             id => id < SpellNames.Count ? SpellNames[id][3..].Trim() : $"spell {id:X2}");
         if (cmds.Count == 0)
         {
             _aiStart = _aiLength = 0; AiHex = "";
-            AiNote = "No AI script: this monster just attacks.";
+            AiNote = "No AI script: this monster just attacks. Use Give spells to make it cast spells.";
             return;
         }
         // numbered steps in script order; jumps name the step they land on
         var stepOf = cmds.Select((c, i) => (c.Offset, i + 1)).ToDictionary(t => t.Offset, t => t.Item2);
         string Step(int offset) => stepOf.TryGetValue(offset, out int n) ? $"step {n}" : $"+{offset:X2}";
         Func<int, string> spell = id => id < SpellNames.Count ? SpellNames[id][3..].Trim() : $"spell {id:X2}";
+        Func<int, string> item = id => id < ItemNames.Count ? ItemNames[id][3..].Trim() : $"item {id:X2}";
         for (int i = 0; i < cmds.Count; i++)
-            AiLines.Add($"{i + 1,2}.  {LufiaForge.Core.Battle.MonsterAi.Plain(cmds[i], Step, spell)}");
+        {
+            AiLines.Add($"{i + 1,2}.  {LufiaForge.Core.Battle.MonsterAi.Plain(cmds[i], Step, spell, item)}");
+            if (cmds[i].Op == 0x07)
+                SpellSteps.Add(new AiSpellStep { Offset = cmds[i].Offset, Original = cmds[i].Args[0], Spell = cmds[i].Args[0], Label = $"Step {i + 1} casts" });
+        }
+        // the builder starts from the spells it already casts, split evenly
+        var known = SpellSteps.Select(x => x.Spell).Distinct().Take(8).ToList();
+        foreach (int sp in known) GiveSpells.Add(new GiveSpellRow { Spell = sp, Percent = Math.Max(1, 60 / known.Count) });
         _aiStart = cmds.Min(c => c.Offset);
         _aiLength = cmds.Max(c => c.Offset + 1 + c.Args.Length) - _aiStart;
         AiHex = ItemEditorViewModel.ToHex(Enumerable.Range(0, _aiLength).Select(k => rom.ReadByte(record + _aiStart + k)).ToArray());
@@ -138,7 +173,7 @@ public partial class MonsterEditorViewModel : GameDataEditorBase
         if (Ctx == null || SelectedIndex < 0) return;
         if (!ItemEditorViewModel.TryParseHex(UnknownHex, out var unknown) || unknown.Length != UnknownFields.Length)
         {
-            Status = $"Unknown bytes must be exactly {UnknownFields.Length} hex bytes (+11 +13 +18 +19 +29).";
+            Status = $"Unknown bytes must be exactly {UnknownFields.Length} hex bytes (+11 +13 +29).";
             return;
         }
 
@@ -162,6 +197,7 @@ public partial class MonsterEditorViewModel : GameDataEditorBase
             rom.WriteByte(o + 14, (byte)Clamp(Graphic, 0, 255));
             rom.WriteByte(o + 15, (byte)Clamp(Palette, 0, 255));
             rom.WriteUInt16Le(o + 16, (ushort)Clamp(Hp,  0, 0xFFFF));
+            rom.WriteUInt16Le(o + 18, (ushort)Clamp(Mp,  0, 0xFFFF));
             rom.WriteUInt16Le(o + 20, (ushort)Clamp(Atp, 0, 0xFFFF));
             rom.WriteUInt16Le(o + 22, (ushort)Clamp(Dfp, 0, 0xFFFF));
             rom.WriteByte(o + 24, (byte)Clamp(MagicDefense, 0, 255));
@@ -174,10 +210,44 @@ public partial class MonsterEditorViewModel : GameDataEditorBase
             for (int i = 0; i < UnknownFields.Length; i++)
                 rom.WriteByte(o + UnknownFields[i], unknown[i]);
             for (int i = 0; i < ai.Length; i++) rom.WriteByte(o + _aiStart + i, ai[i]);
+            foreach (var st in SpellSteps)
+                if (st.Spell != st.Original && st.Spell >= 0) rom.WriteByte(o + st.Offset + 1, (byte)st.Spell);
         });
 
         if (renamed) RefreshList();
         LoadSelected();
+    }
+
+    [RelayCommand]
+    private void AddGiveSpell()
+    {
+        if (GiveSpells.Count >= 8) { Status = "Up to 8 spells."; return; }
+        GiveSpells.Add(new GiveSpellRow { Spell = Math.Max(1, SpellNames.Count - 1), Percent = 20 });
+    }
+
+    [RelayCommand]
+    private void RemoveGiveSpell()
+    {
+        if (GiveSpells.Count > 0) GiveSpells.RemoveAt(GiveSpells.Count - 1);
+    }
+
+    [RelayCommand]
+    private void WriteGiveSpells()
+    {
+        if (Ctx == null || SelectedIndex < 0) return;
+        if (GiveSpells.Count == 0) { Status = "Add at least one spell."; return; }
+        if (GiveSpells.Sum(g => g.Percent) > 100) { Status = "The shares add up to more than 100%."; return; }
+        var rom = Ctx.Rom;
+        int id = SelectedIndex, at = 0;
+        bool gaveMp = false;
+        Commit($"Monster {id:X2}'s spells", () =>
+        {
+            at = LufiaForge.Core.Battle.MonsterAi.WriteSpellScript(rom, id, GiveSpells.Select(g => (Clamp(g.Percent, 0, 100), Clamp(g.Spell, 0, SpellNames.Count - 1))).ToList());
+            int o = Ctx.MonsterOffset(id);
+            if (rom.ReadUInt16Le(o + 18) == 0) { rom.WriteUInt16Le(o + 18, 40); gaveMp = true; }   // a caster needs MP
+        });
+        LoadSelected();
+        if (at > 0) Status = $"New AI script written at 0x{at:X6} (unsaved)." + (gaveMp ? " It had no MP, so it now has 40." : "");
     }
 
     [RelayCommand]

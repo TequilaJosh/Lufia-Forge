@@ -44,6 +44,7 @@ public partial class SpellEditorViewModel : GameDataEditorBase
     [ObservableProperty] private string _teleportText = "";
     [ObservableProperty] private string _rawHex = "";
     [ObservableProperty] private string _offsetText = "";
+    [ObservableProperty] private string _newSpellText = "";
 
     public ObservableCollection<AilmentFlag> Ailments { get; } = new(
         GameDataLabels.Ailments.Select((n, i) => new AilmentFlag { Name = n, Bit = 1 << i }));
@@ -75,10 +76,10 @@ public partial class SpellEditorViewModel : GameDataEditorBase
 
     protected override void LoadSelected()
     {
-        if (Ctx == null || SelectedIndex < 0 || SelectedIndex >= Core.Battle.TricksterPatch.SpellCount(Ctx.Rom)) return;
+        if (Ctx == null || SelectedIndex < 0 || SelectedIndex >= Core.Battle.SpellTablePatch.SpellCount(Ctx.Rom)) return;
         var rom = Ctx.Rom;
-        int o   = _recordOffset = Core.Battle.TricksterPatch.SpellOffset(rom, SelectedIndex);
-        int end = o + Core.Battle.TricksterPatch.SpellLength(SelectedIndex);
+        int o   = _recordOffset = Core.Battle.SpellTablePatch.SpellOffset(rom, SelectedIndex);
+        int end = o + Core.Battle.SpellTablePatch.SpellLength(rom, SelectedIndex);
 
         Name = Ctx.ReadName(o, GameDataOffsets.SpellNameLen);
 
@@ -131,8 +132,42 @@ public partial class SpellEditorViewModel : GameDataEditorBase
         HasNoParameters = !(IsCure || IsAilment || IsStat || IsElement || IsTeleport);
 
         IsEditable = SelectedIndex > 0;   // spell 00 is the "Nothing" placeholder
+        int added = Core.Battle.SpellTablePatch.NewCount(rom);
+        NewSpellText = Core.Battle.SpellTablePatch.IsApplied(rom)
+            ? $"{added} new spells, room for {Core.Battle.SpellTablePatch.NewSlots - added} more. A new spell is a copy of the selected one (effect, animation, numbers): rename it and change its numbers."
+            : "The game has 56 spells. \"New spell\" adds the \"Up to 128 spells\" patch (Patch Manager) first.";
         RawHex     = ItemEditorViewModel.ToHex(rom.ReadBytes(o + 8, end - o - 8));
         OffsetText = $"Record at 0x{o:X6}, {end - o} bytes";
+    }
+
+    [RelayCommand]
+    private void NewSpell()
+    {
+        if (Ctx == null || SelectedIndex < 0) return;
+        var rom = Ctx.Rom;
+        int template = SelectedIndex == 0 ? 1 : SelectedIndex, id = -1;
+        Commit("New spell", () =>
+        {
+            if (!Core.Battle.SpellTablePatch.IsApplied(rom)) Core.Battle.SpellTablePatch.Apply(rom);
+            string name = Ctx.ReadName(Core.Battle.SpellTablePatch.SpellOffset(rom, template), GameDataOffsets.SpellNameLen).Trim();
+            id = Core.Battle.SpellTablePatch.AddSpell(rom, template, name.Length > 6 ? name[..6] + "+" : name + "+");
+            rom.FixChecksum();
+        }, namesChanged: true);
+        if (id >= 0) { SelectedIndex = id; Status = $"Spell {id:X2} added (a copy of {template:X2}). Rename it and change its numbers, then Apply. Unsaved."; }
+    }
+
+    [RelayCommand]
+    private void RemoveLastSpell()
+    {
+        if (Ctx == null) return;
+        var rom = Ctx.Rom;
+        int n = Core.Battle.SpellTablePatch.NewCount(rom);
+        if (n == 0) { Status = "There are no new spells to remove."; return; }
+        int id = Core.Battle.SpellTablePatch.FirstNew + n - 1;
+        if (System.Windows.MessageBox.Show($"Remove spell {id:X2}? Characters stop learning it and monsters that cast it attack instead.",
+                "Remove spell", System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxImage.Question) != System.Windows.MessageBoxResult.Yes) return;
+        Commit($"Spell {id:X2} removed", () => { Core.Battle.SpellTablePatch.RemoveLastSpell(rom); rom.FixChecksum(); }, namesChanged: true);
+        if (SelectedIndex >= Core.Battle.SpellTablePatch.SpellCount(rom)) SelectedIndex = Core.Battle.SpellTablePatch.SpellCount(rom) - 1;
     }
 
     [RelayCommand]

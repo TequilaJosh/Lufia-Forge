@@ -18,8 +18,8 @@ public static class MonsterAi
         (1, "Call another monster of its kind into an empty place", true), // 03 $CC18
         (3, "With a chance, go to", false),                        // 04 $CC58
         (1, "Attack", true),                                       // 05 $CC74
-        (1, "Cast spell", true),                                   // 06 $CCB1
-        (1, "Use an ability (if it has the MP)", true),            // 07 $CD01
+        (1, "Use item", true),                                     // 06 $CCB1 (item data via $08:F999)
+        (1, "Cast spell (if it has the MP)", true),                // 07 $CD01 (spell data via $08:FA2D)
         (3, "Special attack", true),                               // 08 $CE25
         (2, "Go to", false),                                       // 09 $CC66
         (3, "If HP is above a share of max HP, go to", false),     // 0A $CE6A
@@ -39,7 +39,7 @@ public static class MonsterAi
     /// From the handlers: 0A/10 compare max HP/MP x share / 256 with the current HP/MP (battle record +11/+13 and
     /// +42/+44) and jump while the current value is above it; 12/13 set the current HP/MP.
     /// </summary>
-    public static string Plain(Command c, Func<int, string> step, Func<int, string>? spellName = null)
+    public static string Plain(Command c, Func<int, string> step, Func<int, string>? spellName = null, Func<int, string>? itemName = null)
     {
         var a = c.Args;
         string Pct(int share) => $"{share * 100 / 256}%";
@@ -52,8 +52,8 @@ public static class MonsterAi
             0x03 => "Call for help: another monster of its kind joins in an empty spot." + (a[0] != 0 ? $" (Shows battle message {a[0]:X2}.)" : ""),
             0x04 => $"{Pct(a[0])} of the time, skip to {step(Word(1))}. Otherwise carry on.",
             0x05 => "Attack." + (a[0] != 0 ? $" (Shows battle message {a[0]:X2}.)" : ""),
-            0x06 => $"Cast {spellName?.Invoke(a[0]) ?? $"spell {a[0]:X2}"}.",
-            0x07 => $"Use ability {a[0]:X2}. If it doesn't have enough MP, carry on to the next step instead.",
+            0x06 => $"Use {itemName?.Invoke(a[0]) ?? $"item {a[0]:X2}"}.",
+            0x07 => $"Cast {spellName?.Invoke(a[0]) ?? $"spell {a[0]:X2}"}. If it doesn't have enough MP, carry on to the next step instead.",
             0x08 => $"Special attack {a[0]:X2} with power {a[1]}." + (a[2] != 0 ? $" (Shows battle message {a[2]:X2}.)" : ""),
             0x09 => $"Go to {step(Word(0))}.",
             0x0A => $"If its HP is still above {Pct(a[0])} of its max HP, go to {step(Word(1))}. Otherwise carry on.",
@@ -73,7 +73,98 @@ public static class MonsterAi
     public static int ScriptOffset(RomBuffer rom, int record) => rom.ReadUInt16Le(record + 0x22);
 
     /// <summary>The commands of a monster's script (following jumps to code outside the straight line too).</summary>
-    public static List<Command> Decode(RomBuffer rom, int record, Func<int, string>? spellName = null)
+    public const int PointerTable = 0x5800, MonsterCount = 165;
+    public static int RecordOffset(RomBuffer rom, int id) => PointerTable + rom.ReadUInt16Le(PointerTable + id * 2);
+
+    /// <summary>Every monster's script commands, with the record they belong to.</summary>
+    public static IEnumerable<(int Record, Command Cmd)> AllCommands(RomBuffer rom)
+    {
+        for (int m = 0; m < MonsterCount; m++)
+        {
+            int r = RecordOffset(rom, m);
+            foreach (var c in Decode(rom, r)) yield return (r, c);
+        }
+    }
+
+    /// <summary>Unused filler at the end of bank 0, after the last monster record: room for new or longer scripts
+    /// (a script must lie after its record, in the same bank, as offsets count from the record).</summary>
+    public const int FreeStart = 0x7DD0, FreeEnd = 0x7FB0;
+
+    /// <summary>(start, length) of a monster's script, offsets from its record; (0, 0) when it has none.</summary>
+    public static (int Start, int Length) ScriptRange(RomBuffer rom, int record)
+    {
+        var cmds = Decode(rom, record);
+        if (cmds.Count == 0) return (0, 0);
+        int start = cmds.Min(c => c.Offset);
+        return (start, cmds.Max(c => c.Offset + 1 + c.Args.Length) - start);
+    }
+
+    /// <summary>
+    /// A script that casts spells: each (percent, spell) is the share of turns that try that spell (a monster without
+    /// enough MP attacks instead); the rest of the turns it attacks. Built for a script starting at record offset
+    /// <paramref name="at"/>: chance steps (04), then attack (05), then cast steps (07, each followed by an attack).
+    /// </summary>
+    public static byte[] BuildSpellScript(IReadOnlyList<(int Percent, int Spell)> spells, int at)
+    {
+        var b = new List<byte>();
+        int k = spells.Count, casts = at + k * 4 + 2;
+        double left = 100;
+        for (int i = 0; i < k; i++)
+        {
+            double p = Math.Clamp(spells[i].Percent, 0, 100);
+            int chance = left <= 0 ? 0 : (int)Math.Round(Math.Min(1, p / left) * 256);
+            left -= p;
+            int target = casts + i * 4;
+            b.AddRange(new[] { (byte)0x04, (byte)Math.Clamp(chance, 0, 255), (byte)target, (byte)(target >> 8) });
+        }
+        b.AddRange(new byte[] { 0x05, 0x00 });
+        foreach (var (_, sp) in spells) b.AddRange(new byte[] { 0x07, (byte)sp, 0x05, 0x00 });
+        return b.ToArray();
+    }
+
+    public static int SpellScriptLength(int spells) => spells * 8 + 2;
+
+    /// <summary>
+    /// Gives monster <paramref name="id"/> a spell-casting script (see <see cref="BuildSpellScript"/>): in place when
+    /// it fits in its old script, otherwise in the free space at the end of bank 0. Returns where it went.
+    /// </summary>
+    public static int WriteSpellScript(RomBuffer rom, int id, IReadOnlyList<(int Percent, int Spell)> spells)
+    {
+        int record = RecordOffset(rom, id);
+        var (oldStart, oldLen) = ScriptRange(rom, record);
+        int len = SpellScriptLength(spells.Count);
+        int at;
+        if (oldLen >= len) at = record + oldStart;
+        else
+        {
+            // free space not used by any monster's script
+            var used = new List<(int, int)>();
+            for (int m = 0; m < MonsterCount; m++)
+            {
+                if (m == id) continue;
+                int r = RecordOffset(rom, m);
+                var (s0, l0) = ScriptRange(rom, r);
+                if (l0 > 0) used.Add((r + s0, r + s0 + l0));
+            }
+            at = -1;
+            for (int p = FreeStart; p + len <= FreeEnd; p++)
+            {
+                int q = p;
+                var hit = used.FirstOrDefault(u => u.Item1 < q + len && u.Item2 > q);
+                if (hit == default) { at = p; break; }
+                p = hit.Item2 - 1;
+            }
+            if (at < 0) throw new InvalidOperationException("No room left for a longer monster script (the free space at the end of bank 0 is used up). Use fewer spells.");
+        }
+        int rel = at - record;
+        var script = BuildSpellScript(spells, rel);
+        rom.WriteBytes(at, script);
+        if (oldLen > len && at == record + oldStart) rom.WriteBytes(at + len, Enumerable.Repeat((byte)0x00, oldLen - len).ToArray());
+        rom.WriteUInt16Le(record + 0x22, (ushort)rel);
+        return at;
+    }
+
+    public static List<Command> Decode(RomBuffer rom, int record, Func<int, string>? spellName = null, Func<int, string>? itemName = null)
     {
         var list = new List<Command>();
         int start = ScriptOffset(rom, record);
@@ -83,7 +174,7 @@ public static class MonsterAi
         while (todo.Count > 0 && list.Count < 200)
         {
             int at = todo.Dequeue();
-            while (at < 0x400 && seen.Add(at))
+            while (at < 0x4000 && record + at < rom.Length && seen.Add(at))
             {
                 int op = rom.ReadByte(record + at);
                 if (op == 0) { list.Add(new Command(at, 0, Array.Empty<byte>(), "End", null, false)); break; }
@@ -105,8 +196,8 @@ public static class MonsterAi
                     case 0x0A: jump = args[1] | args[2] << 8; text = $"If HP > max HP x {args[0]}/256, go to +{jump:X2}"; break;
                     case 0x10: jump = args[1] | args[2] << 8; text = $"If MP > max MP x {args[0]}/256, go to +{jump:X2}"; break;
                     case 0x05: text = args[0] == 0 ? "Attack" : $"Attack (message {args[0]:X2})"; break;
-                    case 0x06: text = $"Cast {spellName?.Invoke(args[0]) ?? $"spell {args[0]:X2}"}"; break;
-                    case 0x07: text = $"Use ability {args[0]:X2} (if it has the MP)"; break;
+                    case 0x06: text = $"Use {itemName?.Invoke(args[0]) ?? $"item {args[0]:X2}"}"; break;
+                    case 0x07: text = $"Cast {spellName?.Invoke(args[0]) ?? $"spell {args[0]:X2}"} (if it has the MP)"; break;
                     case 0x08: text = $"Special attack {args[0]:X2} (power {args[1]:X2})" + (args[2] != 0 ? $", message {args[2]:X2}" : ""); break;
                     case 0x0F: text = $"Show battle message {args[0]:X2}"; break;
                     case 0x03: text = $"Call another monster of its kind (message {args[0]:X2})"; break;

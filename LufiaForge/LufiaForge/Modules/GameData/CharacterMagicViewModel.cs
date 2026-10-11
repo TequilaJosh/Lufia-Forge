@@ -31,6 +31,8 @@ public partial class CharacterMagicViewModel : GameDataEditorBase
 
     [ObservableProperty] private int    _selectedIndex = -1;
     [ObservableProperty] private string _offsetText = "";
+    [ObservableProperty] private bool   _canResize;
+    [ObservableProperty] private string _castersHint = "";
 
     protected override void OnRomLoaded()
     {
@@ -51,6 +53,9 @@ public partial class CharacterMagicViewModel : GameDataEditorBase
         int keep = SelectedIndex;
         Casters.Clear();
         foreach (var (slot, _) in Current) Casters.Add(Ctx.CharacterName(slot));
+        CastersHint = Current == PatchedLists
+            ? "Entries are checked in order; keep levels ascending. Level 0 = known from the start. Add or remove entries with the buttons (Guy / Aguro magic patch: the Hero up to 19 spells, Aguro 11, Lufia and Jerin 31)."
+            : "Aguro doesn't learn magic and the lists can't change length: add the \"Spells and MP for Guy / Aguro\" patch (Patch Manager) for both. Entries are checked in order; keep levels ascending. Level 0 = known from the start.";
         SelectedIndex = keep < Current.Length ? keep : 0;
     }
 
@@ -59,12 +64,14 @@ public partial class CharacterMagicViewModel : GameDataEditorBase
     protected override void LoadSelected()
     {
         Slots.Clear();
+        CanResize = false;
         if (Ctx == null || SelectedIndex < 0 || SelectedIndex >= Current.Length) return;
         if (Current == PatchedLists)
         {
             int slot = PatchedLists[SelectedIndex].Slot, n = 1;
             foreach (var (lv, sp) in AguroMagicPatch.ReadLists(Ctx.Rom)[slot])
                 Slots.Add(new SpellSlot { Number = n++, Level = lv, Spell = sp });
+            CanResize = true;
             OffsetText = $"Guy / Aguro magic patch: list {slot} at 0x{AguroMagicPatch.BlockOffset(Ctx.Rom):X6}, {Slots.Count} entries " +
                          $"(up to {AguroMagicPatch.MaxSpells(slot)}). Level 0 = known from the start.";
             return;
@@ -77,6 +84,25 @@ public partial class CharacterMagicViewModel : GameDataEditorBase
 
         OffsetText = $"List at 0x{start:X6}, {Slots.Count} entries, FF terminator at 0x{o:X6}. " +
                      "Level 0 = known from the start.";
+    }
+
+    [RelayCommand]
+    private void AddEntry()
+    {
+        if (Ctx == null || !CanResize) return;
+        int slot = PatchedLists[SelectedIndex].Slot;
+        if (Slots.Count >= AguroMagicPatch.MaxSpells(slot)) { Status = $"{Casters[SelectedIndex]} can learn at most {AguroMagicPatch.MaxSpells(slot)} spells."; return; }
+        int level = Slots.Count == 0 ? 0 : Math.Min(Slots[^1].Level + 1, 99);
+        Slots.Add(new SpellSlot { Number = Slots.Count + 1, Level = level, Spell = Ctx.SpellNames.Count - 1 });
+        Status = "Entry added (not yet applied): pick its level and spell, then Apply.";
+    }
+
+    [RelayCommand]
+    private void RemoveEntry()
+    {
+        if (Ctx == null || !CanResize || Slots.Count == 0) return;
+        Slots.RemoveAt(Slots.Count - 1);
+        Status = "Last entry removed (not yet applied).";
     }
 
     [RelayCommand]

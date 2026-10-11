@@ -37,8 +37,8 @@ public sealed class GameDataContext
     {
         Fill(ItemNames, GameDataOffsets.ItemCount,
              i => $"{i:X2} {ReadName(ItemOffset(i), GameDataOffsets.ItemNameLen)}");
-        Fill(SpellNames, Core.Battle.TricksterPatch.SpellCount(Rom),
-             i => $"{i:X2} {ReadName(Core.Battle.TricksterPatch.SpellOffset(Rom, i), GameDataOffsets.SpellNameLen)}");
+        Fill(SpellNames, Core.Battle.SpellTablePatch.SpellCount(Rom),
+             i => $"{i:X2} {ReadName(Core.Battle.SpellTablePatch.SpellOffset(Rom, i), GameDataOffsets.SpellNameLen)}");
     }
 
     /// <summary>Call after any write so the window title shows unsaved changes.</summary>

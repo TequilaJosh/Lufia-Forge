@@ -135,18 +135,6 @@ public partial class MainWindow : Window
     private async void CheckUpdatesMenuItem_Click(object sender, RoutedEventArgs e) =>
         await UpdateService.CheckAsync(silentIfNone: false, HasUnsavedChanges);
 
-    private void AboutMenuItem_Click(object sender, RoutedEventArgs e)
-    {
-        MessageBox.Show(
-            $"Lufia Forge v{UpdateService.CurrentVersion}\n\n" +
-            "A ROM hack toolkit for Lufia & The Fortress of Doom (SNES, US)\n\n" +
-            "Phase 1: ROM loader, IPS patch apply/export, core infrastructure\n" +
-            "Phase 2: Text editor with full encoding support, script export\n" +
-            "Phase 3: Tile & sprite viewer (2bpp / 4bpp / 8bpp, ROM palette)\n" +
-            "Phase 4: IPS Patch Manager UI\n\n" +
-            "Text encoding research: Vegetaman (2010), Digisalt / AllOriginal.tbl (flobo 2011).",
-            "About Lufia Forge",
-            MessageBoxButton.OK,
-            MessageBoxImage.Information);
-    }
+    private void AboutMenuItem_Click(object sender, RoutedEventArgs e) =>
+        new AboutWindow { Owner = this }.ShowDialog();
 }

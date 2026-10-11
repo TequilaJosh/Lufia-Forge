@@ -20,8 +20,7 @@
             <ListBox Style="{StaticResource GdRecordList}"
                      ItemsSource="{Binding Casters}"
                      SelectedIndex="{Binding SelectedIndex}"/>
-            <TextBlock Style="{StaticResource GdHint}" Margin="0,10,0,0"
-                       Text="Aguro doesn't learn magic. Entries are checked in order; keep levels ascending. Level 0 = known from the start."/>
+            <TextBlock Style="{StaticResource GdHint}" Margin="0,10,0,0" TextWrapping="Wrap" Text="{Binding CastersHint}"/>
             <TextBlock Style="{StaticResource GdHint}" Margin="0,8,0,0"
                        Text="Original-game bug: the Hero's first entry is level 1, which is never reached through a level-up, so that spell is never learned. Set it to 2 to fix."/>
         </StackPanel>
@@ -59,6 +58,10 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0" IsEnabled="{Binding CanResize}">
+                        <Button Content="+  Add entry" Style="{StaticResource LufiaButtonGold}" Command="{Binding AddEntryCommand}" Margin="0,0,8,0"/>
+                        <Button Content="Remove last entry" Style="{StaticResource LufiaButton}" Command="{Binding RemoveEntryCommand}"/>
+                    </StackPanel>
                 </StackPanel>
             </Border>
         </ScrollViewer>

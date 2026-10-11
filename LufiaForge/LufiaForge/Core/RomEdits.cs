@@ -46,7 +46,8 @@ public static class RomEdits
         if (SubgroupPatch.IsApplied(rom)) patches.Add("more than 67 encounter subgroups");
         if (RenamePatch.IsApplied(rom)) patches.Add("rename command for events");
         if (AguroMagicPatch.IsApplied(rom)) patches.Add("spells and MP for Guy / Aguro");
-        if (TricksterPatch.IsApplied(rom)) patches.Add("new spell Trickstr");
+        if (SpellTablePatch.IsApplied(rom)) patches.Add($"up to 128 spells ({SpellTablePatch.NewCount(rom)} added)");
+        if (FontPatch.IsApplied(rom)) patches.Add("Lufia II font");
         list.Add(("Built-in patches:", patches.Count == 0 ? "none" : string.Join(", ", patches)));
 
         try
