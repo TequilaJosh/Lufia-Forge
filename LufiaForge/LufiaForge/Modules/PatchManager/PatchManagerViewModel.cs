@@ -73,6 +73,58 @@ public partial class PatchManagerViewModel : ObservableObject
     {
         foreach (var p in BuiltInPatches) p.Refresh(_rom);
         RefreshSize();
+        RefreshFont();
+    }
+
+    // -------------------------------------------------------------------------
+    // Lufia II font
+    // -------------------------------------------------------------------------
+
+    [ObservableProperty] private string _fontText = "";
+    [ObservableProperty] private bool _smallFontToo = true;
+    [ObservableProperty] private bool _canRestoreFont;
+
+    private void RefreshFont()
+    {
+        CanRestoreFont = _rom != null && FontPatch.IsApplied(_rom);
+        FontText = _rom == null ? "" : CanRestoreFont
+            ? "This ROM uses Lufia II's font. Lufia 1's own font is kept in the added space and can be put back."
+            : "Lufia 1's own font. Lufia II's dialogue font (and its thinner small font for names and menu titles) can be copied in from your Lufia II ROM (.sfc, .smc or a .zip).";
+    }
+
+    [RelayCommand]
+    private void UseLufia2Font()
+    {
+        if (_rom == null) return;
+        var dialog = new OpenFileDialog
+        {
+            Title  = "Your Lufia II ROM",
+            Filter = "Lufia II ROM (*.sfc;*.smc;*.zip)|*.sfc;*.smc;*.zip|All files (*.*)|*.*"
+        };
+        if (dialog.ShowDialog() != true) return;
+        if (_rom.Length < Core.Maps.MapWriter.ExpandedSize && !FontPatch.IsApplied(_rom) &&
+            MessageBox.Show("Lufia 1's own font is kept in the expanded part of the ROM so it can be put back. Expand the ROM to 2 MB (the game plays the same)?",
+                "Expand ROM?", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+        { StatusText = "Font not changed: the ROM wasn't expanded."; return; }
+        try
+        {
+            var l2 = FontPatch.ReadLufia2(dialog.FileName);
+            int n = FontPatch.Apply(_rom, l2, SmallFontToo);
+            _mainVm?.NotifyRomModified("Lufia II font");
+            StatusText = $"Lufia II's font copied in ({n} letters changed). Save the ROM to keep it.";
+        }
+        catch (Exception ex) { StatusText = "Font not changed: " + ex.Message; }
+        RefreshBuiltIn();
+    }
+
+    [RelayCommand]
+    private void RestoreFont()
+    {
+        if (_rom == null || !FontPatch.IsApplied(_rom)) return;
+        FontPatch.Restore(_rom);
+        _mainVm?.NotifyRomModified("Lufia 1 font restored");
+        StatusText = "Lufia 1's own font is back. Save the ROM to keep it.";
+        RefreshBuiltIn();
     }
 
     // -------------------------------------------------------------------------

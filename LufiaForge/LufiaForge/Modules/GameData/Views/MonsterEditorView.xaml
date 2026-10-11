@@ -34,7 +34,7 @@
                             </Grid.ColumnDefinitions>
                             <Grid.RowDefinitions>
                                 <RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/>
-                                <RowDefinition/><RowDefinition/><RowDefinition/>
+                                <RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/>
                             </Grid.RowDefinitions>
                             <TextBlock Grid.Row="0" Text="Name" Style="{StaticResource GdFieldLabel}"/>
                             <TextBox   Grid.Row="0" Grid.Column="1" Style="{StaticResource GdText}" Width="140"
@@ -53,6 +53,9 @@
                             <TextBox   Grid.Row="5" Grid.Column="1" Style="{StaticResource GdNumber}" Text="{Binding Agl}"/>
                             <TextBlock Grid.Row="6" Text="MGR" Style="{StaticResource GdFieldLabel}"/>
                             <TextBox   Grid.Row="6" Grid.Column="1" Style="{StaticResource GdNumber}" Text="{Binding Mgr}"/>
+                            <TextBlock Grid.Row="7" Text="MP" Style="{StaticResource GdFieldLabel}"/>
+                            <TextBox   Grid.Row="7" Grid.Column="1" Style="{StaticResource GdNumber}" Text="{Binding Mp}"
+                                       ToolTip="Spells cost the monster MP; without enough it attacks instead"/>
                         </Grid>
                         <Button Content="🎲  Randomize stats" Style="{StaticResource LufiaButton}"
                                 Command="{Binding RandomizeStatsCommand}" HorizontalAlignment="Left" Margin="0,10,0,0"
@@ -119,7 +122,7 @@
                             <TextBlock Grid.Row="4" Text="Palette" Style="{StaticResource GdFieldLabel}"/>
                             <TextBox   Grid.Row="4" Grid.Column="1" Style="{StaticResource GdNumber}" Text="{Binding Palette}"/>
                         </Grid>
-                        <TextBlock Text="Unknown bytes +11 +13 +18 +19 +29 (hex)" Style="{StaticResource LufiaLabel}" Margin="0,10,0,2"/>
+                        <TextBlock Text="Unknown bytes +11 +13 +29 (hex)" Style="{StaticResource LufiaLabel}" Margin="0,10,0,2"/>
                         <TextBox Style="{StaticResource GdText}" Width="160" HorizontalAlignment="Left"
                                  Text="{Binding UnknownHex, UpdateSourceTrigger=PropertyChanged}"/>
                     </StackPanel>
@@ -147,6 +150,18 @@
                 <Border Style="{StaticResource GdCard}">
                     <StackPanel MaxWidth="560">
                         <TextBlock Text="AI SCRIPT (WHAT IT DOES EACH TURN)" Style="{StaticResource GdSection}"/>
+                        <ItemsControl ItemsSource="{Binding SpellSteps}" Margin="0,0,0,8">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal" Margin="0,2">
+                                        <TextBlock Text="{Binding Label}" Style="{StaticResource GdFieldLabel}" Width="110"/>
+                                        <ComboBox Style="{StaticResource GdCombo}" Width="180"
+                                                  ItemsSource="{Binding DataContext.SpellNames, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                  SelectedIndex="{Binding Spell}"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
                         <ItemsControl ItemsSource="{Binding AiLines}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
@@ -159,7 +174,32 @@
                                  Text="{Binding AiHex, UpdateSourceTrigger=PropertyChanged}"/>
                         <TextBlock Text="{Binding AiNote}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0"/>
                         <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0"
-                                   Text="Byte guide for editing: 00 end - 01 aa bb cc / 02 aa bb cc pick a target - 03 mm call for help - 04 cc ssss chance cc/256 to skip to ssss - 05 mm attack - 06 ss cast spell ss - 07 xx use ability xx - 08 aa pp mm special attack - 09 ssss go to - 0A pp ssss if HP above pp/256 of max go to - 0B guard - 0C target itself - 0D target an ally - 0E silent - 0F mm battle message - 10 pp ssss if MP above pp/256 of max go to - 11 run away - 12 hhhh set HP - 13 hhhh set MP. Two-byte values are low byte first; ssss counts from the start of the monster record (the +xx number)."/>
+                                   Text="Byte guide for editing: 00 end - 01 aa bb cc / 02 aa bb cc pick a target - 03 mm call for help - 04 cc ssss chance cc/256 to skip to ssss - 05 mm attack - 06 ii use item ii - 07 ss cast spell ss (if it has the MP) - 08 aa pp mm special attack - 09 ssss go to - 0A pp ssss if HP above pp/256 of max go to - 0B guard - 0C target itself - 0D target an ally - 0E silent - 0F mm battle message - 10 pp ssss if MP above pp/256 of max go to - 11 run away - 12 hhhh set HP - 13 hhhh set MP. Two-byte values are low byte first; ssss counts from the start of the monster record (the +xx number)."/>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource GdCard}">
+                    <StackPanel MaxWidth="420">
+                        <TextBlock Text="GIVE SPELLS" Style="{StaticResource GdSection}"/>
+                        <ItemsControl ItemsSource="{Binding GiveSpells}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal" Margin="0,2">
+                                        <TextBox Style="{StaticResource GdNumber}" Width="50" Text="{Binding Percent}"/>
+                                        <TextBlock Text="% of turns:" Style="{StaticResource GdFieldLabel}" Margin="4,0,8,0"/>
+                                        <ComboBox Style="{StaticResource GdCombo}" Width="180"
+                                                  ItemsSource="{Binding DataContext.SpellNames, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                  SelectedIndex="{Binding Spell}"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                            <Button Content="+  Spell" Style="{StaticResource LufiaButton}" Command="{Binding AddGiveSpellCommand}" Margin="0,0,6,0"/>
+                            <Button Content="-  Spell" Style="{StaticResource LufiaButton}" Command="{Binding RemoveGiveSpellCommand}" Margin="0,0,6,0"/>
+                            <Button Content="Write new AI script" Style="{StaticResource LufiaButtonGold}" Command="{Binding WriteGiveSpellsCommand}"/>
+                        </StackPanel>
+                        <TextBlock Text="{Binding GiveSpellsNote}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,8,0,0"/>
                     </StackPanel>
                 </Border>
 

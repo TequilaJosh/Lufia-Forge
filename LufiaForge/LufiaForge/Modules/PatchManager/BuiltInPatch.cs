@@ -57,9 +57,9 @@ public partial class BuiltInPatch : ObservableObject
         },
         new()
         {
-            Name = "New spell: Trickstr",
-            Description = "Adds spell 38 \"Trickstr\": Trick (raises attack) on the whole party, 9 MP. Edit it in Spells; give it to anyone in Character Magic. Added with the Guy / Aguro magic patch, which teaches it to Aguro at level 24.",
-            IsApplied = TricksterPatch.IsApplied, IsOriginal = TricksterPatch.IsOriginal, Apply = TricksterPatch.Apply, Remove = TricksterPatch.Remove,
+            Name = "Up to 128 spells",
+            Description = "Room for 72 new spells (38-7F) next to the game's 56: make them in Spells (\"New spell\" copies the selected one, then rename and edit it), teach them in Character Magic, give them to monsters and bosses in Monsters. The Guy / Aguro magic patch adds it with a first new spell, Trickstr (Trick on the whole party).",
+            IsApplied = SpellTablePatch.IsApplied, IsOriginal = SpellTablePatch.IsOriginal, Apply = SpellTablePatch.Apply, Remove = SpellTablePatch.Remove,
         },
         new()
         {

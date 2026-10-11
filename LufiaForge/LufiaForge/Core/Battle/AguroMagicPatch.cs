@@ -42,14 +42,16 @@ public static class AguroMagicPatch
     public static int MaxSpells(int slot) => SpellEntries[slot] - 1;
 
     /// <summary>Aguro's spells: a tanky bruiser - defence and attack for the party, life drain, healing; with
-    /// <see cref="TricksterPatch"/> also Trickstr (Trick on the whole party) at level 24.</summary>
+    /// <see cref="SpellTablePatch"/> also Trickstr (Trick on the whole party) at level 24.</summary>
     public static readonly (int Level, int Spell)[] DefaultAguro =
     {
-        (0, 0x1E), (0, 0x22), (8, 0x1C), (12, 0x14), (16, 0x1F), (21, 0x23), (24, TricksterPatch.Id), (26, 0x1D), (31, 0x15), (37, 0x20), (44, 0x24),
+        (0, 0x1E), (0, 0x22), (8, 0x1C), (12, 0x14), (16, 0x1F), (21, 0x23), (26, 0x1D), (31, 0x15), (37, 0x20), (44, 0x24),
     };
     /// <summary>Aguro's default list for this ROM (without Trickstr when the new spell isn't in it).</summary>
     public static List<(int Level, int Spell)> DefaultFor(RomBuffer rom) =>
-        DefaultAguro.Where(e => e.Spell != TricksterPatch.Id || TricksterPatch.IsApplied(rom)).ToList();
+        SpellTablePatch.Find(rom, SpellTablePatch.TricksterName) is int t and >= 0
+            ? DefaultAguro.Append((Level: 24, Spell: t)).OrderBy(e => e.Level).ToList()
+            : DefaultAguro.ToList();
     /// <summary>MP gained over each band of 16 level-ups (about half the Hero's): ~210 MP at level 99.</summary>
     public static readonly int[] DefaultMpGrowth = { 24, 40, 56, 48, 24, 18, 12 };
 
@@ -229,7 +231,8 @@ public static class AguroMagicPatch
         if (IsApplied(rom)) return;
         if (!IsOriginal(rom)) throw new InvalidOperationException("The game's magic code for Aguro's party slot isn't the original, so this patch can't be applied safely.");
         if (rom.Length < MapWriter.ExpandedSize) rom.Expand(MapWriter.ExpandedSize);
-        if (!TricksterPatch.IsApplied(rom) && TricksterPatch.IsOriginal(rom)) TricksterPatch.Apply(rom);
+        if (!SpellTablePatch.IsApplied(rom) && SpellTablePatch.IsOriginal(rom)) SpellTablePatch.Apply(rom);
+        if (SpellTablePatch.IsApplied(rom) && SpellTablePatch.NewCount(rom) < SpellTablePatch.NewSlots) SpellTablePatch.AddTrickster(rom);
         var lists = ReadLists(rom);
         lists[2] = DefaultFor(rom);
         var space = ExpansionSpace.Load(rom);

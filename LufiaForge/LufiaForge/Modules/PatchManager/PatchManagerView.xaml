@@ -48,6 +48,17 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
+                    <TextBlock Text="FONT" Style="{StaticResource LufiaLabel}" Margin="0,0,0,6"/>
+                    <TextBlock Text="{Binding FontText}" Style="{StaticResource LufiaLabel}" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                    <CheckBox Content="Small font too (names, menu titles, numbers)" IsChecked="{Binding SmallFontToo}"
+                              Style="{StaticResource LufiaCheckBox}" Margin="0,0,0,6"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
+                        <Button Content="Use Lufia II's font..." Style="{StaticResource LufiaButtonGold}" MinWidth="150" Margin="0,0,8,0"
+                                Command="{Binding UseLufia2FontCommand}"/>
+                        <Button Content="Put Lufia 1's font back" Style="{StaticResource LufiaButton}" MinWidth="150"
+                                Command="{Binding RestoreFontCommand}" IsEnabled="{Binding CanRestoreFont}"/>
+                    </StackPanel>
+
                     <TextBlock Text="ROM SIZE" Style="{StaticResource LufiaLabel}" Margin="0,0,0,6"/>
                     <TextBlock Text="{Binding RomSizeText}" Style="{StaticResource LufiaLabel}" TextWrapping="Wrap" Margin="0,0,0,8"/>
                     <Button Content="Expand to 4 MB" Style="{StaticResource LufiaButton}" HorizontalAlignment="Left" MinWidth="120"
