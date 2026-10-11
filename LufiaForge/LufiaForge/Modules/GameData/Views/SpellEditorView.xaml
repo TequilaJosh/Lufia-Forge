@@ -61,8 +61,21 @@
                                        Style="{StaticResource LufiaLabel}" Foreground="{StaticResource TextPrimaryBrush}"
                                        VerticalAlignment="Center" Margin="0,6"/>
                         </Grid>
-                        <TextBlock Style="{StaticResource GdHint}" MaxWidth="300" Margin="0,8,0,0"
-                                   Text="The effect type can't be changed: each effect has a different parameter size and spell records can't grow."/>
+                        <TextBlock Style="{StaticResource GdHint}" MaxWidth="300" Margin="0,8,0,0" TextWrapping="Wrap"
+                                   Text="The game's own spells keep their effect type (their records can't grow). A new spell can work like any other spell: see What it does."/>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource GdCard}" Visibility="{Binding IsNewSpell, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <StackPanel MaxWidth="320">
+                        <TextBlock Text="WHAT IT DOES" Style="{StaticResource GdSection}"/>
+                        <TextBlock Text="Works like" Style="{StaticResource GdFieldLabel}"/>
+                        <ComboBox Style="{StaticResource GdCombo}" Width="200" HorizontalAlignment="Left"
+                                  ItemsSource="{Binding SpellNames}" SelectedIndex="{Binding WorksLike}"/>
+                        <Button Content="Use this effect" Style="{StaticResource LufiaButtonGold}" HorizontalAlignment="Left"
+                                Command="{Binding ApplyWorksLikeCommand}" Margin="0,8,0,0"/>
+                        <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,8,0,0"
+                                   Text="Copies that spell's effect (damage, healing, ailments, stat changes, warping...), its animation, usage and target into this spell, which keeps its name and MP. Then change its numbers in Effect parameters: power, element, ailments or stat."/>
                     </StackPanel>
                 </Border>
 

@@ -215,6 +215,28 @@ public static class SpellTablePatch
         rom.WriteByte(b + Count, (byte)(n - 1));
     }
 
+    /// <summary>
+    /// Makes added spell <paramref name="id"/> work like <paramref name="template"/>: its effect and the effect's
+    /// numbers, animation and script, usage and target are copied (the record becomes the template's size); the new
+    /// spell keeps its name and MP cost.
+    /// </summary>
+    public static void SetWorksLike(RomBuffer rom, int id, int template)
+    {
+        int b = BlockOffset(rom);
+        if (b == 0 || id < FirstNew || id >= SpellCount(rom)) throw new InvalidOperationException("Only spells added with the patch (38 and up) can change what they do.");
+        int len = SpellLength(rom, template);
+        if (len < 20 || len > SlotSize) throw new InvalidOperationException($"Spell {template:X2}'s record can't be copied.");
+        int at = SpellOffset(rom, id);
+        var name = rom.ReadBytes(at, 8);
+        byte mp = rom.ReadByte(at + 11);
+        var rec = rom.ReadBytes(SpellOffset(rom, template), len);
+        name.CopyTo(rec, 0);
+        rec[11] = mp;
+        rom.WriteBytes(at, new byte[SlotSize]);
+        rom.WriteBytes(at, rec);
+        rom.WriteByte(b + Lengths + id - FirstNew, (byte)len);
+    }
+
     /// <summary>The id of an added spell with this name, or -1.</summary>
     public static int Find(RomBuffer rom, string name)
     {
