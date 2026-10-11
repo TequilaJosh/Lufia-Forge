@@ -157,6 +157,12 @@ public abstract partial class GameDataEditorBase : ObservableObject
         Status = "Reverted to the values in the ROM.";
     }
 
+    /// <summary>Called when the editor is shown: picks up changes other tabs made (the Patch Manager adding spells).</summary>
+    public virtual void Recheck()
+    {
+        if (Ctx != null && Ctx.SpellNames.Count != Core.Battle.SpellTablePatch.SpellCount(Ctx.Rom)) Ctx.RefreshNames();
+    }
+
     /// <summary>Runs a write action, reporting success or the error in <see cref="Status"/>.</summary>
     protected void Commit(string what, Action write, bool namesChanged = false)
     {

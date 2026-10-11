@@ -148,7 +148,7 @@ public partial class SpellEditorViewModel : GameDataEditorBase
         int template = SelectedIndex == 0 ? 1 : SelectedIndex, id = -1;
         Commit("New spell", () =>
         {
-            if (!Core.Battle.SpellTablePatch.IsApplied(rom)) Core.Battle.SpellTablePatch.Apply(rom);
+            if (!Core.Battle.SpellTablePatch.IsApplied(rom)) Core.Battle.SpellTablePatch.Apply(rom);   // also updates the first Trickstr version
             string name = Ctx.ReadName(Core.Battle.SpellTablePatch.SpellOffset(rom, template), GameDataOffsets.SpellNameLen).Trim();
             id = Core.Battle.SpellTablePatch.AddSpell(rom, template, name.Length > 6 ? name[..6] + "+" : name + "+");
             rom.FixChecksum();
