@@ -58,12 +58,12 @@ public partial class BuiltInPatch : ObservableObject
             Name = "Spells and MP for Guy / Aguro",
             Description = "Aguro (and Guy in the prologue) gets MP and learns spells like the others: a tank/bruiser list (Shield, Strong, Bravery, Drain, Protect, Stronger, Trickstr, Courage, Dread, Mirror, Champion), editable in Character Magic. The Hero keeps up to 19 spells, Aguro up to 11.",
             IsApplied = AguroMagicPatch.IsApplied, IsOriginal = AguroMagicPatch.IsOriginal, Apply = AguroMagicPatch.Apply, Remove = AguroMagicPatch.Remove,
-            NeedsUpdate = AguroMagicPatch.NeedsFieldFix,
+            NeedsUpdate = AguroMagicPatch.NeedsUpdate,
         },
         new()
         {
-            Name = "Up to 128 spells",
-            Description = "Room for 72 new spells (38-7F) next to the game's 56: make them in Spells (\"New spell\" copies the selected one, then rename and edit it), teach them in Character Magic, give them to monsters and bosses in Monsters. The Guy / Aguro magic patch adds it with a first new spell, Trickstr (Trick on the whole party).",
+            Name = "Up to 128 spells, 64 per character",
+            Description = "Room for 72 new spells (38-7F) next to the game's 56: make them in Spells (\"New spell\" copies a spell, then rename it and choose what it does), teach them in Character Magic, give them to monsters and bosses in Monsters. Every character can learn up to 64 spells (their menus list them in spell order); saves from before keep their spells. The Guy / Aguro magic patch adds it with a first new spell, Trickstr (Trick on the whole party).",
             IsApplied = SpellTablePatch.IsApplied, IsOriginal = SpellTablePatch.IsOriginal, Apply = SpellTablePatch.Apply, Remove = SpellTablePatch.Remove,
             NeedsUpdate = SpellTablePatch.NeedsUpdate,
         },

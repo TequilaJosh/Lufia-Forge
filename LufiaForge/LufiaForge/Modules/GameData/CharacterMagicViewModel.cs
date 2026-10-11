@@ -23,17 +23,25 @@ public partial class CharacterMagicViewModel : GameDataEditorBase
         (1, GameDataOffsets.LufiaSpellList),
         (3, GameDataOffsets.JerinSpellList),
     };
-    private static readonly (int Slot, int Offset)[] PatchedLists = { (0, 0), (1, 0), (2, 0), (3, 0) };
-    private (int Slot, int Offset)[] Current => Ctx != null && AguroMagicPatch.HasLists(Ctx.Rom) ? PatchedLists : Lists;
+    // With the "Up to 128 spells, 64 per character" patch the lists live in its spell memory block (offset 0 here);
+    // Aguro has one when the Guy / Aguro patch gave him magic. An earlier Guy / Aguro version is shown the same way
+    // and brought up to date on Apply.
+    private static readonly (int Slot, int Offset)[] Expanded4 = { (0, 0), (1, 0), (2, 0), (3, 0) };
+    private static readonly (int Slot, int Offset)[] Expanded3 = { (0, 0), (1, 0), (3, 0) };
+    private bool IsExpanded => Ctx != null && (SpellMemory.Installed(Ctx.Rom) || SpellMemory.OldBlock(Ctx.Rom) > 0);
+    private (int Slot, int Offset)[] Current =>
+        !IsExpanded ? Lists
+        : AguroMagicPatch.IsApplied(Ctx!.Rom) || Ctx.Rom.ReadByte(AguroMagicPatch.MenuSkip) == 0xFF ? Expanded4 : Expanded3;
 
-    /// <summary>The Patch Manager can add the Guy / Aguro patch (or new spells) while this editor is open: when it is
-    /// shown again, it switches lists if that changed.</summary>
+    /// <summary>The Patch Manager can add the patches while this editor is open: when it is shown again, it switches
+    /// lists if that changed.</summary>
     public override void Recheck()
     {
         base.Recheck();
         if (Ctx == null) return;
-        if (Casters.Count != Current.Length) { RefreshCasters(); LoadSelected(); }
+        if (Casters.Count != Current.Length || _shownExpanded != IsExpanded) { RefreshCasters(); LoadSelected(); }
     }
+    private bool _shownExpanded;
 
     public ObservableCollection<string>    Casters { get; } = new();
     public ObservableCollection<SpellSlot> Slots   { get; } = new();
@@ -62,9 +70,11 @@ public partial class CharacterMagicViewModel : GameDataEditorBase
         int keep = SelectedIndex;
         Casters.Clear();
         foreach (var (slot, _) in Current) Casters.Add(Ctx.CharacterName(slot));
-        CastersHint = Current == PatchedLists
-            ? "Entries are checked in order; keep levels ascending. Level 0 = known from the start. Add or remove entries with the buttons (Guy / Aguro magic patch: the Hero up to 19 spells, Aguro 11, Lufia and Jerin 31)."
-            : "Aguro doesn't learn magic and the lists can't change length: add the \"Spells and MP for Guy / Aguro\" patch (Patch Manager) for both. Entries are checked in order; keep levels ascending. Level 0 = known from the start.";
+        _shownExpanded = IsExpanded;
+        CastersHint = !IsExpanded
+            ? "The lists can't change length and Aguro doesn't learn magic: add \"Up to 128 spells, 64 per character\" (longer lists, up to 64 each) and \"Spells and MP for Guy / Aguro\" in the Patch Manager. Entries are checked in order; keep levels ascending. Level 0 = known from the start."
+            : $"Entries are checked in order; keep levels ascending. Level 0 = known from the start. Add or remove entries with the buttons: up to {SpellMemory.MaxPerCharacter} spells each." +
+              (Current == Expanded3 ? " Aguro learns no magic until the \"Spells and MP for Guy / Aguro\" patch is added." : "");
         SelectedIndex = keep < Current.Length ? keep : 0;
     }
 
@@ -75,14 +85,15 @@ public partial class CharacterMagicViewModel : GameDataEditorBase
         Slots.Clear();
         CanResize = false;
         if (Ctx == null || SelectedIndex < 0 || SelectedIndex >= Current.Length) return;
-        if (Current == PatchedLists)
+        if (IsExpanded)
         {
-            int slot = PatchedLists[SelectedIndex].Slot, n = 1;
-            foreach (var (lv, sp) in AguroMagicPatch.ReadLists(Ctx.Rom)[slot])
+            int slot = Current[SelectedIndex].Slot, n = 1;
+            foreach (var (lv, sp) in SpellMemory.ReadLists(Ctx.Rom)[slot])
                 Slots.Add(new SpellSlot { Number = n++, Level = lv, Spell = sp });
             CanResize = true;
-            OffsetText = $"Guy / Aguro magic patch: list {slot} at 0x{AguroMagicPatch.BlockOffset(Ctx.Rom):X6}, {Slots.Count} entries " +
-                         $"(up to {AguroMagicPatch.MaxSpells(slot)}). Level 0 = known from the start.";
+            OffsetText = SpellMemory.Installed(Ctx.Rom)
+                ? $"Spell memory block at 0x{SpellMemory.BlockOffset(Ctx.Rom):X6}: {Slots.Count} entries (up to {SpellMemory.MaxPerCharacter}). Level 0 = known from the start."
+                : $"An earlier Guy / Aguro patch: Apply brings the spell patch up to date (64 spells each). {Slots.Count} entries.";
             return;
         }
 
@@ -99,8 +110,7 @@ public partial class CharacterMagicViewModel : GameDataEditorBase
     private void AddEntry()
     {
         if (Ctx == null || !CanResize) return;
-        int slot = PatchedLists[SelectedIndex].Slot;
-        if (Slots.Count >= AguroMagicPatch.MaxSpells(slot)) { Status = $"{Casters[SelectedIndex]} can learn at most {AguroMagicPatch.MaxSpells(slot)} spells."; return; }
+        if (Slots.Count >= SpellMemory.MaxPerCharacter) { Status = $"{Casters[SelectedIndex]} can learn at most {SpellMemory.MaxPerCharacter} spells."; return; }
         int level = Slots.Count == 0 ? 0 : Math.Min(Slots[^1].Level + 1, 99);
         Slots.Add(new SpellSlot { Number = Slots.Count + 1, Level = level, Spell = Ctx.SpellNames.Count - 1 });
         Status = "Entry added (not yet applied): pick its level and spell, then Apply.";
@@ -118,15 +128,18 @@ public partial class CharacterMagicViewModel : GameDataEditorBase
     private void Apply()
     {
         if (Ctx == null || SelectedIndex < 0 || SelectedIndex >= Current.Length) return;
-        if (Current == PatchedLists)
+        if (IsExpanded)
         {
-            int slot = PatchedLists[SelectedIndex].Slot;
+            int slot = Current[SelectedIndex].Slot;
+            bool updating = !SpellMemory.Installed(Ctx.Rom);
             Commit($"{Casters[SelectedIndex]}'s spell list", () =>
             {
-                var lists = AguroMagicPatch.ReadLists(Ctx.Rom);
+                if (updating) { SpellTablePatch.Apply(Ctx.Rom); Ctx.Rom.FixChecksum(); }   // an earlier version: up to date first
+                var lists = SpellMemory.ReadLists(Ctx.Rom);
                 lists[slot] = Slots.Select(x => (Clamp(x.Level, 0, 0xFE), Clamp(x.Spell, 0, Ctx.SpellNames.Count - 1))).ToList();
-                AguroMagicPatch.WriteLists(Ctx.Rom, lists);
+                SpellMemory.WriteLists(Ctx.Rom, lists);
             });
+            if (updating) { Status += " The spell patch was brought up to date (64 spells each)."; LoadSelected(); }
             return;
         }
         int start = Lists[SelectedIndex].Offset;
