@@ -66,6 +66,8 @@ public static class SpellMemory
     /// <summary>The block of the version before the spell order (0.4.0-beta.7 to beta.8, "LFM2"): same start, the lists
     /// elsewhere. Recognised so Update can move its lists over.</summary>
     private const int MagicV2 = 811, OffsV2 = 815, BlobV2 = 823;
+    /// <summary>The first spell-order build (a test ROM only; it moved the direct page): "LFM3" at another place.</summary>
+    private const int MagicV3a = 1192, OffsV3a = 1196, BlobV3a = 1204;
     /// <summary>Room for the four learn lists: (level, spell) pairs and an FF each.</summary>
     public const int BlobSize = 4 * (MaxPerCharacter * 2 + 1);
     public const int BlockSize = Blob + BlobSize;
@@ -835,12 +837,27 @@ public static class SpellMemory
         if (r <= 0) return 0;
         if (r + BlockSize <= rom.Length && rom.ReadByte(r + Magic) == 'L' && rom.ReadByte(r + Magic + 3) == '3') return r;
         if (r + BlobV2 + BlobSize <= rom.Length && rom.ReadByte(r + MagicV2) == 'L' && rom.ReadByte(r + MagicV2 + 3) == '2') return r;
+        if (r + BlobV3a + BlobSize <= rom.Length && rom.ReadByte(r + MagicV3a) == 'L' && rom.ReadByte(r + MagicV3a + 3) == '3') return r;
         return 0;
     }
 
     /// <summary>The block is this version's (with the spell order), not beta.7/8's.</summary>
-    public static bool Current(RomBuffer rom) { int b = BlockOffset(rom); return b > 0 && b + BlockSize <= rom.Length && rom.ReadByte(b + Magic + 3) == '3'; }
-    private static (int Offs, int Blob) Layout(RomBuffer rom) => Current(rom) ? (Offs, Blob) : (OffsV2, BlobV2);
+    public static bool Current(RomBuffer rom) { int b = BlockOffset(rom); return b > 0 && b + BlockSize <= rom.Length && rom.ReadByte(b + Magic) == 'L' && rom.ReadByte(b + Magic + 1) == 'F' && rom.ReadByte(b + Magic + 3) == '3'; }
+    private static (int Offs, int Blob) Layout(RomBuffer rom)
+    {
+        if (Current(rom)) return (Offs, Blob);
+        int b = BlockOffset(rom);
+        return b > 0 && rom.ReadByte(b + MagicV3a) == 'L' && rom.ReadByte(b + MagicV3a + 3) == '3' ? (OffsV3a, BlobV3a) : (OffsV2, BlobV2);
+    }
+
+    /// <summary>A JSL from <paramref name="site"/> into the installed block (any version's routine).</summary>
+    private static bool HookedIntoBlock(RomBuffer rom, int site)
+    {
+        int b = BlockOffset(rom);
+        if (b <= 0 || rom.ReadByte(site) != 0x22) return false;
+        int t = FileOffset(rom.ReadByte(site + 1) | rom.ReadByte(site + 2) << 8 | rom.ReadByte(site + 3) << 16);
+        return t >= b && t < b + BlockSize;
+    }
 
     public static bool Installed(RomBuffer rom) => BlockOffset(rom) > 0;
 
@@ -962,8 +979,8 @@ public static class SpellMemory
         int old = BlockOffset(rom);
         if (!Current(rom) || !SwapFixed(rom))
         {
-            if (!(Same(rom, SwapSite, SwapOriginal) || Same(rom, SwapSite, SwapSkip) || Hooked(rom, SwapSite, Swap)) ||
-                !(Same(rom, SaveSite, SaveOriginal) || Hooked(rom, SaveSite, SaveOrder)) || !(Same(rom, LoadSite, LoadOriginal) || Hooked(rom, LoadSite, LoadOrder)))
+            if (!(Same(rom, SwapSite, SwapOriginal) || Same(rom, SwapSite, SwapSkip) || HookedIntoBlock(rom, SwapSite)) ||
+                !(Same(rom, SaveSite, SaveOriginal) || HookedIntoBlock(rom, SaveSite)) || !(Same(rom, LoadSite, LoadOriginal) || HookedIntoBlock(rom, LoadSite)))
                 throw new InvalidOperationException("The game's save or field Magic menu code isn't the original, so the spell order can't be added safely.");
             var space = ExpansionSpace.Load(rom);
             int at = space.AllocateInOneBank(BlockSize, ExpansionSpace.Kind.Patch, 10);
