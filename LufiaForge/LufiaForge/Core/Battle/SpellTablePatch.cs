@@ -160,7 +160,7 @@ public static class SpellTablePatch
             if (b == 0) return id == FirstNew && OldTrickster(rom) > 0 ? OldRecordLength : 0;
             return rom.ReadByte(b + Lengths + id - FirstNew);
         }
-        return id + 1 < FirstNew ? GameDataSpells.Offsets[id + 1] - GameDataSpells.Offsets[id] : 22;
+        return id + 1 < FirstNew ? GameDataSpells.Offsets[id + 1] - GameDataSpells.Offsets[id] : 23;   // (Absobl, the last: its effect ends with 00 at +22)
     }
 
     public static void Apply(RomBuffer rom)

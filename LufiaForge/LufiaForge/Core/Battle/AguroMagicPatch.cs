@@ -33,10 +33,21 @@ public static class AguroMagicPatch
     /// <summary>MP gained over each band of 16 level-ups (about half the Hero's): ~210 MP at level 99.</summary>
     public static readonly int[] DefaultMpGrowth = { 24, 40, 56, 48, 24, 18, 12 };
 
-    public static bool IsApplied(RomBuffer rom) => SpellMemory.Installed(rom) && rom.ReadByte(MenuSkip) == 0xFF;
+    /// <summary>
+    /// The battle code's other "slot 2 has no magic" checks (CMP / CPX #$02), switched off with the patch:
+    /// $08:F1D1 made every MP change (MP items, spells, drain) miss Aguro; $08:B8FB made him immune to Mute.
+    /// </summary>
+    private static readonly int[] SlotChecks = { 0x471D2, 0x438FC };
+    private static bool ChecksOff(RomBuffer rom) => SlotChecks.All(c => rom.ReadByte(c) == 0xFF);
+    private static void SetChecks(RomBuffer rom, byte v) { foreach (int c in SlotChecks) if (rom.ReadByte(c) is 0x02 or 0xFF) rom.WriteByte(c, v); }
 
-    /// <summary>An earlier version is in the ROM: Add (Update) moves it onto the spell memory.</summary>
-    public static bool NeedsUpdate(RomBuffer rom) => !SpellMemory.Installed(rom) && SpellMemory.OldBlock(rom) > 0;
+    public static bool IsApplied(RomBuffer rom) => SpellMemory.Installed(rom) && rom.ReadByte(MenuSkip) == 0xFF && ChecksOff(rom);
+
+    /// <summary>An earlier version is in the ROM: Add (Update) moves it onto the spell memory (or, from before
+    /// 0.4.0-beta.9, also lets MP effects and Mute reach Aguro).</summary>
+    public static bool NeedsUpdate(RomBuffer rom) =>
+        (!SpellMemory.Installed(rom) && SpellMemory.OldBlock(rom) > 0) ||
+        (SpellMemory.Installed(rom) && rom.ReadByte(MenuSkip) == 0xFF && !ChecksOff(rom));
 
     public static bool IsOriginal(RomBuffer rom) =>
         (rom.ReadByte(MenuSkip) == 0x02 || NeedsUpdate(rom)) && (SpellTablePatch.IsApplied(rom) || SpellTablePatch.IsOriginal(rom));
@@ -49,6 +60,14 @@ public static class AguroMagicPatch
     public static void Apply(RomBuffer rom)
     {
         if (IsApplied(rom)) return;
+        if (SpellMemory.Installed(rom) && rom.ReadByte(MenuSkip) == 0xFF)
+        {
+            // applied by an earlier version: only the slot checks are missing
+            SpellTablePatch.Apply(rom);
+            SetChecks(rom, 0xFF);
+            rom.FixChecksum();
+            return;
+        }
         if (!IsOriginal(rom)) throw new InvalidOperationException("The game's spell code isn't the original, so Aguro's magic can't be added safely.");
         bool hadOld = NeedsUpdate(rom);
         SpellTablePatch.Apply(rom);   // the 128-spell table and the spell memory (takes an earlier version's lists over)
@@ -57,6 +76,7 @@ public static class AguroMagicPatch
         var lists = ReadLists(rom);
         if (lists[2].Count == 0) { lists[2] = DefaultFor(rom); WriteLists(rom, lists); }
         rom.WriteByte(MenuSkip, 0xFF);
+        SetChecks(rom, 0xFF);
         if (!hadOld) { GiveMp(rom); GiveGuySpells(rom); }
         rom.FixChecksum();
     }
@@ -66,6 +86,7 @@ public static class AguroMagicPatch
     {
         if (!SpellMemory.Installed(rom)) return;
         rom.WriteByte(MenuSkip, 0x02);
+        SetChecks(rom, 0x02);
         var lists = ReadLists(rom);
         if (lists[2].Count > 0) { lists[2].Clear(); WriteLists(rom, lists); }
         TakeGuySpells(rom);
