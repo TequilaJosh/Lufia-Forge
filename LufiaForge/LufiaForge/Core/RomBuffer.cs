@@ -134,9 +134,20 @@ public class RomBuffer
         string name = DatedSuffix.Replace(Path.GetFileNameWithoutExtension(FilePath), "");
         string path = Path.Combine(dir, $"{name}_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}{ext}");
 
-        File.WriteAllBytes(path, _data);
+        WriteSafely(path);
         _isDirty = false;
         return path;
+    }
+
+    /// <summary>Writes the ROM (with its checksum fixed: some edits write in place without it) to a temporary file
+    /// first, then puts it in place, so a failed write never leaves a cut-off ROM.</summary>
+    private void WriteSafely(string path)
+    {
+        FixChecksum();
+        string tmp = path + ".tmp";
+        File.WriteAllBytes(tmp, _data);
+        if (File.Exists(path)) File.Replace(tmp, path, null);
+        else File.Move(tmp, path);
     }
 
     private static readonly System.Text.RegularExpressions.Regex DatedSuffix =
@@ -145,7 +156,7 @@ public class RomBuffer
     /// <summary>Save the current buffer to a new path (Save As) and update FilePath.</summary>
     public void SaveToFile(string path)
     {
-        File.WriteAllBytes(path, _data);
+        WriteSafely(path);
         FilePath = path;
         _isDirty = false;
     }
