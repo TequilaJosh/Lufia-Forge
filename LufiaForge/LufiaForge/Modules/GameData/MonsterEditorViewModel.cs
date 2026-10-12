@@ -224,6 +224,13 @@ public partial class MonsterEditorViewModel : GameDataEditorBase
             return;
         }
 
+        // FF marks an empty monster slot in battle, and numbers past the last picture read other data
+        if (Graphic < 0 || Graphic >= Core.Battle.MonsterGraphics.Count(Ctx.Rom) || Graphic == 0xFF)
+        {
+            Status = $"Graphic must be a monster picture: 00-{Core.Battle.MonsterGraphics.Count(Ctx.Rom) - 1:X2}.";
+            return;
+        }
+
         var rom = Ctx.Rom;
         int o   = _recordOffset;
         bool renamed = Name != Ctx.ReadName(o, GameDataOffsets.MonsterNameLen);
@@ -251,7 +258,7 @@ public partial class MonsterEditorViewModel : GameDataEditorBase
                 rom.WriteByte(o + UnknownFields[i], unknown[i]);
             for (int i = 0; i < ai.Length; i++) rom.WriteByte(Core.Battle.MonsterAi.At(o, _aiStart + i), ai[i]);
             foreach (var st in SpellSteps)
-                if (st.Spell != st.Original && st.Spell >= 0) rom.WriteByte(o + st.Offset + 1, (byte)st.Spell);
+                if (st.Spell != st.Original && st.Spell >= 0) rom.WriteByte(Core.Battle.MonsterAi.At(o, st.Offset + 1), (byte)st.Spell);
         });
 
         if (renamed) RefreshList();

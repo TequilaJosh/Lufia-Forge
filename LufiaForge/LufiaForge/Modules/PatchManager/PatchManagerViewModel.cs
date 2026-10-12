@@ -221,6 +221,27 @@ public partial class PatchManagerViewModel : ObservableObject
         {
             byte[] patched = IpsHandler.ApplyPatch(_rom, _loadedPatchPath);
 
+            // data Lufia Forge keeps in the added space (moved maps, scripts, patch routines, its space table):
+            // a patch written for another ROM can overwrite or cut it off, leaving pointers to garbage
+            if (_rom.Length >= Core.Maps.MapWriter.ExpandedSize)
+            {
+                var space = Core.Maps.ExpansionSpace.Load(_rom);
+                var blocks = space.Entries.Where(b => b.Kind != Core.Maps.ExpansionSpace.Kind.Unknown)
+                    .Append(new Core.Maps.ExpansionSpace.Entry(Core.Maps.ExpansionSpace.TableStart, Core.Maps.ExpansionSpace.TableSize, Core.Maps.ExpansionSpace.Kind.Unknown, 0xFFFF));
+                int hit = 0;
+                foreach (var b in blocks)
+                {
+                    if (b.End > patched.Length) { hit++; continue; }
+                    for (int i = b.Start; i < b.End; i++) if (patched[i] != _rom.ReadByte(i)) { hit++; break; }
+                }
+                if (hit > 0 && MessageBox.Show(
+                        $"This patch overwrites (or cuts off) {hit} block(s) of data Lufia Forge stored in the expanded part of this ROM " +
+                        "(moved maps, events, new spells/monsters/sprites, patch routines or its space table). The game would read garbage there.\n\n" +
+                        "Apply it anyway? (Usually: apply the patch to a clean ROM first, then make your Lufia Forge edits.)",
+                        "Patch overwrites Lufia Forge data", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes)
+                    return;
+            }
+
             if (patched.Length != _rom.Length &&
                 MessageBox.Show(
                     $"This patch changes the ROM size from {_rom.Length:N0} to {patched.Length:N0} bytes " +
@@ -240,6 +261,8 @@ public partial class PatchManagerViewModel : ObservableObject
 
             _rom.ReplaceAll(patched);
             _mainVm?.NotifyRomModified();
+            // every tab reloads from the patched bytes (open editors still held the old maps, names, offsets)
+            _mainVm?.ReloadModules();
 
             StatusText = $"Patch applied: {LoadedPatchName}  |  {PatchRecords.Count} records";
         }

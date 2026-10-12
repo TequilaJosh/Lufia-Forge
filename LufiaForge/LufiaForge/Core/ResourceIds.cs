@@ -48,7 +48,7 @@ public static class ResourceIds
     /// <summary>File offset of resource <paramref name="id"/>'s table entry.</summary>
     public static int Entry(RomBuffer rom, int id)
     {
-        if (id < 0 || id >= (IsMoved(rom) ? Capacity : 0x200)) throw new ArgumentOutOfRangeException(nameof(id), $"No resource {id:X3}.");
+        if (id < 0 || id >= (IsMoved(rom) ? Capacity : OriginalCount)) throw new ArgumentOutOfRangeException(nameof(id), $"No resource {id:X3}.");
         return TableOffset(rom) + id * 3;
     }
 

@@ -154,6 +154,9 @@ public sealed class ExpansionSpace
     private int Reserve(int size, Kind kind, int id, bool oneBank, int limit)
     {
         if (_rom.Length < MapWriter.ExpandedSize) throw new InvalidOperationException("The ROM isn't expanded.");
+        // (checked before anything is written: Save would fail afterwards and leave the edit half done)
+        if (_entries.Any(e => e.Start == TableStart && e.Kind == Kind.Unknown))
+            throw new InvalidOperationException("The last 4 KB of this expanded ROM hold other data, so Lufia Forge can't keep its space table there.");
         if (_entries.Count >= MaxEntries) throw new InvalidOperationException("The expanded ROM's space table is full.");
         int pos = Find(size, oneBank, limit);
         if (pos < 0 && _rom.Length < MapWriter.MaxSize)

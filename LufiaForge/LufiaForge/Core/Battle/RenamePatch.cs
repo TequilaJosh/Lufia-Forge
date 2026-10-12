@@ -184,9 +184,33 @@ public static class RenamePatch
         rom.WriteBytes(Site, new byte[] { 0x5C, (byte)r, (byte)(r >> 8), (byte)(r >> 16), 0xEA, 0xEA });
     }
 
+    /// <summary>Events that use the rename command (map, event), found while the patch is in.</summary>
+    public static List<(int Map, int Event)> UsedBy(RomBuffer rom)
+    {
+        var list = new List<(int, int)>();
+        if (!IsApplied(rom)) return list;
+        foreach (var m in Maps.MapCatalog.Scan(rom))
+            for (int ev = 0, n = Maps.EventScript.SlotCount(rom, m.MapId); ev < n; ev++)
+            {
+                try
+                {
+                    var s = Maps.EventScript.Load(rom, m.MapId, ev);
+                    if (s != null && s.Ops.Any(o => !o.IsText && o.Bytes.Length > 0 && o.Bytes[0] == Op)) list.Add((m.MapId, ev));
+                }
+                catch { }
+            }
+        return list;
+    }
+
     public static void Remove(RomBuffer rom)
     {
         if (!IsApplied(rom)) return;
+        // without the patch the game jumps into data on command 6E: events using it would crash
+        var used = UsedBy(rom);
+        if (used.Count > 0)
+            throw new InvalidOperationException("Events still use the rename command (" +
+                string.Join(", ", used.Take(6).Select(u => $"map {u.Map:X2} event {u.Event}")) + (used.Count > 6 ? ", ..." : "") +
+                "). Take it out of those events first; removing the patch now would make them crash the game.");
         int r = RoutineOffset(rom);
         rom.WriteBytes(Site, Original);
         var space = ExpansionSpace.Load(rom);

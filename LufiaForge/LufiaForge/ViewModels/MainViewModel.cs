@@ -25,6 +25,9 @@ public partial class MainViewModel : ObservableObject
 
     public bool IsRomLoaded => RomBuffer != null;
 
+    /// <summary>Makes every tab load the ROM again (after its bytes were replaced, e.g. by an IPS patch).</summary>
+    public void ReloadModules() => OnPropertyChanged(nameof(RomBuffer));
+
     public string WindowTitle => RomBuffer == null
         ? "Lufia Forge"
         : $"Lufia Forge - {Path.GetFileName(RomBuffer.FilePath)}{(RomBuffer.IsDirty ? " *" : "")}";
