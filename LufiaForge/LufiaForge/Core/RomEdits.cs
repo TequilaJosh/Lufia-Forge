@@ -50,6 +50,7 @@ public static class RomEdits
         if (SpellTablePatch.IsApplied(rom)) patches.Add($"up to 128 spells, 64 per character ({SpellTablePatch.NewCount(rom)} added)");
         else if (SpellTablePatch.NeedsUpdate(rom)) patches.Add("new spells (older version: click Update on \"Up to 128 spells\" in the Patch Manager)");
         if (FontPatch.IsApplied(rom)) patches.Add("Lufia II font");
+        if (ResourceIds.IsMoved(rom)) patches.Add($"resource table moved ({ResourceIds.Count(rom) - ResourceIds.OriginalCount} new resources)");
         list.Add(("Built-in patches:", patches.Count == 0 ? "none" : string.Join(", ", patches)));
 
         try

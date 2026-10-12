@@ -59,10 +59,7 @@ public static class MapWriter
         rom.WriteBytes(offset, stream);
 
         // Point the resource at its new home (LoROM: file offset -> bank:addr, FastROM mirror $80+).
-        int bank = (offset / 0x8000) | 0x80;
-        int addr = (offset % 0x8000) | 0x8000;
-        int p = LufiaCompression.ResourceTable + map.ResourceId * 3;
-        rom.WriteBytes(p, new[] { (byte)addr, (byte)(addr >> 8), (byte)bank });
+        ResourceIds.Point(rom, map.ResourceId, offset);
         // the previous copy above 1 MB isn't used any more
         if (map.CompressedOffset >= ExpansionStart && map.CompressedOffset != offset) space.Free(map.CompressedOffset);
         space.Save();

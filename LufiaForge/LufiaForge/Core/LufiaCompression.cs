@@ -4,7 +4,8 @@ namespace LufiaForge.Core;
 /// Lufia 1's resource compression (map data, tilesets, battle graphics, music).
 /// Ported from the unpacker at $00:A47D; verified byte-for-byte against WRAM after a map load.
 ///
-/// Resources are listed in a table of 3-byte SNES pointers at file 0x60000 (index = resource id).
+/// Resources are listed in a table of 3-byte SNES pointers (index = resource id): the game's at file 0x60000, or a
+/// bigger copy in the added space (<see cref="ResourceIds"/>).
 /// Stream format:
 ///   u16 unpacked length, then groups of: one control byte + up to 8 flagged items.
 ///   - A byte below $80 is a literal and does not use a control bit.
@@ -20,7 +21,7 @@ public static class LufiaCompression
     /// <summary>File offset of resource <paramref name="id"/>'s compressed stream.</summary>
     public static int ResourceOffset(RomBuffer rom, int id)
     {
-        int p = ResourceTable + id * 3;
+        int p = ResourceIds.Entry(rom, id);
         int addr = rom.ReadByte(p) | (rom.ReadByte(p + 1) << 8);
         int bank = rom.ReadByte(p + 2) & 0x7F;
         return bank * 0x8000 + (addr & 0x7FFF);

@@ -27,7 +27,7 @@ public static class ResourceWriter
             return block != null ? Math.Max(used, block.End - at) : used;
         }
         int next = int.MaxValue;
-        for (int id = 0; id < 0x200; id++)
+        for (int id = 0, n = ResourceIds.Count(rom); id < n; id++)
         {
             int o = LufiaCompression.ResourceOffset(rom, id);
             if (o > at && o < next) next = o;
@@ -58,8 +58,7 @@ public static class ResourceWriter
         var space = ExpansionSpace.Load(rom);
         int offset = space.Allocate(stream.Length, ExpansionSpace.Kind.Resource, resourceId);
         rom.WriteBytes(offset, stream);
-        int bank = (offset / 0x8000) | 0x80, addr = (offset % 0x8000) | 0x8000;
-        rom.WriteBytes(LufiaCompression.ResourceTable + resourceId * 3, new[] { (byte)addr, (byte)(addr >> 8), (byte)bank });
+        ResourceIds.Point(rom, resourceId, offset);
         if (at >= MapWriter.ExpansionStart && at != offset) space.Free(at);
         space.Save();
         rom.FixChecksum();
