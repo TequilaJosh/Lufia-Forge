@@ -20,6 +20,57 @@ public static class Tilesets
     private const int Header = 8, TilesAt = Header, BlocksAt = TilesAt + Capacity, CompositeAt = BlocksAt + Capacity, BlockSize = CompositeAt + Capacity * 3;
     private static readonly byte[] Magic = "LFTS"u8.ToArray();
 
+    // Spot drawing ($01:9C19 / $01:9C63, doors and chests) tests the tileset number itself: LDA $7F0008, CMP #$07 -
+    // tilesets 0-6 (towns) draw one way, 7 and up (dungeons) another. A new tileset (11+) would always get the dungeon
+    // way, so both tests call a routine that compares a style byte per tileset instead (block "LFTY").
+    private static readonly int[] StyleSites = { 0x9C2A, 0x9C95 };
+    private static readonly byte[] StyleOriginal = { 0xAF, 0x08, 0x00, 0x7F, 0xC9, 0x07 };
+    private static readonly byte[] StyleMagic = "LFTY"u8.ToArray();
+    private const int StyleTable = 8, StyleCode = StyleTable + Capacity;
+
+    private static int StyleBlock(RomBuffer rom)
+    {
+        if (rom.ReadByte(StyleSites[0]) != 0x22) return 0;
+        int b = FileOffset(Long(rom, StyleSites[0] + 1)) - StyleCode;
+        return b > 0 && rom.ReadBytes(b, 4).SequenceEqual(StyleMagic) ? b : 0;
+    }
+
+    /// <summary>1 = drawn like a dungeon (the game's tilesets 7-10), 0 = like a town (0-6).</summary>
+    public static int Style(RomBuffer rom, int tileset)
+    {
+        int b = StyleBlock(rom);
+        return b > 0 ? rom.ReadByte(b + StyleTable + tileset) : tileset >= 7 ? 1 : 0;
+    }
+
+    private static void HookStyles(RomBuffer rom)
+    {
+        if (StyleBlock(rom) > 0) return;
+        if (!StyleSites.All(a => rom.ReadBytes(a, StyleOriginal.Length).SequenceEqual(StyleOriginal)))
+            throw new InvalidOperationException("The game's door / chest drawing code isn't the original, so new tilesets can't be added safely.");
+        var space = ExpansionSpace.Load(rom);
+        int size = StyleCode + 32;
+        int at = space.AllocateInOneBank(size, ExpansionSpace.Kind.Patch, 17);
+        space.Save();
+        var block = new byte[size];
+        StyleMagic.CopyTo(block, 0);
+        for (int t = 0; t < Capacity; t++) block[StyleTable + t] = (byte)(t >= 7 ? 1 : 0);
+        int table = SnesAddress(at + StyleTable);
+        var code = new byte[]
+        {
+            0x08, 0xDA,                                   // PHP; PHX        (entered with M = 8)
+            0xC2, 0x30, 0xAF, 0x08, 0x00, 0x7F,           // REP #$30; LDA $7F0008
+            0x29, 0xFF, 0x00, 0xAA,                       // AND #$00FF; TAX
+            0xE2, 0x20,                                   // SEP #$20
+            0xBF, (byte)table, (byte)(table >> 8), (byte)(table >> 16),   // LDA style,X
+            0xFA, 0x28,                                   // PLX; PLP
+            0xC9, 0x01, 0x6B,                             // CMP #$01 (carry set = dungeon, as CMP #$07 did); RTL
+        };
+        code.CopyTo(block, StyleCode);
+        rom.WriteBytes(at, block);
+        int c = SnesAddress(at + StyleCode);
+        foreach (int a in StyleSites) rom.WriteBytes(a, new byte[] { 0x22, (byte)c, (byte)(c >> 8), (byte)(c >> 16), 0xEA, 0xEA });
+    }
+
     private static int FileOffset(int snes) => (snes >> 16 & 0x7F) * 0x8000 + (snes & 0x7FFF);
     private static int SnesAddress(int file) => (file / 0x8000 | 0x80) << 16 | (file % 0x8000 | 0x8000);
     private static int Long(RomBuffer rom, int at) => rom.ReadByte(at) | rom.ReadByte(at + 1) << 8 | rom.ReadByte(at + 2) << 16;
@@ -81,11 +132,15 @@ public static class Tilesets
         Move(rom);
         int b = Block(rom), n = Count(rom);
         if (n >= Capacity) throw new InvalidOperationException($"The ROM already has {Capacity} tilesets.");
+        if (ResourceIds.Count(rom) + 1 - 0xB1 > 0xFF)
+            throw new InvalidOperationException("No resource ids left that a tileset can use (they must be below 1B1).");
         var tiles = LufiaCompression.DecompressResource(rom, TilesResource(rom, template), out _);
         var blocks = LufiaCompression.DecompressResource(rom, BlocksResource(rom, template), out _);
         int t = ResourceIds.Add(rom, tiles), k = ResourceIds.Add(rom, blocks);
         if (t - 0xB1 > 0xFF || k - 0xB1 > 0xFF)
             throw new InvalidOperationException("No resource ids left that a tileset can use (they must be below 1B1).");
+        HookStyles(rom);
+        rom.WriteByte(StyleBlock(rom) + StyleTable + n, (byte)Style(rom, template));
         b = Block(rom);
         rom.WriteByte(b + TilesAt + n, (byte)(t - 0xB1));
         rom.WriteByte(b + BlocksAt + n, (byte)(k - 0xB1));

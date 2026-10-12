@@ -48,15 +48,19 @@ public static class MapFactory
         // the data starts with the map's number in decimal (how the original tools labelled maps; Lufia Forge lists maps by it)
         var label = System.Text.Encoding.ASCII.GetBytes(id.ToString("D3"));
         label.CopyTo(data, 0);
+        // (checked before anything is written, so a refused map leaves nothing half made)
+        if (ResourceIds.Count(rom) - 0xB2 > 0xFF) throw new InvalidOperationException("No resource ids left that a map can use (they must be below 1B2).");
         if (rom.Length < MapWriter.ExpandedSize) rom.Expand(MapWriter.ExpandedSize);
         int res = ResourceIds.Add(rom, data);
-        if (res - 0xB2 > 0xFF) throw new InvalidOperationException("No resource ids left that a map can use (they must be below 1B2).");
         rom.WriteByte(SelectTable + id, (byte)(res - 0xB2));
         rom.WriteBytes(ScriptTable + id * 5, rom.ReadBytes(ScriptTable + template * 5, 5));
         rom.WriteByte(AreaTable + id, rom.ReadByte(AreaTable + template));
         if (blank)
         {
             rom.WriteUInt16Le(SetupTable + id * 2, (ushort)(EmptySetupScript(rom) - SetupTable));
+            // its own empty script in the added space (the three zero bytes found in bank 03 aren't a real script,
+            // and saving characters onto it would change it for everyone)
+            SetupScripts.Replace(rom, id, new byte[] { 0x00, 0x00, 0x00 });
             EventScript.NewBlockFor(rom, id, 32);
             var m = LufiaMap.Load(rom, id);
             for (int i = 0; i < m.Layer.Length; i++) m.Layer[i] = (ushort)(fill & 0x3FF);

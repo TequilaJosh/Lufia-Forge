@@ -169,6 +169,17 @@ public sealed class BlockSet
     /// <summary>Writes the changed graphics and blocks; returns a short report.</summary>
     public string Save(RomBuffer rom, bool allowExpand)
     {
+        if (BlocksChanged && !IsWorld)
+        {
+            // every map on this tileset unpacks these blocks after its own data: each must still fit in work RAM
+            foreach (var e in MapCatalog.Scan(rom))
+            {
+                LufiaMap m;
+                try { m = LufiaMap.Load(rom, e.MapId); } catch { continue; }
+                if (m.IsWorld || m.Tileset != Tileset) continue;
+                MapWriter.CheckWram(rom, m.MapId, m.Original.Length, Tileset, m.Width, m.Height, m.CompositeThreshold >= 0, Blocks);
+            }
+        }
         var notes = new List<string>();
         if (TilesChanged)
         {
