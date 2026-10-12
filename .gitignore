@@ -53,3 +53,5 @@ BizHawk/LufiaForge_Summary_*.txt
 BizHawk/LufiaForge_ScriptSummary*.txt
 LufiaForge/native/spc/obj/
 !LufiaForge/LufiaForge/lufia_spc.dll
+
+BizHawk/Lua/LufiaForge_SpellOrder.log

@@ -157,8 +157,12 @@ public sealed class BizHawkHost : IDisposable
         StatusChanged?.Invoke("Starting BizHawk...");
 
         var args = "";
+        // the spell order watcher starts with every ROM BizHawk opens from here (it logs next to itself)
+        string watch = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(emuHawkPath) ?? "", "Lua", "LufiaForge_WatchSpellOrder.lua");
+        if (System.IO.File.Exists(watch))
+            args = $"\"--lua={watch}\" ";
         if (!string.IsNullOrEmpty(romPath))
-            args = $"\"{romPath}\"";
+            args += $"\"{romPath}\"";
 
         var psi = new ProcessStartInfo
         {
