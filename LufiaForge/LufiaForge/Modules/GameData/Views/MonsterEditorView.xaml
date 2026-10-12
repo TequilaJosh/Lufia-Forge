@@ -60,6 +60,10 @@
                         <Button Content="🎲  Randomize stats" Style="{StaticResource LufiaButton}"
                                 Command="{Binding RandomizeStatsCommand}" HorizontalAlignment="Left" Margin="0,10,0,0"
                                 ToolTip="Roll HP/ATP/DFP/AGL/MGR to a random value between 50% and 150% of the values in the ROM. Each click re-rolls; click Apply to keep."/>
+                        <Button Content="➕  New monster (copy of this one)" Style="{StaticResource LufiaButton}"
+                                Command="{Binding NewMonsterCommand}" HorizontalAlignment="Left" Margin="0,10,0,0"
+                                ToolTip="A new monster with this one's name, stats, picture, drops and AI (its own copy of the script). Rename it, change it, give it its own picture, and put it in encounters (Encounters tab)."/>
+                        <TextBlock Text="{Binding NewMonsterNote}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0"/>
                     </StackPanel>
                 </Border>
 
@@ -142,6 +146,9 @@
                             <Button Content="Import picture..." Style="{StaticResource LufiaButtonGold}" Command="{Binding ImportPictureCommand}"
                                     ToolTip="Width and height in multiples of 16 pixels, up to 128 x 112. Transparent = see-through. Written to the ROM right away (unsaved until File > Save ROM)."/>
                         </StackPanel>
+                        <Button Content="➕  New picture for this monster" Style="{StaticResource LufiaButton}" Command="{Binding NewPictureCommand}"
+                                HorizontalAlignment="Left" Margin="0,8,0,0"
+                                ToolTip="Gives this monster a picture of its own (a copy of the current one, with a new graphic number), so importing a new picture doesn't change the monsters it shared it with."/>
                         <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,8,0,0"
                                    Text="The picture is exported as an indexed 16-colour PNG. Draw over it and keep it indexed: its palette becomes the monster's colours. A full-colour picture is matched to the palette (or, with up to 15 colours, can make a new one). Palette 1 is the recoloured twin (e.g. Red Wolf)."/>
                     </StackPanel>

@@ -71,6 +71,45 @@ public partial class MonsterEditorViewModel : GameDataEditorBase
     private int _typeMiddleBits;   // bits 3-5 of the type byte, preserved as-is
     private int _lastIndex;
 
+    [ObservableProperty] private string _newMonsterNote = "";
+
+    /// <summary>A new monster: a copy of the selected one (see <see cref="Core.Battle.MonsterTable.Add"/>).</summary>
+    [RelayCommand]
+    private void NewMonster()
+    {
+        if (Ctx == null || SelectedIndex < 0) return;
+        if (System.Windows.MessageBox.Show($"Make a new monster as a copy of {Name.Replace('@', ' ').Trim()} (name, stats, picture, drops and its own copy of the AI)?",
+                "New monster", System.Windows.MessageBoxButton.OKCancel, System.Windows.MessageBoxImage.Question) != System.Windows.MessageBoxResult.OK) return;
+        MakeMonster();
+    }
+
+    public void MakeMonster()
+    {
+        if (Ctx == null || SelectedIndex < 0) return;
+        int t = SelectedIndex, made = -1;
+        Commit("New monster", () => made = Core.Battle.MonsterTable.Add(Ctx.Rom, t), namesChanged: true);
+        if (made < 0) return;
+        RefreshList();
+        SelectedIndex = made;
+        Status = $"Monster {made:X2} made (a copy of {t:X2}). Rename it, change it, then put it in encounters (Encounters tab).";
+    }
+
+    /// <summary>Gives the selected monster a picture of its own (a copy of its current one).</summary>
+    [RelayCommand]
+    private void NewPicture()
+    {
+        if (Ctx == null || SelectedIndex < 0) return;
+        int id = SelectedIndex, old = Graphic, made = -1;
+        Commit($"Monster {id:X2} picture", () =>
+        {
+            made = Core.Battle.MonsterTable.AddPicture(Ctx.Rom, old);
+            Ctx.Rom.WriteByte(Ctx.MonsterOffset(id) + 14, (byte)made);
+        });
+        if (made < 0) return;
+        LoadSelected();
+        Status = $"Graphic {made:X2} made (a copy of {old:X2}) and given to this monster. Import its new picture.";
+    }
+
     protected override void OnRomLoaded()
     {
         RefreshList();
@@ -83,9 +122,10 @@ public partial class MonsterEditorViewModel : GameDataEditorBase
         if (Ctx == null) return;
         int keep = SelectedIndex;
         Monsters.Clear();
-        for (int i = 0; i < GameDataOffsets.MonsterCount; i++)
+        for (int i = 0, n = Ctx.MonsterCount; i < n; i++)
             Monsters.Add($"{i:X2}  {Ctx.ReadName(Ctx.MonsterOffset(i), GameDataOffsets.MonsterNameLen)}");
         SelectedIndex = keep;
+        try { NewMonsterNote = $"Room for {Core.Battle.MonsterTable.Room(Ctx.Rom)} more monsters."; } catch { NewMonsterNote = ""; }
     }
 
     partial void OnSelectedIndexChanged(int value)
@@ -127,7 +167,7 @@ public partial class MonsterEditorViewModel : GameDataEditorBase
         UnknownHex   = ItemEditorViewModel.ToHex(UnknownFields.Select(f => rom.ReadByte(o + f)).ToArray());
         LoadAi(rom, o);
 
-        OffsetText = $"Record at 0x{o:X6}  (pointer at 0x{GameDataOffsets.MonsterPointerTable + SelectedIndex * 2:X6}). " +
+        OffsetText = $"Record at 0x{o:X6}{(SelectedIndex >= Core.Battle.MonsterTable.OriginalCount ? " (a new monster)" : "")}. " +
                      "Its AI script is decoded below.";
     }
 
@@ -162,7 +202,7 @@ public partial class MonsterEditorViewModel : GameDataEditorBase
         foreach (int sp in known) GiveSpells.Add(new GiveSpellRow { Spell = sp, Percent = Math.Max(1, 60 / known.Count) });
         _aiStart = cmds.Min(c => c.Offset);
         _aiLength = cmds.Max(c => c.Offset + 1 + c.Args.Length) - _aiStart;
-        AiHex = ItemEditorViewModel.ToHex(Enumerable.Range(0, _aiLength).Select(k => rom.ReadByte(record + _aiStart + k)).ToArray());
+        AiHex = ItemEditorViewModel.ToHex(Enumerable.Range(0, _aiLength).Select(k => rom.ReadByte(Core.Battle.MonsterAi.At(record, _aiStart + k))).ToArray());
         AiNote = "Every turn the monster starts at step 1 and works down the list until a step chooses what it does (attack, spell, ability...). " +
                  $"The bytes below are the script itself ({_aiLength} bytes at record +{_aiStart:X2}); edit them in place, the length can't change.";
     }
@@ -209,7 +249,7 @@ public partial class MonsterEditorViewModel : GameDataEditorBase
             rom.WriteByte(o + 33, (byte)Clamp(DropRate, 0, 255));
             for (int i = 0; i < UnknownFields.Length; i++)
                 rom.WriteByte(o + UnknownFields[i], unknown[i]);
-            for (int i = 0; i < ai.Length; i++) rom.WriteByte(o + _aiStart + i, ai[i]);
+            for (int i = 0; i < ai.Length; i++) rom.WriteByte(Core.Battle.MonsterAi.At(o, _aiStart + i), ai[i]);
             foreach (var st in SpellSteps)
                 if (st.Spell != st.Original && st.Spell >= 0) rom.WriteByte(o + st.Offset + 1, (byte)st.Spell);
         });

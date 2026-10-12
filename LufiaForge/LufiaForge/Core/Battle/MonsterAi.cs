@@ -74,12 +74,16 @@ public static class MonsterAi
 
     /// <summary>The commands of a monster's script (following jumps to code outside the straight line too).</summary>
     public const int PointerTable = 0x5800, MonsterCount = 165;
-    public static int RecordOffset(RomBuffer rom, int id) => PointerTable + rom.ReadUInt16Le(PointerTable + id * 2);
+    public static int RecordOffset(RomBuffer rom, int id) => MonsterTable.RecordOffset(rom, id);
+
+    /// <summary>File offset of record-relative offset <paramref name="rel"/>: the game adds them as 16-bit numbers in
+    /// bank 00, so a script can be anywhere in the bank (also before its record).</summary>
+    public static int At(int record, int rel) => (record + rel) & 0xFFFF;
 
     /// <summary>Every monster's script commands, with the record they belong to.</summary>
     public static IEnumerable<(int Record, Command Cmd)> AllCommands(RomBuffer rom)
     {
-        for (int m = 0; m < MonsterCount; m++)
+        for (int m = 0, n = MonsterTable.Count(rom); m < n; m++)
         {
             int r = RecordOffset(rom, m);
             foreach (var c in Decode(rom, r)) yield return (r, c);
@@ -134,32 +138,17 @@ public static class MonsterAi
         var (oldStart, oldLen) = ScriptRange(rom, record);
         int len = SpellScriptLength(spells.Count);
         int at;
-        if (oldLen >= len) at = record + oldStart;
+        if (oldLen >= len) at = At(record, oldStart);
         else
         {
-            // free space not used by any monster's script
-            var used = new List<(int, int)>();
-            for (int m = 0; m < MonsterCount; m++)
-            {
-                if (m == id) continue;
-                int r = RecordOffset(rom, m);
-                var (s0, l0) = ScriptRange(rom, r);
-                if (l0 > 0) used.Add((r + s0, r + s0 + l0));
-            }
-            at = -1;
-            for (int p = FreeStart; p + len <= FreeEnd; p++)
-            {
-                int q = p;
-                var hit = used.FirstOrDefault(u => u.Item1 < q + len && u.Item2 > q);
-                if (hit == default) { at = p; break; }
-                p = hit.Item2 - 1;
-            }
-            if (at < 0) throw new InvalidOperationException("No room left for a longer monster script (the free space at the end of bank 0 is used up). Use fewer spells.");
+            // free space not used by any other monster's record or script
+            at = MonsterTable.FindSpace(rom, len, MonsterTable.ScriptAreas, skipScriptOf: id);
+            if (at < 0) throw new InvalidOperationException("No room left for a longer monster script (the free space in bank 0 is used up). Use fewer spells.");
         }
-        int rel = at - record;
+        int rel = (at - record) & 0xFFFF;
         var script = BuildSpellScript(spells, rel);
         rom.WriteBytes(at, script);
-        if (oldLen > len && at == record + oldStart) rom.WriteBytes(at + len, Enumerable.Repeat((byte)0x00, oldLen - len).ToArray());
+        if (oldLen > len && at == At(record, oldStart)) rom.WriteBytes(at + len, Enumerable.Repeat((byte)0x00, oldLen - len).ToArray());
         rom.WriteUInt16Le(record + 0x22, (ushort)rel);
         return at;
     }
@@ -174,9 +163,9 @@ public static class MonsterAi
         while (todo.Count > 0 && list.Count < 200)
         {
             int at = todo.Dequeue();
-            while (at < 0x4000 && record + at < rom.Length && seen.Add(at))
+            while (At(record, at) < 0x8000 && seen.Add(at))
             {
-                int op = rom.ReadByte(record + at);
+                int op = rom.ReadByte(At(record, at));
                 if (op == 0) { list.Add(new Command(at, 0, Array.Empty<byte>(), "End", null, false)); break; }
                 if (op > Ops.Length)
                 {
@@ -186,7 +175,7 @@ public static class MonsterAi
                     break;
                 }
                 var (n, name, ends) = Ops[op - 1];
-                var args = Enumerable.Range(1, n).Select(i => rom.ReadByte(record + at + i)).ToArray();
+                var args = Enumerable.Range(1, n).Select(i => rom.ReadByte(At(record, at + i))).ToArray();
                 int? jump = null;
                 string text = name;
                 switch (op)
@@ -207,7 +196,7 @@ public static class MonsterAi
                 if (jump is int j && j > 0 && !seen.Contains(j)) todo.Enqueue(j);
                 if (op == 0x09) break;   // unconditional jump: the straight line ends here
                 if (ends && op != 0x07) break;   // the action is chosen: the script stops (07 carries on without the MP)
-                at += 1 + n;
+                at = (at + 1 + n) & 0xFFFF;
             }
         }
         return list.OrderBy(c => c.Offset).ToList();

@@ -57,8 +57,8 @@ public sealed class GameDataContext
     public int ItemOffset(int id) =>
         GameDataOffsets.ItemPointerTable + Rom.ReadUInt16Le(GameDataOffsets.ItemPointerTable + id * 2);
 
-    public int MonsterOffset(int id) =>
-        GameDataOffsets.MonsterPointerTable + Rom.ReadUInt16Le(GameDataOffsets.MonsterPointerTable + id * 2);
+    public int MonsterOffset(int id) => Core.Battle.MonsterTable.RecordOffset(Rom, id);
+    public int MonsterCount => Core.Battle.MonsterTable.Count(Rom);
 
     public int ShopOffset(int id) => Rom.ReadUInt16Le(GameDataOffsets.ShopPointerTable + id * 2);
 
