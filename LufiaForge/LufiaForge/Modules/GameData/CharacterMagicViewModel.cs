@@ -136,7 +136,8 @@ public partial class CharacterMagicViewModel : GameDataEditorBase
             {
                 if (updating) { SpellTablePatch.Apply(Ctx.Rom); Ctx.Rom.FixChecksum(); }   // an earlier version: up to date first
                 var lists = SpellMemory.ReadLists(Ctx.Rom);
-                lists[slot] = Slots.Select(x => (Clamp(x.Level, 0, 0xFE), Clamp(x.Spell, 0, Ctx.SpellNames.Count - 1))).ToList();
+                // (spell 00 "Nothing" is left out: as the lowest bit it would sort first and the field Magic list would look empty)
+                lists[slot] = Slots.Where(x => x.Spell > 0).Select(x => (Clamp(x.Level, 0, 0xFE), Clamp(x.Spell, 1, Ctx.SpellNames.Count - 1))).ToList();
                 SpellMemory.WriteLists(Ctx.Rom, lists);
             });
             if (updating) { Status += " The spell patch was brought up to date (64 spells each)."; LoadSelected(); }
