@@ -23,8 +23,11 @@ public static class ResourceWriter
         LufiaCompression.Decompress(rom, at, out int used);
         if (at >= MapWriter.ExpansionStart)
         {
+            // only a block Lufia Forge wrote for this stream counts (another hack's data above 1 MB is one big
+            // reserved block: its "room" isn't this resource's)
             var block = rom.Length >= MapWriter.ExpandedSize ? ExpansionSpace.Load(rom).At(at) : null;
-            return block != null ? Math.Max(used, block.End - at) : used;
+            return block != null && block.Start == at && block.Kind is ExpansionSpace.Kind.Resource or ExpansionSpace.Kind.MapData
+                ? Math.Max(used, block.End - at) : used;
         }
         int next = int.MaxValue;
         for (int id = 0, n = ResourceIds.Count(rom); id < n; id++)

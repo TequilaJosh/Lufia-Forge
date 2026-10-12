@@ -14,7 +14,23 @@ namespace LufiaForge.Core.Battle;
 /// </summary>
 public static class MonsterTable
 {
-    public const int OriginalTable = 0x5800, OriginalCount = 165, Capacity = 255, RecordSize = 0x24;
+    public const int OriginalTable = 0x5800, OriginalCount = 165, Capacity = 255;
+    /// <summary>Fixed part of a record; the game's records are 39-48 bytes (see <see cref="RecordLength"/>).</summary>
+    public const int FixedSize = 0x24, LargestRecord = FixedSize + 3 + 8 + 7 + 0x10;
+
+    /// <summary>
+    /// Length of a monster record, read the way the battle loader ($01:F59F-F638) reads it: 0x24 fixed bytes, a mask
+    /// byte and one byte per set bit (8), a mask byte and one byte per set bit of its low 7, a count byte and that many
+    /// bytes. (A script, when there is one, starts right after.)
+    /// </summary>
+    public static int RecordLength(RomBuffer rom, int record)
+    {
+        int p = record + FixedSize;
+        int m1 = rom.ReadByte(p); p += 1 + System.Numerics.BitOperations.PopCount((uint)m1);
+        int m2 = rom.ReadByte(p); p += 1 + System.Numerics.BitOperations.PopCount((uint)(m2 & 0x7F));
+        int c = rom.ReadByte(p); p += 1 + c;
+        return p - record;
+    }
     public const int OriginalPictures = 0x6C, PictureCapacity = 0x100;
     private const int LookupAt = 0xF67D;                 // $01:F67D: PHP SEP #$20 XBA LDA #0 XBA REP #$30 ASL TAY LDA $D800,Y TAY SEP #$20 PLP RTL
     private static readonly byte[] LookupOriginal = Convert.FromHexString("08E220EBA900EBC2300AA8B900D8A8E22028 6B".Replace(" ", ""));
@@ -89,7 +105,7 @@ public static class MonsterTable
         for (int m = 0, n = Count(rom); m < n; m++)
         {
             int r = RecordOffset(rom, m);
-            used.Add((r, r + RecordSize));
+            used.Add((r, r + RecordLength(rom, r)));
             if (m == skipScriptOf) continue;
             var (s, l) = MonsterAi.ScriptRange(rom, r);
             if (l > 0) { int a = MonsterAi.At(r, s); used.Add((a, a + l)); }
@@ -122,10 +138,10 @@ public static class MonsterTable
             int run = 0;
             for (int p = start; p < end; p++)
             {
-                if (used.Any(u => p >= u.Start && p < u.End)) { free += run / RecordSize; run = 0; }
+                if (used.Any(u => p >= u.Start && p < u.End)) { free += run / LargestRecord; run = 0; }
                 else run++;
             }
-            free += run / RecordSize;
+            free += run / LargestRecord;
         }
         return Math.Min(free, Capacity - Count(rom));
     }
@@ -141,9 +157,10 @@ public static class MonsterTable
         if (n >= Capacity) throw new InvalidOperationException($"The ROM already has {Capacity} monsters.");
         int src = RecordOffset(rom, template);
         var (sStart, sLen) = MonsterAi.ScriptRange(rom, src);
-        int rec = FindSpace(rom, RecordSize, RecordAreas);
+        int size = RecordLength(rom, src);
+        int rec = FindSpace(rom, size, RecordAreas);
         if (rec < 0) throw new InvalidOperationException("No room left in bank 0 for another monster record.");
-        var record = rom.ReadBytes(src, RecordSize);
+        var record = rom.ReadBytes(src, size);
         // reserve the record before looking for script space
         int b = TableBlock(rom);
         rom.WriteBytes(rec, record);
