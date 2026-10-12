@@ -89,7 +89,27 @@ Branch: `phase-10-graphics` (from `phase-06-cutscenes`, released as 0.4.0-beta.7
 
 ## 10.6 — Testing & release
 
-- [ ] Every new piece tested in BizHawk (new map walked into through an exit, new sprite on an NPC, new monster
-      fought in an encounter, imported tileset rendered in game).
-- [ ] UI stress test on the original ROM, a Lufia Restored base and an all-features ROM.
-- [ ] Release notes and Discord announcement.
+- [x] Every new piece tested in BizHawk (new map walked into through an exit, new sprite on an NPC, new monster
+      fought in an encounter, imported tileset rendered in game). Also all together on one ROM with the earlier
+      patches (spells, Guy's magic, Lufia II font): map 94 on a new tileset with a new sprite on a new character, and
+      a new monster with its own picture casting spells in a random battle.
+- [x] UI stress test on the original ROM, a Lufia Restored base and an all-features ROM: every tab, Game Data
+      records, all maps, events, cutscenes and text - 0 exceptions, no-op Apply changes nothing, ROMs unchanged by
+      browsing. Map editor flow (new map, characters, resize, new tileset) re-run after the setup-script change.
+- [x] Release notes and Discord announcement (below).
+
+### Release notes
+
+- **Palettes tab**: every palette the game uses, edit colours with sliders or a web colour, PNG export / import.
+- **Block editor** (Map Editor > Edit blocks): build 16x16 blocks from tiles (colour row, flips, priority), walls by
+  side and solid blocks, new blocks, export / import the whole tile sheet; world map blocks too.
+- **New tilesets** (up to 64) so one town can get new graphics without changing every map that shares its tileset.
+- **New maps**: blank or a copy, pick tileset, palette and size, resize existing maps; connect them with exits.
+- **Characters**: add and hide characters on any map and pick their sprite; they now really appear in the game
+  (saving switches them on in the map's setup script); characters without a talk event get a new one.
+- **New sprites** (Sprites tab): copy a sprite (16x16, 16x24 or 32x32) into a new one with its own 8 frames,
+  export / import as an indexed PNG, choose its palette row.
+- **New monsters** (Monsters tab): copy a monster (name, stats, picture, drops, AI) into a new one - room for 22 -
+  and give any monster a picture of its own; new monsters show up in the Encounters tab.
+- Under the hood: the resource, tileset, sprite, monster and monster picture tables (and map setup scripts) can
+  move to the added space; ROMs that don't use the new features are not changed.
