@@ -183,6 +183,10 @@ public sealed class LufiaMap
     public List<MapExit>    Exits    { get; } = new();
     public List<MapArrival> Arrivals { get; } = new();
     public List<MapNpc>     Npcs     { get; } = new();
+    /// <summary>How many characters the map had when it was loaded (later ones are new: saving switches them on in
+    /// the setup script, see <see cref="SetupScripts.SyncCharacters"/>).</summary>
+    public int LoadedNpcCount { get; private set; }
+    public void MarkNpcsSaved() => LoadedNpcCount = Npcs.Count;
     public List<MapSpot>    Spots    { get; } = new();
     /// <summary>Movement paths (section G); path n of commands 14/15 is Paths[n - 1].</summary>
     public List<MovePath>   Paths    { get; } = new();
@@ -321,6 +325,7 @@ public sealed class LufiaMap
                 Index = i, Sprite = d[c], Flags = d[c + 1], X = U16(d, c + 2), Y = U16(d, c + 4),
                 BoxX1 = U16(d, c + 6), BoxY1 = U16(d, c + 8), BoxX2 = U16(d, c + 10), BoxY2 = U16(d, c + 12),
             });
+        LoadedNpcCount = Npcs.Count;
 
         int e = ob + SectionOffsets[4];
         for (int i = 0; i < SectionCounts[4] && e + 12 <= d.Length; i++, e += 12)
@@ -578,7 +583,7 @@ public sealed class LufiaMap
     public MapNpc AddNpc(int sprite, int x, int y)
     {
         if (Npcs.Count >= 32) throw new InvalidOperationException("A map can have at most 32 NPCs.");
-        var n = new MapNpc { Index = Npcs.Count, Sprite = sprite, Flags = 0, X = x, Y = y, BoxX1 = Math.Max(0, x - 2), BoxY1 = Math.Max(0, y - 2), BoxX2 = Math.Min(Width, x + 3), BoxY2 = Math.Min(Height, y + 3) };
+        var n = new MapNpc { Index = Npcs.Count, Sprite = sprite, Flags = 0x20, X = x, Y = y, BoxX1 = Math.Max(0, x - 2), BoxY1 = Math.Max(0, y - 2), BoxX2 = Math.Min(Width, x + 3), BoxY2 = Math.Min(Height, y + 3) };
         Npcs.Add(n);
         return n;
     }

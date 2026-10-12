@@ -31,6 +31,7 @@ public static class MapWriter
 
     public static MapSaveResult Save(RomBuffer rom, LufiaMap map, bool allowExpand)
     {
+        if (!map.IsWorld) SetupScripts.SyncCharacters(rom, map, allowExpand);
         var data = map.BuildData();
         var stream = LufiaCompression.Compress(data);
         if (!LufiaCompression.Decompress(stream).AsSpan().SequenceEqual(data))

@@ -145,10 +145,10 @@ public sealed class ExpansionSpace
     /// Reserve <paramref name="size"/> bytes that stay inside one 32 KB ROM bank (code and tables read with
     /// a bank byte plus a 16-bit index can't run over a bank's end).
     /// </summary>
-    public int AllocateInOneBank(int size, Kind kind, int id)
+    public int AllocateInOneBank(int size, Kind kind, int id, int limit = int.MaxValue)
     {
         if (size > 0x8000) throw new ArgumentOutOfRangeException(nameof(size));
-        return Reserve(size, kind, id, oneBank: true, int.MaxValue);
+        return Reserve(size, kind, id, oneBank: true, limit);
     }
 
     private int Reserve(int size, Kind kind, int id, bool oneBank, int limit)

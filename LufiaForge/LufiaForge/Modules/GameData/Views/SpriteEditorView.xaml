@@ -40,8 +40,16 @@
                     <TextBlock Text="{Binding Info}" Style="{StaticResource GdHint}" TextWrapping="Wrap" MaxWidth="620" HorizontalAlignment="Left" Margin="0,8,0,0"/>
                     <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                         <Button Content="Export sheet…" Style="{StaticResource LufiaButton}" Command="{Binding ExportCommand}" Margin="0,0,8,0"/>
-                        <Button Content="Import sheet…" Style="{StaticResource LufiaButtonGold}" Command="{Binding ImportCommand}"
-                                ToolTip="A picture the same size as the exported sheet. Colours are matched to the sprite's palette row; transparent pixels stay see-through."/>
+                        <Button Content="Import sheet…" Style="{StaticResource LufiaButtonGold}" Command="{Binding ImportCommand}" Margin="0,0,16,0"
+                                ToolTip="A picture the same size as the exported sheet. An indexed picture (as exported) keeps its colour numbers; other pictures are matched to the sprite's palette row. Transparent pixels stay see-through."/>
+                        <TextBlock Text="Palette row" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <ComboBox Style="{StaticResource GdCombo}" Width="80" ItemsSource="{Binding PaletteRows}" SelectedIndex="{Binding PaletteRow}"
+                                  ToolTip="Which row of the sprite palette this sprite is drawn with (edit the colours in the Palettes tab: Character sprites)."/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                        <Button Content="➕ New sprite (copy of this one)" Style="{StaticResource LufiaButton}" Command="{Binding NewSpriteCommand}" Margin="0,0,8,0"
+                                ToolTip="A new sprite the same size as this one (16x16, 16x24 or 32x32 - pick a sprite of the size you want), with its own graphics for all 8 frames."/>
+                        <TextBlock Text="{Binding NewNote}" Style="{StaticResource GdHint}" VerticalAlignment="Center"/>
                     </StackPanel>
                     <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" MaxWidth="620" HorizontalAlignment="Left" Margin="0,8,0,0"
                                Text="These are the sprites walking around on the maps: the party members and every character. Export the sheet, draw over it in any paint program, and import it back - importing writes to the ROM right away (unsaved until File > Save ROM)."/>

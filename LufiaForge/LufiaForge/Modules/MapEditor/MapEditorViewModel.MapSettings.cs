@@ -27,8 +27,11 @@ public partial class MapEditorViewModel
         IsTownMap = !_map.IsWorld;
         TilesetChoices.Clear();
         for (int t = 0, n = Tilesets.Count(_rom); t < n; t++) TilesetChoices.Add($"Tileset {t}");
-        if (SpriteChoices.Count == 0)
-            for (int s = 0; s < NpcSprites.SpriteCount; s++) SpriteChoices.Add($"{s:X2}");
+        if (SpriteChoices.Count != NpcSprites.Count(_rom))
+        {
+            SpriteChoices.Clear();
+            for (int s = 0, n = NpcSprites.Count(_rom); s < n; s++) SpriteChoices.Add($"{s:X2}");
+        }
         _populating = true;
         TilesetChoice = _map.IsWorld ? -1 : _map.Tileset;
         MapPalette = _map.PaletteIndex;

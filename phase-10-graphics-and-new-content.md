@@ -56,10 +56,22 @@ Branch: `phase-10-graphics` (from `phase-06-cutscenes`, released as 0.4.0-beta.7
 
 ## 10.4 — Character sprites
 
-- [ ] Indexed-PNG export / import (keep colour numbers), with the palette row editable.
-- [ ] Resize a sprite (1–4 x 1–4 tiles) and set its 8 frames; graphics move to the added space when they grow.
-- [ ] **New sprites**: the pointer table at 0xE25F (74 sprites) is full — move it (hook $01:AC50) and allow more.
-- [ ] Pick an NPC's sprite in the map editor; cutscene / party actors can use the new sprites.
+- [x] Indexed-PNG export / import (keep colour numbers; a full-colour picture is matched to the row), with the
+      palette row editable.
+- [x] Sizes: the game only uses 16x16, 16x24 and 32x32 (bytes 2/3/5 of a record go with the size), so a new
+      sprite takes the size of the sprite it copies instead of a free resize.
+- [x] **New sprites**: the pointer table moves to the added space (block "LFSP", 192 entries; only the lookup's
+      long operand at $01:AC5D changes; entries past the game's 74 keep their old bytes). Records must be in bank 01
+      (the callers read them with data bank 01), so new ones go in bank 01's unused tail ($01:F880-FFFF, 112 records).
+      Each new sprite gets its own graphics for all 8 frames in the added space. *Checked in game: two new sprites
+      (16x24, 32x32) drawn on map 94; every old sprite still loads through the moved table.*
+- [x] Pick an NPC's sprite in the map editor (new sprites included).
+- [x] **Found on the way: added characters never appeared.** A map's characters only appear when its setup
+      script switches them on (41+n, $01:9AB1); character flags 20 like the game's. Setup scripts could only be in
+      banks 03-04 (16-bit offsets), so a hook at $01:9884 reads a table of 24-bit offsets first (block "LFSU"; FFFFFF =
+      the original entry) and a map's script can move to the added space. Saving a map now switches its new
+      characters on (commands put first, jumps moved) and hidden ones off (40 = no-op). *Checked in game: all 117
+      scripts moved -> intro, prologue and maps unchanged; new characters appear.*
 
 ## 10.5 — Monsters
 
