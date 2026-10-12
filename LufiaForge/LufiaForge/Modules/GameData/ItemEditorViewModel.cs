@@ -105,14 +105,18 @@ public partial class ItemEditorViewModel : GameDataEditorBase
         HeaderHex = ToHex(rom.ReadBytes(o + 18, 3));
 
         // The record ends where the next one starts (the last record: at its 00 terminator).
-        int next = SelectedIndex < GameDataOffsets.ItemCount - 1 ? Ctx.ItemOffset(SelectedIndex + 1) : -1;
+        // (the nearest record after this one: a record that grew may have moved to the end of the bank)
+        int next = -1;
+        for (int i = 0; i < GameDataOffsets.ItemCount; i++) { int r2 = Ctx.ItemOffset(i); if (r2 > o && (next < 0 || r2 < next)) next = r2; }
+        if (o >= Core.Battle.ItemTable.FreeStart) next = -1;
         int p = o + 21, count = 0;
         while (count < 16 && p < rom.Length && rom.ReadByte(p) != 0) { p += 3; count++; }
         int parsedEnd = p + 1;
         if (next < 0) next = parsedEnd;
 
         _tailLength     = next - (o + 21);
-        HasPropertyList = parsedEnd == next && count < 16;
+        // (a list that was shortened in place is followed by zeros up to the next record)
+        HasPropertyList = count < 16 && (parsedEnd == next || parsedEnd < next && Enumerable.Range(parsedEnd, next - parsedEnd).All(i => rom.ReadByte(i) == 0));
 
         Properties.Clear();
         if (HasPropertyList)
@@ -127,6 +131,7 @@ public partial class ItemEditorViewModel : GameDataEditorBase
         EffectHex = _tailLength > 0 ? ToHex(rom.ReadBytes(o + 21, _tailLength)) : "";
 
         OffsetText = $"Record at 0x{o:X6}, {next - o} bytes  (pointer at 0x{GameDataOffsets.ItemPointerTable + SelectedIndex * 2:X6})";
+        LoadStatus();
 
         if (_descriptions != null)
         {
