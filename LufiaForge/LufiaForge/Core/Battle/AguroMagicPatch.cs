@@ -41,13 +41,13 @@ public static class AguroMagicPatch
     private static bool ChecksOff(RomBuffer rom) => SlotChecks.All(c => rom.ReadByte(c) == 0xFF);
     private static void SetChecks(RomBuffer rom, byte v) { foreach (int c in SlotChecks) if (rom.ReadByte(c) is 0x02 or 0xFF) rom.WriteByte(c, v); }
 
-    public static bool IsApplied(RomBuffer rom) => SpellMemory.Installed(rom) && rom.ReadByte(MenuSkip) == 0xFF && ChecksOff(rom);
+    public static bool IsApplied(RomBuffer rom) => SpellMemory.Installed(rom) && rom.ReadByte(MenuSkip) == 0xFF && ChecksOff(rom) && SpellMemory.SwapFixed(rom);
 
     /// <summary>An earlier version is in the ROM: Add (Update) moves it onto the spell memory (or, from before
     /// 0.4.0-beta.9, also lets MP effects and Mute reach Aguro).</summary>
     public static bool NeedsUpdate(RomBuffer rom) =>
         (!SpellMemory.Installed(rom) && SpellMemory.OldBlock(rom) > 0) ||
-        (SpellMemory.Installed(rom) && rom.ReadByte(MenuSkip) == 0xFF && !ChecksOff(rom));
+        (SpellMemory.Installed(rom) && rom.ReadByte(MenuSkip) == 0xFF && (!ChecksOff(rom) || !SpellMemory.SwapFixed(rom)));
 
     public static bool IsOriginal(RomBuffer rom) =>
         (rom.ReadByte(MenuSkip) == 0x02 || NeedsUpdate(rom)) && (SpellTablePatch.IsApplied(rom) || SpellTablePatch.IsOriginal(rom));
