@@ -20,11 +20,14 @@ Branch: `phase-10-graphics` (from `phase-06-cutscenes`, released as 0.4.0-beta.7
 
 ## 10.1 — Foundations
 
-- [ ] **Bigger resource table.** The table at 0x60000 holds ids 0x000–0x13E and has no room after it. Move it into
+- [x] **Bigger resource table.** The table at 0x60000 holds ids 0x000–0x13E and has no room after it. Move it into
       the added space with room for new ids (hook the game's resource lookup), keeping old ids where they are.
       Everything below that needs new graphics or new maps depends on this.
-- [ ] Verify the resource lookup hook in BizHawk (title, town, world map, battle) before building on it.
-- [ ] Palette editor (shared): edit the 16-colour rows a tileset / sprite / monster uses, with PNG palette import.
+- [x] Verify the resource lookup hook in BizHawk (title, town, world map, battle) before building on it.
+      Done: all 319 resources identical through the moved table; new game, intro, prologue maps and a battle
+      play the same; a map loaded from new id 13F in game. ()
+- [x] Palette editor (shared, Game Data > Palettes): edit the 16-colour rows a tileset / sprite / monster uses, with PNG palette import / export. Map palettes (with the maps using
+      each), shared map rows 0-1, character sprites (0AF), battle sprites (0x11200), monster pictures. Checked in game.
 
 ## 10.2 — Tilesets for town & dungeon maps
 
