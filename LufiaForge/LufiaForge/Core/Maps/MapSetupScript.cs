@@ -57,8 +57,7 @@ public static class MapSetupScript
 {
     public const int PointerTable = 0x18000;
 
-    public static int Offset(RomBuffer rom, int mapId) =>
-        PointerTable + rom.ReadUInt16Le(PointerTable + mapId * 2);
+    public static int Offset(RomBuffer rom, int mapId) => SetupScripts.Offset(rom, mapId);
 
     /// <summary>All section E assignments in the map's setup script, in script order.</summary>
     public static List<SpotContent> ReadSpots(RomBuffer rom, int mapId)

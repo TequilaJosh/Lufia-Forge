@@ -21,7 +21,7 @@ public static class MapFactory
     {
         var used = MapCatalog.Scan(rom).Select(m => m.MapId).ToHashSet();
         return Enumerable.Range(2, Limit - 2).Where(i => !used.Contains(i) && rom.ReadByte(SelectTable + i) == 0 &&
-            rom.ReadUInt16Le(SetupTable + i * 2) == 0xFFFF &&
+            rom.ReadUInt16Le(SetupTable + i * 2) == 0xFFFF && !SetupScripts.IsMoved(rom, i) &&
             rom.ReadByte(ScriptTable + i * 5) == 0xFF && rom.ReadByte(ScriptTable + i * 5 + 1) == 0xFF && rom.ReadByte(ScriptTable + i * 5 + 2) == 0xFF).ToList();
     }
 
@@ -67,6 +67,8 @@ public static class MapFactory
         else
         {
             rom.WriteUInt16Le(SetupTable + id * 2, rom.ReadUInt16Le(SetupTable + template * 2));
+            // a template whose script was moved: the copy gets its own (a moved script belongs to one map)
+            if (SetupScripts.IsMoved(rom, template)) SetupScripts.Replace(rom, id, SetupScripts.Read(rom, template));
             EventScript.CopyBlockFor(rom, id);
         }
         rom.FixChecksum();
