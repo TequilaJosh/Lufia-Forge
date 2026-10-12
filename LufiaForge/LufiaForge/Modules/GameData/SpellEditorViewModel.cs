@@ -142,6 +142,7 @@ public partial class SpellEditorViewModel : GameDataEditorBase
             : "The game has 56 spells. \"New spell\" adds the \"Up to 128 spells\" patch (Patch Manager) first.";
         RawHex     = ItemEditorViewModel.ToHex(rom.ReadBytes(o + 8, end - o - 8));
         OffsetText = $"Record at 0x{o:X6}, {end - o} bytes";
+        LoadAnimation(rom, o);
     }
 
     [RelayCommand]
@@ -198,6 +199,8 @@ public partial class SpellEditorViewModel : GameDataEditorBase
             rom.WriteByte(o + 8,  (byte)Usage);
             rom.WriteByte(o + 10, (byte)Target);
             rom.WriteByte(o + 11, (byte)Clamp(Mp, 0, 255));
+            rom.WriteByte(o + 9, (byte)Clamp(Animation, 0, Core.Battle.SpellAnimations.Count(rom) - 1));
+            rom.WriteByte(o + 19, (byte)Clamp(Sound, 0, 255));
 
             if (IsCure || IsStat)
             {
