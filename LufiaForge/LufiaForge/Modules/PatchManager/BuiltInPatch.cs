@@ -63,7 +63,7 @@ public partial class BuiltInPatch : ObservableObject
         new()
         {
             Name = "Up to 128 spells, 64 per character",
-            Description = "Room for 72 new spells (38-7F) next to the game's 56: make them in Spells (\"New spell\" copies a spell, then rename it and choose what it does), teach them in Character Magic, give them to monsters and bosses in Monsters. Every character can learn up to 64 spells (their menus list them in spell order); saves from before keep their spells. The Guy / Aguro magic patch adds it with a first new spell, Trickstr (Trick on the whole party).",
+            Description = "Room for 72 new spells (38-7F) next to the game's 56: make them in Spells (\"New spell\" copies a spell, then rename it and choose what it does), teach them in Character Magic, give them to monsters and bosses in Monsters. Every character can learn up to 64 spells (their menus list them in spell order, so the field menu's spell swap is turned off); saves from before keep their spells. The Guy / Aguro magic patch adds it with a first new spell, Trickstr (Trick on the whole party).",
             IsApplied = SpellTablePatch.IsApplied, IsOriginal = SpellTablePatch.IsOriginal, Apply = SpellTablePatch.Apply, Remove = SpellTablePatch.Remove,
             NeedsUpdate = SpellTablePatch.NeedsUpdate,
         },

@@ -74,7 +74,7 @@ public static class SpellTablePatch
         (rom.ReadBytes(LookupSite, LookupOriginal.Length).SequenceEqual(LookupOriginal) || OldTrickster(rom) > 0 || BlockOffset(rom) > 0) &&
         (SpellMemory.SitesOriginal(rom) || SpellMemory.Installed(rom) || SpellMemory.OldBlock(rom) > 0);
     /// <summary>The spell table and the 64-per-character spell memory are both in.</summary>
-    public static bool IsApplied(RomBuffer rom) => BlockOffset(rom) > 0 && SpellMemory.Installed(rom) && CurrentLookup(rom);
+    public static bool IsApplied(RomBuffer rom) => BlockOffset(rom) > 0 && SpellMemory.Installed(rom) && CurrentLookup(rom) && SpellMemory.SwapFixed(rom);
 
     /// <summary>The block's lookup is this version's (copies added spells to <see cref="RecordBuffer"/>) and calls the
     /// spell memory's ensure. The first version switched DB to the record's bank, which the effect code (reading
@@ -165,7 +165,9 @@ public static class SpellTablePatch
 
     public static void Apply(RomBuffer rom)
     {
-        if (IsApplied(rom)) return;
+        // (ROMs patched before the field menu's swap was turned off: the rest is current)
+        if (SpellMemory.Installed(rom)) SpellMemory.FixSwap(rom);
+        if (IsApplied(rom)) { rom.FixChecksum(); return; }
         if (!IsOriginal(rom)) throw new InvalidOperationException("The game's spell code isn't the original (another patch changed it), so spells can't be expanded safely.");
         if (rom.Length < MapWriter.ExpandedSize) rom.Expand(MapWriter.ExpandedSize);
         if (BlockOffset(rom) == 0) ApplyTable(rom);

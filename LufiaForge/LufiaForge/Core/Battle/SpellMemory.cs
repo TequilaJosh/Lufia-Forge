@@ -16,6 +16,10 @@ namespace LufiaForge.Core.Battle;
 /// <item>$08:BD07 the battle spell menu and $00:D100 / $00:9C27 the field Magic menu's count and "nth spell": spells in
 /// spell number order, at most 64 (the battle menu's buffers hold 64).</item>
 /// </list>
+/// <item>$00:C21F the field Magic menu's swap: it swapped two entries of the old lists (through the pointers at
+/// $00:9CAD; Aguro's pointed at the party names, $14B5), which now scrambled the spell bits and Guy's names. A spell
+/// order can't be kept in the new format, so the swap is skipped (BRA to its end: the selection is just dropped).</item>
+/// </list>
 /// Earlier versions of the Guy / Aguro magic patch (lists per slot, before 0.4.0-beta.7) are recognised: their lists
 /// are read, their code is put back, then this is installed.
 /// </summary>
@@ -24,6 +28,13 @@ public static class SpellMemory
     public const int MaxPerCharacter = 64;
     public const int LearnSite = 0x46829, LevelUpSite = 0x4665E, JoinSite = 0x46C07, ClearSite = 0x46AEC, KnowsSite = 0xD2A7,
                      KnowsLoopSite = 0xD2BC, CountSite = 0x5100, NthSite = 0x1C27, MenuSite = 0x43D07;
+    /// <summary>The field Magic menu's swap (see the class notes): A9 00 in the game, 80 2C (BRA $C24D) with the patch.</summary>
+    public const int SwapSite = 0x421F;
+    private static readonly byte[] SwapOriginal = { 0xA9, 0x00 }, SwapSkip = { 0x80, 0x2C };
+    public static bool SwapFixed(RomBuffer rom) => Same(rom, SwapSite, SwapSkip);
+    /// <summary>Turns the field menu's swap off (ROMs patched before this fix need it: their swap scrambles spells).</summary>
+    public static void FixSwap(RomBuffer rom) { if (Same(rom, SwapSite, SwapOriginal)) rom.WriteBytes(SwapSite, SwapSkip); }
+
     /// <summary>The battle spell menu skips slot 2 ($08:BD03 CPX #$02): 02, or FF when Aguro has magic.</summary>
     public const int MenuSkip = 0x43D04;
     private static readonly byte[] LearnOriginal = Convert.FromHexString("088BE220");
@@ -721,6 +732,7 @@ public static class SpellMemory
         Hook(CountSite, CountOriginal.Length, 0x22, CountAll, 0x60);                         // then RTS
         Hook(NthSite, NthOriginal.Length, 0x22, Nth, 0x60);                                  // then RTS
         Hook(MenuSite, MenuOriginal.Length, 0x22, BuildMenu, 0x80, 0x2B);                    // then BRA $BD38
+        FixSwap(rom);
         WriteLists(rom, lists);
     }
 
@@ -737,6 +749,7 @@ public static class SpellMemory
         rom.WriteBytes(CountSite, CountOriginal);
         rom.WriteBytes(NthSite, NthOriginal);
         rom.WriteBytes(MenuSite, MenuOriginal);
+        if (SwapFixed(rom)) rom.WriteBytes(SwapSite, SwapOriginal);
         rom.WriteByte(MenuSkip, 0x02);
         var space = ExpansionSpace.Load(rom);
         space.Free(b);
