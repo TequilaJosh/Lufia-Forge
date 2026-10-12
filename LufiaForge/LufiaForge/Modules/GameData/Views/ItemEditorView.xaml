@@ -101,6 +101,37 @@
                     </StackPanel>
                 </Border>
 
+                <!-- Status effects -->
+                <Border Style="{StaticResource GdCard}" Visibility="{Binding HasPropertyList, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <StackPanel MaxWidth="340">
+                        <TextBlock Text="STATUS EFFECTS" Style="{StaticResource GdSection}"/>
+                        <TextBlock Text="Inflicts on hit (weapons)" Style="{StaticResource GdFieldLabel}"/>
+                        <ItemsControl ItemsSource="{Binding InflictFlags}">
+                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate><CheckBox Content="{Binding Name}" IsChecked="{Binding IsSet}" Style="{StaticResource GdCheck}" Margin="0,0,10,2"/></DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                            <TextBlock Text="Chance" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBox Style="{StaticResource GdNumber}" Width="44" Text="{Binding InflictChance}"
+                                     ToolTip="Chance per hit, in percent (lowered by the monster's resistance to that ailment)."/>
+                            <TextBlock Text="%" VerticalAlignment="Center" Margin="3,0,0,0" Foreground="{StaticResource TextPrimaryBrush}"/>
+                        </StackPanel>
+                        <TextBlock Text="Resists (any equipment)" Style="{StaticResource GdFieldLabel}" Margin="0,10,0,0"/>
+                        <StackPanel Orientation="Horizontal">
+                            <ComboBox Style="{StaticResource GdCombo}" Width="130" ItemsSource="{Binding ResistChoices}" DisplayMemberPath="Label"
+                                      SelectedValuePath="Value" SelectedValue="{Binding ResistAilment}"/>
+                            <TextBox Style="{StaticResource GdNumber}" Width="44" Margin="6,0,3,0" Text="{Binding ResistPercent}"
+                                     ToolTip="Chance it still works, in percent of normal: 0 = immune, 50 = half as likely."/>
+                            <TextBlock Text="% (0 = immune)" VerticalAlignment="Center" Foreground="{StaticResource TextPrimaryBrush}"/>
+                        </StackPanel>
+                        <Button Content="Apply status effects" Style="{StaticResource LufiaButtonGold}" Command="{Binding ApplyStatusCommand}"
+                                HorizontalAlignment="Left" Margin="0,10,0,0"/>
+                        <TextBlock Text="{Binding StatusNote}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                    </StackPanel>
+                </Border>
+
                 <!-- Properties -->
                 <Border Style="{StaticResource GdCard}">
                     <StackPanel MinWidth="340">
@@ -133,7 +164,7 @@
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
                             <TextBlock Style="{StaticResource GdHint}" MaxWidth="340" Margin="0,6,0,0"
-                                       Text="Values are 16-bit (65535 = -1, 65526 = -10 for negative modifiers). The number of properties is fixed by the record size."/>
+                                       Text="Values are 16-bit (65535 = -1, 65526 = -10 for negative modifiers). For two-number properties (a, b) the value is a + 256 x b. Status effects have their own card."/>
                             <TextBlock Text="Raw data (read-only)" Style="{StaticResource LufiaLabel}" Margin="0,10,0,2"/>
                             <TextBox Style="{StaticResource GdText}" IsReadOnly="True" TextWrapping="Wrap" MaxWidth="340"
                                      Text="{Binding EffectHex, Mode=OneWay}"/>

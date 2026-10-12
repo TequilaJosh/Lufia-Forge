@@ -69,6 +69,12 @@ public partial class BuiltInPatch : ObservableObject
         },
         new()
         {
+            Name = "Status effects on equipment",
+            Description = "Weapons can inflict ailments on hit (Sleep, Poison, Confuse, Mute, Stun, Stone, Death...) with a chance you set, and armor, helmets, shields and accessories can resist ailments - in the game only an accessory's resistance counted. Set them on each item in Items > Status effects (added by itself the first time you use it).",
+            IsApplied = ItemStatusPatch.IsApplied, IsOriginal = ItemStatusPatch.IsOriginal, Apply = ItemStatusPatch.Apply, Remove = ItemStatusPatch.Remove,
+        },
+        new()
+        {
             Name = "Rename command for events",
             Description = "Adds event command 6E \"Rename a party member\" (Events editor, Characters): e.g. show Maxim's name during a flashback, then give the Hero's own name back. Added by itself the first time an event uses it.",
             IsApplied = RenamePatch.IsApplied, IsOriginal = RenamePatch.IsOriginal, Apply = RenamePatch.Apply, Remove = RenamePatch.Remove,

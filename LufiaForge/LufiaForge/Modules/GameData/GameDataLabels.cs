@@ -59,11 +59,15 @@ public static class GameDataLabels
         var known = new Dictionary<int, string>
         {
             [0x05] = "ATP", [0x06] = "DFP", [0x07] = "MGR", [0x08] = "AGL", [0x09] = "STR",
-            [0x0A] = "INT", [0x0C] = "Extra damage", [0x11] = "Death property",
-            [0x14] = "Price modifier", [0x17] = "Extra resistance", [0x1E] = "Death property (?)",
+            [0x0A] = "INT", [0x0C] = "Element / slayer type (a, b)", [0x0D] = "Ailment resist (a = ailment 1-8, b = x/16, FF immune)",
+            [0x0E] = "Weight (a) / hit chance (b, weapon)", [0x0F] = "Element resist (element, x/16)", [0x10] = "Spell element boost (element, x/16)",
+            [0x11] = "Ailment chance boost (bits, x/16)", [0x12] = "Inflict on hit (bits, chance /255; needs patch)",
+            [0x13] = "Item use data", [0x14] = "Ring flags", [0x15] = "Animation / sound (items)", [0x16] = "Weapon special (1 drain, 3 death)",
+            [0x17] = "Encounter rate (?)",
         };
-        var list = new ByteOption[256];
-        for (int i = 0; i < 256; i++)
+        // (ids 18 and up would be written past the game's work area: not offered)
+        var list = new ByteOption[0x18];
+        for (int i = 0; i < 0x18; i++)
             list[i] = new ByteOption(i, $"{i:X2}  {(known.TryGetValue(i, out var s) ? s : "?")}");
         return list;
     }
