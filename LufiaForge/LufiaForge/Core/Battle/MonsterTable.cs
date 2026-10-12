@@ -156,39 +156,101 @@ public static class MonsterTable
         int n = Count(rom);
         if (n >= Capacity) throw new InvalidOperationException($"The ROM already has {Capacity} monsters.");
         int src = RecordOffset(rom, template);
-        var (sStart, sLen) = MonsterAi.ScriptRange(rom, src);
-        int size = RecordLength(rom, src);
-        int rec = FindSpace(rom, size, RecordAreas);
-        if (rec < 0) throw new InvalidOperationException("No room left in bank 0 for another monster record.");
-        var record = rom.ReadBytes(src, size);
-        // reserve the record before looking for script space
+        Place(rom, n, rom.ReadBytes(src, RecordLength(rom, src)), src, isNew: true);
+        return n;
+    }
+
+    /// <summary>
+    /// Writes a monster's whole record (fixed part and variable tail). In place when it isn't longer than the old one;
+    /// otherwise the record moves to bank 0's free space (the offset table moves first) with its own copy of the AI.
+    /// </summary>
+    public static void SetRecord(RomBuffer rom, int id, byte[] record)
+    {
+        int old = RecordOffset(rom, id);
+        if (record.Length <= RecordLength(rom, old))
+        {
+            // (the script offset at +22 is kept: the script itself doesn't move)
+            rom.WriteBytes(old, record);
+            rom.FixChecksum();
+            return;
+        }
+        Move(rom);
+        old = RecordOffset(rom, id);
+        Place(rom, id, record, old, isNew: false);
+    }
+
+    /// <summary>Puts <paramref name="record"/> in free bank 0 space as monster <paramref name="id"/>, with a copy of
+    /// <paramref name="scriptFrom"/>'s AI script whose jumps (counted from the record) are moved with it.</summary>
+    private static void Place(RomBuffer rom, int id, byte[] record, int scriptFrom, bool isNew)
+    {
+        var (sStart, sLen) = MonsterAi.ScriptRange(rom, scriptFrom);
+        var cmds = MonsterAi.Decode(rom, scriptFrom);
+        int oldAt = sLen > 0 ? MonsterAi.At(scriptFrom, sStart) : 0;
+        var script = sLen > 0 ? rom.ReadBytes(oldAt, sLen) : Array.Empty<byte>();
+        int rec = FindSpace(rom, record.Length, RecordAreas, skipScriptOf: isNew ? -1 : id);
+        if (rec < 0) throw new InvalidOperationException("No room left in bank 0 for this monster record.");
         int b = TableBlock(rom);
+        int oldPointer = rom.ReadUInt16Le(b + Header + id * 2);
+        int n = Count(rom);
+        // reserve the record before looking for script space
         rom.WriteBytes(rec, record);
-        rom.WriteUInt16Le(b + Header + n * 2, (ushort)(rec - OriginalTable));
-        rom.WriteByte(b + 4, (byte)(n + 1));
+        rom.WriteUInt16Le(b + Header + id * 2, (ushort)(rec - OriginalTable));
+        if (isNew) rom.WriteByte(b + 4, (byte)(n + 1));
         if (sLen > 0)
         {
-            int scr = FindSpace(rom, sLen, ScriptAreas);
+            int scr = FindSpace(rom, sLen, ScriptAreas, skipScriptOf: id);
             if (scr < 0)
             {
-                rom.WriteByte(b + 4, (byte)n);
-                throw new InvalidOperationException("No room left in bank 0 for the new monster's AI script.");
+                if (isNew) rom.WriteByte(b + 4, (byte)n);
+                else rom.WriteUInt16Le(b + Header + id * 2, (ushort)oldPointer);
+                throw new InvalidOperationException("No room left in bank 0 for the monster's AI script.");
             }
-            int oldAt = MonsterAi.At(src, sStart);
-            rom.WriteBytes(scr, rom.ReadBytes(oldAt, sLen));
+            rom.WriteBytes(scr, script);
             // offsets count from the record: shift every jump by the change of (script - record)
-            int delta = (scr - rec) - (oldAt - src);
-            foreach (var c in MonsterAi.Decode(rom, src))
+            int delta = (scr - rec) - (oldAt - scriptFrom);
+            foreach (var c in cmds)
             {
                 if (c.Jump is not int j) continue;
-                int at = scr + (MonsterAi.At(src, c.Offset) - oldAt) + 1 + (c.Op == 0x09 ? 0 : 1);
-                int nj = (j + delta) & 0xFFFF;
-                rom.WriteUInt16Le(at, (ushort)nj);
+                int at = scr + (MonsterAi.At(scriptFrom, c.Offset) - oldAt) + 1 + (c.Op == 0x09 ? 0 : 1);
+                rom.WriteUInt16Le(at, (ushort)((j + delta) & 0xFFFF));
             }
             rom.WriteUInt16Le(rec + 0x22, (ushort)((sStart + delta) & 0xFFFF));
         }
+        else rom.WriteUInt16Le(rec + 0x22, 0);
         rom.FixChecksum();
-        return n;
+    }
+
+    // ── magic elements: the record's second masked group (bit n = element n + 1, one multiplier byte per set bit) ──
+
+    /// <summary>Elements the battle code reads per target ($08:BFFD, 7 entries): 1 Fire .. 5 Blast, and 6 Light,
+    /// 7 Dark, which the game never uses but handles the same way.</summary>
+    public const int ElementCount = 7;
+
+    /// <summary>Magic damage multipliers in 16ths for elements 1-7 (0 = normal damage).</summary>
+    public static int[] ReadElements(RomBuffer rom, int record)
+    {
+        int p = record + FixedSize;
+        int m1 = rom.ReadByte(p); p += 1 + System.Numerics.BitOperations.PopCount((uint)m1);
+        int m2 = rom.ReadByte(p++);
+        var v = new int[ElementCount];
+        for (int e = 0; e < ElementCount; e++)
+            if ((m2 >> e & 1) != 0) v[e] = rom.ReadByte(p++);
+        return v;
+    }
+
+    /// <summary>The record with new magic multipliers (the length changes with the number of elements set).</summary>
+    public static byte[] WithElements(RomBuffer rom, int record, IReadOnlyList<int> mult)
+    {
+        int len = RecordLength(rom, record);
+        var r = rom.ReadBytes(record, len);
+        int p = FixedSize;
+        int m1 = r[p]; p += 1 + System.Numerics.BitOperations.PopCount((uint)m1);
+        int m2 = r[p];
+        int oldGroup = 1 + System.Numerics.BitOperations.PopCount((uint)(m2 & 0x7F));
+        var group = new List<byte> { (byte)(m2 & 0x80) };
+        for (int e = 0; e < ElementCount; e++)
+            if (mult[e] > 0) { group[0] |= (byte)(1 << e); group.Add((byte)Math.Clamp(mult[e], 1, 255)); }
+        return r.Take(p).Concat(group).Concat(r.Skip(p + oldGroup)).ToArray();
     }
 
     // ── pictures ──────────────────────────────────────────────────────────

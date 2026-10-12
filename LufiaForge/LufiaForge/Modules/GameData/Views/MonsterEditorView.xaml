@@ -117,16 +117,35 @@
                                 <CheckBox Content="Doesn't shake when hit" Style="{StaticResource GdCheck}" IsChecked="{Binding Flag80}"
                                           ToolTip="Flag 0x80 (big monsters and bosses: Dragon, Hydra, Troll, Efreet, the Sinistrals...). The picture stays still instead of jittering when hit or defeated."/>
                             </StackPanel>
-                            <TextBlock Grid.Row="2" Text="Weak against" Style="{StaticResource GdFieldLabel}"/>
-                            <ComboBox  Grid.Row="2" Grid.Column="1" Style="{StaticResource GdCombo}" MinWidth="160"
-                                       ItemsSource="{Binding WeaknessOptions}" DisplayMemberPath="Label"
-                                       SelectedValuePath="Value" SelectedValue="{Binding Weakness}"/>
+                            <TextBlock Grid.Row="2" Text="Weapon weakness" Style="{StaticResource GdFieldLabel}"
+                                       ToolTip="Physical attacks with a weapon of this element (e.g. a Fire Ring's attack) do the damage % beside it."/>
+                            <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal">
+                                <ComboBox Style="{StaticResource GdCombo}" MinWidth="120"
+                                          ItemsSource="{Binding WeaknessOptions}" DisplayMemberPath="Label"
+                                          SelectedValuePath="Value" SelectedValue="{Binding Weakness}"/>
+                                <TextBox Style="{StaticResource GdNumber}" Width="50" Margin="6,0,2,0" Text="{Binding PhysicalPercent}"
+                                         ToolTip="Damage in percent from attacks of that element (100 = normal, 150 = 1.5x)."/>
+                                <TextBlock Text="%" VerticalAlignment="Center" Foreground="{StaticResource TextPrimaryBrush}"/>
+                            </StackPanel>
                             <TextBlock Grid.Row="3" Text="Graphic #" Style="{StaticResource GdFieldLabel}"/>
                             <TextBox   Grid.Row="3" Grid.Column="1" Style="{StaticResource GdNumber}" Text="{Binding Graphic}"/>
                             <TextBlock Grid.Row="4" Text="Palette" Style="{StaticResource GdFieldLabel}"/>
                             <TextBox   Grid.Row="4" Grid.Column="1" Style="{StaticResource GdNumber}" Text="{Binding Palette}"/>
                         </Grid>
-                        <TextBlock Text="Unknown bytes +11 +13 +29 (hex)" Style="{StaticResource LufiaLabel}" Margin="0,10,0,2"/>
+                        <TextBlock Text="SPELL DAMAGE BY ELEMENT (%)" Style="{StaticResource GdSection}" Margin="0,12,0,4"
+                                   ToolTip="Damage this monster takes from spells of each element, in percent: 100 = normal, 200 = weak (double), 50 = resists. Light and Dark are elements the game never used; spells of those elements now work like the others."/>
+                        <ItemsControl ItemsSource="{Binding MagicElements}">
+                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel MaxWidth="380"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,10,4">
+                                        <TextBlock Text="{Binding Name}" Width="42" VerticalAlignment="Center" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                        <TextBox Style="{StaticResource GdNumber}" Width="46" Text="{Binding Percent}"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Text="Unknown bytes +11 +29 (hex)" Style="{StaticResource LufiaLabel}" Margin="0,10,0,2"/>
                         <TextBox Style="{StaticResource GdText}" Width="160" HorizontalAlignment="Left"
                                  Text="{Binding UnknownHex, UpdateSourceTrigger=PropertyChanged}"/>
                     </StackPanel>

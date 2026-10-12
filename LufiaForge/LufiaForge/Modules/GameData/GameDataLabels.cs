@@ -99,6 +99,8 @@ public static class GameDataLabels
     {
         new(0, "0  None"), new(1, "1  Fire"), new(2, "2  Ice"),
         new(3, "3  Bolt"), new(4, "4  Water"), new(5, "5  Blast"),
+        // the game never uses 6 and 7, but its damage code handles them like the others ($08:BFFD)
+        new(6, "6  Light"), new(7, "7  Dark"),
     };
 
     public static readonly ByteOption[] SpellUsages =
