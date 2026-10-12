@@ -75,12 +75,17 @@ Branch: `phase-10-graphics` (from `phase-06-cutscenes`, released as 0.4.0-beta.7
 
 ## 10.5 — Monsters
 
-- [ ] **New monster pictures**: picture ids stop at 0x6B (0x6C would be the sprite palette resource) — use new
-      resource ids from 10.1 and widen the graphic id lookup.
-- [ ] **New monsters**: the pointer table at 0x5800 (165 entries) is full and followed by the records — move it
-      (find and hook the code that reads 0x5800), keep records reachable for AI offsets, allow new ids in
-      encounters (subgroups, bosses).
-- [ ] "New monster" in the Monsters tab: copy an existing one, rename, pick / import its picture, stats, AI, drops.
+- [x] **New monster pictures**: a hook at $08:D959 (where graphic + 0x43 became the resource id) reads a table of
+      resource ids (block "LFMP"; graphics 00-6B keep theirs), so new pictures get new resource ids. "New picture for
+      this monster" gives a monster its own copy to import over (no more changing every monster that shares it).
+- [x] **New monsters**: the record offsets are read only by $01:F67D; it now jumps to a copy reading a moved table
+      (block "LFMT", room for 255). The callers read records as $D800+offset with data bank 00, so records must stay
+      in bank 00 at $D800 or above: new ones go into the old table's place and the end of bank 0 (room for 22). AI
+      scripts are found as (record + offset) & FFFF, so they can be anywhere in bank 00: new monsters' scripts go
+      into the unused $D2B0-$D7FF first (jumps are moved with them). Encounters list the new monsters.
+- [x] "New monster" in the Monsters tab copies the selected one (name, stats, picture, drops, its own AI copy).
+      *Checked in game: a new monster with its own recoloured picture in a random battle - named on the target
+      cursor, casting spells from its copied script, battle won normally.*
 
 ## 10.6 — Testing & release
 

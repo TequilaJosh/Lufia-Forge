@@ -69,14 +69,27 @@ public partial class EncounterEditorViewModel : GameDataEditorBase
     public int SelectedGroup => SelectedIndex >= 0 && SelectedIndex < _entryNumbers.Count && _entryNumbers[SelectedIndex] < Encounters.FirstBoss
         ? _entryNumbers[SelectedIndex] : 0;
 
+    private void FillMonsterChoices()
+    {
+        if (Ctx == null) return;
+        MonsterChoices.Clear();
+        for (int i = 0, n = Ctx.MonsterCount; i < n; i++)
+            MonsterChoices.Add($"{i:X2} {Ctx.ReadName(Ctx.MonsterOffset(i), GameDataOffsets.MonsterNameLen).Replace('@', ' ')}");
+        MonsterChoices.Add("FF (none)");
+    }
+
+    /// <summary>Monster names or the number of monsters changed in the Monsters tab.</summary>
+    protected override void OnNamesChanged()
+    {
+        FillMonsterChoices();
+        LoadSelected();
+    }
+
     protected override void OnRomLoaded()
     {
         if (Ctx == null) return;
         var rom = Ctx.Rom;
-        MonsterChoices.Clear();
-        for (int i = 0; i < GameDataOffsets.MonsterCount; i++)
-            MonsterChoices.Add($"{i:X2} {Ctx.ReadName(Ctx.MonsterOffset(i), GameDataOffsets.MonsterNameLen).Replace('@', ' ')}");
-        MonsterChoices.Add("FF (none)");
+        FillMonsterChoices();
         _mapLabels = MapCatalog.ScanNamed(rom).ToDictionary(m => m.MapId, m => m.Label);
         try { _zones = Encounters.ReadZones(rom); } catch { _zones = Array.Empty<byte>(); }
         ZonesDirty = false;
@@ -147,7 +160,7 @@ public partial class EncounterEditorViewModel : GameDataEditorBase
         }
     }
 
-    private string MonsterName(int m) => m < GameDataOffsets.MonsterCount ? MonsterChoices[m][3..].Trim() : "";
+    private string MonsterName(int m) => m < MonsterChoices.Count - 1 ? MonsterChoices[m][3..].Trim() : "";
 
     /// <summary>A subgroup's monsters: unapplied edits first, else the ROM.</summary>
     private int[] Monsters(int s) => _pending.TryGetValue(s, out var p) ? p : Encounters.SubgroupMonsters(Ctx!.Rom, s);
@@ -210,8 +223,8 @@ public partial class EncounterEditorViewModel : GameDataEditorBase
         M1 = Index(m[0]), M2 = Index(m[1]), M3 = Index(m[2]), M4 = Index(m[3]),
     };
 
-    private int Index(int monster) => monster < GameDataOffsets.MonsterCount ? monster : MonsterChoices.Count - 1;
-    private int Monster(int index) => index >= 0 && index < GameDataOffsets.MonsterCount ? index : 0xFF;
+    private int Index(int monster) => monster < MonsterChoices.Count - 1 ? monster : MonsterChoices.Count - 1;
+    private int Monster(int index) => index >= 0 && index < MonsterChoices.Count - 1 ? index : 0xFF;
     private int[] RowMonsters(SubgroupRow r) => new[] { Monster(r.M1), Monster(r.M2), Monster(r.M3), Monster(r.M4) };
 
     /// <summary>Keeps the monster choices of the rows on screen before the rows are rebuilt.</summary>

@@ -73,7 +73,7 @@ public partial class GraphicsEditorViewModel : GameDataEditorBase
             int size;
             try { size = LufiaCompression.DecompressResource(rom, id, out _).Length; } catch { continue; }
             if (size < 256 || size % 16 != 0) continue;
-            if (id >= 0x43 && id < 0x43 + Core.Battle.MonsterGraphics.Count) continue;   // monster pictures: Monsters tab
+            if (id >= 0x43 && id < 0x43 + Core.Battle.MonsterTable.OriginalPictures) continue;   // monster pictures: Monsters tab
             Sources.Add(new GraphicsSource { Resource = id, Size = size, Label = $"{id:X3}  {names.GetValueOrDefault(id, "resource")}  ({size / 32} tiles at 4bpp)" });
         }
         var first = Sources.OrderBy(s => names.ContainsKey(s.Resource) ? 0 : 1).First();

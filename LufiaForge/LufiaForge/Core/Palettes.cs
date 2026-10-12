@@ -88,8 +88,8 @@ public static class Palettes
             Info = "Field sprites (party, NPCs): 8 rows; a sprite's record picks its row. Compressed resource 0AF." });
         list.Add(new RawPalette { Name = "Battle sprites", Offset = BattlePalettes, RowNames = PaletteSource.Rows(0, 4),
             Info = $"Party in battle, the command ring and numbers: 4 rows at 0x{BattlePalettes:X6}." });
-        for (int g = 0; g < MonsterGraphics.Count; g++)
-            list.Add(new ResourcePalette { Name = $"Monster picture {g:X2}", Resource = MonsterGraphics.FirstResource + g, At = 0, RowNames = new[] { "Palette 0", "Palette 1" },
+        for (int g = 0; g < MonsterGraphics.Count(rom); g++)
+            list.Add(new ResourcePalette { Name = $"Monster picture {g:X2}", Resource = MonsterGraphics.Resource(rom, g), At = 0, RowNames = new[] { "Palette 0", "Palette 1" },
                 Info = "A monster picture's two palettes (a monster's record picks 0 or 1: e.g. the recoloured twin). Compressed in the picture's resource." });
         return list;
     }

@@ -20,7 +20,7 @@ namespace LufiaForge.Core.Battle;
 public static class MonsterGraphics
 {
     public const int FirstResource = 0x43;
-    public const int Count = 0x6C;
+    public const int OriginalCount = 0x6C;
     /// <summary>Largest picture the game uses (the final bosses): 8 x 7 blocks = 128 x 112 pixels.</summary>
     public const int MaxWidth = 8, MaxHeight = 7, MaxBlocks = 56;
 
@@ -30,11 +30,12 @@ public static class MonsterGraphics
         public int PixelHeight => Height * 16;
     }
 
-    public static int Resource(int graphic) => FirstResource + graphic;
+    public static int Resource(RomBuffer rom, int graphic) => MonsterTable.PictureResource(rom, graphic);
+    public static int Count(RomBuffer rom) => MonsterTable.PictureCount(rom);
 
     public static Picture Load(RomBuffer rom, int graphic)
     {
-        var d = LufiaCompression.DecompressResource(rom, Resource(graphic), out _);
+        var d = LufiaCompression.DecompressResource(rom, Resource(rom, graphic), out _);
         if (d.Length < 0x4A) throw new System.IO.InvalidDataException($"Graphic {graphic:X2} is too short.");
         return new Picture(d, d[0x48] >> 4, d[0x48] & 15);
     }

@@ -23,7 +23,7 @@ public partial class MonsterEditorViewModel
 
     private MonsterGraphics.Picture? LoadPicture()
     {
-        if (Ctx == null || Graphic < 0 || Graphic >= MonsterGraphics.Count) return null;
+        if (Ctx == null || Graphic < 0 || Graphic >= MonsterGraphics.Count(Ctx.Rom)) return null;
         try { return MonsterGraphics.Load(Ctx.Rom, Graphic); } catch { return null; }
     }
 
@@ -32,7 +32,7 @@ public partial class MonsterEditorViewModel
     {
         var list = new List<(int, string, int)>();
         if (Ctx == null) return list;
-        for (int i = 0; i < GameDataOffsets.MonsterCount; i++)
+        for (int i = 0, n = Core.Battle.MonsterTable.Count(Ctx.Rom); i < n; i++)
         {
             if (i == SelectedIndex) continue;
             int o = Ctx.MonsterOffset(i);
@@ -48,7 +48,7 @@ public partial class MonsterEditorViewModel
         if (p == null)
         {
             Picture = null;
-            PictureInfo = Graphic >= MonsterGraphics.Count ? $"Graphic {Graphic:X2} is not a monster picture (00-{MonsterGraphics.Count - 1:X2})." : "";
+            PictureInfo = Ctx != null && Graphic >= MonsterGraphics.Count(Ctx.Rom) ? $"Graphic {Graphic:X2} is not a monster picture (00-{MonsterGraphics.Count(Ctx.Rom) - 1:X2})." : "";
             return;
         }
         var (px, w, h) = MonsterGraphics.Render(p, Palette);
@@ -56,7 +56,7 @@ public partial class MonsterEditorViewModel
         bmp.Freeze();
         Picture = bmp;
         var shared = SharedWith();
-        PictureInfo = $"Graphic {Graphic:X2} (resource {MonsterGraphics.Resource(Graphic):X3}): {w} x {h} pixels, palette {Palette & 1}." +
+        PictureInfo = $"Graphic {Graphic:X2} (resource {MonsterGraphics.Resource(Ctx!.Rom, Graphic):X3}): {w} x {h} pixels, palette {Palette & 1}." +
                       (shared.Count == 0 ? "" : " Also used by " + string.Join(", ", shared.Select(s => $"{s.Name} (palette {s.Palette})").Distinct()) +
                        " - a new picture changes them too.") +
                       (Graphic >= 0x60 && Graphic <= 0x64
@@ -168,13 +168,13 @@ public partial class MonsterEditorViewModel
         ResourceWriter.Result? result = null;
         Commit($"Monster picture {graphic:X2}", () =>
         {
-            int slot = ResourceWriter.SlotSize(Ctx.Rom, MonsterGraphics.Resource(graphic));
+            int slot = ResourceWriter.SlotSize(Ctx.Rom, MonsterGraphics.Resource(Ctx.Rom, graphic));
             bool big = LufiaCompression.Compress(data).Length > slot;
             if (big && Ctx.Rom.Length < Core.Maps.MapWriter.ExpandedSize &&
                 MessageBox.Show("The new picture does not fit in the original space. Expand the ROM to 2 MB?", "Expand ROM?",
                     MessageBoxButton.YesNo) != MessageBoxResult.Yes)
                 throw new InvalidOperationException("Not written: the ROM was not expanded.");
-            result = ResourceWriter.Save(Ctx.Rom, MonsterGraphics.Resource(graphic), data, allowExpand: true);
+            result = ResourceWriter.Save(Ctx.Rom, MonsterGraphics.Resource(Ctx.Rom, graphic), data, allowExpand: true);
         });
         DrawPicture();
         if (result != null)
