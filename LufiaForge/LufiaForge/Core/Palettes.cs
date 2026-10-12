@@ -78,6 +78,9 @@ public static class Palettes
         Use(TitleScreen.PaletteIndex, "title screen");
         foreach (var (idx, who) in users)
         {
+            // (the game's pointer table $01:E160 has 20 palettes; a map with a bigger number reads garbage, and
+            // "its" colours would be the setup-script table at 0x18000)
+            if (idx >= LufiaMap.MapPaletteCount) continue;
             int at = LufiaMap.MapPaletteTable + (idx + 1) * 0xC0;
             if (at + 0xC0 > rom.Length) continue;
             string shown = who.Count <= 6 ? string.Join(", ", who) : string.Join(", ", who.Take(6)) + $" and {who.Count - 6} more";

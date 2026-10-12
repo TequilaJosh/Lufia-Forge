@@ -183,8 +183,13 @@ public static class SetupScripts
         try { s = Read(rom, map.MapId); }
         catch (InvalidOperationException) { return false; }   // (a script Lufia Forge can't read is left alone)
         var on = CharactersOn(s);
-        var add = map.Npcs.Where(n => n.Index >= map.LoadedNpcCount && !n.IsUnused && !on.Contains(n.Index) && n.Index < 0x3F)
+        // new characters, and hidden ones given a sprite again (hiding took their 41+n out)
+        var add = map.Npcs.Where(n => (n.Index >= map.LoadedNpcCount || map.HiddenAtLoad.Contains(n.Index)) && !n.IsUnused && !on.Contains(n.Index) && n.Index < 0x3F)
                           .Select(n => n.Index).ToList();
+        // talking to a character runs event n: one with no script would run whatever the slot points at
+        foreach (int i in add)
+            if (i < EventScript.SlotCount(rom, map.MapId) && LufiaMap.EventScriptOffset(rom, map.MapId, i) < 0)
+                EventScript.CreateEvent(rom, map.MapId, i);
         var off = map.Npcs.Where(n => n.IsUnused && on.Contains(n.Index)).Select(n => n.Index).ToHashSet();
         if (add.Count == 0 && off.Count == 0) { map.MarkNpcsSaved(); return false; }
         if (!allowExpand && rom.Length < MapWriter.ExpandedSize)

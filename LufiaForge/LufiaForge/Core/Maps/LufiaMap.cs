@@ -131,6 +131,7 @@ public sealed class LufiaMap
     public const int MapScriptTable     = 0x18200;  // 5 bytes per map: script block offset (u24), ?, event base
     public const int SharedPaletteRows  = 0x11300;  // palette rows 0-1
     public const int MapPaletteTable    = 0x17040;  // rows 2-7: table + (paletteIndex + 1) * 0xC0
+    public const int MapPaletteCount    = 20;       // pointers at $01:E160
     public const int WorldMap           = 0x01;
     public const int CompositeTable     = 0xE14B;   // per tileset: LoROM pointer to (ground, overlay) word pairs
 
@@ -186,7 +187,9 @@ public sealed class LufiaMap
     /// <summary>How many characters the map had when it was loaded (later ones are new: saving switches them on in
     /// the setup script, see <see cref="SetupScripts.SyncCharacters"/>).</summary>
     public int LoadedNpcCount { get; private set; }
-    public void MarkNpcsSaved() => LoadedNpcCount = Npcs.Count;
+    /// <summary>Characters that were hidden (sprite FF) when the map was loaded: given a sprite again, saving switches them on.</summary>
+    public HashSet<int> HiddenAtLoad { get; private set; } = new();
+    public void MarkNpcsSaved() { LoadedNpcCount = Npcs.Count; HiddenAtLoad = Npcs.Where(n => n.IsUnused).Select(n => n.Index).ToHashSet(); }
     public List<MapSpot>    Spots    { get; } = new();
     /// <summary>Movement paths (section G); path n of commands 14/15 is Paths[n - 1].</summary>
     public List<MovePath>   Paths    { get; } = new();
@@ -326,6 +329,7 @@ public sealed class LufiaMap
                 BoxX1 = U16(d, c + 6), BoxY1 = U16(d, c + 8), BoxX2 = U16(d, c + 10), BoxY2 = U16(d, c + 12),
             });
         LoadedNpcCount = Npcs.Count;
+        HiddenAtLoad = Npcs.Where(n => n.IsUnused).Select(n => n.Index).ToHashSet();
 
         int e = ob + SectionOffsets[4];
         for (int i = 0; i < SectionCounts[4] && e + 12 <= d.Length; i++, e += 12)

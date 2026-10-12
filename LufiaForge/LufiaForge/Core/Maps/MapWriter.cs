@@ -29,10 +29,42 @@ public static class MapWriter
         return compressedSize > map.CompressedSize;
     }
 
+    /// <summary>
+    /// A town / dungeon map is unpacked to $7F:0000, its tileset's blocks right after it ($01:BDD8) and, for maps with
+    /// composite blocks, a width x height x 2 overlay after those ($01:BF2A). The unpacker's end address is 16 bits,
+    /// so past $7F:FFFF it wraps onto the map's own header (crash). The game's biggest is 0xA3F8 bytes.
+    /// </summary>
+    public const int WramLimit = 0x10000;
+    /// <summary>Different character sprites a map may use (the loader's 24 minus the party and followers).</summary>
+    public const int MaxSpriteKinds = 16;
+
+    public static int WramNeeded(int dataLength, int blocksLength, int width, int height, bool composite) =>
+        dataLength + blocksLength + (composite ? width * height * 2 : 0);
+
+    /// <summary>Throws when the map wouldn't fit in work RAM (pass new block bytes when the tileset's blocks change).</summary>
+    public static void CheckWram(RomBuffer rom, int mapId, int dataLength, int tileset, int width, int height, bool composite, byte[]? newBlocks)
+    {
+        int blocks = newBlocks?.Length ?? LufiaCompression.DecompressResource(rom, Tilesets.BlocksResource(rom, tileset), out _).Length;
+        int need = WramNeeded(dataLength, blocks, width, height, composite);
+        if (need > WramLimit)
+            throw new InvalidOperationException($"Map {mapId:X2} would need {need:N0} bytes of work RAM (map data, its tileset's blocks" +
+                (composite ? ", the overlay layer" : "") + $"); the game has {WramLimit:N0} and would crash. Make it smaller" +
+                (newBlocks != null ? " or use fewer blocks" : "") + ".");
+    }
+
     public static MapSaveResult Save(RomBuffer rom, LufiaMap map, bool allowExpand)
     {
-        if (!map.IsWorld) SetupScripts.SyncCharacters(rom, map, allowExpand);
         var data = map.BuildData();
+        if (!map.IsWorld)
+        {
+            CheckWram(rom, map.MapId, data.Length, map.Tileset, map.Width, map.Height, map.CompositeThreshold >= 0, null);
+            // the sprite loader ($01:AD32) holds 24 different sprites (party and followers included) and hangs when
+            // it's full; the game's busiest map uses 13 different character sprites
+            int kinds = map.Npcs.Where(n => !n.IsUnused).Select(n => n.Sprite).Distinct().Count();
+            if (kinds > MaxSpriteKinds)
+                throw new InvalidOperationException($"Map {map.MapId:X2} uses {kinds} different character sprites; the game can load {MaxSpriteKinds} next to the party and freezes past that. Reuse some sprites.");
+            SetupScripts.SyncCharacters(rom, map, allowExpand);
+        }
         var stream = LufiaCompression.Compress(data);
         if (!LufiaCompression.Decompress(stream).AsSpan().SequenceEqual(data))
             throw new InvalidOperationException("Compression self-check failed; nothing was written.");

@@ -45,6 +45,7 @@ public partial class MapEditorViewModel
     private void ApplyMapSettings()
     {
         if (_rom == null || _map == null || _map.IsWorld) return;
+        if (MapPalette < 0 || MapPalette >= LufiaMap.MapPaletteCount) { Status = $"Pick a palette 0-{LufiaMap.MapPaletteCount - 1} (the game has {LufiaMap.MapPaletteCount})."; return; }
         try
         {
             if (MapWidth != _map.Width || MapHeight != _map.Height)
@@ -55,7 +56,7 @@ public partial class MapEditorViewModel
                 _map.Resize(MapWidth, MapHeight, Brush);
             }
             if (TilesetChoice < 0 || TilesetChoice >= Tilesets.Count(_rom)) { Status = "Pick a tileset."; return; }
-            _map.SetTilesetAndPalette(TilesetChoice, Math.Clamp(MapPalette, 0, 255));
+            _map.SetTilesetAndPalette(TilesetChoice, MapPalette);
             HasUnappliedChanges = true;
             ApplyToRom();
         }
@@ -119,11 +120,15 @@ public partial class MapEditorViewModel
         {
             int x = _map.Width / 2, y = _map.Height / 2;
             if (_map.Arrivals.Count > 0) { x = Math.Min(_map.Width - 1, _map.Arrivals[0].X + 1); y = _map.Arrivals[0].Y; }
+            int slots = EventScript.SlotCount(_rom, _map.MapId);
+            if (_map.Npcs.Count >= slots)
+            {
+                // talking to it would run event n, past the map's event table: the game would read code as a pointer
+                Status = $"This map's events have {slots} slots, so it can have at most {slots} characters (talking to character n runs event n).";
+                return;
+            }
             var n = _map.AddNpc(NpcSprite >= 0 ? NpcSprite : 0x0C, x, y);
-            if (n.Index >= EventScript.SlotCount(_rom, _map.MapId))
-                Status = $"Character {n.Index + 1} added, but this map's events have only {EventScript.SlotCount(_rom, _map.MapId)} slots, so it can't get a talk event.";
-            else
-                Status = $"Character {n.Index + 1} added (talking runs event {n.Index}). Drag it into place, then Apply.";
+            Status = $"Character {n.Index + 1} added (talking runs event {n.Index}; an empty one is made when you Apply). Drag it into place, then Apply.";
             HasUnappliedChanges = true;
             RebuildOverlays();
             SelectNpc(n);
