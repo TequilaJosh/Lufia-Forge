@@ -66,7 +66,7 @@ public partial class GraphicsEditorViewModel : GameDataEditorBase
             if (!names.ContainsKey(r)) names[r] = $"Town / dungeon tiles (tileset {t})";
         }
         Sources.Clear();
-        for (int id = 0; id < 0x200; id++)
+        for (int id = 0, n = ResourceIds.IsMoved(rom) ? ResourceIds.Count(rom) : 0x200; id < n; id++)
         {
             int at = LufiaCompression.ResourceOffset(rom, id);
             if (at <= 0 || at >= rom.Length - 2) continue;
