@@ -124,7 +124,7 @@ public partial class SpellEditorViewModel : GameDataEditorBase
                 IsElement = true;
                 SubTypeOptions = GameDataLabels.WithValue(GameDataLabels.Elements, sub);
                 Power       = rom.ReadUInt16Le(o + 22);
-                RandomPower = rom.ReadUInt16Le(o + 24);
+                RandomPower = rom.ReadByte(o + 24);   // (one byte: the effect's 00 end follows at +25)
                 break;
             case 0x10:
                 IsTeleport = true;
@@ -215,7 +215,7 @@ public partial class SpellEditorViewModel : GameDataEditorBase
             {
                 rom.WriteByte(o + 21, (byte)SubType);
                 rom.WriteUInt16Le(o + 22, (ushort)Clamp(Power, 0, 0xFFFF));
-                rom.WriteUInt16Le(o + 24, (ushort)Clamp(RandomPower, 0, 0xFFFF));
+                rom.WriteByte(o + 24, (byte)Clamp(RandomPower, 0, 255));
             }
         }, namesChanged: renamed);
 

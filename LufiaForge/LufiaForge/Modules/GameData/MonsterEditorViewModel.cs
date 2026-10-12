@@ -20,11 +20,25 @@ public partial class GiveSpellRow : ObservableObject
     [ObservableProperty] private int _spell = 1;
 }
 
+/// <summary>How much damage a monster takes from spells of one element, in percent (100 = normal).</summary>
+public partial class ElementRow : ObservableObject
+{
+    public string Name { get; init; } = "";
+    [ObservableProperty] private int _percent = 100;
+}
+
 /// <summary>Monster names, stats, rewards, drops, weakness and graphics.</summary>
 public partial class MonsterEditorViewModel : GameDataEditorBase
 {
     // Bytes in the fixed part of the record whose meaning is unknown; shown raw so they can be edited.
-    private static readonly int[] UnknownFields = { 11, 13, 29 };
+    private static readonly int[] UnknownFields = { 11, 29 };
+    public static readonly string[] ElementNames = { "Fire", "Ice", "Bolt", "Water", "Blast", "Light", "Dark" };
+    /// <summary>Spell damage per element (the record's second masked group).</summary>
+    public ObservableCollection<ElementRow> MagicElements { get; } = new(ElementNames.Select(n => new ElementRow { Name = n }));
+    /// <summary>Physical damage from attacks of the "weak against" element, in percent (+13, in 16ths).</summary>
+    [ObservableProperty] private int _physicalPercent = 100;
+    private static int ToPercent(int sixteenths) => sixteenths == 0 ? 100 : (sixteenths * 100 + 8) / 16;
+    private static int ToSixteenths(int percent) => Math.Clamp((percent * 16 + 50) / 100, 1, 255);
 
     public ObservableCollection<string> Monsters { get; } = new();
 
@@ -150,6 +164,9 @@ public partial class MonsterEditorViewModel : GameDataEditorBase
         int weak = rom.ReadByte(o + 12);
         WeaknessOptions = GameDataLabels.WithValue(GameDataLabels.Elements, weak);
         Weakness = weak;
+        PhysicalPercent = ToPercent(rom.ReadByte(o + 13));
+        var magic = Core.Battle.MonsterTable.ReadElements(rom, o);
+        for (int e = 0; e < MagicElements.Count; e++) MagicElements[e].Percent = ToPercent(magic[e]);
 
         Graphic      = rom.ReadByte(o + 14);
         Palette      = rom.ReadByte(o + 15);
@@ -213,7 +230,7 @@ public partial class MonsterEditorViewModel : GameDataEditorBase
         if (Ctx == null || SelectedIndex < 0) return;
         if (!ItemEditorViewModel.TryParseHex(UnknownHex, out var unknown) || unknown.Length != UnknownFields.Length)
         {
-            Status = $"Unknown bytes must be exactly {UnknownFields.Length} hex bytes (+11 +13 +29).";
+            Status = $"Unknown bytes must be exactly {UnknownFields.Length} hex bytes (+11 +29).";
             return;
         }
 
@@ -241,6 +258,7 @@ public partial class MonsterEditorViewModel : GameDataEditorBase
             int type = (MonsterType & 0x07) | _typeMiddleBits | (Flag40 ? 0x40 : 0) | (Flag80 ? 0x80 : 0);
             rom.WriteByte(o + 10, (byte)type);
             rom.WriteByte(o + 12, (byte)Weakness);
+            rom.WriteByte(o + 13, (byte)(PhysicalPercent == 100 && Weakness == 0 ? rom.ReadByte(o + 13) : ToSixteenths(PhysicalPercent)));
             rom.WriteByte(o + 14, (byte)Clamp(Graphic, 0, 255));
             rom.WriteByte(o + 15, (byte)Clamp(Palette, 0, 255));
             rom.WriteUInt16Le(o + 16, (ushort)Clamp(Hp,  0, 0xFFFF));
@@ -259,6 +277,10 @@ public partial class MonsterEditorViewModel : GameDataEditorBase
             for (int i = 0; i < ai.Length; i++) rom.WriteByte(Core.Battle.MonsterAi.At(o, _aiStart + i), ai[i]);
             foreach (var st in SpellSteps)
                 if (st.Spell != st.Original && st.Spell >= 0) rom.WriteByte(Core.Battle.MonsterAi.At(o, st.Offset + 1), (byte)st.Spell);
+            // spell damage per element: the record's tail changes length, so it may have to move
+            var want = MagicElements.Select(e => e.Percent == 100 ? 0 : ToSixteenths(e.Percent)).ToArray();
+            if (!want.SequenceEqual(Core.Battle.MonsterTable.ReadElements(rom, o)))
+                Core.Battle.MonsterTable.SetRecord(rom, SelectedIndex, Core.Battle.MonsterTable.WithElements(rom, o, want));
         });
 
         if (renamed) RefreshList();
