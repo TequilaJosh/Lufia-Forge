@@ -13,8 +13,12 @@ namespace LufiaForge.Core.Battle;
 /// <item>$08:E829 learn (JML): sets the bit (used by event 3D, level-ups and joining).</item>
 /// <item>$08:E65E level-up and $08:EC07 joining: the four learn lists, which live here (up to 64 entries each).</item>
 /// <item>$08:EAEC a new member's spells cleared; $01:D2A7 / $01:D2BC event 45 "knows spell" tests the bit.</item>
-/// <item>$08:BD07 the battle spell menu and $00:D100 / $00:9C27 the field Magic menu's count and "nth spell": spells in
-/// spell number order, at most 64 (the battle menu's buffers hold 64).</item>
+/// <item>$08:BD07 the battle spell menu and $00:D100 / $00:9C27 the field Magic menu's count and "nth spell": each
+/// character's own order, at most 64 (the battle menu's buffers hold 64).</item>
+/// <item>Spell order: a list of 64 spell numbers per character in save RAM ($70:1A00 + 64 x slot while playing; save
+/// slot + $500 in a save, inside the slot's checksum), copied by saving ($00:920A) and loading ($00:9293). Before a
+/// menu shows it, the list is tidied: spells not known (or garbage, as in older saves) dropped, newly learned ones added
+/// at the end. The field Magic menu's swap ($00:C21F) swaps two entries, as the game did with its own lists.</item>
 /// </list>
 /// <item>$00:C21F the field Magic menu's swap: it swapped two entries of the old lists (through the pointers at
 /// $00:9CAD; Aguro's pointed at the party names, $14B5), which now scrambled the spell bits and Guy's names. A spell
@@ -28,12 +32,21 @@ public static class SpellMemory
     public const int MaxPerCharacter = 64;
     public const int LearnSite = 0x46829, LevelUpSite = 0x4665E, JoinSite = 0x46C07, ClearSite = 0x46AEC, KnowsSite = 0xD2A7,
                      KnowsLoopSite = 0xD2BC, CountSite = 0x5100, NthSite = 0x1C27, MenuSite = 0x43D07;
-    /// <summary>The field Magic menu's swap (see the class notes): A9 00 in the game, 80 2C (BRA $C24D) with the patch.</summary>
-    public const int SwapSite = 0x421F;
-    private static readonly byte[] SwapOriginal = { 0xA9, 0x00 }, SwapSkip = { 0x80, 0x2C };
-    public static bool SwapFixed(RomBuffer rom) => Same(rom, SwapSite, SwapSkip);
-    /// <summary>Turns the field menu's swap off (ROMs patched before this fix need it: their swap scrambles spells).</summary>
-    public static void FixSwap(RomBuffer rom) { if (Same(rom, SwapSite, SwapOriginal)) rom.WriteBytes(SwapSite, SwapSkip); }
+    /// <summary>
+    /// The field Magic menu's swap at $00:C21F (A9 00 EB 18 A5 11 in the game): JSL swap, BRA $C24D. beta.8 skipped it
+    /// (80 2C) instead. Saving ($00:920A, AD 53 19 A0 E3 03) and loading ($00:9293, E2 20 A9 00 48 AB) copy the order.
+    /// </summary>
+    public const int SwapSite = 0x421F, SaveSite = 0x120A, LoadSite = 0x1293;
+    private static readonly byte[] SwapOriginal = Convert.FromHexString("A900EB18A511"), SwapSkip = { 0x80, 0x2C },
+                                   SaveOriginal = Convert.FromHexString("AD5319A0E303"), LoadOriginal = Convert.FromHexString("E220A90048AB");
+    /// <summary>The spell order's save RAM: $70:1A00 + 64 x slot while playing, save slot + $500 in a save.</summary>
+    public const int OrderRam = 0x701A00, OrderInSlot = 0x500;
+    private static bool Hooked(RomBuffer rom, int site, int entry) =>
+        rom.ReadByte(site) == 0x22 && FileOffset(rom.ReadByte(site + 1) | rom.ReadByte(site + 2) << 8 | rom.ReadByte(site + 3) << 16) == BlockOffset(rom) + entry;
+    /// <summary>Whether this ROM has the spell order (beta.9 on).</summary>
+    public static bool SwapFixed(RomBuffer rom) => Current(rom) && Hooked(rom, SwapSite, Swap) && Hooked(rom, SaveSite, SaveOrder) && Hooked(rom, LoadSite, LoadOrder);
+    /// <summary>Brings an installed spell memory up to date (the spell order); see <see cref="Install"/>.</summary>
+    public static void FixSwap(RomBuffer rom) { if (Installed(rom) && !SwapFixed(rom)) Upgrade(rom); }
 
     /// <summary>The battle spell menu skips slot 2 ($08:BD03 CPX #$02): 02, or FF when Aguro has magic.</summary>
     public const int MenuSkip = 0x43D04;
@@ -47,15 +60,24 @@ public static class SpellMemory
     private static readonly byte[] NthOriginal = Convert.FromHexString("BEAD9C8609A511186D5519CD5719B004A8B10960");
     private static readonly byte[] MenuOriginal = Convert.FromHexString("BC3FBDA97E48ABA200B98F159D00D8222DFA08AD9D179D40D8AD9A179D80D8AD9C179DC0D8ADA4179D40D9E8C8E020D0D8");
     private const int Ensure = 0, Learn = 151, LearnLevel = 231, LearnInitial = 299, ClearSpells = 355,
-                      KnowsSetup = 399, KnowsCheck = 403, CountAll = 479, Nth = 564, BuildMenu = 665,
-                      Magic = 811, Offs = 815, Blob = 823;
+                      KnowsSetup = 399, KnowsCheck = 403, CountAll = 756, Nth = 839, BuildMenu = 910,
+                      Swap = 1036, SaveOrder = 1141, LoadOrder = 1170,
+                      Magic = 1205, Offs = 1209, Blob = 1217;
+    /// <summary>The block of the version before the spell order (0.4.0-beta.7 to beta.8, "LFM2"): same start, the lists
+    /// elsewhere. Recognised so Update can move its lists over.</summary>
+    private const int MagicV2 = 811, OffsV2 = 815, BlobV2 = 823;
     /// <summary>Room for the four learn lists: (level, spell) pairs and an FF each.</summary>
     public const int BlobSize = 4 * (MaxPerCharacter * 2 + 1);
     public const int BlockSize = Blob + BlobSize;
     /// <summary>Long operands to fix up when placed: (operand offset, block offset it points at).</summary>
     private static readonly (int At, int Target)[] Fixups =
     {
-        (93, 803), (169, 0), (185, 803), (248, 815), (255, 823), (271, 824), (287, 151), (309, 815), (316, 823), (328, 824), (342, 151), (366, 0), (411, 0), (427, 803), (490, 0), (577, 0), (680, 0),
+        (93, 1197), (169, 0), (185, 1197), (248, 1209), (255, 1217), (271, 1218), (287, 151), (309, 1209), (316, 1217), (328, 1218), (342, 151), (366, 0), (411, 0), (427, 1197), (678, 1197), (767, 0), (852, 0), (925, 0),
+    };
+    /// <summary>JSR operands inside the block (16-bit: the block is in one bank).</summary>
+    private static readonly (int At, int Target)[] JsrFixups =
+    {
+        (559, 666), (566, 712), (573, 641), (592, 666), (599, 712), (606, 641), (624, 641), (776, 479), (931, 479),
     };
 
     private static readonly byte[] Routine =
@@ -366,219 +388,438 @@ public static class SpellMemory
         0xAB,                      // 476 PLB
         0xEB,                      // 477 XBA  (Z from the result)
         0x6B,                      // 478 RTL
-        // countAll:
+        // sync:
         0x08,                      // 479 PHP
         0x8B,                      // 480 PHB
         0xE2, 0x20,                // 481 SEP #$20
         0xC2, 0x10,                // 483 REP #$10
-        0xA9, 0x7E,                // 485 LDA #$7E
-        0x48,                      // 487 PHA
-        0xAB,                      // 488 PLB
-        0x22, 0x00, 0x00, 0x00,    // 489 JSL ensure
-        0xA2, 0x00, 0x00,          // 493 LDX #$0000
-        0xA9, 0x00,                // 496 LDA #$00
-        0x48,                      // 498 PHA  (slot)
+        0x48,                      // 485 PHA
+        0xA9, 0x7E,                // 486 LDA #$7E
+        0x48,                      // 488 PHA
+        0xAB,                      // 489 PLB
+        0x68,                      // 490 PLA
+        0xC2, 0x20,                // 491 REP #$20
+        0x29, 0x03, 0x00,          // 493 AND #$0003
+        0xA8,                      // 496 TAY  (slot)
+        0x3B,                      // 497 TSC
+        0x38,                      // 498 SEC
+        0xE9, 0x0E, 0x00,          // 499 SBC #$000E
+        0x1B,                      // 502 TCS
+        0x98,                      // 503 TYA
+        0x83, 0x01,                // 504 STA 1,S  (slot, w = 0)
+        0x0A,                      // 506 ASL
+        0x0A,                      // 507 ASL
+        0x0A,                      // 508 ASL
+        0x0A,                      // 509 ASL
+        0x83, 0x07,                // 510 STA 7,S  (bits offset)
+        0x0A,                      // 512 ASL
+        0x0A,                      // 513 ASL
+        0x83, 0x05,                // 514 STA 5,S  (list base)
+        0xE2, 0x20,                // 516 SEP #$20
+        0xA9, 0x00,                // 518 LDA #$00
+        0x83, 0x03,                // 520 STA 3,S  (r)
+        // YC:
+        0xA3, 0x03,                // 522 LDA 3,S
+        0xC9, 0x40,                // 524 CMP #$40
+        0xB0, 0x31,                // 526 BCS yd
+        0xC2, 0x20,                // 528 REP #$20
+        0xA3, 0x03,                // 530 LDA 3,S
+        0x29, 0xFF, 0x00,          // 532 AND #$00FF
+        0x18,                      // 535 CLC
+        0x63, 0x05,                // 536 ADC 5,S
+        0xAA,                      // 538 TAX
+        0xE2, 0x20,                // 539 SEP #$20
+        0xBF, 0x00, 0x1A, 0x70,    // 541 LDA order,X
+        0x83, 0x04,                // 545 STA 4,S
+        0xA3, 0x03,                // 547 LDA 3,S
+        0x1A,                      // 549 INC
+        0x83, 0x03,                // 550 STA 3,S
+        0xA3, 0x04,                // 552 LDA 4,S
+        0xF0, 0x15,                // 554 BEQ yd  (0 ends the list)
+        0x30, 0xDC,                // 556 BMI YC  (not a spell)
+        0x20, 0x00, 0x00,          // 558 JSR known
+        0x90, 0xD7,                // 561 BCC YC
+        0xA3, 0x04,                // 563 LDA 4,S
+        0x20, 0x00, 0x00,          // 565 JSR inList
+        0xB0, 0xD0,                // 568 BCS YC
+        0xA3, 0x04,                // 570 LDA 4,S
+        0x20, 0x00, 0x00,          // 572 JSR put
+        0x80, 0xC9,                // 575 BRA YC
+        // yd:
+        0xA9, 0x01,                // 577 LDA #$01
+        0x83, 0x09,                // 579 STA 9,S  (s)
+        // YA:
+        0xA3, 0x02,                // 581 LDA 2,S
+        0xC9, 0x40,                // 583 CMP #$40
+        0xB0, 0x1C,                // 585 BCS YF
+        0xA3, 0x09,                // 587 LDA 9,S
+        0x30, 0x18,                // 589 BMI YF
+        0x20, 0x00, 0x00,          // 591 JSR known
+        0x90, 0x0C,                // 594 BCC yn
+        0xA3, 0x09,                // 596 LDA 9,S
+        0x20, 0x00, 0x00,          // 598 JSR inList
+        0xB0, 0x05,                // 601 BCS yn
+        0xA3, 0x09,                // 603 LDA 9,S
+        0x20, 0x00, 0x00,          // 605 JSR put
+        // yn:
+        0xA3, 0x09,                // 608 LDA 9,S
+        0x1A,                      // 610 INC
+        0x83, 0x09,                // 611 STA 9,S
+        0x80, 0xDE,                // 613 BRA YA
+        // YF:
+        0xA3, 0x02,                // 615 LDA 2,S
+        0xC9, 0x40,                // 617 CMP #$40
+        0xB0, 0x07,                // 619 BCS yx
+        0xA9, 0x00,                // 621 LDA #$00
+        0x20, 0x00, 0x00,          // 623 JSR put
+        0x80, 0xF3,                // 626 BRA YF
+        // yx:
+        0xC2, 0x20,                // 628 REP #$20
+        0x3B,                      // 630 TSC
+        0x18,                      // 631 CLC
+        0x69, 0x0E, 0x00,          // 632 ADC #$000E
+        0x1B,                      // 635 TCS
+        0xE2, 0x20,                // 636 SEP #$20
+        0xAB,                      // 638 PLB
+        0x28,                      // 639 PLP
+        0x60,                      // 640 RTS
+        // put:
+        0x48,                      // 641 PHA
+        0xC2, 0x20,                // 642 REP #$20
+        0xA3, 0x05,                // 644 LDA 5,S  (w)
+        0x29, 0xFF, 0x00,          // 646 AND #$00FF
+        0x18,                      // 649 CLC
+        0x63, 0x08,                // 650 ADC 8,S  (base)
+        0xAA,                      // 652 TAX
+        0xE2, 0x20,                // 653 SEP #$20
+        0x68,                      // 655 PLA
+        0x9F, 0x00, 0x1A, 0x70,    // 656 STA order,X
+        0xA3, 0x04,                // 660 LDA 4,S  (w)
+        0x1A,                      // 662 INC
+        0x83, 0x04,                // 663 STA 4,S
+        0x60,                      // 665 RTS
+        // known:
+        0x48,                      // 666 PHA
+        0x29, 0x07,                // 667 AND #$07
+        0xC2, 0x20,                // 669 REP #$20
+        0x29, 0x07, 0x00,          // 671 AND #$0007
+        0xAA,                      // 674 TAX
+        0xE2, 0x20,                // 675 SEP #$20
+        0xBF, 0x00, 0x00, 0x00,    // 677 LDA mask,X
+        0x83, 0x0E,                // 681 STA 14,S  (mask)
+        0xA3, 0x01,                // 683 LDA 1,S
+        0x4A,                      // 685 LSR
+        0x4A,                      // 686 LSR
+        0x4A,                      // 687 LSR
+        0xC2, 0x20,                // 688 REP #$20
+        0x29, 0xFF, 0x00,          // 690 AND #$00FF
+        0x18,                      // 693 CLC
+        0x63, 0x0A,                // 694 ADC 10,S  (bits offset)
+        0xAA,                      // 696 TAX
+        0xE2, 0x20,                // 697 SEP #$20
+        0xBD, 0x8F, 0x15,          // 699 LDA $158F,X
+        0x23, 0x0E,                // 702 AND 14,S
+        0xF0, 0x03,                // 704 BEQ kn0
+        0x68,                      // 706 PLA
+        0x38,                      // 707 SEC
+        0x60,                      // 708 RTS
+        // kn0:
+        0x68,                      // 709 PLA
+        0x18,                      // 710 CLC
+        0x60,                      // 711 RTS
+        // inList:
+        0x83, 0x10,                // 712 STA 16,S  (value)
+        0xA9, 0x00,                // 714 LDA #$00
+        0x83, 0x0E,                // 716 STA 14,S  (i)
+        // IL:
+        0xA3, 0x0E,                // 718 LDA 14,S
+        0xC3, 0x04,                // 720 CMP 4,S  (w)
+        0xB0, 0x1E,                // 722 BCS ilno
+        0xC2, 0x20,                // 724 REP #$20
+        0xA3, 0x0E,                // 726 LDA 14,S
+        0x29, 0xFF, 0x00,          // 728 AND #$00FF
+        0x18,                      // 731 CLC
+        0x63, 0x07,                // 732 ADC 7,S  (base)
+        0xAA,                      // 734 TAX
+        0xE2, 0x20,                // 735 SEP #$20
+        0xBF, 0x00, 0x1A, 0x70,    // 737 LDA order,X
+        0xC3, 0x10,                // 741 CMP 16,S
+        0xF0, 0x07,                // 743 BEQ ilyes
+        0xA3, 0x0E,                // 745 LDA 14,S
+        0x1A,                      // 747 INC
+        0x83, 0x0E,                // 748 STA 14,S
+        0x80, 0xDE,                // 750 BRA IL
+        // ilyes:
+        0x38,                      // 752 SEC
+        0x60,                      // 753 RTS
+        // ilno:
+        0x18,                      // 754 CLC
+        0x60,                      // 755 RTS
+        // countAll:
+        0x08,                      // 756 PHP
+        0x8B,                      // 757 PHB
+        0xE2, 0x20,                // 758 SEP #$20
+        0xC2, 0x10,                // 760 REP #$10
+        0xA9, 0x7E,                // 762 LDA #$7E
+        0x48,                      // 764 PHA
+        0xAB,                      // 765 PLB
+        0x22, 0x00, 0x00, 0x00,    // 766 JSL ensure
+        0xA9, 0x00,                // 770 LDA #$00
+        0x48,                      // 772 PHA  (slot)
         // S1:
-        0xA0, 0x00, 0x00,          // 499 LDY #$0000  (count)
-        0xA9, 0x10,                // 502 LDA #$10
-        0x48,                      // 504 PHA  (bytes left)
-        // B1:
-        0xBD, 0x8F, 0x15,          // 505 LDA $158F,X
-        // b2:
-        0xC9, 0x00,                // 508 CMP #$00
-        0xF0, 0x06,                // 510 BEQ bn
-        0x4A,                      // 512 LSR
-        0x90, 0xF9,                // 513 BCC b2
-        0xC8,                      // 515 INY
-        0x80, 0xF6,                // 516 BRA b2
-        // bn:
-        0xE8,                      // 518 INX
-        0xA3, 0x01,                // 519 LDA 1,S
-        0x3A,                      // 521 DEC
-        0x83, 0x01,                // 522 STA 1,S
-        0xD0, 0xEB,                // 524 BNE B1
-        0x68,                      // 526 PLA
-        0xC0, 0x40, 0x00,          // 527 CPY #$0040
-        0x90, 0x03,                // 530 BCC c64
-        0xA0, 0x40, 0x00,          // 532 LDY #$0040
-        // c64:
-        0x98,                      // 535 TYA
-        0x48,                      // 536 PHA
-        0xC2, 0x20,                // 537 REP #$20
-        0xA3, 0x02,                // 539 LDA 2,S  (slot)
-        0x29, 0x03, 0x00,          // 541 AND #$0003
-        0xA8,                      // 544 TAY
-        0xE2, 0x20,                // 545 SEP #$20
-        0x68,                      // 547 PLA
-        0x99, 0x4E, 0x19,          // 548 STA $194E,Y
-        0xA3, 0x01,                // 551 LDA 1,S
-        0x1A,                      // 553 INC
-        0x83, 0x01,                // 554 STA 1,S
-        0xC9, 0x04,                // 556 CMP #$04
-        0xD0, 0xC3,                // 558 BNE S1
-        0x68,                      // 560 PLA
-        0xAB,                      // 561 PLB
-        0x28,                      // 562 PLP
-        0x6B,                      // 563 RTL
+        0xA3, 0x01,                // 773 LDA 1,S
+        0x20, 0x00, 0x00,          // 775 JSR sync
+        0xC2, 0x20,                // 778 REP #$20
+        0xA3, 0x01,                // 780 LDA 1,S
+        0x29, 0x03, 0x00,          // 782 AND #$0003
+        0x0A,                      // 785 ASL
+        0x0A,                      // 786 ASL
+        0x0A,                      // 787 ASL
+        0x0A,                      // 788 ASL
+        0x0A,                      // 789 ASL
+        0x0A,                      // 790 ASL
+        0xAA,                      // 791 TAX
+        0xE2, 0x20,                // 792 SEP #$20
+        0xA0, 0x00, 0x00,          // 794 LDY #$0000
+        // cn:
+        0xBF, 0x00, 0x1A, 0x70,    // 797 LDA order,X
+        0xF0, 0x07,                // 801 BEQ cd
+        0xC8,                      // 803 INY
+        0xE8,                      // 804 INX
+        0xC0, 0x40, 0x00,          // 805 CPY #$0040
+        0xD0, 0xF3,                // 808 BNE cn
+        // cd:
+        0x98,                      // 810 TYA
+        0x48,                      // 811 PHA
+        0xC2, 0x20,                // 812 REP #$20
+        0xA3, 0x02,                // 814 LDA 2,S  (slot)
+        0x29, 0x03, 0x00,          // 816 AND #$0003
+        0xA8,                      // 819 TAY
+        0xE2, 0x20,                // 820 SEP #$20
+        0x68,                      // 822 PLA
+        0x99, 0x4E, 0x19,          // 823 STA $194E,Y
+        0xA3, 0x01,                // 826 LDA 1,S
+        0x1A,                      // 828 INC
+        0x83, 0x01,                // 829 STA 1,S
+        0xC9, 0x04,                // 831 CMP #$04
+        0xD0, 0xC2,                // 833 BNE S1
+        0x68,                      // 835 PLA
+        0xAB,                      // 836 PLB
+        0x28,                      // 837 PLP
+        0x6B,                      // 838 RTL
         // nth:
-        0x08,                      // 564 PHP
-        0x8B,                      // 565 PHB
-        0xE2, 0x20,                // 566 SEP #$20
-        0xC2, 0x10,                // 568 REP #$10
-        0xDA,                      // 570 PHX
-        0x5A,                      // 571 PHY
-        0xA9, 0x7E,                // 572 LDA #$7E
-        0x48,                      // 574 PHA
-        0xAB,                      // 575 PLB
-        0x22, 0x00, 0x00, 0x00,    // 576 JSL ensure
-        0xA5, 0x11,                // 580 LDA $11
-        0x18,                      // 582 CLC
-        0x6D, 0x55, 0x19,          // 583 ADC $1955
-        0xCD, 0x57, 0x19,          // 586 CMP $1957
-        0xB0, 0x41,                // 589 BCS none
-        0x48,                      // 591 PHA  (n)
-        0xC2, 0x20,                // 592 REP #$20
-        0xA3, 0x04,                // 594 LDA 4,S  (slot)
-        0x29, 0x03, 0x00,          // 596 AND #$0003
-        0x0A,                      // 599 ASL
-        0x0A,                      // 600 ASL
-        0x0A,                      // 601 ASL
-        0x0A,                      // 602 ASL
-        0xAA,                      // 603 TAX
-        0xE2, 0x20,                // 604 SEP #$20
-        0xA0, 0x00, 0x00,          // 606 LDY #$0000  (spell)
-        // NB:
-        0xBD, 0x8F, 0x15,          // 609 LDA $158F,X
-        0x48,                      // 612 PHA  (bits)
-        0xA9, 0x08,                // 613 LDA #$08
-        0x48,                      // 615 PHA  (left)
-        // NI:
-        0xA3, 0x02,                // 616 LDA 2,S
-        0x4A,                      // 618 LSR
-        0x83, 0x02,                // 619 STA 2,S
-        0x90, 0x07,                // 621 BCC nsk
-        0xA3, 0x03,                // 623 LDA 3,S  (n)
-        0xF0, 0x16,                // 625 BEQ nf
-        0x3A,                      // 627 DEC
-        0x83, 0x03,                // 628 STA 3,S
-        // nsk:
-        0xC8,                      // 630 INY
-        0xA3, 0x01,                // 631 LDA 1,S
-        0x3A,                      // 633 DEC
-        0x83, 0x01,                // 634 STA 1,S
-        0xD0, 0xEA,                // 636 BNE NI
-        0x68,                      // 638 PLA
-        0x68,                      // 639 PLA
-        0xE8,                      // 640 INX
-        0xC0, 0x80, 0x00,          // 641 CPY #$0080
-        0xD0, 0xDB,                // 644 BNE NB
-        0x68,                      // 646 PLA  (n)
-        0x80, 0x07,                // 647 BRA none
-        // nf:
-        0x98,                      // 649 TYA
-        0xEB,                      // 650 XBA
-        0x68,                      // 651 PLA
-        0x68,                      // 652 PLA
-        0x68,                      // 653 PLA
-        0x80, 0x03,                // 654 BRA nout
+        0x08,                      // 839 PHP
+        0x8B,                      // 840 PHB
+        0xE2, 0x20,                // 841 SEP #$20
+        0xC2, 0x10,                // 843 REP #$10
+        0xDA,                      // 845 PHX
+        0x5A,                      // 846 PHY
+        0xA9, 0x7E,                // 847 LDA #$7E
+        0x48,                      // 849 PHA
+        0xAB,                      // 850 PLB
+        0x22, 0x00, 0x00, 0x00,    // 851 JSL ensure
+        0xA5, 0x11,                // 855 LDA $11
+        0x18,                      // 857 CLC
+        0x6D, 0x55, 0x19,          // 858 ADC $1955
+        0xCD, 0x57, 0x19,          // 861 CMP $1957
+        0xB0, 0x23,                // 864 BCS none
+        0xC9, 0x40,                // 866 CMP #$40
+        0xB0, 0x1F,                // 868 BCS none
+        0xC2, 0x20,                // 870 REP #$20
+        0x29, 0xFF, 0x00,          // 872 AND #$00FF
+        0x48,                      // 875 PHA  (n)
+        0xA3, 0x05,                // 876 LDA 5,S  (slot)
+        0x29, 0x03, 0x00,          // 878 AND #$0003
+        0x0A,                      // 881 ASL
+        0x0A,                      // 882 ASL
+        0x0A,                      // 883 ASL
+        0x0A,                      // 884 ASL
+        0x0A,                      // 885 ASL
+        0x0A,                      // 886 ASL
+        0x18,                      // 887 CLC
+        0x63, 0x01,                // 888 ADC 1,S
+        0xAA,                      // 890 TAX
+        0x68,                      // 891 PLA
+        0xE2, 0x20,                // 892 SEP #$20
+        0xBF, 0x00, 0x1A, 0x70,    // 894 LDA order,X
+        0xEB,                      // 898 XBA
+        0x80, 0x03,                // 899 BRA nout
         // none:
-        0xA9, 0x00,                // 656 LDA #$00
-        0xEB,                      // 658 XBA
+        0xA9, 0x00,                // 901 LDA #$00
+        0xEB,                      // 903 XBA
         // nout:
-        0x7A,                      // 659 PLY
-        0xFA,                      // 660 PLX
-        0xAB,                      // 661 PLB
-        0x28,                      // 662 PLP
-        0xEB,                      // 663 XBA  (Z from the spell)
-        0x6B,                      // 664 RTL
+        0x7A,                      // 904 PLY
+        0xFA,                      // 905 PLX
+        0xAB,                      // 906 PLB
+        0x28,                      // 907 PLP
+        0xEB,                      // 908 XBA  (Z from the spell)
+        0x6B,                      // 909 RTL
         // buildMenu:
-        0x08,                      // 665 PHP
-        0x8B,                      // 666 PHB
-        0xE2, 0x20,                // 667 SEP #$20
-        0xC2, 0x10,                // 669 REP #$10
-        0x8A,                      // 671 TXA
-        0x29, 0x03,                // 672 AND #$03
-        0x48,                      // 674 PHA  (slot)
-        0xA9, 0x7E,                // 675 LDA #$7E
-        0x48,                      // 677 PHA
-        0xAB,                      // 678 PLB
-        0x22, 0x00, 0x00, 0x00,    // 679 JSL ensure
-        0xC2, 0x20,                // 683 REP #$20
-        0xA3, 0x01,                // 685 LDA 1,S
-        0x29, 0x03, 0x00,          // 687 AND #$0003
-        0x0A,                      // 690 ASL
-        0x0A,                      // 691 ASL
-        0x0A,                      // 692 ASL
-        0x0A,                      // 693 ASL
-        0xAA,                      // 694 TAX
-        0xE2, 0x20,                // 695 SEP #$20
-        0xA9, 0x00,                // 697 LDA #$00
-        0x48,                      // 699 PHA  (out)
-        0xA0, 0x00, 0x00,          // 700 LDY #$0000  (spell)
-        // BB:
-        0xBD, 0x8F, 0x15,          // 703 LDA $158F,X
-        0x48,                      // 706 PHA  (bits)
-        0xA9, 0x08,                // 707 LDA #$08
-        0x48,                      // 709 PHA  (left)
-        // BI:
-        0xA3, 0x02,                // 710 LDA 2,S
-        0x4A,                      // 712 LSR
-        0x83, 0x02,                // 713 STA 2,S
-        0x90, 0x3D,                // 715 BCC bsk
-        0x98,                      // 717 TYA
-        0xF0, 0x3A,                // 718 BEQ bsk
-        0xDA,                      // 720 PHX
-        0x5A,                      // 721 PHY
-        0x48,                      // 722 PHA  (spell)
-        0xA3, 0x08,                // 723 LDA 8,S  (out)
-        0xC2, 0x20,                // 725 REP #$20
-        0x29, 0xFF, 0x00,          // 727 AND #$00FF
-        0xAA,                      // 730 TAX
-        0xE2, 0x20,                // 731 SEP #$20
-        0x68,                      // 733 PLA
-        0x9D, 0x00, 0xD8,          // 734 STA $D800,X
-        0x22, 0x2D, 0xFA, 0x08,    // 737 JSL $08FA2D  (the spell's data)
-        0xAD, 0x9D, 0x17,          // 741 LDA $179D
-        0x9D, 0x40, 0xD8,          // 744 STA $D840,X
-        0xAD, 0x9A, 0x17,          // 747 LDA $179A
-        0x9D, 0x80, 0xD8,          // 750 STA $D880,X
-        0xAD, 0x9C, 0x17,          // 753 LDA $179C
-        0x9D, 0xC0, 0xD8,          // 756 STA $D8C0,X
-        0xAD, 0xA4, 0x17,          // 759 LDA $17A4
-        0x9D, 0x40, 0xD9,          // 762 STA $D940,X
-        0xA3, 0x07,                // 765 LDA 7,S  (out)
-        0x1A,                      // 767 INC
-        0x83, 0x07,                // 768 STA 7,S
-        0x7A,                      // 770 PLY
-        0xFA,                      // 771 PLX
-        0xA3, 0x03,                // 772 LDA 3,S  (out)
-        0xC9, 0x40,                // 774 CMP #$40  (full?)
-        0xB0, 0x12,                // 776 BCS bdone
-        // bsk:
-        0xC8,                      // 778 INY
-        0xA3, 0x01,                // 779 LDA 1,S
-        0x3A,                      // 781 DEC
-        0x83, 0x01,                // 782 STA 1,S
-        0xD0, 0xB4,                // 784 BNE BI
-        0x68,                      // 786 PLA
-        0x68,                      // 787 PLA
-        0xE8,                      // 788 INX
-        0xC0, 0x80, 0x00,          // 789 CPY #$0080
-        0xD0, 0xA5,                // 792 BNE BB
-        0x80, 0x02,                // 794 BRA bend
-        // bdone:
-        0x68,                      // 796 PLA
-        0x68,                      // 797 PLA
-        // bend:
-        0x68,                      // 798 PLA  (out)
-        0x68,                      // 799 PLA  (slot)
-        0xAB,                      // 800 PLB
-        0x28,                      // 801 PLP
-        0x6B,                      // 802 RTL
+        0x08,                      // 910 PHP
+        0x8B,                      // 911 PHB
+        0xE2, 0x20,                // 912 SEP #$20
+        0xC2, 0x10,                // 914 REP #$10
+        0x8A,                      // 916 TXA
+        0x29, 0x03,                // 917 AND #$03
+        0x48,                      // 919 PHA  (slot)
+        0xA9, 0x7E,                // 920 LDA #$7E
+        0x48,                      // 922 PHA
+        0xAB,                      // 923 PLB
+        0x22, 0x00, 0x00, 0x00,    // 924 JSL ensure
+        0xA3, 0x01,                // 928 LDA 1,S
+        0x20, 0x00, 0x00,          // 930 JSR sync
+        0xA9, 0x00,                // 933 LDA #$00
+        0x48,                      // 935 PHA  (out)
+        0xC2, 0x20,                // 936 REP #$20
+        0xA3, 0x02,                // 938 LDA 2,S  (slot)
+        0x29, 0x03, 0x00,          // 940 AND #$0003
+        0x0A,                      // 943 ASL
+        0x0A,                      // 944 ASL
+        0x0A,                      // 945 ASL
+        0x0A,                      // 946 ASL
+        0x0A,                      // 947 ASL
+        0x0A,                      // 948 ASL
+        0x48,                      // 949 PHA  (base)
+        0xE2, 0x20,                // 950 SEP #$20
+        0xA0, 0x00, 0x00,          // 952 LDY #$0000  (i)
+        // BL:
+        0xC2, 0x20,                // 955 REP #$20
+        0x98,                      // 957 TYA
+        0x18,                      // 958 CLC
+        0x63, 0x01,                // 959 ADC 1,S
+        0xAA,                      // 961 TAX
+        0xE2, 0x20,                // 962 SEP #$20
+        0xBF, 0x00, 0x1A, 0x70,    // 964 LDA order,X
+        0xF0, 0x38,                // 968 BEQ bz
+        0x5A,                      // 970 PHY
+        0x48,                      // 971 PHA  (spell)
+        0xA3, 0x06,                // 972 LDA 6,S  (out)
+        0xC2, 0x20,                // 974 REP #$20
+        0x29, 0xFF, 0x00,          // 976 AND #$00FF
+        0xAA,                      // 979 TAX
+        0xE2, 0x20,                // 980 SEP #$20
+        0x68,                      // 982 PLA
+        0x9D, 0x00, 0xD8,          // 983 STA $D800,X
+        0x22, 0x2D, 0xFA, 0x08,    // 986 JSL $08FA2D  (the spell data)
+        0xAD, 0x9D, 0x17,          // 990 LDA $179D
+        0x9D, 0x40, 0xD8,          // 993 STA $D840,X
+        0xAD, 0x9A, 0x17,          // 996 LDA $179A
+        0x9D, 0x80, 0xD8,          // 999 STA $D880,X
+        0xAD, 0x9C, 0x17,          // 1002 LDA $179C
+        0x9D, 0xC0, 0xD8,          // 1005 STA $D8C0,X
+        0xAD, 0xA4, 0x17,          // 1008 LDA $17A4
+        0x9D, 0x40, 0xD9,          // 1011 STA $D940,X
+        0xA3, 0x05,                // 1014 LDA 5,S  (out)
+        0x1A,                      // 1016 INC
+        0x83, 0x05,                // 1017 STA 5,S
+        0x7A,                      // 1019 PLY
+        0xC8,                      // 1020 INY
+        0xC0, 0x40, 0x00,          // 1021 CPY #$0040
+        0xD0, 0xB9,                // 1024 BNE BL
+        // bz:
+        0xC2, 0x20,                // 1026 REP #$20
+        0x68,                      // 1028 PLA  (base)
+        0xE2, 0x20,                // 1029 SEP #$20
+        0x68,                      // 1031 PLA  (out)
+        0x68,                      // 1032 PLA  (slot)
+        0xAB,                      // 1033 PLB
+        0x28,                      // 1034 PLP
+        0x6B,                      // 1035 RTL
+        // swap:
+        0x08,                      // 1036 PHP
+        0x8B,                      // 1037 PHB
+        0xE2, 0x20,                // 1038 SEP #$20
+        0xC2, 0x10,                // 1040 REP #$10
+        0xA9, 0x7E,                // 1042 LDA #$7E
+        0x48,                      // 1044 PHA
+        0xAB,                      // 1045 PLB
+        0xAD, 0x03, 0x00,          // 1046 LDA $0003
+        0xC2, 0x20,                // 1049 REP #$20
+        0x29, 0xFF, 0x00,          // 1051 AND #$00FF
+        0xAA,                      // 1054 TAX
+        0xE2, 0x20,                // 1055 SEP #$20
+        0xBD, 0xD2, 0x14,          // 1057 LDA $14D2,X  (slot)
+        0xC2, 0x20,                // 1060 REP #$20
+        0x29, 0x03, 0x00,          // 1062 AND #$0003
+        0x0A,                      // 1065 ASL
+        0x0A,                      // 1066 ASL
+        0x0A,                      // 1067 ASL
+        0x0A,                      // 1068 ASL
+        0x0A,                      // 1069 ASL
+        0x0A,                      // 1070 ASL
+        0x48,                      // 1071 PHA  (base)
+        0xE2, 0x20,                // 1072 SEP #$20
+        0xA5, 0x11,                // 1074 LDA $11
+        0x18,                      // 1076 CLC
+        0x6D, 0x55, 0x19,          // 1077 ADC $1955
+        0x29, 0x3F,                // 1080 AND #$3F
+        0xC2, 0x20,                // 1082 REP #$20
+        0x29, 0xFF, 0x00,          // 1084 AND #$00FF
+        0x18,                      // 1087 CLC
+        0x63, 0x01,                // 1088 ADC 1,S
+        0xAA,                      // 1090 TAX
+        0xE2, 0x20,                // 1091 SEP #$20
+        0xAD, 0x58, 0x19,          // 1093 LDA $1958
+        0x18,                      // 1096 CLC
+        0x6D, 0x59, 0x19,          // 1097 ADC $1959
+        0x29, 0x3F,                // 1100 AND #$3F
+        0xC2, 0x20,                // 1102 REP #$20
+        0x29, 0xFF, 0x00,          // 1104 AND #$00FF
+        0x18,                      // 1107 CLC
+        0x63, 0x01,                // 1108 ADC 1,S
+        0xA8,                      // 1110 TAY
+        0xE2, 0x20,                // 1111 SEP #$20
+        0xBF, 0x00, 0x1A, 0x70,    // 1113 LDA order,X
+        0xEB,                      // 1117 XBA
+        0xDA,                      // 1118 PHX
+        0xBB,                      // 1119 TYX
+        0xBF, 0x00, 0x1A, 0x70,    // 1120 LDA order,X
+        0xFA,                      // 1124 PLX
+        0x9F, 0x00, 0x1A, 0x70,    // 1125 STA order,X
+        0xEB,                      // 1129 XBA
+        0xBB,                      // 1130 TYX
+        0x9F, 0x00, 0x1A, 0x70,    // 1131 STA order,X
+        0xC2, 0x20,                // 1135 REP #$20
+        0x68,                      // 1137 PLA
+        0xAB,                      // 1138 PLB
+        0x28,                      // 1139 PLP
+        0x6B,                      // 1140 RTL
+        // saveOrder:
+        0x8B,                      // 1141 PHB
+        0x08,                      // 1142 PHP
+        0xC2, 0x30,                // 1143 REP #$30
+        0xA5, 0x1F,                // 1145 LDA $1F
+        0x18,                      // 1147 CLC
+        0x69, 0x00, 0x05,          // 1148 ADC #$0500
+        0xA8,                      // 1151 TAY
+        0xA2, 0x00, 0x1A,          // 1152 LDX #$1A00
+        0xA9, 0xFF, 0x00,          // 1155 LDA #$00FF
+        0x54, 0x70, 0x70,          // 1158 MVN $70,$70
+        0x28,                      // 1161 PLP
+        0xAB,                      // 1162 PLB
+        0xAD, 0x53, 0x19,          // 1163 LDA $1953
+        0xA0, 0xE3, 0x03,          // 1166 LDY #$03E3
+        0x6B,                      // 1169 RTL
+        // loadOrder:
+        0x8B,                      // 1170 PHB
+        0xC2, 0x30,                // 1171 REP #$30
+        0xA5, 0x1F,                // 1173 LDA $1F
+        0x18,                      // 1175 CLC
+        0x69, 0x00, 0x05,          // 1176 ADC #$0500
+        0xAA,                      // 1179 TAX
+        0xA0, 0x00, 0x1A,          // 1180 LDY #$1A00
+        0xA9, 0xFF, 0x00,          // 1183 LDA #$00FF
+        0x54, 0x70, 0x70,          // 1186 MVN $70,$70
+        0xAB,                      // 1189 PLB
+        0xE2, 0x20,                // 1190 SEP #$20
+        0xA9, 0x00,                // 1192 LDA #$00
+        0x48,                      // 1194 PHA
+        0xAB,                      // 1195 PLB
+        0x6B,                      // 1196 RTL
         // mask:
-        0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, // 803 bit masks
+        0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, // 1197 bit masks
         // magic:
-        0x4C, 0x46, 0x4D, 0x32,    // 811 "LFM2"
+        0x4C, 0x46, 0x4D, 0x33,    // 1205 "LFM3"
         // offs:
     };
 
@@ -591,8 +832,15 @@ public static class SpellMemory
     {
         if (rom.ReadByte(LearnSite) != 0x5C) return 0;
         int r = FileOffset(rom.ReadByte(LearnSite + 1) | rom.ReadByte(LearnSite + 2) << 8 | rom.ReadByte(LearnSite + 3) << 16) - Learn;
-        return r > 0 && r + BlockSize <= rom.Length && rom.ReadByte(r + Magic) == 'L' && rom.ReadByte(r + Magic + 3) == '2' ? r : 0;
+        if (r <= 0) return 0;
+        if (r + BlockSize <= rom.Length && rom.ReadByte(r + Magic) == 'L' && rom.ReadByte(r + Magic + 3) == '3') return r;
+        if (r + BlobV2 + BlobSize <= rom.Length && rom.ReadByte(r + MagicV2) == 'L' && rom.ReadByte(r + MagicV2 + 3) == '2') return r;
+        return 0;
     }
+
+    /// <summary>The block is this version's (with the spell order), not beta.7/8's.</summary>
+    public static bool Current(RomBuffer rom) { int b = BlockOffset(rom); return b > 0 && b + BlockSize <= rom.Length && rom.ReadByte(b + Magic + 3) == '3'; }
+    private static (int Offs, int Blob) Layout(RomBuffer rom) => Current(rom) ? (Offs, Blob) : (OffsV2, BlobV2);
 
     public static bool Installed(RomBuffer rom) => BlockOffset(rom) > 0;
 
@@ -650,7 +898,7 @@ public static class SpellMemory
         {
             lists[s] = new List<(int, int)>();
             int p;
-            if (block > 0) p = block + Blob + rom.ReadUInt16Le(block + Offs + 2 * s);
+            if (block > 0) { var (o, bl) = Layout(rom); p = block + bl + rom.ReadUInt16Le(block + o + 2 * s); }
             else if (old > 0) p = old + layout.Blob + rom.ReadByte(old + layout.Offs + s);
             else if (s == 2) continue;
             else p = 0x46E0D + rom.ReadByte(0x467EB + s * 2);
@@ -672,6 +920,7 @@ public static class SpellMemory
     {
         int block = BlockOffset(rom);
         if (block == 0) throw new InvalidOperationException("The \"Up to 128 spells\" patch isn't in this ROM.");
+        if (!Current(rom)) { Upgrade(rom); block = BlockOffset(rom); }
         if (Problem(lists) is string bad) throw new InvalidOperationException(bad);
         var blob = new List<byte>();
         for (int s = 0; s < 4; s++)
@@ -690,7 +939,7 @@ public static class SpellMemory
     /// earlier version had given Aguro magic.</summary>
     public static bool Install(RomBuffer rom)
     {
-        if (Installed(rom)) return rom.ReadByte(MenuSkip) == 0xFF;
+        if (Installed(rom)) { if (!SwapFixed(rom)) Upgrade(rom); return rom.ReadByte(MenuSkip) == 0xFF; }
         var lists = ReadLists(rom);
         bool aguro = RemoveOld(rom);
         if (!SitesOriginal(rom)) throw new InvalidOperationException("The game's spell memory code isn't the original (another patch changed it), so spells can't be expanded safely.");
@@ -703,6 +952,28 @@ public static class SpellMemory
         return aguro;
     }
 
+    /// <summary>
+    /// Moves an installed spell memory to this version (beta.7/8 had no spell order): its learn lists are kept, the
+    /// old block freed, a new one written and every hook pointed at it.
+    /// </summary>
+    private static void Upgrade(RomBuffer rom)
+    {
+        var lists = ReadLists(rom);
+        int old = BlockOffset(rom);
+        if (!Current(rom) || !SwapFixed(rom))
+        {
+            if (!(Same(rom, SwapSite, SwapOriginal) || Same(rom, SwapSite, SwapSkip) || Hooked(rom, SwapSite, Swap)) ||
+                !(Same(rom, SaveSite, SaveOriginal) || Hooked(rom, SaveSite, SaveOrder)) || !(Same(rom, LoadSite, LoadOriginal) || Hooked(rom, LoadSite, LoadOrder)))
+                throw new InvalidOperationException("The game's save or field Magic menu code isn't the original, so the spell order can't be added safely.");
+            var space = ExpansionSpace.Load(rom);
+            int at = space.AllocateInOneBank(BlockSize, ExpansionSpace.Kind.Patch, 10);
+            if (!Current(rom) && space.At(old) is { } e && e.Start == old) space.Free(old);
+            space.Save();
+            WriteAt(rom, at, lists);
+            rom.FixChecksum();
+        }
+    }
+
     /// <summary>Writes the routines and lists at <paramref name="at"/> and hooks the game's code (also for test copies).</summary>
     public static void WriteAt(RomBuffer rom, int at, IReadOnlyList<IReadOnlyList<(int Level, int Spell)>> lists)
     {
@@ -713,6 +984,11 @@ public static class SpellMemory
         {
             int a = baseSnes + t;
             code[o] = (byte)a; code[o + 1] = (byte)(a >> 8); code[o + 2] = (byte)(a >> 16);
+        }
+        foreach (var (o, t) in JsrFixups)
+        {
+            int a = baseSnes + t;
+            code[o] = (byte)a; code[o + 1] = (byte)(a >> 8);
         }
         rom.WriteBytes(at, code);
         void Hook(int site, int length, byte op, int entry, params byte[] after)
@@ -732,7 +1008,9 @@ public static class SpellMemory
         Hook(CountSite, CountOriginal.Length, 0x22, CountAll, 0x60);                         // then RTS
         Hook(NthSite, NthOriginal.Length, 0x22, Nth, 0x60);                                  // then RTS
         Hook(MenuSite, MenuOriginal.Length, 0x22, BuildMenu, 0x80, 0x2B);                    // then BRA $BD38
-        FixSwap(rom);
+        Hook(SwapSite, SwapOriginal.Length, 0x22, Swap, 0x80, 0x28);                         // then BRA $C24D
+        Hook(SaveSite, SaveOriginal.Length, 0x22, SaveOrder);
+        Hook(LoadSite, LoadOriginal.Length, 0x22, LoadOrder);
         WriteLists(rom, lists);
     }
 
@@ -749,7 +1027,9 @@ public static class SpellMemory
         rom.WriteBytes(CountSite, CountOriginal);
         rom.WriteBytes(NthSite, NthOriginal);
         rom.WriteBytes(MenuSite, MenuOriginal);
-        if (SwapFixed(rom)) rom.WriteBytes(SwapSite, SwapOriginal);
+        if (!Same(rom, SwapSite, SwapOriginal)) rom.WriteBytes(SwapSite, SwapOriginal);
+        if (!Same(rom, SaveSite, SaveOriginal)) rom.WriteBytes(SaveSite, SaveOriginal);
+        if (!Same(rom, LoadSite, LoadOriginal)) rom.WriteBytes(LoadSite, LoadOriginal);
         rom.WriteByte(MenuSkip, 0x02);
         var space = ExpansionSpace.Load(rom);
         space.Free(b);
