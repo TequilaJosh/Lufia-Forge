@@ -1,0 +1,106 @@
+<Window x:Class="LufiaForge.Modules.MapEditor.BlockEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Block editor" Width="1240" Height="820" MinWidth="900" MinHeight="560"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{DynamicResource MidPurpleBrush}">
+    <Window.Resources>
+        <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
+    </Window.Resources>
+
+    <Grid Margin="12" Background="{DynamicResource MidPurpleBrush}">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="300"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Grid.ColumnSpan="3" Margin="0,0,0,8">
+            <TextBlock x:Name="TitleText" Style="{StaticResource GdSection}" FontSize="15"/>
+            <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap"
+                       Text="1. Click a block on the left.  2. Click one of its four quarters.  3. Click a tile on the right to put it there (in the quarter's colour row; flip it if needed).  Walls: tick the sides of the block the party can't walk through into it. Apply writes the tileset: every map using it changes."/>
+        </StackPanel>
+
+        <!-- blocks -->
+        <DockPanel Grid.Row="1" Grid.Column="0" Margin="0,0,8,0">
+            <TextBlock DockPanel.Dock="Top" x:Name="BlocksHeader" Text="BLOCKS" Style="{StaticResource GdSection}"/>
+            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="#40000000">
+                <Image x:Name="BlocksImage" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor" HorizontalAlignment="Left" VerticalAlignment="Top"
+                       MouseLeftButtonDown="Blocks_Click" Cursor="Hand"/>
+            </ScrollViewer>
+        </DockPanel>
+
+        <!-- selected block -->
+        <ScrollViewer Grid.Row="1" Grid.Column="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <TextBlock x:Name="BlockHeader" Text="BLOCK" Style="{StaticResource GdSection}"/>
+                <Border Background="#40000000" HorizontalAlignment="Left" Padding="4">
+                    <Image x:Name="BlockImage" Width="192" Height="192" Stretch="Fill" RenderOptions.BitmapScalingMode="NearestNeighbor"
+                           MouseLeftButtonDown="Block_Click" Cursor="Hand"/>
+                </Border>
+                <TextBlock x:Name="QuarterText" Style="{StaticResource GdFieldLabel}" Margin="0,6,0,0"/>
+                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                    <TextBlock Text="Tile" Style="{StaticResource GdFieldLabel}" Width="70"/>
+                    <TextBox x:Name="TileBox" Style="{StaticResource GdNumber}" Width="70" LostFocus="Quarter_Changed" KeyDown="Box_KeyDown"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Colour row" Style="{StaticResource GdFieldLabel}" Width="70"/>
+                    <ComboBox x:Name="RowBox" Style="{StaticResource GdCombo}" MinWidth="70" Width="70" SelectionChanged="Quarter_Changed"/>
+                </StackPanel>
+                <WrapPanel Margin="0,4,0,0">
+                    <CheckBox x:Name="FlipXBox" Content="Flip across" Style="{StaticResource GdCheck}" Margin="0,0,10,0" Click="Quarter_Changed"/>
+                    <CheckBox x:Name="FlipYBox" Content="Flip up/down" Style="{StaticResource GdCheck}" Margin="0,0,10,0" Click="Quarter_Changed"/>
+                    <CheckBox x:Name="PriorityBox" Content="In front" Style="{StaticResource GdCheck}" Click="Quarter_Changed"
+                              ToolTip="Drawn in front of characters (priority bit)"/>
+                </WrapPanel>
+
+                <TextBlock Text="WALLS (SIDES OF THIS BLOCK)" Style="{StaticResource GdSection}" Margin="0,14,0,4"/>
+                <Grid Width="250" HorizontalAlignment="Left">
+                    <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
+                    <CheckBox x:Name="WallUp" Grid.Column="1" Grid.Row="0" Content="Top" Style="{StaticResource GdCheck}" Click="Attr_Changed" ToolTip="Wall on the top side: can't walk down into this block (bit 04)"/>
+                    <CheckBox x:Name="WallLeft" Grid.Column="0" Grid.Row="1" Content="Left" Style="{StaticResource GdCheck}" Click="Attr_Changed" ToolTip="Wall on the left side: can't walk right into this block (bit 01)"/>
+                    <CheckBox x:Name="WallRight" Grid.Column="2" Grid.Row="1" Content="Right" Style="{StaticResource GdCheck}" Click="Attr_Changed" ToolTip="Wall on the right side: can't walk left into this block (bit 02)"/>
+                    <CheckBox x:Name="WallDown" Grid.Column="1" Grid.Row="2" Content="Bottom" Style="{StaticResource GdCheck}" Click="Attr_Changed" ToolTip="Wall on the bottom side: can't walk up into this block (bit 08)"/>
+                </Grid>
+                <CheckBox x:Name="Blocked" Content="Solid: can't walk onto it at all" Style="{StaticResource GdCheck}" Margin="0,6,0,0" Click="Attr_Changed" ToolTip="Bit 20"/>
+                <WrapPanel Margin="0,4,0,0">
+                    <CheckBox x:Name="Flag10" Content="Flag 10" Style="{StaticResource GdCheck}" Margin="0,0,10,0" Click="Attr_Changed" ToolTip="Doesn't change walking; meaning unknown"/>
+                    <CheckBox x:Name="Flag40" Content="Flag 40" Style="{StaticResource GdCheck}" Margin="0,0,10,0" Click="Attr_Changed" ToolTip="Doesn't change walking; meaning unknown"/>
+                    <CheckBox x:Name="Flag80" Content="Flag 80" Style="{StaticResource GdCheck}" Click="Attr_Changed" ToolTip="Meaning unknown"/>
+                </WrapPanel>
+                <TextBlock x:Name="AttrText" Style="{StaticResource GdHint}" Margin="0,4,0,0"/>
+                <Button x:Name="AddBlockButton" Content="+ New block (copy of this one)" Style="{StaticResource LufiaButton}" HorizontalAlignment="Left" Margin="0,12,0,0" Click="AddBlock_Click"/>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- tiles -->
+        <DockPanel Grid.Row="1" Grid.Column="2" Margin="8,0,0,0">
+            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
+                <TextBlock Text="TILES" Style="{StaticResource GdSection}"/>
+                <TextBlock Text="  shown in row" Style="{StaticResource GdFieldLabel}"/>
+                <ComboBox x:Name="SheetRowBox" Style="{StaticResource GdCombo}" MinWidth="60" Width="60" Margin="6,0,0,0" SelectionChanged="SheetRow_Changed"/>
+            </StackPanel>
+            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,6,0,0">
+                <Button Content="Export tile sheet..." Style="{StaticResource LufiaButton}" Click="ExportSheet_Click" Margin="0,0,8,0"/>
+                <Button Content="Import tile sheet..." Style="{StaticResource LufiaButtonGold}" Click="ImportSheet_Click"
+                        ToolTip="A PNG 128 pixels wide (16 tiles across). An indexed PNG keeps its colour numbers; any other picture is matched to the colours of the row shown."/>
+            </StackPanel>
+            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="#40000000">
+                <Image x:Name="TilesImage" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor" HorizontalAlignment="Left" VerticalAlignment="Top"
+                       MouseLeftButtonDown="Tiles_Click" Cursor="Hand"/>
+            </ScrollViewer>
+        </DockPanel>
+
+        <DockPanel Grid.Row="2" Grid.ColumnSpan="3" Margin="0,10,0,0">
+            <Button DockPanel.Dock="Right" Content="Close" Style="{StaticResource LufiaButton}" MinWidth="90" Click="Close_Click"/>
+            <Button DockPanel.Dock="Right" Content="Apply to ROM" Style="{StaticResource LufiaButtonGold}" MinWidth="120" Margin="0,0,8,0" Click="Apply_Click"/>
+            <TextBlock x:Name="StatusText" Style="{StaticResource GdHint}" VerticalAlignment="Center" TextWrapping="Wrap"/>
+        </DockPanel>
+    </Grid>
+</Window>

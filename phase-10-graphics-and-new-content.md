@@ -31,11 +31,16 @@ Branch: `phase-10-graphics` (from `phase-06-cutscenes`, released as 0.4.0-beta.7
 
 ## 10.2 — Tilesets for town & dungeon maps
 
-- [ ] Import a whole tileset sheet (PNG, 4bpp, up to 16 KB of tiles) as well as the existing block-by-block import.
-- [ ] Block editor: build 16x16 blocks from tiles, set each block's walkability / collision attribute.
-- [ ] Map palette rows editable (the rows 2–7 a map uses).
-- [ ] New tilesets: room for more than 12 (tables at 0xE134 / 0xE140 / 0xE14B grow into the added space).
-- [ ] World map tiles and blocks import (resource 0x124 and the world map's own block records).
+- [x] Import a whole tileset sheet (PNG, 4bpp, up to 16 KB of tiles) as well as the existing block-by-block import.
+      Block editor > Export / Import tile sheet (indexed PNG keeps colour numbers).
+- [x] Block editor: build 16x16 blocks from tiles, set each block's walkability / collision attribute.
+      Attribute checked in game: the block walked INTO is tested; 01 = wall on its left, 02 right, 04 top, 08 bottom,
+      20 = solid; 10 / 40 don't affect walking. (Map editor > Edit blocks; `Core/Maps/BlockSet.cs`)
+- [x] Map palette rows editable (the rows 2–7 a map uses) - Palettes tab (10.1).
+- [x] New tilesets: room for 64 (tables at $01:E134 / E140 / E14B move to the added space; `Core/Maps/Tilesets.cs`).
+      Checked in game: map 94 on a new tileset 11 (copy of 10, recoloured) while map 93 keeps tileset 10.
+- [x] World map tiles and blocks import (resource 0x124 and the world map's own block records) - Block editor on the
+      world map (its 240 blocks can be edited, not added).
 
 ## 10.3 — New maps
 
