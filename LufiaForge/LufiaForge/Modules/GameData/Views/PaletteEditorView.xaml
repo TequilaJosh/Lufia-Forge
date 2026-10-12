@@ -1,0 +1,93 @@
+<UserControl x:Class="LufiaForge.Modules.GameData.Views.PaletteEditorView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="clr-namespace:LufiaForge.Modules.GameData.Views">
+    <UserControl.Resources>
+        <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="260"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <ListBox Grid.Column="0" Margin="12" Style="{StaticResource GdRecordList}"
+                 ItemsSource="{Binding Sources}" SelectedItem="{Binding SelectedSource}"/>
+
+        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" Padding="0,12,0,0">
+            <WrapPanel Orientation="Horizontal">
+                <Border Style="{StaticResource GdCard}">
+                    <StackPanel>
+                        <TextBlock Text="COLOURS" Style="{StaticResource GdSection}"/>
+                        <ItemsControl ItemsSource="{Binding Rows}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal" Margin="0,2">
+                                        <TextBlock Text="{Binding Name}" Style="{StaticResource GdFieldLabel}" Width="70"/>
+                                        <ItemsControl ItemsSource="{Binding Swatches}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Button Width="26" Height="26" Margin="1" Padding="0" Cursor="Hand" ToolTip="{Binding Tip}"
+                                                            Command="{Binding DataContext.PickCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                            CommandParameter="{Binding}">
+                                                        <Button.Template>
+                                                            <ControlTemplate TargetType="Button">
+                                                                <Border x:Name="b" Background="{Binding Brush}" BorderBrush="#40000000" BorderThickness="1"/>
+                                                                <ControlTemplate.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                                        <Setter TargetName="b" Property="BorderBrush" Value="Gold"/>
+                                                                        <Setter TargetName="b" Property="BorderThickness" Value="3"/>
+                                                                    </DataTrigger>
+                                                                </ControlTemplate.Triggers>
+                                                            </ControlTemplate>
+                                                        </Button.Template>
+                                                    </Button>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Text="{Binding InfoText}" Style="{StaticResource GdHint}" TextWrapping="Wrap" MaxWidth="520" Margin="0,8,0,0"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                            <Button Content="Export palette..." Style="{StaticResource LufiaButton}" Command="{Binding ExportCommand}" Margin="0,0,8,0"/>
+                            <Button Content="Import palette..." Style="{StaticResource LufiaButtonGold}" Command="{Binding ImportCommand}"
+                                    ToolTip="An indexed PNG takes its palette in order; any other picture is read as a grid of colour cells, 16 across and one row per palette row"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource GdCard}">
+                    <StackPanel Width="230">
+                        <TextBlock Text="SELECTED COLOUR" Style="{StaticResource GdSection}"/>
+                        <Border Height="56" Background="{Binding Preview}" BorderBrush="#40000000" BorderThickness="1" Margin="0,0,0,8"/>
+                        <TextBlock Text="Red (0-31)" Style="{StaticResource GdFieldLabel}"/>
+                        <DockPanel><TextBlock DockPanel.Dock="Right" Text="{Binding Red}" Width="24" Style="{StaticResource GdFieldLabel}"/>
+                            <Slider Minimum="0" Maximum="31" IsSnapToTickEnabled="True" TickFrequency="1" Value="{Binding Red}"/></DockPanel>
+                        <TextBlock Text="Green (0-31)" Style="{StaticResource GdFieldLabel}"/>
+                        <DockPanel><TextBlock DockPanel.Dock="Right" Text="{Binding Green}" Width="24" Style="{StaticResource GdFieldLabel}"/>
+                            <Slider Minimum="0" Maximum="31" IsSnapToTickEnabled="True" TickFrequency="1" Value="{Binding Green}"/></DockPanel>
+                        <TextBlock Text="Blue (0-31)" Style="{StaticResource GdFieldLabel}"/>
+                        <DockPanel><TextBlock DockPanel.Dock="Right" Text="{Binding Blue}" Width="24" Style="{StaticResource GdFieldLabel}"/>
+                            <Slider Minimum="0" Maximum="31" IsSnapToTickEnabled="True" TickFrequency="1" Value="{Binding Blue}"/></DockPanel>
+                        <TextBlock Text="Web colour" Style="{StaticResource GdFieldLabel}" Margin="0,6,0,0"/>
+                        <TextBox Style="{StaticResource GdText}" Width="100" HorizontalAlignment="Left" Text="{Binding Hex, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,8,0,0"
+                                   Text="The SNES has 32 shades per channel; web colours are rounded to the nearest. Apply writes the whole palette."/>
+                    </StackPanel>
+                </Border>
+            </WrapPanel>
+        </ScrollViewer>
+
+        <v:EditorFooter Grid.Row="1" Grid.ColumnSpan="2"/>
+    </Grid>
+</UserControl>
