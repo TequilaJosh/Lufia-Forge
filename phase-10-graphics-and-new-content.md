@@ -44,13 +44,15 @@ Branch: `phase-10-graphics` (from `phase-06-cutscenes`, released as 0.4.0-beta.7
 
 ## 10.3 — New maps
 
-- [ ] **New map**: start from an empty map or a copy of an existing one; pick tileset, palette, size.
-      Needs a free map number (byte ids, 196 select slots, 117 used), a resource id, and entries in the setup-script
-      (0x18000) and event-script (0x18200) tables.
-- [ ] Resize a map (width / height in blocks).
-- [ ] Add / remove NPCs and choose their sprite (section C is only patched in place today).
-- [ ] Connect it: exits to / from existing maps, arrival points (tools exist; make sure new maps work with them).
-- [ ] World map: zones are painted already (encounter groups); also paint where exits / towns sit and new world tiles.
+- [x] **New map**: start from an empty map or a copy of an existing one; pick tileset, palette, size.
+      Uses free map numbers 46-86 (35 of them); fills the data select ($01:E19B), setup (0x18000), event (0x18200) and
+      area-name ($01:E93E) tables. Copies get their own event block; blank maps an empty block and an empty setup
+      script. Checked in game: walked from map 93 into a copy and into a blank map ($077F = 46). (`Core/Maps/MapFactory.cs`)
+- [x] Resize a map (width / height in blocks).
+- [x] Add / remove NPCs and choose their sprite; an NPC without an event gets an empty one to edit.
+- [x] Connect it: exits to / from existing maps, arrival points (new maps appear in the exit destination list).
+- [x] World map: zones are painted already (encounter groups); exits are edited with the exit tools; world tiles and
+      blocks in the Block editor (10.2).
 
 ## 10.4 — Character sprites
 

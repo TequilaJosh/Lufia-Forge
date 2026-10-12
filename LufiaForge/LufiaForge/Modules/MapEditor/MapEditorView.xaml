@@ -136,9 +136,41 @@
         <Grid Grid.Row="1" Grid.Column="2" Margin="8">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
-            <Border Style="{StaticResource GdCard}" Margin="0,0,0,8">
+            <Expander Grid.Row="0" Header="MAP: settings, new map, characters" Foreground="{StaticResource GoldBrush}" Margin="0,0,0,8"
+                      IsEnabled="{Binding IsTownMap}">
+                <Border Style="{StaticResource GdCard}" Margin="0,4,0,0">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Tileset" Style="{StaticResource GdFieldLabel}" Width="54"/>
+                            <ComboBox Style="{StaticResource GdCombo}" MinWidth="110" Width="110" ItemsSource="{Binding TilesetChoices}" SelectedIndex="{Binding TilesetChoice}"/>
+                            <Button Content="+ New tileset" Style="{StaticResource LufiaButton}" Command="{Binding NewTilesetCommand}" Margin="6,0,0,0"
+                                    ToolTip="A copy of this map's tileset, given to this map: edit its blocks without changing other maps"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Palette" Style="{StaticResource GdFieldLabel}" Width="54"/>
+                            <TextBox Style="{StaticResource GdNumber}" Width="50" Text="{Binding MapPalette}" ToolTip="Map palette number (edit its colours in Game Data > Palettes)"/>
+                            <TextBlock Text="  Size" Style="{StaticResource GdFieldLabel}"/>
+                            <TextBox Style="{StaticResource GdNumber}" Width="44" Text="{Binding MapWidth}"/>
+                            <TextBlock Text="x" Style="{StaticResource GdFieldLabel}"/>
+                            <TextBox Style="{StaticResource GdNumber}" Width="44" Text="{Binding MapHeight}"/>
+                        </StackPanel>
+                        <Button Content="Apply map settings" Style="{StaticResource LufiaButtonGold}" Command="{Binding ApplyMapSettingsCommand}" HorizontalAlignment="Left" Margin="0,4,0,8"
+                                ToolTip="Writes the tileset, palette and size (new cells get the brush block)"/>
+                        <TextBlock Text="New map" Style="{StaticResource GdFieldLabel}"/>
+                        <WrapPanel>
+                            <Button Content="Copy of this map" Style="{StaticResource LufiaButton}" Command="{Binding NewMapCopyCommand}" Margin="0,0,6,4"/>
+                            <Button Content="Blank (brush block)" Style="{StaticResource LufiaButton}" Command="{Binding NewMapBlankCommand}" Margin="0,0,0,4"/>
+                        </WrapPanel>
+                        <TextBlock Text="{Binding NewMapNote}" Style="{StaticResource GdHint}" TextWrapping="Wrap"/>
+                        <Button Content="+ Add character" Style="{StaticResource LufiaButton}" Command="{Binding AddNpcCommand}" HorizontalAlignment="Left" Margin="0,8,0,0"
+                                ToolTip="Adds a character near the first arrival point; drag it into place and pick its sprite"/>
+                    </StackPanel>
+                </Border>
+            </Expander>
+            <Border Grid.Row="1" Style="{StaticResource GdCard}" Margin="0,0,0,8">
                 <StackPanel>
                     <TextBlock Text="{Binding SelectionTitle}" Style="{StaticResource GdSection}"/>
                     <TextBlock Text="{Binding SelectionDetails}" Style="{StaticResource LufiaLabel}"
@@ -154,8 +186,15 @@
                             <TextBlock Text="  Y" Style="{StaticResource GdFieldLabel}"/>
                             <TextBox Style="{StaticResource GdNumber}" Width="60" Text="{Binding NpcY}"/>
                         </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                            <TextBlock Text="Sprite" Style="{StaticResource GdFieldLabel}"/>
+                            <ComboBox Style="{StaticResource GdCombo}" MinWidth="70" Width="70" Margin="6,0,0,0" ItemsSource="{Binding SpriteChoices}" SelectedIndex="{Binding NpcSprite}"
+                                      ToolTip="Which character sprite it uses (see Game Data > Sprites)"/>
+                            <Button Content="Hide / remove" Style="{StaticResource LufiaButton}" Command="{Binding HideNpcCommand}" Margin="8,0,0,0"
+                                    ToolTip="The last character is removed; others are hidden so the rest keep their events"/>
+                        </StackPanel>
                         <Button Content="✎ Edit event / dialogue…" Style="{StaticResource LufiaButton}" Command="{Binding OpenEventEditorCommand}"
-                                HorizontalAlignment="Left" Margin="0,6,0,0"/>
+                                HorizontalAlignment="Left" Margin="0,6,0,0" ToolTip="Opens its talk event (makes an empty one if it has none)"/>
                     </StackPanel>
 
                     <StackPanel Visibility="{Binding IsExitSelected, Converter={StaticResource BoolToVisibilityConverter}}" Margin="0,8,0,0">
@@ -222,7 +261,7 @@
                 </StackPanel>
             </Border>
 
-            <Border Grid.Row="1" Style="{StaticResource GdCard}" Margin="0" VerticalAlignment="Stretch">
+            <Border Grid.Row="2" Style="{StaticResource GdCard}" Margin="0" VerticalAlignment="Stretch">
                 <DockPanel>
                     <TextBlock DockPanel.Dock="Top" Text="BLOCKS (click to choose a brush)" Style="{StaticResource GdSection}"/>
                     <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4">

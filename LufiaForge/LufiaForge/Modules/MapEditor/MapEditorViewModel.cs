@@ -436,6 +436,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
                          $"{_map.Spots.Count(IsTreasureSpot)} treasures, " +
                          $"data resource {_map.ResourceId:X3} at 0x{_map.CompressedOffset:X6} ({_map.CompressedSize} bytes packed)";
             RebuildOverlays();
+            RefreshMapSettings();
             Status = "Loaded. Select tool: click objects. Paint tool: paint the chosen block. Pick tool: copy a block from the map.";
         }
         catch (Exception ex)
@@ -802,10 +803,11 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
     {
         if (_rom == null || _map == null || _selection is not { kind: "npc" } sel) return;
         var script = EventScript.Load(_rom, _map.MapId, sel.index);
-        if (script == null || script.Ops.Count == 0 || (script.Ops.Count == 1 && script.Ops[0].Bytes is [0x00]))
+        if (script == null)
         {
-            Status = $"Character {sel.index + 1} has no event script (talking runs event {sel.index}).";
-            return;
+            if (!CreateTalkEvent(sel.index)) return;
+            script = EventScript.Load(_rom, _map.MapId, sel.index);
+            if (script == null) { Status = $"Character {sel.index + 1}'s event couldn't be made."; return; }
         }
         EventEditorRequested?.Invoke(script, $"Map {_map.MapId:X2} - character {sel.index + 1} (talking runs event {sel.index})");
     }
@@ -933,6 +935,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
         SpotEdits.Clear();
         _populating = true;
         NpcX = n.X; NpcY = n.Y;
+        NpcSprite = n.IsUnused ? -1 : n.Sprite;
         _populating = false;
         int script = LufiaMap.EventScriptOffset(_rom, _map.MapId, n.Index);
         SelectionTitle = $"Character {n.Index + 1}";
