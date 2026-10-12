@@ -60,9 +60,9 @@ public partial class GraphicsEditorViewModel : GameDataEditorBase
             [LufiaMap.WorldTilesResource] = "World map tiles",
             [0x13D] = "Battle sprites (party, command ring, numbers)",
         };
-        for (int t = 0; t < 12; t++)
+        for (int t = 0, n = Tilesets.Count(rom); t < n; t++)
         {
-            int r = 0xB1 + rom.ReadByte(LufiaMap.TilesSelectTable + t);
+            int r = Tilesets.TilesResource(rom, t);
             if (!names.ContainsKey(r)) names[r] = $"Town / dungeon tiles (tileset {t})";
         }
         Sources.Clear();

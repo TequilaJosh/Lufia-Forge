@@ -37,8 +37,8 @@ public sealed class MapTileset
         _rom = rom;
         Tileset = tileset;
         PaletteIndex = paletteIndex;
-        TilesResource  = 0xB1 + rom.ReadByte(LufiaMap.TilesSelectTable + tileset);
-        BlocksResource = 0xB1 + rom.ReadByte(LufiaMap.BlocksSelectTable + tileset);
+        TilesResource  = Tilesets.TilesResource(rom, tileset);
+        BlocksResource = Tilesets.BlocksResource(rom, tileset);
         Tiles  = LufiaCompression.DecompressResource(rom, TilesResource, out _);
         Blocks = LufiaCompression.DecompressResource(rom, BlocksResource, out _);
 
@@ -50,9 +50,7 @@ public sealed class MapTileset
             Palette555[32 + i] = rom.ReadUInt16Le(rows + i * 2);
         for (int i = 0; i < 128; i++) Palette[i] = SnesPalette.Bgr555ToArgb32(Palette555[i]);
 
-        int ptr = LufiaMap.CompositeTable + tileset * 3;
-        int snes = rom.ReadByte(ptr) | (rom.ReadByte(ptr + 1) << 8) | (rom.ReadByte(ptr + 2) << 16);
-        _compositeTable = ((snes >> 16) & 0x7F) * 0x8000 + (snes & 0x7FFF);
+        _compositeTable = Tilesets.CompositePairs(rom, tileset);
         CompositeThreshold = compositeThreshold;
     }
 

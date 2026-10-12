@@ -204,6 +204,26 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
 
     // ── custom graphics: a picture into the tileset's blocks ──────────────────
 
+    /// <summary>The Block editor for this map's tileset (or the world map's blocks).</summary>
+    [RelayCommand]
+    private void EditBlocks()
+    {
+        if (_rom == null || _map == null) { Status = "Open a map first."; return; }
+        if (HasUnappliedChanges) { Status = "Apply or revert this map's changes first: the Block editor reloads the map."; return; }
+        try
+        {
+            var set = BlockSet.FromMap(_rom, _map);
+            var win = new BlockEditorWindow(_rom, set, Brush) { Owner = Application.Current.MainWindow };
+            win.ShowDialog();
+            if (!win.Wrote) return;
+            int id = _map.MapId;
+            LoadMap(id);
+            _mainVm?.NotifyRomModified(_map?.IsWorld == true ? "World map blocks" : $"Tileset {_map?.Tileset} blocks");
+            Status = "Blocks written. Every map using this tileset shows the change.";
+        }
+        catch (Exception ex) { Status = "Block editor: " + ex.Message; }
+    }
+
     /// <summary>Redraw blocks from a picture: picture block k goes to block Brush + k.</summary>
     [RelayCommand]
     private void ImportOverBlocks() => ImportPicture(addNew: false);

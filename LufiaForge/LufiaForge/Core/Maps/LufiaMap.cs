@@ -409,6 +409,7 @@ public sealed class LufiaMap
     {
         var d = (byte[])Original.Clone();
         int shiftFrom = int.MaxValue, delta = 0;   // byte range moved by a grown world chunk table
+        if (IsWorld) Array.Copy(WorldBlocks, 0, d, WorldBlocksOffset, WorldBlocks.Length);   // block records (Block editor)
 
         if (IsWorld)
         {
