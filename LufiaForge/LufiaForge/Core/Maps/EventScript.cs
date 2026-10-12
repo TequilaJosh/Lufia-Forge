@@ -845,6 +845,75 @@ public sealed class EventScript
     /// </summary>
     public const int ScriptLimit = MapWriter.ExpandedSize;
 
+    /// <summary>How many event slots the map's block has (its offset table runs up to the first event's code).</summary>
+    public static int SlotCount(RomBuffer rom, int mapId)
+    {
+        int b = BlockOffset(rom, mapId);
+        int len = new EventScript(rom, mapId, 0, b, b).BlockLength(), first = len;
+        for (int i = 0; i < 0x100 && i * 2 + 1 < first && b + i * 2 + 1 < rom.Length; i++)
+        {
+            int rel = rom.ReadUInt16Le(b + i * 2);
+            if (rel != 0xFFFF && rel >= 2 && rel < first) first = rel;
+        }
+        return Math.Min(0x100, first / 2);
+    }
+
+    /// <summary>
+    /// Gives map <paramref name="mapId"/> its own copy of the script block it uses (in the added space), so editing its
+    /// events in place doesn't change another map that shares the block. Used for new maps copied from another one.
+    /// </summary>
+    public static void CopyBlockFor(RomBuffer rom, int mapId)
+    {
+        var s = new EventScript(rom, mapId, 0, BlockOffset(rom, mapId), BlockOffset(rom, mapId));
+        int len = s.BlockLength();
+        if (len <= 0 || len > 0xFFF0) throw new InvalidOperationException("This map's script block can't be copied.");
+        var space = ExpansionSpace.Load(rom);
+        int at = space.Allocate(len + 1, ExpansionSpace.Kind.ScriptBlock, mapId, ScriptLimit);
+        rom.WriteBytes(at, rom.ReadBytes(s.BlockBase, len));
+        rom.WriteByte(at + len, 0x00);
+        space.Save();
+        int t = at - 0x18000, p = LufiaMap.MapScriptTable + mapId * 5;
+        rom.WriteBytes(p, new[] { (byte)t, (byte)(t >> 8), (byte)(t >> 16) });
+    }
+
+    /// <summary>A new, empty script block for a map: <paramref name="slots"/> events, none with a script yet.</summary>
+    public static void NewBlockFor(RomBuffer rom, int mapId, int slots)
+    {
+        var space = ExpansionSpace.Load(rom);
+        int at = space.Allocate(slots * 2 + 1, ExpansionSpace.Kind.ScriptBlock, mapId, ScriptLimit);
+        rom.WriteBytes(at, Enumerable.Repeat((byte)0xFF, slots * 2).ToArray());
+        rom.WriteByte(at + slots * 2, 0x00);
+        space.Save();
+        int t = at - 0x18000, p = LufiaMap.MapScriptTable + mapId * 5;
+        rom.WriteBytes(p, new[] { (byte)t, (byte)(t >> 8), (byte)(t >> 16) });
+    }
+
+    /// <summary>
+    /// Creates event <paramref name="ev"/> of a map that has none yet (a slot with no script): the map's block is
+    /// copied to the added space with a one-command event (end) after it, which the event editor can then fill in.
+    /// </summary>
+    public static void CreateEvent(RomBuffer rom, int mapId, int ev)
+    {
+        if (LufiaMap.EventScriptOffset(rom, mapId, ev) >= 0) throw new InvalidOperationException($"Event {ev} already has a script.");
+        if (ev >= SlotCount(rom, mapId)) throw new InvalidOperationException($"This map's script block has {SlotCount(rom, mapId)} event slots; event {ev} doesn't fit.");
+        if (rom.Length < MapWriter.ExpandedSize) rom.Expand(MapWriter.ExpandedSize);
+        var s = new EventScript(rom, mapId, ev, BlockOffset(rom, mapId), BlockOffset(rom, mapId));
+        int len = s.BlockLength(), oldBase = s.BlockBase;
+        var space = ExpansionSpace.Load(rom);
+        int at = space.Allocate(len + 2, ExpansionSpace.Kind.ScriptBlock, mapId, ScriptLimit);
+        rom.WriteBytes(at, rom.ReadBytes(oldBase, len));
+        rom.WriteByte(at + len, 0x00);       // the new event: end
+        rom.WriteByte(at + len + 1, 0x00);   // guard
+        rom.WriteUInt16Le(at + ev * 2, (ushort)len);
+        int t = at - 0x18000, p = LufiaMap.MapScriptTable + mapId * 5;
+        rom.WriteBytes(p, new[] { (byte)t, (byte)(t >> 8), (byte)(t >> 16) });
+        if (oldBase >= MapWriter.ExpansionStart && space.At(oldBase)?.Start == oldBase &&
+            !MapCatalog.Scan(rom).Any(m => m.MapId != mapId && BlockOffset(rom, m.MapId) == oldBase))
+            space.Free(oldBase);
+        space.Save();
+        rom.FixChecksum();
+    }
+
     /// <summary>Bytes from this block's start to the next map's script block (blocks are contiguous).</summary>
     private int BlockLength()
     {

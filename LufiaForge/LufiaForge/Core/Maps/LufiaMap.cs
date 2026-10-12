@@ -148,8 +148,9 @@ public sealed class LufiaMap
     public bool IsWorld { get; }
     public int Tileset { get; }
     public int PaletteIndex { get; }
-    public int Width { get; }
-    public int Height { get; }
+    public int Width { get; private set; }
+    public int Height { get; private set; }
+    private readonly int _origWidth, _origHeight;
     public int LayerOffset { get; }
     public int ObjectsOffset { get; }
 
@@ -167,7 +168,7 @@ public sealed class LufiaMap
     public int CompositeThreshold { get; }
 
     /// <summary>Metatile layer, Width*Height entries (low 10 bits = metatile number).</summary>
-    public ushort[] Layer { get; }
+    public ushort[] Layer { get; private set; }
 
     /// <summary>
     /// Second metatile layer drawn on BG2 behind the map (the intro's clouds; header 0x16/0x18 = its size,
@@ -203,6 +204,7 @@ public sealed class LufiaMap
 
         Width         = U16(data, 0x12);
         Height        = U16(data, 0x14);
+        _origWidth = Width; _origHeight = Height;
         LayerOffset   = (int)U32(data, 0x28);
         ObjectsOffset = (int)U32(data, 0x30);
         Layer = new ushort[Width * Height];
@@ -430,6 +432,23 @@ public sealed class LufiaMap
                 if (v >= shiftFrom && v <= Original.Length) PutU32(d, h, (uint)(v + delta));
             }
         }
+        else if (Width != _origWidth || Height != _origHeight)
+        {
+            // resized: new layer, everything after the old layer moves along
+            int oldEnd = LayerOffset + _origWidth * _origHeight * 2;
+            var body = new List<byte>(d.AsSpan(0, LayerOffset).ToArray());
+            foreach (var t in Layer) { body.Add((byte)t); body.Add((byte)(t >> 8)); }
+            body.AddRange(d.AsSpan(oldEnd, d.Length - oldEnd).ToArray());
+            delta = Layer.Length * 2 - (oldEnd - LayerOffset);
+            shiftFrom = oldEnd;
+            d = body.ToArray();
+            Put16(d, 0x12, Width); Put16(d, 0x14, Height);
+            foreach (int h in new[] { 0x2C, 0x30, 0x34, 0x38 })
+            {
+                uint v = U32(Original, h);
+                if (v >= shiftFrom && v <= Original.Length) PutU32(d, h, (uint)(v + delta));
+            }
+        }
         else
         {
             for (int i = 0; i < Layer.Length; i++) Put16(d, LayerOffset + i * 2, Layer[i]);
@@ -504,14 +523,12 @@ public sealed class LufiaMap
         }
         var b = new List<byte>();
         foreach (var r in Arrivals) { Add16(b, r.Flags); Add16(b, r.X); Add16(b, r.Y); }
-        var c = new List<byte>(raw[2]);
-        foreach (var n in Npcs)
+        // NPCs: 14 bytes each, in number order (the list can grow / shrink at the end)
+        var c = new List<byte>();
+        foreach (var n in Npcs.OrderBy(n => n.Index))
         {
-            int p = n.Index * 14;
-            if (p + 14 > c.Count) continue;
-            c[p] = (byte)n.Sprite; c[p + 1] = (byte)n.Flags;
-            Set16(c, p + 2, n.X); Set16(c, p + 4, n.Y);
-            Set16(c, p + 6, n.BoxX1); Set16(c, p + 8, n.BoxY1); Set16(c, p + 10, n.BoxX2); Set16(c, p + 12, n.BoxY2);
+            c.Add((byte)n.Sprite); c.Add((byte)n.Flags);
+            Add16(c, n.X); Add16(c, n.Y); Add16(c, n.BoxX1); Add16(c, n.BoxY1); Add16(c, n.BoxX2); Add16(c, n.BoxY2);
         }
 
         var g = new List<byte>();
@@ -522,7 +539,7 @@ public sealed class LufiaMap
             foreach (var st in path.Steps) { g.Add((byte)st.Mode); g.Add((byte)st.DirByte); g.Add((byte)st.Tiles); }
         }
         var sections = new[] { a.ToArray(), b.ToArray(), c.ToArray(), raw[3], raw[4], raw[5], g.ToArray(), raw[7] };
-        var counts = new[] { Exits.Count, Arrivals.Count, SectionCounts[2], SectionCounts[3], SectionCounts[4],
+        var counts = new[] { Exits.Count, Arrivals.Count, Npcs.Count, SectionCounts[3], SectionCounts[4],
                              SectionCounts[5], Paths.Count, SectionCounts[7] };
         if (Paths.Count > 255) throw new InvalidOperationException("A map can have at most 255 paths.");
         if (counts[0] > 255 || counts[1] > 255) throw new InvalidOperationException("A map can have at most 255 exits and 255 arrival points.");
@@ -534,6 +551,44 @@ public sealed class LufiaMap
         block.AddRange(prefix);
         foreach (var s in sections) block.AddRange(s);
         return block.ToArray();
+    }
+
+    /// <summary>Changes the map's size (town / dungeon maps): the layer keeps its top-left part, new cells get
+    /// <paramref name="fill"/>. Objects outside the new size stay where they are (move them in the editor).</summary>
+    public void Resize(int width, int height, int fill)
+    {
+        if (IsWorld) throw new InvalidOperationException("The world map's size is fixed.");
+        if (width < 16 || height < 14 || width > 255 || height > 255) throw new InvalidOperationException("A map is 16-255 blocks wide and 14-255 high (the screen is 16 x 14).");
+        var n = new ushort[width * height];
+        for (int y = 0; y < height; y++)
+            for (int x = 0; x < width; x++)
+                n[y * width + x] = x < Width && y < Height ? Layer[y * Width + x] : (ushort)(fill & 0x3FF);
+        Layer = n; Width = width; Height = height;
+    }
+
+    /// <summary>Header bytes the editor can change: tileset (+0x08) and palette (+0x09). Takes effect when the map is
+    /// saved and loaded again.</summary>
+    public void SetTilesetAndPalette(int tileset, int palette)
+    {
+        if (IsWorld) throw new InvalidOperationException("The world map's graphics are fixed.");
+        Original[0x08] = (byte)tileset; Original[0x09] = (byte)palette;
+    }
+
+    /// <summary>Adds an NPC at the end (NPC n runs event n of the map's script).</summary>
+    public MapNpc AddNpc(int sprite, int x, int y)
+    {
+        if (Npcs.Count >= 32) throw new InvalidOperationException("A map can have at most 32 NPCs.");
+        var n = new MapNpc { Index = Npcs.Count, Sprite = sprite, Flags = 0, X = x, Y = y, BoxX1 = Math.Max(0, x - 2), BoxY1 = Math.Max(0, y - 2), BoxX2 = Math.Min(Width, x + 3), BoxY2 = Math.Min(Height, y + 3) };
+        Npcs.Add(n);
+        return n;
+    }
+
+    /// <summary>Removes the last NPC (others keep their numbers and events); any other NPC is hidden instead
+    /// (sprite FF = unused).</summary>
+    public void RemoveNpc(MapNpc n)
+    {
+        if (Npcs.Count > 0 && Npcs[^1] == n) Npcs.RemoveAt(Npcs.Count - 1);
+        else n.Sprite = 0xFF;
     }
 
     public ushort GetTile(int x, int y) => Layer[y * Width + x];
