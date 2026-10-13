@@ -271,6 +271,115 @@
         <Setter Property="FontSize"   Value="12"/>
     </Style>
 
+    <!-- Tool button: a RadioButton / ToggleButton drawn as a button; checked = gold (one of a group of tools) -->
+    <Style x:Key="LufiaToolButton" TargetType="ToggleButton">
+        <Setter Property="Background"   Value="{StaticResource MidPurpleBrush}"/>
+        <Setter Property="Foreground"   Value="{StaticResource TextPrimaryBrush}"/>
+        <Setter Property="BorderBrush"  Value="{StaticResource BorderPurpleBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding"      Value="10,5"/>
+        <Setter Property="Margin"       Value="0,0,2,0"/>
+        <Setter Property="FontFamily"   Value="Segoe UI Semibold"/>
+        <Setter Property="FontSize"     Value="12"/>
+        <Setter Property="Cursor"       Value="Hand"/>
+        <Setter Property="ToolTipService.InitialShowDelay" Value="300"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Background" Value="{StaticResource ElevatedPurpleBrush}"/>
+                            <Setter Property="BorderBrush" Value="{StaticResource GoldDimBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter Property="Background" Value="{StaticResource GoldDimBrush}"/>
+                            <Setter Property="BorderBrush" Value="{StaticResource GoldBrush}"/>
+                            <Setter Property="Foreground" Value="#1A0D2E"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Foreground" Value="{StaticResource TextDisabledBrush}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style x:Key="LufiaToolRadio" TargetType="RadioButton" BasedOn="{StaticResource LufiaToolButton}"/>
+
+    <!-- Chip: a small on/off toggle (what to show, filters) -->
+    <Style x:Key="LufiaChip" TargetType="ToggleButton" BasedOn="{StaticResource LufiaToolButton}">
+        <Setter Property="Padding"  Value="9,2"/>
+        <Setter Property="Margin"   Value="0,0,4,0"/>
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="1" CornerRadius="10" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="BorderBrush" Value="{StaticResource GoldDimBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter Property="Background" Value="#4A3A7A"/>
+                            <Setter Property="BorderBrush" Value="{StaticResource GoldDimBrush}"/>
+                            <Setter Property="Foreground" Value="{StaticResource GoldLightBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="False">
+                            <Setter Property="Foreground" Value="{StaticResource TextDisabledBrush}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style x:Key="LufiaChipCheck" TargetType="CheckBox" BasedOn="{StaticResource LufiaChip}"/>
+
+    <!-- Search box: a text box with a placeholder (set Tag to the placeholder text) -->
+    <Style x:Key="LufiaSearchBox" TargetType="TextBox" BasedOn="{StaticResource LufiaTextBox}">
+        <Setter Property="FontFamily" Value="Segoe UI"/>
+        <Setter Property="Padding" Value="24,5,6,5"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TextBox">
+                    <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4">
+                        <Grid>
+                            <TextBlock Text="🔍" FontSize="11" Margin="7,0,0,0" VerticalAlignment="Center" Foreground="{StaticResource TextDisabledBrush}"/>
+                            <TextBlock x:Name="Placeholder" Text="{TemplateBinding Tag}" Margin="25,0,0,0" VerticalAlignment="Center"
+                                       Foreground="{StaticResource TextDisabledBrush}" FontStyle="Italic" Visibility="Collapsed" IsHitTestVisible="False"/>
+                            <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}" Padding="0" VerticalAlignment="Center"/>
+                        </Grid>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="Text" Value="">
+                            <Setter TargetName="Placeholder" Property="Visibility" Value="Visible"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Card and card header (the Patch Manager look) -->
+    <Style x:Key="LufiaCard" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource SurfacePurpleBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource BorderPurpleBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="6"/>
+        <Setter Property="Padding" Value="12,10"/>
+    </Style>
+    <Style x:Key="LufiaCardTitle" TargetType="TextBlock" BasedOn="{StaticResource LufiaLabelGold}">
+        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="Margin" Value="0,0,0,6"/>
+    </Style>
+
     <!-- ScrollBar -->
     <Style TargetType="ScrollBar">
         <Setter Property="Background" Value="{StaticResource MidPurpleBrush}"/>

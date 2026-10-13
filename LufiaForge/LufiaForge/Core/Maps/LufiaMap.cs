@@ -564,6 +564,57 @@ public sealed class LufiaMap
 
     /// <summary>Changes the map's size (town / dungeon maps): the layer keeps its top-left part, new cells get
     /// <paramref name="fill"/>. Objects outside the new size stay where they are (move them in the editor).</summary>
+    /// <summary>Everything the Map Editor changes before Apply (blocks, size, exits, arrival points, characters,
+    /// routes), copied: for its undo / redo.</summary>
+    public sealed class State
+    {
+        public int Width { get; init; }
+        public int Height { get; init; }
+        public ushort[] Layer { get; init; } = Array.Empty<ushort>();
+        public List<MapExit> Exits { get; init; } = new();
+        public List<MapArrival> Arrivals { get; init; } = new();
+        public List<MapNpc> Npcs { get; init; } = new();
+        public List<MovePath> Paths { get; init; } = new();
+
+        public bool SameAs(State o) =>
+            Width == o.Width && Height == o.Height && Layer.AsSpan().SequenceEqual(o.Layer) &&
+            Exits.Count == o.Exits.Count && Exits.Zip(o.Exits).All(p => Key(p.First) == Key(p.Second)) &&
+            Arrivals.Count == o.Arrivals.Count && Arrivals.Zip(o.Arrivals).All(p => Key(p.First) == Key(p.Second)) &&
+            Npcs.Count == o.Npcs.Count && Npcs.Zip(o.Npcs).All(p => Key(p.First) == Key(p.Second)) &&
+            Paths.Count == o.Paths.Count && Paths.Zip(o.Paths).All(p => Key(p.First) == Key(p.Second));
+
+        public static string Key(MapExit e) => $"{e.Index} {e.Arrival} {e.Flags} {e.DestMap} {e.Byte3} {e.X1} {e.Y1} {e.X2} {e.Y2}";
+        public static string Key(MapArrival a) => $"{a.Index} {a.Flags} {a.X} {a.Y}";
+        public static string Key(MapNpc n) => $"{n.Index} {n.Sprite} {n.Flags} {n.X} {n.Y} {n.BoxX1} {n.BoxY1} {n.BoxX2} {n.BoxY2}";
+        public static string Key(MovePath p) => $"{p.Flags} {p.StartX} {p.StartY} " + string.Join(",", p.Steps.Select(s => $"{s.Mode}/{s.DirByte}/{s.Tiles}"));
+    }
+
+    private static MapExit Copy(MapExit e) => new() { Index = e.Index, Arrival = e.Arrival, Flags = e.Flags, DestMap = e.DestMap, Byte3 = e.Byte3, X1 = e.X1, Y1 = e.Y1, X2 = e.X2, Y2 = e.Y2 };
+    private static MapArrival Copy(MapArrival a) => new() { Index = a.Index, Flags = a.Flags, X = a.X, Y = a.Y };
+    private static MapNpc Copy(MapNpc n) => new() { Index = n.Index, Sprite = n.Sprite, Flags = n.Flags, X = n.X, Y = n.Y, BoxX1 = n.BoxX1, BoxY1 = n.BoxY1, BoxX2 = n.BoxX2, BoxY2 = n.BoxY2 };
+    private static MovePath Copy(MovePath p)
+    {
+        var c = new MovePath { Flags = p.Flags, StartX = p.StartX, StartY = p.StartY };
+        foreach (var s in p.Steps) c.Steps.Add(new MoveStep { Mode = s.Mode, DirByte = s.DirByte, Tiles = s.Tiles });
+        return c;
+    }
+
+    public State Capture() => new()
+    {
+        Width = Width, Height = Height, Layer = (ushort[])Layer.Clone(),
+        Exits = Exits.Select(Copy).ToList(), Arrivals = Arrivals.Select(Copy).ToList(),
+        Npcs = Npcs.Select(Copy).ToList(), Paths = Paths.Select(Copy).ToList(),
+    };
+
+    public void Restore(State s)
+    {
+        Width = s.Width; Height = s.Height; Layer = (ushort[])s.Layer.Clone();
+        Exits.Clear(); Exits.AddRange(s.Exits.Select(Copy));
+        Arrivals.Clear(); Arrivals.AddRange(s.Arrivals.Select(Copy));
+        Npcs.Clear(); Npcs.AddRange(s.Npcs.Select(Copy));
+        Paths.Clear(); Paths.AddRange(s.Paths.Select(Copy));
+    }
+
     public void Resize(int width, int height, int fill)
     {
         if (IsWorld) throw new InvalidOperationException("The world map's size is fixed.");

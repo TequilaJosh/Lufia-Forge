@@ -103,7 +103,7 @@ public partial class MapEditorViewModel
             }
             if (TilesetChoice < 0 || TilesetChoice >= Tilesets.Count(_rom)) { Status = "Pick a tileset."; return; }
             _map.SetTilesetAndPalette(TilesetChoice, MapPalette);
-            HasUnappliedChanges = true;
+            MarkEdited();
             ApplyToRom();
         }
         catch (Exception ex) { Status = "Map settings: " + ex.Message; }
@@ -122,7 +122,7 @@ public partial class MapEditorViewModel
         {
             int t = Tilesets.Add(_rom, _map.Tileset);
             _map.SetTilesetAndPalette(t, _map.PaletteIndex);
-            HasUnappliedChanges = true;
+            MarkEdited();
             ApplyToRom();
             _mainVm?.NotifyRomModified($"New tileset {t}");
             Status = $"Tileset {t} made (a copy of the old one) and given to map {_map?.MapId:X2}. Edit it with Edit blocks.";
@@ -175,7 +175,7 @@ public partial class MapEditorViewModel
             }
             var n = _map.AddNpc(NpcSprite >= 0 ? NpcSprite : 0x0C, x, y);
             Status = $"Character {n.Index + 1} added (talking runs event {n.Index}; an empty one is made when you Apply). Drag it into place, then Apply.";
-            HasUnappliedChanges = true;
+            MarkEdited();
             RebuildOverlays();
             SelectNpc(n);
         }
@@ -190,7 +190,7 @@ public partial class MapEditorViewModel
         var n = _map.Npcs[sel.index];
         bool last = _map.Npcs.Count > 0 && _map.Npcs[^1] == n;
         _map.RemoveNpc(n);
-        HasUnappliedChanges = true;
+        MarkEdited();
         ClearSelection();
         RebuildOverlays();
         Status = last ? "Character removed (not yet applied)." : "Character hidden (it keeps its number so the others keep their events; not yet applied).";
@@ -202,7 +202,7 @@ public partial class MapEditorViewModel
         var n = _map.Npcs[sel.index];
         if (n.Sprite == value) return;
         n.Sprite = value;
-        HasUnappliedChanges = true;
+        MarkEdited();
         RebuildOverlays();
         Status = $"Character {sel.index + 1} now uses sprite {value:X2} (not yet applied).";
     }

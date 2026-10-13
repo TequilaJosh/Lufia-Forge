@@ -87,7 +87,6 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
     private LufiaMap? _map;
     private MapTileset? _tileset;
     private uint[]? _pixels;
-    private readonly Stack<List<(int x, int y, ushort before)>> _undo = new();
     private List<(int x, int y, ushort before)>? _stroke;
     private (string kind, int index)? _selection;
     private (int x, int y)? _dragStart;
@@ -322,10 +321,8 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
     [ObservableProperty] private int _npcY;
 
     private const string SelectHint =
-        "With Select / move: click a character (yellow), exit (red), arrival point (cyan) or treasure (gold = chest, " +
-        "pink = hidden item) to edit it here — exits: where they lead and their size; arrival points: their position. " +
-        "Drag to move. When things overlap, click the same block again to pick the next one. Ctrl + click picks a block " +
-        "for painting. Exits leading to \"this map (00)\" are doors/stairs inside the map; the dotted line shows where each goes.";
+        "Click something on the map to edit it here: a character (yellow), exit (red), arrival point (cyan) or treasure " +
+        "(gold = chest, pink = hidden item).";
 
     public bool IsSelectTool { get => Tool == MapTool.Select; set { if (value) Tool = MapTool.Select; } }
     public bool IsPaintTool  { get => Tool == MapTool.Paint;  set { if (value) Tool = MapTool.Paint; } }
@@ -340,6 +337,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
         OnPropertyChanged(nameof(IsAddExitTool));
         OnPropertyChanged(nameof(IsAddArrivalTool));
         OnPropertyChanged(nameof(IsAreaTool));
+        OnPropertyChanged(nameof(ToolHint));
         if (value != MapTool.Paint) CancelStamp();
         if (value == MapTool.Area) Status = "Area: drag a rectangle of blocks, then Copy / Cut / Fill (or Ctrl+C, Ctrl+X, Del). Paste (Ctrl+V) stamps copied blocks.";
         if (value == MapTool.AddExit) Status = "Add exit: drag a rectangle on the map where the party should leave.";
@@ -416,7 +414,6 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
         ClearSelection();
         CancelStamp();
         ClearAreaSelection();
-        _undo.Clear();
         HasUnappliedChanges = false;
         try
         {
@@ -439,6 +436,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
                          $"data resource {_map.ResourceId:X3} at 0x{_map.CompressedOffset:X6} ({_map.CompressedSize} bytes packed)";
             RebuildOverlays();
             RefreshMapSettings();
+            StartHistory();
             Status = "Loaded. Select tool: click objects. Paint tool: paint the chosen block. Pick tool: copy a block from the map.";
         }
         catch (Exception ex)
@@ -691,6 +689,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
     public void OnMouseDown(double px, double py, bool ctrl = false)
     {
         if (_map == null) return;
+        _inGesture = true;
         int x = (int)(px / 16), y = (int)(py / 16);
         if (x < 0 || y < 0 || x >= _map.Width || y >= _map.Height) return;
         if (ShowZones && IsWorldMap)
@@ -724,7 +723,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
             case MapTool.AddExit:
             {
                 var e = _map.AddExit(x, y, x + 1, y + 1, 0, 0);
-                HasUnappliedChanges = true;
+                MarkEdited();
                 SelectExit(e, focusLinked: false);
                 _dragStart = (x, y); _dragAnchor = (x, y); _dragMode = "new-exit"; _dragMoved = false;
                 break;
@@ -732,7 +731,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
             case MapTool.AddArrival:
             {
                 var a = _map.AddArrival(x, y);
-                HasUnappliedChanges = true;
+                MarkEdited();
                 Tool = MapTool.Select;
                 SelectArrival(a, focusLinked: false);
                 Status = $"Added arrival point A{a.Index} at ({x}, {y}). Exits can now lead here.";
@@ -764,8 +763,9 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
     {
         AreaUp();
         _picking = false;
-        if (_stroke is { Count: > 0 }) _undo.Push(_stroke);
         _stroke = null;
+        _inGesture = false;
+        Checkpoint();
         bool clickedNpc = _dragStart != null && !_dragMoved && _dragMode == "npc";
         if (_dragMode == "new-exit")
         {
@@ -863,7 +863,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
         _stroke.Add((x, y, before));
         _map.SetTile(x, y, Brush);
         RedrawBlock(x, y);
-        HasUnappliedChanges = true;
+        MarkEdited();
     }
 
     private void RedrawBlock(int x, int y)
@@ -873,19 +873,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
         MapImage.WritePixels(new Int32Rect(x * 16, y * 16, 16, 16), px, 64, 0);
     }
 
-    [RelayCommand]
-    private void Undo()
-    {
-        if (_map == null || _undo.Count == 0) return;
-        var stroke = _undo.Pop();
-        for (int i = stroke.Count - 1; i >= 0; i--)
-        {
-            var (x, y, before) = stroke[i];
-            _map.Layer[y * _map.Width + x] = before;
-            RedrawBlock(x, y);
-        }
-        Status = $"Undid {stroke.Count} block change(s).";
-    }
+
 
     // ── Selection ──────────────────────────────────────────────────────────
 
@@ -1061,7 +1049,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
         _populating = true;
         NpcX = n.X; NpcY = n.Y;
         _populating = false;
-        HasUnappliedChanges = true;
+        MarkEdited();
         RebuildOverlays();
     }
 
@@ -1077,7 +1065,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
         int dx = x - n.X, dy = y - n.Y;
         n.X = x; n.Y = y;
         n.BoxX1 += dx; n.BoxX2 += dx; n.BoxY1 += dy; n.BoxY2 += dy;
-        HasUnappliedChanges = true;
+        MarkEdited();
         RebuildOverlays();
     }
 
@@ -1155,7 +1143,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
         int w = Math.Clamp(ExitW, 1, _map.Width - x), h = Math.Clamp(ExitH, 1, _map.Height - y);
         if (e.X1 == x && e.Y1 == y && e.X2 == x + w && e.Y2 == y + h) return;
         e.X1 = x; e.Y1 = y; e.X2 = x + w; e.Y2 = y + h;
-        HasUnappliedChanges = true;
+        MarkEdited();
         RebuildOverlays();
     }
 
@@ -1180,7 +1168,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
         _populating = true;
         ExitX = e.X1; ExitY = e.Y1; ExitW = e.X2 - e.X1; ExitH = e.Y2 - e.Y1;
         _populating = false;
-        HasUnappliedChanges = true;
+        MarkEdited();
         RebuildOverlays();
     }
 
@@ -1194,7 +1182,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
         _populating = true;
         ArrivalX = x; ArrivalY = y;
         _populating = false;
-        HasUnappliedChanges = true;
+        MarkEdited();
         RebuildOverlays();
     }
 
@@ -1208,7 +1196,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
         int x = Math.Clamp(ArrivalX, 0, _map.Width - 1), y = Math.Clamp(ArrivalY, 0, _map.Height - 1);
         if (a.X == x && a.Y == y) return;
         a.X = x; a.Y = y;
-        HasUnappliedChanges = true;
+        MarkEdited();
         RebuildOverlays();
     }
 
@@ -1219,7 +1207,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
         if (_selection is { kind: "exit" } se && se.index < _map.Exits.Count)
         {
             _map.RemoveExit(_map.Exits[se.index]);
-            HasUnappliedChanges = true;
+            MarkEdited();
             ClearSelection();
             RebuildOverlays();
             Status = "Exit deleted (exits after it were renumbered). Apply to ROM to keep the change.";
@@ -1236,7 +1224,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
             if (inc.Count > 0 && MessageBox.Show($"{inc.Count} exit(s) lead to this arrival point. Delete it anyway?", "Delete arrival point",
                     MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
             _map.RemoveArrival(a);
-            HasUnappliedChanges = true;
+            MarkEdited();
             ClearSelection();
             RebuildOverlays();
             Status = "Arrival point deleted. Apply to ROM to keep the change.";
@@ -1290,7 +1278,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
         }
         exit.DestMap = dest;
         exit.Arrival = arrival;
-        HasUnappliedChanges = true;
+        MarkEdited();
         _links = MapLinks.Build(_rom, Maps.Select(m => m.MapId));
         SelectExit(exit, focusLinked: dest == 0);
         Status = $"Exit E{exit.Index} now leads to {ExitTargetText(exit)}. Apply to ROM to keep the change.";
@@ -1311,7 +1299,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
         int dest = Math.Clamp(ExitDestMap, 0, 255), arr = Math.Clamp(ExitArrival, 0, 255);
         if (e.DestMap == dest && e.Arrival == arr) return;
         e.DestMap = dest; e.Arrival = arr;
-        HasUnappliedChanges = true;
+        MarkEdited();
         RebuildOverlays();
         SelectionDetails =
             $"Area ({e.X1},{e.Y1}) to ({e.X2 - 1},{e.Y2 - 1})   type {e.Flags >> 4:X}\n" +
