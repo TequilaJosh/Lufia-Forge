@@ -49,6 +49,23 @@ public partial class BlockEditorWindow : Window
         return bmp;
     }
 
+    /// <summary>A selection frame that shows on any colours: <paramref name="gold"/> pixels of gold with a black line
+    /// on each side, around the cell at (x, y) of the given size (spilling into the grid gap and its neighbours).</summary>
+    private static void Outline(uint[] px, int w, int h, int x, int y, int size, int gold)
+    {
+        void Ring(int d, uint c)
+        {
+            int x1 = x - d, y1 = y - d, x2 = x + size - 1 + d, y2 = y + size - 1 + d;
+            void P(int px_, int py_) { if (px_ >= 0 && py_ >= 0 && px_ < w && py_ < h) px[py_ * w + px_] = c; }
+            for (int i = x1; i <= x2; i++) { P(i, y1); P(i, y2); }
+            for (int i = y1; i <= y2; i++) { P(x1, i); P(x2, i); }
+        }
+        int outer = gold / 2 + 1;   // gold rings straddle the cell edge
+        Ring(outer, 0xFF000000);
+        for (int d = outer - 1; d > outer - 1 - gold; d--) Ring(d, 0xFFFFD700);
+        Ring(outer - 1 - gold, 0xFF000000);
+    }
+
     private void DrawBlocks()
     {
         int n = _set.BlockCount, rows = (n + BlocksAcross - 1) / BlocksAcross, cell = 16 * BlockZoom + 1;
@@ -62,13 +79,8 @@ public partial class BlockEditorWindow : Window
             for (int y = 0; y < 16 * BlockZoom; y++)
                 for (int x = 0; x < 16 * BlockZoom; x++)
                     px[(oy + y) * w + ox + x] = bp[y / BlockZoom * 16 + x / BlockZoom];
-            if (b == _block)
-                for (int i = 0; i < 16 * BlockZoom; i++)
-                {
-                    px[oy * w + ox + i] = px[(oy + 16 * BlockZoom - 1) * w + ox + i] = 0xFFFFD700;
-                    px[(oy + i) * w + ox] = px[(oy + i) * w + ox + 16 * BlockZoom - 1] = 0xFFFFD700;
-                }
         }
+        Outline(px, w, h, _block % BlocksAcross * cell, _block / BlocksAcross * cell, 16 * BlockZoom, 3);
         BlocksImage.Source = Bitmap(px, w, h);
         BlocksHeader.Text = $"BLOCKS ({n})";
     }
@@ -90,13 +102,8 @@ public partial class BlockEditorWindow : Window
                     int ci = ti[y / TileZoom * 8 + x / TileZoom];
                     px[(oy + y) * w + ox + x] = ci == 0 ? 0xFF000000u : _set.Argb(_sheetRow * 16 + ci);
                 }
-            if (t == cur)
-                for (int i = 0; i < 8 * TileZoom; i++)
-                {
-                    px[oy * w + ox + i] = px[(oy + 8 * TileZoom - 1) * w + ox + i] = 0xFFFFD700;
-                    px[(oy + i) * w + ox] = px[(oy + i) * w + ox + 8 * TileZoom - 1] = 0xFFFFD700;
-                }
         }
+        if (cur < n) Outline(px, w, h, cur % 16 * cell, cur / 16 * cell, 8 * TileZoom, 3);
         TilesImage.Source = Bitmap(px, w, h);
     }
 
@@ -107,11 +114,7 @@ public partial class BlockEditorWindow : Window
         var big = new uint[64 * 64];
         for (int y = 0; y < 64; y++) for (int x = 0; x < 64; x++) big[y * 64 + x] = bp[y / 4 * 16 + x / 4];
         var (qx, qy) = BlockSet.Quadrants[_quarter];
-        for (int i = 0; i < 32; i++)
-        {
-            big[qy * 32 * 64 + qx * 32 + i] = big[(qy * 32 + 31) * 64 + qx * 32 + i] = 0xFFFFD700;
-            big[(qy * 32 + i) * 64 + qx * 32] = big[(qy * 32 + i) * 64 + qx * 32 + 31] = 0xFFFFD700;
-        }
+        Outline(big, 64, 64, qx * 32, qy * 32, 32, 2);
         BlockImage.Source = Bitmap(big, 64, 64);
         ushort w = _set.Word(_block, _quarter);
         string[] names = { "top-left", "bottom-left", "top-right", "bottom-right" };
