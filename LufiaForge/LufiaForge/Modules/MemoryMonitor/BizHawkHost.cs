@@ -112,7 +112,20 @@ public sealed class BizHawkHost : IDisposable
             Dock      = DockStyle.Fill,
             BackColor = System.Drawing.Color.FromArgb(18, 12, 28),
         };
-        _hostPanel.Resize += (_, _) => ResizeBizHawk();
+        _hostPanel.Resize += (_, _) => { ResizeBizHawk(); _hostPanel.Invalidate(); };
+        // while no BizHawk is docked here, say how to get one
+        _hostPanel.Paint += (_, e) =>
+        {
+            if (IsRunning && !IsUndocked) return;
+            string text = IsUndocked
+                ? "BizHawk is in its own window.\nClick Dock to bring it back here."
+                : "BizHawk isn't docked here.\n\nClick Launch BizHawk to play the open ROM in this space,\nwith Lufia Forge's live memory view on the right.\n\nA BizHawk you started yourself stays in its own window;\nits memory still shows on the right.";
+            using var font = new System.Drawing.Font("Segoe UI", 11f);
+            using var brush = new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(150, 140, 175));
+            var r = _hostPanel.ClientRectangle;
+            using var fmt = new System.Drawing.StringFormat { Alignment = System.Drawing.StringAlignment.Center, LineAlignment = System.Drawing.StringAlignment.Center };
+            e.Graphics.DrawString(text, font, brush, r, fmt);
+        };
         return _hostPanel;
     }
 
@@ -193,7 +206,7 @@ public sealed class BizHawkHost : IDisposable
         _process.Exited += (_, _) =>
         {
             _bizHawkHwnd = IntPtr.Zero;
-            try { _hostPanel?.Invoke(() => Exited?.Invoke()); } catch { }
+            try { _hostPanel?.Invoke(() => { _hostPanel.Invalidate(); Exited?.Invoke(); }); } catch { }
         };
 
         StatusChanged?.Invoke("Waiting for BizHawk window...");
@@ -246,7 +259,7 @@ public sealed class BizHawkHost : IDisposable
                     _process.Exited += (_, _) =>
                     {
                         _bizHawkHwnd = IntPtr.Zero;
-                        try { _hostPanel?.Invoke(() => Exited?.Invoke()); } catch { }
+                        try { _hostPanel?.Invoke(() => { _hostPanel.Invalidate(); Exited?.Invoke(); }); } catch { }
                     };
 
                     return true;
@@ -264,7 +277,7 @@ public sealed class BizHawkHost : IDisposable
                     _process.Exited += (_, _) =>
                     {
                         _bizHawkHwnd = IntPtr.Zero;
-                        try { _hostPanel?.Invoke(() => Exited?.Invoke()); } catch { }
+                        try { _hostPanel?.Invoke(() => { _hostPanel.Invalidate(); Exited?.Invoke(); }); } catch { }
                     };
 
                     return true;
@@ -340,7 +353,7 @@ public sealed class BizHawkHost : IDisposable
                      SWP_SHOWWINDOW);
 
         IsUndocked = true;
-        DockStateChanged?.Invoke(true);
+        DockStateChanged?.Invoke(true); _hostPanel?.Invalidate();
         StatusChanged?.Invoke("BizHawk undocked — floating window active.");
     }
 
@@ -358,7 +371,7 @@ public sealed class BizHawkHost : IDisposable
         ReparentWindow();
 
         IsUndocked = false;
-        DockStateChanged?.Invoke(false);
+        DockStateChanged?.Invoke(false); _hostPanel?.Invalidate();
         StatusChanged?.Invoke("BizHawk re-docked.");
     }
 

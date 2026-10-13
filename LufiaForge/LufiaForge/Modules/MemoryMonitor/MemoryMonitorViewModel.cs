@@ -26,8 +26,8 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool   _isConnected;
     [ObservableProperty] private bool   _isBizHawkRunning;
     [ObservableProperty] private bool   _isBizHawkUndocked;
-    [ObservableProperty] private string _connectionStatus = "Waiting for BizHawk...";
-    [ObservableProperty] private string _hexText = "  Waiting for BizHawk connection...";
+    [ObservableProperty] private string _connectionStatus = "BizHawk isn't connected: click Launch BizHawk.";
+    [ObservableProperty] private string _hexText = "  The game's memory shows here while BizHawk runs the ROM\n  (with the Lufia Forge tool open in BizHawk: Tools > External Tools).";
     [ObservableProperty] private int    _hexOffset;
     [ObservableProperty] private string _frameInfo = "";
     [ObservableProperty] private string _searchValueText = "";

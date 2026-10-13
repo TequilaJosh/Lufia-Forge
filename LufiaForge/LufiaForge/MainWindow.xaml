@@ -160,13 +160,28 @@ Title="{Binding WindowTitle}"
                     SelectedIndex="{Binding SelectedTabIndex}"
                     Background="Transparent">
 
-            <!-- Memory Monitor (always available, default tab) -->
-            <TabItem Header="🔗  Memory Monitor" Style="{StaticResource LufiaTabItem}">
-                <mm:MemoryMonitorView x:Name="MemoryMonitorView">
-                    <mm:MemoryMonitorView.DataContext>
-                        <mm:MemoryMonitorViewModel/>
-                    </mm:MemoryMonitorView.DataContext>
-                </mm:MemoryMonitorView>
+            <TabItem Header="🗺  Map Editor"    Style="{StaticResource LufiaTabItem}">
+                <me:MapEditorView x:Name="MapEditorView">
+                    <me:MapEditorView.DataContext>
+                        <me:MapEditorViewModel/>
+                    </me:MapEditorView.DataContext>
+                </me:MapEditorView>
+            </TabItem>
+
+            <TabItem Header="💬  Events"         Style="{StaticResource LufiaTabItem}">
+                <ev:EventsView x:Name="EventsView">
+                    <ev:EventsView.DataContext>
+                        <ev:EventsViewModel/>
+                    </ev:EventsView.DataContext>
+                </ev:EventsView>
+            </TabItem>
+
+            <TabItem Header="🎬  Cutscenes"     Style="{StaticResource LufiaTabItem}">
+                <cs:CutscenesView x:Name="CutscenesView">
+                    <cs:CutscenesView.DataContext>
+                        <cs:CutscenesViewModel/>
+                    </cs:CutscenesView.DataContext>
+                </cs:CutscenesView>
             </TabItem>
 
             <TabItem Header="📝  Text Editor" Style="{StaticResource LufiaTabItem}">
@@ -185,28 +200,20 @@ Title="{Binding WindowTitle}"
                 </gd:GameDataView>
             </TabItem>
 
-            <TabItem Header="🎬  Cutscenes"     Style="{StaticResource LufiaTabItem}">
-                <cs:CutscenesView x:Name="CutscenesView">
-                    <cs:CutscenesView.DataContext>
-                        <cs:CutscenesViewModel/>
-                    </cs:CutscenesView.DataContext>
-                </cs:CutscenesView>
+            <TabItem Header="🔧  Patch Manager" Style="{StaticResource LufiaTabItem}">
+                <pm:PatchManagerView x:Name="PatchManagerView">
+                    <pm:PatchManagerView.DataContext>
+                        <pm:PatchManagerViewModel/>
+                    </pm:PatchManagerView.DataContext>
+                </pm:PatchManagerView>
             </TabItem>
 
-            <TabItem Header="🗺  Map Editor"    Style="{StaticResource LufiaTabItem}">
-                <me:MapEditorView x:Name="MapEditorView">
-                    <me:MapEditorView.DataContext>
-                        <me:MapEditorViewModel/>
-                    </me:MapEditorView.DataContext>
-                </me:MapEditorView>
-            </TabItem>
-
-            <TabItem Header="💬  Events"         Style="{StaticResource LufiaTabItem}">
-                <ev:EventsView x:Name="EventsView">
-                    <ev:EventsView.DataContext>
-                        <ev:EventsViewModel/>
-                    </ev:EventsView.DataContext>
-                </ev:EventsView>
+            <TabItem Header="🔗  Memory Monitor" Style="{StaticResource LufiaTabItem}">
+                <mm:MemoryMonitorView x:Name="MemoryMonitorView">
+                    <mm:MemoryMonitorView.DataContext>
+                        <mm:MemoryMonitorViewModel/>
+                    </mm:MemoryMonitorView.DataContext>
+                </mm:MemoryMonitorView>
             </TabItem>
 
             <TabItem Header="⚙  Disassembler"  Style="{StaticResource LufiaTabItem}">
@@ -215,14 +222,6 @@ Title="{Binding WindowTitle}"
                         <dis:DisassemblerViewModel/>
                     </dis:DisassemblerView.DataContext>
                 </dis:DisassemblerView>
-            </TabItem>
-
-            <TabItem Header="🩹  Patch Manager" Style="{StaticResource LufiaTabItem}">
-                <pm:PatchManagerView x:Name="PatchManagerView">
-                    <pm:PatchManagerView.DataContext>
-                        <pm:PatchManagerViewModel/>
-                    </pm:PatchManagerView.DataContext>
-                </pm:PatchManagerView>
             </TabItem>
 
             <TabItem Header="🔍  ROM Info"      Style="{StaticResource LufiaTabItem}">
@@ -259,6 +258,48 @@ Title="{Binding WindowTitle}"
             </TabItem>
 
         </TabControl>
+
+
+        <!-- ============================================================
+             WELCOME (no ROM open yet)
+             ============================================================ -->
+        <Grid Grid.Row="3" Background="{StaticResource MidPurpleBrush}"
+              Visibility="{Binding ShowWelcome, Converter={StaticResource BoolToVisibilityConverter}}">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24" MaxWidth="900">
+                    <TextBlock Text="⚔" FontSize="40" Foreground="{StaticResource GoldBrush}" HorizontalAlignment="Center"/>
+                    <TextBlock Text="Welcome to Lufia Forge" Style="{StaticResource LufiaLabelGold}" FontSize="24" HorizontalAlignment="Center" Margin="0,4,0,6"/>
+                    <TextBlock Text="An editor for Lufia &amp; the Fortress of Doom (USA). Open your ROM to start: your edits are saved to a new dated copy, the ROM you open is never changed."
+                               Style="{StaticResource LufiaLabel}" FontSize="13" TextWrapping="Wrap" TextAlignment="Center" MaxWidth="620" HorizontalAlignment="Center"/>
+                    <Button Content="📂  Open a ROM…" Style="{StaticResource LufiaButtonGold}" FontSize="15" Padding="26,10" Margin="0,18,0,6"
+                            HorizontalAlignment="Center" Command="{Binding OpenRomCommand}"/>
+                    <TextBlock Text="(.sfc or .smc; Restored and Recolor ROMs work too)" Style="{StaticResource LufiaLabel}" HorizontalAlignment="Center" Margin="0,0,0,22"/>
+
+                    <ItemsControl HorizontalAlignment="Center">
+                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="3"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                        <ItemsControl.Resources>
+                            <Style x:Key="WelcomeCard" TargetType="Border" BasedOn="{StaticResource LufiaCard}">
+                                <Setter Property="Margin" Value="6"/>
+                                <Setter Property="Width" Value="270"/>
+                            </Style>
+                        </ItemsControl.Resources>
+                        <Border Style="{StaticResource WelcomeCard}"><StackPanel><TextBlock Text="🗺  Map Editor" Style="{StaticResource LufiaCardTitle}"/><TextBlock Style="{StaticResource LufiaLabel}" TextWrapping="Wrap" Text="Paint maps, move characters, exits and arrival points, set treasure, make new maps."/></StackPanel></Border>
+                        <Border Style="{StaticResource WelcomeCard}"><StackPanel><TextBlock Text="💬  Events and 🎬 Cutscenes" Style="{StaticResource LufiaCardTitle}"/><TextBlock Style="{StaticResource LufiaLabel}" TextWrapping="Wrap" Text="What characters say and do, story flags, and the scenes on a timeline."/></StackPanel></Border>
+                        <Border Style="{StaticResource WelcomeCard}"><StackPanel><TextBlock Text="📝  Text Editor" Style="{StaticResource LufiaCardTitle}"/><TextBlock Style="{StaticResource LufiaLabel}" TextWrapping="Wrap" Text="Every dialogue box in the game, searchable, with a preview."/></StackPanel></Border>
+                        <Border Style="{StaticResource WelcomeCard}"><StackPanel><TextBlock Text="⚔  Game Data" Style="{StaticResource LufiaCardTitle}"/><TextBlock Style="{StaticResource LufiaLabel}" TextWrapping="Wrap" Text="Characters, items, shops, spells, monsters, encounters, music, palettes, graphics."/></StackPanel></Border>
+                        <Border Style="{StaticResource WelcomeCard}"><StackPanel><TextBlock Text="🔧  Patch Manager" Style="{StaticResource LufiaCardTitle}"/><TextBlock Style="{StaticResource LufiaLabel}" TextWrapping="Wrap" Text="One-click fixes and features, fan patches (Restored, Recolor), fonts and IPS patches."/></StackPanel></Border>
+                        <Border Style="{StaticResource WelcomeCard}"><StackPanel><TextBlock Text="🔗  Memory Monitor" Style="{StaticResource LufiaCardTitle}"/><TextBlock Style="{StaticResource LufiaLabel}" TextWrapping="Wrap" Text="Play in BizHawk next to the editor and watch the game's memory live."/></StackPanel></Border>
+                    </ItemsControl>
+
+                    <TextBlock HorizontalAlignment="Center" Margin="0,18,0,0" Style="{StaticResource LufiaLabel}">
+                        <Hyperlink Command="{Binding DismissWelcomeCommand}" Foreground="{StaticResource GoldLightBrush}">Continue without a ROM</Hyperlink>
+                        <Run Text="  (the Memory Monitor and BizHawk work without one)"/>
+                    </TextBlock>
+                    <TextBlock Text="Tip: Edit &gt; Undo (Ctrl+Z) takes back any change, in any tab; Edit &gt; History jumps back several at once."
+                               Style="{StaticResource LufiaLabel}" HorizontalAlignment="Center" Margin="0,10,0,0" Foreground="{StaticResource TextDisabledBrush}"/>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
 
         <!-- ============================================================
              STATUS BAR
