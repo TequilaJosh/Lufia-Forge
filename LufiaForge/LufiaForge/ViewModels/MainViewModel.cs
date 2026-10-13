@@ -15,6 +15,7 @@ public partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsRomLoaded))]
+    [NotifyPropertyChangedFor(nameof(ShowWelcome))]
     [NotifyPropertyChangedFor(nameof(WindowTitle))]
     private RomBuffer? _romBuffer;
 
@@ -24,6 +25,14 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private int    _selectedTabIndex = 0;
 
     public bool IsRomLoaded => RomBuffer != null;
+
+    /// <summary>The welcome screen: shown until a ROM is opened (or it's closed to use BizHawk without one).</summary>
+    [ObservableProperty] private bool _welcomeDismissed;
+    public bool ShowWelcome => !IsRomLoaded && !WelcomeDismissed;
+    partial void OnWelcomeDismissedChanged(bool value) => OnPropertyChanged(nameof(ShowWelcome));
+
+    [RelayCommand]
+    private void DismissWelcome() => WelcomeDismissed = true;
 
     /// <summary>Every change written to the ROM, from any tab (Edit > Undo / Redo, Ctrl+Z / Ctrl+Y).</summary>
     public RomHistory History { get; } = new();

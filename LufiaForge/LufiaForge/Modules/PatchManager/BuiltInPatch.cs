@@ -16,7 +16,7 @@ public partial class BuiltInPatch : ObservableObject
     public string Category { get; init; } = "Other";
     /// <summary>One line for the card; the description is under Details.</summary>
     public string Summary { get; init; } = "";
-    public string Icon { get; init; } = "🩹";
+    public string Icon { get; init; } = "🔧";
     /// <summary>Who made it (community patches), shown on the card.</summary>
     public string Credit { get; init; } = "";
     /// <summary>False for patches that don't put code in the added space (no 2 MB expansion first).</summary>
