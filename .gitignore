@@ -41,6 +41,7 @@ desktop.ini
 *.smc
 *.sfc
 *.ips
+!LufiaForge/LufiaForge/Patches/*.ips
 
 # Claude Code
 .claude/
