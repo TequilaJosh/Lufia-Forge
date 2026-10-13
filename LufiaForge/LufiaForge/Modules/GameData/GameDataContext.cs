@@ -129,6 +129,30 @@ public abstract partial class GameDataEditorBase : ObservableObject
         OnRomLoaded();
     }
 
+    /// <summary>Attaches to a reloaded ROM (after undo / redo) keeping the record that was selected: an int
+    /// SelectedIndex, or a selected list entry found again by its text.</summary>
+    public void Reattach(GameDataContext ctx)
+    {
+        var props = GetType().GetProperties().Where(p => p.CanRead && p.CanWrite && p.Name.StartsWith("Selected") && p.GetIndexParameters().Length == 0).ToList();
+        var kept = props.Select(p => (p, v: p.GetValue(this))).ToList();
+        Attach(ctx);
+        foreach (var (p, v) in kept)
+        {
+            try
+            {
+                if (v is int or bool) { if (!Equals(p.GetValue(this), v)) p.SetValue(this, v); continue; }
+                if (v == null) continue;
+                string text = v.ToString() ?? "";
+                var match = GetType().GetProperties()
+                    .Where(q => q.GetIndexParameters().Length == 0 && typeof(System.Collections.IEnumerable).IsAssignableFrom(q.PropertyType) && q.PropertyType != typeof(string))
+                    .SelectMany(q => (q.GetValue(this) as System.Collections.IEnumerable)?.Cast<object>() ?? Enumerable.Empty<object>())
+                    .FirstOrDefault(o => o != null && p.PropertyType.IsInstanceOfType(o) && o.ToString() == text);
+                if (match != null) p.SetValue(this, match);
+            }
+            catch { }
+        }
+    }
+
     /// <summary>Build record lists and load the first record.</summary>
     protected abstract void OnRomLoaded();
 

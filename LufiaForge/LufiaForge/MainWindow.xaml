@@ -54,6 +54,26 @@ Title="{Binding WindowTitle}"
                 <MenuItem Header="Exit" Command="{Binding ExitCommand}" Foreground="Black"/>
             </MenuItem>
 
+            <MenuItem Header="_Edit" Foreground="{StaticResource TextPrimaryBrush}">
+                <MenuItem Header="{Binding UndoText}" Command="{Binding UndoCommand}" InputGestureText="Ctrl+Z" Foreground="Black"/>
+                <MenuItem Header="{Binding RedoText}" Command="{Binding RedoCommand}" InputGestureText="Ctrl+Y" Foreground="Black"/>
+                <Separator Style="{StaticResource LufiaSeparator}"/>
+                <MenuItem Header="History (click a step to go back to it)" ItemsSource="{Binding HistoryEntries}" Foreground="Black"
+                          IsEnabled="{Binding IsRomLoaded}">
+                    <MenuItem.ItemContainerStyle>
+                        <Style TargetType="MenuItem">
+                            <Setter Property="Header" Value="{Binding Text}"/>
+                            <Setter Property="Foreground" Value="Black"/>
+                            <Setter Property="Command" Value="{Binding DataContext.GoToHistoryCommand, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                            <Setter Property="CommandParameter" Value="{Binding}"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsDone}" Value="False"><Setter Property="Foreground" Value="Gray"/></DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </MenuItem.ItemContainerStyle>
+                </MenuItem>
+            </MenuItem>
+
             <MenuItem Header="_Help" Foreground="{StaticResource TextPrimaryBrush}">
                 <MenuItem Header="Check for Updates..." Click="CheckUpdatesMenuItem_Click" Foreground="Black"/>
                 <MenuItem Header="About &amp; Thanks" Click="AboutMenuItem_Click" Foreground="Black"/>
@@ -99,6 +119,13 @@ Title="{Binding WindowTitle}"
                         Style="{StaticResource LufiaButton}"
                         Command="{Binding SaveRomAsCommand}"
                         Margin="0,0,8,0"/>
+
+                <Separator Style="{StaticResource LufiaSeparator}" Margin="8,0,16,0"/>
+
+                <Button Content="↶  Undo" Style="{StaticResource LufiaButton}" Command="{Binding UndoCommand}" Margin="0,0,8,0"
+                        ToolTip="{Binding UndoText}" ToolTipService.ShowOnDisabled="True"/>
+                <Button Content="↷  Redo" Style="{StaticResource LufiaButton}" Command="{Binding RedoCommand}" Margin="0,0,8,0"
+                        ToolTip="{Binding RedoText}" ToolTipService.ShowOnDisabled="True"/>
 
                 <!-- ROM info chip -->
                 <Border Background="{StaticResource MidPurpleBrush}"

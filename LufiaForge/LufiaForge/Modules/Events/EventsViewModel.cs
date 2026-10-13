@@ -86,6 +86,8 @@ public partial class EventsViewModel : ObservableObject, IEventHost
 
     public void SetRom(RomBuffer rom, MainViewModel mainVm)
     {
+        // the same ROM again (undo / redo): stay on the map that was open
+        int? keepMap = ReferenceEquals(rom, _rom) ? SelectedMap?.MapId : null;
         _rom = rom; _mainVm = mainVm;
         Maps.Clear();
         foreach (var m in MapCatalog.ScanNamed(rom)) Maps.Add(m);
@@ -96,7 +98,7 @@ public partial class EventsViewModel : ObservableObject, IEventHost
         BuildFlagIndex();
         LiveFlags.SetRom(rom);
         Status = $"{Maps.Count} maps, {Flags.Count} story flags in use. Pick a map, then an event.";
-        SelectedMap = Maps.FirstOrDefault(m => m.MapId == 0x04) ?? Maps.FirstOrDefault();
+        SelectedMap = Maps.FirstOrDefault(m => m.MapId == (keepMap ?? 0x04)) ?? Maps.FirstOrDefault();
     }
 
     partial void OnSelectedMapChanged(MapInfo? value) => BuildList();
