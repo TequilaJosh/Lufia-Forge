@@ -28,10 +28,12 @@ public static class IpsHandler
     /// The original RomBuffer is NOT modified.
     /// Returns the patched bytes.
     /// </summary>
-    public static byte[] ApplyPatch(RomBuffer rom, string patchPath)
+    public static byte[] ApplyPatch(RomBuffer rom, string patchPath) => ApplyPatch(rom.ToArray(), File.ReadAllBytes(patchPath));
+
+    /// <summary>Apply IPS patch bytes to a ROM image; returns the patched copy (the image passed in is not changed).</summary>
+    public static byte[] ApplyPatch(byte[] rom, byte[] patchData)
     {
-        byte[] patchData = File.ReadAllBytes(patchPath);
-        byte[] romCopy   = rom.ToArray();
+        byte[] romCopy   = (byte[])rom.Clone();
 
         ValidateMagic(patchData);
 

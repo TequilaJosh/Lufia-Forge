@@ -23,6 +23,9 @@ public partial class PatchManagerViewModel : ObservableObject
 
     /// <summary>Fixes and features Lufia Forge adds with one click.</summary>
     public List<BuiltInPatch> BuiltInPatches { get; } = BuiltInPatch.All();
+    /// <summary>The patches grouped for the cards (in this order).</summary>
+    public List<PatchGroup> PatchGroups => new[] { "Community", "Battle", "Magic", "Items", "Events", "Testing", "Other" }
+        .Select(c => new PatchGroup(c == "Community" ? "Community patches (by fans, built in)" : c, BuiltInPatches.Where(p => p.Category == c).ToList())).Where(g => g.Patches.Count > 0).ToList();
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasRecords))]
@@ -54,7 +57,10 @@ public partial class PatchManagerViewModel : ObservableObject
     {
         if (_rom == null || patch == null) return;
         bool adding = !patch.IsApplied(_rom);
-        if (adding && _rom.Length < Core.Maps.MapWriter.ExpandedSize &&
+        if (adding && patch.ConfirmText != null &&
+            MessageBox.Show(patch.ConfirmText, patch.Name, MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+            return;
+        if (adding && patch.NeedsExpandedRom && _rom.Length < Core.Maps.MapWriter.ExpandedSize &&
             MessageBox.Show($"\"{patch.Name}\" adds a small routine to the expanded part of the ROM. Expand the ROM to 2 MB (the game plays the same)?",
                 "Expand ROM?", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
         { StatusText = "Not added: the ROM wasn't expanded."; return; }
@@ -62,6 +68,7 @@ public partial class PatchManagerViewModel : ObservableObject
         {
             if (adding) patch.Apply(_rom); else patch.Remove!(_rom);
             _mainVm?.NotifyRomModified((adding ? "Added: " : "Removed: ") + patch.Name);
+            if (patch.ReloadsAll) _mainVm?.ReloadModules();
             StatusText = (adding ? "Added: " : "Removed: ") + patch.Name + ". Save the ROM to keep it.";
         }
         catch (Exception ex) { StatusText = "Not changed: " + ex.Message; }
@@ -392,3 +399,5 @@ public partial class PatchManagerViewModel : ObservableObject
         OnPropertyChanged(nameof(HasRecords));
     }
 }
+
+public sealed record PatchGroup(string Title, List<BuiltInPatch> Patches);
