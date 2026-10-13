@@ -193,8 +193,6 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
     // -------------------------------------------------------------------------
     // Polling loop
     // -------------------------------------------------------------------------
-    private int _attachAttemptCooldown;
-
     private void Timer_Tick(object? sender, EventArgs e)
     {
         // Check if BizHawk is still alive
@@ -207,20 +205,8 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
             return;
         }
 
-        // Auto-attach: if BizHawk isn't embedded yet, try to find and embed it
-        if (!_host.IsRunning && _attachAttemptCooldown <= 0)
-        {
-            if (_host.TryAttachToRunning())
-            {
-                IsBizHawkRunning = true;
-            }
-            else
-            {
-                // Don't spam: wait ~2 seconds before trying again (60 ticks at 33ms)
-                _attachAttemptCooldown = 60;
-            }
-        }
-        if (_attachAttemptCooldown > 0) _attachAttemptCooldown--;
+        // A BizHawk started outside Lufia Forge is left in its own window (its WRAM still streams below); it's only
+        // embedded when Launch is clicked.
 
         // Poll shared memory for WRAM data
         if (!_bridge.IsConnected)
@@ -233,7 +219,7 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
             IsConnected = true;
             ConnectionStatus = _host.IsRunning
                 ? "Connected - live WRAM streaming"
-                : "WRAM streaming (BizHawk not embedded - click Launch)";
+                : "WRAM streaming from BizHawk in its own window (click Launch to dock it here)";
             FrameInfo = $"Frame: {_bridge.FrameCount:N0}";
             RefreshHexView();
             RefreshWatches();
