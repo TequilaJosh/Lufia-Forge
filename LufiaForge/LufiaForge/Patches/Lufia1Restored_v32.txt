@@ -1,0 +1,492 @@
+                                LUFIA & THE FORTRESS OF DOOM RESTORED
+                                         v3.2 (Oct 3 2024)
+
+====================================================================================================
+Disclaimer
+==========
+- Lufia & the Fortress of Doom (c) Square Enix / Taito / Neverland. All rights reserved.
+
+
+- No ownership is claimed by FlamePurge over Lufia & the Fortress of Doom or the franchise from
+   which it originates. Commercial use of this patch, including but not limited to reproduction,
+   sale, etc. is strictly prohibited.
+
+
+- This unofficial, fan-made patch is provided "as-is" on a voluntary (i.e. non-profit) basis.
+   FlamePurge is not liable for damage incurred to the end-user, their OS, or their hardware while
+   using this patch.
+
+
+- Apply this patch only to an Unheadered "Lufia & the Fortress of Doom (U) [!].sfc" with the
+   following specifications.
+
+     Hashes: CRC32 - 5E1AA1A6
+              SHA1 - 904BBA17F5A37FDC714C91BE80082444136586EA
+               MD5 - 4BBAAD6ABDFC9F05D2D8DDE47DF8B15D
+
+- Players are encouraged to keep a backup of their original game file in case an error occurs.
+
+----------------------------------------------------------------------------------------------------
+
+Within this archive are two patches.
+
+   * Lufia1Restored_v32.IPS
+      The primary project patch. Contains all features as listed in the overview.
+
+   * AlwaysRetryMode.IPS (by justin3009)
+      This allows players to start a game in Retry Mode (4x EXP/gold) without needing to unlock it
+      first.
+
+----------------------------------------------------------------------------------------------------
+
+The sequels to Lufia & the Fortress of Doom reveal the dated aspects of the first entry.
+Inconsistent terms and names, like the revival spell Dead or the elfin girl Mirka, and the
+requisite slow walking speed on the world map and in dungeons.
+
+When my part on Frue Lufia was done, I turned toward the first title to fix its worst issues.
+Mercifully, D had released his censorship removal mod first. All it took was restoring certain
+texts to match English canon. It would be remiss to not mention rainponcho's contributions of
+restoring item descriptions and finalizing the walking speed improvements, nor Ok Impala!
+reducing the encounter rate. And if you use Always Retry Mode? Please be sure to thank Justin!
+
+Fans around the world came together to make the definitive editions of each Lufia title.
+I sincerely hope that all players enjoy them.
+====================================================================================================
+
+====================================================================================================
+Overview
+========
+GENERAL:
+- Lufia Decensored used as a base.
+   * Bunny girls return to Forfeit Island
+   * Priests can be found in churches
+   * References to alcohol restored
+   * Gades' infamous line has been revised
+
+- Dialogue printing noise now plays with Message Speed "Fast" enabled as in the Japanese original.
+   (Credit to rainponcho)
+
+- Game file expanded to 1.5 MB, increased from 1.0 MB original. (Credit: rainponcho)
+
+----------------------------------------------------------------------------------------------------
+
+GAMEPLAY:
+- Increased walking speed on the world map and in dungeons. Includes the Falcon.
+   (Credit: JCE3000GT, rainponcho, Justin3009)
+
+- Cut enemy encounter rate on the world map and in dungeons by 50%. Includes the Falcon.
+   (Credit: Ok Impala!)
+
+- Final boss' battle script behaves as it does in the Japanese original. (Credit: rainponcho)
+
+- Selan and Lufia can equip the following:
+   * Zircon Rod
+   * Zircon Robe
+   * Zircon Wrist
+   * Might Shield
+   * Zircon Beret
+   * Might Helmet
+     (Selan begins the prologue equipped with the Zircon Rod and Zircon Robe.)
+
+- Enemy Rock Golem now drops armor Might Shield.
+
+- Hero learns spell Bravery at LV 2.
+
+- Artea begins the prologue equipped with the Mach Heels.
+
+- Audio defaults to Stereo when starting a New Game.
+
+- (OPTIONAL) Patch to have Try Again Mode immediately, with no need to unlock. (Credit: Justin3009)
+
+----------------------------------------------------------------------------------------------------
+
+GRAPHICS:
+- Crosses restored to church interiors. (Credit: rainponcho)
+
+- 8x8 menu and 8x16 dialogue fonts changed to modified versions of those from Lufia II.
+
+----------------------------------------------------------------------------------------------------
+
+TEXT:
+- Item descriptions restored from the Japanese release. (Credit: rainponcho)
+
+- Item, equipment, spell, and enemy names made consistent with Frue Lufia Trilogizer and
+   Lufia: The Legend Returns Complete.
+
+- Various small dialogue edits for consistency with the aforementioned projects.
+====================================================================================================
+
+====================================================================================================
+Changelog
+=========
+v3.2 (Oct 3 2024)
+
+- Typo fix for Results Screen label.
+
+----------------------------------------------------------------------------------------------------
+
+v3.1 (Nov 19 2022)
+
+- Small adjustments to the descriptions of accessory Wave Ring and item Poison Pin.
+
+----------------------------------------------------------------------------------------------------
+
+v3.0 (Nov 6 2022)
+
+- [Applied Patch] Lufia - Encounter Rate Fix by Ok Impala!
+   The random encounter rate has been reduced by 50%. Armor Clear Silk no longer increases the
+   encounter rate when equipped.
+
+
+- Poison once again damages the afflicted as the player travels. This also holds true in settlements,
+   so be careful! (Credit: Justin3009)
+
+
+- Enemy Rock Golem now drops armor Might Shield about 0.8% of the time. (This is the same rate that
+   the other 2 Might-line defensive equipment drop from enemies Roam Armor and Barient.)
+
+
+- Original font variant patch removed.
+
+
+- 8x16 dialogue font changed to a modified version of Lufia II's.
+
+
+- 8x8 menu font's lowercase p, q, and y modified for readability.
+
+
+- Labels for post-game Results screen updated for clarity.
+
+
+- 3 item names updated for consistency with later games in the trilogy.
+(Seethru Silk -> Sheer Silk
+ Might Helmet -> Might Helm
+ Small Knife  -> Cleaver)
+
+
+- 4 spell names updated to match later games in the trilogy.
+(Thunder -> Storm
+ Elegi   -> Ray
+ Elegio  -> Shock
+ Elegion -> Thunder)
+
+----------------------------------------------------------------------------------------------------
+
+v2.4.6 (Jan 31 2022)
+
+- Hero can equip Might Shield and Might Helmet again. This was accidental, sorry.
+  (Thanks to ParaParadise for reporting.)
+
+
+- Revised the Wave Ring description.
+
+
+- Ensured checksum is correct.
+
+----------------------------------------------------------------------------------------------------
+
+v2.4.4 (Jan 3 2022)
+
+- Hero will now learn spell Bravery at LV 2.
+
+
+- Lufia and Selan can now equip Might Shield and Might Helmet.
+
+
+- Removed headers of base and output ROMs to fix compatibility issues.
+
+
+- Used IPSbehead to remove the header of Always Retry Mode.
+
+----------------------------------------------------------------------------------------------------
+
+v2.4.3 (Dec 30 2021)
+
+- No changes to the main patches. Added optional "Always Retry Mode" addendum that allows players
+   to unlock Retry Mode (formerly "Try Again" mode; gives quadruple EXP and gold) without needing to
+   beat the game. (Credit: Justin3009)
+
+----------------------------------------------------------------------------------------------------
+
+v2.4.1 (Sep 21 2018)
+
+GENERAL:
+- Based on Lufia Decensored by D. Bunny girls return to Forfeit, priests return to churches, alcohol
+   can now be bought rather than cider, Gades' line in Sheran is tidied up.
+   Note: Reverted changes D made to character and magic names in Lufia Decensored.
+
+
+- Header of base and output ROM have been assured to match.
+
+
+- The dialogue printing noise is present when Message Speed is set to "Fast", just like the Japanese
+   original. (Credit: rainponcho)
+
+
+- ROM is expanded to 1.5 MB to accommodate Ruan church crosses and item descriptions.
+
+
+GAMEPLAY:
+- Walking speed increased, by a combination of improvements thanks to JCE3000GT and rainponcho.
+   * Walking speed on the world map and in dungeons increased to speed in towns.
+   * Vehicle movement speed increased.
+   * Characters no longer decrease in speed when disembarking a vehicle.
+   * Sweet Water/Foul Water cannot expire in towns, and their expiration notices properly appear.
+   * Unfortunately, as a result characters no longer take damage from Poison while wandering the
+      world map or dungeons.
+
+
+- Guard Daos now uses its full move set from the Japanese original.
+   * Chaos
+   * Destroy
+   * Amnesia
+   * Wail
+   * Melanchoy (Sorrowful)
+      (Note: It appears to do nothing, but this is intended.)
+   * Glacier
+   * Vulcan
+   * Flood
+   * Elegion (Thunder)
+   * Dread
+
+
+- Selan and Lufia can now equip: Zircon Rod, Zircon Robe, Zircon Wrist, Zircon Beret.
+   Selan begins the prologue equipped with the Zircon Rod and Robe, rather than the Silver Rod and
+   Robe.
+
+
+- Artea begins the prologue equipped with Mach Heels, rather than Cat Heels. This is to emphasize
+   his role as the fastest of the team.
+
+
+- When first starting the game or beginning a new playthrough, the audio is set to Stereo rather
+   than Mono.
+
+
+GRAPHICS:
+- Crosses can now be found on the walls of churches.
+
+
+- Optional patch to change the 8x8 (menu) font to a modified version of the one seen in Lufia II.
+   The 8x16 (dialogue) font saw some changes as well.
+
+
+
+TEXT:
+- Corrected a bug of overflowing text, caused by D restoring alcohol references.
+
+
+- Finished D's item name changes by renaming the Potions as Sources upon requesting them from the
+   Egg Dragon, the names of the Source types in doalogue, and changing "Voice of Gloom" to "Voice of
+   Death".
+
+
+- Restored item descriptions. (Credit: rainponcho) Press the X Button while hovering over an item.
+   Rather than receive a fresh translation, most have been pulled from Lufia II and Lufia: The
+   Legend Returns. A fair chunk were made up whole-cloth.
+
+
+- Corrected several lore terms.
+(Slime -> Jelly
+ Mirka -> Milka
+ Shilf -> Sylph)
+
+
+- Made data management selections consistent with Lufia II.
+(Initial   -> Start
+ Try Again -> Retry)
+
+
+- Corrected grammar of three menu labels.
+(Item's   -> Items
+ Jeweller -> Jeweler
+ EXPER    -> EXP.)
+
+
+- In the post-battle rewards text, label "gold pcs" was shortened to "gold".
+
+
+- Item name changes:
+Note: This is comparing the original name to the altered name, including both my and D's changes.
+      If something isn't listed, assume it hasn't changed from retail.
+(Swing Wing   -> Warp
+ Power Gourd  -> Power Drug
+ Magic Gourd  -> Magic Drug
+ Power Potion -> Life Source
+ Spell Potion -> Magic Source
+ Speed Potion -> Speed Source
+ Mind Potion  -> Mind Source
+ Great Potion -> Power Source
+ Gloom Arrow  -> Death Arrow
+ Pear Cider   -> Rum
+ Sour Cider   -> Vodka
+ Lime Cider   -> Gin
+ Plum Cider   -> Liqueur
+ Apple Cider  -> Whiskey
+ Stuffed Bear -> Plush Bear
+ Stuffed Dog  -> Plush Dog
+ Stuffed Pig  -> Plush Monkey
+ Goblet       -> Wine Glass
+ Ear Tip      -> Earpick
+ Dragon Tooth -> Dragon Fang
+ Grilled Newt -> Charred Newt)
+
+
+- Equipment name changes:
+Note: This is comparing the original name to the altered name, including both my and D's changes.
+      If something isn't listed, assume it hasn't changed from retail.
+(Brone equipment -> Bronze equipment
+ Tan equipment   -> Hide equipment
+ Carbo equipment -> Holy equipment
+ Glass Robe   -> Battle Wire
+ Axe          -> Francisca
+ Catwhip      -> Cutter Whip
+ Battle Axe   -> Rainy Axe
+ Buster Sword -> Bastard Edge
+ Broad Sword  -> Bloody Sword
+ Broad Rod    -> Bloody Rod
+ Gloom Pick   -> Death Pick
+ Dress        -> One-Piece
+ Cloth        -> Clothes
+ Clear Silk   -> Seethru Silk
+ Brone Shield -> Bronze Targe
+ Silver Plate -> Silver Targe
+ Zircon Plate -> Zircon Targe
+ Hair Band    -> Katyusha
+ Sakret       -> Circlet
+ Heeled Shoes -> High Heels
+ Cat Heels    -> Cutter Heels
+ Daze Ring    -> Guard Ring
+ Hi Daze Ring -> Higuard Ring
+ Flame Ring   -> Fire Ring
+ Flash Ring   -> Bolt Ring
+ Blast Ring   -> Bomb Ring
+ Frost Ring   -> Ice Ring
+ Gloom Ring   -> Death Ring
+ Gloom Guard  -> Death Guard
+ Gloom Voice  -> Death Voice
+ Brone Breast -> Bronze Wrist
+ Gown         -> Bunny Suit
+ Ribbon       -> Bunny Ears
+ Fry Pan      -> Frying Pan
+ Pot          -> Saucepan
+ Chop Block   -> Chop Board)
+
+
+- Magic and enemy skill name changes:
+Note: This is comparing the original name to the altered name, including both my and D's changes.
+      If something isn't listed, assume it hasn't changed from retail. All of the Estpolis-themed
+      magic names have been reverted, save one.
+(Flame     -> Fireball
+ Dew       -> Droplet
+ Water     -> Vortex
+ Frost     -> Gale
+ Fright    -> Coma
+ Deflect   -> Mute
+ Bounce    -> Silence
+ Valor     -> Cheer
+ Poison    -> Detox
+ Stun      -> Release
+ Dead      -> Rally
+ Rally     -> Valor
+ Stone     -> Unstone
+ Elf       -> Ateret
+ Elegion   -> Skywrath
+ Figual    -> Madness
+ Jolt      -> Rush
+ Melanchoy -> Sorrowful
+ Fire air  -> Fire Air
+ Iron air  -> Iron Air
+ Oily air  -> Oily Air)
+
+
+- Enemy name changes:
+Note: This is comparing the original name to the altered name, including both my and D's changes.
+      If something isn't listed, assume it hasn't changed from retail.
+(Jellyfish  -> Red Jelly
+ Nettles    -> Nepenthes
+ Mini Demon -> Mini-Devil
+ Flamefreak -> Pug
+ Giant Bat  -> Great Bat
+ Big Meany  -> Shaggy
+ Horrorquin -> Pierre
+ Straw Man  -> Straw Doll
+ Willowisp  -> Wispy
+ Chomp Weed -> Big Mouth
+ Mud Man    -> Nouveaux
+ Jellybean  -> Blue Jelly
+ Dark Demon -> Dark Devil
+ Blue Meany -> Shaggier
+ Nail Man   -> Curse Doll
+ Giant Oak  -> Treant
+ Gargoyle   -> Lamia
+ Crazy Pot  -> Mystic Jar
+ Fight      -> Warrior
+ Archer     -> Liliputian
+ Terrorquin -> Daniele
+ Zooster    -> Cockatrice
+ Sand Man   -> Sand Golem
+ Mud Ghoul  -> Mud Golem
+ Rok        -> Water Rail
+ Huge Bunny -> Evil Bunny
+ Ice Snake  -> Corydoras
+ Sting      -> Stinger
+ Red Wolf   -> Hellhound
+ Trap Harp  -> Trap Herb
+ Mega Frog  -> King Frog
+ Demon Mace -> Mace Demon
+ Dark Spook -> Death
+ Crazy Pine -> Mad Ent
+ Fire Plate -> Roam Armor
+ Mad Lily   -> Carnivore
+ Jelly Bolt -> Bolt Jelly
+ Red Star   -> Demon Star
+ Mega Atlas -> Atlas
+ Red Skull  -> Chaos Head
+ Mad Cleric -> Mad Sage
+ Eye Curse  -> Doom Eye
+ Zaurus Rex -> Procyon
+ Gloom      -> Hades
+ Act Demon  -> Archdemon
+ Humungus   -> Gaia Guard
+ Act Hydra  -> High Hydra
+ Act Dragon -> Archdragon
+ Follower   -> Underling
+ Pirates    -> Viking
+ Demon Lord -> Devilcorps
+ Goblins    -> Gobby Gang)
+====================================================================================================
+
+====================================================================================================
+Credits
+=======
+- D (CinnamonPirate): Lufia Decensored
+
+- Crysta_Blade (suicune girl): Translations of inventory and descriptions from Estpolis Denki:
+   Yomigaeru Densetsu
+
+- pokeeiyuu: Continuing Crysta_Blade's work
+
+- KWhazit: Translations of Estpolis Denki II
+
+- JCE3000GT: Lufia 1 Multi-editor; Walk Faster patch
+
+- Ok Impala!: Encounter Rate Fix
+
+- rainponcho: Walk Faster addenda; restoring church crosses; restoring Guard Daos' battle script;
+   restoring item descriptions
+
+- Justin3009: Always Retry Mode addendum, mod-induced Poison bug fix
+
+- Artemis64: Frue Lufia and other Lufia II patches author
+
+- relnqshd: Grandfather of Lufia modding and reprogramming
+
+- Taito: Publishers of Estpolis Denki trilogy; localizer for Lufia & the Fortress of Doom
+
+- Neverland: Creators of Lufia series (Rest in peace)
+
+- Square Enix: Owners of Taito and Lufia series
+
+...and all you Lufia fans out there!
+====================================================================================================
