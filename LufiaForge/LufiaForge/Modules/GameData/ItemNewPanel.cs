@@ -39,14 +39,11 @@ public partial class ItemEditorViewModel
         return set;
     }
 
+    /// <summary>(Cheap: the scan of shops, chests and events for free item numbers runs only when New item is clicked.)</summary>
     private void RefreshNewItemNote()
     {
         if (Ctx == null) return;
-        try
-        {
-            int free = ItemTable.FreeIds(Ctx.Rom, ReferencedItems(Ctx.Rom)).Count;
-            NewItemNote = $"{free} free item number(s) left; {ItemTable.Free(Ctx.Rom):N0} bytes of item space.";
-        }
+        try { NewItemNote = $"{ItemTable.Free(Ctx.Rom):N0} bytes of item space free."; }
         catch { NewItemNote = ""; }
     }
 
