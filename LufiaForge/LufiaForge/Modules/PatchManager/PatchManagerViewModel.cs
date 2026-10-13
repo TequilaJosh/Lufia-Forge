@@ -94,8 +94,12 @@ public partial class PatchManagerViewModel : ObservableObject
     private void RefreshFont()
     {
         CanRestoreFont = _rom != null && FontPatch.IsApplied(_rom);
+        bool restored = _rom != null && CommunityPatches.RestoredApplied(_rom);
         FontText = _rom == null ? "" : CanRestoreFont
-            ? "This ROM uses Lufia II's font. Lufia 1's own font is kept in the added space and can be put back."
+            ? "This ROM uses Lufia II's font. The font it had before is kept in the added space and can be put back." +
+              (restored ? " (Restored's own font was already close to Lufia II's, so only about 40 letters changed, by a pixel or two.)" : "")
+            : restored
+            ? "Restored's font: already close to Lufia II's (26 letters are identical). Copying in Lufia II's from your Lufia II ROM changes about 40 more letters slightly, and its thinner small font for names and menu titles."
             : "Lufia 1's own font. Lufia II's dialogue font (and its thinner small font for names and menu titles) can be copied in from your Lufia II ROM (.sfc, .smc or a .zip).";
     }
 
