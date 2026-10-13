@@ -25,6 +25,64 @@ public partial class MainViewModel : ObservableObject
 
     public bool IsRomLoaded => RomBuffer != null;
 
+    /// <summary>Every change written to the ROM, from any tab (Edit > Undo / Redo, Ctrl+Z / Ctrl+Y).</summary>
+    public RomHistory History { get; } = new();
+
+    public string UndoText => History.UndoSteps.Count > 0 ? "Undo: " + History.UndoSteps[^1].What : "Undo";
+    public string RedoText => History.RedoSteps.Count > 0 ? "Redo: " + History.RedoSteps[^1].What : "Redo";
+    /// <summary>The newest steps first (Edit > History).</summary>
+    public List<HistoryEntry> HistoryEntries =>
+        History.RedoSteps.Select(s => new HistoryEntry(s, false)).Concat(History.UndoSteps.Reverse().Select(s => new HistoryEntry(s, true))).Take(40).ToList();
+
+    partial void OnRomBufferChanged(RomBuffer? value) => History.Attach(value);
+
+    private void HistoryChanged()
+    {
+        OnPropertyChanged(nameof(UndoText));
+        OnPropertyChanged(nameof(RedoText));
+        OnPropertyChanged(nameof(HistoryEntries));
+        UndoCommand.NotifyCanExecuteChanged();
+        RedoCommand.NotifyCanExecuteChanged();
+    }
+
+    public MainViewModel() => History.Changed += HistoryChanged;
+
+    private bool CanUndo() => History.CanUndo;
+    private bool CanRedo() => History.CanRedo;
+
+    [RelayCommand(CanExecute = nameof(CanUndo))]
+    private void Undo()
+    {
+        var step = History.Undo();
+        if (step == null) return;
+        AfterHistoryMove("Undone: " + step.What);
+    }
+
+    [RelayCommand(CanExecute = nameof(CanRedo))]
+    private void Redo()
+    {
+        var step = History.Redo();
+        if (step == null) return;
+        AfterHistoryMove("Redone: " + step.What);
+    }
+
+    /// <summary>Undoes (or redoes) every step up to the chosen one in Edit > History.</summary>
+    [RelayCommand]
+    private void GoToHistory(HistoryEntry? entry)
+    {
+        if (entry == null) return;
+        int n = entry.IsDone ? History.UndoTo(entry.Step) : History.RedoTo(entry.Step);
+        if (n > 0) AfterHistoryMove($"{(entry.IsDone ? "Undone" : "Redone")} {n} step{(n == 1 ? "" : "s")}, back to: {entry.Step.What}");
+    }
+
+    private void AfterHistoryMove(string what)
+    {
+        _pendingChanges.Add(what);
+        ReloadModules();
+        OnPropertyChanged(nameof(WindowTitle));
+        StatusMessage = what + " (in memory; save the ROM to keep it)";
+    }
+
     /// <summary>Makes every tab load the ROM again (after its bytes were replaced, e.g. by an IPS patch).</summary>
     public void ReloadModules() => OnPropertyChanged(nameof(RomBuffer));
 
@@ -165,6 +223,7 @@ public partial class MainViewModel : ObservableObject
     public void NotifyRomModified(string? what = null)
     {
         if (!string.IsNullOrWhiteSpace(what)) _pendingChanges.Add(what);
+        History.Record(what);
         OnPropertyChanged(nameof(WindowTitle));
         StatusMessage = what == null
             ? "ROM modified (unsaved changes)."
@@ -176,4 +235,10 @@ public partial class MainViewModel : ObservableObject
     {
         if (SaveRomCommand.CanExecute(null)) SaveRomCommand.Execute(null);
     }
+}
+
+/// <summary>A line in Edit > History: a step that is in the ROM (click: undo back to before it) or undone (click: redo it).</summary>
+public sealed record HistoryEntry(RomHistory.Step Step, bool IsDone)
+{
+    public string Text => (IsDone ? "↶ " : "↷ ") + Step.What + $"   ({Step.When:HH:mm:ss})";
 }

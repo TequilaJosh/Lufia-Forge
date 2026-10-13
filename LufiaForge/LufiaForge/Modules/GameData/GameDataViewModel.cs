@@ -26,12 +26,17 @@ public partial class GameDataViewModel : ObservableObject
 
     [ObservableProperty] private bool _isRomLoaded;
 
+    private RomBuffer? _rom;
+
     public void SetRom(RomBuffer rom, MainViewModel mainVm)
     {
+        // the same ROM again (undo / redo): every editor keeps its selected record
+        bool reload = ReferenceEquals(rom, _rom);
+        _rom = rom;
         var ctx = new GameDataContext(rom, mainVm);
         foreach (var editor in new GameDataEditorBase[]
                  { Characters, CharacterMagic, Growth, Sprites, Items, PartyItems, Shops, Spells, Monsters, Encounters, Music, Credits, Title, Graphics, Palettes, Settings })
-            editor.Attach(ctx);
+            if (reload) editor.Reattach(ctx); else editor.Attach(ctx);
         IsRomLoaded = true;
     }
 }

@@ -369,6 +369,8 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
 
     public void SetRom(RomBuffer rom, MainViewModel mainVm)
     {
+        // the same ROM again (undo / redo): stay on the map that was open
+        int? keepMap = ReferenceEquals(rom, _rom) ? SelectedMap?.MapId : null;
         _rom = rom;
         _mainVm = mainVm;
         Maps.Clear();
@@ -381,7 +383,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
         for (int i = 0; i < 256; i++)
             ItemChoices.Add(i == 0 ? "00 (empty)" : $"{i:X2} {MapSetupScript.ItemName(rom, i)}");
         Status = $"{Maps.Count} maps found. Pick one on the left.";
-        SelectedMap = Maps.FirstOrDefault(m => m.MapId == 0x04) ?? Maps.FirstOrDefault();
+        SelectedMap = Maps.FirstOrDefault(m => m.MapId == (keepMap ?? 0x04)) ?? Maps.FirstOrDefault();
     }
 
     private bool _revertingSelection;

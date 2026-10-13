@@ -21,6 +21,18 @@ public partial class MainWindow : Window
         var vm = (MainViewModel)DataContext;
         vm.PropertyChanged += Vm_PropertyChanged;
 
+        // Ctrl+Z / Ctrl+Y (Ctrl+Shift+Z): the app-wide history, unless a text box or a tab took the key first
+        KeyDown += (_, e) =>
+        {
+            if (e.Handled || System.Windows.Input.Keyboard.Modifiers.HasFlag(System.Windows.Input.ModifierKeys.Alt)) return;
+            if (System.Windows.Input.Keyboard.FocusedElement is System.Windows.Controls.Primitives.TextBoxBase) return;
+            bool ctrl = System.Windows.Input.Keyboard.Modifiers.HasFlag(System.Windows.Input.ModifierKeys.Control);
+            bool shift = System.Windows.Input.Keyboard.Modifiers.HasFlag(System.Windows.Input.ModifierKeys.Shift);
+            if (!ctrl) return;
+            if (e.Key == System.Windows.Input.Key.Z && !shift) { if (vm.UndoCommand.CanExecute(null)) vm.UndoCommand.Execute(null); e.Handled = true; }
+            else if (e.Key == System.Windows.Input.Key.Y || e.Key == System.Windows.Input.Key.Z && shift) { if (vm.RedoCommand.CanExecute(null)) vm.RedoCommand.Execute(null); e.Handled = true; }
+        };
+
         // Quietly check GitHub for a newer release once the window is up.
         Loaded += async (_, _) => await UpdateService.CheckAsync(silentIfNone: true, HasUnsavedChanges);
 
