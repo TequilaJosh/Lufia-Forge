@@ -131,7 +131,7 @@ public partial class CharacterMagicViewModel : GameDataEditorBase
         if (IsExpanded)
         {
             int slot = Current[SelectedIndex].Slot;
-            bool updating = !SpellMemory.Installed(Ctx.Rom);
+            bool updating = !SpellMemory.Installed(Ctx.Rom) || !SpellMemory.SwapFixed(Ctx.Rom);
             Commit($"{Casters[SelectedIndex]}'s spell list", () =>
             {
                 if (updating) { SpellTablePatch.Apply(Ctx.Rom); Ctx.Rom.FixChecksum(); }   // an earlier version: up to date first

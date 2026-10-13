@@ -101,6 +101,18 @@
                     </StackPanel>
                 </Border>
 
+                <!-- New item -->
+                <Border Style="{StaticResource GdCard}">
+                    <StackPanel MaxWidth="300">
+                        <TextBlock Text="NEW ITEM" Style="{StaticResource GdSection}"/>
+                        <Button Content="➕ New item (copy of this one)" Style="{StaticResource LufiaButton}" Command="{Binding NewItemCommand}" HorizontalAlignment="Left"
+                                ToolTip="Turns a free item number into a copy of this item (name, type, who can equip it, stats, properties, use effect). Then rename it, change it and put it in shops, chests or events."/>
+                        <TextBlock Text="{Binding NewItemNote}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                        <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,6,0,0"
+                                   Text="Item numbers are one byte and the game uses almost all 256: new items take the numbers it left unused (&quot;Dummy&quot;, &quot;Not Use&quot;). You can also turn any item you don't need into a new one by editing it."/>
+                    </StackPanel>
+                </Border>
+
                 <!-- Status effects -->
                 <Border Style="{StaticResource GdCard}" Visibility="{Binding HasPropertyList, Converter={StaticResource BoolToVisibilityConverter}}">
                     <StackPanel MaxWidth="340">

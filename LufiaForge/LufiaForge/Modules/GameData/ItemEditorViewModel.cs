@@ -56,6 +56,7 @@ public partial class ItemEditorViewModel : GameDataEditorBase
         HasDescriptions = _descriptions != null;
         SelectedIndex = -1;
         SelectedIndex = 1;
+        RefreshNewItemNote();
     }
 
     private int _lastIndex = 1;
@@ -106,9 +107,8 @@ public partial class ItemEditorViewModel : GameDataEditorBase
 
         // The record ends where the next one starts (the last record: at its 00 terminator).
         // (the nearest record after this one: a record that grew may have moved to the end of the bank)
-        int next = -1;
-        for (int i = 0; i < GameDataOffsets.ItemCount; i++) { int r2 = Ctx.ItemOffset(i); if (r2 > o && (next < 0 || r2 < next)) next = r2; }
-        if (o >= Core.Battle.ItemTable.FreeStart) next = -1;
+        int next = o + Core.Battle.ItemTable.Length(rom, SelectedIndex);
+        if (o >= Core.Battle.ItemTable.FreeStart && o < Core.Battle.ItemTable.FreeEnd || Core.Battle.ItemTable.InItemBank(rom, SelectedIndex)) next = -1;
         int p = o + 21, count = 0;
         while (count < 16 && p < rom.Length && rom.ReadByte(p) != 0) { p += 3; count++; }
         int parsedEnd = p + 1;
@@ -208,6 +208,7 @@ public partial class ItemEditorViewModel : GameDataEditorBase
                 all[SelectedIndex] = newDescription;
                 _descriptions!.WriteAll(all);
             }
+            Core.Battle.ItemTable.Sync(rom, SelectedIndex);   // (the item bank's copy, which the game reads)
         }, namesChanged: renamed);
 
         if (!renamed) LoadSelected();

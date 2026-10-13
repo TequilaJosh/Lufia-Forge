@@ -131,8 +131,7 @@ public static class MapSetupScript
 
     public static string ItemName(RomBuffer rom, int id)
     {
-        int table = GameDataOffsets.ItemPointerTable;
-        int o = table + rom.ReadUInt16Le(table + id * 2);
+        int o = Battle.ItemTable.RecordOffset(rom, id);
         var chars = rom.ReadBytes(o, GameDataOffsets.ItemNameLen).Select(b => b == (byte)'@' ? ' ' : (char)b);
         string name = new string(chars.ToArray()).TrimEnd(' ', '\0');
         return name.Length == 0 ? $"item {id:X2}" : name;

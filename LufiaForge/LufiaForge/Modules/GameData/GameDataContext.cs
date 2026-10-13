@@ -54,8 +54,7 @@ public sealed class GameDataContext
 
     // ── Record locators ─────────────────────────────────────────────────────
 
-    public int ItemOffset(int id) =>
-        GameDataOffsets.ItemPointerTable + Rom.ReadUInt16Le(GameDataOffsets.ItemPointerTable + id * 2);
+    public int ItemOffset(int id) => Core.Battle.ItemTable.RecordOffset(Rom, id);
 
     public int MonsterOffset(int id) => Core.Battle.MonsterTable.RecordOffset(Rom, id);
     public int MonsterCount => Core.Battle.MonsterTable.Count(Rom);
