@@ -20,7 +20,7 @@
         <!-- maps -->
         <DockPanel Grid.Column="0" Margin="8">
             <TextBlock DockPanel.Dock="Top" Text="MAPS" Style="{StaticResource GdSection}"/>
-            <ListBox Style="{StaticResource GdRecordList}" ItemsSource="{Binding Maps}" SelectedItem="{Binding SelectedMap}"
+            <ListBox Style="{StaticResource GdFindList}" ItemsSource="{Binding Maps}" SelectedItem="{Binding SelectedMap}"
                      DisplayMemberPath="Label"/>
         </DockPanel>
 
@@ -74,7 +74,7 @@
                         </StackPanel>
                         <TextBlock Text="{Binding FreeFlagsText}" Style="{StaticResource GdHint}"/>
                     </StackPanel>
-                    <ListBox Grid.Row="1" Style="{StaticResource GdRecordList}" ItemsSource="{Binding Flags}" SelectedItem="{Binding SelectedFlag}"
+                    <ListBox Grid.Row="1" Style="{StaticResource GdFindList}" ItemsSource="{Binding Flags}" SelectedItem="{Binding SelectedFlag}"
                              SelectionChanged="ScrollSelectedIntoView"
                              HorizontalContentAlignment="Stretch">
                         <ListBox.ItemTemplate>

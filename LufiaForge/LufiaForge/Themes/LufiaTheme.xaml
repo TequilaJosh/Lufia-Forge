@@ -196,6 +196,72 @@
         </Setter>
     </Style>
 
+    <!-- Side navigation: a TabControl whose tabs are a list on the left (group them with LufiaSideGroup items) -->
+    <Style x:Key="LufiaSideTabControl" TargetType="TabControl">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TabControl">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Border Grid.Column="0" Background="{StaticResource DeepPurpleBrush}" BorderBrush="{StaticResource BorderPurpleBrush}" BorderThickness="0,0,1,0" MinWidth="168">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                <StackPanel IsItemsHost="True" Margin="0,4,0,8" KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                            </ScrollViewer>
+                        </Border>
+                        <ContentPresenter Grid.Column="1" ContentSource="SelectedContent"/>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="LufiaSideTab" TargetType="TabItem">
+        <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
+        <Setter Property="FontFamily" Value="Segoe UI Semibold"/>
+        <Setter Property="FontSize"   Value="13"/>
+        <Setter Property="Cursor"     Value="Hand"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TabItem">
+                    <Grid x:Name="Root" Background="Transparent">
+                        <Border x:Name="Bar" Width="3" HorizontalAlignment="Left" Background="Transparent"/>
+                        <ContentPresenter ContentSource="Header" Margin="20,6,14,6" HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Root" Property="Background" Value="{StaticResource ElevatedPurpleBrush}"/>
+                            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Root" Property="Background" Value="{StaticResource SurfacePurpleBrush}"/>
+                            <Setter TargetName="Bar" Property="Background" Value="{StaticResource GoldBrush}"/>
+                            <Setter Property="Foreground" Value="{StaticResource GoldLightBrush}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- A heading between side tabs (not selectable) -->
+    <Style x:Key="LufiaSideGroup" TargetType="TabItem">
+        <Setter Property="IsEnabled" Value="False"/>
+        <Setter Property="Focusable" Value="False"/>
+        <Setter Property="IsHitTestVisible" Value="False"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TabItem">
+                    <TextBlock Text="{TemplateBinding Header}" Margin="14,12,8,3" FontFamily="Segoe UI Semibold" FontSize="10.5"
+                               Foreground="{StaticResource GoldDimBrush}" Typography.Capitals="AllSmallCaps"/>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- ListBox -->
     <Style x:Key="LufiaListBox" TargetType="ListBox">
         <Setter Property="Background"      Value="{StaticResource MidPurpleBrush}"/>

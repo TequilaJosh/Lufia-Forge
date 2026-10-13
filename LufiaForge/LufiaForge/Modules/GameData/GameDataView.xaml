@@ -5,54 +5,60 @@
 
     <Grid Background="{StaticResource MidPurpleBrush}">
 
-        <TabControl Style="{StaticResource LufiaTabControl}"
+        <TabControl Style="{StaticResource LufiaSideTabControl}" SelectedIndex="1"
                     Visibility="{Binding IsRomLoaded, Converter={StaticResource BoolToVisibilityConverter}}">
-            <TabItem Header="Characters" Style="{StaticResource LufiaTabItem}">
+            <TabItem Header="Party" Style="{StaticResource LufiaSideGroup}"/>
+            <TabItem Header="Characters" Style="{StaticResource LufiaSideTab}">
                 <v:CharacterEditorView DataContext="{Binding Characters}"/>
             </TabItem>
-            <TabItem Header="Character Magic" Style="{StaticResource LufiaTabItem}">
+            <TabItem Header="Character Magic" Style="{StaticResource LufiaSideTab}">
                 <v:CharacterMagicView DataContext="{Binding CharacterMagic}"/>
             </TabItem>
-            <TabItem Header="Growth &amp; EXP" Style="{StaticResource LufiaTabItem}">
+            <TabItem Header="Growth &amp; EXP" Style="{StaticResource LufiaSideTab}">
                 <v:GrowthEditorView DataContext="{Binding Growth}"/>
             </TabItem>
-            <TabItem Header="Sprites" Style="{StaticResource LufiaTabItem}">
+            <TabItem Header="Sprites" Style="{StaticResource LufiaSideTab}">
                 <v:SpriteEditorView DataContext="{Binding Sprites}"/>
             </TabItem>
-            <TabItem Header="Items" Style="{StaticResource LufiaTabItem}">
-                <v:ItemEditorView DataContext="{Binding Items}"/>
-            </TabItem>
-            <TabItem Header="Prologue Items" Style="{StaticResource LufiaTabItem}">
+            <TabItem Header="Prologue Items" Style="{StaticResource LufiaSideTab}">
                 <v:PartyItemsView DataContext="{Binding PartyItems}"/>
             </TabItem>
-            <TabItem Header="Shops" Style="{StaticResource LufiaTabItem}">
+            <TabItem Header="Items &amp; magic" Style="{StaticResource LufiaSideGroup}"/>
+            <TabItem Header="Items" Style="{StaticResource LufiaSideTab}">
+                <v:ItemEditorView DataContext="{Binding Items}"/>
+            </TabItem>
+            <TabItem Header="Shops" Style="{StaticResource LufiaSideTab}">
                 <v:ShopEditorView DataContext="{Binding Shops}"/>
             </TabItem>
-            <TabItem Header="Spells" Style="{StaticResource LufiaTabItem}">
+            <TabItem Header="Spells" Style="{StaticResource LufiaSideTab}">
                 <v:SpellEditorView DataContext="{Binding Spells}"/>
             </TabItem>
-            <TabItem Header="Monsters" Style="{StaticResource LufiaTabItem}">
+            <TabItem Header="Battle" Style="{StaticResource LufiaSideGroup}"/>
+            <TabItem Header="Monsters" Style="{StaticResource LufiaSideTab}">
                 <v:MonsterEditorView DataContext="{Binding Monsters}"/>
             </TabItem>
-            <TabItem Header="Encounters" Style="{StaticResource LufiaTabItem}">
+            <TabItem Header="Encounters" Style="{StaticResource LufiaSideTab}">
                 <v:EncounterEditorView DataContext="{Binding Encounters}"/>
             </TabItem>
-            <TabItem Header="Music" Style="{StaticResource LufiaTabItem}">
+            <TabItem Header="Sound" Style="{StaticResource LufiaSideGroup}"/>
+            <TabItem Header="Music" Style="{StaticResource LufiaSideTab}">
                 <v:MusicEditorView DataContext="{Binding Music}"/>
             </TabItem>
-            <TabItem Header="Credits" Style="{StaticResource LufiaTabItem}">
-                <v:CreditsEditorView DataContext="{Binding Credits}"/>
-            </TabItem>
-            <TabItem Header="Title screen" Style="{StaticResource LufiaTabItem}">
+            <TabItem Header="Look" Style="{StaticResource LufiaSideGroup}"/>
+            <TabItem Header="Title screen" Style="{StaticResource LufiaSideTab}">
                 <v:TitleEditorView DataContext="{Binding Title}"/>
             </TabItem>
-            <TabItem Header="Palettes" Style="{StaticResource LufiaTabItem}">
+            <TabItem Header="Credits" Style="{StaticResource LufiaSideTab}">
+                <v:CreditsEditorView DataContext="{Binding Credits}"/>
+            </TabItem>
+            <TabItem Header="Palettes" Style="{StaticResource LufiaSideTab}">
                 <v:PaletteEditorView DataContext="{Binding Palettes}"/>
             </TabItem>
-            <TabItem Header="Graphics" Style="{StaticResource LufiaTabItem}">
+            <TabItem Header="Graphics" Style="{StaticResource LufiaSideTab}">
                 <v:GraphicsEditorView DataContext="{Binding Graphics}"/>
             </TabItem>
-            <TabItem Header="Game Settings" Style="{StaticResource LufiaTabItem}">
+            <TabItem Header="Game" Style="{StaticResource LufiaSideGroup}"/>
+            <TabItem Header="Game Settings" Style="{StaticResource LufiaSideTab}">
                 <v:GameSettingsView DataContext="{Binding Settings}"/>
             </TabItem>
         </TabControl>

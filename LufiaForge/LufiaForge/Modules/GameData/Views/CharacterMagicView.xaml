@@ -17,7 +17,7 @@
         </Grid.RowDefinitions>
 
         <StackPanel Grid.Column="0" Margin="12">
-            <ListBox Style="{StaticResource GdRecordList}"
+            <ListBox Style="{StaticResource GdFindList}"
                      ItemsSource="{Binding Casters}"
                      SelectedIndex="{Binding SelectedIndex}"/>
             <TextBlock Style="{StaticResource GdHint}" Margin="0,10,0,0" TextWrapping="Wrap" Text="{Binding CastersHint}"/>

@@ -29,7 +29,7 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <ListBox Grid.Column="0" Margin="12" Style="{StaticResource GdRecordList}" ItemsSource="{Binding Songs}" SelectedIndex="{Binding SelectedIndex}"/>
+        <ListBox Grid.Column="0" Margin="12" Style="{StaticResource GdFindList}" ItemsSource="{Binding Songs}" SelectedIndex="{Binding SelectedIndex}"/>
 
         <TabControl Grid.Column="1" Margin="0,8,8,0" Style="{StaticResource LufiaTabControl}" SelectedIndex="{Binding TabIndex}">
             <!-- ═══ SONG: listen, instruments, files ═══ -->

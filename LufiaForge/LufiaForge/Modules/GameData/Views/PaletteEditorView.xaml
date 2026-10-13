@@ -16,7 +16,7 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <ListBox Grid.Column="0" Margin="12" Style="{StaticResource GdRecordList}"
+        <ListBox Grid.Column="0" Margin="12" Style="{StaticResource GdFindList}"
                  ItemsSource="{Binding Sources}" SelectedItem="{Binding SelectedSource}"/>
 
         <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" Padding="0,12,0,0">
