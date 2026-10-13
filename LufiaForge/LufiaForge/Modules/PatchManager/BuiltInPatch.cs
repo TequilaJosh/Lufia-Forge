@@ -69,6 +69,12 @@ public partial class BuiltInPatch : ObservableObject
         },
         new()
         {
+            Name = "Items in the added space",
+            Description = "The game reads item records from a bank of their own (a copy of the game's, at the same addresses) with 22 KB free, so items can gain properties (stats, status effects...) and new items can be made (Items > New item). Added by itself when an item needs more room.",
+            IsApplied = ItemTable.IsMoved, IsOriginal = ItemTable.IsOriginal, Apply = ItemTable.MoveToItemBank,
+        },
+        new()
+        {
             Name = "Status effects on equipment",
             Description = "Weapons can inflict ailments on hit (Sleep, Poison, Confuse, Mute, Stun, Stone, Death...) with a chance you set, and armor, helmets, shields and accessories can resist ailments - in the game only an accessory's resistance counted. Set them on each item in Items > Status effects (added by itself the first time you use it).",
             IsApplied = ItemStatusPatch.IsApplied, IsOriginal = ItemStatusPatch.IsOriginal, Apply = ItemStatusPatch.Apply, Remove = ItemStatusPatch.Remove,
