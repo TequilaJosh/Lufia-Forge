@@ -28,7 +28,7 @@
             </StackPanel>
             <TextBlock DockPanel.Dock="Top" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,6"
                        Text="Packed graphics resources (named when the game's tables say what they are). Monster pictures are on the Monsters tab, map sprites on Sprites, the title on Title screen."/>
-            <ListBox Style="{StaticResource GdRecordList}" ItemsSource="{Binding Sources}" SelectedItem="{Binding SelectedSource}" DisplayMemberPath="Label"
+            <ListBox Style="{StaticResource GdFindList}" ItemsSource="{Binding Sources}" SelectedItem="{Binding SelectedSource}" DisplayMemberPath="Label"
                      Visibility="{Binding RawMode, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
         </DockPanel>
 

@@ -31,7 +31,7 @@
                 <Button Content="Delete group" Style="{StaticResource LufiaButton}" Command="{Binding DeleteGroupCommand}"
                         ToolTip="Deletes the last group, if no map or world map zone uses it."/>
             </StackPanel>
-            <ListBox Style="{StaticResource GdRecordList}" ItemsSource="{Binding Entries}" SelectedIndex="{Binding SelectedIndex}"/>
+            <ListBox Style="{StaticResource GdFindList}" ItemsSource="{Binding Entries}" SelectedIndex="{Binding SelectedIndex}"/>
         </DockPanel>
 
         <TabControl Grid.Column="1" Margin="0,12,8,0" Background="Transparent" BorderThickness="0">
@@ -138,7 +138,7 @@
             <TextBlock DockPanel.Dock="Top" Text="GROUP OF EACH MAP" Style="{StaticResource GdSection}"/>
             <TextBlock DockPanel.Dock="Top" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,6"
                        Text="Towns, caves and towers choose their group in their setup script (command 0D). Maps not listed have no random battles. The world map uses zones instead (World map page)."/>
-            <ListBox Style="{StaticResource GdRecordList}" ItemsSource="{Binding MapGroups}" HorizontalContentAlignment="Stretch">
+            <ListBox Style="{StaticResource GdFindList}" ItemsSource="{Binding MapGroups}" HorizontalContentAlignment="Stretch">
                 <ListBox.ItemTemplate>
                     <DataTemplate>
                         <DockPanel>

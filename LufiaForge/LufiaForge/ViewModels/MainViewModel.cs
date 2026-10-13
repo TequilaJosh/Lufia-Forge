@@ -34,7 +34,12 @@ public partial class MainViewModel : ObservableObject
     public List<HistoryEntry> HistoryEntries =>
         History.RedoSteps.Select(s => new HistoryEntry(s, false)).Concat(History.UndoSteps.Reverse().Select(s => new HistoryEntry(s, true))).Take(40).ToList();
 
-    partial void OnRomBufferChanged(RomBuffer? value) => History.Attach(value);
+    partial void OnRomBufferChanged(RomBuffer? value)
+    {
+        History.Attach(value);
+        SaveRomCommand.NotifyCanExecuteChanged();
+        SaveRomAsCommand.NotifyCanExecuteChanged();
+    }
 
     private void HistoryChanged()
     {

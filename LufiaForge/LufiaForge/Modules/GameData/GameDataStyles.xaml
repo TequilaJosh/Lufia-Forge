@@ -1,5 +1,6 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:common="clr-namespace:LufiaForge.Modules.Common">
 
     <!-- Shared layout styles for the Game Data editors (merged into each editor view). -->
 
@@ -60,6 +61,26 @@
     <Style x:Key="GdRecordList" TargetType="ListBox" BasedOn="{StaticResource LufiaListBox}">
         <Setter Property="ItemContainerStyle" Value="{StaticResource LufiaListBoxItem}"/>
         <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True"/>
+    </Style>
+
+    <!-- A record list with a "Find…" box above it (typing jumps to the first match, Enter to the next) -->
+    <Style x:Key="GdFindList" TargetType="ListBox" BasedOn="{StaticResource GdRecordList}">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ListBox">
+                    <DockPanel>
+                        <TextBox DockPanel.Dock="Top" Style="{StaticResource LufiaSearchBox}" Tag="Find… (Enter = next)" Margin="0,0,0,4"
+                                 common:ListFind.IsFindBox="True"
+                                 ToolTip="Type part of a name or number: the first match is selected. Enter = next match, Shift+Enter = previous, Esc = clear, Down = into the list."/>
+                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
+                            <ScrollViewer Focusable="False" Padding="{TemplateBinding Padding}" CanContentScroll="True">
+                                <ItemsPresenter/>
+                            </ScrollViewer>
+                        </Border>
+                    </DockPanel>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
 </ResourceDictionary>

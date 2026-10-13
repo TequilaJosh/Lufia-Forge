@@ -23,7 +23,7 @@
                 <Button Content="Remove last new spell" Style="{StaticResource LufiaButton}" Command="{Binding RemoveLastSpellCommand}" Margin="0,6,0,0"/>
                 <TextBlock Text="{Binding NewSpellText}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,6,0,0"/>
             </StackPanel>
-            <ListBox Style="{StaticResource GdRecordList}"
+            <ListBox Style="{StaticResource GdFindList}"
                      ItemsSource="{Binding SpellNames}"
                      SelectedIndex="{Binding SelectedIndex}"/>
         </DockPanel>

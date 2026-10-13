@@ -18,7 +18,7 @@
 
         <DockPanel Grid.Column="0" Margin="12">
             <TextBlock DockPanel.Dock="Top" Text="CREDIT CARDS (IN ENDING ORDER)" Style="{StaticResource GdSection}"/>
-            <ListBox Style="{StaticResource GdRecordList}" ItemsSource="{Binding Cards}" SelectedItem="{Binding Selected}">
+            <ListBox Style="{StaticResource GdFindList}" ItemsSource="{Binding Cards}" SelectedItem="{Binding Selected}">
                 <ListBox.ItemTemplate>
                     <DataTemplate>
                         <StackPanel Margin="0,2">
