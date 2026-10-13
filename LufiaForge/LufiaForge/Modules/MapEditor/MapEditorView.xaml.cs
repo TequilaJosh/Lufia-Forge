@@ -19,7 +19,25 @@ public partial class MapEditorView : UserControl
         LufiaForge.Modules.Common.MapNavigation.Attach(MapScroll, () => Vm?.Zoom ?? 1, z => { if (Vm != null) Vm.Zoom = z; }, 0.25, 6);
         LufiaForge.Modules.Common.MapNavigation.Attach(PaletteScroll, () => Vm?.PaletteZoom ?? 2, z => { if (Vm != null) Vm.PaletteZoom = z; }, 1, 4);
         _tip.PlacementTarget = MapSurface;
+        // the block palette (16 blocks per row) fills the card's width; the size slider still changes it
+        PaletteScroll.SizeChanged += (_, e) =>
+        {
+            if (Vm == null || !e.WidthChanged) return;
+            double fit = Math.Floor((PaletteScroll.ActualWidth - 20) / 256 * 4) / 4;
+            if (fit >= 1) Vm.PaletteZoom = Math.Min(4, fit);
+        };
         DataContextChanged += (_, _) => HookVm();
+        // Ctrl+Z / Ctrl+Y anywhere in the editor (text boxes keep their own): the map's edits first; with none left
+        // the key goes on to the app's history (Edit > Undo)
+        KeyDown += (_, e) =>
+        {
+            if (e.Handled || Vm == null || Keyboard.FocusedElement is System.Windows.Controls.Primitives.TextBoxBase) return;
+            if (Keyboard.Modifiers == ModifierKeys.None) { if (Vm.ToolKey(e.Key)) e.Handled = true; return; }
+            if ((Keyboard.Modifiers & ModifierKeys.Control) == 0) return;
+            bool shift = (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
+            if (e.Key == Key.Z && !shift) { if (Vm.UndoCommand.CanExecute(null)) { Vm.UndoCommand.Execute(null); e.Handled = true; } }
+            else if (e.Key == Key.Y || e.Key == Key.Z) { if (Vm.RedoCommand.CanExecute(null)) { Vm.RedoCommand.Execute(null); e.Handled = true; } }
+        };
         HookVm();
     }
 
@@ -92,13 +110,21 @@ public partial class MapEditorView : UserControl
         else if (ctrl && e.Key == Key.C) { Vm.CopyAreaCommand.Execute(null); e.Handled = true; }
         else if (ctrl && e.Key == Key.X) { Vm.CutAreaCommand.Execute(null); e.Handled = true; }
         else if (ctrl && e.Key == Key.V) { Vm.PasteCommand.Execute(null); e.Handled = true; }
-        else if (ctrl && e.Key == Key.Z) { Vm.UndoCommand.Execute(null); e.Handled = true; }
         else if (e.Key == Key.Delete)
         {
             if (Vm.IsAreaTool && Vm.HasArea) Vm.ClearAreaCommand.Execute(null);
             else Vm.DeleteSelectedCommand.Execute(null);
             e.Handled = true;
         }
+    }
+
+    /// <summary>Zoom so the whole map fits the view.</summary>
+    private void Fit_Click(object sender, System.Windows.RoutedEventArgs e)
+    {
+        if (Vm?.MapImage is not { } img || img.PixelWidth == 0) return;
+        double z = Math.Min((MapScroll.ViewportWidth - 4) / img.PixelWidth, (MapScroll.ViewportHeight - 4) / img.PixelHeight);
+        Vm.Zoom = Math.Clamp(z, 0.25, 6);
+        MapScroll.ScrollToHome();
     }
 
     private void MapSurface_MouseRightButtonDown(object sender, MouseButtonEventArgs e)

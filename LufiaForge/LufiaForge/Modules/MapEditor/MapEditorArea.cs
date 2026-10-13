@@ -128,7 +128,7 @@ public partial class MapEditorViewModel
                 _map.SetTile(x, y, metatile);
                 if (_map.GetTile(x, y) != before) { stroke.Add((x, y, before)); RedrawBlock(x, y); }
             }
-        if (stroke.Count > 0) { _undo.Push(stroke); HasUnappliedChanges = true; }
+        if (stroke.Count > 0) MarkEdited();
         Status = $"{verb} {x2 - x1 + 1} x {y2 - y1 + 1} blocks with block {metatile:X3} ({stroke.Count} changed). Undo takes it back.";
     }
 
@@ -197,7 +197,7 @@ public partial class MapEditorViewModel
                 else _map.SetTile(x, y, t & 0x3FF);
                 if (_map.GetTile(x, y) != before) { stroke.Add((x, y, before)); RedrawBlock(x, y); }
             }
-        if (stroke.Count > 0) { _undo.Push(stroke); HasUnappliedChanges = true; }
+        if (stroke.Count > 0) MarkEdited();
         Status = $"Stamped {p.W} x {p.H} blocks at ({x0}, {y0}). Click again to stamp more, Esc to stop, Undo to take it back.";
     }
 
