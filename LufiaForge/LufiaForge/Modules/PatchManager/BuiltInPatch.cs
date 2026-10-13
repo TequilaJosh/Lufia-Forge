@@ -89,10 +89,17 @@ public partial class BuiltInPatch : ObservableObject
         },
         new()
         {
-            Name = "Test start (skip the opening)", Category = "Testing", Icon = "🧪", Summary = "Power-on goes straight into the game (Fortress of Doom, Hero's start, or any map).",
-            Description = "For test ROMs: power-on skips the opening and the title and goes straight into the prologue at the Fortress of Doom with Maxim's party. The Map Editor (MAP settings > Test start) can instead skip the prologue or put the party on any map. Saves can't be loaded while it's on - remove it before sharing the ROM.",
-            IsApplied = Core.Maps.TestStartPatch.IsApplied, IsOriginal = Core.Maps.TestStartPatch.IsOriginal,
-            Apply = rom => Core.Maps.TestStartPatch.Set(rom, Core.Maps.TestStartPatch.Mode.Fortress),
+            Name = "Test start (skip the opening)", Category = "Testing", Icon = "🧪", Summary = "Power-on goes straight to New Game / Continue, then the Fortress of Doom, the Hero's start, or any map.",
+            Description = "For test runs: power-on skips the opening and goes straight to the file select, as when a button is pressed during the opening: Initial starts a new game (with the Hero's name) and Continue loads a save. A new game starts the prologue at the Fortress of Doom; the Map Editor (MAP settings > Test start) can instead skip the prologue or put the party on any map.",
+            IsApplied = rom => Core.Maps.TestStartPatch.IsApplied(rom) && !Core.Maps.TestStartPatch.IsOldStyle(rom),
+            IsOriginal = Core.Maps.TestStartPatch.IsOriginal,
+            NeedsUpdate = Core.Maps.TestStartPatch.IsOldStyle,
+            Apply = rom =>
+            {
+                var mode = Core.Maps.TestStartPatch.Current(rom);
+                var (map, arrival) = Core.Maps.TestStartPatch.Target(rom);
+                Core.Maps.TestStartPatch.Set(rom, mode == Core.Maps.TestStartPatch.Mode.Off ? Core.Maps.TestStartPatch.Mode.Fortress : mode, map, arrival);
+            },
             Remove = rom => Core.Maps.TestStartPatch.Set(rom, Core.Maps.TestStartPatch.Mode.Off),
         },
         new()
