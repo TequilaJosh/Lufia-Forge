@@ -30,17 +30,18 @@ public partial class MapEditorViewModel
         if (_rom == null) return;
         var mode = TestStartPatch.Current(_rom);
         var (m, e) = TestStartPatch.Target(_rom);
+        bool old = TestStartPatch.IsOldStyle(_rom);
         _populating = true;
         TestStartMode = (int)mode;
         if (mode == TestStartPatch.Mode.ChosenMap) TestStartArrival = Math.Max(1, e);
         _populating = false;
         TestStartNote = mode switch
         {
-            TestStartPatch.Mode.Off => "Power-on plays the opening and the title as usual.",
-            TestStartPatch.Mode.Fortress => "Power-on goes straight into the prologue at the Fortress of Doom (no title: saves can't be loaded).",
-            TestStartPatch.Mode.SkipPrologue => "Power-on skips the opening and the prologue: the Hero's game starts (no title: saves can't be loaded).",
-            _ => $"Power-on puts the prologue party on map {m:X2} at arrival {e} (after the prologue's first scene). No title: saves can't be loaded.",
-        };
+            TestStartPatch.Mode.Off => "Power-on plays the opening as usual.",
+            TestStartPatch.Mode.Fortress => "Power-on goes straight to the file select (Initial = new game with the Hero's name, Continue = load a save); a new game starts the prologue at the Fortress of Doom.",
+            TestStartPatch.Mode.SkipPrologue => "Power-on goes straight to the file select; a new game (after the Hero's name) skips the prologue: the Hero's game starts.",
+            _ => $"Power-on goes straight to the file select; a new game puts the prologue party on map {m:X2} at arrival {e} (after the prologue's first scene).",
+        } + (old ? " (Made by an older Lufia Forge that skipped the game's start-up: click Apply to update it.)" : "");
     }
 
     /// <summary>Sets the "test start" patch (see <see cref="TestStartPatch"/>).</summary>
