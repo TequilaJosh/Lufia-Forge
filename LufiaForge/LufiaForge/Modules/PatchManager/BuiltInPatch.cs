@@ -69,6 +69,14 @@ public partial class BuiltInPatch : ObservableObject
         },
         new()
         {
+            Name = "Test start (skip the opening)",
+            Description = "For test ROMs: power-on skips the opening and the title and goes straight into the prologue at the Fortress of Doom with Maxim's party. The Map Editor (MAP settings > Test start) can instead skip the prologue or put the party on any map. Saves can't be loaded while it's on - remove it before sharing the ROM.",
+            IsApplied = Core.Maps.TestStartPatch.IsApplied, IsOriginal = Core.Maps.TestStartPatch.IsOriginal,
+            Apply = rom => Core.Maps.TestStartPatch.Set(rom, Core.Maps.TestStartPatch.Mode.Fortress),
+            Remove = rom => Core.Maps.TestStartPatch.Set(rom, Core.Maps.TestStartPatch.Mode.Off),
+        },
+        new()
+        {
             Name = "Items in the added space",
             Description = "The game reads item records from a bank of their own (a copy of the game's, at the same addresses) with 22 KB free, so items can gain properties (stats, status effects...) and new items can be made (Items > New item). Added by itself when an item needs more room.",
             IsApplied = ItemTable.IsMoved, IsOriginal = ItemTable.IsOriginal, Apply = ItemTable.MoveToItemBank,

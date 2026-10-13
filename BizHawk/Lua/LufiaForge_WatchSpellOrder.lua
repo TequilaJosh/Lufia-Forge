@@ -1,4 +1,5 @@
--- Lufia Forge: logs the spell order lists, the party names and the field menu's swap rows whenever they change,
+-- Lufia Forge: logs the spell order lists, the party names, the first 24 inventory slots and the field menu's swap rows
+-- whenever they change,
 -- so a test can be followed from outside BizHawk. Output: LufiaForge_SpellOrder.log next to this script (a new
 -- section every time a ROM starts; the file is trimmed when it grows past about 2 MB).
 local dir = (debug.getinfo(1, "S").source:match("^@(.*[/\\])") or "")
@@ -24,6 +25,7 @@ while true do
     local snap = {}
     for k = 0, 3 do snap[#snap + 1] = "order " .. k .. ": " .. hex("CARTRAM", 0x1A00 + k * 64, 24) end
     snap[#snap + 1] = "names: " .. names()
+    snap[#snap + 1] = "items (id qty): " .. hex("WRAM", 0x14F7, 48)
     snap[#snap + 1] = "swap rows $11/$1955/$1958/$1959: " .. hex("WRAM", 0x11, 1) .. " / " .. hex("WRAM", 0x1955, 1) .. " / " .. hex("WRAM", 0x1958, 2)
     return table.concat(snap, "\n")
   end)

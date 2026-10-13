@@ -20,6 +20,50 @@ public partial class MapEditorViewModel
     [ObservableProperty] private int _npcSprite = -1;
     [ObservableProperty] private string _newMapNote = "";
 
+    public string[] TestStartModes { get; } = { "Normal start (off)", "Fortress of Doom (prologue)", "Skip the prologue", "This map" };
+    [ObservableProperty] private int _testStartMode;
+    [ObservableProperty] private int _testStartArrival = 1;
+    [ObservableProperty] private string _testStartNote = "";
+
+    private void RefreshTestStart()
+    {
+        if (_rom == null) return;
+        var mode = TestStartPatch.Current(_rom);
+        var (m, e) = TestStartPatch.Target(_rom);
+        _populating = true;
+        TestStartMode = (int)mode;
+        if (mode == TestStartPatch.Mode.ChosenMap) TestStartArrival = Math.Max(1, e);
+        _populating = false;
+        TestStartNote = mode switch
+        {
+            TestStartPatch.Mode.Off => "Power-on plays the opening and the title as usual.",
+            TestStartPatch.Mode.Fortress => "Power-on goes straight into the prologue at the Fortress of Doom (no title: saves can't be loaded).",
+            TestStartPatch.Mode.SkipPrologue => "Power-on skips the opening and the prologue: the Hero's game starts (no title: saves can't be loaded).",
+            _ => $"Power-on puts the prologue party on map {m:X2} at arrival {e} (after the prologue's first scene). No title: saves can't be loaded.",
+        };
+    }
+
+    /// <summary>Sets the "test start" patch (see <see cref="TestStartPatch"/>).</summary>
+    [RelayCommand]
+    private void ApplyTestStart()
+    {
+        if (_rom == null) return;
+        var mode = (TestStartPatch.Mode)Math.Clamp(TestStartMode, 0, 3);
+        if (mode == TestStartPatch.Mode.ChosenMap)
+        {
+            if (_map == null) { Status = "Open the map to start on."; return; }
+            if (TestStartArrival < 1 || _map != null && TestStartArrival > _map.Arrivals.Count) { Status = $"This map has {_map?.Arrivals.Count} arrival points."; return; }
+        }
+        try
+        {
+            TestStartPatch.Set(_rom, mode, _map?.MapId ?? 0, TestStartArrival);
+            _mainVm?.NotifyRomModified("Test start: " + TestStartModes[(int)mode]);
+            RefreshTestStart();
+            Status = TestStartNote + " Save the ROM and reset the game to use it.";
+        }
+        catch (Exception ex) { Status = "Test start: " + ex.Message; }
+    }
+
     /// <summary>Fills the map settings from the loaded map (called after a map loads).</summary>
     private void RefreshMapSettings()
     {
@@ -38,6 +82,7 @@ public partial class MapEditorViewModel
         MapWidth = _map.Width; MapHeight = _map.Height;
         _populating = false;
         NewMapNote = $"{MapFactory.FreeIds(_rom).Count} free map numbers left.";
+        RefreshTestStart();
     }
 
     /// <summary>Writes the tileset, palette and size (and any other edits of this map).</summary>

@@ -143,6 +143,15 @@
                       IsEnabled="{Binding IsTownMap}">
                 <Border Style="{StaticResource GdCard}" Margin="0,4,0,0">
                     <StackPanel>
+                        <TextBlock Text="TEST START (for test ROMs)" Style="{StaticResource GdSection}"/>
+                        <StackPanel Orientation="Horizontal">
+                            <ComboBox Style="{StaticResource GdCombo}" Width="150" ItemsSource="{Binding TestStartModes}" SelectedIndex="{Binding TestStartMode}"
+                                      ToolTip="What power-on does: the normal opening, straight into the prologue at the Fortress of Doom, skip the prologue (the Hero's game in Alekia), or the prologue party on this map."/>
+                            <TextBlock Text="arrival" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="6,0,4,0"/>
+                            <TextBox Style="{StaticResource GdNumber}" Width="36" Text="{Binding TestStartArrival}" ToolTip="Arrival point number (1 = the first) for &quot;This map&quot;."/>
+                            <Button Content="Set" Style="{StaticResource LufiaButtonGold}" Command="{Binding ApplyTestStartCommand}" Margin="6,0,0,0"/>
+                        </StackPanel>
+                        <TextBlock Text="{Binding TestStartNote}" Style="{StaticResource GdHint}" TextWrapping="Wrap" MaxWidth="320" HorizontalAlignment="Left" Margin="0,4,0,8"/>
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="Tileset" Style="{StaticResource GdFieldLabel}" Width="54"/>
                             <ComboBox Style="{StaticResource GdCombo}" MinWidth="110" Width="110" ItemsSource="{Binding TilesetChoices}" SelectedIndex="{Binding TilesetChoice}"/>
