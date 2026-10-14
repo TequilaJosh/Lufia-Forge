@@ -23,7 +23,7 @@
         <StackPanel Grid.Row="0" Grid.ColumnSpan="3" Margin="0,0,0,8">
             <TextBlock x:Name="TitleText" Style="{StaticResource GdSection}" FontSize="15"/>
             <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap"
-                       Text="1. Click a block on the left.  2. Click one of its four quarters.  3. Click a tile on the right to put it there (in the quarter's colour row; flip it if needed).  Walls: tick the sides of the block the party can't walk through into it. Apply writes the tileset: every map using it changes."/>
+                       Text="1. Click a block on the left.  2. Click one of its four quarters.  3. Click a tile on the right to put it there (in the quarter's colour row; flip it if needed; Alt + mouse wheel turns it).  Walls: tick the sides of the block the party can't walk through into it. Apply writes the tileset: every map using it changes."/>
         </StackPanel>
 
         <!-- blocks -->
@@ -54,7 +54,8 @@
                 </StackPanel>
                 <WrapPanel Margin="0,4,0,0">
                     <CheckBox x:Name="FlipXBox" Content="Flip across" Style="{StaticResource GdCheck}" Margin="0,0,10,0" Click="Quarter_Changed"/>
-                    <CheckBox x:Name="FlipYBox" Content="Flip up/down" Style="{StaticResource GdCheck}" Margin="0,0,10,0" Click="Quarter_Changed"/>
+                    <CheckBox x:Name="FlipYBox" Content="Flip up/down" Style="{StaticResource GdCheck}" Margin="0,0,10,0" Click="Quarter_Changed"
+                              ToolTip="Tip: Alt + mouse wheel steps the quarter through normal, flipped across, turned 180° and flipped up/down"/>
                     <CheckBox x:Name="PriorityBox" Content="In front" Style="{StaticResource GdCheck}" Click="Quarter_Changed"
                               ToolTip="Drawn in front of characters (priority bit)"/>
                 </WrapPanel>
