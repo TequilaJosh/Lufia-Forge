@@ -92,9 +92,18 @@ public static class TestStartPatch
             }
             else
             {
+                // the prologue's first event runs an event of the chosen map, which does the warp: the map loads while
+                // its own event runs, as with the game's own story warps, so its step-on areas run its events (a warp
+                // from the Fortress's event made them run the Fortress's events of the same numbers)
+                int arrive = MapEvents.FreeChainedNumber(rom, map);
+                MapEvents.Create(rom, map, arrive);
+                var warp = EventScript.Load(rom, map, arrive)!;
+                warp.Ops.Insert(0, new ScriptOp { Bytes = new byte[] { 0x4C, (byte)map, (byte)Math.Max(1, entrance) } });
+                warp.Save(true);
+                s = EventScript.Load(rom, PrologueMap, PrologueEvent)!;
                 int end = s.Ops.FindLastIndex(o => !o.IsText && o.Bytes.Length == 1 && o.Bytes[0] == 0x00);
                 if (end < 0) throw new InvalidOperationException("The prologue's first event has no end.");
-                s.Ops.Insert(end, new ScriptOp { Bytes = new byte[] { 0x4C, (byte)map, (byte)Math.Max(1, entrance) } });
+                s.Ops.Insert(end, new ScriptOp { Bytes = new byte[] { 0x51, (byte)map, (byte)((arrive - LufiaMap.EventBase(rom, map)) & 0xFF) } });
             }
             s.Save(true);
             rom.WriteByte(b + 7, 3);

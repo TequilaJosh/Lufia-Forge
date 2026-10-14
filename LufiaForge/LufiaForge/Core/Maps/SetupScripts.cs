@@ -172,6 +172,33 @@ public static class SetupScripts
         rom.FixChecksum();
     }
 
+    /// <summary>Puts commands near the start of the map's setup script, so they always run: after its "current map"
+    /// command (01 mm) when that comes before any story check (step-on areas record the current map when switched
+    /// on, so they must come after it), else right after the leading word. Jumps past the insert move along.</summary>
+    public static void Insert(RomBuffer rom, int mapId, byte[] cmds)
+    {
+        var s = Read(rom, mapId);
+        var (ops, _) = Parse(s);
+        int at = 2;
+        foreach (int p in ops)
+        {
+            if (s[p] is 0x04 or (>= 0x05 and <= 0x0A) || s[p] == 0x00) break;
+            if (s[p] == 0x01) { at = p + 2; break; }
+        }
+        int k = cmds.Length;
+        var result = new byte[s.Length + k];
+        s.AsSpan(0, at).CopyTo(result);
+        cmds.CopyTo(result, at);
+        s.AsSpan(at).CopyTo(result.AsSpan(at + k));
+        foreach (int p in ops)
+            if (s[p] == 0x04)
+            {
+                int q = p >= at ? p + k : p, w = result[q + 1] | result[q + 2] << 8;
+                if (w >= at) { w += k; result[q + 1] = (byte)w; result[q + 2] = (byte)(w >> 8); }
+            }
+        Replace(rom, mapId, result);
+    }
+
     /// <summary>
     /// Switches on the map's new characters (added since it was loaded; not hidden) that its script doesn't switch on,
     /// and switches off hidden ones (sprite FF). Commands for new characters go first, so they always appear.
