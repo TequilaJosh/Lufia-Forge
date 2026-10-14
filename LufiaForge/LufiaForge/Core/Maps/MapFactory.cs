@@ -64,8 +64,15 @@ public static class MapFactory
             EventScript.NewBlockFor(rom, id, 32);
             var m = LufiaMap.Load(rom, id);
             for (int i = 0; i < m.Layer.Length; i++) m.Layer[i] = (ushort)(fill & 0x3FF);
-            foreach (var n in m.Npcs) n.Sprite = 0xFF;
+            // nothing of the template's objects: no characters, exits, step-on areas or routes, and one arrival
+            // point in the middle (exits of other maps lead to arrival points by number)
+            m.Npcs.Clear();
             m.Exits.Clear();
+            m.Triggers.Clear();
+            m.Paths.Clear();
+            var a0 = m.Arrivals.FirstOrDefault() ?? m.AddArrival(m.Width / 2, m.Height / 2);
+            a0.X = m.Width / 2; a0.Y = m.Height / 2;
+            m.Arrivals.RemoveAll(a => a != a0);
             MapWriter.Save(rom, m, true);
         }
         else
