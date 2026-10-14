@@ -65,6 +65,7 @@ public static class MapWriter
                 throw new InvalidOperationException($"Map {map.MapId:X2} uses {kinds} different character sprites; the game can load {MaxSpriteKinds} next to the party and freezes past that. Reuse some sprites.");
             SetupScripts.SyncCharacters(rom, map, allowExpand);
         }
+        MapEvents.SyncTriggers(rom, map, allowExpand);
         var stream = LufiaCompression.Compress(data);
         if (!LufiaCompression.Decompress(stream).AsSpan().SequenceEqual(data))
             throw new InvalidOperationException("Compression self-check failed; nothing was written.");

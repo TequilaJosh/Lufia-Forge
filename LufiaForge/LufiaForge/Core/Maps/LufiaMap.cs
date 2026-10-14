@@ -94,6 +94,20 @@ public sealed class MoveStep
 }
 
 /// <summary>An NPC (object section C, 14 bytes). NPC n runs event n of the map's script block.</summary>
+/// <summary>A step-on trigger area (object section D): walking into it runs event (event base + index + 1), once the
+/// map's setup script enables it (opcode 81+index). Bytes 0-3 are filled in by the game at run time.</summary>
+public sealed class MapTrigger
+{
+    public int Index { get; init; }
+    public byte[] Runtime { get; set; } = new byte[4];
+    public int X1 { get; set; }
+    public int Y1 { get; set; }
+    public int X2 { get; set; }
+    public int Y2 { get; set; }
+    /// <summary>A disabled area (no size): kept so the areas after it keep their numbers and events.</summary>
+    public bool IsUnused => X2 <= X1 || Y2 <= Y1;
+}
+
 public sealed class MapNpc
 {
     public int Index { get; init; }
@@ -191,6 +205,7 @@ public sealed class LufiaMap
     public HashSet<int> HiddenAtLoad { get; private set; } = new();
     public void MarkNpcsSaved() { LoadedNpcCount = Npcs.Count; HiddenAtLoad = Npcs.Where(n => n.IsUnused).Select(n => n.Index).ToHashSet(); }
     public List<MapSpot>    Spots    { get; } = new();
+    public List<MapTrigger> Triggers { get; } = new();
     /// <summary>Movement paths (section G); path n of commands 14/15 is Paths[n - 1].</summary>
     public List<MovePath>   Paths    { get; } = new();
 
@@ -330,6 +345,11 @@ public sealed class LufiaMap
             });
         LoadedNpcCount = Npcs.Count;
         HiddenAtLoad = Npcs.Where(n => n.IsUnused).Select(n => n.Index).ToHashSet();
+
+        int dd = ob + SectionOffsets[3];
+        for (int i = 0; i < SectionCounts[3] && dd + 12 <= d.Length; i++, dd += 12)
+            Triggers.Add(new MapTrigger { Index = i, Runtime = d[dd..(dd + 4)], X1 = U16(d, dd + 4), Y1 = U16(d, dd + 6), X2 = U16(d, dd + 8), Y2 = U16(d, dd + 10) });
+        LoadedTriggerCount = _triggersParsed = Triggers.Count;
 
         int e = ob + SectionOffsets[4];
         for (int i = 0; i < SectionCounts[4] && e + 12 <= d.Length; i++, e += 12)
@@ -540,6 +560,18 @@ public sealed class LufiaMap
             Add16(c, n.X); Add16(c, n.Y); Add16(c, n.BoxX1); Add16(c, n.BoxY1); Add16(c, n.BoxX2); Add16(c, n.BoxY2);
         }
 
+        // step-on areas: 12 bytes each (4 run-time bytes kept, the rectangle)
+        var dsec = new List<byte>();
+        foreach (var t in Triggers.OrderBy(t => t.Index))
+        {
+            dsec.AddRange(t.Runtime.Length == 4 ? t.Runtime : new byte[] { 1, 0, 0, 0 });
+            Add16(dsec, t.X1); Add16(dsec, t.Y1); Add16(dsec, t.X2); Add16(dsec, t.Y2);
+        }
+        // keep the original bytes when nothing changed (records the parser couldn't read stay exact)
+        // (a section the parser couldn't read whole is always kept as it was)
+        bool partial = _triggersParsed != SectionCounts[3];
+        byte[] dBytes = partial || Triggers.Count == SectionCounts[3] && dsec.Count == raw[3].Length && TriggersUnchanged(raw[3]) ? raw[3] : dsec.ToArray();
+
         var g = new List<byte>();
         foreach (var path in Paths)
         {
@@ -547,8 +579,9 @@ public sealed class LufiaMap
             g.Add((byte)path.Flags); g.Add((byte)path.Steps.Count); Add16(g, path.StartX); Add16(g, path.StartY);
             foreach (var st in path.Steps) { g.Add((byte)st.Mode); g.Add((byte)st.DirByte); g.Add((byte)st.Tiles); }
         }
-        var sections = new[] { a.ToArray(), b.ToArray(), c.ToArray(), raw[3], raw[4], raw[5], g.ToArray(), raw[7] };
-        var counts = new[] { Exits.Count, Arrivals.Count, Npcs.Count, SectionCounts[3], SectionCounts[4],
+        var sections = new[] { a.ToArray(), b.ToArray(), c.ToArray(), dBytes, raw[4], raw[5], g.ToArray(), raw[7] };
+        if (Triggers.Count > 63) throw new InvalidOperationException("A map can have at most 63 step-on areas.");
+        var counts = new[] { Exits.Count, Arrivals.Count, Npcs.Count, partial ? SectionCounts[3] : Triggers.Count, SectionCounts[4],
                              SectionCounts[5], Paths.Count, SectionCounts[7] };
         if (Paths.Count > 255) throw new InvalidOperationException("A map can have at most 255 paths.");
         if (counts[0] > 255 || counts[1] > 255) throw new InvalidOperationException("A map can have at most 255 exits and 255 arrival points.");
@@ -560,6 +593,45 @@ public sealed class LufiaMap
         block.AddRange(prefix);
         foreach (var s in sections) block.AddRange(s);
         return block.ToArray();
+    }
+
+    private bool TriggersUnchanged(byte[] raw)
+    {
+        for (int i = 0; i < Triggers.Count; i++)
+        {
+            var t = Triggers[i]; int o = i * 12;
+            if (!raw.AsSpan(o, 4).SequenceEqual(t.Runtime) || U16(raw, o + 4) != t.X1 || U16(raw, o + 6) != t.Y1 || U16(raw, o + 8) != t.X2 || U16(raw, o + 10) != t.Y2)
+                return false;
+        }
+        return true;
+    }
+
+    /// <summary>How many step-on areas the map had when loaded (later ones are new: Apply switches them on and gives
+    /// them an event).</summary>
+    public int LoadedTriggerCount { get; private set; }
+    private int _triggersParsed;
+    /// <summary>False when the map's step-on area section couldn't be read whole (then it can't be edited).</summary>
+    public bool TriggersEditable => _triggersParsed == SectionCounts[3];
+    public void MarkTriggersSaved() => LoadedTriggerCount = Triggers.Count;
+
+    /// <summary>Adds a step-on area (it gets event base + its number + 1 when the map is applied).</summary>
+    public MapTrigger AddTrigger(int x1, int y1, int x2, int y2, int index = -1)
+    {
+        // areas before the wanted number are added empty (switched off), so it gets the event it should
+        while (index > Triggers.Count && Triggers.Count < 62)
+            Triggers.Add(new MapTrigger { Index = Triggers.Count, Runtime = new byte[] { 1, 0, 0, 0 } });
+        if (Triggers.Count >= 63) throw new InvalidOperationException("A map can have at most 63 step-on areas.");
+        if (!TriggersEditable) throw new InvalidOperationException("This map's step-on areas can't be read whole, so new ones can't be added.");
+        var t = new MapTrigger { Index = Triggers.Count, Runtime = new byte[] { 1, 0, 0, 0 }, X1 = x1, Y1 = y1, X2 = x2, Y2 = y2 };
+        Triggers.Add(t);
+        return t;
+    }
+
+    /// <summary>Removes a step-on area: the last one is removed, others are emptied so later areas keep their events.</summary>
+    public void RemoveTrigger(MapTrigger t)
+    {
+        if (Triggers.Count > 0 && Triggers[^1] == t && t.Index >= LoadedTriggerCount) Triggers.Remove(t);
+        else { t.X2 = t.X1; t.Y2 = t.Y1; }
     }
 
     /// <summary>Changes the map's size (town / dungeon maps): the layer keeps its top-left part, new cells get
@@ -575,23 +647,27 @@ public sealed class LufiaMap
         public List<MapArrival> Arrivals { get; init; } = new();
         public List<MapNpc> Npcs { get; init; } = new();
         public List<MovePath> Paths { get; init; } = new();
+        public List<MapTrigger> Triggers { get; init; } = new();
 
         public bool SameAs(State o) =>
             Width == o.Width && Height == o.Height && Layer.AsSpan().SequenceEqual(o.Layer) &&
             Exits.Count == o.Exits.Count && Exits.Zip(o.Exits).All(p => Key(p.First) == Key(p.Second)) &&
             Arrivals.Count == o.Arrivals.Count && Arrivals.Zip(o.Arrivals).All(p => Key(p.First) == Key(p.Second)) &&
             Npcs.Count == o.Npcs.Count && Npcs.Zip(o.Npcs).All(p => Key(p.First) == Key(p.Second)) &&
-            Paths.Count == o.Paths.Count && Paths.Zip(o.Paths).All(p => Key(p.First) == Key(p.Second));
+            Paths.Count == o.Paths.Count && Paths.Zip(o.Paths).All(p => Key(p.First) == Key(p.Second)) &&
+            Triggers.Count == o.Triggers.Count && Triggers.Zip(o.Triggers).All(p => Key(p.First) == Key(p.Second));
 
         public static string Key(MapExit e) => $"{e.Index} {e.Arrival} {e.Flags} {e.DestMap} {e.Byte3} {e.X1} {e.Y1} {e.X2} {e.Y2}";
         public static string Key(MapArrival a) => $"{a.Index} {a.Flags} {a.X} {a.Y}";
         public static string Key(MapNpc n) => $"{n.Index} {n.Sprite} {n.Flags} {n.X} {n.Y} {n.BoxX1} {n.BoxY1} {n.BoxX2} {n.BoxY2}";
+        public static string Key(MapTrigger t) => $"{t.Index} {Convert.ToHexString(t.Runtime)} {t.X1} {t.Y1} {t.X2} {t.Y2}";
         public static string Key(MovePath p) => $"{p.Flags} {p.StartX} {p.StartY} " + string.Join(",", p.Steps.Select(s => $"{s.Mode}/{s.DirByte}/{s.Tiles}"));
     }
 
     private static MapExit Copy(MapExit e) => new() { Index = e.Index, Arrival = e.Arrival, Flags = e.Flags, DestMap = e.DestMap, Byte3 = e.Byte3, X1 = e.X1, Y1 = e.Y1, X2 = e.X2, Y2 = e.Y2 };
     private static MapArrival Copy(MapArrival a) => new() { Index = a.Index, Flags = a.Flags, X = a.X, Y = a.Y };
     private static MapNpc Copy(MapNpc n) => new() { Index = n.Index, Sprite = n.Sprite, Flags = n.Flags, X = n.X, Y = n.Y, BoxX1 = n.BoxX1, BoxY1 = n.BoxY1, BoxX2 = n.BoxX2, BoxY2 = n.BoxY2 };
+    private static MapTrigger Copy(MapTrigger t) => new() { Index = t.Index, Runtime = (byte[])t.Runtime.Clone(), X1 = t.X1, Y1 = t.Y1, X2 = t.X2, Y2 = t.Y2 };
     private static MovePath Copy(MovePath p)
     {
         var c = new MovePath { Flags = p.Flags, StartX = p.StartX, StartY = p.StartY };
@@ -603,7 +679,7 @@ public sealed class LufiaMap
     {
         Width = Width, Height = Height, Layer = (ushort[])Layer.Clone(),
         Exits = Exits.Select(Copy).ToList(), Arrivals = Arrivals.Select(Copy).ToList(),
-        Npcs = Npcs.Select(Copy).ToList(), Paths = Paths.Select(Copy).ToList(),
+        Npcs = Npcs.Select(Copy).ToList(), Paths = Paths.Select(Copy).ToList(), Triggers = Triggers.Select(Copy).ToList(),
     };
 
     public void Restore(State s)
@@ -613,6 +689,7 @@ public sealed class LufiaMap
         Arrivals.Clear(); Arrivals.AddRange(s.Arrivals.Select(Copy));
         Npcs.Clear(); Npcs.AddRange(s.Npcs.Select(Copy));
         Paths.Clear(); Paths.AddRange(s.Paths.Select(Copy));
+        Triggers.Clear(); Triggers.AddRange(s.Triggers.Select(Copy));
     }
 
     public void Resize(int width, int height, int fill)
