@@ -342,6 +342,55 @@
                         </Grid>
                         <TextBlock DockPanel.Dock="Top" Text="{Binding BrushText}" Style="{StaticResource LufiaLabel}" TextWrapping="Wrap"
                                    Foreground="{StaticResource GoldLightBrush}" Margin="0,0,0,6"/>
+                        <Button DockPanel.Dock="Top" Content="🧩  Pieces from other maps..." Style="{StaticResource LufiaButtonGold}" Padding="9,4" Margin="0,0,0,6"
+                                HorizontalAlignment="Stretch" Command="{Binding PiecesFromMapsCommand}"
+                                ToolTip="Copy part of any map with this tileset (a river bend, a house, a bridge) and stamp it on this map"/>
+                        <!-- recent brushes -->
+                        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4">
+                            <TextBlock DockPanel.Dock="Left" Text="Recent" Style="{StaticResource LufiaLabel}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <ItemsControl ItemsSource="{Binding RecentBrushes}">
+                                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Command="{Binding DataContext.PickBlockCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding Block}"
+                                                ToolTip="{Binding Tip}" Margin="0,0,2,2" Padding="0" BorderThickness="1" BorderBrush="{StaticResource BorderPurpleBrush}" Background="Transparent" Cursor="Hand">
+                                            <Image Source="{Binding Image}" Width="22" Height="22" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </DockPanel>
+                        <!-- what goes next to the brush block -->
+                        <Expander DockPanel.Dock="Top" Header="Goes with this block" IsExpanded="True" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6">
+                            <StackPanel Margin="0,4,0,0">
+                                <TextBlock Text="{Binding NeighbourNote}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,4"/>
+                                <ItemsControl ItemsSource="{Binding NeighbourRows}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <DockPanel Margin="0,0,0,2">
+                                                <TextBlock DockPanel.Dock="Left" Text="{Binding Label}" Width="50" Style="{StaticResource LufiaLabel}" FontSize="11" VerticalAlignment="Center"/>
+                                                <ItemsControl ItemsSource="{Binding Blocks}">
+                                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Button Command="{Binding DataContext.PickBlockCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding Block}"
+                                                                    ToolTip="{Binding Tip}" Margin="0,0,2,2" Padding="0" BorderThickness="1" BorderBrush="{StaticResource BorderPurpleBrush}" Background="Transparent" Cursor="Hand">
+                                                                <Image Source="{Binding Image}" Width="22" Height="22" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                                                            </Button>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </DockPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Expander>
+                        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4">
+                            <TextBlock DockPanel.Dock="Left" Text="Order" Style="{StaticResource LufiaLabel}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <ComboBox Style="{StaticResource GdCombo}" Width="Auto" HorizontalAlignment="Stretch" ItemsSource="{Binding PaletteModeChoices}" SelectedIndex="{Binding PaletteMode}"
+                                      ToolTip="Tileset order (drag to make a multi-block brush), the blocks the game's maps use most first, or only the blocks this map uses"/>
+                        </DockPanel>
                         <WrapPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
                             <Button Content="🧱  Edit blocks…" Style="{StaticResource LufiaButton}" Padding="9,4" Command="{Binding EditBlocksCommand}" Margin="0,0,4,0"
                                     ToolTip="Block editor: build blocks from 8x8 tiles, set their walls, export / import the tile sheet"/>
