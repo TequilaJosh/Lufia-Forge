@@ -172,6 +172,16 @@ public static class SetupScripts
         rom.FixChecksum();
     }
 
+    /// <summary>Forgets a map's moved script (its space is freed; the map falls back to its original table entry).</summary>
+    public static void Forget(RomBuffer rom, int mapId)
+    {
+        if (!IsMoved(rom, mapId)) return;
+        var space = ExpansionSpace.Load(rom);
+        int old = Offset(rom, mapId);
+        if (space.At(old) is { Kind: ExpansionSpace.Kind.Patch } e && e.Start == old && e.Id == 0x200 + mapId) { space.Free(old); space.Save(); }
+        rom.WriteBytes(Block(rom) + Table + mapId * 3, new byte[] { 0xFF, 0xFF, 0xFF });
+    }
+
     /// <summary>Puts commands near the start of the map's setup script, so they always run: after its "current map"
     /// command (01 mm) when that comes before any story check (step-on areas record the current map when switched
     /// on, so they must come after it), else right after the leading word. Jumps past the insert move along.</summary>

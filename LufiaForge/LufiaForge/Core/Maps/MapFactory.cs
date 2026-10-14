@@ -86,6 +86,68 @@ public static class MapFactory
         return id;
     }
 
+    /// <summary>What still leads to a map: exits of other maps, events that warp there (4C / 5B) or run its events
+    /// (51), and the test start. Deleting the map makes those crash the game, so they're listed first.</summary>
+    public static List<string> References(RomBuffer rom, int id, Func<int, string> mapLabel)
+    {
+        var refs = new List<string>();
+        foreach (var m in MapCatalog.Scan(rom))
+        {
+            if (m.MapId == id) continue;
+            try
+            {
+                var map = LufiaMap.Load(rom, m.MapId);
+                foreach (var e in map.Exits.Where(e => !e.IsUnused && e.DestMap == id))
+                    refs.Add($"Exit E{e.Index} of {mapLabel(m.MapId)}");
+            }
+            catch { }
+            int slots;
+            try { slots = MapEvents.TableLength(rom, m.MapId); } catch { continue; }
+            var seen = new HashSet<int>();
+            for (int ev = 0; ev < slots; ev++)
+            {
+                int start = LufiaMap.EventScriptOffset(rom, m.MapId, ev);
+                if (start < 0 || !seen.Add(start)) continue;
+                EventScript? s;
+                try { s = EventScript.Load(rom, m.MapId, ev); } catch { continue; }
+                if (s == null) continue;
+                int warps = s.Ops.Count(o => !o.IsText && o.Bytes.Length >= 3 && o.Bytes[0] is 0x4C or 0x5B or 0x51 && o.Bytes[1] == id);
+                if (warps > 0) refs.Add($"Event {ev} of {mapLabel(m.MapId)} ({warps} warp / run-event command{(warps == 1 ? "" : "s")})");
+            }
+        }
+        if (TestStartPatch.Current(rom) == TestStartPatch.Mode.ChosenMap && TestStartPatch.Target(rom).Map == id) refs.Add("The test start (it puts the party on this map)");
+        return refs;
+    }
+
+    /// <summary>True for maps made with Lufia Forge (their data is in the added space).</summary>
+    public static bool IsNewMap(RomBuffer rom, int id)
+    {
+        try { return LufiaCompression.ResourceOffset(rom, LufiaMap.MapDataResource(rom, id)) >= MapWriter.ExpansionStart; }
+        catch { return false; }
+    }
+
+    /// <summary>
+    /// Deletes a map: its number becomes free again (for New map), and the added space its data, events and setup
+    /// script used is given back (unless another map shares them). Anything still leading to it is left as it is.
+    /// </summary>
+    public static void Delete(RomBuffer rom, int id)
+    {
+        if (id <= LufiaMap.WorldMap) throw new InvalidOperationException("The world map can't be deleted.");
+        if (!LufiaMap.IsValidMap(rom, id, out _, out _)) throw new InvalidOperationException($"Map {id:X2} doesn't exist.");
+        var space = ExpansionSpace.Load(rom);
+        int data = LufiaCompression.ResourceOffset(rom, LufiaMap.MapDataResource(rom, id));
+        int block = EventScript.BlockOffset(rom, id);
+        bool blockShared = MapCatalog.Scan(rom).Any(m => m.MapId != id && EventScript.BlockOffset(rom, m.MapId) == block);
+        if (space.At(data) is { } d && d.Start == data && d.Kind is ExpansionSpace.Kind.Resource or ExpansionSpace.Kind.MapData) space.Free(data);
+        if (!blockShared && space.At(block) is { Kind: ExpansionSpace.Kind.ScriptBlock } b && b.Start == block) space.Free(block);
+        space.Save();
+        SetupScripts.Forget(rom, id);
+        rom.WriteByte(SelectTable + id, 0);
+        rom.WriteUInt16Le(SetupTable + id * 2, 0xFFFF);
+        rom.WriteBytes(ScriptTable + id * 5, new byte[] { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF });
+        rom.FixChecksum();
+    }
+
     /// <summary>A setup script that does nothing: three zero bytes in bank 03 (leading word 0, then end), found in the
     /// ROM (the scripts are addressed with 16-bit offsets from 0x18000, so a new one can't go elsewhere).</summary>
     public static int EmptySetupScript(RomBuffer rom)

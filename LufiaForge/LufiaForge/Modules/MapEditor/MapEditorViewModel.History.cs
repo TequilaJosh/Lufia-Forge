@@ -92,6 +92,7 @@ public partial class MapEditorViewModel
         var sel = _selection;
         _map.Restore(state);
         _current = state;
+        if (_rom != null && _tileset != null && !_map.IsWorld) { _tileset = MapTileset.ForMap(_rom, _map); BuildPalette(); OnPropertyChanged(nameof(BrushText)); }
         RedrawMap();
         ClearSelection();
         // keep the selected object when it still exists
@@ -132,8 +133,10 @@ public partial class MapEditorViewModel
     private static string Describe(LufiaMap.State a, LufiaMap.State b)
     {
         var parts = new List<string>();
+        if (a.Tileset != b.Tileset) parts.Add($"tileset {b.Tileset}");
+        if (a.Palette != b.Palette) parts.Add($"palette {b.Palette}");
         if (a.Width != b.Width || a.Height != b.Height) parts.Add($"map size {b.Width} x {b.Height}");
-        else
+        else if (a.Tileset == b.Tileset)
         {
             int blocks = 0;
             for (int i = 0; i < a.Layer.Length; i++) if (a.Layer[i] != b.Layer[i]) blocks++;
