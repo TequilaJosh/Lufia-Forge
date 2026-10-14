@@ -924,14 +924,30 @@ public sealed class EventScript
             if (entry != null) return entry.End - BlockBase;
             return Math.Min(0xC000, ExpansionSpace.TableStart - BlockBase);
         }
-        int next = int.MaxValue;
-        foreach (var m in MapCatalog.Scan(_rom))
-        {
-            int b = BlockOffset(_rom, m.MapId);
-            if (b > BlockBase && b < next) next = b;
-        }
+        int next = NextBlockStart(_rom, BlockBase);
         int limit = Math.Min(_rom.Length, BlockBase + 0xC000);
         return Math.Min(next, limit) - BlockBase;
+    }
+
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<RomBuffer, Tuple<byte[], int[]>> _blockStarts = new();
+
+    /// <summary>The script blocks of the game's maps, sorted (cached: rebuilt only when the map tables change, so
+    /// asking for every map's block length no longer lists every map each time).</summary>
+    public static int[] BlockStarts(RomBuffer rom)
+    {
+        // the tables a map's existence and block depend on: map data select, script table
+        var key = rom.ReadBytes(LufiaMap.MapScriptTable, 256 * 5).Concat(rom.ReadBytes(LufiaMap.MapDataSelectTable, 256)).ToArray();
+        if (_blockStarts.TryGetValue(rom, out var c) && c.Item1.AsSpan().SequenceEqual(key)) return c.Item2;
+        var starts = MapCatalog.Scan(rom).Select(m => BlockOffset(rom, m.MapId)).Distinct().OrderBy(x => x).ToArray();
+        _blockStarts.AddOrUpdate(rom, Tuple.Create(key, starts));
+        return starts;
+    }
+
+    /// <summary>Where the next map's script block starts after <paramref name="blockBase"/> (int.MaxValue for none).</summary>
+    public static int NextBlockStart(RomBuffer rom, int blockBase)
+    {
+        foreach (int b in BlockStarts(rom)) if (b > blockBase) return b;
+        return int.MaxValue;
     }
 
 }
