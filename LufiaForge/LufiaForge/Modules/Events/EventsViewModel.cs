@@ -195,7 +195,72 @@ public partial class EventsViewModel : ObservableObject, IEventHost
         return img;
     }
 
+    // ── New / delete events ────────────────────────────────────────────────
+
+    /// <summary>Makes a new event (New event window) on the selected map and opens it.</summary>
+    public void NewEvent(Window? owner)
+    {
+        if (_rom == null || SelectedMap == null) return;
+        var win = new NewEventWindow(_rom, Maps, SelectedMap.MapId, "New event", cutscene: false) { Owner = owner };
+        if (win.ShowDialog() != true) return;
+        _mainVm?.NotifyRomModified(win.ResultText);
+        int map = win.ResultMap, ev = win.ResultEvent;
+        if (SelectedMap.MapId != map) SelectedMap = Maps.FirstOrDefault(m => m.MapId == map);
+        else BuildList();
+        BuildFlagIndex();
+        Open(ev, "new");
+        Status = win.ResultText + ". It's open on the right: add its lines, then Apply.";
+    }
+
+    /// <summary>Deletes the selected event (after saying what changes).</summary>
+    public void DeleteSelectedEvent(Window? owner)
+    {
+        if (_rom == null || SelectedMap == null || SelectedEvent == null) { Status = "Pick an event first."; return; }
+        string? done = EventDelete.Run(owner, _rom, SelectedMap.MapId, SelectedEvent.Event, SelectedMap.Label, MapLabelOf);
+        if (done == null) return;
+        _mainVm?.NotifyRomModified(done);
+        BuildList();
+        Status = done + ".";
+    }
+
+    private string MapLabelOf(int id) => Maps.FirstOrDefault(m => m.MapId == id)?.Label ?? $"map {id:X2}";
+
     // ── Story flags ────────────────────────────────────────────────────────
+
+    /// <summary>Claims the first free flag (nothing in the game uses it) with a name of its own, ready to rename.</summary>
+    [RelayCommand]
+    private void NewFlag()
+    {
+        if (_rom == null) return;
+        int f = Enumerable.Range(0, 0xF0).FirstOrDefault(x => StoryFlags.IsFree(_rom, x) && StoryFlags.NameOf(x) == null, -1);
+        if (f < 0) { Status = "No free story flags are left."; return; }
+        StoryFlags.SetName(f, $"My flag {f:X2}");
+        FlagFilter = "";
+        FillFlags();
+        OnPropertyChanged(nameof(FreeFlagsText));
+        SelectedFlag = Flags.FirstOrDefault(r => r.Flag == f);
+        if (SelectedFlag == null) { ShowFreeFlags = true; SelectedFlag = Flags.FirstOrDefault(r => r.Flag == f); }
+        Status = $"Story flag {f:X2} is yours: rename it below, then use it in events (Set story flag / If flag is set).";
+    }
+
+    /// <summary>Gives the selected flag back: its name goes (events that use it are left as they are).</summary>
+    [RelayCommand]
+    private void FreeFlag()
+    {
+        if (_rom == null || SelectedFlag == null) return;
+        int f = SelectedFlag.Flag;
+        int uses = _flagIndex.Count(u => u.Flag == f);
+        if (StoryFlags.NameOf(f) == null && uses == 0) { Status = $"Flag {f:X2} is already free."; return; }
+        if (uses > 0 && MessageBox.Show($"Flag {f:X2} is still used in {uses} place(s) (listed below). Free it anyway? Its name goes; the events keep using it until you change them.",
+                "Free story flag", MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK) return;
+        StoryFlags.SetName(f, null);
+        FillFlags();
+        OnPropertyChanged(nameof(FreeFlagsText));
+        SelectedFlag = Flags.FirstOrDefault(r => r.Flag == f);
+        Status = uses == 0 ? $"Flag {f:X2} is free again." : $"Flag {f:X2} lost its name; {uses} use(s) remain in events.";
+    }
+
+    // ── Story flags (index) ────────────────────────────────────────────────
 
     private void BuildFlagIndex()
     {

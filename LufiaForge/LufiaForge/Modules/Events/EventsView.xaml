@@ -29,6 +29,12 @@
             <TabItem Header="Events of this map" Style="{StaticResource LufiaTabItem}">
                 <DockPanel Margin="4">
                     <StackPanel DockPanel.Dock="Top">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <Button Content="＋  New event…" Style="{StaticResource LufiaButtonGold}" Padding="10,4" Click="NewEvent_Click" Margin="0,0,6,0"
+                                    ToolTip="A new event on this map, started by walking onto an area, right after another event, or by talking to a character"/>
+                            <Button Content="🗑  Delete event" Style="{StaticResource LufiaButton}" Padding="10,4" Click="DeleteEvent_Click"
+                                    ToolTip="Empties the selected event, switches off its step-on areas and removes run-event commands leading to it (says exactly what changes first)"/>
+                        </StackPanel>
                         <CheckBox Content="Also show events nothing on this map starts" IsChecked="{Binding ShowUnused}" Style="{StaticResource GdCheck}"/>
                         <StackPanel Orientation="Horizontal" Margin="0,4,0,6">
                             <TextBlock Text="Open event number" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center"/>
@@ -91,8 +97,14 @@
                         <ScrollViewer MaxHeight="190" VerticalScrollBarVisibility="Auto">
                             <TextBlock Text="{Binding FlagDescription}" Foreground="{StaticResource TextPrimaryBrush}" TextWrapping="Wrap" FontSize="12"/>
                         </ScrollViewer>
-                        <TextBlock Text="Name of this flag (yours; kept for every ROM copy — leave empty for the automatic name)" Style="{StaticResource GdFieldLabel}" Margin="0,6,0,0"/>
+                        <TextBlock Text="Name of this flag (yours; kept for every ROM copy; leave empty for the automatic name)" Style="{StaticResource GdFieldLabel}" Margin="0,6,0,0"/>
                         <TextBox Style="{StaticResource GdText}" Text="{Binding FlagNameText}" HorizontalAlignment="Stretch" Width="Auto"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                            <Button Content="＋  New flag" Style="{StaticResource LufiaButtonGold}" Padding="10,3" Command="{Binding NewFlagCommand}" Margin="0,0,6,0"
+                                    ToolTip="Claims the first flag nothing in the game uses, with a name of its own (rename it above)"/>
+                            <Button Content="Free this flag" Style="{StaticResource LufiaButton}" Padding="10,3" Command="{Binding FreeFlagCommand}"
+                                    ToolTip="Gives the flag back to the free list (its name goes; events that use it are left as they are)"/>
+                        </StackPanel>
                         <TextBlock Text="Where it's used (click to open; sets first)" Style="{StaticResource GdFieldLabel}" Margin="0,6,0,0"/>
                     </StackPanel>
                     <ListBox Grid.Row="3" Style="{StaticResource GdRecordList}" ItemsSource="{Binding FlagUses}" SelectedItem="{Binding SelectedFlagUse}"

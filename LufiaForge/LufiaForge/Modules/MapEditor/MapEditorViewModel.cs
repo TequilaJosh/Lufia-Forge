@@ -15,7 +15,7 @@ using Color = System.Windows.Media.Color;
 
 namespace LufiaForge.Modules.MapEditor;
 
-public enum MapTool { Select, Paint, Pick, AddExit, AddArrival, Area }
+public enum MapTool { Select, Paint, Pick, AddExit, AddArrival, Area, AddTrigger }
 
 /// <summary>A rectangle drawn over the map (NPC, exit, arrival point, selection).</summary>
 public sealed class MapOverlay
@@ -337,6 +337,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
         OnPropertyChanged(nameof(IsAddExitTool));
         OnPropertyChanged(nameof(IsAddArrivalTool));
         OnPropertyChanged(nameof(IsAreaTool));
+        OnPropertyChanged(nameof(IsAddTriggerTool));
         OnPropertyChanged(nameof(ToolHint));
         if (value != MapTool.Paint) CancelStamp();
         if (value == MapTool.Area) Status = "Area: drag a rectangle of blocks, then Copy / Cut / Fill (or Ctrl+C, Ctrl+X, Del). Paste (Ctrl+V) stamps copied blocks.";
@@ -608,6 +609,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
                     Stroke = Brushes.Yellow, Thickness = 3, Label = n.Index.ToString(),
                 });
             }
+        AddTriggerOverlays();
         if (_selection is { } sel)
         {
             var o = Overlays.FirstOrDefault(x => x.Kind == sel.kind && x.Index == sel.index);
@@ -653,6 +655,8 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
                 case "exit-move": DragExit(x, y, resize: false); break;
                 case "exit-resize": case "new-exit": DragExit(x, y, resize: true); break;
                 case "arrival": DragArrival(x, y); break;
+                case "trigger-move": DragTrigger(x, y, resize: false); break;
+                case "trigger-resize": case "new-trigger": DragTrigger(x, y, resize: true); break;
             }
         }
     }
@@ -728,6 +732,9 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
                 _dragStart = (x, y); _dragAnchor = (x, y); _dragMode = "new-exit"; _dragMoved = false;
                 break;
             }
+            case MapTool.AddTrigger:
+                AddTriggerAt(x, y);
+                break;
             case MapTool.AddArrival:
             {
                 var a = _map.AddArrival(x, y);
@@ -744,6 +751,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
                 _dragStart = null;
                 if (_selection is { kind: "npc" }) { _dragMode = "npc"; _dragStart = (x, y); }
                 else if (_selection is { kind: "arrival" }) { _dragMode = "arrival"; _dragStart = (x, y); }
+                else if (_selection is { kind: "trigger" }) StartTriggerDrag(x, y);
                 else if (_selection is { kind: "exit" } se)
                 {
                     var ex = _map.Exits[se.index];
@@ -767,6 +775,13 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
         _inGesture = false;
         Checkpoint();
         bool clickedNpc = _dragStart != null && !_dragMoved && _dragMode == "npc";
+        if (_dragMode is "new-trigger" or "trigger-move" or "trigger-resize" && _selection is { kind: "trigger" } ts && _map != null && ts.index < _map.Triggers.Count)
+            SelectTrigger(_map.Triggers[ts.index]);   // its size and position in the panel
+        if (_dragMode == "new-trigger")
+        {
+            Tool = MapTool.Select;
+            Status = "New step-on area added. Apply to ROM switches it on and makes its event; then Event... (on the right) opens it.";
+        }
         if (_dragMode == "new-exit")
         {
             Tool = MapTool.Select;
@@ -888,6 +903,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
         if (ShowArrivals) here.AddRange(_map.Arrivals.Where(a => a.X == x && a.Y == y).Reverse().Select(a => ("arrival", a.Index)));
         if (ShowItems) here.AddRange(_map.Spots.Where(s => IsTreasureSpot(s) && Inside(x, y, s.X1, s.Y1, s.X2, s.Y2)).Reverse().Select(s => ("spot", s.Index)));
         if (ShowExits) here.AddRange(_map.Exits.Where(e => !e.IsUnused && Inside(x, y, e.X1, e.Y1, e.X2, e.Y2)).Reverse().Select(e => ("exit", e.Index)));
+        here.AddRange(TriggersAt(x, y));
         if (here.Count == 0) { _lastClick = (x, y); ClearSelection(); RebuildOverlays(); return; }
         int pick = 0;
         if (_lastClick == (x, y) && _selection is { } cur)
@@ -902,6 +918,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
             case "npc": SelectNpc(_map.Npcs[index]); break;
             case "arrival": SelectArrival(_map.Arrivals[index]); break;
             case "spot": SelectSpot(_map.Spots[index]); break;
+            case "trigger": SelectTrigger(_map.Triggers[index]); break;
             default: SelectExit(_map.Exits[index]); break;
         }
         if (here.Count > 1) Status = $"{here.Count} things on this block; click it again for the next one ({pick + 1} of {here.Count}).";
@@ -910,7 +927,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
     private void ClearSelection()
     {
         _selection = null;
-        IsExitSelected = IsNpcSelected = IsSpotSelected = IsArrivalSelected = false;
+        IsExitSelected = IsNpcSelected = IsSpotSelected = IsArrivalSelected = IsTriggerSelected = false;
         SpotEdits.Clear();
         SelectionTitle = "Nothing selected";
         SelectionDetails = SelectHint;
@@ -1204,6 +1221,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
     private void DeleteSelected()
     {
         if (_map == null) return;
+        if (_selection is { kind: "trigger" } st && st.index < _map.Triggers.Count) { DeleteTrigger(_map.Triggers[st.index]); return; }
         if (_selection is { kind: "exit" } se && se.index < _map.Exits.Count)
         {
             _map.RemoveExit(_map.Exits[se.index]);

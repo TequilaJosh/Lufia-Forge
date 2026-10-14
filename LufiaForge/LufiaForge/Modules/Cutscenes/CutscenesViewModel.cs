@@ -178,6 +178,42 @@ public partial class CutscenesViewModel : ObservableObject, IEventHost
         OpenRequested?.Invoke(s, value.Label);
     }
 
+    // ── New / delete ──
+
+    /// <summary>A new cutscene: a new event on a map (New event window), listed at the top and opened on the stage.</summary>
+    public void NewCutscene(Window? owner)
+    {
+        if (_rom == null) return;
+        var maps = MapCatalog.ScanNamed(_rom);
+        int map = Selected?.MapId ?? (MapFilterIndex > 0 && MapFilterIndex < _mapFilterIds.Count ? _mapFilterIds[MapFilterIndex] : 0x04);
+        var win = new Events.NewEventWindow(_rom, maps, map, "New cutscene", cutscene: true) { Owner = owner };
+        if (win.ShowDialog() != true) return;
+        _mainVm?.NotifyRomModified(win.ResultText);
+        string label = maps.FirstOrDefault(m => m.MapId == win.ResultMap)?.Label ?? $"map {win.ResultMap:X2}";
+        var entry = new CutsceneEntry { MapId = win.ResultMap, Event = win.ResultEvent, MapLabel = label, Title = $"New cutscene: {label}, event {win.ResultEvent}", Hint = win.ResultText };
+        _all.Insert(0, entry);
+        Search = ""; OnlyBig = false; MapFilterIndex = 0;
+        ApplyFilter();
+        Selected = entry;
+        Status = win.ResultText + ". Add its moves, camera and dialogue on the stage, then Apply.";
+    }
+
+    /// <summary>Deletes the selected cutscene's event (after saying what changes).</summary>
+    public bool DeleteSelected(Window? owner)
+    {
+        if (_rom == null || Selected is not { } c) { Status = "Pick a cutscene first."; return false; }
+        var maps = MapCatalog.ScanNamed(_rom);
+        string Label(int id) => maps.FirstOrDefault(m => m.MapId == id)?.Label ?? $"map {id:X2}";
+        string? done = Events.EventDelete.Run(owner, _rom, c.MapId, c.Event, Label(c.MapId), Label);
+        if (done == null) return false;
+        _mainVm?.NotifyRomModified(done);
+        _all.Remove(c);
+        _suppressOpen = true; Selected = null; _suppressOpen = false;
+        ApplyFilter();
+        Status = done + ".";
+        return true;
+    }
+
     // ── IEventHost ──
     public bool ConfirmExpand(string what) =>
         MessageBox.Show(

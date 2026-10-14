@@ -42,6 +42,7 @@ public partial class MapEditorViewModel
         MapTool.Area => "Area (M): drag a rectangle, then Copy (Ctrl+C), Cut (Ctrl+X), Fill or Delete; Paste (Ctrl+V) stamps copied blocks. Esc stops.",
         MapTool.AddExit => "Add exit (E): drag a rectangle where the party should leave, then choose where it leads.",
         MapTool.AddArrival => "Add arrival point (A): click where the party should appear.",
+        MapTool.AddTrigger => "Add step-on area (T): drag a rectangle; walking into it plays a new event (Apply makes the event, then Event... on the right opens it).",
         _ => "",
     };
 
@@ -56,6 +57,7 @@ public partial class MapEditorViewModel
             System.Windows.Input.Key.M => MapTool.Area,
             System.Windows.Input.Key.E => MapTool.AddExit,
             System.Windows.Input.Key.A => MapTool.AddArrival,
+            System.Windows.Input.Key.T => MapTool.AddTrigger,
             _ => null,
         };
         if (t == null || !IsMapLoaded) return false;
