@@ -207,6 +207,39 @@ public partial class MapEditorViewModel
         catch (Exception ex) { Status = "Delete map: " + ex.Message; }
     }
 
+    /// <summary>Room for new blocks on a map whose tileset has composite blocks (see <see cref="BlockRoom"/>).</summary>
+    [RelayCommand]
+    private void MakeRoom() => MakeRoomFor(null);
+
+    /// <summary>Asks, then makes room; true when there's room now. <paramref name="why"/> starts the question.</summary>
+    private bool MakeRoomFor(string? why)
+    {
+        if (_rom == null || _map == null) return false;
+        if (BlockRoom.CantMakeRoom(_rom, _map) is { } cant) { Status = "Make room: " + cant; return false; }
+        if (HasUnappliedChanges) { Status = "Apply or revert this map's changes first, then make room for new blocks."; return false; }
+        bool shared = Maps.Any(m => m.MapId != _map.MapId && m.MapId != LufiaMap.WorldMap && m.Tileset == _map.Tileset);
+        string text = (why != null ? why + "\n\n" : "") +
+            $"Make room for {BlockRoom.DefaultSpares} new blocks on this map?\n\n" +
+            (shared ? $"Tileset {_map.Tileset} is shared with other maps, so this map gets its own copy of it first (the other maps don't change). " : "") +
+            "Blank spare blocks are added; the map looks exactly the same. New blocks (flipping the brush with Alt + wheel, + New block in Edit blocks) then use them.\n\nEdit > Undo takes it back.";
+        if (MessageBox.Show(text, "Make room for new blocks", MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return false;
+        try
+        {
+            int id = _map.MapId;
+            string done = BlockRoom.MakeRoom(_rom, id);
+            _mainVm?.NotifyRomModified($"Map {id:X2}: room for new blocks");
+            Maps.Clear();
+            foreach (var m in MapCatalog.ScanNamed(_rom)) Maps.Add(m);
+            _populatingName = true;
+            SelectedMap = Maps.FirstOrDefault(m => m.MapId == id);
+            _populatingName = false;
+            LoadMap(id);
+            Status = "Room made: " + done;
+            return true;
+        }
+        catch (Exception ex) { Status = "Make room: " + ex.Message; return false; }
+    }
+
     [RelayCommand] private void NewMapCopy() => NewMap(blank: false);
     [RelayCommand] private void NewMapBlank() => NewMap(blank: true);
 

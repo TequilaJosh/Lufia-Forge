@@ -180,7 +180,7 @@ public sealed class LufiaMap
     /// overlay block (BG1: tree tops, roofs, bridge rails) on a second layer, using the tileset's
     /// composite table. Only maps with header 0x10 bit 1 set, 0x11 bit 7 clear and 0x23 zero do this.
     /// </summary>
-    public int CompositeThreshold { get; }
+    public int CompositeThreshold { get; private set; }
 
     /// <summary>Metatile layer, Width*Height entries (low 10 bits = metatile number).</summary>
     public ushort[] Layer { get; private set; }
@@ -709,6 +709,21 @@ public sealed class LufiaMap
 
     /// <summary>Header bytes the editor can change: tileset (+0x08) and palette (+0x09). Takes effect when the map is
     /// saved and loaded again.</summary>
+    /// <summary>Raises the composite threshold by <paramref name="count"/> and renumbers the composite cells to match
+    /// (they keep their pair table entries: number - threshold is unchanged).</summary>
+    public void ShiftComposites(int count)
+    {
+        if (CompositeThreshold < 0) throw new InvalidOperationException("This map has no composite blocks.");
+        int t = CompositeThreshold;
+        for (int i = 0; i < Layer.Length; i++)
+        {
+            int c = Layer[i];
+            if ((c & 0x3FF) >= t) Layer[i] = (ushort)((c & 0xFC00) | ((c & 0x3FF) + count));
+        }
+        CompositeThreshold = t + count;
+        Original[0x1E] = (byte)CompositeThreshold; Original[0x1F] = (byte)(CompositeThreshold >> 8);
+    }
+
     public void SetTilesetAndPalette(int tileset, int palette)
     {
         if (IsWorld) throw new InvalidOperationException("The world map's graphics are fixed.");

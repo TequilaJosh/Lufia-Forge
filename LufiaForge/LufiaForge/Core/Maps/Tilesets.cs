@@ -99,6 +99,13 @@ public static class Tilesets
     /// <summary>File offset of the tileset's composite pairs (meaningful only for maps with a composite threshold).</summary>
     public static int CompositePairs(RomBuffer rom, int tileset) => FileOffset(Long(rom, CompositeTable(rom) + tileset * 3));
 
+    /// <summary>Points a tileset at another (ground, overlay) pair table (file offset; the tilesets table must be moved).</summary>
+    public static void SetCompositePairs(RomBuffer rom, int tileset, int fileOffset)
+    {
+        Move(rom);
+        WriteLong(rom, CompositeTable(rom) + tileset * 3, SnesAddress(fileOffset));
+    }
+
     /// <summary>Moves the three tables into the added space (room for <see cref="Capacity"/> tilesets).</summary>
     public static void Move(RomBuffer rom)
     {
