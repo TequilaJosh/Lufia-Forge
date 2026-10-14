@@ -109,6 +109,8 @@
                                 <ToggleButton Style="{StaticResource LufiaChip}" IsChecked="{Binding ShowArrivals}" Content="● Arrival points" ToolTip="Arrival points (cyan)"/>
                                 <ToggleButton Style="{StaticResource LufiaChip}" IsChecked="{Binding ShowItems}" Content="● Treasure" ToolTip="Chests (gold) and hidden items (pink)"/>
                                 <ToggleButton Style="{StaticResource LufiaChip}" IsChecked="{Binding ShowTriggers}" Content="● Step-on areas" ToolTip="Areas that play an event when the party walks in (pink; faded = switched off)"/>
+                                <ToggleButton Style="{StaticResource LufiaChip}" IsChecked="{Binding ShowCamera}" Content="▣ Camera"
+                                              ToolTip="Shows what the game screen sees (16 x 14 blocks) with the party on the block under the mouse; the camera stops at the map's edges"/>
                                 <StackPanel Orientation="Horizontal" Visibility="{Binding IsWorldMap, Converter={StaticResource BoolToVisibilityConverter}}">
                                     <ToggleButton Style="{StaticResource LufiaChip}" IsChecked="{Binding ShowZones}" Content="● Battle zones"
                                                   ToolTip="The world map's random-battle zones (4x4 blocks each). While on, clicking paints the group below; Ctrl + click picks a zone's group."/>
@@ -155,6 +157,15 @@
                                 <Rectangle Canvas.Left="{Binding AreaX}" Canvas.Top="{Binding AreaY}" Width="{Binding AreaW}" Height="{Binding AreaH}"
                                            Stroke="White" StrokeThickness="1.5" StrokeDashArray="3 2" Fill="#2000BFFF"
                                            Visibility="{Binding AreaVisible, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                <!-- camera view: outside the screen dimmed, the screen framed -->
+                                <Path Data="{Binding CameraShade}" Fill="#8C000000"
+                                      Visibility="{Binding CameraVisible, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                <Rectangle Canvas.Left="{Binding CameraX}" Canvas.Top="{Binding CameraY}" Width="256" Height="224"
+                                           Stroke="White" StrokeThickness="2" StrokeDashArray="4 2"
+                                           Visibility="{Binding CameraVisible, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                <TextBlock Canvas.Left="{Binding CameraX}" Canvas.Top="{Binding CameraY}" Text="{Binding CameraText}" Foreground="White"
+                                           FontSize="9" Background="#B0000000" Padding="3,1" Margin="2,2,0,0"
+                                           Visibility="{Binding CameraVisible, Converter={StaticResource BoolToVisibilityConverter}}"/>
                             </Canvas>
                             <ItemsControl ItemsSource="{Binding Overlays}" IsHitTestVisible="False">
                                 <ItemsControl.ItemsPanel>

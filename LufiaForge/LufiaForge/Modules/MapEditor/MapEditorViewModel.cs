@@ -635,6 +635,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
         if (_map == null || _tileset == null) return;
         int x = (int)(px / 16), y = (int)(py / 16);
         if (x < 0 || y < 0 || x >= _map.Width || y >= _map.Height) { HoverText = ""; HoverTip = ""; return; }
+        CameraFollow(x, y);
         int mt = _map.GetTile(x, y) & 0x3FF;
         HoverText = $"Block ({x}, {y})   metatile {mt:X3}   attribute {_tileset.Attribute(mt):X2}{CompositeText(mt)}" +
                     (ShowZones && IsWorldMap && ZoneAt(x, y) is >= 0 and var zi ? $"   battle group {_zones[zi]:X2}" : "");
