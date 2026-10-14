@@ -20,6 +20,12 @@
                 <TextBlock Text="🎬 Cutscenes" Style="{StaticResource GdSection}" FontSize="15"/>
                 <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,2,0,6"
                            Text="Every event that moves characters, the camera or the screen. Pick one to edit it on the stage."/>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                    <Button Content="＋  New cutscene…" Style="{StaticResource LufiaButtonGold}" Padding="10,4" Click="NewCutscene_Click" Margin="0,0,6,0"
+                            ToolTip="A new scene on any map, started by walking onto an area, right after another event, or by talking to a character"/>
+                    <Button Content="🗑  Delete" Style="{StaticResource LufiaButton}" Padding="10,4" Click="DeleteCutscene_Click"
+                            ToolTip="Empties the selected cutscene's event, switches off its step-on areas and removes run-event commands leading to it (says exactly what changes first)"/>
+                </StackPanel>
                 <TextBox Style="{StaticResource GdText}" Text="{Binding Search, UpdateSourceTrigger=PropertyChanged}" HorizontalAlignment="Stretch" Width="Auto"
                          ToolTip="Search names and what the cutscene does"/>
                 <ComboBox Style="{StaticResource GdCombo}" ItemsSource="{Binding MapFilters}" SelectedIndex="{Binding MapFilterIndex}"

@@ -28,6 +28,8 @@
                                  ToolTip="Add exit (E): drag a rectangle where the party should leave"/>
                     <RadioButton GroupName="MapTool" Style="{StaticResource LufiaToolRadio}" IsChecked="{Binding IsAddArrivalTool}" Content="＋ Arrival"
                                  ToolTip="Add arrival point (A): click where the party should appear"/>
+                    <RadioButton GroupName="MapTool" Style="{StaticResource LufiaToolRadio}" IsChecked="{Binding IsAddTriggerTool}" Content="＋ Step-on area"
+                                 ToolTip="Add step-on area (T): drag a rectangle; walking into it plays a new event"/>
 
                     <!-- area actions, only with the Area tool -->
                     <StackPanel Orientation="Horizontal" Margin="14,0,0,0" Visibility="{Binding IsAreaTool, Converter={StaticResource BoolToVisibilityConverter}}">
@@ -104,6 +106,7 @@
                                 <ToggleButton Style="{StaticResource LufiaChip}" IsChecked="{Binding ShowExits}" Content="● Exits" ToolTip="Exits (red) and where they lead (dotted lines)"/>
                                 <ToggleButton Style="{StaticResource LufiaChip}" IsChecked="{Binding ShowArrivals}" Content="● Arrival points" ToolTip="Arrival points (cyan)"/>
                                 <ToggleButton Style="{StaticResource LufiaChip}" IsChecked="{Binding ShowItems}" Content="● Treasure" ToolTip="Chests (gold) and hidden items (pink)"/>
+                                <ToggleButton Style="{StaticResource LufiaChip}" IsChecked="{Binding ShowTriggers}" Content="● Step-on areas" ToolTip="Areas that play an event when the party walks in (pink; faded = switched off)"/>
                                 <StackPanel Orientation="Horizontal" Visibility="{Binding IsWorldMap, Converter={StaticResource BoolToVisibilityConverter}}">
                                     <ToggleButton Style="{StaticResource LufiaChip}" IsChecked="{Binding ShowZones}" Content="● Battle zones"
                                                   ToolTip="The world map's random-battle zones (4x4 blocks each). While on, clicking paints the group below; Ctrl + click picks a zone's group."/>
@@ -247,6 +250,13 @@
                                     <TextBox Style="{StaticResource GdNumber}" Width="36" Text="{Binding ExitH}"/>
                                 </StackPanel>
                             </StackPanel>
+
+                            <WrapPanel Visibility="{Binding IsTriggerSelected, Converter={StaticResource BoolToVisibilityConverter}}" Margin="0,8,0,0">
+                                <Button Content="✎  Event..." Style="{StaticResource LufiaButtonGold}" Command="{Binding OpenTriggerEventCommand}" Margin="0,0,6,4"
+                                        ToolTip="Opens the event walking in plays"/>
+                                <Button Content="✕ Delete" Style="{StaticResource LufiaButton}" Command="{Binding DeleteSelectedCommand}" Margin="0,0,0,4"
+                                        ToolTip="Delete this area (Del); later areas keep their numbers"/>
+                            </WrapPanel>
 
                             <StackPanel Visibility="{Binding IsArrivalSelected, Converter={StaticResource BoolToVisibilityConverter}}" Margin="0,8,0,0">
                                 <StackPanel Orientation="Horizontal">

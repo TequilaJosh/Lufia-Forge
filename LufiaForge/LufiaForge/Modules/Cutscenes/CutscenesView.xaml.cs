@@ -23,6 +23,22 @@ public partial class CutscenesView : UserControl
         if (_hooked != null) _hooked.OpenRequested += Open;
     }
 
+    private void NewCutscene_Click(object sender, RoutedEventArgs e)
+    {
+        if (Editor.IsLoadedScript && !Editor.ConfirmDiscard()) return;
+        _hooked?.NewCutscene(Window.GetWindow(this));
+    }
+
+    private void DeleteCutscene_Click(object sender, RoutedEventArgs e)
+    {
+        if (Editor.IsLoadedScript && !Editor.ConfirmDiscard()) return;
+        if (_hooked?.DeleteSelected(Window.GetWindow(this)) == true)
+        {
+            Editor.Visibility = Visibility.Collapsed;
+            EmptyText.Visibility = Visibility.Visible;
+        }
+    }
+
     private void Open(EventScript script, string title)
     {
         if (_hooked?.Rom == null) return;

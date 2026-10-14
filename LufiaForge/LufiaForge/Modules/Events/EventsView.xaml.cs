@@ -32,6 +32,13 @@ public partial class EventsView : UserControl
         if (sender is System.Windows.Controls.ListBox lb && lb.SelectedItem != null) lb.ScrollIntoView(lb.SelectedItem);
     }
 
+    private void NewEvent_Click(object sender, RoutedEventArgs e) => _hooked?.NewEvent(Window.GetWindow(this));
+    private void DeleteEvent_Click(object sender, RoutedEventArgs e)
+    {
+        if (Editor.IsLoadedScript && !Editor.ConfirmDiscard()) return;
+        _hooked?.DeleteSelectedEvent(Window.GetWindow(this));
+    }
+
     private void Open(EventScript script, string title, int highlightLine)
     {
         if (_hooked?.Rom == null) return;

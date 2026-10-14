@@ -100,6 +100,7 @@ public partial class MapEditorViewModel
             if (s.kind == "npc" && s.index < _map.Npcs.Count && !_map.Npcs[s.index].IsUnused) SelectNpc(_map.Npcs[s.index]);
             else if (s.kind == "exit" && s.index < _map.Exits.Count) SelectExit(_map.Exits[s.index], focusLinked: false);
             else if (s.kind == "arrival" && s.index < _map.Arrivals.Count) SelectArrival(_map.Arrivals[s.index], focusLinked: false);
+            else if (s.kind == "trigger" && s.index < _map.Triggers.Count && !_map.Triggers[s.index].IsUnused) SelectTrigger(_map.Triggers[s.index]);
         }
         RebuildOverlays();
         RefreshMapSettings();
@@ -145,6 +146,8 @@ public partial class MapEditorViewModel
             (x, y) => x.DestMap != y.DestMap || x.Arrival != y.Arrival ? "destination" :
                       x.X2 - x.X1 != y.X2 - y.X1 || x.Y2 - x.Y1 != y.Y2 - y.Y1 ? "resized" : "moved");
         Compare(parts, a.Arrivals, b.Arrivals, LufiaMap.State.Key, "arrival point A", p => p.Index, (_, _) => "moved");
+        Compare(parts, a.Triggers, b.Triggers, LufiaMap.State.Key, "area T", t => t.Index,
+            (x, y) => y.IsUnused && !x.IsUnused ? "deleted" : x.X2 - x.X1 != y.X2 - y.X1 || x.Y2 - x.Y1 != y.Y2 - y.Y1 ? "resized" : "moved");
         if (a.Paths.Count != b.Paths.Count || a.Paths.Zip(b.Paths).Any(p => LufiaMap.State.Key(p.First) != LufiaMap.State.Key(p.Second)))
             parts.Add("routes");
         return parts.Count == 0 ? "edit" : string.Join(", ", parts.Take(3)) + (parts.Count > 3 ? "…" : "");
