@@ -339,6 +339,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
         OnPropertyChanged(nameof(IsAreaTool));
         OnPropertyChanged(nameof(IsAddTriggerTool));
         OnPropertyChanged(nameof(ToolHint));
+        if (value != MapTool.Paint) BrushPreviewVisible = false;
         if (value != MapTool.Paint) CancelStamp();
         if (value == MapTool.Area) Status = "Area: drag a rectangle of blocks, then Copy / Cut / Fill (or Ctrl+C, Ctrl+X, Del). Paste (Ctrl+V) stamps copied blocks.";
         if (value == MapTool.AddExit) Status = "Add exit: drag a rectangle on the map where the party should leave.";
@@ -353,6 +354,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
     partial void OnBrushChanged(int value)
     {
         if (!_turning) _turnBase = -1;   // a brush picked by hand: the next Alt + wheel turns this block
+        RefreshBrushPreview();
         OnPropertyChanged(nameof(BrushText));
         OnPropertyChanged(nameof(BrushBoxX));
         OnPropertyChanged(nameof(BrushBoxY));
@@ -450,6 +452,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
 
     private void BuildPalette()
     {
+        RefreshBrushPreview();
         if (_tileset == null) return;
         int count = _tileset.MetatileCount, cols = 16, rows = (count + cols - 1) / cols;
         int w = cols * 16, h = Math.Max(1, rows) * 16;
@@ -635,8 +638,9 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
     {
         if (_map == null || _tileset == null) return;
         int x = (int)(px / 16), y = (int)(py / 16);
-        if (x < 0 || y < 0 || x >= _map.Width || y >= _map.Height) { HoverText = ""; HoverTip = ""; return; }
+        if (x < 0 || y < 0 || x >= _map.Width || y >= _map.Height) { HoverText = ""; HoverTip = ""; BrushPreviewVisible = false; return; }
         CameraFollow(x, y);
+        BrushPreviewFollow(x, y);
         int mt = _map.GetTile(x, y) & 0x3FF;
         HoverText = $"Block ({x}, {y})   metatile {mt:X3}   attribute {_tileset.Attribute(mt):X2}{CompositeText(mt)}" +
                     (ShowZones && IsWorldMap && ZoneAt(x, y) is >= 0 and var zi ? $"   battle group {_zones[zi]:X2}" : "");
@@ -663,7 +667,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
         }
     }
 
-    public void OnMouseLeave() => HoverTip = "";
+    public void OnMouseLeave() { HoverTip = ""; BrushPreviewVisible = false; }
 
     /// <summary>Tooltip text for everything on a block: treasure, exits, arrival points, characters.</summary>
     private string DescribeAt(int x, int y)

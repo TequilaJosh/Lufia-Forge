@@ -157,6 +157,13 @@
                                 <Rectangle Canvas.Left="{Binding AreaX}" Canvas.Top="{Binding AreaY}" Width="{Binding AreaW}" Height="{Binding AreaH}"
                                            Stroke="White" StrokeThickness="1.5" StrokeDashArray="3 2" Fill="#2000BFFF"
                                            Visibility="{Binding AreaVisible, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                <!-- the brush block under the mouse (Paint tool) -->
+                                <Image Source="{Binding BrushPreviewImage}" Canvas.Left="{Binding BrushPreviewX}" Canvas.Top="{Binding BrushPreviewY}"
+                                       Width="16" Height="16" Opacity="0.75" RenderOptions.BitmapScalingMode="NearestNeighbor"
+                                       Visibility="{Binding BrushPreviewVisible, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                <Rectangle Canvas.Left="{Binding BrushPreviewX}" Canvas.Top="{Binding BrushPreviewY}" Width="16" Height="16"
+                                           Stroke="White" StrokeThickness="0.75" Opacity="0.9"
+                                           Visibility="{Binding BrushPreviewVisible, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                 <!-- camera view: outside the screen dimmed, the screen framed -->
                                 <Path Data="{Binding CameraShade}" Fill="#8C000000"
                                       Visibility="{Binding CameraVisible, Converter={StaticResource BoolToVisibilityConverter}}"/>
