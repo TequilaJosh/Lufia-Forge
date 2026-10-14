@@ -75,12 +75,14 @@
             <DockPanel Grid.Column="0" Margin="8,8,4,8">
                 <TextBox DockPanel.Dock="Top" Style="{StaticResource LufiaSearchBox}" Tag="Search maps (name or number)" Margin="0,0,0,6"
                          Text="{Binding MapSearch, UpdateSourceTrigger=PropertyChanged}"/>
-                <Expander DockPanel.Dock="Bottom" Header="Rename this map" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,6,0,0">
+                <Expander DockPanel.Dock="Bottom" Header="Rename or delete this map" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,6,0,0">
                     <StackPanel Margin="0,4,0,0">
                         <TextBox Style="{StaticResource GdText}" Text="{Binding MapNameText}" HorizontalAlignment="Stretch" Width="Auto"
                                  ToolTip="Type a name and press Tab. Clear it to go back to the automatic name."/>
                         <TextBlock Text="Town names come from the game; others are worked out from where each map is entered. Your names are kept for every copy of the ROM."
                                    Style="{StaticResource GdHint}" TextWrapping="Wrap"/>
+                        <Button Content="🗑  Delete this map..." Style="{StaticResource LufiaButton}" Padding="10,4" Command="{Binding DeleteMapCommand}" HorizontalAlignment="Left" Margin="0,8,0,0"
+                                ToolTip="Frees the map's number (for New map) and its space; first lists every exit and event that still leads to it"/>
                     </StackPanel>
                 </Expander>
                 <ListBox Style="{StaticResource GdRecordList}" ItemsSource="{Binding MapsView}" SelectedItem="{Binding SelectedMap}" DisplayMemberPath="Label">
@@ -307,6 +309,19 @@
                             <TextBlock DockPanel.Dock="Right" Text="size" Style="{StaticResource LufiaLabel}" VerticalAlignment="Center" Margin="0,0,6,0"/>
                             <Rectangle/>
                         </DockPanel>
+                        <Grid DockPanel.Dock="Top" Margin="0,0,0,6" IsEnabled="{Binding IsTownMap}"
+                              ToolTip="The map's graphics: picking one shows the map with it at once; Apply to ROM keeps it, Undo takes it back. New tileset (in Map settings) gives this map a copy of its own.">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="90"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Tileset" Style="{StaticResource LufiaLabel}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <ComboBox Grid.Column="1" Style="{StaticResource GdCombo}" Width="Auto" HorizontalAlignment="Stretch" ItemsSource="{Binding TilesetChoices}" SelectedIndex="{Binding TilesetChoice}"/>
+                            <TextBlock Grid.Column="2" Text="Palette" Style="{StaticResource LufiaLabel}" VerticalAlignment="Center" Margin="8,0,6,0"/>
+                            <ComboBox Grid.Column="3" Style="{StaticResource GdCombo}" Width="Auto" HorizontalAlignment="Stretch" ItemsSource="{Binding PaletteChoices}" SelectedIndex="{Binding MapPalette}"/>
+                        </Grid>
                         <TextBlock DockPanel.Dock="Top" Text="{Binding BrushText}" Style="{StaticResource LufiaLabel}" TextWrapping="Wrap"
                                    Foreground="{StaticResource GoldLightBrush}" Margin="0,0,0,6"/>
                         <WrapPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">

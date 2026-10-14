@@ -11,6 +11,31 @@ public partial class MapEditorViewModel
 {
     public ObservableCollection<string> TilesetChoices { get; } = new();
     public ObservableCollection<string> SpriteChoices { get; } = new();
+    public ObservableCollection<string> PaletteChoices { get; } = new();
+
+    /// <summary>Picking a tileset or palette shows the map with it at once (Apply writes it; Undo takes it back).</summary>
+    partial void OnTilesetChoiceChanged(int value) => PreviewGraphics();
+    partial void OnMapPaletteChanged(int value) => PreviewGraphics();
+
+    private void PreviewGraphics()
+    {
+        if (_populating || _rom == null || _map == null || _map.IsWorld) return;
+        if (TilesetChoice < 0 || TilesetChoice >= Tilesets.Count(_rom) || MapPalette < 0 || MapPalette >= LufiaMap.MapPaletteCount) return;
+        if (TilesetChoice == _map.Tileset && MapPalette == _map.PaletteIndex) return;
+        try
+        {
+            _map.SetTilesetAndPalette(TilesetChoice, MapPalette);
+            _tileset = MapTileset.ForMap(_rom, _map);
+            BuildPalette();
+            OnPropertyChanged(nameof(BrushText));
+            RedrawMap();
+            RebuildOverlays();
+            MarkEdited();
+            Status = $"Map {_map.MapId:X2} shown with tileset {TilesetChoice}, palette {MapPalette}. Apply to ROM to keep it (Undo takes it back). " +
+                     "Block numbers stay the same, so a tileset made for other maps can look scrambled here.";
+        }
+        catch (Exception ex) { Status = "Tileset: " + ex.Message; }
+    }
 
     [ObservableProperty] private int _tilesetChoice;
     [ObservableProperty] private int _mapPalette;
@@ -71,7 +96,12 @@ public partial class MapEditorViewModel
         if (_rom == null || _map == null) return;
         IsTownMap = !_map.IsWorld;
         TilesetChoices.Clear();
-        for (int t = 0, n = Tilesets.Count(_rom); t < n; t++) TilesetChoices.Add($"Tileset {t}");
+        for (int t = 0, n = Tilesets.Count(_rom); t < n; t++) TilesetChoices.Add($"Tileset {t}" + TilesetUsers(t));
+        if (PaletteChoices.Count != LufiaMap.MapPaletteCount)
+        {
+            PaletteChoices.Clear();
+            for (int p = 0; p < LufiaMap.MapPaletteCount; p++) PaletteChoices.Add($"Palette {p}");
+        }
         if (SpriteChoices.Count != NpcSprites.Count(_rom))
         {
             SpriteChoices.Clear();
@@ -84,6 +114,14 @@ public partial class MapEditorViewModel
         _populating = false;
         NewMapNote = $"{MapFactory.FreeIds(_rom).Count} free map numbers left.";
         RefreshTestStart();
+    }
+
+    /// <summary>" (Alekia, Treck…)": the first maps that use a tileset, to recognise it in the list.</summary>
+    private string TilesetUsers(int t)
+    {
+        var users = Maps.Where(m => m.MapId != LufiaMap.WorldMap && m.Tileset == t).Take(3).Select(m => string.IsNullOrEmpty(m.Name) ? $"map {m.MapId:X2}" : m.Name).ToList();
+        int more = Maps.Count(m => m.MapId != LufiaMap.WorldMap && m.Tileset == t) - users.Count;
+        return users.Count == 0 ? "  (no map uses it)" : $"  ({string.Join(", ", users)}{(more > 0 ? $" +{more}" : "")})";
     }
 
     /// <summary>Writes the tileset, palette and size (and any other edits of this map).</summary>
@@ -128,6 +166,45 @@ public partial class MapEditorViewModel
             Status = $"Tileset {t} made (a copy of the old one) and given to map {_map?.MapId:X2}. Edit it with Edit blocks.";
         }
         catch (Exception ex) { Status = "New tileset: " + ex.Message; }
+    }
+
+    /// <summary>Deletes the open map (after listing what still leads to it).</summary>
+    [RelayCommand]
+    private void DeleteMap()
+    {
+        if (_rom == null || _map == null) return;
+        int id = _map.MapId;
+        if (_map.IsWorld) { Status = "The world map can't be deleted."; return; }
+        string label = SelectedMap?.Label ?? $"map {id:X2}";
+        Status = "Looking for what leads to this map...";
+        string Label(int m) => Maps.FirstOrDefault(x => x.MapId == m)?.Label ?? $"map {m:X2}";
+        var refs = MapFactory.References(_rom, id, Label);
+        bool mine = MapFactory.IsNewMap(_rom, id);
+        string text = $"Delete {label}?\n\n" +
+            (mine ? "It was made with Lufia Forge; its number becomes free for a new map and its space is given back."
+                  : "It is one of the game's own maps: the story may take the party there, and deleting it can break the game.") +
+            (refs.Count == 0 ? "\n\nNothing else leads to it." :
+                $"\n\nThese still lead to it and would crash the game until you change them:\n  " + string.Join("\n  ", refs.Take(15)) +
+                (refs.Count > 15 ? $"\n  ...and {refs.Count - 15} more" : "")) +
+            "\n\nEdit > Undo takes it back.";
+        if (MessageBox.Show(text, "Delete map", MessageBoxButton.OKCancel, mine && refs.Count == 0 ? MessageBoxImage.Question : MessageBoxImage.Warning,
+                MessageBoxResult.Cancel) != MessageBoxResult.OK) { Status = "Not deleted."; return; }
+        try
+        {
+            HasUnappliedChanges = false;
+            MapFactory.Delete(_rom, id);
+            var names = MapNames.LoadCustom();
+            if (names.Remove(id)) MapNames.SaveCustom(names);
+            _mainVm?.NotifyRomModified($"Deleted map {id:X2}");
+            Maps.Clear();
+            foreach (var m in MapCatalog.ScanNamed(_rom)) Maps.Add(m);
+            _generatedNames = MapNames.Generate(_rom, Maps.Select(m => m.MapId).ToList());
+            _links = MapLinks.Build(_rom, Maps.Select(m => m.MapId));
+            BuildDestinationChoices();
+            SelectedMap = Maps.FirstOrDefault(m => m.MapId == 0x04) ?? Maps.FirstOrDefault();
+            Status = $"Map {id:X2} deleted" + (refs.Count > 0 ? $"; {refs.Count} exit(s) / event(s) still lead to it: point them elsewhere." : ".");
+        }
+        catch (Exception ex) { Status = "Delete map: " + ex.Message; }
     }
 
     [RelayCommand] private void NewMapCopy() => NewMap(blank: false);

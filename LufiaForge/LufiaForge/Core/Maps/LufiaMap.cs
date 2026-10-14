@@ -161,8 +161,8 @@ public sealed class LufiaMap
     public byte[] Original { get; }
 
     public bool IsWorld { get; }
-    public int Tileset { get; }
-    public int PaletteIndex { get; }
+    public int Tileset { get; private set; }
+    public int PaletteIndex { get; private set; }
     public int Width { get; private set; }
     public int Height { get; private set; }
     private readonly int _origWidth, _origHeight;
@@ -648,9 +648,11 @@ public sealed class LufiaMap
         public List<MapNpc> Npcs { get; init; } = new();
         public List<MovePath> Paths { get; init; } = new();
         public List<MapTrigger> Triggers { get; init; } = new();
+        public int Tileset { get; init; }
+        public int Palette { get; init; }
 
         public bool SameAs(State o) =>
-            Width == o.Width && Height == o.Height && Layer.AsSpan().SequenceEqual(o.Layer) &&
+            Tileset == o.Tileset && Palette == o.Palette && Width == o.Width && Height == o.Height && Layer.AsSpan().SequenceEqual(o.Layer) &&
             Exits.Count == o.Exits.Count && Exits.Zip(o.Exits).All(p => Key(p.First) == Key(p.Second)) &&
             Arrivals.Count == o.Arrivals.Count && Arrivals.Zip(o.Arrivals).All(p => Key(p.First) == Key(p.Second)) &&
             Npcs.Count == o.Npcs.Count && Npcs.Zip(o.Npcs).All(p => Key(p.First) == Key(p.Second)) &&
@@ -680,6 +682,7 @@ public sealed class LufiaMap
         Width = Width, Height = Height, Layer = (ushort[])Layer.Clone(),
         Exits = Exits.Select(Copy).ToList(), Arrivals = Arrivals.Select(Copy).ToList(),
         Npcs = Npcs.Select(Copy).ToList(), Paths = Paths.Select(Copy).ToList(), Triggers = Triggers.Select(Copy).ToList(),
+        Tileset = Tileset, Palette = PaletteIndex,
     };
 
     public void Restore(State s)
@@ -690,6 +693,7 @@ public sealed class LufiaMap
         Npcs.Clear(); Npcs.AddRange(s.Npcs.Select(Copy));
         Paths.Clear(); Paths.AddRange(s.Paths.Select(Copy));
         Triggers.Clear(); Triggers.AddRange(s.Triggers.Select(Copy));
+        if (!IsWorld && (s.Tileset != Tileset || s.Palette != PaletteIndex)) SetTilesetAndPalette(s.Tileset, s.Palette);
     }
 
     public void Resize(int width, int height, int fill)
@@ -709,6 +713,7 @@ public sealed class LufiaMap
     {
         if (IsWorld) throw new InvalidOperationException("The world map's graphics are fixed.");
         Original[0x08] = (byte)tileset; Original[0x09] = (byte)palette;
+        Tileset = tileset; PaletteIndex = palette;
     }
 
     /// <summary>Adds an NPC at the end (NPC n runs event n of the map's script).</summary>
