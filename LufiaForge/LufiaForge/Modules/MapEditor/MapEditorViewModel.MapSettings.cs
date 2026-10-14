@@ -138,7 +138,7 @@ public partial class MapEditorViewModel
         if (_rom == null || _map == null || _map.IsWorld) { Status = "Open a town or dungeon map to start from."; return; }
         if (HasUnappliedChanges) { Status = "Apply or revert this map's changes first."; return; }
         string what = blank
-            ? $"a new blank map with map {_map.MapId:X2}'s size and graphics, filled with block {Brush:X3} (no characters or exits, its own empty events)"
+            ? $"a new blank map with map {_map.MapId:X2}'s size and graphics, filled with block {Brush:X3} (no characters, exits or step-on areas; one arrival point in the middle; its own empty events)"
             : $"a new map copied from map {_map.MapId:X2} (layout, characters, exits; its own copy of the events; chests and doors are shared with map {_map.MapId:X2})";
         if (MessageBox.Show($"Make {what}?\n\nConnect it afterwards: point an exit of another map at it.", "New map",
                 MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;
