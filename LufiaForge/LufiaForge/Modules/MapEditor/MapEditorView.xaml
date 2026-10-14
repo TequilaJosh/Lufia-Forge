@@ -446,6 +446,9 @@
                                 <Button Content="Apply map settings" Style="{StaticResource LufiaButtonGold}" Padding="10,4" Command="{Binding ApplyMapSettingsCommand}" HorizontalAlignment="Left" Margin="0,4,0,10"
                                         ToolTip="Writes the tileset, palette and size (new cells get the brush block)"/>
 
+                                <Button Content="Make room for new blocks..." Style="{StaticResource LufiaButton}" Padding="10,4" Command="{Binding MakeRoomCommand}" HorizontalAlignment="Left" Margin="0,0,0,10"
+                                        ToolTip="For town tilesets with composite blocks (tree tops, roofs): adds blank spare blocks for this map (its own copy of the tileset if it's shared). The map looks the same."/>
+
                                 <TextBlock Text="Characters" Style="{StaticResource GdSection}"/>
                                 <Button Content="+ Add character" Style="{StaticResource LufiaButton}" Padding="10,4" Command="{Binding AddNpcCommand}" HorizontalAlignment="Left" Margin="0,0,0,10"
                                         ToolTip="Adds a character near the first arrival point; drag it into place and pick its sprite"/>

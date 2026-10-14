@@ -58,7 +58,40 @@ public sealed class BlockSet
     public static BlockSet FromMap(RomBuffer rom, LufiaMap map)
     {
         var ts = MapTileset.ForMap(rom, map);
-        return new BlockSet(map, ts, ts.TilesResource, ts.BlocksResource);
+        var set = new BlockSet(map, ts, ts.TilesResource, ts.BlocksResource);
+        if (!map.IsWorld && set.CompositeThreshold >= 0) set.FindSpares(rom);
+        return set;
+    }
+
+    /// <summary>On a tileset with composite blocks: blank blocks (all zero, from Make room) below every map's threshold
+    /// that no map with this tileset uses (cells or composite pairs). New blocks go there.</summary>
+    public List<int> Spares { get; } = new();
+
+    private void FindSpares(RomBuffer rom)
+    {
+        var used = new HashSet<int>();
+        int minT = int.MaxValue;
+        int pairs = Tilesets.CompositePairs(rom, Tileset);
+        foreach (var info in MapCatalog.Scan(rom))
+        {
+            if (info.MapId == LufiaMap.WorldMap || info.Tileset != Tileset) continue;
+            LufiaMap m;
+            try { m = info.MapId == Map.MapId ? Map : LufiaMap.Load(rom, info.MapId); } catch { continue; }
+            int t = m.CompositeThreshold < 0 ? BlockCount : m.CompositeThreshold;
+            minT = Math.Min(minT, t);
+            foreach (var c in m.Layer)
+            {
+                int b = c & 0x3FF;
+                if (b < t) used.Add(b);
+                else if (m.CompositeThreshold >= 0)
+                {
+                    int e = pairs + (b - t) * 4;
+                    if (e + 4 <= rom.Length) { used.Add(rom.ReadUInt16Le(e) & 0x3FF); used.Add(rom.ReadUInt16Le(e + 2) & 0x3FF); }
+                }
+            }
+        }
+        for (int b = 1; b < Math.Min(minT, BlockCount); b++)
+            if (!used.Contains(b) && Blocks.AsSpan(b * Size, Size).IndexOfAnyExcept((byte)0) < 0) Spares.Add(b);
     }
 
     // ── block records ─────────────────────────────────────────────────────
@@ -82,12 +115,21 @@ public sealed class BlockSet
 
     /// <summary>Blocks can be added at the end unless the tileset has composite blocks there (or it is the world map,
     /// whose block count is fixed by its chunk table).</summary>
-    public bool CanAddBlocks => !IsWorld && CompositeThreshold < 0 && BlockCount < 1024;
+    public bool CanAddBlocks => !IsWorld && (CompositeThreshold < 0 ? BlockCount < 1024 : Spares.Count > 0);
 
     /// <summary>Adds a copy of <paramref name="block"/> at the end; returns its number.</summary>
     public int AddBlock(int block)
     {
-        if (!CanAddBlocks) throw new InvalidOperationException(IsWorld ? "The world map has a fixed number of blocks." : "This tileset has composite blocks after its normal ones, so blocks can't be added at the end.");
+        if (!CanAddBlocks) throw new InvalidOperationException(IsWorld ? "The world map has a fixed number of blocks." : "This map's tileset has no spare blocks left: use Make room for new blocks.");
+        if (CompositeThreshold >= 0)
+        {
+            // a spare blank block (Make room) instead of the end, which is composite on this map
+            int s = Spares[0];
+            Spares.RemoveAt(0);
+            Array.Copy(Blocks, block * Size, Blocks, s * Size, Size);
+            BlocksChanged = true;
+            return s;
+        }
         var b = new byte[Blocks.Length + Size];
         Blocks.CopyTo(b, 0);
         Array.Copy(Blocks, block * Size, b, Blocks.Length, Size);

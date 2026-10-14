@@ -49,6 +49,7 @@ public partial class MapEditorViewModel
             if (_turnBase < 0 || _turnBase >= set.BlockCount) { _turnBase = Brush; _turnIndex = 0; }
             _turnIndex = ((_turnIndex + step) % 4 + 4) % 4;
             var (fx, fy, name) = BrushTurns[_turnIndex];
+            int turning = _turnBase, turnIndex = _turnIndex;
             var want = Turned(set, _turnBase, fx, fy);
             int found = -1;
             for (int b = 0; b < set.BlockCount && found < 0; b++)
@@ -61,7 +62,19 @@ public partial class MapEditorViewModel
             if (found >= 0) how = found == _turnBase ? "" : $" (block {found:X3}, already in the tileset)";
             else
             {
-                if (!set.CanAddBlocks) { Status = $"The tileset has no {name} copy of block {_turnBase:X3}, and blocks can't be added to it (it has composite blocks at the end)."; return true; }
+                if (!set.CanAddBlocks)
+                {
+                    if (set.CompositeThreshold < 0 || !MakeRoomFor($"The tileset has no {name} copy of block {_turnBase:X3}, and no room for a new block yet."))
+                    {
+                        if (set.CompositeThreshold < 0) Status = $"The tileset has no {name} copy of block {_turnBase:X3}, and it is full (1024 blocks).";
+                        _turnIndex = ((_turnIndex - step) % 4 + 4) % 4;
+                        return true;
+                    }
+                    // (making room reloads the map, which resets the brush: carry on with the block being turned)
+                    _turnBase = turning; _turnIndex = turnIndex;
+                    set = BlockSet.FromMap(_rom, _map!);
+                    if (!set.CanAddBlocks) return true;
+                }
                 found = set.AddBlock(_turnBase);
                 for (int k = 0; k < BlockSet.Size; k++) set.Blocks[found * BlockSet.Size + k] = want[k];
                 set.SetAttribute(found, want[8]);   // marks the blocks changed
