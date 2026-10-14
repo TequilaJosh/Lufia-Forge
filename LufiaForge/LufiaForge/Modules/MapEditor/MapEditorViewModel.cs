@@ -352,6 +352,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
         _tileset?.CompositeParts(mt) is var (g, o) ? $"   = ground {g:X3} + overlay {o:X3}" : "";
     partial void OnBrushChanged(int value)
     {
+        if (!_turning) _turnBase = -1;   // a brush picked by hand: the next Alt + wheel turns this block
         OnPropertyChanged(nameof(BrushText));
         OnPropertyChanged(nameof(BrushBoxX));
         OnPropertyChanged(nameof(BrushBoxY));
