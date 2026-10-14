@@ -38,6 +38,26 @@ public partial class BlockEditorWindow : Window
         AddBlockButton.ToolTip = set.CanAddBlocks ? "Adds a copy of the selected block at the end" :
             set.IsWorld ? "The world map has a fixed number of blocks" : "This tileset has composite blocks at the end, so new ones can't be added";
         DrawBlocks(); DrawTiles(); ShowBlock();
+        PreviewMouseWheel += TurnQuarter;
+    }
+
+    /// <summary>The four ways a tile can face (the SNES can flip tiles, not turn them 90 degrees): normal, flipped
+    /// across, turned 180 degrees (both flips), flipped up/down.</summary>
+    private static readonly (bool X, bool Y, string Name)[] Turns =
+        { (false, false, "normal"), (true, false, "flipped across"), (true, true, "turned 180°"), (false, true, "flipped up/down") };
+
+    /// <summary>Alt + mouse wheel anywhere in the window: the selected quarter steps through the four ways it can face.</summary>
+    private void TurnQuarter(object sender, MouseWheelEventArgs e)
+    {
+        if ((Keyboard.Modifiers & ModifierKeys.Alt) == 0) return;
+        e.Handled = true;
+        ushort w = _set.Word(_block, _quarter);
+        int i = Array.FindIndex(Turns, t => t.X == BlockSet.FlipX(w) && t.Y == BlockSet.FlipY(w));
+        i = ((i + (e.Delta > 0 ? 1 : -1)) % 4 + 4) % 4;
+        _set.SetWord(_block, _quarter, BlockSet.MakeWord(BlockSet.TileOf(w), BlockSet.RowOf(w), BlockSet.Priority(w), Turns[i].X, Turns[i].Y));
+        string[] names = { "top-left", "bottom-left", "top-right", "bottom-right" };
+        StatusText.Text = $"Block {_block:X3}, {names[_quarter]} quarter: {Turns[i].Name} (not yet applied). Alt + mouse wheel turns it again.";
+        DrawBlocks(); ShowBlock(); DrawTiles();
     }
 
     private int RowOfQuarter() => BlockSet.RowOf(_set.Word(_block, _quarter));
