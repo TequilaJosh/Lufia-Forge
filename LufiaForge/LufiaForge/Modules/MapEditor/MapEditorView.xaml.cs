@@ -11,6 +11,7 @@ public partial class MapEditorView : UserControl
     // Floating tooltip that follows the mouse and describes what's under it (treasure, exits, arrivals).
     private readonly ToolTip _tip = new() { Placement = PlacementMode.Mouse, HorizontalOffset = 14, VerticalOffset = 14 };
     private MapEditorViewModel? _vmHooked;
+    private bool _altWheel;
 
     public MapEditorView()
     {
@@ -27,6 +28,16 @@ public partial class MapEditorView : UserControl
             if (fit >= 1) Vm.PaletteZoom = Math.Min(4, fit);
         };
         DataContextChanged += (_, _) => HookVm();
+        // Alt + mouse wheel anywhere in the editor turns the brush block; letting go of Alt then doesn't open the menu bar
+        PreviewMouseWheel += (_, e) =>
+        {
+            if (Vm == null || (Keyboard.Modifiers & ModifierKeys.Alt) == 0) return;
+            if (Vm.TurnBrush(e.Delta > 0 ? 1 : -1)) { e.Handled = true; _altWheel = true; }
+        };
+        PreviewKeyUp += (_, e) =>
+        {
+            if (_altWheel && e.Key == Key.System && e.SystemKey is Key.LeftAlt or Key.RightAlt) { e.Handled = true; _altWheel = false; }
+        };
         // Ctrl+Z / Ctrl+Y anywhere in the editor (text boxes keep their own): the map's edits first; with none left
         // the key goes on to the app's history (Edit > Undo)
         KeyDown += (_, e) =>
