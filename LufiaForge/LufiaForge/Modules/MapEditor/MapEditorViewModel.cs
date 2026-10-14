@@ -355,6 +355,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
     {
         if (!_turning) _turnBase = -1;   // a brush picked by hand: the next Alt + wheel turns this block
         RefreshBrushPreview();
+        BrushHelpers();
         OnPropertyChanged(nameof(BrushText));
         OnPropertyChanged(nameof(BrushBoxX));
         OnPropertyChanged(nameof(BrushBoxY));
@@ -363,8 +364,10 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
     }
 
     /// <summary>Where the brush's block sits in the palette image (16 blocks per row), for its highlight box.</summary>
-    public double BrushBoxX => Brush % 16 * 16;
-    public double BrushBoxY => Brush / 16 * 16;
+    /// <summary>Where the brush's block is in the palette (its place in the chosen order; off the palette if it isn't listed).</summary>
+    private int BrushCell => _paletteOrder == null ? Brush : Array.IndexOf(_paletteOrder, Brush);
+    public double BrushBoxX => BrushCell < 0 ? -100 : BrushCell % 16 * 16;
+    public double BrushBoxY => BrushCell < 0 ? -100 : BrushCell / 16 * 16;
 
     /// <summary>Zoom of the block palette on the right.</summary>
     [ObservableProperty] private double _paletteZoom = 2.0;
@@ -421,9 +424,12 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
         HasUnappliedChanges = false;
         try
         {
+            _statsTileset = -999;   // counted again (maps may have changed since)
             _map = LufiaMap.Load(_rom, mapId);
             _spotContents = MapSetupScript.ReadSpots(_rom, mapId);
             _tileset = MapTileset.ForMap(_rom, _map);
+            int recentKey = _map.IsWorld ? -1 : _map.Tileset;
+            if (recentKey != _recentKey) { RecentBrushes.Clear(); _recentKey = recentKey; }
             _pixels = _tileset.RenderMap(_map);
             int w = _map.Width * 16, h = _map.Height * 16;
             var bmp = new WriteableBitmap(w, h, 96, 96, PixelFormats.Bgra32, null);
@@ -454,13 +460,15 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
     {
         RefreshBrushPreview();
         if (_tileset == null) return;
-        int count = _tileset.MetatileCount, cols = 16, rows = (count + cols - 1) / cols;
+        _paletteOrder = PaletteOrder();
+        int count = _paletteOrder?.Length ?? _tileset.MetatileCount, cols = 16, rows = (count + cols - 1) / cols;
         int w = cols * 16, h = Math.Max(1, rows) * 16;
         var buf = new uint[w * h];
-        for (int i = 0; i < count; i++) _tileset.DrawMetatile(buf, w, (i % cols) * 16, (i / cols) * 16, i);
+        for (int i = 0; i < count; i++) _tileset.DrawMetatile(buf, w, (i % cols) * 16, (i / cols) * 16, _paletteOrder?[i] ?? i);
         var bmp = new WriteableBitmap(w, h, 96, 96, PixelFormats.Bgra32, null);
         bmp.WritePixels(new Int32Rect(0, 0, w, h), buf, w * 4, 0);
         PaletteImage = bmp;
+        BrushHelpers();
     }
 
     partial void OnShowNpcsChanged(bool value) => RebuildOverlays();
@@ -870,6 +878,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
     {
         if (_tileset == null) return;
         int i = (int)(py / 16) * 16 + (int)(px / 16);
+        if (_paletteOrder != null) { if (px < 0 || px >= 256 || i < 0 || i >= _paletteOrder.Length) return; i = _paletteOrder[i]; }
         if (i < 0 || i >= _tileset.MetatileCount) return;
         Brush = i;
         Tool = MapTool.Paint;
