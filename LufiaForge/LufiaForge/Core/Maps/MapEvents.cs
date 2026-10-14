@@ -19,13 +19,7 @@ public static class MapEvents
     {
         int b = EventScript.BlockOffset(rom, mapId);
         if (b >= MapWriter.ExpansionStart && ExpansionSpace.Load(rom).At(b) is { } e && e.Start == b) return e.End - b;
-        int next = int.MaxValue;
-        foreach (var m in MapCatalog.Scan(rom))
-        {
-            int o = EventScript.BlockOffset(rom, m.MapId);
-            if (o > b && o < next) next = o;
-        }
-        return Math.Min(Math.Min(next, rom.Length) - b, 0xC000);
+        return Math.Min(Math.Min(EventScript.NextBlockStart(rom, b), rom.Length) - b, 0xC000);
     }
 
     /// <summary>How many entries the map's event table has: up to the empty entry closing it after the event base (or
