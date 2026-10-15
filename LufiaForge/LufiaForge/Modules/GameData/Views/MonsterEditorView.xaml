@@ -163,7 +163,7 @@
                         <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                             <Button Content="Export picture..." Style="{StaticResource LufiaButton}" Command="{Binding ExportPictureCommand}" Margin="0,0,8,0"/>
                             <Button Content="Import picture..." Style="{StaticResource LufiaButtonGold}" Command="{Binding ImportPictureCommand}"
-                                    ToolTip="Width and height in multiples of 16 pixels, up to 128 x 112. Transparent = see-through. Written to the ROM right away (unsaved until File > Save ROM)."/>
+                                    ToolTip="Width and height in multiples of 16 pixels, up to 128 x 112. Transparent = see-through. Written to the ROM right away (Save Project keeps it)."/>
                         </StackPanel>
                         <Button Content="➕  New picture for this monster" Style="{StaticResource LufiaButton}" Command="{Binding NewPictureCommand}"
                                 HorizontalAlignment="Left" Margin="0,8,0,0"

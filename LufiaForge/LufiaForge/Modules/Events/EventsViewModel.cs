@@ -390,10 +390,9 @@ public partial class EventsViewModel : ObservableObject, IEventHost
 
     public void ConfirmWritten(string heading, string details) =>
         InfoDialog.Show("Written to ROM", "✔ " + heading,
-            details + "\n\nThe change is in the ROM loaded in Lufia Forge, but not on disk yet. " +
-            "Use File > Save ROM (or the button below) to write a new dated copy; the ROM you opened is never overwritten.",
-            path: _rom?.FilePath, pathLabel: "ROM being edited (the copy is saved next to it)",
-            primaryText: _mainVm != null ? "💾 Save ROM now" : null, primary: () => _mainVm?.SaveNow());
+            details + "\n\nIt's in your project now: saving the project keeps it (Ctrl+S, or on its own every 5 minutes), and File > Export ROM writes a playable ROM.",
+            path: null, pathLabel: null,
+            primaryText: _mainVm != null ? "💾 Save project now" : null, primary: () => _mainVm?.SaveNow());
 
     /// <summary>True while the list is rebuilt after a save (the editor keeps showing the saved event).</summary>
     public bool SuppressOpen => _suppressOpen;

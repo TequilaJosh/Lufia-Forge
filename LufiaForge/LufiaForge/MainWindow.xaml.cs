@@ -25,16 +25,36 @@ public partial class MainWindow : Window
         KeyDown += (_, e) =>
         {
             if (e.Handled || System.Windows.Input.Keyboard.Modifiers.HasFlag(System.Windows.Input.ModifierKeys.Alt)) return;
-            if (System.Windows.Input.Keyboard.FocusedElement is System.Windows.Controls.Primitives.TextBoxBase) return;
             bool ctrl = System.Windows.Input.Keyboard.Modifiers.HasFlag(System.Windows.Input.ModifierKeys.Control);
             bool shift = System.Windows.Input.Keyboard.Modifiers.HasFlag(System.Windows.Input.ModifierKeys.Shift);
             if (!ctrl) return;
+            // project keys work everywhere, also while typing
+            System.Windows.Input.ICommand? project = e.Key switch
+            {
+                System.Windows.Input.Key.S => shift ? vm.SaveProjectAsCommand : vm.SaveProjectCommand,
+                System.Windows.Input.Key.O when !shift => vm.OpenProjectCommand,
+                System.Windows.Input.Key.N when !shift => vm.NewProjectCommand,
+                _ => null,
+            };
+            if (project != null) { if (project.CanExecute(null)) project.Execute(null); e.Handled = true; return; }
+            if (System.Windows.Input.Keyboard.FocusedElement is System.Windows.Controls.Primitives.TextBoxBase) return;
             if (e.Key == System.Windows.Input.Key.Z && !shift) { if (vm.UndoCommand.CanExecute(null)) vm.UndoCommand.Execute(null); e.Handled = true; }
             else if (e.Key == System.Windows.Input.Key.Y || e.Key == System.Windows.Input.Key.Z && shift) { if (vm.RedoCommand.CanExecute(null)) vm.RedoCommand.Execute(null); e.Handled = true; }
         };
 
         // Quietly check GitHub for a newer release once the window is up.
         Loaded += async (_, _) => await UpdateService.CheckAsync(silentIfNone: true, HasUnsavedChanges);
+
+        // Saving the project: the map editor writes its unapplied map first
+        if (MapEditorView.DataContext is MapEditorViewModel mapEdit)
+        {
+            vm.FlushPendingEdits += () => (mapEdit.FlushPendingEdits(out var error), error);
+            vm.HasPendingEdits = () => mapEdit.HasUnappliedChanges;
+        }
+
+        // BizHawk plays the project as it is now: a fresh copy of its ROM is written when it's launched
+        if (MemoryMonitorView.DataContext is MemoryMonitorViewModel monitor)
+            monitor.PrepareRom = vm.WritePlayRom;
 
         // Wire cross-module: Disassembler "Add to Watchlist" → Memory Monitor
         if (DisassemblerView.DataContext  is DisassemblerViewModel  disVm &&
@@ -134,6 +154,13 @@ public partial class MainWindow : Window
         catch { }
     }
 
+    /// <summary>Closing: asks to save the project when something isn't saved (Cancel keeps the app open).</summary>
+    protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+    {
+        if (!((MainViewModel)DataContext).ConfirmLeaveProject()) e.Cancel = true;
+        base.OnClosing(e);
+    }
+
     protected override void OnClosed(System.EventArgs e)
     {
         // Dispose the memory monitor bridge/timer
@@ -142,7 +169,7 @@ public partial class MainWindow : Window
         base.OnClosed(e);
     }
 
-    private bool HasUnsavedChanges() => ((MainViewModel)DataContext).RomBuffer?.IsDirty == true;
+    private bool HasUnsavedChanges() => ((MainViewModel)DataContext).HasUnsavedProjectChanges();
 
     private async void CheckUpdatesMenuItem_Click(object sender, RoutedEventArgs e) =>
         await UpdateService.CheckAsync(silentIfNone: false, HasUnsavedChanges);

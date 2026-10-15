@@ -85,7 +85,7 @@ public partial class MapEditorViewModel
             TestStartPatch.Set(_rom, mode, _map?.MapId ?? 0, TestStartArrival);
             _mainVm?.NotifyRomModified("Test start: " + TestStartModes[(int)mode]);
             RefreshTestStart();
-            Status = TestStartNote + " Save the ROM and reset the game to use it.";
+            Status = TestStartNote + " Export the ROM (or launch BizHawk from the Memory Monitor) and reset the game to use it.";
         }
         catch (Exception ex) { Status = "Test start: " + ex.Message; }
     }
@@ -152,7 +152,7 @@ public partial class MapEditorViewModel
     private void NewTileset()
     {
         if (_rom == null || _map == null || _map.IsWorld) return;
-        if (HasUnappliedChanges) { Status = "Apply or revert this map's changes first."; return; }
+        if (!WritePendingFirst()) return;
         if (MessageBox.Show($"Make a new tileset as a copy of tileset {_map.Tileset} and use it for map {_map.MapId:X2}? " +
                             "Then editing its blocks and tiles changes only the maps you give it.", "New tileset",
                             MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;
@@ -216,7 +216,7 @@ public partial class MapEditorViewModel
     {
         if (_rom == null || _map == null) return false;
         if (BlockRoom.CantMakeRoom(_rom, _map) is { } cant) { Status = "Make room: " + cant; return false; }
-        if (HasUnappliedChanges) { Status = "Apply or revert this map's changes first, then make room for new blocks."; return false; }
+        if (!WritePendingFirst()) return false;
         bool shared = Maps.Any(m => m.MapId != _map.MapId && m.MapId != LufiaMap.WorldMap && m.Tileset == _map.Tileset);
         string text = (why != null ? why + "\n\n" : "") +
             $"Make room for {BlockRoom.DefaultSpares} new blocks on this map?\n\n" +
@@ -246,7 +246,7 @@ public partial class MapEditorViewModel
     private void NewMap(bool blank)
     {
         if (_rom == null || _map == null || _map.IsWorld) { Status = "Open a town or dungeon map to start from."; return; }
-        if (HasUnappliedChanges) { Status = "Apply or revert this map's changes first."; return; }
+        if (!WritePendingFirst()) return;
         string what = blank
             ? $"a new blank map with map {_map.MapId:X2}'s size and graphics, filled with block {Brush:X3} (no characters, exits or step-on areas; one arrival point in the middle; its own empty events)"
             : $"a new map copied from map {_map.MapId:X2} (layout, characters, exits; its own copy of the events; chests and doors are shared with map {_map.MapId:X2})";
@@ -321,7 +321,7 @@ public partial class MapEditorViewModel
     private bool CreateTalkEvent(int ev)
     {
         if (_rom == null || _map == null) return false;
-        if (HasUnappliedChanges) { Status = "Apply this map's changes first."; return false; }
+        if (!WritePendingFirst()) return false;
         if (MessageBox.Show($"Character {ev + 1} has no event yet. Make one (talking to it runs event {ev})?", "New event",
                 MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return false;
         try

@@ -37,18 +37,40 @@ Title="{Binding WindowTitle}"
               Foreground="{StaticResource TextPrimaryBrush}">
 
             <MenuItem Header="_File" Foreground="{StaticResource TextPrimaryBrush}">
-                <MenuItem Header="Open ROM..."
-                          Command="{Binding OpenRomCommand}"
+                <MenuItem Header="New Project from a ROM..." ToolTip="Pick a ROM and name the project; the ROM itself is never changed"
+                          Command="{Binding NewProjectCommand}"
+                          InputGestureText="Ctrl+N"
+                          Foreground="Black"/>
+                <MenuItem Header="Open Project..."
+                          Command="{Binding OpenProjectCommand}"
                           InputGestureText="Ctrl+O"
                           Foreground="Black"/>
+                <MenuItem Header="Recent Projects" ItemsSource="{Binding RecentList}" IsEnabled="{Binding HasRecent}" Foreground="Black">
+                    <MenuItem.ItemContainerStyle>
+                        <Style TargetType="MenuItem">
+                            <Setter Property="Header" Value="{Binding Name}"/>
+                            <Setter Property="ToolTip" Value="{Binding Path}"/>
+                            <Setter Property="Command" Value="{Binding DataContext.OpenRecentCommand, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                            <Setter Property="CommandParameter" Value="{Binding}"/>
+                            <Setter Property="Foreground" Value="Black"/>
+                        </Style>
+                    </MenuItem.ItemContainerStyle>
+                </MenuItem>
                 <Separator Style="{StaticResource LufiaSeparator}"/>
-                <MenuItem Header="Save ROM (dated copy)" ToolTip="Saves a new copy named with the date and time; the opened ROM is never overwritten"
-                          Command="{Binding SaveRomCommand}"
+                <MenuItem Header="Save Project" ToolTip="Keeps your changes in the project (it also saves on its own every 5 minutes)"
+                          Command="{Binding SaveProjectCommand}"
                           InputGestureText="Ctrl+S"
                           Foreground="Black"/>
-                <MenuItem Header="Save ROM As..."
-                          Command="{Binding SaveRomAsCommand}"
+                <MenuItem Header="Save Project As..."
+                          Command="{Binding SaveProjectAsCommand}"
                           InputGestureText="Ctrl+Shift+S"
+                          Foreground="Black"/>
+                <Separator Style="{StaticResource LufiaSeparator}"/>
+                <MenuItem Header="Export ROM (dated copy)" ToolTip="Writes a playable ROM with everything in the project, named with the date and time, next to the project"
+                          Command="{Binding SaveRomCommand}"
+                          Foreground="Black"/>
+                <MenuItem Header="Export ROM As..."
+                          Command="{Binding SaveRomAsCommand}"
                           Foreground="Black"/>
                 <Separator Style="{StaticResource LufiaSeparator}"/>
                 <MenuItem Header="Exit" Command="{Binding ExitCommand}" Foreground="Black"/>
@@ -105,19 +127,19 @@ Title="{Binding WindowTitle}"
 
                 <Separator Style="{StaticResource LufiaSeparator}" Margin="0,0,16,0"/>
 
-                <Button Content="📂  Open ROM"
+                <Button Content="📂  Open Project" ToolTip="Open a project (File &gt; New Project starts one from a ROM)"
                         Style="{StaticResource LufiaButton}"
-                        Command="{Binding OpenRomCommand}"
+                        Command="{Binding OpenProjectCommand}"
                         Margin="0,0,8,0"/>
 
-                <Button Content="💾  Save ROM" ToolTip="Saves a new copy named with the date and time; the opened ROM is never overwritten"
+                <Button Content="💾  Save Project" ToolTip="Keeps your changes in the project (Ctrl+S; it also saves on its own every 5 minutes)"
+                        Style="{StaticResource LufiaButton}"
+                        Command="{Binding SaveProjectCommand}"
+                        Margin="0,0,8,0"/>
+
+                <Button Content="🎮  Export ROM" ToolTip="Writes a playable ROM with everything in the project, named with the date and time, next to the project"
                         Style="{StaticResource LufiaButton}"
                         Command="{Binding SaveRomCommand}"
-                        Margin="0,0,8,0"/>
-
-                <Button Content="Save As..."
-                        Style="{StaticResource LufiaButton}"
-                        Command="{Binding SaveRomAsCommand}"
                         Margin="0,0,8,0"/>
 
                 <Separator Style="{StaticResource LufiaSeparator}" Margin="8,0,16,0"/>
@@ -269,11 +291,39 @@ Title="{Binding WindowTitle}"
                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24" MaxWidth="900">
                     <TextBlock Text="⚔" FontSize="40" Foreground="{StaticResource GoldBrush}" HorizontalAlignment="Center"/>
                     <TextBlock Text="Welcome to Lufia Forge" Style="{StaticResource LufiaLabelGold}" FontSize="24" HorizontalAlignment="Center" Margin="0,4,0,6"/>
-                    <TextBlock Text="An editor for Lufia &amp; the Fortress of Doom (USA). Open your ROM to start: your edits are saved to a new dated copy, the ROM you open is never changed."
+                    <TextBlock Text="An editor for Lufia &amp; the Fortress of Doom (USA). Start a project from your ROM: your changes are kept in the project and saved every 5 minutes, and the ROM you pick is never changed."
                                Style="{StaticResource LufiaLabel}" FontSize="13" TextWrapping="Wrap" TextAlignment="Center" MaxWidth="620" HorizontalAlignment="Center"/>
-                    <Button Content="📂  Open a ROM…" Style="{StaticResource LufiaButtonGold}" FontSize="15" Padding="26,10" Margin="0,18,0,6"
-                            HorizontalAlignment="Center" Command="{Binding OpenRomCommand}"/>
-                    <TextBlock Text="(.sfc or .smc; Restored and Recolor ROMs work too)" Style="{StaticResource LufiaLabel}" HorizontalAlignment="Center" Margin="0,0,0,22"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,18,0,6">
+                        <Button Content="✨  New project from a ROM…" Style="{StaticResource LufiaButtonGold}" FontSize="15" Padding="22,10" Margin="0,0,10,0"
+                                Command="{Binding NewProjectCommand}"/>
+                        <Button Content="📂  Open a project…" Style="{StaticResource LufiaButton}" FontSize="15" Padding="22,10"
+                                Command="{Binding OpenProjectCommand}"/>
+                    </StackPanel>
+                    <TextBlock Text="(.sfc or .smc; Restored and Recolor ROMs work too)" Style="{StaticResource LufiaLabel}" HorizontalAlignment="Center" Margin="0,0,0,16"/>
+
+                    <!-- recent projects: pick up where you left off -->
+                    <Border Style="{StaticResource LufiaCard}" Width="560" HorizontalAlignment="Center" Margin="0,0,0,18"
+                            Visibility="{Binding HasRecent, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <StackPanel>
+                            <TextBlock Text="Recent projects" Style="{StaticResource LufiaCardTitle}"/>
+                            <ItemsControl ItemsSource="{Binding RecentList}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Command="{Binding DataContext.OpenRecentCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}"
+                                                Style="{StaticResource LufiaButton}" HorizontalContentAlignment="Stretch" Padding="10,6" Margin="0,3,0,0" ToolTip="{Binding Path}">
+                                            <DockPanel>
+                                                <TextBlock DockPanel.Dock="Right" Text="{Binding When}" Style="{StaticResource LufiaLabel}" Foreground="{StaticResource TextDisabledBrush}" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding Name}" Style="{StaticResource LufiaLabelGold}" FontSize="14"/>
+                                                    <TextBlock Text="{Binding Path}" Style="{StaticResource LufiaLabel}" Foreground="{StaticResource TextDisabledBrush}" TextTrimming="CharacterEllipsis"/>
+                                                </StackPanel>
+                                            </DockPanel>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
 
                     <ItemsControl HorizontalAlignment="Center">
                         <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="3"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>

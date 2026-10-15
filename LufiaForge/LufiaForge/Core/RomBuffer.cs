@@ -153,6 +153,15 @@ public class RomBuffer
     private static readonly System.Text.RegularExpressions.Regex DatedSuffix =
         new(@"_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}$");
 
+    /// <summary>Whether the ROM's bytes are exactly these.</summary>
+    public bool SameAs(byte[] other) => _data.AsSpan().SequenceEqual(other);
+
+    /// <summary>Writes the ROM as it is now to a file (a playable copy), without changing FilePath.</summary>
+    public void WriteCopy(string path) => WriteSafely(path);
+
+    /// <summary>Where copies of the ROM go (a project's ROM file next to the project): exports and the copy BizHawk plays.</summary>
+    public void SetFilePath(string path) => FilePath = path;
+
     /// <summary>Save the current buffer to a new path (Save As) and update FilePath.</summary>
     public void SaveToFile(string path)
     {

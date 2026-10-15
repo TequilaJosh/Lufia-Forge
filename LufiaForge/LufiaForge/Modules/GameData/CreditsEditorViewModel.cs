@@ -92,7 +92,7 @@ public partial class CreditsEditorViewModel : GameDataEditorBase
         }
         string result = "";
         Commit($"Credits: {Selected.Label}", () => result = s.Save(expand));
-        if (result.Length > 0) Status = $"Credits written: {result} (unsaved until File > Save ROM).";
+        if (result.Length > 0) Status = $"Credits written: {result} (Save Project keeps it).";
         _ = Reload(c);
     }
 }

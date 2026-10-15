@@ -69,7 +69,7 @@ public partial class PatchManagerViewModel : ObservableObject
             if (adding) patch.Apply(_rom); else patch.Remove!(_rom);
             _mainVm?.NotifyRomModified((adding ? "Added: " : "Removed: ") + patch.Name);
             if (patch.ReloadsAll) _mainVm?.ReloadModules();
-            StatusText = (adding ? "Added: " : "Removed: ") + patch.Name + ". Save the ROM to keep it.";
+            StatusText = (adding ? "Added: " : "Removed: ") + patch.Name + ". Save Project keeps it.";
         }
         catch (Exception ex) { StatusText = "Not changed: " + ex.Message; }
         RefreshBuiltIn();
@@ -122,7 +122,7 @@ public partial class PatchManagerViewModel : ObservableObject
             var l2 = FontPatch.ReadLufia2(dialog.FileName);
             int n = FontPatch.Apply(_rom, l2, SmallFontToo);
             _mainVm?.NotifyRomModified("Lufia II font");
-            StatusText = $"Lufia II's font copied in ({n} letters changed). Save the ROM to keep it.";
+            StatusText = $"Lufia II's font copied in ({n} letters changed). Save Project keeps it.";
         }
         catch (Exception ex) { StatusText = "Font not changed: " + ex.Message; }
         RefreshBuiltIn();
@@ -134,7 +134,7 @@ public partial class PatchManagerViewModel : ObservableObject
         if (_rom == null || !FontPatch.IsApplied(_rom)) return;
         FontPatch.Restore(_rom);
         _mainVm?.NotifyRomModified("Lufia 1 font restored");
-        StatusText = "Lufia 1's own font is back. Save the ROM to keep it.";
+        StatusText = "Lufia 1's own font is back. Save Project keeps it.";
         RefreshBuiltIn();
     }
 
@@ -172,7 +172,7 @@ public partial class PatchManagerViewModel : ObservableObject
         Core.Maps.ExpansionSpace.Load(_rom).Save();
         _rom.FixChecksum();
         _mainVm?.NotifyRomModified("ROM expanded to 4 MB");
-        StatusText = "ROM expanded to 4 MB. Save the ROM to keep it.";
+        StatusText = "ROM expanded to 4 MB. Save Project keeps it.";
         RefreshBuiltIn();
     }
 

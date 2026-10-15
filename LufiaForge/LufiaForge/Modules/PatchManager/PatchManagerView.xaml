@@ -43,7 +43,7 @@
             <StackPanel>
                 <TextBlock Text="Patch Manager" Style="{StaticResource LufiaLabelGold}" FontSize="17"/>
                 <TextBlock Style="{StaticResource LufiaLabel}" TextWrapping="Wrap" Margin="0,4,0,0"
-                           Text="Fixes and features Lufia Forge can add to your ROM with one click, plus the font, the ROM size and IPS patches. Changes are made in memory: use File &gt; Save ROM to keep them."/>
+                           Text="Fixes and features Lufia Forge can add to your ROM with one click, plus the font, the ROM size and IPS patches. Changes go into your project: Save Project keeps them."/>
             </StackPanel>
         </Border>
 

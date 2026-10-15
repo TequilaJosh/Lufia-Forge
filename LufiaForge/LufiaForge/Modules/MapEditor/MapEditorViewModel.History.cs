@@ -96,18 +96,65 @@ public partial class MapEditorViewModel
         if (_rom != null && _tileset != null && !_map.IsWorld) { _tileset = MapTileset.ForMap(_rom, _map); BuildPalette(); OnPropertyChanged(nameof(BrushText)); }
         RedrawMap();
         ClearSelection();
-        // keep the selected object when it still exists
-        if (sel is { } s)
-        {
-            if (s.kind == "npc" && s.index < _map.Npcs.Count && !_map.Npcs[s.index].IsUnused) SelectNpc(_map.Npcs[s.index]);
-            else if (s.kind == "exit" && s.index < _map.Exits.Count) SelectExit(_map.Exits[s.index], focusLinked: false);
-            else if (s.kind == "arrival" && s.index < _map.Arrivals.Count) SelectArrival(_map.Arrivals[s.index], focusLinked: false);
-            else if (s.kind == "trigger" && s.index < _map.Triggers.Count && !_map.Triggers[s.index].IsUnused) SelectTrigger(_map.Triggers[s.index]);
-        }
+        Reselect(sel);
         RebuildOverlays();
         RefreshMapSettings();
         HasUnappliedChanges = _baseline == null || !state.SameAs(_baseline);
         UpdateHistoryUi();
+    }
+
+    /// <summary>Selects the same object again (after the map was restored or reloaded) when it still exists.</summary>
+    private void Reselect((string kind, int index)? sel)
+    {
+        if (_map == null || sel is not { } s) return;
+        if (s.kind == "npc" && s.index < _map.Npcs.Count && !_map.Npcs[s.index].IsUnused) SelectNpc(_map.Npcs[s.index]);
+        else if (s.kind == "exit" && s.index < _map.Exits.Count) SelectExit(_map.Exits[s.index], focusLinked: false);
+        else if (s.kind == "arrival" && s.index < _map.Arrivals.Count) SelectArrival(_map.Arrivals[s.index], focusLinked: false);
+        else if (s.kind == "trigger" && s.index < _map.Triggers.Count && !_map.Triggers[s.index].IsUnused) SelectTrigger(_map.Triggers[s.index]);
+    }
+
+    /// <summary>
+    /// Writes this map's unapplied edits to the ROM without asking (the project is being saved), and carries on as if
+    /// nothing happened: the selection, the brush, a building being placed and this map's undo steps all stay. False
+    /// (with the reason) when they couldn't be written; the edits stay unapplied then.
+    /// </summary>
+    public bool FlushPendingEdits(out string? error)
+    {
+        error = null;
+        if (_rom == null || _map == null || !HasUnappliedChanges) return true;
+        if (_inGesture) { error = "a map edit is in progress"; return false; }
+        try
+        {
+            var result = MapWriter.Save(_rom, _map, allowExpand: true);
+            int id = _map.MapId;
+            var sel = _selection;
+            _map = LufiaMap.Load(_rom, id);
+            _spotContents = MapSetupScript.ReadSpots(_rom, id);
+            _tileset = MapTileset.ForMap(_rom, _map);
+            _baseline = _current = _map.Capture();
+            HasUnappliedChanges = false;
+            _links = MapLinks.Build(_rom, Maps.Select(m => m.MapId));
+            ClearSelection();
+            Reselect(sel);
+            RebuildOverlays();
+            _mainVm?.NotifyRomModified($"Map {id:X2}: blocks/characters/exits ({(result.Moved ? $"moved to 0x{result.FileOffset:X6}" : $"in place at 0x{result.FileOffset:X6}")})");
+            UpdateHistoryUi();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
+    }
+
+    /// <summary>Before something that reloads the map (the block editor, importing, make room...): its edits are
+    /// written first. False when they couldn't be (the reason is in the status bar).</summary>
+    private bool WritePendingFirst()
+    {
+        if (FlushPendingEdits(out var error)) return true;
+        Status = $"This map's edits couldn't be written first ({error}): Apply or Revert them, then try again.";
+        return false;
     }
 
     /// <summary>Draws the whole map again (after undo / redo, which can change its size).</summary>

@@ -52,7 +52,7 @@
                         <TextBlock Text="{Binding NewNote}" Style="{StaticResource GdHint}" VerticalAlignment="Center"/>
                     </StackPanel>
                     <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" MaxWidth="620" HorizontalAlignment="Left" Margin="0,8,0,0"
-                               Text="These are the sprites walking around on the maps: the party members and every character. Export the sheet, draw over it in any paint program, and import it back - importing writes to the ROM right away (unsaved until File > Save ROM)."/>
+                               Text="These are the sprites walking around on the maps: the party members and every character. Export the sheet, draw over it in any paint program, and import it back - importing writes to the ROM right away (Save Project keeps it)."/>
                 </StackPanel>
             </Border>
             <Border Style="{StaticResource GdCard}" HorizontalAlignment="Left">

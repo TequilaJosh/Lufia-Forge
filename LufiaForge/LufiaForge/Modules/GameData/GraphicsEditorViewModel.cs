@@ -245,7 +245,7 @@ public partial class GraphicsEditorViewModel : GameDataEditorBase
         {
             if (!Hex(RawOffsetText, out int off)) return;
             Commit($"Graphics at {off:X6}", () => rom.WriteBytes(off, data));
-            Status = $"Graphics written at 0x{off:X6} ({how}); unsaved until File > Save ROM.";
+            Status = $"Graphics written at 0x{off:X6} ({how}); Save Project keeps it.";
         }
         else
         {
@@ -259,7 +259,7 @@ public partial class GraphicsEditorViewModel : GameDataEditorBase
             }
             ResourceWriter.Result? r = null;
             Commit($"Graphics resource {res:X3}", () => r = ResourceWriter.Save(rom, res, data, expand));
-            if (r != null) Status = $"Resource {res:X3} written ({how}{(r.Moved ? ", moved to the expanded space" : "")}); unsaved until File > Save ROM.";
+            if (r != null) Status = $"Resource {res:X3} written ({how}{(r.Moved ? ", moved to the expanded space" : "")}); Save Project keeps it.";
         }
         Draw();
     }

@@ -13,7 +13,7 @@ public partial class InfoDialog : Window
     private InfoDialog() => InitializeComponent();
 
     /// <param name="path">A file to show with "Open folder" / "Copy path" buttons.</param>
-    /// <param name="primaryText">Caption of an extra action button (e.g. "Save ROM now").</param>
+    /// <param name="primaryText">Caption of an extra action button (e.g. "Save project now").</param>
     public static void Show(string title, string heading, string body,
                             string? path = null, string? pathLabel = null,
                             string? primaryText = null, Action? primary = null)

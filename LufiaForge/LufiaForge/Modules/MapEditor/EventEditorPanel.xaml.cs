@@ -886,7 +886,7 @@ public partial class EventEditorPanel : UserControl
             Script = EventScript.Reload(_rom, Script) ?? Script;
             Fill();
             if (Stage.Visibility == Visibility.Visible) { Stage.Bind(_rom, this); if (_selectedLine >= 0) SelectLine(Math.Min(_selectedLine, _lines.Count - 1)); }
-            StatusText.Text = "✔ Written to the ROM. Use Save ROM to write a dated copy.";
+            StatusText.Text = "✔ Written to the ROM. Save Project keeps it.";
             _owner.ConfirmWritten($"Event {_event} of map {_mapId:X2} written to the ROM", result);
         }
         catch (Exception ex)

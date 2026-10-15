@@ -627,7 +627,7 @@ public partial class TitleEditorViewModel : GameDataEditorBase
             bool anim = Animating;
             LoadSelected();
             Animating = anim;
-            Status = $"Title screen written ({built}; {result}); unsaved until File > Save ROM.";
+            Status = $"Title screen written ({built}; {result}); Save Project keeps it.";
         }
     }
 }
