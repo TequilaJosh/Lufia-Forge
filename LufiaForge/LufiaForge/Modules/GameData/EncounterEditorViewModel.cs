@@ -146,7 +146,7 @@ public partial class EncounterEditorViewModel : GameDataEditorBase
         BuildEntries();
         SelectedIndex = -1; SelectedIndex = keep;
         foreach (var (s, m) in pending) _pending[s] = m;
-        Status = $"Patched: up to {SubgroupPatch.MaxSubgroups} subgroups and {Encounters.GroupRoom(rom)} bytes for group lists (unsaved until File > Save ROM).";
+        Status = $"Patched: up to {SubgroupPatch.MaxSubgroups} subgroups and {Encounters.GroupRoom(rom)} bytes for group lists (Save Project keeps it).";
     }
 
     private void BuildSubgroupChoices()

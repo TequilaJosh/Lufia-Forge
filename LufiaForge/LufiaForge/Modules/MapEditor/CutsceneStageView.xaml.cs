@@ -701,7 +701,7 @@ public partial class CutsceneStageView : UserControl
             var result = MapWriter.Save(_rom, _map, allowExpand: expand);
             _pathsDirty = false;
             _panel.Host.EventSaved($"Map {_map.MapId:X2}: movement paths");
-            PathStatus.Text = "✔ Paths written to the ROM. Use Save ROM to write a dated copy.";
+            PathStatus.Text = "✔ Paths written to the ROM. Save Project keeps it.";
             _panel.Host.ConfirmWritten($"Paths of map {_map.MapId:X2} written to the ROM", result.Describe());
             _map = LufiaMap.Load(_rom, _map.MapId);
             Resimulate();

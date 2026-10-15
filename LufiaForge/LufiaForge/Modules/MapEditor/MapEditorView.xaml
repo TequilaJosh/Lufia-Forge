@@ -50,7 +50,7 @@
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
                     <Border CornerRadius="10" Padding="9,2" Margin="0,0,10,0" Background="#5A4416" VerticalAlignment="Center"
                             Visibility="{Binding HasUnappliedChanges, Converter={StaticResource BoolToVisibilityConverter}}"
-                            ToolTip="This map has edits that aren't in the ROM yet: Apply writes them (then Save ROM keeps them)">
+                            ToolTip="This map has edits that aren't in the ROM yet: Apply writes them now; saving the project writes them too">
                         <TextBlock Text="● Not applied yet" Foreground="{StaticResource GoldLightBrush}" FontSize="11"/>
                     </Border>
                     <Button Content="↺  Revert" Style="{StaticResource LufiaButton}" Padding="10,4" Command="{Binding RevertMapCommand}" Margin="0,0,6,0"

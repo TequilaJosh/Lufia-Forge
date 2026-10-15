@@ -19,7 +19,7 @@ public partial class MainViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(WindowTitle))]
     private RomBuffer? _romBuffer;
 
-    [ObservableProperty] private string _statusMessage = "Ready. Open a Lufia 1 ROM to begin.";
+    [ObservableProperty] private string _statusMessage = "Ready. Start a project from your ROM, or open one, to begin.";
     [ObservableProperty] private string _statusDetail  = "";
     [ObservableProperty] private bool   _isLoading     = false;
     [ObservableProperty] private int    _selectedTabIndex = 0;
@@ -48,6 +48,8 @@ public partial class MainViewModel : ObservableObject
         History.Attach(value);
         SaveRomCommand.NotifyCanExecuteChanged();
         SaveRomAsCommand.NotifyCanExecuteChanged();
+        SaveProjectCommand.NotifyCanExecuteChanged();
+        SaveProjectAsCommand.NotifyCanExecuteChanged();
     }
 
     private void HistoryChanged()
@@ -59,7 +61,11 @@ public partial class MainViewModel : ObservableObject
         RedoCommand.NotifyCanExecuteChanged();
     }
 
-    public MainViewModel() => History.Changed += HistoryChanged;
+    public MainViewModel()
+    {
+        History.Changed += HistoryChanged;
+        if (Application.Current != null) StartProjectSupport();
+    }
 
     private bool CanUndo() => History.CanUndo;
     private bool CanRedo() => History.CanRedo;
@@ -94,7 +100,7 @@ public partial class MainViewModel : ObservableObject
         _pendingChanges.Add(what);
         ReloadModules();
         OnPropertyChanged(nameof(WindowTitle));
-        StatusMessage = what + " (in memory; save the ROM to keep it)";
+        StatusMessage = what + (Project != null ? " (Save Project keeps it)" : "");
     }
 
     /// <summary>Makes every tab load the ROM again (after its bytes were replaced, e.g. by an IPS patch).</summary>
@@ -102,62 +108,16 @@ public partial class MainViewModel : ObservableObject
 
     public string WindowTitle => RomBuffer == null
         ? "Lufia Forge"
-        : $"Lufia Forge - {Path.GetFileName(RomBuffer.FilePath)}{(RomBuffer.IsDirty ? " *" : "")}";
+        : Project != null
+            ? $"Lufia Forge - {Project.Name}{(TitleDirty ? " *" : "")}"
+            : $"Lufia Forge - {Path.GetFileName(RomBuffer.FilePath)}";
+
+    /// <summary>Whether the title shows "*": changed since the project was saved.</summary>
+    private bool TitleDirty => Project != null && RomBuffer != null && (_savedRom == null || !RomBuffer.SameAs(_savedRom));
 
     // -------------------------------------------------------------------------
     // Commands
     // -------------------------------------------------------------------------
-
-    [RelayCommand]
-    private void OpenRom()
-    {
-        var dialog = new OpenFileDialog
-        {
-            Title  = "Open Lufia 1 ROM",
-            Filter = "SNES ROM files (*.sfc;*.smc)|*.sfc;*.smc|All files (*.*)|*.*"
-        };
-
-        if (dialog.ShowDialog() != true) return;
-
-        IsLoading = true;
-        StatusMessage = "Loading ROM...";
-
-        var report = RomLoader.Load(dialog.FileName);
-        IsLoading = false;
-
-        switch (report.Result)
-        {
-            case RomLoadResult.Success:
-                RomBuffer     = report.Buffer;
-                StatusMessage = $"Loaded: {Path.GetFileName(dialog.FileName)}";
-                StatusDetail  = report.HadSmcHeader
-                    ? "SMC header detected and stripped."
-                    : $"Size: {report.RomSizeBytes / 1024}KB  |  Title: {report.DetectedTitle}";
-                break;
-
-            case RomLoadResult.ChecksumMismatch:
-                RomBuffer     = report.Buffer; // Still load - might be a pre-patched ROM
-                StatusMessage = $"Loaded with warnings: {Path.GetFileName(dialog.FileName)}";
-                StatusDetail  = "Checksum mismatch - ROM may already be modified. Proceeding anyway.";
-                MessageBox.Show(report.Message, "Checksum Warning",
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
-                break;
-
-            case RomLoadResult.WrongGame:
-                StatusMessage = "Load failed: Wrong game.";
-                StatusDetail  = report.Message;
-                MessageBox.Show(report.Message, "Wrong ROM",
-                    MessageBoxButton.OK, MessageBoxImage.Error);
-                break;
-
-            default:
-                StatusMessage = "Load failed.";
-                StatusDetail  = report.Message;
-                MessageBox.Show(report.Message, "Error Loading ROM",
-                    MessageBoxButton.OK, MessageBoxImage.Error);
-                break;
-        }
-    }
 
     [RelayCommand(CanExecute = nameof(IsRomLoaded))]
     private void SaveRom()
@@ -165,26 +125,21 @@ public partial class MainViewModel : ObservableObject
         if (RomBuffer == null) return;
         try
         {
-            // Never overwrite the opened ROM: each save writes a new date-stamped copy beside it.
+            // a new date-stamped ROM next to the project each time; the ROM the project started from is never touched
+            Flush(quiet: false);
             string copyPath = RomBuffer.SaveDatedCopy();
-            StatusMessage = $"Saved copy: {Path.GetFileName(copyPath)} (original ROM unchanged).";
+            StatusMessage = $"Exported: {Path.GetFileName(copyPath)}.";
             StatusDetail  = copyPath;
-            OnPropertyChanged(nameof(WindowTitle));
-
-            var changes = _pendingChanges.Count == 0
-                ? "All edits made so far are in this file."
-                : "Included in this save:\n  • " + string.Join("\n  • ", _pendingChanges.Distinct());
-            _pendingChanges.Clear();
-            Modules.Common.InfoDialog.Show("ROM saved", "✔ ROM saved to a new file",
-                $"Your edits were written to a new dated copy ({new FileInfo(copyPath).Length / 1024} KB). " +
-                $"The ROM you opened ({Path.GetFileName(RomBuffer.FilePath)}) was not changed.\n\n{changes}\n\n" +
+            Modules.Common.InfoDialog.Show("ROM exported", "✔ ROM exported",
+                $"Everything in the project so far was written to a new dated ROM ({new FileInfo(copyPath).Length / 1024} KB) next to the project. " +
+                "The project itself is kept by Save Project, not by exporting.\n\n" +
                 "Load the new file in your emulator to play with the changes. Start from an in-game save rather than " +
                 "an old savestate (savestates carry the old ROM contents).",
-                path: copyPath, pathLabel: "Saved to");
+                path: copyPath, pathLabel: "Exported to");
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Failed to save: {ex.Message}", "Save Error",
+            MessageBox.Show($"Failed to export: {ex.Message}", "Export Error",
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
@@ -196,9 +151,9 @@ public partial class MainViewModel : ObservableObject
 
         var dialog = new SaveFileDialog
         {
-            Title      = "Save ROM As",
+            Title      = "Export ROM As",
             Filter     = "SNES ROM (*.sfc)|*.sfc|All files (*.*)|*.*",
-            FileName   = Path.GetFileNameWithoutExtension(RomBuffer.FilePath) + "_modified.sfc",
+            FileName   = Path.GetFileNameWithoutExtension(RomBuffer.FilePath) + ".sfc",
             InitialDirectory = Path.GetDirectoryName(RomBuffer.FilePath)
         };
 
@@ -206,23 +161,23 @@ public partial class MainViewModel : ObservableObject
 
         try
         {
-            RomBuffer.SaveToFile(dialog.FileName);
-            StatusMessage = "ROM saved as new file.";
+            Flush(quiet: false);
+            RomBuffer.WriteCopy(dialog.FileName);
+            StatusMessage = "ROM exported.";
             StatusDetail  = dialog.FileName;
-            OnPropertyChanged(nameof(WindowTitle));
-            _pendingChanges.Clear();
-            Modules.Common.InfoDialog.Show("ROM saved", "✔ ROM saved",
-                "All edits were written to the file below.", path: dialog.FileName, pathLabel: "Saved to");
+            Modules.Common.InfoDialog.Show("ROM exported", "✔ ROM exported",
+                "Everything in the project so far was written to the file below.", path: dialog.FileName, pathLabel: "Exported to");
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Failed to save: {ex.Message}", "Save Error",
+            MessageBox.Show($"Failed to export: {ex.Message}", "Export Error",
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
+    /// <summary>Closes the main window (which asks to save the project first).</summary>
     [RelayCommand]
-    private void Exit() => Application.Current.Shutdown();
+    private void Exit() => Application.Current.MainWindow?.Close();
 
     // -------------------------------------------------------------------------
     // Called by child modules when they modify the ROM
@@ -240,15 +195,12 @@ public partial class MainViewModel : ObservableObject
         History.Record(what);
         OnPropertyChanged(nameof(WindowTitle));
         StatusMessage = what == null
-            ? "ROM modified (unsaved changes)."
-            : $"Written to ROM (not saved to disk yet): {what}";
+            ? "Changed (Save Project keeps it)."
+            : $"Changed: {what} (Save Project keeps it)";
     }
 
-    /// <summary>Save a dated copy now (used by "Save ROM now" buttons in confirmations).</summary>
-    public void SaveNow()
-    {
-        if (SaveRomCommand.CanExecute(null)) SaveRomCommand.Execute(null);
-    }
+    /// <summary>Save the project now (the "Save project now" buttons in confirmations).</summary>
+    public void SaveNow() => SaveProjectNow(quiet: false);
 }
 
 /// <summary>A line in Edit > History: a step that is in the ROM (click: undo back to before it) or undone (click: redo it).</summary>

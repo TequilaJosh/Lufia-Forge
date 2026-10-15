@@ -145,7 +145,9 @@ public partial class MapEditorViewModel
     private void OpenTriggerEvent()
     {
         if (_rom == null || _map == null || _selection is not { kind: "trigger" } sel) return;
-        if (sel.index >= _map.LoadedTriggerCount || HasUnappliedChanges) { Status = "Apply the map first: that switches the area on and makes its event."; return; }
+        // writing the map switches the area on and makes its event
+        if (!WritePendingFirst() || _map == null) return;
+        if (sel.index >= _map.LoadedTriggerCount) { Status = "Apply the map first: that switches the area on and makes its event."; return; }
         int ev = MapEvents.AreaEvent(_rom, _map.MapId, sel.index);
         if (!MapEvents.HasEvent(_rom, _map.MapId, ev))
         {

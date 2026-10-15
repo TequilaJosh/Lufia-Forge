@@ -135,6 +135,9 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
         _pendingRomPath = rom.FilePath;
     }
 
+    /// <summary>Writes the ROM BizHawk should play (the project as it is now) and returns its path.</summary>
+    public Func<string?>? PrepareRom { get; set; }
+
     private static void WriteLoadRomCommand(string romPath)
     {
         try { File.WriteAllText(LoadRomCommandFile, romPath); } catch { }
@@ -167,8 +170,9 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
 
         try
         {
-            // Pass any already-open ROM so BizHawk loads it immediately
-            await _host.LaunchAsync(DefaultEmuHawkPath, _pendingRomPath);
+            // Pass the project's ROM (written fresh) so BizHawk loads it immediately
+            string? rom = PrepareRom?.Invoke() ?? _pendingRomPath;
+            await _host.LaunchAsync(DefaultEmuHawkPath, rom);
             IsBizHawkRunning = _host.IsRunning;
         }
         catch (Exception ex)

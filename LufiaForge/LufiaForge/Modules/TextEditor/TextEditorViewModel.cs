@@ -251,8 +251,8 @@ public partial class TextEditorViewModel : ObservableObject
                 "Expand ROM?", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
         public void EventSaved(string what) { _vm._mainVm?.NotifyRomModified(what); _ = _vm.BuildAsync(); }
         public void ConfirmWritten(string heading, string details) =>
-            InfoDialog.Show("Written to ROM", "✔ " + heading, details + "\n\nUse File > Save ROM to write it to disk.",
-                path: _vm._rom?.FilePath, pathLabel: "ROM being edited");
+            InfoDialog.Show("Written to ROM", "✔ " + heading, details + "\n\nIt's in your project now: saving the project keeps it (Ctrl+S, or on its own every 5 minutes), and File > Export ROM writes a playable ROM.",
+                path: null, pathLabel: null);
     }
 
     [RelayCommand]
@@ -284,13 +284,12 @@ public partial class TextEditorViewModel : ObservableObject
             row.IsEdited = true;
             string what = $"Dialogue: {row.MapLabel}, event {l.Event}, line {l.Line + 1}";
             _mainVm?.NotifyRomModified(what);
-            StatusText = "✔ Written to the ROM. Use Save ROM to write a dated copy.";
+            StatusText = "✔ Written to the ROM. Save Project keeps it.";
             UpdateSize();
             InfoDialog.Show("Written to ROM", "✔ Dialogue written to the ROM",
-                result + "\n\nThe change is in the ROM loaded in Lufia Forge, but not on disk yet. Use File > Save ROM " +
-                "(or the button below) to write a new dated copy; the ROM you opened is never overwritten.",
-                path: _rom.FilePath, pathLabel: "ROM being edited (the copy is saved next to it)",
-                primaryText: _mainVm != null ? "💾 Save ROM now" : null, primary: () => _mainVm?.SaveNow());
+                result + "\n\nIt's in your project now: saving the project keeps it (Ctrl+S, or on its own every 5 minutes), and File > Export ROM writes a playable ROM.",
+                path: null, pathLabel: null,
+                primaryText: _mainVm != null ? "💾 Save project now" : null, primary: () => _mainVm?.SaveNow());
             if (!s.IsCodeView && !fits) _ = BuildAsync();   // the event moved: line offsets changed
         }
         catch (Exception ex)

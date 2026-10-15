@@ -208,7 +208,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
     private void EditBlocks()
     {
         if (_rom == null || _map == null) { Status = "Open a map first."; return; }
-        if (HasUnappliedChanges) { Status = "Apply or revert this map's changes first: the Block editor reloads the map."; return; }
+        if (!WritePendingFirst()) return;
         try
         {
             var set = BlockSet.FromMap(_rom, _map);
@@ -235,7 +235,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
     {
         if (_rom == null || _map == null || _tileset == null || _map.IsWorld)
         { Status = "Open a town or dungeon map first (the world map's graphics work differently)."; return; }
-        if (HasUnappliedChanges) { Status = "Apply or revert this map's changes first: importing reloads the map."; return; }
+        if (!WritePendingFirst()) return;
         var dlg = new Microsoft.Win32.OpenFileDialog { Title = "Picture to import (multiple of 16 x 16 pixels)", Filter = "Pictures (*.png;*.bmp;*.gif)|*.png;*.bmp;*.gif" };
         if (dlg.ShowDialog() != true) return;
         uint[] px; int w, h;
@@ -396,8 +396,9 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
     partial void OnSelectedMapChanged(MapInfo? oldValue, MapInfo? newValue)
     {
         if (_revertingSelection || newValue == null || _rom == null) return;
-        if (HasUnappliedChanges &&
-            MessageBox.Show("This map has edits that weren't applied to the ROM. Discard them?", "Unapplied changes",
+        // the map's edits go into the project on their own; only when they can't be written, ask
+        if (HasUnappliedChanges && !FlushPendingEdits(out var flushError) &&
+            MessageBox.Show($"This map's edits couldn't be written ({flushError}). Discard them?", "Unsaved map edits",
                 MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
         {
             // keep showing the edited map; put the list selection back
@@ -849,10 +850,9 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
     public void ConfirmWritten(string heading, string details)
     {
         Modules.Common.InfoDialog.Show("Written to ROM", "✔ " + heading,
-            details + "\n\nThe change is in the ROM loaded in Lufia Forge, but not on disk yet. " +
-            "Use File > Save ROM (or the button below) to write a new dated copy; the ROM you opened is never overwritten.",
-            path: _rom?.FilePath, pathLabel: "ROM being edited (the copy is saved next to it)",
-            primaryText: _mainVm != null ? "💾 Save ROM now" : null, primary: () => _mainVm?.SaveNow());
+            details + "\n\nIt's in your project now: saving the project keeps it (Ctrl+S, or on its own every 5 minutes), and File > Export ROM writes a playable ROM.",
+            path: null, pathLabel: null,
+            primaryText: _mainVm != null ? "💾 Save project now" : null, primary: () => _mainVm?.SaveNow());
     }
 
     /// <summary>Called by the event editor after it wrote to the ROM.</summary>
@@ -1066,8 +1066,8 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
         string what = $"Map {_map.MapId:X2} spot {e.Content.Spot}: {updated?.Describe(_rom)}";
         _mainVm?.NotifyRomModified(what);
         SpotWrittenText = $"✔ Written to the ROM at 0x{e.Content.ScriptOffset + 1:X6}: {updated?.Describe(_rom)}.\n" +
-                          "Not on disk yet; use File > Save ROM to write a dated copy.";
-        Status = $"Treasure changed in the ROM ({updated?.Describe(_rom)}). Use Save ROM to write a dated copy.";
+                          "Save Project keeps it.";
+        Status = $"Treasure changed in the ROM ({updated?.Describe(_rom)}). Save Project keeps it.";
     }
 
     private void DragNpc(int x, int y, (int x, int y) start)
@@ -1407,7 +1407,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
             _mainVm?.NotifyRomModified($"Map {id:X2}: blocks/characters/exits ({(result.Moved ? $"moved to 0x{result.FileOffset:X6}" : $"in place at 0x{result.FileOffset:X6}")})");
             _links = MapLinks.Build(_rom, Maps.Select(m => m.MapId));
             LoadMap(id);
-            Status = result.Describe() + " Use Save ROM to write a dated copy.";
+            Status = result.Describe() + " Save Project keeps it.";
             ConfirmWritten($"Map {id:X2} written to the ROM", result.Describe());
         }
         catch (Exception ex)
