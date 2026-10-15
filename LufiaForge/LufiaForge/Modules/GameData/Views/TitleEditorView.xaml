@@ -209,7 +209,7 @@
                         <TextBlock Text="{Binding Info}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,6,0,0"/>
                     </StackPanel>
                 </Border>
-                <TextBlock Text="● changes not written yet - click Apply" Foreground="{StaticResource WarningBrush}" Margin="4,0,0,8"
+                <TextBlock Text="● edited (written by itself, or Apply to ROM in the top bar)" Foreground="{StaticResource WarningBrush}" Margin="4,0,0,8"
                            Visibility="{Binding Dirty, Converter={StaticResource BoolToVisibilityConverter}}"/>
             </StackPanel>
         </ScrollViewer>

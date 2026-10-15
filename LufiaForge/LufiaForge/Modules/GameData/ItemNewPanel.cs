@@ -66,7 +66,7 @@ public partial class ItemEditorViewModel
         Commit($"New item {id:X2}", () => { ItemTable.NewItem(Ctx.Rom, id, template); ok = true; }, namesChanged: true);
         if (!ok) return;
         SelectedIndex = id;
-        Status = $"Item {id:X2} is now a copy of item {template:X2}. Rename it and change it, then Apply.";
+        Status = $"Item {id:X2} is now a copy of item {template:X2}. Rename it and change it; it's written by itself (or click Apply to ROM in the top bar).";
         RefreshNewItemNote();
     }
 }

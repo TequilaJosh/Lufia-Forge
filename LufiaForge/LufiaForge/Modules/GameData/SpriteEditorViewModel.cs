@@ -59,7 +59,7 @@ public partial class SpriteEditorViewModel : GameDataEditorBase
 
     partial void OnSelectedChanged(SpriteEntry? value) => LoadSelected();
 
-    protected override void LoadSelected()
+    protected override void LoadRecord()
     {
         if (Ctx == null || Selected == null) { Sheet = null; return; }
         var info = NpcSprites.Info(Ctx.Rom, Selected.Number)!;

@@ -41,15 +41,15 @@ public sealed class GameDataContext
              i => $"{i:X2} {ReadName(Core.Battle.SpellTablePatch.SpellOffset(Rom, i), GameDataOffsets.SpellNameLen)}");
     }
 
-    /// <summary>Call after any write so the window title shows unsaved changes.</summary>
-    public void MarkModified(bool namesChanged = false)
+    /// <summary>Call after any write: records it in the history (false when nothing really changed).</summary>
+    public bool MarkModified(bool namesChanged = false, string? what = null)
     {
         if (namesChanged)
         {
             RefreshNames();
             NamesChanged?.Invoke();
         }
-        _mainVm?.NotifyRomModified("Game data edit (characters / items / shops / spells / monsters)");
+        return _mainVm?.NotifyRomModified(what ?? "Game data edit (characters / items / shops / spells / monsters)") ?? true;
     }
 
     // ── Record locators ─────────────────────────────────────────────────────
@@ -122,11 +122,110 @@ public abstract partial class GameDataEditorBase : ObservableObject
         if (Ctx != null) Ctx.NamesChanged -= HandleNamesChanged;
         Ctx = ctx;
         Ctx.NamesChanged += HandleNamesChanged;
-        OnPropertyChanged(nameof(ItemNames));
-        OnPropertyChanged(nameof(SpellNames));
-        IsLoaded = true;
-        Status   = "";
-        OnRomLoaded();
+        _loading++;
+        try
+        {
+            OnPropertyChanged(nameof(ItemNames));
+            OnPropertyChanged(nameof(SpellNames));
+            IsLoaded = true;
+            Status   = "";
+            OnRomLoaded();
+        }
+        finally { _loading--; }
+        Edited = false;
+        HookCollections();
+    }
+
+    // ── edits are written by themselves ──
+    // Anything typed, ticked or picked marks the editor edited (also rows of its lists); the edits are written when
+    // another record is picked and when the project is saved (or Apply to ROM in the top bar is clicked).
+
+    private int _loading;
+    private bool _writing;
+
+    /// <summary>Something was changed since the record was loaded or written.</summary>
+    public bool Edited { get; protected set; }
+
+    /// <summary>Whether this editor has edits that aren't in the ROM yet.</summary>
+    public virtual bool HasPendingEdits => Edited && Ctx != null;
+
+    /// <summary>Writes the edits (the editor's Apply). Null, or why they couldn't be written.</summary>
+    public virtual string? WritePendingEdits()
+    {
+        if (!HasPendingEdits || _writing) return null;
+        _writing = true;
+        string status = Status;
+        try
+        {
+            _changed = false;
+            (GetType().GetProperty("ApplyCommand")?.GetValue(this) as System.Windows.Input.ICommand)?.Execute(null);
+            if (!_changed) Status = status;   // the same bytes again: keep what the editor said
+            Edited = false;
+            return null;
+        }
+        catch (Exception ex) { return ex.Message; }
+        finally { _writing = false; }
+    }
+
+    private bool _changed;
+
+    /// <summary>The property names that don't count as edits (lists and what the editor shows).</summary>
+    private static readonly HashSet<string> NotEdits = new()
+    {
+        nameof(Status), nameof(IsLoaded), nameof(ItemNames), nameof(SpellNames), "TabIndex",
+        "Animating", "Busy", "Canvas", "Counter", "CurrentChannel", "CurrentTool", "CursorTick", "CursorText", "FlashColour", "FollowPlayhead",
+        "Loaded", "LoopAllChannels", "PaletteMode", "Picture", "PlayheadTick", "Preview", "PreviewNotes", "RawMode", "RawTiles",
+        "ShowAllZones", "ShowBoth", "ShowGrid", "SnapIndex", "StepFrames", "TilesPerRow", "ToolIndex", "Zoom", "ZonesDirty", "Dirty",
+        "BrushSize", "EraseZones", "DepthIndex", "LengthIndex", "SelLength", "SelPitch", "SelStart", "SelVelocity", "NewVelocity",
+        "AddChoice", "NewSpellText", "Cycle", "FrameCount", "FrameHeight", "FrameWidth", "WorksLike", "Summary", "Warning", "Info",
+        "EncounterText", "HoverText", "InfoText", "LimitText", "LoopText", "OffsetText", "PaletteOffsetText", "RawOffsetText",
+        "RegionText", "RoomText", "SizeText", "TeleportText", "WhereText", "WorldStatus", "Count",
+    };
+
+    private static bool IsShownOnly(string name) =>
+        NotEdits.Contains(name) || name.StartsWith("Is") || name.StartsWith("Can") ||
+        name.EndsWith("Options") || name.EndsWith("Image") || name.EndsWith("Sheet") || name.EndsWith("Info") ||
+        name.EndsWith("Note") || name.EndsWith("Hint");
+
+    protected override void OnPropertyChanged(System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        base.OnPropertyChanged(e);
+        if (_loading > 0 || _writing || e.PropertyName == null || IsShownOnly(e.PropertyName) || e.PropertyName.StartsWith("Selected")) return;
+        Edited = true;
+        if (GetType().GetProperty(e.PropertyName)?.GetValue(this) is System.Collections.Specialized.INotifyCollectionChanged) HookCollections();
+    }
+
+    /// <summary>Picking another record: the edits of the one shown are written first.</summary>
+    protected override void OnPropertyChanging(System.ComponentModel.PropertyChangingEventArgs e)
+    {
+        if (_loading == 0 && !_writing && e.PropertyName != null && e.PropertyName.StartsWith("Selected") && HasPendingEdits)
+            WritePendingEdits();
+        base.OnPropertyChanging(e);
+    }
+
+    private readonly HashSet<object> _hooked = new(ReferenceEqualityComparer.Instance);
+
+    /// <summary>Listens to the editor's lists and their rows, so changing a row counts as an edit.</summary>
+    private void HookCollections()
+    {
+        foreach (var p in GetType().GetProperties())
+        {
+            if (p.GetIndexParameters().Length > 0 || IsShownOnly(p.Name)) continue;
+            if (!typeof(System.Collections.Specialized.INotifyCollectionChanged).IsAssignableFrom(p.PropertyType)) continue;
+            if (p.GetValue(this) is not System.Collections.Specialized.INotifyCollectionChanged list || !_hooked.Add(list)) continue;
+            list.CollectionChanged += (_, args) =>
+            {
+                if (args.NewItems != null) foreach (var item in args.NewItems) HookItem(item);
+                if (_loading == 0 && !_writing) Edited = true;
+            };
+            if (list is System.Collections.IEnumerable items) foreach (var item in items) HookItem(item);
+        }
+    }
+
+    private void HookItem(object? item)
+    {
+        if (item is not System.ComponentModel.INotifyPropertyChanged n || !_hooked.Add(n)) return;
+        n.PropertyChanged += (_, _) => { if (_loading == 0 && !_writing) Edited = true; };
     }
 
     /// <summary>Attaches to a reloaded ROM (after undo / redo) keeping the record that was selected: an int
@@ -157,7 +256,17 @@ public abstract partial class GameDataEditorBase : ObservableObject
     protected abstract void OnRomLoaded();
 
     /// <summary>Re-read the currently selected record from the ROM.</summary>
-    protected abstract void LoadSelected();
+    protected abstract void LoadRecord();
+
+    /// <summary>Re-reads the selected record (what it shows isn't an edit).</summary>
+    protected void LoadSelected()
+    {
+        _loading++;
+        try { LoadRecord(); }
+        finally { _loading--; }
+        Edited = false;
+        HookCollections();
+    }
 
     /// <summary>
     /// Renaming replaces entries in the shared name lists, which clears ComboBox selections bound to
@@ -193,8 +302,8 @@ public abstract partial class GameDataEditorBase : ObservableObject
         try
         {
             write();
-            Ctx.MarkModified(namesChanged);
-            Status = $"{what} written to ROM (unsaved).";
+            if (Ctx.MarkModified(namesChanged, what)) { _changed = true; Status = $"{what} written to the ROM (Save Project keeps it)."; }
+            else Status = $"{what}: nothing changed.";
         }
         catch (Exception ex)
         {

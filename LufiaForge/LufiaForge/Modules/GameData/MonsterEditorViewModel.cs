@@ -148,7 +148,7 @@ public partial class MonsterEditorViewModel : GameDataEditorBase
         LoadSelected();
     }
 
-    protected override void LoadSelected()
+    protected override void LoadRecord()
     {
         if (Ctx == null || SelectedIndex < 0) return;
         var rom = Ctx.Rom;

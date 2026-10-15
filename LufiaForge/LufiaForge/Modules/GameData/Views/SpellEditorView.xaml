@@ -71,7 +71,7 @@
                         <TextBlock Text="BATTLE ANIMATION" Style="{StaticResource GdSection}"/>
                         <StackPanel Orientation="Horizontal">
                             <ComboBox Style="{StaticResource GdCombo}" Width="220" ItemsSource="{Binding AnimationChoices}" SelectedIndex="{Binding Animation}"
-                                      ToolTip="Which animation plays when the spell is cast (saved with Apply)."/>
+                                      ToolTip="Which animation plays when the spell is cast (written by itself)."/>
                             <TextBlock Text="Sound" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="12,0,6,0"/>
                             <TextBox Style="{StaticResource GdNumber}" Width="44" Text="{Binding Sound}" ToolTip="Sound effect number played with it (0 = none)."/>
                         </StackPanel>

@@ -1,7 +1,8 @@
 <UserControl x:Class="LufiaForge.Modules.GameData.Views.EditorFooter"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <!-- Apply / Revert bar shared by every Game Data editor. DataContext = the editor view model. -->
+    <!-- Revert bar shared by every Game Data editor (edits are written by themselves: picking another record, saving
+         the project, Apply to ROM in the top bar). DataContext = the editor view model. -->
     <Border Background="{StaticResource DeepPurpleBrush}"
             BorderBrush="{StaticResource BorderPurpleBrush}"
             BorderThickness="0,1,0,0"
@@ -12,16 +13,11 @@
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
-            <Button Grid.Column="0" Content="✔  Apply to ROM"
-                    Style="{StaticResource LufiaButtonGold}"
-                    Command="{Binding ApplyCommand}"
-                    IsEnabled="{Binding IsLoaded}"
-                    Margin="0,0,8,0"/>
             <Button Grid.Column="1" Content="↺  Revert"
                     Style="{StaticResource LufiaButton}"
                     Command="{Binding RevertCommand}"
                     IsEnabled="{Binding IsLoaded}"
-                    ToolTip="Discard unapplied changes and reload this record from the ROM"
+                    ToolTip="Throw away the edits that aren't in the ROM yet and reload this record from the ROM"
                     Margin="0,0,16,0"/>
             <StackPanel Grid.Column="2" VerticalAlignment="Center">
                 <TextBlock Text="{Binding Status}" Style="{StaticResource LufiaLabel}"

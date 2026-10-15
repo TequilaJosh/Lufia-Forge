@@ -137,6 +137,11 @@ Title="{Binding WindowTitle}"
                         Command="{Binding SaveProjectCommand}"
                         Margin="0,0,8,0"/>
 
+                <Button Content="✔  Apply to ROM" ToolTip="Writes the edits of every tab to the ROM now (they're also written by themselves when you pick another record, save the project, export or play)"
+                        Style="{StaticResource LufiaButtonGold}"
+                        Command="{Binding ApplyAllCommand}"
+                        Margin="0,0,8,0"/>
+
                 <Button Content="🎮  Export ROM" ToolTip="Writes a playable ROM with everything in the project, named with the date and time, next to the project"
                         Style="{StaticResource LufiaButton}"
                         Command="{Binding SaveRomCommand}"

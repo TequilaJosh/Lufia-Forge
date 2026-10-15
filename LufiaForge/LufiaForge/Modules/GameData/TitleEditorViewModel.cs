@@ -44,6 +44,8 @@ public partial class TitleEditorViewModel : GameDataEditorBase
     [ObservableProperty] private string _info = "";
     [ObservableProperty] private bool _dirty;
 
+    public override bool HasPendingEdits => Dirty && Ctx != null;
+
     // painting
     [ObservableProperty] private bool _editFront = true;
     [ObservableProperty] private bool _showBoth = true;
@@ -73,7 +75,7 @@ public partial class TitleEditorViewModel : GameDataEditorBase
 
     protected override void OnRomLoaded() => LoadSelected();
 
-    protected override void LoadSelected()
+    protected override void LoadRecord()
     {
         if (Ctx == null) return;
         try { _title = TitleScreen.Load(Ctx.Rom); }
@@ -445,7 +447,7 @@ public partial class TitleEditorViewModel : GameDataEditorBase
         _loadingCycles = false;
         CyclesEdited();
         RefreshSwatches(); SelectColour(Colour);
-        Status = "The rainbow now uses row 3 (14 colours by hue) and row 3 cycles: it flows through the letters. Change the speed below; Apply to write it.";
+        Status = "The rainbow now uses row 3 (14 colours by hue) and row 3 cycles: it flows through the letters. Change the speed below; it's written by itself.";
     }
 
     // ── files ───────────────────────────────────────────────────────────────
@@ -539,7 +541,7 @@ public partial class TitleEditorViewModel : GameDataEditorBase
         Dirty = true;
         RefreshSwatches(); SelectColour(Colour);
         Redraw();
-        Status = $"{(front ? "Front" : "Back")} layer imported ({how}). Paint on it here, or click Apply to write it to the ROM.";
+        Status = $"{(front ? "Front" : "Back")} layer imported ({how}). Paint on it here; it's written by itself.";
     }
 
     /// <summary>A message about the first 8x8 square that uses two colour rows, or null.</summary>

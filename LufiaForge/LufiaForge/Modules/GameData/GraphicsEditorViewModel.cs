@@ -92,7 +92,7 @@ public partial class GraphicsEditorViewModel : GameDataEditorBase
     partial void OnPaletteRowChanged(int value) => Draw();
     partial void OnPaletteOffsetTextChanged(string value) => Draw();
 
-    protected override void LoadSelected() => Draw();
+    protected override void LoadRecord() => Draw();
 
     private static bool Hex(string s, out int v)
     {

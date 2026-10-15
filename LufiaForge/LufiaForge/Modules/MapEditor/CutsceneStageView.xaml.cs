@@ -94,9 +94,7 @@ public partial class CutsceneStageView : UserControl
         var script = panel.Script;
         if (script.MapId != _mapId || _map == null)
         {
-            if (_pathsDirty && _map != null &&
-                MessageBox.Show("The paths of the previous map were changed but not written to the ROM. Write them now?", "Paths",
-                    MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes) SavePaths();
+            if (_pathsDirty && _map != null) SavePaths(quiet: true);   // the previous map's paths are written by themselves
             _pathsDirty = false;
             _mapId = script.MapId;
             try
@@ -685,14 +683,13 @@ public partial class CutsceneStageView : UserControl
         PathEdited();
     }
 
-    private void SavePaths_Click(object sender, RoutedEventArgs e) => SavePaths();
 
-    private void SavePaths()
+    private void SavePaths(bool quiet)
     {
         if (_rom == null || _map == null || _panel == null) return;
         try
         {
-            bool expand = _rom.Length >= MapWriter.ExpandedSize;
+            bool expand = _rom.Length >= MapWriter.ExpandedSize || quiet;
             if (MapWriter.NeedsMoreSpace(_map, out _) && !expand)
             {
                 if (!_panel.Host.ConfirmExpand("The map's data no longer fits where it was.")) { PathStatus.Text = "Not written."; return; }
@@ -702,7 +699,7 @@ public partial class CutsceneStageView : UserControl
             _pathsDirty = false;
             _panel.Host.EventSaved($"Map {_map.MapId:X2}: movement paths");
             PathStatus.Text = "✔ Paths written to the ROM. Save Project keeps it.";
-            _panel.Host.ConfirmWritten($"Paths of map {_map.MapId:X2} written to the ROM", result.Describe());
+            if (!quiet) _panel.Host.ConfirmWritten($"Paths of map {_map.MapId:X2} written to the ROM", result.Describe());
             _map = LufiaMap.Load(_rom, _map.MapId);
             Resimulate();
         }

@@ -112,8 +112,6 @@
                                       ToolTip="Off: only the selected group is shown (yellow)."/>
                             <Button Content="↶ Undo" Style="{StaticResource LufiaButton}" Command="{Binding UndoZonesCommand}" Margin="0,0,6,4"
                                     IsEnabled="{Binding CanUndo}" ToolTip="Take back the last paint, fill or rectangle (Ctrl+Z)."/>
-                            <Button Content="Write zones" Style="{StaticResource LufiaButtonGold}" Command="{Binding WriteZonesCommand}" Margin="0,0,6,4"
-                                    IsEnabled="{Binding ZonesDirty}"/>
                             <Button Content="Revert" Style="{StaticResource LufiaButton}" Command="{Binding RevertZonesCommand}" Margin="0,0,6,4"
                                     IsEnabled="{Binding ZonesDirty}"/>
                         </WrapPanel>

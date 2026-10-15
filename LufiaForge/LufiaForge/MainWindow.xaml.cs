@@ -45,12 +45,10 @@ public partial class MainWindow : Window
         // Quietly check GitHub for a newer release once the window is up.
         Loaded += async (_, _) => await UpdateService.CheckAsync(silentIfNone: true, HasUnsavedChanges);
 
-        // Saving the project: the map editor writes its unapplied map first
-        if (MapEditorView.DataContext is MapEditorViewModel mapEdit)
-        {
-            vm.FlushPendingEdits += () => (mapEdit.FlushPendingEdits(out var error), error);
-            vm.HasPendingEdits = () => mapEdit.HasUnappliedChanges;
-        }
+        // tabs whose edits are written by themselves (saving the project, Apply to ROM in the top bar...)
+        if (MapEditorView.DataContext is IPendingEdits mapEdit) vm.Register(mapEdit);
+        if (GameDataView.DataContext is IPendingEdits gameData) vm.Register(gameData);
+        if (TextEditorView.DataContext is IPendingEdits text) vm.Register(text);
 
         // BizHawk plays the project as it is now: a fresh copy of its ROM is written when it's launched
         if (MemoryMonitorView.DataContext is MemoryMonitorViewModel monitor)

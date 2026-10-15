@@ -50,6 +50,7 @@ public partial class MainViewModel : ObservableObject
         SaveRomAsCommand.NotifyCanExecuteChanged();
         SaveProjectCommand.NotifyCanExecuteChanged();
         SaveProjectAsCommand.NotifyCanExecuteChanged();
+        ApplyAllCommand.NotifyCanExecuteChanged();
     }
 
     private void HistoryChanged()
@@ -189,14 +190,16 @@ public partial class MainViewModel : ObservableObject
     public IReadOnlyList<string> PendingChanges => _pendingChanges;
 
     /// <param name="what">Short description of the change, listed in the save confirmation.</param>
-    public void NotifyRomModified(string? what = null)
+    /// <returns>Whether the ROM really changed (writing the same bytes again isn't a change).</returns>
+    public bool NotifyRomModified(string? what = null)
     {
+        if (History.Record(what) == null && History.IsAttached) return false;
         if (!string.IsNullOrWhiteSpace(what)) _pendingChanges.Add(what);
-        History.Record(what);
         OnPropertyChanged(nameof(WindowTitle));
         StatusMessage = what == null
             ? "Changed (Save Project keeps it)."
             : $"Changed: {what} (Save Project keeps it)";
+        return true;
     }
 
     /// <summary>Save the project now (the "Save project now" buttons in confirmations).</summary>

@@ -195,7 +195,7 @@ public partial class CutscenesViewModel : ObservableObject, IEventHost
         Search = ""; OnlyBig = false; MapFilterIndex = 0;
         ApplyFilter();
         Selected = entry;
-        Status = win.ResultText + ". Add its moves, camera and dialogue on the stage, then Apply.";
+        Status = win.ResultText + ". Add its moves, camera and dialogue on the stage; it's written by itself (or click Apply to ROM in the top bar).";
     }
 
     /// <summary>Deletes the selected cutscene's event (after saying what changes).</summary>

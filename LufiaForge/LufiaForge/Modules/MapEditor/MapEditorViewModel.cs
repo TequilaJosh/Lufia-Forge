@@ -79,7 +79,7 @@ public partial class SpotEditVm : ObservableObject
     }
 }
 
-public partial class MapEditorViewModel : ObservableObject, IEventHost
+public partial class MapEditorViewModel : ObservableObject, IEventHost, LufiaForge.ViewModels.IPendingEdits
 {
     private RomBuffer? _rom;
     public RomBuffer? Rom => _rom;
@@ -795,7 +795,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
         if (_dragMode == "new-trigger")
         {
             Tool = MapTool.Select;
-            Status = "New step-on area added. Apply to ROM switches it on and makes its event; then Event... (on the right) opens it.";
+            Status = "New step-on area added. Writing the map (by itself, or Apply to ROM in the top bar) switches it on and makes its event; then Event... (on the right) opens it.";
         }
         if (_dragMode == "new-exit")
         {
@@ -1243,7 +1243,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
             MarkEdited();
             ClearSelection();
             RebuildOverlays();
-            Status = "Exit deleted (exits after it were renumbered). Apply to ROM to keep the change.";
+            Status = "Exit deleted (exits after it were renumbered). It goes into the ROM with the map's other edits.";
         }
         else if (_selection is { kind: "arrival" } sa && sa.index < _map.Arrivals.Count)
         {
@@ -1260,7 +1260,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
             MarkEdited();
             ClearSelection();
             RebuildOverlays();
-            Status = "Arrival point deleted. Apply to ROM to keep the change.";
+            Status = "Arrival point deleted. It goes into the ROM with the map's other edits.";
         }
     }
 
@@ -1314,7 +1314,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost
         MarkEdited();
         _links = MapLinks.Build(_rom, Maps.Select(m => m.MapId));
         SelectExit(exit, focusLinked: dest == 0);
-        Status = $"Exit E{exit.Index} now leads to {ExitTargetText(exit)}. Apply to ROM to keep the change.";
+        Status = $"Exit E{exit.Index} now leads to {ExitTargetText(exit)}. It goes into the ROM with the map's other edits.";
     }
 
     partial void OnExitDestMapChanged(int value) => UpdateSelectedExit();

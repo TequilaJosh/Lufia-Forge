@@ -61,7 +61,7 @@ public partial class PaletteEditorViewModel : GameDataEditorBase
 
     partial void OnSelectedSourceChanged(PaletteSource? value) => LoadSelected();
 
-    protected override void LoadSelected()
+    protected override void LoadRecord()
     {
         Rows.Clear();
         Selected = null;

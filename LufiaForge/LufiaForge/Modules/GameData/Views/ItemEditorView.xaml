@@ -138,8 +138,6 @@
                                      ToolTip="Chance it still works, in percent of normal: 0 = immune, 50 = half as likely."/>
                             <TextBlock Text="% (0 = immune)" VerticalAlignment="Center" Foreground="{StaticResource TextPrimaryBrush}"/>
                         </StackPanel>
-                        <Button Content="Apply status effects" Style="{StaticResource LufiaButtonGold}" Command="{Binding ApplyStatusCommand}"
-                                HorizontalAlignment="Left" Margin="0,10,0,0"/>
                         <TextBlock Text="{Binding StatusNote}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,6,0,0"/>
                     </StackPanel>
                 </Border>
