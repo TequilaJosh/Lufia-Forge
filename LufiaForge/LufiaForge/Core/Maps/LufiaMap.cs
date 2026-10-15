@@ -650,9 +650,10 @@ public sealed class LufiaMap
         public List<MapTrigger> Triggers { get; init; } = new();
         public int Tileset { get; init; }
         public int Palette { get; init; }
+        public int Threshold { get; init; } = -1;
 
         public bool SameAs(State o) =>
-            Tileset == o.Tileset && Palette == o.Palette && Width == o.Width && Height == o.Height && Layer.AsSpan().SequenceEqual(o.Layer) &&
+            Tileset == o.Tileset && Palette == o.Palette && Threshold == o.Threshold && Width == o.Width && Height == o.Height && Layer.AsSpan().SequenceEqual(o.Layer) &&
             Exits.Count == o.Exits.Count && Exits.Zip(o.Exits).All(p => Key(p.First) == Key(p.Second)) &&
             Arrivals.Count == o.Arrivals.Count && Arrivals.Zip(o.Arrivals).All(p => Key(p.First) == Key(p.Second)) &&
             Npcs.Count == o.Npcs.Count && Npcs.Zip(o.Npcs).All(p => Key(p.First) == Key(p.Second)) &&
@@ -682,7 +683,7 @@ public sealed class LufiaMap
         Width = Width, Height = Height, Layer = (ushort[])Layer.Clone(),
         Exits = Exits.Select(Copy).ToList(), Arrivals = Arrivals.Select(Copy).ToList(),
         Npcs = Npcs.Select(Copy).ToList(), Paths = Paths.Select(Copy).ToList(), Triggers = Triggers.Select(Copy).ToList(),
-        Tileset = Tileset, Palette = PaletteIndex,
+        Tileset = Tileset, Palette = PaletteIndex, Threshold = CompositeThreshold,
     };
 
     public void Restore(State s)
@@ -694,6 +695,7 @@ public sealed class LufiaMap
         Paths.Clear(); Paths.AddRange(s.Paths.Select(Copy));
         Triggers.Clear(); Triggers.AddRange(s.Triggers.Select(Copy));
         if (!IsWorld && (s.Tileset != Tileset || s.Palette != PaletteIndex)) SetTilesetAndPalette(s.Tileset, s.Palette);
+        if (s.Threshold >= 0 && s.Threshold != CompositeThreshold) { CompositeThreshold = s.Threshold; Original[0x1E] = (byte)s.Threshold; Original[0x1F] = (byte)(s.Threshold >> 8); }
     }
 
     public void Resize(int width, int height, int fill)
@@ -722,6 +724,17 @@ public sealed class LufiaMap
         }
         CompositeThreshold = t + count;
         Original[0x1E] = (byte)CompositeThreshold; Original[0x1F] = (byte)(CompositeThreshold >> 8);
+    }
+
+    /// <summary>Lets the map use blocks below <paramref name="threshold"/> as normal blocks: its composite cells are
+    /// renumbered (they keep their pair table entries, so the map looks the same). False when the composites don't fit.</summary>
+    public bool RaiseThreshold(int threshold)
+    {
+        if (CompositeThreshold < 0 || threshold <= CompositeThreshold) return true;
+        int max = Layer.Max(c => c & 0x3FF);
+        if (max >= CompositeThreshold && max + (threshold - CompositeThreshold) > 0x3FF) return false;
+        ShiftComposites(threshold - CompositeThreshold);
+        return true;
     }
 
     public void SetTilesetAndPalette(int tileset, int palette)

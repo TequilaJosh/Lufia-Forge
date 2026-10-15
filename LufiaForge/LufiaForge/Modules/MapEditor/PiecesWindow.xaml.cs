@@ -21,6 +21,7 @@ public partial class PiecesWindow : Window
     public int ResultH { get; private set; }
     public ushort[] ResultBlocks { get; private set; } = Array.Empty<ushort>();
     public string ResultSource { get; private set; } = "";
+    public LufiaMap? ResultMap { get; private set; }
 
     public PiecesWindow(RomBuffer rom, IEnumerable<MapInfo> maps, int tileset, int currentMap)
     {
@@ -94,7 +95,7 @@ public partial class PiecesWindow : Window
         for (int y = 0; y < h; y++)
             for (int x = 0; x < w; x++)
                 t[y * w + x] = (ushort)(_shown.GetTile(r.x1 + x, r.y1 + y) & 0x3FF);
-        ResultW = w; ResultH = h; ResultBlocks = t;
+        ResultW = w; ResultH = h; ResultBlocks = t; ResultMap = _shown;
         ResultSource = (MapList.SelectedItem as MapInfo)?.Label ?? $"map {_shown.MapId:X2}";
         DialogResult = true;
         Close();

@@ -90,6 +90,7 @@ public partial class MapEditorViewModel
     {
         if (_map == null) return;
         var sel = _selection;
+        if (state.Threshold != _map.CompositeThreshold) CancelStamp();   // its block numbers were for the other threshold
         _map.Restore(state);
         _current = state;
         if (_rom != null && _tileset != null && !_map.IsWorld) { _tileset = MapTileset.ForMap(_rom, _map); BuildPalette(); OnPropertyChanged(nameof(BrushText)); }

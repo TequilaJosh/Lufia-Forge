@@ -153,7 +153,48 @@ public partial class MapEditorViewModel
         if (_rom == null || _map == null) return;
         if (_map.IsWorld) { Status = "The world map has its own blocks: copy pieces of it with the Area tool."; return; }
         var w = new PiecesWindow(_rom, Maps, _map.Tileset, _map.MapId) { Owner = System.Windows.Application.Current?.MainWindow };
-        if (w.ShowDialog() == true) UsePattern(w.ResultW, w.ResultH, w.ResultBlocks, w.ResultSource);
+        if (w.ShowDialog() != true || w.ResultMap == null) return;
+        // the other map may number its composite blocks (roofs, tree tops) from another point: fit them to this map
+        var piece = Prefabs.Placer.FromMap(w.ResultMap, w.ResultW, w.ResultH, w.ResultBlocks, w.ResultSource);
+        if (new Prefabs.Placer(_rom, _map, Maps).Place(piece) is not { } placed)
+        {
+            Status = $"That piece of {w.ResultSource} uses blocks this map's tileset doesn't have.";
+            return;
+        }
+        UsePlacement(placed, w.ResultSource);
+    }
+
+    /// <summary>Buildings: ready-made structures from the game's maps with this tileset, as a stamp brush.</summary>
+    [RelayCommand]
+    private void Buildings()
+    {
+        if (_rom == null || _map == null) return;
+        if (_map.IsWorld) { Status = "The world map has its own blocks: copy pieces of it with the Area tool."; return; }
+        BuildingsWindow w;
+        var mouse = System.Windows.Input.Mouse.OverrideCursor;
+        System.Windows.Input.Mouse.OverrideCursor = System.Windows.Input.Cursors.Wait;
+        try { w = new BuildingsWindow(_rom, _map, Maps) { Owner = System.Windows.Application.Current?.MainWindow }; }
+        catch (Exception ex) { Status = "Buildings: " + ex.Message; return; }
+        finally { System.Windows.Input.Mouse.OverrideCursor = mouse; }
+        if (w.ShowDialog() == true && w.Result is { } p)
+            UsePlacement(p, $"{p.Prefab.W} x {p.Prefab.H} building from {p.Prefab.Source}");
+    }
+
+    /// <summary>Stamps a structure fitted to this map. When it uses blocks this map shows as composites, the map's
+    /// composites start higher first (its own look the same; Undo takes it back).</summary>
+    private void UsePlacement(Prefabs.Placement p, string source)
+    {
+        if (_rom == null || _map == null) return;
+        if (_map.CompositeThreshold >= 0 && p.Threshold > _map.CompositeThreshold)
+        {
+            if (BlockRoom.PatternEvent(_rom, _map) is { } why) { Status = "That one uses blocks this map shows as roofs and tree tops, and they can't be moved here: " + why; return; }
+            if (!_map.RaiseThreshold(p.Threshold)) { Status = "This map has no room for the blocks that one uses."; return; }
+            _tileset = MapTileset.ForMap(_rom, _map);
+            BuildPalette();
+            RedrawMap();
+            MarkEdited();
+        }
+        UsePattern(p.Prefab.W, p.Prefab.H, p.Cells, source);
     }
 
     /// <summary>Uses copied blocks (e.g. from Pieces from other maps) as a stamp brush.</summary>
