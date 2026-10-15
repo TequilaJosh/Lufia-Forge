@@ -22,7 +22,7 @@
         <StackPanel Grid.Row="0" Grid.ColumnSpan="2" Margin="0,0,0,10">
             <TextBlock x:Name="HeaderText" Text="Buildings" Style="{StaticResource LufiaCardTitle}" FontSize="16"/>
             <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap"
-                       Text="Houses, shops, rooms and other structures cut out of the game's own maps that use this tileset. Pick one and click on your map to place it, as often as you like. The dark parts around a building aren't stamped: whatever is painted there (grass, trees, paths) stays."/>
+                       Text="Your own presets (Area tool, Save as preset) and the houses, shops, rooms and other structures cut out of the game's own maps that use this tileset. Pick one and click on your map to place it, as often as you like. The dark parts around a building aren't stamped: whatever is painted there (grass, trees, paths) stays."/>
         </StackPanel>
 
         <ListBox x:Name="GroupList" Grid.Row="1" Grid.Column="0" Style="{StaticResource GdFindList}" Margin="0,0,10,0"
@@ -39,6 +39,11 @@
                             <Border x:Name="Card" Width="186" Height="200" Margin="4" CornerRadius="4" BorderThickness="2"
                                     BorderBrush="Transparent" Background="{StaticResource SurfacePurpleBrush}" Cursor="Hand"
                                     MouseLeftButtonDown="Card_MouseLeftButtonDown" ToolTip="{Binding Tip}">
+                                <Border.ContextMenu>
+                                    <ContextMenu Visibility="{Binding DeleteVisibility}">
+                                        <MenuItem Header="Delete this preset" Click="Delete_Click"/>
+                                    </ContextMenu>
+                                </Border.ContextMenu>
                                 <DockPanel Margin="4">
                                     <TextBlock DockPanel.Dock="Bottom" Text="{Binding Label}" Style="{StaticResource GdHint}" TextTrimming="CharacterEllipsis" Margin="2,4,2,0"/>
                                     <Image Source="{Binding Thumb}" Stretch="Uniform" StretchDirection="DownOnly" RenderOptions.BitmapScalingMode="NearestNeighbor"

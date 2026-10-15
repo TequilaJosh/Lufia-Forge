@@ -18,6 +18,9 @@ public partial class BuildingsWindow : Window
         public required ImageSource Thumb { get; init; }
         public required string Label { get; init; }
         public required string Tip { get; init; }
+        /// <summary>A preset of the user's (can be deleted).</summary>
+        public string? CustomId { get; init; }
+        public Visibility DeleteVisibility => CustomId != null ? Visibility.Visible : Visibility.Collapsed;
         public double MaxW => Math.Min(176, Placement.Prefab.W * 16 * 1.5);
         public double MaxH => Math.Min(170, Placement.Prefab.H * 16 * 1.5);
         [ObservableProperty] private bool _isSelected;
@@ -50,13 +53,30 @@ public partial class BuildingsWindow : Window
                 Tip = $"{p.W} x {p.H} blocks, from {p.Source}" + (p.Count > 1 ? $" ({p.Count} times in the game)" : ""),
             });
         }
+        // the user's own presets (made with the Area tool's Save as preset), on maps with the same graphics
+        var mine = new List<Item>();
+        uint graphics = CustomPresets.GraphicsOf(rom, map.Tileset);
+        foreach (var c in CustomPresets.Load().Where(c => c.Graphics == graphics).OrderByDescending(c => c.Made))
+        {
+            if (placer.Place(c) is not { } pl) continue;
+            if (!tilesets.TryGetValue(pl.Threshold, out var ts))
+                tilesets[pl.Threshold] = ts = new MapTileset(rom, map.Tileset, map.PaletteIndex, pl.Threshold);
+            mine.Add(new Item
+            {
+                Placement = pl, CustomId = c.Id,
+                Thumb = Render(ts, c.W, c.H, pl.Cells),
+                Label = c.Name,
+                Tip = $"{c.Name}: {c.W} x {c.H} blocks, made from {c.From} on {c.Made:yyyy-MM-dd} (right-click to delete)",
+            });
+        }
         var groups = items.GroupBy(i => i.Placement.Prefab.Category)
                           .OrderBy(g => g.Key == "Buildings" ? 0 : g.Key == "Small objects" ? 1 : 2)
                           .Select(g => new Group($"{g.Key} ({g.Count()})", g.ToList())).ToList();
-        HeaderText.Text = $"Buildings (tileset {map.Tileset}: {items.Count} ready to place)";
+        if (mine.Count > 0) groups.Insert(0, new Group($"My presets ({mine.Count})", mine));
+        HeaderText.Text = $"Buildings (tileset {map.Tileset}: {items.Count} ready to place" + (mine.Count > 0 ? $", {mine.Count} of your own)" : ")");
         GroupList.ItemsSource = groups;
         GroupList.SelectedIndex = groups.Count > 0 ? 0 : -1;
-        if (items.Count == 0) ChoiceText.Text = "No structures were found for this tileset.";
+        if (groups.Count == 0) ChoiceText.Text = "No structures were found for this tileset.";
     }
 
     private static ImageSource Render(MapTileset ts, int w, int h, ushort[] cells)
@@ -95,6 +115,19 @@ public partial class BuildingsWindow : Window
     }
 
     private void Cancel_Click(object sender, RoutedEventArgs e) { DialogResult = false; Close(); }
+
+    private void Delete_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not Item { CustomId: { } id } item) return;
+        if (MessageBox.Show($"Delete the preset \"{item.Label}\"?", "My presets", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        CustomPresets.Remove(id);
+        if (GroupList.SelectedItem is Group g)
+        {
+            g.Items.Remove(item);
+            Gallery.ItemsSource = null; Gallery.ItemsSource = g.Items;
+        }
+        if (_selected == item) { _selected = null; OkButton.IsEnabled = false; ChoiceText.Text = "Preset deleted."; }
+    }
 
     private void Ok_Click(object sender, RoutedEventArgs e)
     {

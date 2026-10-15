@@ -58,6 +58,7 @@ public partial class MapEditorViewModel
         OnPropertyChanged(nameof(HasArea));
         CopyAreaCommand.NotifyCanExecuteChanged(); CutAreaCommand.NotifyCanExecuteChanged();
         FillAreaCommand.NotifyCanExecuteChanged(); ClearAreaCommand.NotifyCanExecuteChanged();
+        SaveAreaAsPresetCommand.NotifyCanExecuteChanged();
     }
 
     private void AreaDown(int x, int y)
@@ -130,6 +131,22 @@ public partial class MapEditorViewModel
             }
         if (stroke.Count > 0) MarkEdited();
         Status = $"{verb} {x2 - x1 + 1} x {y2 - y1 + 1} blocks with block {metatile:X3} ({stroke.Count} changed). Undo takes it back.";
+    }
+
+    /// <summary>The selected area as a preset of the user's (Buildings... > My presets).</summary>
+    [RelayCommand(CanExecute = nameof(HasArea))]
+    private void SaveAreaAsPreset()
+    {
+        if (_rom == null || _map == null || _area is not var (x1, y1, x2, y2)) return;
+        if (_map.IsWorld) { Status = "Presets are made from town and dungeon maps (the world map has its own blocks)."; return; }
+        var w = new SavePresetWindow(_rom, _map, x1, y1, x2 - x1 + 1, y2 - y1 + 1) { Owner = Application.Current?.MainWindow };
+        if (w.ShowDialog() != true || w.Result is not { } p) return;
+        try
+        {
+            CustomPresets.Add(p);
+            Status = $"Preset \"{p.Name}\" saved ({p.W} x {p.H} blocks): Buildings... > My presets places it.";
+        }
+        catch (Exception ex) { Status = "The preset couldn't be saved: " + ex.Message; }
     }
 
     // ── stamping (paste / multi-block brush) ──

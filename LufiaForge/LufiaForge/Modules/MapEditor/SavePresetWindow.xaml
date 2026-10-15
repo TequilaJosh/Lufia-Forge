@@ -1,0 +1,31 @@
+<Window x:Class="LufiaForge.Modules.MapEditor.SavePresetWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Save as preset" Width="520" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{DynamicResource MidPurpleBrush}">
+    <StackPanel Margin="18">
+        <TextBlock Text="Save as preset" Style="{StaticResource LufiaCardTitle}" FontSize="16"/>
+        <TextBlock x:Name="SizeText" Style="{StaticResource LufiaLabel}" TextWrapping="Wrap" Margin="0,4,0,10"/>
+
+        <Border Background="#FF101018" CornerRadius="4" Padding="6" HorizontalAlignment="Center" Margin="0,0,0,10">
+            <Image x:Name="PreviewImage" Stretch="Uniform" StretchDirection="Both" MaxWidth="460" MaxHeight="300" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+        </Border>
+
+        <TextBlock Text="Name" Style="{StaticResource LufiaLabel}" Margin="0,0,0,4"/>
+        <TextBox x:Name="NameBox" FontSize="14" Padding="4,3" TextChanged="NameBox_TextChanged"/>
+
+        <CheckBox x:Name="GroundBox" Margin="0,10,0,0" IsChecked="True" Checked="GroundBox_Changed" Unchecked="GroundBox_Changed">
+            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource TextPrimaryBrush}"
+                       Text="Leave out the ground around it (the block seen most on its edge), so placing it keeps what's painted there"/>
+        </CheckBox>
+
+        <TextBlock Style="{StaticResource LufiaLabel}" TextWrapping="Wrap" Margin="0,12,0,0" Foreground="{StaticResource TextDisabledBrush}"
+                   Text="It's added to Buildings... (My presets) for every project, on maps whose tileset has the same graphics."/>
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button x:Name="OkButton" Content="★  Save preset" Style="{StaticResource LufiaButtonGold}" Padding="14,5" Margin="0,0,8,0" IsDefault="True" Click="Ok_Click"/>
+            <Button Content="Cancel" Style="{StaticResource LufiaButton}" Padding="14,5" IsCancel="True"/>
+        </StackPanel>
+    </StackPanel>
+</Window>
