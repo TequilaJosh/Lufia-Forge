@@ -414,8 +414,7 @@
                                     <Image x:Name="PaletteImage" Source="{Binding PaletteImage}" Stretch="None" HorizontalAlignment="Left"
                                            RenderOptions.BitmapScalingMode="NearestNeighbor"
                                            MouseLeftButtonDown="PaletteImage_MouseLeftButtonDown" MouseMove="PaletteImage_MouseMove"
-                                           MouseLeftButtonUp="PaletteImage_MouseLeftButtonUp" Cursor="Hand"
-                                           ToolTip="Click a block to paint with it; drag a rectangle for a multi-block brush"/>
+                                           MouseLeftButtonUp="PaletteImage_MouseLeftButtonUp" Cursor="Hand"/>
                                     <Canvas IsHitTestVisible="False">
                                         <Rectangle Canvas.Left="{Binding PaletteBoxX}" Canvas.Top="{Binding PaletteBoxY}" Width="{Binding BrushBoxW}" Height="{Binding BrushBoxH}"
                                                    Stroke="Gold" StrokeThickness="1.5"/>
