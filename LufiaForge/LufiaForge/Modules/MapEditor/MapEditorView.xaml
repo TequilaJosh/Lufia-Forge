@@ -50,13 +50,11 @@
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
                     <Border CornerRadius="10" Padding="9,2" Margin="0,0,10,0" Background="#5A4416" VerticalAlignment="Center"
                             Visibility="{Binding HasUnappliedChanges, Converter={StaticResource BoolToVisibilityConverter}}"
-                            ToolTip="This map has edits that aren't in the ROM yet: Apply writes them now; saving the project writes them too">
-                        <TextBlock Text="● Not applied yet" Foreground="{StaticResource GoldLightBrush}" FontSize="11"/>
+                            ToolTip="This map has edits that aren't in the ROM yet. They're written by themselves when you pick another map or save the project (or click Apply to ROM in the top bar).">
+                        <TextBlock Text="● Edited" Foreground="{StaticResource GoldLightBrush}" FontSize="11"/>
                     </Border>
-                    <Button Content="↺  Revert" Style="{StaticResource LufiaButton}" Padding="10,4" Command="{Binding RevertMapCommand}" Margin="0,0,6,0"
-                            ToolTip="Throw away this map's edits (back to the map in the ROM)"/>
-                    <Button Content="✔  Apply to ROM" Style="{StaticResource LufiaButtonGold}" Padding="14,4" Command="{Binding ApplyToRomCommand}"
-                            ToolTip="Write this map's edits to the ROM (Edit &gt; Undo takes the whole Apply back)"/>
+                    <Button Content="↺  Revert" Style="{StaticResource LufiaButton}" Padding="10,4" Command="{Binding RevertMapCommand}"
+                            ToolTip="Throw away this map's edits that aren't in the ROM yet (back to the map in the ROM)"/>
                 </StackPanel>
             </DockPanel>
         </Border>
@@ -117,7 +115,6 @@
                                     <TextBlock Text="group" Style="{StaticResource LufiaLabel}" VerticalAlignment="Center" Margin="4,0,4,0"/>
                                     <TextBox Style="{StaticResource GdNumber}" Width="34" Text="{Binding ZoneBrushText, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,4,0"
                                              ToolTip="Battle group to paint (hex, see Game Data > Encounters; 00 = no battles)"/>
-                                    <Button Content="Write zones" Style="{StaticResource LufiaButton}" Padding="8,2" Command="{Binding WriteZonesCommand}" IsEnabled="{Binding ZonesDirty}"/>
                                 </StackPanel>
                             </WrapPanel>
                             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
@@ -328,7 +325,7 @@
                             <Rectangle/>
                         </DockPanel>
                         <Grid DockPanel.Dock="Top" Margin="0,0,0,6" IsEnabled="{Binding IsTownMap}"
-                              ToolTip="The map's graphics: picking one shows the map with it at once; Apply to ROM keeps it, Undo takes it back. New tileset (in Map settings) gives this map a copy of its own.">
+                              ToolTip="The map's graphics: picking one shows the map with it at once; it&apos;s written with the map, Undo takes it back. New tileset (in Map settings) gives this map a copy of its own.">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
@@ -447,8 +444,8 @@
                                     <TextBlock Text="x" Style="{StaticResource GdFieldLabel}"/>
                                     <TextBox Style="{StaticResource GdNumber}" Width="44" Text="{Binding MapHeight}"/>
                                 </StackPanel>
-                                <Button Content="Apply map settings" Style="{StaticResource LufiaButtonGold}" Padding="10,4" Command="{Binding ApplyMapSettingsCommand}" HorizontalAlignment="Left" Margin="0,4,0,10"
-                                        ToolTip="Writes the tileset, palette and size (new cells get the brush block)"/>
+                                <Button Content="Resize map" Style="{StaticResource LufiaButton}" Padding="10,4" Command="{Binding ApplyMapSettingsCommand}" HorizontalAlignment="Left" Margin="0,4,0,10"
+                                        ToolTip="Gives the map the size typed above (new cells get the brush block). The tileset and palette change as soon as they're picked."/>
 
                                 <Button Content="Make room for new blocks..." Style="{StaticResource LufiaButton}" Padding="10,4" Command="{Binding MakeRoomCommand}" HorizontalAlignment="Left" Margin="0,0,0,10"
                                         ToolTip="For town tilesets with composite blocks (tree tops, roofs): adds blank spare blocks for this map (its own copy of the tileset if it's shared). The map looks the same."/>

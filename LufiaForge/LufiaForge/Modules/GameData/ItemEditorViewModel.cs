@@ -74,7 +74,7 @@ public partial class ItemEditorViewModel : GameDataEditorBase
         else LoadSelected();
     }
 
-    protected override void LoadSelected()
+    protected override void LoadRecord()
     {
         if (Ctx == null || SelectedIndex < 0) return;
         var rom = Ctx.Rom;

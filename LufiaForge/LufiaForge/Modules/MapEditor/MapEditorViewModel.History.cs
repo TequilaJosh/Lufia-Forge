@@ -148,6 +148,25 @@ public partial class MapEditorViewModel
         }
     }
 
+    /// <summary>The map's unapplied edits, or painted world map battle zones.</summary>
+    public bool HasPendingEdits => _rom != null && (HasUnappliedChanges || ZonesDirty);
+
+    public string? WritePendingEdits()
+    {
+        if (!FlushPendingEdits(out var error)) return $"Map {_map?.MapId:X2}: {error}";
+        if (ZonesDirty && _rom != null)
+        {
+            try
+            {
+                Core.Battle.Encounters.WriteZones(_rom, _zones, allowExpand: true);
+                ZonesDirty = false;
+                _mainVm?.NotifyRomModified("World map encounter zones");
+            }
+            catch (Exception ex) { return "Encounter zones: " + ex.Message; }
+        }
+        return null;
+    }
+
     /// <summary>Before something that reloads the map (the block editor, importing, make room...): its edits are
     /// written first. False when they couldn't be (the reason is in the status bar).</summary>
     private bool WritePendingFirst()

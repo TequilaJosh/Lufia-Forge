@@ -5,7 +5,7 @@ using LufiaForge.ViewModels;
 namespace LufiaForge.Modules.GameData;
 
 /// <summary>Hosts the Game Data editors (the L1ME feature set) and hands them the loaded ROM.</summary>
-public partial class GameDataViewModel : ObservableObject
+public partial class GameDataViewModel : ObservableObject, LufiaForge.ViewModels.IPendingEdits
 {
     public CharacterEditorViewModel Characters     { get; } = new();
     public CharacterMagicViewModel  CharacterMagic { get; } = new();
@@ -27,6 +27,17 @@ public partial class GameDataViewModel : ObservableObject
     [ObservableProperty] private bool _isRomLoaded;
 
     private RomBuffer? _rom;
+
+    private GameDataEditorBase[] Editors => new GameDataEditorBase[]
+        { Characters, CharacterMagic, Growth, Sprites, Items, PartyItems, Shops, Spells, Monsters, Encounters, Music, Credits, Title, Graphics, Palettes, Settings };
+
+    public bool HasPendingEdits => _rom != null && Editors.Any(e => e.HasPendingEdits);
+
+    public string? WritePendingEdits()
+    {
+        var errors = Editors.Where(e => e.HasPendingEdits).Select(e => e.WritePendingEdits()).Where(e => e != null).ToList();
+        return errors.Count == 0 ? null : "Game Data: " + string.Join("; ", errors);
+    }
 
     public void SetRom(RomBuffer rom, MainViewModel mainVm)
     {

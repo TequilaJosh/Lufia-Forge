@@ -18,6 +18,10 @@ public partial class ItemEditorViewModel
     [ObservableProperty] private int _resistPercent;
     [ObservableProperty] private string _statusNote = "";
 
+    private (int Bits, int Chance, int Resist, int Percent) _loadedStatus;
+    private (int Bits, int Chance, int Resist, int Percent) StatusNow() =>
+        (InflictFlags.Where(f => f.IsSet).Sum(f => f.Bit), InflictChance, ResistAilment, ResistPercent);
+
     private void LoadStatus()
     {
         if (Ctx == null || SelectedIndex < 0) return;
@@ -28,6 +32,7 @@ public partial class ItemEditorViewModel
         var res = props.FirstOrDefault(p => p.Id == ItemStatusPatch.ResistProperty);
         ResistAilment = res.Id == 0 ? 0 : res.A;
         ResistPercent = res.Id == 0 ? 0 : res.B == 0xFF ? 0 : res.B * 100 / 16;
+        _loadedStatus = StatusNow();
         StatusNote = ItemStatusPatch.IsApplied(Ctx.Rom)
             ? "Any weapon, armor or accessory can carry these."
             : "In the game only an accessory's resistance counts and no weapon can inflict ailments; applying here adds the \"Status effects on equipment\" patch.";
@@ -39,6 +44,7 @@ public partial class ItemEditorViewModel
         if (Ctx == null || SelectedIndex < 0) return;
         var props = ItemTable.Properties(Ctx.Rom, SelectedIndex);
         if (props == null) { Status = "This item has no property list (it's used, not equipped)."; return; }
+        if (StatusNow() == _loadedStatus) return;   // unchanged (writing the list again would reorder it)
         int bits = InflictFlags.Where(f => f.IsSet).Sum(f => f.Bit);
         if (bits != 0 && (InflictChance < 1 || InflictChance > 100)) { Status = "Chance on hit: 1-100%."; return; }
         if (ResistAilment != 0 && (ResistPercent < 0 || ResistPercent > 1500)) { Status = "Resist: 0 (immune) to 1500%."; return; }
@@ -53,5 +59,22 @@ public partial class ItemEditorViewModel
             ItemTable.SetProperties(Ctx.Rom, id, list);
         });
         LoadSelected();
+    }
+
+    public override string? WritePendingEdits()
+    {
+        if (!HasPendingEdits) return null;
+        var status = StatusNow();
+        var flags = InflictFlags.Select(f => f.IsSet).ToArray();
+        string? error = base.WritePendingEdits();
+        if (status != _loadedStatus && Ctx != null)
+        {
+            // writing the record reloaded the panel: put the edits back and write them
+            for (int i = 0; i < flags.Length; i++) InflictFlags[i].IsSet = flags[i];
+            InflictChance = status.Chance; ResistAilment = status.Resist; ResistPercent = status.Percent;
+            ApplyStatus();
+            Edited = false;
+        }
+        return error;
     }
 }

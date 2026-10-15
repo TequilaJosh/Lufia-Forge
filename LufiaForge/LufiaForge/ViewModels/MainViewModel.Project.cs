@@ -31,12 +31,43 @@ public partial class MainViewModel
 
     public string ProjectText => Project == null ? "" : $"{Project.Name}";
 
-    /// <summary>Tabs with edits that aren't in the ROM yet (the map editor's unapplied map): asked to write them
-    /// before the project is saved. Each returns false (with the reason) when it couldn't.</summary>
-    public event Func<(bool Ok, string? Error)>? FlushPendingEdits;
+    private readonly List<IPendingEdits> _editors = new();
+
+    /// <summary>A tab or panel whose edits are written by themselves (see <see cref="IPendingEdits"/>).</summary>
+    public void Register(IPendingEdits editor) { if (!_editors.Contains(editor)) _editors.Add(editor); ApplyAllCommand.NotifyCanExecuteChanged(); }
+    public void Unregister(IPendingEdits editor) => _editors.Remove(editor);
 
     /// <summary>Whether a tab has edits that aren't in the ROM yet.</summary>
-    public Func<bool>? HasPendingEdits { get; set; }
+    public bool HasPendingEdits => _editors.ToList().Any(e => { try { return e.HasPendingEdits; } catch { return false; } });
+
+    /// <summary>Apply to ROM (top bar): every tab's edits are written to the ROM now.</summary>
+    [RelayCommand(CanExecute = nameof(IsRomLoaded))]
+    private void ApplyAll()
+    {
+        if (RomBuffer == null) return;
+        bool had = HasPendingEdits;
+        var errors = WriteAllPending();
+        if (errors.Count > 0)
+            MessageBox.Show("Some edits couldn't be written:\n\n" + string.Join("\n", errors), "Apply to ROM", MessageBoxButton.OK, MessageBoxImage.Warning);
+        else
+            StatusMessage = had ? "Every tab's edits are in the ROM now (Save Project keeps them)." : "Nothing to apply: every edit is already in the ROM.";
+    }
+
+    /// <summary>Writes every tab's pending edits; returns the problems.</summary>
+    private List<string> WriteAllPending()
+    {
+        var errors = new List<string>();
+        foreach (var e in _editors.ToList())
+        {
+            try
+            {
+                if (!e.HasPendingEdits) continue;
+                if (e.WritePendingEdits() is { } error) errors.Add(error);
+            }
+            catch (Exception ex) { errors.Add(ex.Message); }
+        }
+        return errors;
+    }
 
     private DispatcherTimer? _autosave;
 
@@ -59,7 +90,7 @@ public partial class MainViewModel
     public bool HasUnsavedProjectChanges()
     {
         if (Project == null || RomBuffer == null) return false;
-        if (HasPendingEdits?.Invoke() == true) return true;
+        if (HasPendingEdits) return true;
         return _savedRom == null || !RomBuffer.SameAs(_savedRom);
     }
 
@@ -239,18 +270,12 @@ public partial class MainViewModel
     /// <summary>Writes the tabs' pending edits to the ROM; with quiet, problems only go to the status bar.</summary>
     private bool Flush(bool quiet)
     {
-        if (FlushPendingEdits == null) return true;
-        bool ok = true;
-        foreach (Func<(bool Ok, string? Error)> f in FlushPendingEdits.GetInvocationList())
-        {
-            var (done, error) = f();
-            if (done) continue;
-            ok = false;
-            string msg = "Some map edits couldn't be saved into the project yet: " + error;
-            if (quiet) StatusDetail = msg;
-            else MessageBox.Show(msg + "\n\nThe rest of the project is saved; the map keeps its edits in the Map Editor.", "Save project", MessageBoxButton.OK, MessageBoxImage.Warning);
-        }
-        return ok;
+        var errors = WriteAllPending();
+        if (errors.Count == 0) return true;
+        string msg = "Some edits couldn't be saved into the project yet: " + string.Join("; ", errors);
+        if (quiet) StatusDetail = msg;
+        else MessageBox.Show(msg + "\n\nThe rest is saved; those edits stay in their tab.", "Save project", MessageBoxButton.OK, MessageBoxImage.Warning);
+        return false;
     }
 
     /// <summary>Saves the project; false when it couldn't be.</summary>
@@ -280,7 +305,9 @@ public partial class MainViewModel
 
     private void Autosave()
     {
-        if (Project == null || !HasUnsavedProjectChanges()) return;
+        if (Project == null) return;
+        Flush(quiet: true);
+        if (!HasUnsavedProjectChanges()) return;
         SaveProjectNow(quiet: true);
     }
 
@@ -288,7 +315,9 @@ public partial class MainViewModel
     /// saved. False = stay.</summary>
     public bool ConfirmLeaveProject()
     {
-        if (Project == null || !HasUnsavedProjectChanges()) return true;
+        if (Project == null) return true;
+        Flush(quiet: true);   // edits still in the tabs go into the ROM first
+        if (!HasUnsavedProjectChanges()) return true;
         var answer = MessageBox.Show($"Save the changes to the project \"{Project.Name}\"?", "Lufia Forge",
             MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
         if (answer == MessageBoxResult.Cancel) return false;

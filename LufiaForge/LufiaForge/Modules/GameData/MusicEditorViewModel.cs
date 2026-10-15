@@ -85,17 +85,10 @@ public partial class MusicEditorViewModel : GameDataEditorBase
     partial void OnSelectedIndexChanged(int oldValue, int newValue)
     {
         if (_goingBack) return;
-        if (Notes.Dirty && oldValue >= 0 && newValue >= 0 && newValue != oldValue &&
-            MessageBox.Show($"Song {oldValue:X2} has note changes that aren't written to the ROM. Throw them away?", "Note editor",
-                MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
-        {
-            System.Windows.Application.Current?.Dispatcher.BeginInvoke(() => { _goingBack = true; SelectedIndex = oldValue; _goingBack = false; });
-            return;
-        }
         StopPlaying(); LoadSelected();
     }
 
-    protected override void LoadSelected()
+    protected override void LoadRecord()
     {
         if (Ctx == null || SelectedIndex < 0) return;
         var d = LufiaCompression.DecompressResource(Ctx.Rom, SelectedIndex, out int packed);
@@ -204,6 +197,8 @@ public partial class MusicEditorViewModel : GameDataEditorBase
         return d.Skip(0x32).Take(8).TakeWhile(b => b != 0).Select(b => (int)b).ToList();
     }
 
+    public override bool HasPendingEdits => base.HasPendingEdits || Notes.Dirty && Ctx != null;
+
     /// <summary>Writes the note editor's song to the selected slot.</summary>
     public void ApplyNotes()
     {
@@ -231,7 +226,7 @@ public partial class MusicEditorViewModel : GameDataEditorBase
     [RelayCommand]
     private void Apply()
     {
-        if (TabIndex == 1) { ApplyNotes(); return; }
+        if (Notes.Dirty) ApplyNotes();
         if (Ctx == null || SelectedIndex < 0) return;
         var ids = new List<int>();
         foreach (var part in InstrumentsText.Split(new[] { ' ', ',' }, StringSplitOptions.RemoveEmptyEntries))
@@ -242,7 +237,9 @@ public partial class MusicEditorViewModel : GameDataEditorBase
         }
         if (ids.Count > 8) { Status = "A song can load at most 8 instruments."; return; }
         var d = LufiaCompression.DecompressResource(Ctx.Rom, SelectedIndex, out _);
-        for (int i = 0; i < 8; i++) d[0x32 + i] = (byte)(i < ids.Count ? ids[i] : 0);
+        var want = Enumerable.Range(0, 8).Select(i => (byte)(i < ids.Count ? ids[i] : 0)).ToArray();
+        if (d.AsSpan(0x32, 8).SequenceEqual(want)) return;   // the same instruments (packing the song again would move bytes)
+        for (int i = 0; i < 8; i++) d[0x32 + i] = want[i];
         Write(d, $"Song {SelectedIndex:X2} instruments");
     }
 

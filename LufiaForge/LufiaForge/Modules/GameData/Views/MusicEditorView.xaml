@@ -51,7 +51,7 @@
                             <StackPanel>
                                 <TextBlock Text="INSTRUMENTS THIS SONG LOADS" Style="{StaticResource GdSection}"/>
                                 <TextBox Style="{StaticResource GdText}" Width="240" HorizontalAlignment="Left" Text="{Binding InstrumentsText, UpdateSourceTrigger=PropertyChanged}"
-                                         ToolTip="Up to 8 hex numbers, 10-37. Apply to ROM, then Play to hear the change."/>
+                                         ToolTip="Up to 8 hex numbers, 10-37. They go into the ROM when you pick another song or save (or click Apply to ROM in the top bar); then Play to hear them."/>
                                 <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0"
                                            Text="Each song plays its notes with the instruments in this list, in order. Swapping one for another changes how the song sounds (e.g. a different lead). Instruments 00-0F and 30-3F are always there."/>
                             </StackPanel>
@@ -149,7 +149,6 @@
                         <TextBlock Text="{Binding BpmText}" Style="{StaticResource GdHint}" VerticalAlignment="Center" Margin="0,0,12,4"/>
                         <Button Content="↶ Undo" Style="{StaticResource NeSmall}" Command="{Binding UndoCommand}" ToolTip="Ctrl+Z"/>
                         <Button Content="↷ Redo" Style="{StaticResource NeSmall}" Command="{Binding RedoCommand}" ToolTip="Ctrl+Y" Margin="0,0,12,4"/>
-                        <Button Content="✔ Write notes to ROM" Style="{StaticResource LufiaButtonGold}" Command="{Binding WriteToRomCommand}" Padding="10,3" Margin="0,0,4,4"/>
                         <Button Content="↺ Reload" Style="{StaticResource NeSmall}" Command="{Binding RevertNotesCommand}" ToolTip="Throw away the changes and read the song from the ROM again"/>
                         <TextBlock Text="{Binding SizeText}" Style="{StaticResource GdHint}" VerticalAlignment="Center" Margin="6,0,0,4"/>
                     </WrapPanel>

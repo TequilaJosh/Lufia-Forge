@@ -41,7 +41,7 @@ public sealed class CharacterOption
 /// Text editor: every dialogue box of the game in one list (where it happens, who says it, with a picture
 /// of the character), and an editor for the selected box. Saving goes through the event script writer.
 /// </summary>
-public partial class TextEditorViewModel : ObservableObject
+public partial class TextEditorViewModel : ObservableObject, LufiaForge.ViewModels.IPendingEdits
 {
     private RomBuffer? _rom;
     private MainViewModel? _mainVm;
@@ -255,11 +255,33 @@ public partial class TextEditorViewModel : ObservableObject
                 path: null, pathLabel: null);
     }
 
+    /// <summary>The line being edited differs from the ROM.</summary>
+    public bool HasPendingEdits => _rom != null && SelectedRow != null && EditText.Replace("\r", "") != SelectedRow.Line.Text;
+
+    public string? WritePendingEdits()
+    {
+        if (!HasPendingEdits) return null;
+        string status = StatusText;
+        Write(SelectedRow!, quiet: true);
+        return StatusText.StartsWith("Not applied") || StatusText.StartsWith("This line") ? StatusText : null;
+    }
+
+    /// <summary>Picking another line: the one being edited is written first.</summary>
+    partial void OnSelectedRowChanging(DialogueRow? oldValue, DialogueRow? newValue)
+    {
+        if (oldValue != null && _rom != null && EditText.Replace("\r", "") != oldValue.Line.Text) Write(oldValue, quiet: true);
+    }
+
     [RelayCommand]
     private void Apply()
     {
         if (_rom == null || SelectedRow == null) return;
-        var row = SelectedRow;
+        Write(SelectedRow, quiet: false);
+    }
+
+    private void Write(DialogueRow row, bool quiet)
+    {
+        if (_rom == null) return;
         var l = row.Line;
         try
         {
@@ -268,7 +290,7 @@ public partial class TextEditorViewModel : ObservableObject
             s.Ops[l.Line].Text = EditText.Replace("\r", "");
             if (!s.IsModified) { StatusText = "Nothing changed."; return; }
             bool fits = s.FitsInPlace();
-            bool expand = _rom.Length >= MapWriter.ExpandedSize;
+            bool expand = _rom.Length >= MapWriter.ExpandedSize || quiet;
             if (!fits && !expand)
             {
                 if (MessageBox.Show("The new text is a different length, so its event has to be moved. To store it, Lufia Forge needs " +
@@ -286,7 +308,7 @@ public partial class TextEditorViewModel : ObservableObject
             _mainVm?.NotifyRomModified(what);
             StatusText = "✔ Written to the ROM. Save Project keeps it.";
             UpdateSize();
-            InfoDialog.Show("Written to ROM", "✔ Dialogue written to the ROM",
+            if (!quiet) InfoDialog.Show("Written to ROM", "✔ Dialogue written to the ROM",
                 result + "\n\nIt's in your project now: saving the project keeps it (Ctrl+S, or on its own every 5 minutes), and File > Export ROM writes a playable ROM.",
                 path: null, pathLabel: null,
                 primaryText: _mainVm != null ? "💾 Save project now" : null, primary: () => _mainVm?.SaveNow());

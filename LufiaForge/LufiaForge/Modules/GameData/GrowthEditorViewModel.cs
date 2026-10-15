@@ -73,7 +73,7 @@ public partial class GrowthEditorViewModel : GameDataEditorBase
 
     partial void OnSelectedIndexChanged(int value) => LoadSelected();
 
-    protected override void LoadSelected()
+    protected override void LoadRecord()
     {
         if (Ctx == null || SelectedIndex < 0) return;
         _loading = true;

@@ -63,7 +63,7 @@ public partial class GameSettingsViewModel : GameDataEditorBase
 
     protected override void OnRomLoaded() => LoadSelected();
 
-    protected override void LoadSelected()
+    protected override void LoadRecord()
     {
         if (Ctx == null) return;
         var rom = Ctx.Rom;

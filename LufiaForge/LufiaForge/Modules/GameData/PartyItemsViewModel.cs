@@ -25,7 +25,7 @@ public partial class PartyItemsViewModel : GameDataEditorBase
 
     protected override void OnRomLoaded() => LoadSelected();
 
-    protected override void LoadSelected()
+    protected override void LoadRecord()
     {
         Slots.Clear();
         if (Ctx == null) return;

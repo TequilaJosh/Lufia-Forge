@@ -66,7 +66,7 @@ public partial class MapEditorViewModel
             $"Walking in runs event {ev}.\n" +
             state switch
             {
-                "new" => "New: Apply to ROM switches it on and makes its event (then Event… opens it).",
+                "new" => "New: Writing the map (by itself, or Apply to ROM in the top bar) switches it on and makes its event (then Event… opens it).",
                 "on" => "Switched on when the map loads (by its setup script).",
                 _ => "Not switched on by this map's setup script, so it does nothing in the game (the game keeps a few spare areas).",
             } + "\nDrag it to move it, its bottom-right block to resize it.";
@@ -147,7 +147,7 @@ public partial class MapEditorViewModel
         if (_rom == null || _map == null || _selection is not { kind: "trigger" } sel) return;
         // writing the map switches the area on and makes its event
         if (!WritePendingFirst() || _map == null) return;
-        if (sel.index >= _map.LoadedTriggerCount) { Status = "Apply the map first: that switches the area on and makes its event."; return; }
+        if (sel.index >= _map.LoadedTriggerCount) { Status = "The area couldn't be switched on yet: see the status above."; return; }
         int ev = MapEvents.AreaEvent(_rom, _map.MapId, sel.index);
         if (!MapEvents.HasEvent(_rom, _map.MapId, ev))
         {

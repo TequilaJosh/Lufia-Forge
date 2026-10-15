@@ -190,7 +190,7 @@ public partial class EncounterEditorViewModel : GameDataEditorBase
         DrawZones();
     }
 
-    protected override void LoadSelected()
+    protected override void LoadRecord()
     {
         Rows.Clear();
         if (Ctx == null || SelectedIndex < 0 || SelectedIndex >= _entryNumbers.Count) return;
@@ -329,7 +329,7 @@ public partial class EncounterEditorViewModel : GameDataEditorBase
         var list = CurrentList();
         if (list.All(s => s == row.Number)) { Status = "A group needs at least one subgroup."; return; }
         list.RemoveAll(s => s == row.Number); SetList(list);
-        Status = $"Subgroup {row.Number:X2} removed from this group (Apply to keep).";
+        Status = $"Subgroup {row.Number:X2} removed from this group (written by itself).";
     }
 
     [RelayCommand]
@@ -337,7 +337,7 @@ public partial class EncounterEditorViewModel : GameDataEditorBase
     {
         if (!IsGroup || AddChoice < 0) { Status = "Pick a subgroup to add first."; return; }
         var list = CurrentList(); list.Add(AddChoice + 1); SetList(list);
-        Status = $"Subgroup {AddChoice + 1:X2} added (Apply to keep).";
+        Status = $"Subgroup {AddChoice + 1:X2} added (written by itself).";
     }
 
     /// <summary>A subgroup slot no group lists (counting the edit on screen), or 0.</summary>
@@ -362,7 +362,7 @@ public partial class EncounterEditorViewModel : GameDataEditorBase
         var list = CurrentList();
         _pending[s] = Rows.Count > 0 ? RowMonsters(Rows[0]) : new[] { 0, 0xFF, 0xFF, 0xFF };
         list.Add(s); SetList(list);
-        Status = $"New subgroup {s:X2} (a free slot) added with a copy of the first monsters: choose its monsters, then Apply.";
+        Status = $"New subgroup {s:X2} (a free slot) added with a copy of the first monsters: choose its monsters; it's written by itself (or click Apply to ROM in the top bar).";
     }
 
     // ── new / delete group ──

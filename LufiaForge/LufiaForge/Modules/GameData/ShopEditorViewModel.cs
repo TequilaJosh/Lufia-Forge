@@ -35,7 +35,7 @@ public partial class ShopEditorViewModel : GameDataEditorBase
 
     partial void OnSelectedIndexChanged(int value) => LoadSelected();
 
-    protected override void LoadSelected()
+    protected override void LoadRecord()
     {
         Slots.Clear();
         if (Ctx == null || SelectedIndex < 0) return;

@@ -82,7 +82,7 @@
                         <TextBlock Text="Web colour" Style="{StaticResource GdFieldLabel}" Margin="0,6,0,0"/>
                         <TextBox Style="{StaticResource GdText}" Width="100" HorizontalAlignment="Left" Text="{Binding Hex, UpdateSourceTrigger=PropertyChanged}"/>
                         <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,8,0,0"
-                                   Text="The SNES has 32 shades per channel; web colours are rounded to the nearest. Apply writes the whole palette."/>
+                                   Text="The SNES has 32 shades per channel; web colours are rounded to the nearest. The whole palette is written."/>
                     </StackPanel>
                 </Border>
             </WrapPanel>

@@ -65,7 +65,6 @@
         <Border x:Name="PathPanel" Grid.Row="3" Style="{StaticResource GdCard}" Margin="0,6,0,0" Padding="8" Visibility="Collapsed">
             <StackPanel>
                 <DockPanel>
-                    <Button DockPanel.Dock="Right" Content="💾 Write paths to ROM" Style="{StaticResource LufiaButtonGold}" Click="SavePaths_Click"/>
                     <TextBlock x:Name="PathHeader" Style="{StaticResource GdSection}" VerticalAlignment="Center"/>
                 </DockPanel>
                 <WrapPanel Margin="0,6,0,0">

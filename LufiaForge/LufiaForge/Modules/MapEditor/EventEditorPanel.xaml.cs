@@ -318,7 +318,7 @@ public partial class EventLineVm : ObservableObject
     }
 }
 
-public partial class EventEditorPanel : UserControl
+public partial class EventEditorPanel : UserControl, LufiaForge.ViewModels.IPendingEdits
 {
     private RomBuffer _rom = null!;
     private int _mapId, _event;
@@ -342,6 +342,22 @@ public partial class EventEditorPanel : UserControl
         InitializeComponent();
         ShowBytesBox.IsChecked = ShowCommandBytes;
         Lines.ItemsSource = _lines;
+        // while it's on screen its edits are written by themselves (saving the project, Apply to ROM in the top bar)
+        Loaded += (_, _) => (Application.Current?.MainWindow?.DataContext as LufiaForge.ViewModels.MainViewModel)?.Register(this);
+        Unloaded += (_, _) =>
+        {
+            if (HasPendingEdits) WritePendingEdits();
+            (Application.Current?.MainWindow?.DataContext as LufiaForge.ViewModels.MainViewModel)?.Unregister(this);
+        };
+    }
+
+    /// <summary>The event (or its cutscene's paths) was changed and isn't in the ROM yet.</summary>
+    public bool HasPendingEdits => Script != null && _rom != null && (Script.IsModified || Stage.HasPathChanges);
+
+    public string? WritePendingEdits()
+    {
+        if (!HasPendingEdits) return null;
+        return Write(quiet: true) ? null : $"Event {_event} of map {_mapId:X2}: {StatusText.Text}";
     }
 
     private readonly Stack<(EventScript Script, string Title)> _history = new();
@@ -864,19 +880,21 @@ public partial class EventEditorPanel : UserControl
         Changed();
     }
 
-    private void Apply_Click(object sender, RoutedEventArgs e)
+
+    /// <summary>Writes the event (and its paths) to the ROM; quiet: no questions or confirmations.</summary>
+    private bool Write(bool quiet)
     {
-        if (!Script.IsModified && !Stage.HasPathChanges) { StatusText.Text = "Nothing changed."; return; }
+        if (!Script.IsModified && !Stage.HasPathChanges) { StatusText.Text = "Nothing changed."; return true; }
         try
         {
             bool fits = Script.FitsInPlace();
-            bool allowExpand = _rom.Length >= MapWriter.ExpandedSize;
+            bool allowExpand = _rom.Length >= MapWriter.ExpandedSize || quiet;
             if (!fits && !allowExpand)
             {
                 if (!_owner.ConfirmExpand("The edited event is a different size than the original, so it has to be moved."))
                 {
                     StatusText.Text = "Not applied. Keep every line the same size to save without expanding.";
-                    return;
+                    return false;
                 }
                 allowExpand = true;
             }
@@ -887,11 +905,13 @@ public partial class EventEditorPanel : UserControl
             Fill();
             if (Stage.Visibility == Visibility.Visible) { Stage.Bind(_rom, this); if (_selectedLine >= 0) SelectLine(Math.Min(_selectedLine, _lines.Count - 1)); }
             StatusText.Text = "✔ Written to the ROM. Save Project keeps it.";
-            _owner.ConfirmWritten($"Event {_event} of map {_mapId:X2} written to the ROM", result);
+            if (!quiet) _owner.ConfirmWritten($"Event {_event} of map {_mapId:X2} written to the ROM", result);
+            return true;
         }
         catch (Exception ex)
         {
             StatusText.Text = "Not applied: " + ex.Message;
+            return false;
         }
     }
 
@@ -975,8 +995,8 @@ public partial class EventEditorPanel : UserControl
 
     /// <summary>Ask before throwing away unapplied edits. True = OK to continue.</summary>
     public bool ConfirmDiscard() =>
-        Script == null || !Script.IsModified ||
-        MessageBox.Show("Discard the event changes that weren't applied?", "Unapplied changes",
+        Script == null || !Script.IsModified || Write(quiet: true) ||
+        MessageBox.Show($"The event's changes couldn't be written ({StatusText.Text}). Discard them?", "Event changes",
             MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
 
     private void Revert_Click(object sender, RoutedEventArgs e)

@@ -51,7 +51,7 @@ public partial class CreditsEditorViewModel : GameDataEditorBase
 
     partial void OnSelectedChanged(CreditCardRow? value) => LoadSelected();
 
-    protected override void LoadSelected()
+    protected override void LoadRecord()
     {
         if (Selected == null) { EditText = ""; Preview = null; return; }
         EditText = Selected.Card.Text.Replace("\n", Environment.NewLine);

@@ -31,6 +31,9 @@ public sealed class RomHistory
     /// <summary>Raised after a step is recorded, undone or redone.</summary>
     public event Action? Changed;
 
+    /// <summary>Whether a ROM is being tracked.</summary>
+    public bool IsAttached => _rom != null;
+
     /// <summary>Starts a new history for a freshly opened ROM.</summary>
     public void Attach(RomBuffer? rom)
     {

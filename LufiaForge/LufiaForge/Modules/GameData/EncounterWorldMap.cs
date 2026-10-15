@@ -256,6 +256,16 @@ public partial class EncounterEditorViewModel
         Status = "Undone.";
     }
 
+    public override bool HasPendingEdits => base.HasPendingEdits || ZonesDirty && Ctx != null;
+
+    public override string? WritePendingEdits()
+    {
+        bool zones = ZonesDirty;
+        string? error = base.HasPendingEdits ? base.WritePendingEdits() : null;
+        if (zones && ZonesDirty) WriteZones();
+        return error;
+    }
+
     [RelayCommand]
     private void WriteZones()
     {

@@ -101,8 +101,7 @@
                             <Button Content="Open the event…" Style="{StaticResource LufiaButton}" Command="{Binding OpenEventCommand}" Margin="0,0,8,0"
                                     ToolTip="The whole script this line is part of, in the event editor"/>
                             <Button Content="Export all dialogue…" Style="{StaticResource LufiaButton}" Command="{Binding ExportAllCommand}" Margin="0,0,16,0"/>
-                            <Button Content="↺ Revert" Style="{StaticResource LufiaButton}" Command="{Binding RevertCommand}" Margin="0,0,8,0"/>
-                            <Button Content="✔ Apply to ROM" Style="{StaticResource LufiaButtonGold}" Command="{Binding ApplyCommand}"/>
+                            <Button Content="↺ Revert" Style="{StaticResource LufiaButton}" Command="{Binding RevertCommand}"/>
                         </StackPanel>
                     </StackPanel>
                     <TextBox Text="{Binding EditText, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource GdText}"

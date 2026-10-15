@@ -209,7 +209,7 @@ public partial class EventsViewModel : ObservableObject, IEventHost
         else BuildList();
         BuildFlagIndex();
         Open(ev, "new");
-        Status = win.ResultText + ". It's open on the right: add its lines, then Apply.";
+        Status = win.ResultText + ". It's open on the right: add its lines; it's written by itself (or click Apply to ROM in the top bar).";
     }
 
     /// <summary>Deletes the selected event (after saying what changes).</summary>

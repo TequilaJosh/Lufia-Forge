@@ -31,7 +31,7 @@ public partial class MapEditorViewModel
             RedrawMap();
             RebuildOverlays();
             MarkEdited();
-            Status = $"Map {_map.MapId:X2} shown with tileset {TilesetChoice}, palette {MapPalette}. Apply to ROM to keep it (Undo takes it back). " +
+            Status = $"Map {_map.MapId:X2} shown with tileset {TilesetChoice}, palette {MapPalette}. It's written with the map's other edits (Undo takes it back). " +
                      "Block numbers stay the same, so a tileset made for other maps can look scrambled here.";
         }
         catch (Exception ex) { Status = "Tileset: " + ex.Message; }
@@ -141,8 +141,10 @@ public partial class MapEditorViewModel
             }
             if (TilesetChoice < 0 || TilesetChoice >= Tilesets.Count(_rom)) { Status = "Pick a tileset."; return; }
             _map.SetTilesetAndPalette(TilesetChoice, MapPalette);
+            RedrawMap();
+            RebuildOverlays();
             MarkEdited();
-            ApplyToRom();
+            Status = $"Map {_map.MapId:X2} is {_map.Width}x{_map.Height} blocks now (written with its other edits; Undo takes it back).";
         }
         catch (Exception ex) { Status = "Map settings: " + ex.Message; }
     }
@@ -284,7 +286,7 @@ public partial class MapEditorViewModel
                 return;
             }
             var n = _map.AddNpc(NpcSprite >= 0 ? NpcSprite : 0x0C, x, y);
-            Status = $"Character {n.Index + 1} added (talking runs event {n.Index}; an empty one is made when you Apply). Drag it into place, then Apply.";
+            Status = $"Character {n.Index + 1} added (talking runs event {n.Index}; an empty one is made when the map is written). Drag it into place; it's written by itself (or click Apply to ROM in the top bar).";
             MarkEdited();
             RebuildOverlays();
             SelectNpc(n);
