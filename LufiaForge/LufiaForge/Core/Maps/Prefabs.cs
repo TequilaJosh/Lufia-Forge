@@ -519,27 +519,59 @@ public static class Prefabs
             if (!_sources.TryGetValue(p.Tileset, out var src))
                 _sources[p.Tileset] = src = (p.Tileset == _map.Tileset ? _blocks : LufiaCompression.DecompressResource(_rom, Tilesets.BlocksResource(_rom, p.Tileset), out _),
                                              Tilesets.CompositePairs(_rom, p.Tileset));
-            int t = _map.CompositeThreshold;
-            var plain = new int[p.Cells.Length];
-            var pair = new int[p.Cells.Length];
-            int need = t;
-            for (int i = 0; i < p.Cells.Length; i++)
+            var keys = new string[p.Cells.Length];
+            var same = new int[p.Cells.Length];
+            for (int i = 0; i < keys.Length; i++)
             {
                 ushort c = p.Cells[i];
-                plain[i] = pair[i] = -1;
-                if (c == Keep) continue;
+                same[i] = -1;
+                if (c == Keep) { keys[i] = ""; continue; }
                 if ((c & CompositeFlag) != 0)
                 {
-                    if (t < 0) return null;
                     var (g, o) = PairAt(_rom, src.Pairs, c & 0x3FF);
-                    if (!_byPair.TryGetValue(Record(src.Blocks, g) + "/" + Record(src.Blocks, o), out int q)) return null;
+                    keys[i] = Record(src.Blocks, g) + "/" + Record(src.Blocks, o);
+                }
+                else
+                {
+                    keys[i] = Record(src.Blocks, c);
+                    if (p.Tileset == _map.Tileset) same[i] = c;   // the same block number when it is the same block
+                }
+            }
+            return PlaceKeys(p, keys, same);
+        }
+
+        /// <summary>A preset the user made (cells kept as block records), fitted to this map; null when some of its
+        /// blocks aren't in the map's tileset.</summary>
+        public Placement? Place(CustomPresets.Preset preset)
+        {
+            if (_map.IsWorld) return null;
+            var shell = new Prefab(preset.W, preset.H, Array.Empty<ushort>(), preset.Name, 1, preset.Count, _map.Tileset);
+            return PlaceKeys(shell, preset.Cells, Enumerable.Repeat(-1, preset.Cells.Length).ToArray());
+        }
+
+        /// <summary>Cells given by their block records ("" = left out, "ground/overlay" = a composite) as this map's
+        /// block numbers. <paramref name="same"/>: a block number to keep when it still is that block (or -1).</summary>
+        private Placement? PlaceKeys(Prefab p, string[] keys, int[] same)
+        {
+            int t = _map.CompositeThreshold;
+            var plain = new int[keys.Length];
+            var pair = new int[keys.Length];
+            int need = t;
+            for (int i = 0; i < keys.Length; i++)
+            {
+                string k = keys[i];
+                plain[i] = pair[i] = -1;
+                if (k.Length == 0) continue;
+                if (k.Contains('/'))
+                {
+                    if (t < 0 || !_byPair.TryGetValue(k, out int q)) return null;
                     pair[i] = q;
                 }
                 else
                 {
-                    if (!_byRecord.TryGetValue(Record(src.Blocks, c), out var list)) return null;
+                    if (!_byRecord.TryGetValue(k, out var list)) return null;
                     // the same block number when it is the same block, else the first copy the map shows as a block
-                    int b = p.Tileset == _map.Tileset && (t < 0 || c < t) ? c : list.FirstOrDefault(x => t < 0 || x < t, list[0]);
+                    int b = same[i] >= 0 && (t < 0 || same[i] < t) ? same[i] : list.FirstOrDefault(x => t < 0 || x < t, list[0]);
                     plain[i] = b;
                     if (t >= 0 && b >= t) need = Math.Max(need, b + 1);
                 }
@@ -550,7 +582,7 @@ public static class Prefabs
                 int ownMax = _map.Layer.Max(c => c & 0x3FF);
                 if (ownMax >= t && ownMax + need - t > 0x3FF) return null;
             }
-            var cells = new ushort[p.Cells.Length];
+            var cells = new ushort[keys.Length];
             for (int i = 0; i < cells.Length; i++)
             {
                 if (plain[i] >= 0) cells[i] = (ushort)plain[i];
