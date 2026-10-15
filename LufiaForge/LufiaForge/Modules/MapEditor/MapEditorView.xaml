@@ -342,9 +342,14 @@
                         </Grid>
                         <TextBlock DockPanel.Dock="Top" Text="{Binding BrushText}" Style="{StaticResource LufiaLabel}" TextWrapping="Wrap"
                                    Foreground="{StaticResource GoldLightBrush}" Margin="0,0,0,6"/>
-                        <Button DockPanel.Dock="Top" Content="🧩  Pieces from other maps..." Style="{StaticResource LufiaButtonGold}" Padding="9,4" Margin="0,0,0,6"
-                                HorizontalAlignment="Stretch" Command="{Binding PiecesFromMapsCommand}"
-                                ToolTip="Copy part of any map with this tileset (a river bend, a house, a bridge) and stamp it on this map"/>
+                        <UniformGrid DockPanel.Dock="Top" Columns="2" Margin="0,0,0,6">
+                            <Button Content="🏠  Buildings..." Style="{StaticResource LufiaButtonGold}" Padding="9,4" Margin="0,0,3,0"
+                                    Command="{Binding BuildingsCommand}"
+                                    ToolTip="Ready-made houses, shops, rooms and towers from the game's maps with this tileset: pick one and click on your map to place it"/>
+                            <Button Content="🧩  Pieces..." Style="{StaticResource LufiaButtonGold}" Padding="9,4" Margin="3,0,0,0"
+                                    Command="{Binding PiecesFromMapsCommand}"
+                                    ToolTip="Copy part of any map with this tileset (a river bend, a house, a bridge) and stamp it on this map"/>
+                        </UniformGrid>
                         <!-- recent brushes -->
                         <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4">
                             <TextBlock DockPanel.Dock="Left" Text="Recent" Style="{StaticResource LufiaLabel}" VerticalAlignment="Center" Margin="0,0,6,0"/>

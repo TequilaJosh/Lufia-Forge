@@ -17,7 +17,16 @@ public static class BlockRoom
     {
         if (map.IsWorld) return "The world map has a fixed set of blocks.";
         if (map.CompositeThreshold < 0) return "This map's tileset can already take new blocks.";
-        // stamped tile patterns (event command 55) hold block numbers in the map data that aren't renumbered
+        if (PatternEvent(rom, map) is { } why) return why;
+        int max = map.Layer.Max(c => c & 0x3FF);
+        if (max + 1 > 0x3FF) return "This map already uses every block number (0-3FF).";
+        return null;
+    }
+
+    /// <summary>Why the map's composite blocks can't be renumbered, or null: an event that stamps tile patterns
+    /// (event command 55, a puzzle) holds block numbers that aren't renumbered.</summary>
+    public static string? PatternEvent(RomBuffer rom, LufiaMap map)
+    {
         int slots = MapEvents.TableLength(rom, map.MapId);
         for (int ev = 0; ev < slots; ev++)
         {
@@ -26,8 +35,6 @@ public static class BlockRoom
             if (s != null && s.Ops.Any(o => !o.IsText && o.Bytes.Length > 0 && o.Bytes[0] == 0x55))
                 return $"Event {ev} of this map stamps tile patterns (a puzzle), whose block numbers can't be moved yet.";
         }
-        int max = map.Layer.Max(c => c & 0x3FF);
-        if (max + 1 > 0x3FF) return "This map already uses every block number (0-3FF).";
         return null;
     }
 
@@ -59,8 +66,9 @@ public static class BlockRoom
         Array.Copy(blocks, 0, nb, 0, t * BlockSet.Size);
         Array.Copy(blocks, t * BlockSet.Size, nb, (t + count) * BlockSet.Size, blocks.Length - t * BlockSet.Size);
 
-        // pair table: the entries this map's composite cells use, with blocks at or above the threshold renumbered
-        int pairs = Math.Max(0, max - t + 1);
+        // pair table: the entries any map of the tileset uses (so structures from those maps still fit here), with
+        // blocks at or above the threshold renumbered
+        int pairs = Math.Max(Math.Max(0, max - t + 1), Prefabs.PairCount(rom, map.Tileset, MapCatalog.Scan(rom)));
         int oldPairs = Tilesets.CompositePairs(rom, ts);
         var table = new byte[Math.Max(4, pairs * 4)];
         for (int i = 0; i < pairs; i++)

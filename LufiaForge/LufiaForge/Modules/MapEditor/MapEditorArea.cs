@@ -154,6 +154,7 @@ public partial class MapEditorViewModel
             for (int bx = 0; bx < p.W; bx++)
             {
                 ushort t = p.Tiles[by * p.W + bx];
+                if (t == Prefabs.Keep) continue;   // see-through: the map keeps its block there
                 var block = _tileset.MetatilePixels(p.Raw ? t : (ushort)(t & 0x3FF));
                 for (int y = 0; y < 16; y++)
                     for (int x = 0; x < 16; x++)
@@ -193,6 +194,7 @@ public partial class MapEditorViewModel
                 int x = x0 + bx, y = y0 + by;
                 if (x < 0 || y < 0 || x >= _map.Width || y >= _map.Height) continue;
                 ushort before = _map.GetTile(x, y), t = p.Tiles[by * p.W + bx];
+                if (t == Prefabs.Keep) continue;
                 if (p.Raw && _map.IsWorld == (p.TilesetKey == -1)) _map.Layer[y * _map.Width + x] = t;
                 else _map.SetTile(x, y, t & 0x3FF);
                 if (_map.GetTile(x, y) != before) { stroke.Add((x, y, before)); RedrawBlock(x, y); }
