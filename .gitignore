@@ -56,3 +56,8 @@ LufiaForge/native/spc/obj/
 !LufiaForge/LufiaForge/lufia_spc.dll
 
 BizHawk/Lua/LufiaForge_SpellOrder.log
+
+# Lufia Forge projects (they hold a ROM)
+*.lfproj
+*.lfproj.bak
+*.lfproj.tmp
