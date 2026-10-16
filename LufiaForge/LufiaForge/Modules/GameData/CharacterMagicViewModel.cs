@@ -113,7 +113,7 @@ public partial class CharacterMagicViewModel : GameDataEditorBase
         if (Slots.Count >= SpellMemory.MaxPerCharacter) { Status = $"{Casters[SelectedIndex]} can learn at most {SpellMemory.MaxPerCharacter} spells."; return; }
         int level = Slots.Count == 0 ? 0 : Math.Min(Slots[^1].Level + 1, 99);
         Slots.Add(new SpellSlot { Number = Slots.Count + 1, Level = level, Spell = Ctx.SpellNames.Count - 1 });
-        Status = "Entry added (not yet applied): pick its level and spell; it's written by itself (or click Apply to ROM in the top bar).";
+        Status = "Entry added (not yet applied): pick its level and spell; it's written by itself (or click Apply in the top bar).";
     }
 
     [RelayCommand]

@@ -50,12 +50,18 @@ public partial class MainViewModel
         if (errors.Count > 0)
             MessageBox.Show("Some edits couldn't be written:\n\n" + string.Join("\n", errors), "Apply to ROM", MessageBoxButton.OK, MessageBoxImage.Warning);
         else
-            StatusMessage = had ? "Every tab's edits are in the ROM now (Save Project keeps them)." : "Nothing to apply: every edit is already in the ROM.";
+            StatusMessage = had ? "Every tab's edits are in the project now (Save Project keeps them)." : "Nothing to apply: every edit is already in the project.";
     }
+
+    private static bool IsModal(Window w) =>
+        (bool)(typeof(Window).GetField("_showingAsDialog", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)?.GetValue(w) ?? false);
 
     /// <summary>Writes every tab's pending edits; returns the problems.</summary>
     private List<string> WriteAllPending()
     {
+        // a box being typed in hands its text over first (it would be put back to the old value otherwise)
+        if (System.Windows.Input.Keyboard.FocusedElement is System.Windows.Controls.TextBox tb)
+            System.Windows.Data.BindingOperations.GetBindingExpression(tb, System.Windows.Controls.TextBox.TextProperty)?.UpdateSource();
         var errors = new List<string>();
         foreach (var e in _editors.ToList())
         {
@@ -71,9 +77,14 @@ public partial class MainViewModel
 
     private DispatcherTimer? _autosave;
 
+    /// <summary>When the user last typed, clicked or scrolled (the autosave waits for a pause).</summary>
+    private static DateTime _lastInput = DateTime.MinValue;
+
     private void StartProjectSupport()
     {
         RefreshRecent();
+        foreach (var ev in new RoutedEvent[] { UIElement.PreviewKeyDownEvent, UIElement.PreviewMouseDownEvent, UIElement.PreviewMouseWheelEvent, UIElement.PreviewMouseUpEvent })
+            EventManager.RegisterClassHandler(typeof(Window), ev, new RoutedEventHandler((_, _) => _lastInput = DateTime.Now), true);
         _autosave = new DispatcherTimer { Interval = AutosaveEvery };
         _autosave.Tick += (_, _) => Autosave();
         _autosave.Start();
@@ -305,7 +316,12 @@ public partial class MainViewModel
 
     private void Autosave()
     {
-        if (Project == null) return;
+        if (Project == null || _autosave == null) return;
+        // not in the middle of something (typing, a drag, a dialog): try again a little later
+        bool busy = (DateTime.Now - _lastInput).TotalSeconds < 4 || System.Windows.Input.Mouse.Captured != null ||
+                    Application.Current?.Windows.OfType<Window>().Any(w => w.IsVisible && w != Application.Current.MainWindow && w.Owner != null && IsModal(w)) == true;
+        if (busy) { _autosave.Interval = TimeSpan.FromSeconds(20); return; }
+        _autosave.Interval = AutosaveEvery;
         Flush(quiet: true);
         if (!HasUnsavedProjectChanges()) return;
         SaveProjectNow(quiet: true);

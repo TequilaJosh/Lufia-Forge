@@ -354,7 +354,7 @@ public sealed class BizHawkHost : IDisposable
 
         IsUndocked = true;
         DockStateChanged?.Invoke(true); _hostPanel?.Invalidate();
-        StatusChanged?.Invoke("BizHawk undocked — floating window active.");
+        StatusChanged?.Invoke("BizHawk undocked: floating window active.");
     }
 
     /// <summary>

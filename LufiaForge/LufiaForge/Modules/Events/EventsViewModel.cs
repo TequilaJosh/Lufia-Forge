@@ -209,7 +209,7 @@ public partial class EventsViewModel : ObservableObject, IEventHost
         else BuildList();
         BuildFlagIndex();
         Open(ev, "new");
-        Status = win.ResultText + ". It's open on the right: add its lines; it's written by itself (or click Apply to ROM in the top bar).";
+        Status = win.ResultText + ". It's open on the right: add its lines; it's written by itself (or click Apply in the top bar).";
     }
 
     /// <summary>Deletes the selected event (after saying what changes).</summary>
@@ -321,9 +321,9 @@ public partial class EventsViewModel : ObservableObject, IEventHost
             {
                 Use = u,
                 Label = u.IsSetup
-                    ? $"{MapLabel(u.MapId)} · map setup script — {u.Action}"
+                    ? $"{MapLabel(u.MapId)} · map setup script: {u.Action}"
                     : $"{MapLabel(u.MapId)} · event {u.Event}" + (u.RegionStart >= 0 && u.RegionStart != u.JumpBase ? " (jumped-to code)" : "") +
-                      $" · line {u.Line + 1} — {u.Action}",
+                      $" · line {u.Line + 1}: {u.Action}",
             });
     }
 
@@ -389,7 +389,7 @@ public partial class EventsViewModel : ObservableObject, IEventHost
     private bool _suppressOpen;
 
     public void ConfirmWritten(string heading, string details) =>
-        InfoDialog.Show("Written to ROM", "✔ " + heading,
+        InfoDialog.Show("Saved in the project", "✔ " + heading,
             details + "\n\nIt's in your project now: saving the project keeps it (Ctrl+S, or on its own every 5 minutes), and File > Export ROM writes a playable ROM.",
             path: null, pathLabel: null,
             primaryText: _mainVm != null ? "💾 Save project now" : null, primary: () => _mainVm?.SaveNow());

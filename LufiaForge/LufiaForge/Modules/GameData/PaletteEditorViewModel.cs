@@ -133,7 +133,7 @@ public partial class PaletteEditorViewModel : GameDataEditorBase
         try { note = source.Write(Ctx.Rom, colors, allow); }
         catch (InvalidOperationException) when (!allow)
         {
-            if (MessageBox.Show("This palette is stored compressed and no longer fits where it was. Expand the ROM to 2 MB (the game plays the same) so it can move?",
+            if (!AutoWriting && MessageBox.Show("This palette is stored compressed and no longer fits where it was. Expand the ROM to 2 MB (the game plays the same) so it can move?",
                     "Expand ROM?", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) { Status = "Not written: the ROM wasn't expanded."; return; }
             Commit($"{source.Name}", () => note = source.Write(Ctx.Rom, colors, true));
             if (note != null) Status += $" ({note})";

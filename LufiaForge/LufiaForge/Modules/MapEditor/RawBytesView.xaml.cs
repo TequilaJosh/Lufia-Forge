@@ -90,8 +90,8 @@ public partial class RawBytesView : UserControl
 
         int now = script.BuiltLength(), was = script.End - script.Start;
         SizeText.Text = now < 0 ? "A jump lands inside a command: fix it in Lines before saving."
-            : now == was ? $"{now} bytes — same size as in the ROM (written in place)."
-            : $"{now} bytes (was {was}, {(now > was ? "+" : "")}{now - was}) — the event will be moved when applied.";
+            : now == was ? $"{now} bytes: same size as in the ROM (written in place)."
+            : $"{now} bytes (was {was}, {(now > was ? "+" : "")}{now - was}): the event will be moved when applied.";
     }
 
     private static void Colorize(TextBlock tb, ScriptOp op, byte[] bytes)
@@ -180,7 +180,7 @@ public partial class RawBytesView : UserControl
         {
             int len = EventScript.CommandLength(bytes[p], p + 1 < bytes.Count ? bytes[p + 1] : 0);
             if (len == 0) return $"{bytes[p]:X2} isn't a command the engine has.";
-            if (len < 0) return $"{bytes[p]:X2} starts a dialogue box — add dialogue from the Lines view.";
+            if (len < 0) return $"{bytes[p]:X2} starts a dialogue box: add dialogue from the Lines view.";
             if (p + len > bytes.Count) return $"Command {bytes[p]:X2} needs {len} bytes; only {bytes.Count - p} given.";
             commands.Add(bytes.Skip(p).Take(len).ToArray());
             p += len;

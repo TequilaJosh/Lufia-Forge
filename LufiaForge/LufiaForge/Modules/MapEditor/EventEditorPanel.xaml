@@ -157,7 +157,7 @@
             <ColumnDefinition x:Name="StageColumn" Width="0"/>
         </Grid.ColumnDefinitions>
         <Border x:Name="LinesCard" Grid.Column="0" Style="{StaticResource GdCard}" Margin="0" Padding="6">
-            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <ScrollViewer x:Name="LinesScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                 <ItemsControl x:Name="Lines" ItemTemplate="{StaticResource LineTemplate}">
                 </ItemsControl>
             </ScrollViewer>

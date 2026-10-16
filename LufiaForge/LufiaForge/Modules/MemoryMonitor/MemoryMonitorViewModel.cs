@@ -103,7 +103,7 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
         {
             IsBizHawkRunning = true;
             ConnectionStatus = _pendingRomPath != null
-                ? "BizHawk embedded — loading ROM automatically…"
+                ? "BizHawk embedded: loading ROM automatically…"
                 : "BizHawk embedded. Open Tools › External Tools › Lufia Forge Monitor.";
         };
         _host.Exited += () =>

@@ -746,8 +746,8 @@ public partial class EventEditorPanel : UserControl, LufiaForge.ViewModels.IPend
     {
         UndoButton.IsEnabled = _undo.Count > 0;
         RedoButton.IsEnabled = _redo.Count > 0;
-        UndoButton.ToolTip = $"Undo ({_undo.Count} step{(_undo.Count == 1 ? "" : "s")}) — Ctrl+Z";
-        RedoButton.ToolTip = $"Redo ({_redo.Count}) — Ctrl+Y";
+        UndoButton.ToolTip = $"Undo ({_undo.Count} step{(_undo.Count == 1 ? "" : "s")}, Ctrl+Z)";
+        RedoButton.ToolTip = $"Redo ({_redo.Count} step{(_redo.Count == 1 ? "" : "s")}, Ctrl+Y)";
     }
 
     public void Undo()
@@ -902,10 +902,19 @@ public partial class EventEditorPanel : UserControl, LufiaForge.ViewModels.IPend
             string result = Script.Save(allowExpand) + (walks != null ? "\n\n" + walks : "");
             _owner.EventSaved($"Map {_mapId:X2} event {_event}: dialogue/commands");
             Script = EventScript.Reload(_rom, Script) ?? Script;
+            var undo = _undo.ToList(); var redo = _redo.Reverse().ToList();
+            int line = _selectedLine;
+            double scroll = LinesScroll.VerticalOffset;
             Fill();
-            if (Stage.Visibility == Visibility.Visible) { Stage.Bind(_rom, this); if (_selectedLine >= 0) SelectLine(Math.Min(_selectedLine, _lines.Count - 1)); }
-            StatusText.Text = "✔ Written to the ROM. Save Project keeps it.";
-            if (!quiet) _owner.ConfirmWritten($"Event {_event} of map {_mapId:X2} written to the ROM", result);
+            // writing isn't a step back: the undo history, the selected line and the scroll position carry on
+            foreach (var u in undo) _undo.AddLast(u);
+            foreach (var r in redo) _redo.Push(r);
+            UpdateUndoButtons();
+            if (Stage.Visibility == Visibility.Visible) Stage.Bind(_rom, this);
+            if (line >= 0 && _lines.Count > 0) SelectLine(Math.Min(line, _lines.Count - 1));
+            Dispatcher.BeginInvoke(() => LinesScroll.ScrollToVerticalOffset(scroll), System.Windows.Threading.DispatcherPriority.Loaded);
+            StatusText.Text = "✔ Saved in the project.";
+            if (!quiet) _owner.ConfirmWritten($"Event {_event} of map {_mapId:X2} saved in the project", result);
             return true;
         }
         catch (Exception ex)
@@ -1003,7 +1012,7 @@ public partial class EventEditorPanel : UserControl, LufiaForge.ViewModels.IPend
     {
         Script = EventScript.Reload(_rom, Script) ?? Script;
         Fill();
-        StatusText.Text = "Reverted to the event stored in the ROM.";
+        StatusText.Text = "Put back as the project has it.";
     }
 
     private void Close_Click(object sender, RoutedEventArgs e)

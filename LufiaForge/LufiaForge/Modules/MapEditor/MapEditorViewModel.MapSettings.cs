@@ -286,7 +286,7 @@ public partial class MapEditorViewModel
                 return;
             }
             var n = _map.AddNpc(NpcSprite >= 0 ? NpcSprite : 0x0C, x, y);
-            Status = $"Character {n.Index + 1} added (talking runs event {n.Index}; an empty one is made when the map is written). Drag it into place; it's written by itself (or click Apply to ROM in the top bar).";
+            Status = $"Character {n.Index + 1} added (talking runs event {n.Index}; an empty one is made when the map is written). Drag it into place; it's written by itself (or click Apply in the top bar).";
             MarkEdited();
             RebuildOverlays();
             SelectNpc(n);

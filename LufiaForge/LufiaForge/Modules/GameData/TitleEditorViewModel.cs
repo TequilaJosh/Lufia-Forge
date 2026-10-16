@@ -618,7 +618,7 @@ public partial class TitleEditorViewModel : GameDataEditorBase
         bool expand = rom.Length >= Core.Maps.MapWriter.ExpandedSize;
         if (_title.NeedsMoreSpace(rom) && !expand)
         {
-            if (MessageBox.Show("The new title doesn't fit in the original space. Expand the ROM to 2 MB?", "Expand ROM?", MessageBoxButton.YesNo) != MessageBoxResult.Yes)
+            if (!AutoWriting && MessageBox.Show("The new title doesn't fit in the original space. Expand the ROM to 2 MB?", "Expand ROM?", MessageBoxButton.YesNo) != MessageBoxResult.Yes)
             { Status = "Not applied."; return; }
             expand = true;
         }
@@ -627,7 +627,12 @@ public partial class TitleEditorViewModel : GameDataEditorBase
         if (result.Length > 0)
         {
             bool anim = Animating;
+            var undo = _undo.Reverse().ToList(); var redo = _redo.Reverse().ToList();
             LoadSelected();
+            // writing isn't a step: the paint history carries on
+            foreach (var u in undo) _undo.Push(u);
+            foreach (var r in redo) _redo.Push(r);
+            UndoCommand.NotifyCanExecuteChanged(); RedoCommand.NotifyCanExecuteChanged();
             Animating = anim;
             Status = $"Title screen written ({built}; {result}); Save Project keeps it.";
         }

@@ -51,7 +51,7 @@
                             <StackPanel>
                                 <TextBlock Text="INSTRUMENTS THIS SONG LOADS" Style="{StaticResource GdSection}"/>
                                 <TextBox Style="{StaticResource GdText}" Width="240" HorizontalAlignment="Left" Text="{Binding InstrumentsText, UpdateSourceTrigger=PropertyChanged}"
-                                         ToolTip="Up to 8 hex numbers, 10-37. They go into the ROM when you pick another song or save (or click Apply to ROM in the top bar); then Play to hear them."/>
+                                         ToolTip="Up to 8 hex numbers, 10-37. They go into the project when you pick another song or save (or click Apply in the top bar); then Play to hear them."/>
                                 <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0"
                                            Text="Each song plays its notes with the instruments in this list, in order. Swapping one for another changes how the song sounds (e.g. a different lead). Instruments 00-0F and 30-3F are always there."/>
                             </StackPanel>
