@@ -176,6 +176,8 @@
                 <Border Style="{StaticResource GdCard}">
                     <StackPanel MaxWidth="560">
                         <TextBlock Text="AI SCRIPT (WHAT IT DOES EACH TURN)" Style="{StaticResource GdSection}"/>
+                        <Button Content="✎  Edit AI script..." Style="{StaticResource LufiaButtonGold}" Command="{Binding EditAiScriptCommand}" HorizontalAlignment="Left" Margin="0,0,0,8"
+                                ToolTip="Steps in plain words: attack, spells, items, targets, conditions (its HP, the party's HP, turns, being the last one left) and switches for boss phases"/>
                         <ItemsControl ItemsSource="{Binding SpellSteps}" Margin="0,0,0,8">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>

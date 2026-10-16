@@ -99,6 +99,10 @@ public static class MonsterTable
     }
 
     /// <summary>Bank 00 bytes in use by records and scripts (file ranges), optionally leaving one monster's script out.</summary>
+    /// <summary>Whether another monster's record or script uses any of these bytes (a script shared by several monsters).</summary>
+    public static bool Overlaps(RomBuffer rom, int start, int length, int skipScriptOf) =>
+        Used(rom, skipScriptOf).Any(u => u.Start < start + length && start < u.End);
+
     private static List<(int Start, int End)> Used(RomBuffer rom, int skipScriptOf = -1)
     {
         var used = new List<(int, int)>();
