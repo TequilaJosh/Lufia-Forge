@@ -15,10 +15,6 @@
         <TextBlock Text="Name" Style="{StaticResource LufiaLabel}" Margin="0,0,0,4"/>
         <TextBox x:Name="NameBox" FontSize="14" Padding="4,3" TextChanged="NameBox_TextChanged"/>
 
-        <CheckBox x:Name="GroundBox" Margin="0,10,0,0" IsChecked="True" Checked="GroundBox_Changed" Unchecked="GroundBox_Changed">
-            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource TextPrimaryBrush}"
-                       Text="Leave out the ground around it (the block seen most on its edge), so placing it keeps what's painted there"/>
-        </CheckBox>
 
         <TextBlock Style="{StaticResource LufiaLabel}" TextWrapping="Wrap" Margin="0,12,0,0" Foreground="{StaticResource TextDisabledBrush}"
                    Text="It's added to Buildings... (My presets) for every project, on maps whose tileset has the same graphics."/>

@@ -26,12 +26,12 @@ public partial class SavePresetWindow : Window
     }
 
     private CustomPresets.Preset Make() =>
-        CustomPresets.FromArea(_rom, _map, _x, _y, _w, _h, NameBox.Text.Trim(), GroundBox.IsChecked == true);
+        CustomPresets.FromArea(_rom, _map, _x, _y, _w, _h, NameBox.Text.Trim());
 
-    /// <summary>What will be saved: the left-out cells are see-through.</summary>
+    /// <summary>What will be saved: every block of the selection.</summary>
     private void Preview()
     {
-        if (PreviewImage == null || _rom == null) return;   // (the checkbox fires while the window is still being built)
+        if (PreviewImage == null || _rom == null) return;
         var p = Make();
         var ts = MapTileset.ForMap(_rom, _map);
         int pw = _w * 16, ph = _h * 16;
@@ -39,11 +39,6 @@ public partial class SavePresetWindow : Window
         for (int i = 0; i < p.Cells.Length; i++)
         {
             int bx = i % _w * 16, by = i / _w * 16;
-            if (p.Cells[i].Length == 0)
-            {
-                for (int y = 0; y < 16; y++) for (int x = 0; x < 16; x++) px[(by + y) * pw + bx + x] = ((x / 4 + y / 4) % 2 == 0) ? 0xFF202030u : 0xFF2A2A3Cu;
-                continue;
-            }
             var block = ts.MetatilePixels(_map.GetTile(_x + i % _w, _y + i / _w) & 0x3FF);
             for (int y = 0; y < 16; y++) for (int x = 0; x < 16; x++) px[(by + y) * pw + bx + x] = block[y * 16 + x] | 0xFF000000;
         }
@@ -53,14 +48,11 @@ public partial class SavePresetWindow : Window
         PreviewImage.Width = Math.Min(460, pw * 2); PreviewImage.Height = Math.Min(300, ph * 2);
     }
 
-    private void GroundBox_Changed(object sender, RoutedEventArgs e) => Preview();
     private void NameBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e) { if (OkButton != null) OkButton.IsEnabled = NameBox.Text.Trim().Length > 0; }
 
     private void Ok_Click(object sender, RoutedEventArgs e)
     {
-        var p = Make();
-        if (p.Count == 0) { SizeText.Text = "Nothing would be left: untick \"Leave out the ground\"."; return; }
-        Result = p;
+        Result = Make();
         DialogResult = true;
     }
 }
