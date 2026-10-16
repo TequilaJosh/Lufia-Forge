@@ -1,6 +1,7 @@
 <UserControl x:Class="LufiaForge.Modules.MapEditor.MapEditorView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:common="clr-namespace:LufiaForge.Modules.Common">
     <UserControl.Resources>
         <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
     </UserControl.Resources>
@@ -132,7 +133,7 @@
                 </Border>
 
                 <Border BorderBrush="{StaticResource BorderPurpleBrush}" BorderThickness="1,1,1,0" CornerRadius="6,6,0,0" ClipToBounds="True">
-                    <ScrollViewer x:Name="MapScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
+                    <ScrollViewer common:ScrollPan.MiddleDrag="True" x:Name="MapScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
                                   Background="#FF101018" RenderOptions.BitmapScalingMode="NearestNeighbor" UseLayoutRounding="True">
                         <Grid x:Name="MapSurface" HorizontalAlignment="Left" VerticalAlignment="Top"
                               MouseLeftButtonDown="MapSurface_MouseLeftButtonDown"

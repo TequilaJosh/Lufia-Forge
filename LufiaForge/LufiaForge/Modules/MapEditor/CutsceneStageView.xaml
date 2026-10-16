@@ -1,6 +1,7 @@
 <UserControl x:Class="LufiaForge.Modules.MapEditor.CutsceneStageView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:common="clr-namespace:LufiaForge.Modules.Common"
              Background="{DynamicResource MidPurpleBrush}">
     <UserControl.Resources>
         <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
@@ -37,7 +38,7 @@
 
         <!-- stage -->
         <Border Grid.Row="1" Style="{StaticResource GdCard}" Margin="0" Padding="0" ClipToBounds="True">
-            <ScrollViewer x:Name="Scroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="#FF120A1E"
+            <ScrollViewer common:ScrollPan.MiddleDrag="True" x:Name="Scroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="#FF120A1E"
                           RenderOptions.BitmapScalingMode="NearestNeighbor" UseLayoutRounding="True">
                 <Grid x:Name="StageRoot" HorizontalAlignment="Left" VerticalAlignment="Top">
                     <Grid.LayoutTransform>
