@@ -117,8 +117,18 @@ public partial class EncounterEditorViewModel
 
     // ── tools: a stroke is mouse down .. mouse up; each stroke can be undone ──
 
-    private readonly Stack<byte[]> _undo = new();
+    private readonly Stack<byte[]> _undo = new(), _redo = new();
     [ObservableProperty] private bool _canUndo;
+    [ObservableProperty] private bool _canRedo;
+    [ObservableProperty] private string _undoText = "Nothing to undo";
+    [ObservableProperty] private string _redoText = "Nothing to redo";
+
+    private void UpdateUndo()
+    {
+        CanUndo = _undo.Count > 0; CanRedo = _redo.Count > 0;
+        UndoText = _undo.Count > 0 ? $"Undo the last paint, fill or rectangle ({_undo.Count} step{(_undo.Count == 1 ? "" : "s")} back, Ctrl+Z)" : "Nothing to undo";
+        RedoText = _redo.Count > 0 ? $"Redo ({_redo.Count} step{(_redo.Count == 1 ? "" : "s")}, Ctrl+Y)" : "Nothing to redo";
+    }
     private (int X, int Y)? _rectStart;
     private byte[]? _beforeRect;
     /// <summary>A "no battles" area bigger than this is joined to the open map; filling it asks first.</summary>
@@ -135,8 +145,9 @@ public partial class EncounterEditorViewModel
     private void PushUndo()
     {
         _undo.Push(_zones.ToArray());
-        if (_undo.Count > 50) { var keep = _undo.Take(50).Reverse().ToList(); _undo.Clear(); foreach (var z in keep) _undo.Push(z); }
-        CanUndo = true;
+        if (_undo.Count > 300) { var keep = _undo.Take(300).Reverse().ToList(); _undo.Clear(); foreach (var z in keep) _undo.Push(z); }
+        _redo.Clear();
+        UpdateUndo();
     }
 
     /// <summary>Mouse down on cell (cx, cy).</summary>
@@ -194,7 +205,7 @@ public partial class EncounterEditorViewModel
             DragStroke(cx, cy);
             if (!_zones.SequenceEqual(_beforeRect))
             {
-                _undo.Push(_beforeRect); CanUndo = true;
+                _undo.Push(_beforeRect); _redo.Clear(); UpdateUndo();
                 ZonesDirty = true;
             }
             _beforeRect = null; _rectStart = null;
@@ -249,11 +260,24 @@ public partial class EncounterEditorViewModel
     private void UndoZones()
     {
         if (_undo.Count == 0) return;
+        _redo.Push(_zones.ToArray());
         _zones = _undo.Pop();
-        CanUndo = _undo.Count > 0;
+        UpdateUndo();
         ZonesDirty = true;
         DrawZones();
-        Status = "Undone.";
+        Status = $"Undone ({_undo.Count} more step{(_undo.Count == 1 ? "" : "s")} can be undone).";
+    }
+
+    [RelayCommand]
+    private void RedoZones()
+    {
+        if (_redo.Count == 0) return;
+        _undo.Push(_zones.ToArray());
+        _zones = _redo.Pop();
+        UpdateUndo();
+        ZonesDirty = true;
+        DrawZones();
+        Status = "Redone.";
     }
 
     public override bool HasPendingEdits => base.HasPendingEdits || ZonesDirty && Ctx != null;
@@ -273,7 +297,7 @@ public partial class EncounterEditorViewModel
         var rom = Ctx.Rom;
         int size = LufiaCompression.Compress(_zones).Length;
         int slot = ResourceWriter.SlotSize(rom, Encounters.ZoneResource);
-        if (size > slot && rom.Length < MapWriter.ExpandedSize &&
+        if (size > slot && rom.Length < MapWriter.ExpandedSize && !AutoWriting &&
             MessageBox.Show("The edited zones don't fit in their original space. Expand the ROM to 2 MB?", "Expand ROM?", MessageBoxButton.YesNo) != MessageBoxResult.Yes)
         { Status = "Zones not written: the ROM was not expanded."; return; }
         var zones = _zones.ToArray();
@@ -292,8 +316,8 @@ public partial class EncounterEditorViewModel
         if (Ctx == null) return;
         try { _zones = Encounters.ReadZones(Ctx.Rom); } catch { _zones = Array.Empty<byte>(); }
         ZonesDirty = false;
-        _undo.Clear(); CanUndo = false;
+        _undo.Clear(); _redo.Clear(); UpdateUndo();
         DrawZones();
-        Status = "Zones reverted to the ROM.";
+        Status = "Zones put back as they are in the project.";
     }
 }

@@ -795,7 +795,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost, LufiaFor
         if (_dragMode == "new-trigger")
         {
             Tool = MapTool.Select;
-            Status = "New step-on area added. Writing the map (by itself, or Apply to ROM in the top bar) switches it on and makes its event; then Event... (on the right) opens it.";
+            Status = "New step-on area added. Writing the map (by itself, or Apply in the top bar) switches it on and makes its event; then Event... (on the right) opens it.";
         }
         if (_dragMode == "new-exit")
         {
@@ -849,7 +849,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost, LufiaFor
     /// </summary>
     public void ConfirmWritten(string heading, string details)
     {
-        Modules.Common.InfoDialog.Show("Written to ROM", "✔ " + heading,
+        Modules.Common.InfoDialog.Show("Saved in the project", "✔ " + heading,
             details + "\n\nIt's in your project now: saving the project keeps it (Ctrl+S, or on its own every 5 minutes), and File > Export ROM writes a playable ROM.",
             path: null, pathLabel: null,
             primaryText: _mainVm != null ? "💾 Save project now" : null, primary: () => _mainVm?.SaveNow());
@@ -1065,7 +1065,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost, LufiaFor
         RebuildOverlays();
         string what = $"Map {_map.MapId:X2} spot {e.Content.Spot}: {updated?.Describe(_rom)}";
         _mainVm?.NotifyRomModified(what);
-        SpotWrittenText = $"✔ Written to the ROM at 0x{e.Content.ScriptOffset + 1:X6}: {updated?.Describe(_rom)}.\n" +
+        SpotWrittenText = $"✔ Saved in the project at 0x{e.Content.ScriptOffset + 1:X6}: {updated?.Describe(_rom)}.\n" +
                           "Save Project keeps it.";
         Status = $"Treasure changed in the ROM ({updated?.Describe(_rom)}). Save Project keeps it.";
     }
@@ -1408,7 +1408,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost, LufiaFor
             _links = MapLinks.Build(_rom, Maps.Select(m => m.MapId));
             LoadMap(id);
             Status = result.Describe() + " Save Project keeps it.";
-            ConfirmWritten($"Map {id:X2} written to the ROM", result.Describe());
+            ConfirmWritten($"Map {id:X2} saved in the project", result.Describe());
         }
         catch (Exception ex)
         {
@@ -1422,7 +1422,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost, LufiaFor
         if (_map == null) return;
         HasUnappliedChanges = false;
         LoadMap(_map.MapId);
-        Status = "Reverted to the map stored in the ROM.";
+        Status = "Put back as the project has it.";
     }
 
     [RelayCommand] private void ZoomIn()  => Zoom = Math.Min(6, Zoom * 1.5);

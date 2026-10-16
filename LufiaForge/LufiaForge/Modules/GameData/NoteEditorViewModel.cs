@@ -210,6 +210,18 @@ public partial class NoteEditorViewModel : ObservableObject
     // ── change tracking ─────────────────────────────────────────────────────
 
     private readonly Stack<(EditChannel[] Ch, int Tempo)> _undo = new(), _redo = new();
+
+    /// <summary>The undo / redo history and the cursor, kept while the song is written and read back.</summary>
+    public object SaveHistory() => (_undo.Reverse().ToList(), _redo.Reverse().ToList(), CursorTick);
+
+    public void RestoreHistory(object saved)
+    {
+        if (saved is not (List<(EditChannel[], int)> undo, List<(EditChannel[], int)> redo, int cursor)) return;
+        _undo.Clear(); foreach (var u in undo) _undo.Push(u);
+        _redo.Clear(); foreach (var r in redo) _redo.Push(r);
+        CursorTick = cursor;
+        UndoCommand.NotifyCanExecuteChanged(); RedoCommand.NotifyCanExecuteChanged();
+    }
     private readonly DispatcherTimer _sizeTimer;
 
     /// <summary>Call before a change (the change can then be undone).</summary>

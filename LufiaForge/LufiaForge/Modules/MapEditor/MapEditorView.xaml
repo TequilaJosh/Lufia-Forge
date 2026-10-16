@@ -53,11 +53,11 @@
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
                     <Border CornerRadius="10" Padding="9,2" Margin="0,0,10,0" Background="#5A4416" VerticalAlignment="Center"
                             Visibility="{Binding HasUnappliedChanges, Converter={StaticResource BoolToVisibilityConverter}}"
-                            ToolTip="This map has edits that aren't in the ROM yet. They're written by themselves when you pick another map or save the project (or click Apply to ROM in the top bar).">
+                            ToolTip="This map has edits that aren't in the project yet. They're written by themselves when you pick another map or save the project (or click Apply in the top bar).">
                         <TextBlock Text="● Edited" Foreground="{StaticResource GoldLightBrush}" FontSize="11"/>
                     </Border>
                     <Button Content="↺  Revert" Style="{StaticResource LufiaButton}" Padding="10,4" Command="{Binding RevertMapCommand}"
-                            ToolTip="Throw away this map's edits that aren't in the ROM yet (back to the map in the ROM)"/>
+                            ToolTip="Throw away this map's edits that aren't in the project yet (back to the map as the project has it)"/>
                 </StackPanel>
             </DockPanel>
         </Border>

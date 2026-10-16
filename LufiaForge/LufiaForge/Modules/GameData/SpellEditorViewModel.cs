@@ -158,7 +158,7 @@ public partial class SpellEditorViewModel : GameDataEditorBase
             id = Core.Battle.SpellTablePatch.AddSpell(rom, template, name.Length > 6 ? name[..6] + "+" : name + "+");
             rom.FixChecksum();
         }, namesChanged: true);
-        if (id >= 0) { SelectedIndex = id; Status = $"Spell {id:X2} added (a copy of {template:X2}). Rename it and change its numbers; it's written by itself (or click Apply to ROM in the top bar). Unsaved."; }
+        if (id >= 0) { SelectedIndex = id; Status = $"Spell {id:X2} added (a copy of {template:X2}). Rename it and change its numbers; it's written by itself (or click Apply in the top bar). Unsaved."; }
     }
 
     [RelayCommand]
@@ -168,7 +168,7 @@ public partial class SpellEditorViewModel : GameDataEditorBase
         int id = SelectedIndex, template = WorksLike;
         Commit($"Spell {id:X2} works like {template:X2}", () => { Core.Battle.SpellTablePatch.SetWorksLike(Ctx.Rom, id, template); Ctx.Rom.FixChecksum(); });
         LoadSelected();
-        Status = $"Spell {id:X2} now works like {SpellNames[template][3..].Trim()} (effect, numbers, animation, usage and target); it keeps its name and MP. Change its numbers below; it's written by itself (or click Apply to ROM in the top bar). Unsaved.";
+        Status = $"Spell {id:X2} now works like {SpellNames[template][3..].Trim()} (effect, numbers, animation, usage and target); it keeps its name and MP. Change its numbers below; it's written by itself (or click Apply in the top bar). Unsaved.";
     }
 
     [RelayCommand]

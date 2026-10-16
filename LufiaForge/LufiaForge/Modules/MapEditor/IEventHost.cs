@@ -7,7 +7,7 @@ public interface IEventHost
     bool ConfirmExpand(string what);
     /// <summary>The event was written to the ROM (for the save list / window title).</summary>
     void EventSaved(string what);
-    /// <summary>Show the "written to the ROM" confirmation.</summary>
+    /// <summary>Show the "saved in the project" confirmation.</summary>
     void ConfirmWritten(string heading, string details);
     /// <summary>Show where a story flag is used (optional).</summary>
     void ShowFlag(int flag) { }

@@ -23,7 +23,7 @@
         <StackPanel Grid.Row="0" Grid.ColumnSpan="2" Margin="0,0,0,8">
             <TextBlock x:Name="HeaderText" Style="{StaticResource GdSection}" FontSize="15"/>
             <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap"
-                       Text="1. Choose the destination map on the left.  2. Click an arrival point (cyan) on it — or tick &quot;Place a new arrival point&quot; and click where the party should appear.  3. Press Use this destination."/>
+                       Text="1. Choose the destination map on the left.  2. Click an arrival point (cyan) on it: or tick &quot;Place a new arrival point&quot; and click where the party should appear.  3. Press Use this destination."/>
             <WrapPanel Margin="0,6,0,0">
                 <CheckBox x:Name="NewArrivalCheck" Content="Place a new arrival point" Style="{StaticResource GdCheck}" Checked="NewArrival_Changed" Unchecked="NewArrival_Changed"/>
                 <Button Content="Zoom out" Style="{StaticResource LufiaButton}" Click="ZoomOut_Click" Margin="12,0,4,0"/>

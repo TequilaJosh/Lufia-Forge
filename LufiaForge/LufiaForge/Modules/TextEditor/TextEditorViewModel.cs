@@ -80,6 +80,11 @@ public partial class TextEditorViewModel : ObservableObject, LufiaForge.ViewMode
     private async Task BuildAsync()
     {
         if (_rom == null) return;
+        // where the user is (kept when the list is rebuilt after a line moved)
+        var keepLine = SelectedRow?.Line;
+        int keepMap = MapFilterIndex >= 0 && MapFilterIndex < _mapFilterIds.Count ? _mapFilterIds[MapFilterIndex] : -1;
+        string? keepCharacter = CharacterFilter?.Key;
+        string keepText = EditText;
         IsBusy = true;
         StatusText = "Collecting every dialogue box in the game…";
         var rom = _rom;
@@ -101,11 +106,17 @@ public partial class TextEditorViewModel : ObservableObject, LufiaForge.ViewMode
         {
             MapFilters.Add(m.Label); _mapFilterIds.Add(m.MapId);
         }
-        MapFilterIndex = 0;
+        MapFilterIndex = Math.Max(0, _mapFilterIds.IndexOf(keepMap));
         BuildCharacterFilters();
+        if (keepCharacter != null && CharacterFilters.FirstOrDefault(c => c.Key == keepCharacter) is { } cf) CharacterFilter = cf;
         ApplyFilter();
         IsBusy = false;
         StatusText = $"{_all.Count} dialogue boxes on {MapFilters.Count - 1} maps. Pick one to edit it.";
+        if (keepLine != null && Rows.FirstOrDefault(r => r.Line.MapId == keepLine.MapId && r.Line.Event == keepLine.Event && r.Line.Line == keepLine.Line) is { } again)
+        {
+            SelectedRow = again;
+            if (EditText != keepText) EditText = keepText;   // anything typed since the line was written stays
+        }
     }
 
     private static string Flatten(string text)
@@ -224,7 +235,7 @@ public partial class TextEditorViewModel : ObservableObject, LufiaForge.ViewMode
         int now = s.EncodeText(EditText, op.Terminator).Length;
         SizeText = EditText.Replace("\r", "") == op.OriginalText ? $"{was} bytes"
                  : now == was ? $"{now} bytes (same size: saved in place)"
-                 : $"{now} bytes (was {was}: the event will be moved{(SelectedRow.Line.IsCodeView ? " — not possible for this line, keep the same size" : "")})";
+                 : $"{now} bytes (was {was}: the event will be moved{(SelectedRow.Line.IsCodeView ? ": not possible for this line, keep the same size" : "")})";
     }
 
     /// <summary>The whole event the selected line is part of, in the event editor.</summary>
@@ -251,7 +262,7 @@ public partial class TextEditorViewModel : ObservableObject, LufiaForge.ViewMode
                 "Expand ROM?", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
         public void EventSaved(string what) { _vm._mainVm?.NotifyRomModified(what); _ = _vm.BuildAsync(); }
         public void ConfirmWritten(string heading, string details) =>
-            InfoDialog.Show("Written to ROM", "✔ " + heading, details + "\n\nIt's in your project now: saving the project keeps it (Ctrl+S, or on its own every 5 minutes), and File > Export ROM writes a playable ROM.",
+            InfoDialog.Show("Saved in the project", "✔ " + heading, details + "\n\nIt's in your project now: saving the project keeps it (Ctrl+S, or on its own every 5 minutes), and File > Export ROM writes a playable ROM.",
                 path: null, pathLabel: null);
     }
 
@@ -306,9 +317,9 @@ public partial class TextEditorViewModel : ObservableObject, LufiaForge.ViewMode
             row.IsEdited = true;
             string what = $"Dialogue: {row.MapLabel}, event {l.Event}, line {l.Line + 1}";
             _mainVm?.NotifyRomModified(what);
-            StatusText = "✔ Written to the ROM. Save Project keeps it.";
+            StatusText = "✔ Saved in the project.";
             UpdateSize();
-            if (!quiet) InfoDialog.Show("Written to ROM", "✔ Dialogue written to the ROM",
+            if (!quiet) InfoDialog.Show("Saved in the project", "✔ Dialogue saved in the project",
                 result + "\n\nIt's in your project now: saving the project keeps it (Ctrl+S, or on its own every 5 minutes), and File > Export ROM writes a playable ROM.",
                 path: null, pathLabel: null,
                 primaryText: _mainVm != null ? "💾 Save project now" : null, primary: () => _mainVm?.SaveNow());

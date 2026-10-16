@@ -85,7 +85,7 @@ public partial class CreditsEditorViewModel : GameDataEditorBase
         bool expand = rom.Length >= MapWriter.ExpandedSize;
         if (!s.FitsInPlace() && !expand)
         {
-            if (MessageBox.Show("The new text is a different length, so its event has to be moved. To store it, Lufia Forge needs to expand " +
+            if (!AutoWriting && MessageBox.Show("The new text is a different length, so its event has to be moved. To store it, Lufia Forge needs to expand " +
                     "the ROM from 1 MB to 2 MB. Continue?", "Expand ROM?", MessageBoxButton.YesNo) != MessageBoxResult.Yes)
             { Status = "Not applied."; return; }
             expand = true;

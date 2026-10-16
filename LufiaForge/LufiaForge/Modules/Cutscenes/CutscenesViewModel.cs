@@ -195,7 +195,7 @@ public partial class CutscenesViewModel : ObservableObject, IEventHost
         Search = ""; OnlyBig = false; MapFilterIndex = 0;
         ApplyFilter();
         Selected = entry;
-        Status = win.ResultText + ". Add its moves, camera and dialogue on the stage; it's written by itself (or click Apply to ROM in the top bar).";
+        Status = win.ResultText + ". Add its moves, camera and dialogue on the stage; it's written by itself (or click Apply in the top bar).";
     }
 
     /// <summary>Deletes the selected cutscene's event (after saying what changes).</summary>
@@ -225,7 +225,7 @@ public partial class CutscenesViewModel : ObservableObject, IEventHost
     public void EventSaved(string what) => _mainVm?.NotifyRomModified(what);
 
     public void ConfirmWritten(string heading, string details) =>
-        InfoDialog.Show("Written to ROM", "✔ " + heading,
+        InfoDialog.Show("Saved in the project", "✔ " + heading,
             details + "\n\nIt's in your project now: saving the project keeps it (Ctrl+S, or on its own every 5 minutes), and File > Export ROM writes a playable ROM.",
             path: null, pathLabel: null,
             primaryText: _mainVm != null ? "💾 Save project now" : null, primary: () => _mainVm?.SaveNow());

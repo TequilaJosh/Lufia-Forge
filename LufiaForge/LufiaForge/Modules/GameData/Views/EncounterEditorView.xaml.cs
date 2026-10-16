@@ -20,6 +20,7 @@ public partial class EncounterEditorView : UserControl
     {
         if (Vm == null) return;
         _down = true;
+        WorldGrid.Focus();   // so Ctrl+Z / Ctrl+Y go to this map's undo and redo
         WorldGrid.CaptureMouse();
         var (x, y) = Cell(e);
         Vm.BeginStroke(x, y);

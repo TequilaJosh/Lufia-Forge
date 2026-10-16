@@ -444,7 +444,7 @@ public partial class CutsceneStageView : UserControl
         var st = CurrentState;
         if (st == null || _panel == null) return;
         var menu = new ContextMenu { PlacementTarget = Overlay };
-        menu.Items.Add(new MenuItem { Header = $"Tile ({x}, {y}) — added after line {_line + 1}", IsEnabled = false });
+        menu.Items.Add(new MenuItem { Header = $"Tile ({x}, {y}), added after line {_line + 1}", IsEnabled = false });
         void Add(string header, Action act) { var mi = new MenuItem { Header = header }; mi.Click += (_, _) => act(); menu.Items.Add(mi); }
 
         IEnumerable<StageActor> who = _picked >= 0 && st.Actors.TryGetValue(_picked, out var pa) ? new[] { pa }
@@ -698,8 +698,8 @@ public partial class CutsceneStageView : UserControl
             var result = MapWriter.Save(_rom, _map, allowExpand: expand);
             _pathsDirty = false;
             _panel.Host.EventSaved($"Map {_map.MapId:X2}: movement paths");
-            PathStatus.Text = "✔ Paths written to the ROM. Save Project keeps it.";
-            if (!quiet) _panel.Host.ConfirmWritten($"Paths of map {_map.MapId:X2} written to the ROM", result.Describe());
+            PathStatus.Text = "✔ Paths saved in the project.";
+            if (!quiet) _panel.Host.ConfirmWritten($"Paths of map {_map.MapId:X2} saved in the project", result.Describe());
             _map = LufiaMap.Load(_rom, _map.MapId);
             Resimulate();
         }

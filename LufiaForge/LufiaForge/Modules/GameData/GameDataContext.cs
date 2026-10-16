@@ -143,6 +143,10 @@ public abstract partial class GameDataEditorBase : ObservableObject
     private int _loading;
     private bool _writing;
 
+    /// <summary>The editor's edits are being written by the app (another record picked, the project saved, Apply to
+    /// ROM): no questions then (growing the ROM to make room is harmless in a project).</summary>
+    protected bool AutoWriting => _writing;
+
     /// <summary>Something was changed since the record was loaded or written.</summary>
     public bool Edited { get; protected set; }
 
@@ -286,7 +290,7 @@ public abstract partial class GameDataEditorBase : ObservableObject
     {
         if (Ctx == null) return;
         LoadSelected();
-        Status = "Reverted to the values in the ROM.";
+        Status = "Put back as the project has it.";
     }
 
     /// <summary>Called when the editor is shown: picks up changes other tabs made (the Patch Manager adding spells).</summary>
@@ -302,7 +306,7 @@ public abstract partial class GameDataEditorBase : ObservableObject
         try
         {
             write();
-            if (Ctx.MarkModified(namesChanged, what)) { _changed = true; Status = $"{what} written to the ROM (Save Project keeps it)."; }
+            if (Ctx.MarkModified(namesChanged, what)) { _changed = true; Status = $"{what} saved in the project."; }
             else Status = $"{what}: nothing changed.";
         }
         catch (Exception ex)

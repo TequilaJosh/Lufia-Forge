@@ -113,7 +113,7 @@ public partial class DestinationPickerWindow : Window
         string map = _shown.IsWorld ? "the world map" : $"map {_shown.MapId:X2}";
         if (ResultNewArrival is { } p)
             ChoiceText.Text = $"Leads to a NEW arrival point at ({p.x}, {p.y}) on {map}." +
-                              (_shown.MapId != _currentMapId ? $" Map {_shown.MapId:X2} will be written to the ROM with the new point." : "");
+                              (_shown.MapId != _currentMapId ? $" Map {_shown.MapId:X2} will be saved in the project with the new point." : "");
         else if (ResultArrival >= 0 && ResultArrival < _shown.Arrivals.Count)
         {
             var a = _shown.Arrivals[ResultArrival];

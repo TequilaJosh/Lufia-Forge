@@ -161,7 +161,7 @@ public partial class MusicEditorViewModel : GameDataEditorBase
         _playLoop = loop is { } l && l.End > fromTick ? (Math.Max(l.Start, fromTick), l.End) : null;
         _playTempo = Notes.Tempo;
         _playhead.Start();
-        Status = fromTick == 0 ? "Playing the edited song (not written to the ROM yet)." : $"Playing the edited song from {NoteEditorViewModel.TimeText(fromTick)}.";
+        Status = fromTick == 0 ? "Playing the edited song (not in the project yet)." : $"Playing the edited song from {NoteEditorViewModel.TimeText(fromTick)}.";
     }
 
     private void UpdatePlayhead()
@@ -206,9 +206,11 @@ public partial class MusicEditorViewModel : GameDataEditorBase
         byte[] data; List<string> warnings;
         try { data = BuildSongData(Notes.ToSong(), out warnings); }
         catch (Exception ex) { Status = "Not written: " + ex.Message; return; }
-        StopPlaying();
+        if (!AutoWriting) StopPlaying();
         Notes.Dirty = false;
+        var history = Notes.SaveHistory();
         Write(data, $"Song {SelectedIndex:X2} notes");
+        Notes.RestoreHistory(history);
         Status = $"Song {SelectedIndex:X2} written ({data.Length - 2:N0} bytes)." + (warnings.Count > 0 ? " " + string.Join(" ", warnings) : "");
     }
 
@@ -249,7 +251,7 @@ public partial class MusicEditorViewModel : GameDataEditorBase
         Commit(what, () =>
         {
             bool needs = LufiaCompression.Compress(data).Length > SlotSize(song);
-            if (needs && Ctx!.Rom.Length < Core.Maps.MapWriter.ExpandedSize &&
+            if (needs && Ctx!.Rom.Length < Core.Maps.MapWriter.ExpandedSize && !AutoWriting &&
                 MessageBox.Show("The song doesn't fit in its original space. Expand the ROM to 2 MB and store it in the new space?", "Expand ROM?",
                     MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
                 throw new InvalidOperationException("Not written: the ROM wasn't expanded.");

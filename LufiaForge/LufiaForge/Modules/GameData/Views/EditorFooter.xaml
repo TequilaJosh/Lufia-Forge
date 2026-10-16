@@ -17,7 +17,7 @@
                     Style="{StaticResource LufiaButton}"
                     Command="{Binding RevertCommand}"
                     IsEnabled="{Binding IsLoaded}"
-                    ToolTip="Throw away the edits that aren't in the ROM yet and reload this record from the ROM"
+                    ToolTip="Throw away the edits that aren't in the project yet and reload this record from the project"
                     Margin="0,0,16,0"/>
             <StackPanel Grid.Column="2" VerticalAlignment="Center">
                 <TextBlock Text="{Binding Status}" Style="{StaticResource LufiaLabel}"

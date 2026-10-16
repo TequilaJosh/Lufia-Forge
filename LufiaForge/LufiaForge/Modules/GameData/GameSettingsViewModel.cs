@@ -101,7 +101,7 @@ public partial class GameSettingsViewModel : GameDataEditorBase
         var rom = Ctx.Rom;
         bool patchWanted = HoldLPatch, patched = LufiaForge.Core.Battle.EncounterPatch.IsApplied(rom);
         bool fixWanted = RetargetFix, fixed_ = LufiaForge.Core.Battle.RetargetPatch.IsApplied(rom);
-        if ((patchWanted && !patched || fixWanted && !fixed_) && rom.Length < Core.Maps.MapWriter.ExpandedSize &&
+        if ((patchWanted && !patched || fixWanted && !fixed_) && rom.Length < Core.Maps.MapWriter.ExpandedSize && !AutoWriting &&
             System.Windows.MessageBox.Show("The patches you ticked add small routines to the expanded part of the ROM. Expand the ROM to 2 MB?",
                 "Expand ROM?", System.Windows.MessageBoxButton.YesNo) != System.Windows.MessageBoxResult.Yes)
         { Status = "Not applied: the ROM was not expanded."; return; }

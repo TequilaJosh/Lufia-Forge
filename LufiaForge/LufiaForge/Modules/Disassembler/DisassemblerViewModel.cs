@@ -240,7 +240,7 @@ public partial class DisassemblerViewModel : ObservableObject
     {
         if (DisassemblyLines.Count == 0)
         {
-            StatusText = "Nothing to export — disassemble first.";
+            StatusText = "Nothing to export: disassemble first.";
             return;
         }
 
@@ -255,7 +255,7 @@ public partial class DisassemblerViewModel : ObservableObject
         try
         {
             var sb = new StringBuilder();
-            sb.AppendLine($"; Lufia Forge disassembly — generated {DateTime.Now:yyyy-MM-dd HH:mm}");
+            sb.AppendLine($"; Lufia Forge disassembly, generated {DateTime.Now:yyyy-MM-dd HH:mm}");
             sb.AppendLine($"; ROM: {Path.GetFileName(_rom?.FilePath ?? "unknown")}");
             sb.AppendLine($"; Flags: M={Bit(FlagM)} X={Bit(FlagX)}");
             sb.AppendLine();
@@ -434,7 +434,7 @@ public partial class DisassemblerViewModel : ObservableObject
 
         IsXrefBuilding = true;
         XrefProgress   = 0;
-        StatusText     = "Building cross-reference index — scanning entire ROM…";
+        StatusText     = "Building cross-reference index: scanning entire ROM…";
 
         var progress = new Progress<int>(p =>
         {
@@ -446,7 +446,7 @@ public partial class DisassemblerViewModel : ObservableObject
             await _xref.BuildAsync(_rom, _bookmarks, progress);
             IsXrefBuilt    = true;
             IsXrefBuilding = false;
-            StatusText     = $"Cross-reference complete — {_xref.Xref.Count:N0} unique targets indexed; " +
+            StatusText     = $"Cross-reference complete: {_xref.Xref.Count:N0} unique targets indexed; " +
                              $"{_xref.Unresolved.Count:N0} indirect jumps/calls can't be resolved statically (live PC tracking shows where they go).";
             RefreshXrefPanel();
         }

@@ -66,7 +66,7 @@ public partial class MapEditorViewModel
             $"Walking in runs event {ev}.\n" +
             state switch
             {
-                "new" => "New: Writing the map (by itself, or Apply to ROM in the top bar) switches it on and makes its event (then Event… opens it).",
+                "new" => "New: Writing the map (by itself, or Apply in the top bar) switches it on and makes its event (then Event… opens it).",
                 "on" => "Switched on when the map loads (by its setup script).",
                 _ => "Not switched on by this map's setup script, so it does nothing in the game (the game keeps a few spare areas).",
             } + "\nDrag it to move it, its bottom-right block to resize it.";

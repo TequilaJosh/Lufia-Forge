@@ -362,7 +362,7 @@ public partial class EncounterEditorViewModel : GameDataEditorBase
         var list = CurrentList();
         _pending[s] = Rows.Count > 0 ? RowMonsters(Rows[0]) : new[] { 0, 0xFF, 0xFF, 0xFF };
         list.Add(s); SetList(list);
-        Status = $"New subgroup {s:X2} (a free slot) added with a copy of the first monsters: choose its monsters; it's written by itself (or click Apply to ROM in the top bar).";
+        Status = $"New subgroup {s:X2} (a free slot) added with a copy of the first monsters: choose its monsters; it's written by itself (or click Apply in the top bar).";
     }
 
     // ── new / delete group ──
@@ -393,7 +393,7 @@ public partial class EncounterEditorViewModel : GameDataEditorBase
         _pending.Clear();
         BuildEntries();
         SelectedIndex = n - 1;
-        Status = $"Group {n:X2} added (with subgroup {first:X2}); written to ROM (unsaved). Add its subgroups, then paint it on the world map or give it to a map.";
+        Status = $"Group {n:X2} added (with subgroup {first:X2}); saved in the project. Add its subgroups, then paint it on the world map or give it to a map.";
     }
 
     [RelayCommand]

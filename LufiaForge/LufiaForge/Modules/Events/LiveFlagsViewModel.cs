@@ -113,7 +113,7 @@ public partial class LiveFlagsViewModel : ObservableObject
         var wram = _bridge.Wram;
         if (!_bridge.IsConnected || wram == null)
         {
-            Status = "Not connected — start BizHawk from the Memory Monitor tab (with the Lufia Forge tool open) and load the game.";
+            Status = "Not connected: start BizHawk from the Memory Monitor tab (with the Lufia Forge tool open) and load the game.";
             Running = "";
             return;
         }
