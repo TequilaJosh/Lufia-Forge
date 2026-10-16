@@ -39,7 +39,7 @@
                         <Button Content="Paste" Style="{StaticResource LufiaButton}" Padding="9,4" Command="{Binding PasteCommand}" Margin="0,0,4,0" ToolTip="Stamp the copied blocks: click on the map, Esc to stop (Ctrl+V)"/>
                         <Button Content="Fill" Style="{StaticResource LufiaButton}" Padding="9,4" Command="{Binding FillAreaCommand}" ToolTip="Fill the selected area with the brush block"/>
                         <Button Content="★  Save as preset..." Style="{StaticResource LufiaButtonGold}" Padding="9,4" Margin="4,0,0,0" Command="{Binding SaveAreaAsPresetCommand}"
-                                ToolTip="Keep the selected piece (a house you built, a bridge, a garden) as a preset: Buildings... (My presets) places it again, on any map with the same tileset graphics"/>
+                                ToolTip="Keep the selected piece (a house you built, a bridge, a garden) as a preset, exactly as selected: Buildings... (My presets) places it again, on any map with the same tileset graphics"/>
                     </StackPanel>
 
                     <Rectangle Width="1" Fill="{StaticResource BorderPurpleBrush}" Margin="14,2,12,2"/>
