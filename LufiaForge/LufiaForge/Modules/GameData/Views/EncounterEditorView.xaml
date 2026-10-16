@@ -1,6 +1,7 @@
 <UserControl x:Class="LufiaForge.Modules.GameData.Views.EncounterEditorView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:common="clr-namespace:LufiaForge.Modules.Common"
              xmlns:v="clr-namespace:LufiaForge.Modules.GameData.Views"
              x:Name="Root">
     <UserControl.InputBindings>
@@ -120,7 +121,7 @@
                         <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,4"
                                    Text="Yellow = the group selected on the left. Pick a zone to open its group; paint, fill or drag a rectangle to change areas (select the group first). 'No battles' land joins up across the map, so to put a group where another was, use Rectangle or Paint (or Fill the old group's area before erasing it). Unmarked land has no random battles. Write zones saves them to the ROM."/>
                     </StackPanel>
-                    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="#20000000">
+                    <ScrollViewer common:ScrollPan.MiddleDrag="True" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="#20000000">
                         <Grid x:Name="WorldGrid" Width="{Binding WorldPixelWidth}" Height="{Binding WorldPixelHeight}" HorizontalAlignment="Left" VerticalAlignment="Top"
                               Background="Transparent" Cursor="Cross"
                               MouseLeftButtonDown="World_MouseDown" MouseMove="World_MouseMove" MouseLeftButtonUp="World_MouseUp" MouseLeave="World_MouseLeave">
