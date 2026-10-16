@@ -12,6 +12,10 @@ public partial class GameSettingsViewModel : GameDataEditorBase
     [ObservableProperty] private bool   _fastWalk;
     [ObservableProperty] private bool   _fastShip;
     [ObservableProperty] private bool   _fastAirship;
+    /// <summary>Lufia Restored's faster walking on the world map and in dungeons (<see cref="LufiaForge.Core.RestoredWalk"/>).</summary>
+    [ObservableProperty] private bool   _restoredWalk;
+    /// <summary>The ROM has Restored's walking (the setting is shown only then).</summary>
+    [ObservableProperty] private bool   _hasRestoredWalk;
     [ObservableProperty] private int    _swampDamage;
     [ObservableProperty] private int    _maxLevelDisplayed;
     [ObservableProperty] private int    _maxLevelActual;
@@ -70,6 +74,8 @@ public partial class GameSettingsViewModel : GameDataEditorBase
         FastWalk          = rom.ReadByte(GameDataOffsets.WalkSpeed) != 0x10;
         FastShip          = rom.ReadByte(GameDataOffsets.ShipSpeed) != 0x20;
         FastAirship       = rom.ReadByte(GameDataOffsets.AirshipSpeed) != 0x40;
+        HasRestoredWalk   = LufiaForge.Core.RestoredWalk.IsAvailable(rom);
+        RestoredWalk      = HasRestoredWalk && LufiaForge.Core.RestoredWalk.IsOn(rom);
         SwampDamage       = rom.ReadUInt16Le(GameDataOffsets.SwampDamage);
         MaxLevelDisplayed = rom.ReadByte(GameDataOffsets.MaxLevelDisplay);
         MaxLevelActual    = rom.ReadByte(GameDataOffsets.MaxLevelActual);
@@ -109,6 +115,8 @@ public partial class GameSettingsViewModel : GameDataEditorBase
             rom.WriteByte(GameDataOffsets.WalkSpeed, (byte)(FastWalk ? 0x20 : 0x10));
             rom.WriteBytes(GameDataOffsets.WalkSpeedPatch,
                 FastWalk ? GameDataOffsets.WalkPatchFast : GameDataOffsets.WalkPatchNormal);
+            if (LufiaForge.Core.RestoredWalk.IsAvailable(rom) && RestoredWalk != LufiaForge.Core.RestoredWalk.IsOn(rom))
+                LufiaForge.Core.RestoredWalk.Set(rom, RestoredWalk);
             rom.WriteByte(GameDataOffsets.ShipSpeed,    (byte)(FastShip    ? 0x40 : 0x20));
             rom.WriteByte(GameDataOffsets.AirshipSpeed, (byte)(FastAirship ? 0x80 : 0x40));
             rom.WriteUInt16Le(GameDataOffsets.SwampDamage, (ushort)Clamp(SwampDamage, 0, 999));

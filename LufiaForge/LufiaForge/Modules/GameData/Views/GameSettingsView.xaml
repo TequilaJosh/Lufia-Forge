@@ -21,6 +21,11 @@
                         <CheckBox Content="Fast walking" Style="{StaticResource GdCheck}" IsChecked="{Binding FastWalk}"/>
                         <TextBlock Style="{StaticResource GdHint}" Margin="20,0,0,6"
                                    Text="Warning: breaks the Foul Water item - its effect becomes permanent (a battle every step) until the game is reset."/>
+                        <StackPanel Visibility="{Binding HasRestoredWalk, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <CheckBox Content="Lufia Restored's faster walking" Style="{StaticResource GdCheck}" IsChecked="{Binding RestoredWalk}"/>
+                            <TextBlock Style="{StaticResource GdHint}" Margin="20,0,0,6" TextWrapping="Wrap"
+                                       Text="Restored walks at town speed on the world map and in dungeons. Untick for the game's normal speed there (towns stay the same). Restored's faster ship and airship are the two settings below."/>
+                        </StackPanel>
                         <CheckBox Content="Fast sailing (ship)" Style="{StaticResource GdCheck}" IsChecked="{Binding FastShip}"/>
                         <CheckBox Content="Fast flying (airship)" Style="{StaticResource GdCheck}" IsChecked="{Binding FastAirship}"/>
                     </StackPanel>
