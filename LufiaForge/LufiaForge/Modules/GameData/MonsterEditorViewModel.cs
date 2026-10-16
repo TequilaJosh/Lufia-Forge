@@ -224,6 +224,27 @@ public partial class MonsterEditorViewModel : GameDataEditorBase
                  $"The bytes below are the script itself ({_aiLength} bytes at record +{_aiStart:X2}); edit them in place, the length can't change.";
     }
 
+    /// <summary>The AI script editor (steps, every command incl. Lufia Forge's own); writes the script when it closes with Use.</summary>
+    [RelayCommand]
+    private void EditAiScript()
+    {
+        if (Ctx == null || SelectedIndex < 0) return;
+        WritePendingEdits();   // the monster's other edits first (they share the record)
+        int id = SelectedIndex;
+        var w = new AiScriptWindow(Ctx.Rom, id, Name.Replace('@', ' ').Trim(), SpellNames, ItemNames) { Owner = System.Windows.Application.Current?.MainWindow };
+        if (w.ShowDialog() != true || w.Result is not { } steps) return;
+        int at = 0;
+        bool patched = !LufiaForge.Core.Battle.AiCommandsPatch.IsApplied(Ctx.Rom) && LufiaForge.Core.Battle.AiScript.UsesNewCommands(steps);
+        try
+        {
+            Commit($"Monster {id:X2}'s AI script", () => at = LufiaForge.Core.Battle.AiScript.Write(Ctx.Rom, id, steps));
+        }
+        catch (InvalidOperationException ex) { Status = ex.Message; return; }
+        LoadSelected();
+        Status = (at > 0 ? $"AI script written ({LufiaForge.Core.Battle.AiScript.Length(steps)} bytes at 0x{at:X5})." : "AI script removed: it just attacks.") +
+                 (patched ? " Lufia Forge's new AI commands were added to the ROM." : "");
+    }
+
     [RelayCommand]
     private void Apply()
     {

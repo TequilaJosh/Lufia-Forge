@@ -1,0 +1,95 @@
+<Window x:Class="LufiaForge.Modules.GameData.AiScriptWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:LufiaForge.Modules.GameData"
+        Title="AI script" Width="1100" Height="720" MinWidth="820" MinHeight="460"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{DynamicResource MidPurpleBrush}">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- one template per kind of value a command takes -->
+            <DataTemplate x:Key="NumberField">
+                <StackPanel Orientation="Horizontal" Margin="0,4">
+                    <TextBlock Text="{Binding Label}" Style="{StaticResource GdFieldLabel}" Width="170"/>
+                    <TextBox Style="{StaticResource GdNumber}" Width="80" Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}"/>
+                    <TextBlock Text="{Binding Hint}" Style="{StaticResource GdHint}" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                </StackPanel>
+            </DataTemplate>
+            <DataTemplate x:Key="ListField">
+                <StackPanel Orientation="Horizontal" Margin="0,4">
+                    <TextBlock Text="{Binding Label}" Style="{StaticResource GdFieldLabel}" Width="170"/>
+                    <ComboBox Style="{StaticResource GdCombo}" Width="300" ItemsSource="{Binding Choices}" SelectedIndex="{Binding Value}"/>
+                </StackPanel>
+            </DataTemplate>
+            <DataTemplate x:Key="StepField">
+                <StackPanel Orientation="Horizontal" Margin="0,4">
+                    <TextBlock Text="{Binding Label}" Style="{StaticResource GdFieldLabel}" Width="170"/>
+                    <ComboBox Style="{StaticResource GdCombo}" Width="420" ItemsSource="{Binding Steps}" SelectedItem="{Binding Target}" DisplayMemberPath="Title"/>
+                </StackPanel>
+            </DataTemplate>
+            <local:FieldTemplateSelector x:Key="FieldSelector"
+                                         Number="{StaticResource NumberField}" List="{StaticResource ListField}" Step="{StaticResource StepField}"/>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Grid Margin="12">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="5*"/>
+            <ColumnDefinition Width="4*"/>
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Grid.ColumnSpan="2" Margin="0,0,0,10">
+            <TextBlock x:Name="HeaderText" Text="AI script" Style="{StaticResource LufiaCardTitle}" FontSize="16"/>
+            <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap"
+                       Text="Every turn the monster starts at step 1 and works down the list until a step chooses what it does (attack, a spell, an item, an ability, guard, run away). &quot;Go to&quot; and &quot;if ... go to&quot; steps jump to another step. Turn counts and switches are its own, from the start of each battle."/>
+        </StackPanel>
+
+        <!-- the steps -->
+        <DockPanel Grid.Row="1" Grid.Column="0" Margin="0,0,10,0">
+            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,8,0,0">
+                <Button Content="+  Add step" Style="{StaticResource LufiaButton}" Click="Add_Click" Margin="0,0,6,0" ToolTip="A new step after the selected one"/>
+                <Button Content="Delete" Style="{StaticResource LufiaButton}" Click="Delete_Click" Margin="0,0,6,0"/>
+                <Button Content="▲" Style="{StaticResource LufiaButton}" Click="Up_Click" Margin="0,0,6,0" Padding="10,2" ToolTip="Move the step up"/>
+                <Button Content="▼" Style="{StaticResource LufiaButton}" Click="Down_Click" Padding="10,2" ToolTip="Move the step down"/>
+            </StackPanel>
+            <ListBox x:Name="StepList" Style="{StaticResource GdFindList}" SelectionChanged="StepList_SelectionChanged" HorizontalContentAlignment="Stretch"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding Line}" TextWrapping="Wrap" Margin="0,2"/>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </DockPanel>
+
+        <!-- the selected step -->
+        <Border Grid.Row="1" Grid.Column="1" Style="{StaticResource GdCard}" Margin="0">
+            <StackPanel x:Name="EditPanel">
+                <TextBlock x:Name="StepTitle" Style="{StaticResource GdSection}"/>
+                <StackPanel Orientation="Horizontal" Margin="0,4">
+                    <TextBlock Text="Command" Style="{StaticResource GdFieldLabel}" Width="170"/>
+                    <ComboBox x:Name="CommandBox" Style="{StaticResource GdCombo}" Width="420" DisplayMemberPath="Title" SelectionChanged="CommandBox_SelectionChanged"/>
+                </StackPanel>
+                <ItemsControl x:Name="Fields" ItemTemplateSelector="{StaticResource FieldSelector}"/>
+                <TextBlock x:Name="StepHelp" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,10,0,0"/>
+            </StackPanel>
+        </Border>
+
+        <DockPanel Grid.Row="2" Grid.ColumnSpan="2" Margin="0,10,0,0">
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <Button Content="✔  Use this script" Style="{StaticResource LufiaButtonGold}" Click="Ok_Click" Margin="0,0,8,0"/>
+                <Button Content="Cancel" Style="{StaticResource LufiaButton}" IsCancel="True"/>
+            </StackPanel>
+            <TextBlock x:Name="SizeText" Style="{StaticResource LufiaLabel}" Foreground="{StaticResource GoldLightBrush}" VerticalAlignment="Center" TextWrapping="Wrap"/>
+        </DockPanel>
+    </Grid>
+</Window>
