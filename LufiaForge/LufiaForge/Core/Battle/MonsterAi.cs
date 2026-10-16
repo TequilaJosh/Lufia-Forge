@@ -32,7 +32,38 @@ public static class MonsterAi
         (0, "Run away", true),                                     // 11 $CEBB
         (2, "Set its HP", false),                                  // 12 $CEC8
         (2, "Set its MP", false),                                  // 13 $CEE6
+        // Lufia Forge's own (AiCommandsPatch), for every monster
+        (3, "If its turn count is N or more, go to", false),       // 14
+        (3, "Every N turns, go to", false),                        // 15
+        (3, "If a party member's HP is below a share of max HP, go to", false), // 16
+        (0, "Target the party member with the lowest HP", false),  // 17
+        (0, "Target the party member with the highest HP", false), // 18
+        (2, "If it is the only monster left, go to", false),       // 19
+        (3, "If N or fewer party members are standing, go to", false), // 1A
+        (1, "Switch on", false),                                   // 1B
+        (1, "Switch off", false),                                  // 1C
+        (3, "If a switch is on, go to", false),                    // 1D
     };
+
+    /// <summary>Commands 14 and up are Lufia Forge's own: they need <see cref="AiCommandsPatch"/> in the ROM.</summary>
+    public static bool IsNew(int op) => op >= AiCommandsPatch.First && op < AiCommandsPatch.First + AiCommandsPatch.Count;
+
+    /// <summary>Argument bytes of a command (-1 for a number that isn't a command).</summary>
+    public static int ArgCount(int op) => op >= 1 && op <= Ops.Length ? Ops[op - 1].Args : op == 0 ? 0 : -1;
+
+    /// <summary>Where a command keeps its "go to" word (an argument index), or -1.</summary>
+    public static int JumpArg(int op) => op switch
+    {
+        0x09 or 0x19 => 0,
+        0x04 or 0x0A or 0x10 or 0x14 or 0x15 or 0x16 or 0x1A or 0x1D => 1,
+        _ => -1,
+    };
+
+    /// <summary>Whether the command chooses the monster's action (its turn ends there).</summary>
+    public static bool EndsTurn(int op) => op >= 1 && op <= Ops.Length && Ops[op - 1].Ends;
+
+    /// <summary>A command's name.</summary>
+    public static string Name(int op) => op == 0 ? "End of the script" : op >= 1 && op <= Ops.Length ? Ops[op - 1].Name : $"Command {op:X2}";
 
     /// <summary>
     /// The command in plain words. <paramref name="step"/> turns a jump offset into a step number.
@@ -66,6 +97,16 @@ public static class MonsterAi
             0x11 => "Run away.",
             0x12 => $"Set its HP to {Word(0)}.",
             0x13 => $"Set its MP to {Word(0)}.",
+            0x14 => $"If this is its turn {a[0]} or later, go to {step(Word(1))}.",
+            0x15 => a[0] == 0 ? "Every 0 turns: never." : $"Every {a[0]} turns (turn {a[0]}, {a[0] * 2}, {a[0] * 3}...), go to {step(Word(1))}.",
+            0x16 => $"If a party member's HP is below {Pct(a[0])} of their max HP, go to {step(Word(1))}.",
+            0x17 => "Target the party member with the lowest HP.",
+            0x18 => "Target the party member with the highest HP.",
+            0x19 => $"If it is the only monster left, go to {step(Word(0))}.",
+            0x1A => $"If {a[0]} or fewer party members are still standing, go to {step(Word(1))}.",
+            0x1B => $"Switch {a[0] & 7} on (it stays on for the rest of the battle).",
+            0x1C => $"Switch {a[0] & 7} off.",
+            0x1D => $"If switch {a[0] & 7} is on, go to {step(Word(1))}.",
             _ => c.Text,
         } + (c.EndsTurn && c.Op != 0x07 ? "  -> its turn ends here." : "");
     }
@@ -191,6 +232,9 @@ public static class MonsterAi
                     case 0x0F: text = $"Show battle message {args[0]:X2}"; break;
                     case 0x03: text = $"Call another monster of its kind (message {args[0]:X2})"; break;
                     case 0x12: case 0x13: text = $"{name}: {args[0] | args[1] << 8}"; break;
+                    default:
+                        if (JumpArg(op) is int ja and >= 0) { jump = args[ja] | args[ja + 1] << 8; text = $"{name} +{jump:X2}"; }
+                        break;
                 }
                 list.Add(new Command(at, op, args, text, jump, ends));
                 if (jump is int j && j > 0 && !seen.Contains(j)) todo.Enqueue(j);
