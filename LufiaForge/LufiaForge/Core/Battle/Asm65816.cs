@@ -41,6 +41,14 @@ public sealed partial class Asm65816
         return this;
     }
 
+    /// <summary>A 24-bit table entry holding a label's address in this block.</summary>
+    public Asm65816 LongWord(string label)
+    {
+        _fixups.Add((_code.Count, label, 'l'));
+        _code.Add(0); _code.Add(0); _code.Add(0);
+        return this;
+    }
+
     /// <summary>A 16-bit table word holding a label's address in this block.</summary>
     public Asm65816 Word(string label)
     {
@@ -54,6 +62,15 @@ public sealed partial class Asm65816
     {
         _code.Add(opcode);
         _code.Add((byte)address); _code.Add((byte)(address >> 8)); _code.Add((byte)(address >> 16));
+        return this;
+    }
+
+    /// <summary>A 16-bit relative branch (BRL, PER) to a label.</summary>
+    public Asm65816 Br16(byte opcode, string label)
+    {
+        _code.Add(opcode);
+        _fixups.Add((_code.Count, label, 'R'));
+        _code.Add(0); _code.Add(0);
         return this;
     }
 
@@ -78,6 +95,11 @@ public sealed partial class Asm65816
                 int rel = target - (at + 1);
                 if (rel < -128 || rel > 127) throw new InvalidOperationException($"Branch to {label} is too far ({rel}).");
                 bytes[at] = (byte)(sbyte)rel;
+            }
+            else if (kind == 'R')
+            {
+                int rel = target - (at + 2);
+                bytes[at] = (byte)rel; bytes[at + 1] = (byte)(rel >> 8);
             }
             else if (kind == 'l')
             {
