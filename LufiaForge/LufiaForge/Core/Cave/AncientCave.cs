@@ -39,7 +39,7 @@ public static partial class AncientCave
     private static readonly byte[] NewGameOriginal = { 0xA9, 0x4F, 0x20, 0x70, 0xBD, 0x20, 0xB4 };
     private static readonly byte[] GameOverOriginal = { 0xAD, 0x49, 0x13, 0xD0, 0x24 };
     private static readonly byte[] Magic = "LFAC"u8.ToArray();
-    private const byte Version = 8;
+    private const byte Version = 9;
     // block: magic, version, map 1, map 2, options (bit 0 = cave-only New Game), save flag, 3 spare; then the code
     private const int Header = 12;
 
@@ -51,7 +51,7 @@ public static partial class AncientCave
 
     public static bool IsOriginal(RomBuffer rom) =>
         Matches(rom, MapLoadSite, MapLoadOriginal) && Matches(rom, PostHeaderSite, PostHeaderOriginal) && Matches(rom, NewGameSite, NewGameOriginal) &&
-        Matches(rom, GameOverSite, GameOverOriginal);
+        Matches(rom, GameOverSite, GameOverOriginal) && Matches(rom, ChestSite, ChestOriginal) && Matches(rom, MsgSite, MsgOriginal);
 
     public static bool IsApplied(RomBuffer rom) => Read(rom) != null;
 
@@ -121,6 +121,8 @@ public static partial class AncientCave
         rom.WriteBytes(NewGameSite, NewGameOriginal);
         if (caveOnly) rom.WriteBytes(NewGameSite, Jsl("CaveStart"));
         rom.WriteBytes(GameOverSite, Jsl("GameOver")); rom.WriteByte(GameOverSite + 4, 0xEA);
+        rom.WriteBytes(ChestSite, Jsl("ChestHook")); rom.WriteBytes(ChestSite + 4, new byte[] { 0xEA, 0xEA });
+        rom.WriteBytes(MsgSite, Jsl("MsgHook")); rom.WriteBytes(MsgSite + 4, new byte[] { 0xEA, 0xEA });
         rom.FixChecksum();
     }
 
@@ -133,6 +135,8 @@ public static partial class AncientCave
         rom.WriteBytes(PostHeaderSite, PostHeaderOriginal);
         rom.WriteBytes(NewGameSite, NewGameOriginal);
         rom.WriteBytes(GameOverSite, GameOverOriginal);
+        rom.WriteBytes(ChestSite, ChestOriginal);
+        rom.WriteBytes(MsgSite, MsgOriginal);
         var space = ExpansionSpace.Load(rom);
         space.Free(info.Block);
         int data = LufiaCompression.ResourceOffset(rom, LufiaMap.MapDataResource(rom, info.Map1));
@@ -195,23 +199,31 @@ public static partial class AncientCave
         return b.ToArray();
     }
 
-    /// <summary>Events: 0 does nothing; 1 (stepping into the arrival door) opens the save menu on a checkpoint floor
+    /// <summary>Events: 0 and 3 do nothing; 1 (stepping into the arrival door) opens the save menu on a checkpoint floor
     /// (<paramref name="saveFlag"/>, set by the generator); 2 (the stairs) sets flag F0 ("went down") and goes to the
-    /// other cave map. <paramref name="at"/>: the map's block to write over (0 = a new one).</summary>
-    private static void WriteEvents(RomBuffer rom, int map, int other, int saveFlag, int at)
+    /// other cave map; 4-19 are the spell chests. <paramref name="old"/>: the map's block now (freed, 0 = none).</summary>
+    private static void WriteEvents(RomBuffer rom, int map, int other, int saveFlag, int old)
     {
-        var block = new byte[]
+        var events = new List<byte[]>
         {
-            0x08, 0x00, 0x09, 0x00, 0x0F, 0x00, 0x08, 0x00,
-            0x00,                                   // 0: nothing
-            0x05, (byte)saveFlag, 0x05, 0x00, 0x4A, 0x00,   // 1: if the save flag isn't set, go to the end; save menu; end
-            0x06, 0xF0, 0x4C, (byte)other, 0x01, 0x00,   // 2: set flag F0, go to the other cave map
+            new byte[] { 0x00 },                                               // 0: nothing
+            new byte[] { 0x05, (byte)saveFlag, 0x05, 0x00, 0x4A, 0x00 },       // 1: if the save flag isn't set, go to the end; save menu; end
+            new byte[] { 0x06, 0xF0, 0x4C, (byte)other, 0x01, 0x00 },          // 2: set flag F0, go to the other cave map
+            new byte[] { 0x00 },                                               // 3: nothing
         };
-        if (at > 0) { rom.WriteBytes(at, block); return; }
+        var spells = Spells(rom);
+        int potion = ChestPotion(rom);
+        for (int k = 0; k < SpellMarkers; k++)
+            events.Add(k < spells.Count ? SpellEvent(rom, spells[k], potion) : new byte[] { 0x00 });
+        var block = new List<byte>();
+        int at0 = events.Count * 2;
+        foreach (var e in events) { block.Add((byte)at0); block.Add((byte)(at0 >> 8)); at0 += e.Length; }
+        foreach (var e in events) block.AddRange(e);
         var space = ExpansionSpace.Load(rom);
-        at = space.Allocate(block.Length, ExpansionSpace.Kind.ScriptBlock, map, EventScript.ScriptLimit);
+        if (old > 0 && space.At(old) is { Kind: ExpansionSpace.Kind.ScriptBlock } b && b.Start == old) space.Free(old);
+        int at = space.Allocate(block.Count, ExpansionSpace.Kind.ScriptBlock, map, EventScript.ScriptLimit);
         space.Save();
-        rom.WriteBytes(at, block);
+        rom.WriteBytes(at, block.ToArray());
         int t = at - 0x18000;
         rom.WriteBytes(MapFactory.ScriptTable + map * 5, new byte[] { (byte)t, (byte)(t >> 8), (byte)(t >> 16), 0x00, 0x00 });
     }
@@ -306,6 +318,7 @@ public static partial class AncientCave
         a.Source($"!CAVEMAP = ${map1:X2}\n!CAVEMAP2 = ${map2:X2}\n!SAVEBYTE = ${0x7E1296 + saveFlag / 8:X6}\n!SAVEBIT = ${1 << (saveFlag % 8):X2}\n" + Source);
         a.Source(StartSource);
         a.Source(GameOverSource);
+        a.Source(SpellSource);
         a.Source(Level1Source);
         a.Source(LootSource);
         a.Label("ChestLoot").B(ChestLoot(rom));
