@@ -64,6 +64,7 @@ public static partial class AncientCave
         var gear = items.Where(i => i.Type is 0x02 or 0x06 && i.Slot is >= 1 and <= 6 && (i.Equip & 0xF0) != 0 && i.Price > 0)
                         .OrderBy(i => i.Price).ThenBy(i => i.Id).ToList();
         bool usable(int id) => items.Any(i => i.Id == id && (i.Type & 0x41) != 0);
+        int spellCount = Spells(rom).Count;
         int Pick(int want, int fallback) => usable(want) ? want : fallback;
         int potion = Pick(Potion, items.FirstOrDefault(i => (i.Type & 0x41) != 0)?.Id ?? 1);
         int hi = Pick(HiPotion, potion), ex = Pick(ExPotion, hi), anti = Pick(Antidote, potion);
@@ -83,10 +84,20 @@ public static partial class AncientCave
                 _ => new[] { hi, hi, ex, ex, ex, anti },
             });
             while (row.Count < PerTier) row.Add(potion);
+            // two spell chests per tier (markers F0 + k), teaching spells about right for the depth
+            if (spellCount > 0)
+            {
+                int k = Math.Min(spellCount - 2, t * SpellMarkers / Tiers);
+                row[PerTier - 2] = FirstMarker + Math.Max(0, k);
+                row[PerTier - 1] = FirstMarker + Math.Min(spellCount - 1, Math.Max(0, k) + 1);
+            }
             for (int k = 0; k < PerTier; k++) data[t * PerTier + k] = (byte)row[k];
         }
         return data;
     }
+
+    /// <summary>The potion a spell chest gives when its hero knows the spell already.</summary>
+    private static int ChestPotion(RomBuffer rom) => Items(rom).Any(i => i.Id == Potion && (i.Type & 0x41) != 0) ? Potion : 1;
 
     /// <summary>Floor 1-100 -> its tier x 16 (the start of its row in <see cref="ChestLoot"/>).</summary>
     private static byte[] LootTiers() => Enumerable.Range(0, 100).Select(f => (byte)(Math.Min(Tiers - 1, f / 10) * PerTier)).ToArray();
@@ -95,6 +106,8 @@ public static partial class AncientCave
     public static List<string> LootSummary(RomBuffer rom)
     {
         var names = Items(rom).ToDictionary(i => i.Id, i => $"{i.Name} ({i.Price} GP)");
+        var spells = Spells(rom);
+        for (int k = 0; k < spells.Count; k++) names[FirstMarker + k] = $"spell chest: {"Hero Lufia Aguro Jerin".Split(' ')[spells[k].Character]} learns spell {spells[k].Spell:X2} (level {spells[k].Level})";
         var loot = ChestLoot(rom);
         return Enumerable.Range(0, Tiers).Select(t => $"floors {t * 10 + 1}-{t * 10 + 10}: " +
             string.Join(", ", loot.Skip(t * PerTier).Take(PerTier).Distinct().Select(id => names.GetValueOrDefault(id, $"item {id:X2}")))).ToList();
