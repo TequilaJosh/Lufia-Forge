@@ -89,7 +89,13 @@ public sealed partial class Asm65816
         var bytes = _code.ToArray();
         foreach (var (at, label, kind) in _fixups)
         {
-            if (!_labels.TryGetValue(label, out int target)) throw new InvalidOperationException($"Unknown label {label}.");
+            if (!_labels.TryGetValue(label, out int target))
+            {
+                // "label+12" / "label-3": a label's address plus a number
+                var m = System.Text.RegularExpressions.Regex.Match(label, @"^(.+?)([+-]\d+)$");
+                if (!m.Success || !_labels.TryGetValue(m.Groups[1].Value, out target)) throw new InvalidOperationException($"Unknown label {label}.");
+                target += int.Parse(m.Groups[2].Value);
+            }
             if (kind == 'r')
             {
                 int rel = target - (at + 1);

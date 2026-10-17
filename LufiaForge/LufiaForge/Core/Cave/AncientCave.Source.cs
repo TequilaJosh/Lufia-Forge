@@ -1282,12 +1282,23 @@ public static partial class AncientCave
             STZ $14CE
             LDA.b #$00
             JSL $08EA8F
+            LDA.b #$00
+            JSR Level1
             LDA.b #$01
             JSL $08EA8F
+            LDA.b #$01
+            JSR Level1
             LDA.b #$02
             JSL $08EA8F
+            LDA.b #$02
+            JSR Level1
             LDA.b #$03
             JSL $08EA8F
+            LDA.b #$03
+            JSR Level1
+            STZ $14CF               ; (joining the Hero gives 100 GP: the cave starts with none)
+            STZ $14D0
+            STZ $14D1
             ; names: 6 bytes each at $14B6 (+ the hero name-entry buffer at $14B0)
             LDX.w #$0000
         -   LDA.l CaveNames,x
