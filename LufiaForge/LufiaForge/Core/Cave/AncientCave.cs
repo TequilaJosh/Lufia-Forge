@@ -18,6 +18,8 @@ namespace LufiaForge.Core.Cave;
 /// $01:9969  22 PostHeader EA        after the setup script: the floor's encounters and chest contents (was LDA $92 / CMP $078E)
 /// $01:C0D4  22 CaveStart            cave-only ROM: a new game starts on floor 1 with the four heroes (was LDA #$4F / JSR $BD70)
 /// $01:8A12  22 GameOver EA          a game over in the cave: back to the last checkpoint floor (was LDA $1349 / BNE)
+/// $00:AB23  22 SaveName EA          the save screen's place name: "Cave" for the cave maps (was LDY #0 / LDA $00; the game
+///                                   shows the last town, which the cave never changes)
 /// </code>
 /// $01:C081 runs twice: at power-on for the opening (demo flag $0D9E = FF) and again for New Game after the file
 /// select ($0D9E = 0, $01:853F). CaveStart sends only the second one to the cave; the opening runs as usual (the
@@ -34,12 +36,14 @@ public static partial class AncientCave
     private const int PostHeaderSite = 0x09969; // $01:9969
     private const int NewGameSite = 0x0C0D4;   // $01:C0D4
     private const int GameOverSite = 0x08A12;  // $01:8A12
+    private const int SaveNameSite = 0x02B23;  // $00:AB23
     private static readonly byte[] MapLoadOriginal = { 0x22, 0x7D, 0xA4, 0x00 };
     private static readonly byte[] PostHeaderOriginal = { 0xA5, 0x92, 0xCD, 0x8E, 0x07 };
     private static readonly byte[] NewGameOriginal = { 0xA9, 0x4F, 0x20, 0x70, 0xBD, 0x20, 0xB4 };
     private static readonly byte[] GameOverOriginal = { 0xAD, 0x49, 0x13, 0xD0, 0x24 };
+    private static readonly byte[] SaveNameOriginal = { 0xA0, 0x00, 0x00, 0xA5, 0x00 };
     private static readonly byte[] Magic = "LFAC"u8.ToArray();
-    private const byte Version = 9;
+    private const byte Version = 10;
     // block: magic, version, map 1, map 2, options (bit 0 = cave-only New Game), save flag, 3 spare; then the code
     private const int Header = 12;
 
@@ -51,7 +55,8 @@ public static partial class AncientCave
 
     public static bool IsOriginal(RomBuffer rom) =>
         Matches(rom, MapLoadSite, MapLoadOriginal) && Matches(rom, PostHeaderSite, PostHeaderOriginal) && Matches(rom, NewGameSite, NewGameOriginal) &&
-        Matches(rom, GameOverSite, GameOverOriginal) && Matches(rom, ChestSite, ChestOriginal) && Matches(rom, MsgSite, MsgOriginal);
+        Matches(rom, GameOverSite, GameOverOriginal) && Matches(rom, ChestSite, ChestOriginal) && Matches(rom, MsgSite, MsgOriginal) &&
+        Matches(rom, SaveNameSite, SaveNameOriginal);
 
     public static bool IsApplied(RomBuffer rom) => Read(rom) != null;
 
@@ -123,6 +128,7 @@ public static partial class AncientCave
         rom.WriteBytes(GameOverSite, Jsl("GameOver")); rom.WriteByte(GameOverSite + 4, 0xEA);
         rom.WriteBytes(ChestSite, Jsl("ChestHook")); rom.WriteBytes(ChestSite + 4, new byte[] { 0xEA, 0xEA });
         rom.WriteBytes(MsgSite, Jsl("MsgHook")); rom.WriteBytes(MsgSite + 4, new byte[] { 0xEA, 0xEA });
+        rom.WriteBytes(SaveNameSite, Jsl("SaveName")); rom.WriteByte(SaveNameSite + 4, 0xEA);
         rom.FixChecksum();
     }
 
@@ -137,6 +143,7 @@ public static partial class AncientCave
         rom.WriteBytes(GameOverSite, GameOverOriginal);
         rom.WriteBytes(ChestSite, ChestOriginal);
         rom.WriteBytes(MsgSite, MsgOriginal);
+        rom.WriteBytes(SaveNameSite, SaveNameOriginal);
         var space = ExpansionSpace.Load(rom);
         space.Free(info.Block);
         int data = LufiaCompression.ResourceOffset(rom, LufiaMap.MapDataResource(rom, info.Map1));
@@ -298,6 +305,30 @@ public static partial class AncientCave
         +   JML $018A3B
         """;
 
+    /// <summary>From $00:AB23 (M = 8, X = 16): $00 = the save's map. The name goes to $190D, ending with 0.</summary>
+    private const string SaveNameSource = """
+        SaveName:
+            LDA $00
+            JSR IsCaveMap
+            BEQ .cave
+            LDY.w #$0000            ; as before: LDY #$0000 / LDA $00, then back at $00:AB28
+            LDA $00
+            RTL
+        .cave
+            PLA                     ; drop the JSL's return address and leave through $00:AB63 (RTS)
+            PLA
+            PLA
+            LDX.w #$0000
+        -   LDA.l CaveName,x
+            STA $7E190D,x
+            INX
+            CPX.w #5
+            BCC -
+            JML $00AB63
+        CaveName:
+            db "Cave", 0
+        """;
+
     private static string MonsterName(RomBuffer rom, int m)
     {
         var b = rom.ReadBytes(MonsterTable.RecordOffset(rom, m), 10);
@@ -319,6 +350,7 @@ public static partial class AncientCave
         a.Source(StartSource);
         a.Source(GameOverSource);
         a.Source(SpellSource);
+        a.Source(SaveNameSource);
         a.Source(Level1Source);
         a.Source(LootSource);
         a.Label("ChestLoot").B(ChestLoot(rom));
