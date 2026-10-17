@@ -43,6 +43,14 @@ public static class MonsterAi
         (1, "Switch on", false),                                   // 1B
         (1, "Switch off", false),                                  // 1C
         (3, "If a switch is on, go to", false),                    // 1D
+        // Ok Impala's AI extensions (their 14-1A)
+        (7, "If a party member check is true, go to", false),     // 1E who stat cmp val16 to
+        (2, "Target the party member with the highest / lowest value", false), // 1F stat mode
+        (2, "Set a number", false),                                // 20 n val
+        (2, "Add to a number", false),                             // 21 n add
+        (5, "If a number compares, go to", false),                 // 22 n cmp val to
+        (2, "Bonus damage this turn", false),                      // 23 mode pct
+        (3, "Set a number from the party", false),                 // 24 n who stat
     };
 
     /// <summary>Commands 14 and up are Lufia Forge's own: they need <see cref="AiCommandsPatch"/> in the ROM.</summary>
@@ -56,6 +64,8 @@ public static class MonsterAi
     {
         0x09 or 0x19 => 0,
         0x04 or 0x0A or 0x10 or 0x14 or 0x15 or 0x16 or 0x1A or 0x1D => 1,
+        0x22 => 3,
+        0x1E => 5,
         _ => -1,
     };
 
@@ -107,9 +117,38 @@ public static class MonsterAi
             0x1B => $"Switch {a[0] & 7} on (it stays on for the rest of the battle).",
             0x1C => $"Switch {a[0] & 7} off.",
             0x1D => $"If switch {a[0] & 7} is on, go to {step(Word(1))}.",
+            0x1E => $"If {Who(a[0])}: {Stat(a[1])} {Cmp(a[2])} {Word(3)}, go to {step(Word(5))}.",
+            0x1F => $"Target the standing party member with the {(a[1] == 0 ? "highest" : "lowest")} {Stat(a[0])}.",
+            0x20 => $"Number {a[0] & 3} = {a[1]}.",
+            0x21 => (sbyte)a[1] >= 0 ? $"Add {a[1]} to number {a[0] & 3} (up to 255)." : $"Take {-(sbyte)a[1]} from number {a[0] & 3} (down to 0).",
+            0x22 => $"If number {a[0] & 3} {Cmp(a[1])} {a[2]}, go to {step(Word(3))}.",
+            0x23 => a[1] == 0 ? "No bonus damage this turn." : $"This turn its hits do {a[1]}% of the target's {(a[0] == 0 ? "max" : "current")} HP more (up to 9999).",
+            0x24 => $"Number {a[0] & 3} = {Stat(a[2])} of {WhoValue(a[1])}.",
             _ => c.Text,
         } + (c.EndsTurn && c.Op != 0x07 ? "  -> its turn ends here." : "");
     }
+
+    /// <summary>Who a party check (1E / 24) looks at.</summary>
+    public static readonly (int Value, string Name)[] WhoChoices =
+    {
+        (0x00, "Hero (Maxim in the prologue)"), (0x01, "Lufia (Selan)"), (0x02, "Aguro (Guy)"), (0x03, "Jerin (Artea)"),
+        (0x10, "any standing party member"), (0x11, "every standing party member"), (0x12, "its current target"), (0x13, "how many are standing"),
+    };
+
+    /// <summary>The same for command 24 (10 / 11 give the highest / lowest value).</summary>
+    public static readonly (int Value, string Name)[] WhoValueChoices =
+    {
+        (0x00, "Hero (Maxim in the prologue)"), (0x01, "Lufia (Selan)"), (0x02, "Aguro (Guy)"), (0x03, "Jerin (Artea)"),
+        (0x10, "the highest among standing members"), (0x11, "the lowest among standing members"), (0x12, "its current target"), (0x13, "how many are standing"),
+    };
+
+    public static readonly string[] StatChoices = { "level", "HP", "max HP", "MP", "max MP", "HP %", "status bits", "standing (1 / 0)" };
+    public static readonly string[] CmpChoices = { "=", "is not", "<", "<=", ">", ">=", "has any of the bits", "has none of the bits" };
+
+    private static string Who(int v) => WhoChoices.FirstOrDefault(c => c.Value == v).Name ?? $"who {v:X2}";
+    private static string WhoValue(int v) => WhoValueChoices.FirstOrDefault(c => c.Value == v).Name ?? $"who {v:X2}";
+    private static string Stat(int v) => v < StatChoices.Length ? StatChoices[v] : $"stat {v}";
+    private static string Cmp(int v) => v < CmpChoices.Length ? CmpChoices[v] : $"compare {v}";
 
     public static int ScriptOffset(RomBuffer rom, int record) => rom.ReadUInt16Le(record + 0x22);
 
