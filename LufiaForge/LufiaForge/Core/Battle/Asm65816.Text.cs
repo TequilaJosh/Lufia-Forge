@@ -171,6 +171,16 @@ public sealed partial class Asm65816
         e = e.Trim();
         if (mode is Mode.Imp or Mode.Acc) { B(op); return; }
 
+        var plus = Regex.Match(e, @"^(\.?[A-Za-z_]\w*)\s*([+-].+)$");
+        if (plus.Success && !Regex.IsMatch(plus.Groups[1].Value, "^[0-9]"))
+        {
+            // label + number
+            string l = LabelName(plus.Groups[1].Value) + Eval(plus.Groups[2].Value, out _).ToString("+0;-0");
+            if (mode is Mode.Long or Mode.LongX) LongLabel(op, l);
+            else if (mode is Mode.Abs or Mode.AbsX or Mode.AbsY or Mode.IndAbs or Mode.IndAbsX) Abs(op, l);
+            else throw new FormatException("a label needs an absolute or long operand");
+            return;
+        }
         if (IsLabelRef(e))
         {
             string l = LabelName(e);
@@ -197,7 +207,7 @@ public sealed partial class Asm65816
         if (size == 'b') return 1;
         if (size == 'w') return 2;
         if (size == 'l') return 3;
-        if (IsLabelRef(e.Trim())) return mn is "JSL" or "JML" ? 3 : 2;
+        if (IsLabelRef(e.Trim()) || Regex.IsMatch(e.Trim(), @"^\.?[A-Za-z_]\w*\s*[+-]")) return mn is "JSL" or "JML" ? 3 : 2;
         Eval(e, out int hint);
         if (hint == 0) throw new FormatException($"say how wide \"{e}\" is (.b / .w / .l)");
         return hint;
@@ -251,7 +261,7 @@ public sealed partial class Asm65816
         private long Shift() { long v = Add(); while (true) { if (Eat("<<")) v <<= (int)Add(); else if (Eat(">>")) v >>= (int)Add(); else return v; } }
         private long Add() { long v = Mul(); while (true) { if (Eat("+")) v += Mul(); else if (Eat("-")) v -= Mul(); else return v; } }
         private long Mul() { long v = Unary(); while (true) { if (Eat("*")) v *= Unary(); else if (Eat("/")) v /= Unary(); else return v; } }
-        private long Unary() => Eat("-") ? -Unary() : Eat("~") ? ~Unary() : Primary();
+        private long Unary() => Eat("-") ? -Unary() : Eat("+") ? Unary() : Eat("~") ? ~Unary() : Primary();
         private long Primary()
         {
             if (Eat("(")) { long v = Or(); if (!Eat(")")) throw new FormatException("missing )"); return v; }

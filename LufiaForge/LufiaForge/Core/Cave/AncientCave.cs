@@ -32,7 +32,7 @@ public static partial class AncientCave
     private static readonly byte[] PostHeaderOriginal = { 0xA5, 0x92, 0xCD, 0x8E, 0x07 };
     private static readonly byte[] NewGameOriginal = { 0xA9, 0x4F, 0x20, 0x70, 0xBD, 0x20, 0xB4 };
     private static readonly byte[] Magic = "LFAC"u8.ToArray();
-    private const byte Version = 1;
+    private const byte Version = 2;
     // block: magic, version, map 1, map 2, options (bit 0 = cave-only New Game), then the code
     private const int Header = 8;
 
@@ -220,7 +220,9 @@ public static partial class AncientCave
     {
         var a = new Asm65816();
         a.Source($"!CAVEMAP = ${map1:X2}\n!CAVEMAP2 = ${map2:X2}\n" + Source);
+        a.Source(Level1Source);
         a.Label("EncounterByFloor").B(EncountersByFloor(rom));
+        a.Label("Level1Data").B(Level1Data(rom));
         return a;
     }
 }
