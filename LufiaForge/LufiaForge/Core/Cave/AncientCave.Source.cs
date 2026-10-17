@@ -8,7 +8,9 @@ public static partial class AncientCave
     /// <see cref="Assemble"/>).
     /// </summary>
     private const string Source = """
-        !AC_FLOOR   = $7FFF20       ; current floor 1-100
+        !AC_FLOOR   = $7E1332       ; current floor 1-100 (Lufia Forge: in saved RAM, chest flags 3E0-3E7 no map uses)
+        !AC_CHECK   = $7E1333       ; last checkpoint floor (1, 11, 21 ... 91): a game over brings you back there
+        !AC_INCAVE  = $7E1334       ; 1 while the party is in the cave (a lost battle first moves to map 10, the game-over room)
         !AC_ACTIVE  = $7FFF21       ; 1 while in an Ancient Cave run
         !AC_RNG     = $7FFF22       ; 16-bit RNG state
         !AC_SPAWNX  = $7FFF24
@@ -64,8 +66,15 @@ public static partial class AncientCave
             LDA $7E077F
             JSR IsCaveMap
             BNE +
+            LDA.b #$01
+            STA !AC_INCAVE
             JSL GenerateFloor
-        +   PLP
+            BRA ++
+        +   CMP.b #$10              ; (the game-over room doesn't count as leaving)
+            BEQ ++
+            LDA.b #$00
+            STA !AC_INCAVE
+        ++  PLP
             RTL
 
         IsCaveMap:                  ; A = map id -> Z set if it is a cave floor map
@@ -214,6 +223,27 @@ public static partial class AncientCave
             BNE +
             LDA.b #$01
             STA !AC_FLOOR
+        +
+            ; (Lufia Forge) checkpoint floors 1, 11, 21 ... 91: a game over brings you back to the last one, and from
+            ; floor 11 on their arrival door offers a save (a free story flag, !SAVEBYTE / !SAVEBIT, read by event 1)
+            LDA !SAVEBYTE
+            AND.b #!SAVEBIT^$FF
+            STA !SAVEBYTE
+            LDA !AC_FLOOR
+            DEC A
+        -   CMP.b #10
+            BCC +
+            SBC.b #10
+            BRA -
+        +   CMP.b #$00
+            BNE +
+            LDA !AC_FLOOR
+            STA !AC_CHECK
+            CMP.b #1
+            BEQ +
+            LDA !SAVEBYTE
+            ORA.b #!SAVEBIT
+            STA !SAVEBYTE
         +
             ; --- mix the frame counter into the RNG
             REP #$20
@@ -1294,6 +1324,7 @@ public static partial class AncientCave
             ; cave state
             LDA.b #$01
             STA !AC_FLOOR
+            STA !AC_CHECK
             STA !AC_ACTIVE
             REP #$20
             LDA $38
