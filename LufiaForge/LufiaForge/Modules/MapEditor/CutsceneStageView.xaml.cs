@@ -197,6 +197,16 @@ public partial class CutsceneStageView : UserControl
 
     // ── drawing ─────────────────────────────────────────────────────────────
 
+    private readonly Dictionary<int, BitmapSource> _emotes = new();
+
+    private BitmapSource Emote(int i)
+    {
+        if (_emotes.TryGetValue(i, out var e)) return e;
+        var bmp = BitmapSource.Create(16, 16, 96, 96, PixelFormats.Bgra32, null, EmoteGraphics.Pixels(i), 16 * 4);
+        bmp.Freeze();
+        return _emotes[i] = bmp;
+    }
+
     private BitmapSource? Sprite(int id)
     {
         if (_rom == null) return null;
@@ -245,6 +255,13 @@ public partial class CutsceneStageView : UserControl
                 RenderOptions.SetBitmapScalingMode(el, BitmapScalingMode.NearestNeighbor);
                 Canvas.SetLeft(el, left); Canvas.SetTop(el, top);
                 Overlay.Children.Add(el);
+            }
+            if (st.Emote is { } em && em.Actor == a.Id)
+            {
+                var bubble = new Image { Source = Emote(em.Icon), Width = 16, Height = 16, IsHitTestVisible = false };
+                RenderOptions.SetBitmapScalingMode(bubble, BitmapScalingMode.NearestNeighbor);
+                Canvas.SetLeft(bubble, left); Canvas.SetTop(bubble, top - 16);
+                Overlay.Children.Add(bubble);
             }
             if (a.Id == _picked)
             {
@@ -894,6 +911,8 @@ public partial class CutsceneStageView : UserControl
             if (NpcSprites.Render(_rom!, a.Sprite) is not var (px, w, h)) continue;
             var (ax, ay) = v.Positions.TryGetValue(a.Id, out var pos) ? pos : (a.X, a.Y);
             sprites.Add((px, w, h, (int)Math.Round(ax * 16 + 8 - w / 2.0) - left, (int)Math.Round(ay * 16 + 16 - h) - top));
+            if (v.State.Emote is { } em && em.Actor == a.Id)
+                sprites.Add((EmoteGraphics.Pixels(em.Icon), 16, 16, (int)Math.Round(ax * 16 + 8 - w / 2.0) - left, (int)Math.Round(ay * 16 + 16 - h) - top - 16));
         }
         var lines = v.Text != null && v.TextWindow is { } win && v.Speaker < 0
             ? CutsceneText.Layout(v.Text, v.TypedText ?? "", win.Column, win.Row) : null;

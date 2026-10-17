@@ -205,6 +205,8 @@ public static class RenamePatch
     public static void Remove(RomBuffer rom)
     {
         if (!IsApplied(rom)) return;
+        if (EmotePatch.IsApplied(rom))
+            throw new InvalidOperationException("The emote command for cutscenes is built on this patch. Remove it first (Patch Manager), then this one.");
         // without the patch the game jumps into data on command 6E: events using it would crash
         var used = UsedBy(rom);
         if (used.Count > 0)

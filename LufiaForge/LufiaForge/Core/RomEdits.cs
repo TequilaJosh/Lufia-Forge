@@ -45,6 +45,7 @@ public static class RomEdits
         if (EncounterPatch.IsApplied(rom)) patches.Add("hold L to avoid battles");
         if (SubgroupPatch.IsApplied(rom)) patches.Add("more than 67 encounter subgroups");
         if (RenamePatch.IsApplied(rom)) patches.Add("rename command for events");
+        if (EmotePatch.IsApplied(rom)) patches.Add("emote bubbles for cutscenes");
         if (AguroMagicPatch.IsApplied(rom)) patches.Add("spells and MP for Guy / Aguro");
         else if (AguroMagicPatch.NeedsUpdate(rom)) patches.Add("spells and MP for Guy / Aguro (older version: click Update in the Patch Manager)");
         if (SpellTablePatch.IsApplied(rom)) patches.Add($"up to 128 spells, 64 per character ({SpellTablePatch.NewCount(rom)} added)");
