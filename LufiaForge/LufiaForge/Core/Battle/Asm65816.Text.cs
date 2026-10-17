@@ -103,6 +103,8 @@ public sealed partial class Asm65816
         var glob = Regex.Match(s, @"^([A-Za-z_]\w*):(.*)$");
         if (glob.Success) { _scope = glob.Groups[1].Value; Label(_scope); Statement(glob.Groups[2].Value.Trim()); return; }
         if (Regex.IsMatch(s, @"^\.\w+$")) { Label(_scope + s); return; }
+        var loc = Regex.Match(s, @"^(\.\w+):(.*)$");
+        if (loc.Success) { Label(_scope + loc.Groups[1].Value); Statement(loc.Groups[2].Value.Trim()); return; }
 
         s = Expand(s);
         var m = Regex.Match(s, @"^([A-Za-z]{2,3})(\.([bwl]))?\s*(.*)$");
@@ -111,14 +113,31 @@ public sealed partial class Asm65816
         char size = m.Groups[3].Success ? char.ToLowerInvariant(m.Groups[3].Value[0]) : ' ';
         string arg = m.Groups[4].Value.Trim();
 
-        if (mn is "DB" or "DW")
+        if (mn is "DB" or "DW" or "DL")
         {
-            foreach (var item in arg.Split(',').Select(x => x.Trim()))
+            foreach (var item in Regex.Matches(arg, @"""[^""]*""|[^,]+").Select(x => x.Value.Trim()))
             {
-                if (IsLabelRef(item)) { if (mn == "DB") throw new FormatException("db of a label"); Word(LabelName(item)); continue; }
+                if (item.StartsWith('"')) { if (mn != "DB") throw new FormatException("text only in db"); B(System.Text.Encoding.ASCII.GetBytes(item.Trim('"'))); continue; }
+                if (IsLabelRef(item))
+                {
+                    if (mn == "DB") throw new FormatException("db of a label");
+                    if (mn == "DW") Word(LabelName(item)); else LongWord(LabelName(item));
+                    continue;
+                }
                 int iv = Eval(item, out _);
-                B((byte)iv); if (mn == "DW") B((byte)(iv >> 8));
+                B((byte)iv);
+                if (mn != "DB") B((byte)(iv >> 8));
+                if (mn == "DL") B((byte)(iv >> 16));
             }
+            return;
+        }
+        if (mn == "BRL") { Br16(0x82, RefName(arg)); return; }
+        // ASL #3, NOP #4 ...: the same one-byte instruction n times
+        var rep = Regex.Match(arg, @"^#(\d+)$");
+        if (rep.Success && !Ops.ContainsKey((mn, Mode.Imm)) && (Ops.ContainsKey((mn, Mode.Imp)) || Ops.ContainsKey((mn, Mode.Acc))))
+        {
+            byte one = Ops.TryGetValue((mn, Mode.Imp), out var io) ? io : Ops[(mn, Mode.Acc)];
+            for (int k = int.Parse(rep.Groups[1].Value); k > 0; k--) B(one);
             return;
         }
 
@@ -206,23 +225,41 @@ public sealed partial class Asm65816
         return LabelName(e);
     }
 
-    /// <summary>A number expression: terms ($hex, decimal, %binary) joined by + and -; hint = bytes the first term is written with.</summary>
+    /// <summary>
+    /// A number expression: $hex, %binary, decimal and 'c' terms with ( ), unary - and ~, * / + - &lt;&lt; &gt;&gt; &amp; ^ |
+    /// (usual precedence; asar sources keep their sums in brackets anyway). hint = bytes the first written number has
+    /// ($12 = 1, $1234 = 2, $7E1234 = 3, decimal = 0).
+    /// </summary>
     private static int Eval(string e, out int hint)
     {
-        hint = 0;
-        int total = 0, sign = 1; bool first = true;
-        foreach (Match t in Regex.Matches(e.Replace(" ", ""), @"([+-]?)([^+-]+)"))
+        var first = Regex.Match(e, @"[$%]([0-9A-Fa-f]+)");
+        hint = !first.Success ? 0 : e[first.Index] == '$' ? (first.Groups[1].Length + 1) / 2 : (first.Groups[1].Length + 7) / 8;
+        var p = new ExprParser(e.Replace(" ", ""));
+        long v = p.Or();
+        if (p.Pos != p.Text.Length) throw new FormatException($"can't work out \"{e}\" (labels can't be used in sums)");
+        return (int)v;
+    }
+
+    private sealed class ExprParser
+    {
+        public readonly string Text; public int Pos;
+        public ExprParser(string t) { Text = t; }
+        private bool Eat(string s) { if (string.CompareOrdinal(Text, Pos, s, 0, s.Length) == 0) { Pos += s.Length; return true; } return false; }
+        public long Or() { long v = Xor(); while (Eat("|")) v |= Xor(); return v; }
+        private long Xor() { long v = And(); while (Eat("^")) v ^= And(); return v; }
+        private long And() { long v = Shift(); while (Eat("&")) v &= Shift(); return v; }
+        private long Shift() { long v = Add(); while (true) { if (Eat("<<")) v <<= (int)Add(); else if (Eat(">>")) v >>= (int)Add(); else return v; } }
+        private long Add() { long v = Mul(); while (true) { if (Eat("+")) v += Mul(); else if (Eat("-")) v -= Mul(); else return v; } }
+        private long Mul() { long v = Unary(); while (true) { if (Eat("*")) v *= Unary(); else if (Eat("/")) v /= Unary(); else return v; } }
+        private long Unary() => Eat("-") ? -Unary() : Eat("~") ? ~Unary() : Primary();
+        private long Primary()
         {
-            if (t.Groups[1].Value == "-") sign = -1; else sign = 1;
-            string term = t.Groups[2].Value;
-            int v; int h;
-            if (term.StartsWith('$')) { v = int.Parse(term[1..], NumberStyles.HexNumber); h = (term.Length - 1 + 1) / 2; }
-            else if (term.StartsWith('%')) { v = Convert.ToInt32(term[1..], 2); h = (term.Length - 1 + 7) / 8; }
-            else if (Regex.IsMatch(term, @"^\d+$")) { v = int.Parse(term); h = 0; }
-            else throw new FormatException($"can't work out \"{term}\" (labels can't be used in sums)");
-            if (first) { hint = h; first = false; }
-            total += sign * v;
+            if (Eat("(")) { long v = Or(); if (!Eat(")")) throw new FormatException("missing )"); return v; }
+            var m = Regex.Match(Text[Pos..], @"^(\$[0-9A-Fa-f]+|%[01]+|\d+|'.')");
+            if (!m.Success) throw new FormatException($"can't work out \"{Text}\" (labels can't be used in sums)");
+            Pos += m.Length;
+            string t = m.Value;
+            return t[0] == '$' ? long.Parse(t[1..], NumberStyles.HexNumber) : t[0] == '%' ? Convert.ToInt64(t[1..], 2) : t[0] == '\'' ? t[1] : long.Parse(t);
         }
-        return total;
     }
 }

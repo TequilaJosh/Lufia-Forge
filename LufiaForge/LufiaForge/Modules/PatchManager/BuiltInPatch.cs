@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using LufiaForge.Core;
 using LufiaForge.Core.Battle;
+using LufiaForge.Core.Cave;
 
 namespace LufiaForge.Modules.PatchManager;
 
@@ -119,6 +120,12 @@ public partial class BuiltInPatch : ObservableObject
             Name = "Rename command for events", Category = "Events", Icon = "💬", Summary = "An event command to rename a party member (flashbacks, disguises...).",
             Description = "Adds event command 6E \"Rename a party member\" (Events editor, Characters): e.g. show Maxim's name during a flashback, then give the Hero's own name back. Added by itself the first time an event uses it.",
             IsApplied = RenamePatch.IsApplied, IsOriginal = RenamePatch.IsOriginal, Apply = RenamePatch.Apply, Remove = RenamePatch.Remove,
+        },
+        new()
+        {
+            Name = "Ancient Cave (cave-only game)", Category = "Maps", Icon = "🕳", Summary = "New Game starts in a cave of random floors, like Lufia 2's Ancient Cave.",
+            Description = "Turns the game into an Ancient Cave run: New Game puts the Hero, Lufia, Aguro and Jerin on floor 1 with nothing, and every staircase leads to a new floor built at random (rooms, corridors, chests). Battles get harder floor by floor, using this ROM's own encounter groups sorted by EXP. The rest of the game can't be reached. Uses two free map numbers and its own copy of map 8E (the Old Cave floor), which must be unchanged. From the Ancient Cave project (ac.asm).",
+            IsApplied = AncientCave.IsApplied, IsOriginal = AncientCave.IsOriginal, Apply = rom => AncientCave.Apply(rom, true), Remove = AncientCave.Remove,
         },
         new()
         {
