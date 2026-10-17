@@ -55,7 +55,10 @@ public partial class AiScriptWindow : Window
         new(0x16, "If: a party member's HP is below a share of max, go to"), new(0x14, "If: this is turn N or later, go to"),
         new(0x15, "If: every N turns, go to"), new(0x19, "If: it is the only monster left, go to"),
         new(0x1A, "If: N or fewer party members are standing, go to"), new(0x1D, "If: a switch is on, go to"),
+        new(0x1E, "If: a party member check (level, HP, MP, status...), go to"), new(0x1F, "Target: the party member with the highest / lowest value"),
         new(0x1B, "Phase: switch on"), new(0x1C, "Phase: switch off"),
+        new(0x20, "Numbers: set a number"), new(0x21, "Numbers: add to a number"), new(0x24, "Numbers: set a number from the party"),
+        new(0x22, "If: a number compares, go to"), new(0x23, "Do: bonus damage this turn (a share of the target's HP)"),
         new(0x09, "Go to"), new(0x00, "End of the script"),
         new(0x0F, "Other: show a battle message"), new(0x0E, "Other: next action makes no sound"), new(0x12, "Other: set its HP"), new(0x13, "Other: set its MP"),
     };
@@ -162,6 +165,11 @@ public partial class AiScriptWindow : Window
             case 0x14: a[0] = 3; break;
             case 0x15: a[0] = 2; break;
             case 0x1A: a[0] = 1; break;
+            case 0x1E: a[0] = 0x10; a[1] = 5; a[2] = 2; a[3] = 30; break;   // any standing member below 30% HP
+            case 0x1F: a[0] = 1; a[1] = 1; break;                            // the lowest HP
+            case 0x21: a[1] = 1; break;
+            case 0x23: a[1] = 25; break;
+            case 0x24: a[1] = 0x13; break;
             case 0x08: a[1] = 10; break;
             case 0x07: a[0] = 1; break;
             case 0x06: a[0] = 1; break;
@@ -176,7 +184,10 @@ public partial class AiScriptWindow : Window
         0x16 => "Only party members who are in the party and still standing count. Pair it with \"Target: the party member with the lowest HP\" to finish off the weakest.",
         0x14 or 0x15 => "Turns are counted for this monster from the start of the battle: its first turn is turn 1.",
         0x1B or 0x1C or 0x1D => "Each monster has 8 switches, all off when the battle starts. Use them for phases: when something happens, switch one on, and check it at the top of the script.",
-        0x17 or 0x18 => "Choose the target first, then the action (attack, spell...).",
+        0x17 or 0x18 or 0x1F => "Choose the target first, then the action (attack, spell...). Only party members who are still standing count.",
+        0x1E => "\"Any\" is true when one standing member passes, \"every\" when all of them do. HP % is 0-100. Status bits: KO is 32 (use \"has any of the bits\" with 32). From Ok Impala's AI extensions.",
+        0x20 or 0x21 or 0x22 or 0x24 => "Each monster has 4 numbers (0-255), all 0 when the battle starts: count hits, turns since something happened, how often it healed... From Ok Impala's AI extensions.",
+        0x23 => "Set it before the attack or spell: every hit this turn that does damage gets the extra, up to 9999. It is cleared at the start of the monster's next turn. 0% = none. From Ok Impala's AI extensions.",
         0x0A or 0x10 => "50% = half of its max. While it's above, the script goes to the chosen step; once it drops below, it carries on.",
         0x04 => "The chance is out of 100%: 25% means a quarter of the turns go to the chosen step.",
         0x09 => "Jumps to another step (for example back to the top).",
@@ -243,6 +254,26 @@ public partial class AiScriptWindow : Window
             return f;
         }
         var switches = Enumerable.Range(0, 8).Select(n => $"Switch {n}").ToList();
+        var numbers = Enumerable.Range(0, 4).Select(n => $"Number {n}").ToList();
+        FieldVm PickValue(int i, string label, (int Value, string Name)[] choices)
+        {
+            var f = new FieldVm { Kind = FieldKind.List, Label = label, Choices = choices.Select(c => c.Name).ToList(), Changed = Changed,
+                                  SetValue = v => { if (v >= 0) s.Args[i] = (byte)choices[v].Value; } };
+            f.Value = Math.Max(0, Array.FindIndex(choices, c => c.Value == s.Args[i]));
+            return f;
+        }
+        FieldVm Signed(int i, string label)
+        {
+            var f = new FieldVm
+            {
+                Kind = FieldKind.Number, Label = label, Hint = "-128 to 127", Changed = Changed,
+                Parse = t => { if (!int.TryParse(t, out int v) || v < -128 || v > 127) return false; s.Args[i] = (byte)(sbyte)v; return true; },
+            };
+            f.Text = ((sbyte)s.Args[i]).ToString();
+            return f;
+        }
+        var stats = MonsterAi.StatChoices.Select(x => char.ToUpper(x[0]) + x[1..]).ToList();
+        var cmps = MonsterAi.CmpChoices.ToList();
         switch (s.Op)
         {
             case 0x01: case 0x02: list.Add(Hex(0, "Value 1 (hex)")); list.Add(Hex(1, "Value 2 (hex)")); list.Add(Hex(2, "Value 3 (hex)")); break;
@@ -263,6 +294,14 @@ public partial class AiScriptWindow : Window
             case 0x1A: list.Add(Byte(0, "Standing (at most)", "1-4", 4)); list.Add(Step("Go to")); break;
             case 0x1B: case 0x1C: list.Add(Pick(0, "Switch", switches)); break;
             case 0x1D: list.Add(Pick(0, "Switch", switches)); list.Add(Step("Go to")); break;
+            case 0x1E: list.Add(PickValue(0, "Who", MonsterAi.WhoChoices)); list.Add(Pick(1, "Value", stats)); list.Add(Pick(2, "Is", cmps));
+                       list.Add(Word(3, "Than")); list.Add(Step("Go to")); break;
+            case 0x1F: list.Add(Pick(0, "Value", stats)); list.Add(Pick(1, "Which", new List<string> { "Highest", "Lowest" })); break;
+            case 0x20: list.Add(Pick(0, "Number", numbers)); list.Add(Byte(1, "Set to")); break;
+            case 0x21: list.Add(Pick(0, "Number", numbers)); list.Add(Signed(1, "Add")); break;
+            case 0x22: list.Add(Pick(0, "Number", numbers)); list.Add(Pick(1, "Is", cmps)); list.Add(Byte(2, "Than")); list.Add(Step("Go to")); break;
+            case 0x23: list.Add(Pick(0, "Of the target's", new List<string> { "Max HP", "Current HP" })); list.Add(Byte(1, "Extra damage", "% (0 = none)")); break;
+            case 0x24: list.Add(Pick(0, "Number", numbers)); list.Add(PickValue(1, "From", MonsterAi.WhoValueChoices)); list.Add(Pick(2, "Value", stats)); break;
         }
         return list;
     }

@@ -5,7 +5,7 @@ namespace LufiaForge.Core.Battle;
 /// branches (8-bit relative), JSR / JMP / table words inside the block (16-bit, from the block's SNES address) and
 /// long addresses. Mistakes (an unknown label, a branch too far) throw when the block is built.
 /// </summary>
-public sealed class Asm65816
+public sealed partial class Asm65816
 {
     private readonly List<byte> _code = new();
     private readonly Dictionary<string, int> _labels = new();
@@ -57,6 +57,15 @@ public sealed class Asm65816
         return this;
     }
 
+    /// <summary>An instruction with the 24-bit address of a label in this block (JSL / JML).</summary>
+    public Asm65816 LongLabel(byte opcode, string label)
+    {
+        _code.Add(opcode);
+        _fixups.Add((_code.Count, label, 'l'));
+        _code.Add(0); _code.Add(0); _code.Add(0);
+        return this;
+    }
+
     /// <summary>The bytes, for a block that starts at <paramref name="snesBase"/> (bank in the top byte).</summary>
     public byte[] Build(int snesBase)
     {
@@ -69,6 +78,11 @@ public sealed class Asm65816
                 int rel = target - (at + 1);
                 if (rel < -128 || rel > 127) throw new InvalidOperationException($"Branch to {label} is too far ({rel}).");
                 bytes[at] = (byte)(sbyte)rel;
+            }
+            else if (kind == 'l')
+            {
+                int address = snesBase + target;
+                bytes[at] = (byte)address; bytes[at + 1] = (byte)(address >> 8); bytes[at + 2] = (byte)(address >> 16);
             }
             else
             {

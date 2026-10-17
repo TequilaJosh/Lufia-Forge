@@ -50,7 +50,7 @@
         <StackPanel Grid.Row="0" Grid.ColumnSpan="2" Margin="0,0,0,10">
             <TextBlock x:Name="HeaderText" Text="AI script" Style="{StaticResource LufiaCardTitle}" FontSize="16"/>
             <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap"
-                       Text="Every turn the monster starts at step 1 and works down the list until a step chooses what it does (attack, a spell, an item, an ability, guard, run away). &quot;Go to&quot; and &quot;if ... go to&quot; steps jump to another step. Turn counts and switches are its own, from the start of each battle."/>
+                       Text="Every turn the monster starts at step 1 and works down the list until a step chooses what it does (attack, a spell, an item, an ability, guard, run away). &quot;Go to&quot; and &quot;if ... go to&quot; steps jump to another step. Turn counts, switches and numbers are its own, from the start of each battle."/>
         </StackPanel>
 
         <!-- the steps -->
