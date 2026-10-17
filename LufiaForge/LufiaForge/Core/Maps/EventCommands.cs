@@ -20,6 +20,7 @@ public enum ParamKind
     SystemCall,  // 50 sub-function
     KeyItem,     // 1-based key item (F0 + n - 1)
     Name,        // 5 letters from this byte on (FF = the character's normal name)
+    Emote,       // emote bubble number (EmoteGraphics.Names)
     FlashKind,
 }
 
@@ -89,6 +90,8 @@ public sealed class CommandDef
     public byte[]? Template { get; init; }
     /// <summary>Script pauses here until something finishes.</summary>
     public string Waits { get; init; } = "";
+    /// <summary>Offered in the Cutscenes tab's menu only (still shown and editable wherever it's used).</summary>
+    public bool CutsceneOnly { get; init; }
     public bool Matches(int op) => op >= First && op <= Last;
 }
 
@@ -141,6 +144,16 @@ public static class EventCommands
         b.Length < 7 ? "" : new string(b.Skip(2).Take(5).TakeWhile(c => c != 0).Select(c => (char)c).ToArray());
 
     public static string Who(int v) => v >= 0x100 ? $"character {v - 0x100}" : Actor(v);
+
+    public static string EmoteName(int i) => i < EmoteGraphics.Names.Length ? EmoteGraphics.Names[i] : $"Emote {i:X2}";
+
+    /// <summary>The emote command's actor byte (1-6 = actors, 7 + n = map character n), as a "who" value.</summary>
+    private static readonly ParamDef EmoteWho = new()
+    {
+        Label = "who", Kind = ParamKind.Who, Max = 0x1FF,
+        Get = b => b[1] < 7 ? b[1] : 0x100 + b[1] - 7,
+        Set = (b, v) => b[1] = (byte)(v >= 0x100 ? Math.Min(v - 0x100 + 7, 0x3F) : Math.Max(v, 1)),
+    };
 
     public static string Actor(int a) => a switch
     {
@@ -262,6 +275,15 @@ public static class EventCommands
                 : $"Rename {CharacterNames[b[1] & 7]} (party slot {(b[1] & 3) + 1}) to \"{NameText(b)}\"",
             new byte[] { 0x6E, 4, (byte)'M', (byte)'a', (byte)'x', (byte)'i', (byte)'m' }, "",
             P("character", ParamKind.Character, 1, 0, 7), new ParamDef { Label = "name (5 letters, * = normal name)", Kind = ParamKind.Name, Get = b => 0, Set = (_, _) => { } });
+        l.Add(new CommandDef
+        {
+            First = 0x6F, Last = 0x6F, Name = "Emote bubble", Category = Chars, CutsceneOnly = true,
+            Describe = (b, _) => b.Length < 4 ? "Emote bubble"
+                : b[3] == 0 ? $"Hide the emote bubble"
+                : $"{EmoteName(b[2])} bubble over {Who(EmoteWho.Get(b))}" + (b[3] == 0xFF ? " (stays until hidden)" : $" for {Frames(b[3])}"),
+            Template = new byte[] { 0x6F, 1, 0, 60 },
+            Params = new[] { EmoteWho, P("emote", ParamKind.Emote, 2), P("frames (FF = until hidden, 0 = hide now)", ParamKind.Number, 3) },
+        });
         Add(0x1B, 0x1B, "Character leaves", Chars, (b, _) => $"{CharacterNames[b[1] & 15]} leaves the party (the last follower disappears)",
             new byte[] { 0x1B, 1 }, "", P("character", ParamKind.Character, 1, 0, 15));
 
@@ -377,6 +399,7 @@ public static class EventCommands
         ParamKind.Who => Enumerable.Range(1, 6).Select(a => (a, Cap(Actor(a))))
                          .Concat(Enumerable.Range(1, 32).Select(n => (0x100 + n, $"Character {n}"))).ToList(),
         ParamKind.Actor => Enumerable.Range(1, 4).Select(a => (a, Cap(Actor(a)))).ToList(),
+        ParamKind.Emote => EmoteGraphics.Names.Select((n, i) => (i, n)).ToList(),
         ParamKind.KeyItem => Enumerable.Range(1, 16).Select(n => (n, $"{n}: {MapSetupScript.ItemName(rom, 0xF0 + n - 1)}")).ToList(),
         ParamKind.Map when mapLabel != null => Enumerable.Range(0, 256).Select(m => (m, m == 0 ? "00 (this map / none)" : mapLabel(m))).ToList(),
         ParamKind.FlashKind => new List<(int, string)> { (0, "White, with thunder"), (1, "Silent") },

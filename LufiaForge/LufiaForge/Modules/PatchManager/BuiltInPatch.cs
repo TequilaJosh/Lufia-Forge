@@ -122,6 +122,12 @@ public partial class BuiltInPatch : ObservableObject
         },
         new()
         {
+            Name = "Emote bubbles for cutscenes", Category = "Events", Icon = "💭", Summary = "A cutscene command that shows a little bubble (!, ?, a heart...) over a character's head.",
+            Description = "Adds cutscene command 6F \"Emote bubble\" (Cutscenes tab, ＋ > Characters): shows one of 12 bubbles (surprise, question, heart, laugh, tears, anger, sweat, music, idea, sleep, silence, shock) over the leader, a party member or a map character for a number of frames, or until hidden. The bubble follows the character. Added by itself the first time a cutscene uses it; it also adds the rename command, which it is built on.",
+            IsApplied = EmotePatch.IsApplied, IsOriginal = EmotePatch.IsOriginal, Apply = EmotePatch.Apply, Remove = EmotePatch.Remove,
+        },
+        new()
+        {
             Name = "More than 67 encounter subgroups", Category = "Battle", Icon = "⚔", Summary = "Room for up to 255 monster subgroups in the Encounters tab.",
             Description = "Room for up to 255 monster subgroups in the Encounters tab (the game has room for 67).",
             IsApplied = SubgroupPatch.IsApplied, IsOriginal = SubgroupPatch.IsOriginal, Apply = SubgroupPatch.Apply,

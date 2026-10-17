@@ -330,6 +330,7 @@ public sealed class EventScript
         0x6B => 3,
         0x6C or 0x6D => 2,
         0x6E => next <= 7 ? 7 : 0,      // rename a party member (Lufia Forge's command, see RenamePatch)
+        0x6F => next is >= 1 and <= 0x3F ? 4 : 0,   // emote bubble (Lufia Forge's command, see EmotePatch)
         >= 0x80 and <= 0x87 => 1,
         >= 0x88 and <= 0xAF => -1,
         >= 0xB0 and <= 0xBF => 1,
@@ -454,6 +455,7 @@ public sealed class EventScript
             int op = _rom.ReadByte(p);
             int len = CommandLength(op, p + 1 < _rom.Length ? _rom.ReadByte(p + 1) : 0);
             if (op == Battle.RenamePatch.Op && !Battle.RenamePatch.IsCommandAt(_rom, p)) len = 0;   // (only with the patch: 'n' in text is 6E too)
+            if (op == Battle.EmotePatch.Op && !Battle.EmotePatch.IsCommandAt(_rom, p)) len = 0;     // ('o' is 6F)
             if (len == 0) { StopReason = $"unknown command {op:X2} at 0x{p:X6}"; break; }
 
             ScriptOp sop;
@@ -508,6 +510,7 @@ public sealed class EventScript
             int op = _rom.ReadByte(q);
             int len = CommandLength(op, q + 1 < _rom.Length ? _rom.ReadByte(q + 1) : 0);
             if (op == Battle.RenamePatch.Op && !Battle.RenamePatch.IsCommandAt(_rom, q)) len = 0;
+            if (op == Battle.EmotePatch.Op && !Battle.EmotePatch.IsCommandAt(_rom, q)) len = 0;
             if (len == 0) return false;
             if (len < 0) { var (_, raw, _) = DecodeText(_rom, q - len); q += -len + raw; }
             else q += len;
@@ -770,6 +773,13 @@ public sealed class EventScript
             if (!allowExpand && _rom.Length < MapWriter.ExpandedSize)
                 throw new InvalidOperationException("The rename command needs a small patch in the expanded part of the ROM; the ROM must be expanded to 2 MB.");
             Battle.RenamePatch.Apply(_rom);
+        }
+        // so does the emote command
+        if (Ops.Any(o => !o.IsText && o.Bytes.Length > 0 && o.Bytes[0] == Battle.EmotePatch.Op) && !Battle.EmotePatch.IsApplied(_rom))
+        {
+            if (!allowExpand && _rom.Length < MapWriter.ExpandedSize)
+                throw new InvalidOperationException("The emote command needs a small patch in the expanded part of the ROM; the ROM must be expanded to 2 MB.");
+            Battle.EmotePatch.Apply(_rom);
         }
         if (Regions.Count > 1)
         {

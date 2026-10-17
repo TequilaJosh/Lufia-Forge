@@ -59,6 +59,8 @@ public sealed class StageState
     public int ShownSpeaker { get; set; } = -1;
     /// <summary>Frames this line waits (waits and fades), for playback.</summary>
     public int WaitFrames { get; set; }
+    /// <summary>The emote bubble on screen (command 6F): over which actor, which one, frames left (int.MaxValue = until hidden).</summary>
+    public (int Actor, int Icon, int Frames)? Emote { get; set; }
     /// <summary>Set when the event leaves the map here (warp / another map's event).</summary>
     public string? Leaves { get; set; }
 
@@ -67,7 +69,7 @@ public sealed class StageState
         var c = new StageState
         {
             CameraX = CameraX, CameraY = CameraY, CameraFixed = CameraFixed, Black = Black, Music = Music, Shaking = Shaking,
-            AutoText = AutoText, ShownText = ShownText, ShownSpeaker = ShownSpeaker, TextWindow = TextWindow,
+            AutoText = AutoText, ShownText = ShownText, ShownSpeaker = ShownSpeaker, TextWindow = TextWindow, Emote = Emote,
         };
         foreach (var kv in Actors) c.Actors[kv.Key] = kv.Value.Clone();
         return c;
@@ -98,7 +100,7 @@ public static class CutsceneStage
 
     /// <summary>Commands that move characters, the camera or the screen (what makes an event a cutscene).</summary>
     public static bool IsStageCommand(ScriptOp o) => !o.IsText && o.Bytes.Length > 0 &&
-        o.Bytes[0] is >= 0x09 and <= 0x15 or 0x18 or 0x19 or >= 0x20 and <= 0x2F or 0x3C or >= 0x5C and <= 0x68 or >= 0xB0 and <= 0xBF;
+        o.Bytes[0] is >= 0x09 and <= 0x15 or 0x18 or 0x19 or >= 0x20 and <= 0x2F or 0x3C or >= 0x5C and <= 0x68 or 0x6F or >= 0xB0 and <= 0xBF;
 
     /// <summary>How many stage commands an event has (0 = not a cutscene).</summary>
     public static int StageCommandCount(EventScript s) => s.Ops.Count(IsStageCommand);
@@ -118,6 +120,9 @@ public static class CutsceneStage
         {
             st = st.Clone();
             try { Apply(map, st, op); } catch { /* malformed command: keep the stage as it was */ }
+            // a timed bubble goes away once the lines after it have waited long enough
+            if (st.Emote is { } em && em.Frames != int.MaxValue && !(!op.IsText && op.Bytes.Length > 0 && op.Bytes[0] == 0x6F))
+                st.Emote = em.Frames - st.WaitFrames > 0 ? em with { Frames = em.Frames - st.WaitFrames } : null;
             if (!st.CameraFixed && st.Actors.TryGetValue(1, out var lead)) { st.CameraX = lead.X; st.CameraY = lead.Y; }
             states.Add(st);
         }
@@ -314,6 +319,9 @@ public static class CutsceneStage
                 break;
             case 0x5C or 0x5D:
                 if (Get(st, ActorOf(ParamDef.Who(1).Get(b))) is { } h) { h.Visible = b[2] != 0; h.Blinking = b[2] != 0; }
+                break;
+            case 0x6F when b.Length >= 4:
+                st.Emote = b[3] == 0 ? null : (b[1], b[2], b[3] == 0xFF ? int.MaxValue : b[3]);
                 break;
             case 0x5E or 0x5F:
                 if (Get(st, ActorOf(ParamDef.Who(1).Get(b))) is { } v) { v.Visible = true; v.Blinking = false; }

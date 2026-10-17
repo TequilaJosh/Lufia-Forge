@@ -837,7 +837,7 @@ public partial class EventEditorPanel : UserControl, LufiaForge.ViewModels.IPend
         AddText("Dialogue: the leader speaks", 0x89);
         AddText("Dialogue: character 1 speaks", 0x90);
         menu.Items.Add(new Separator());
-        foreach (var group in EventCommands.Definitions.Where(d => d.Template != null).GroupBy(d => d.Category))
+        foreach (var group in EventCommands.Definitions.Where(d => d.Template != null && (!d.CutsceneOnly || CutsceneMode)).GroupBy(d => d.Category))
         {
             var sub = new MenuItem { Header = group.Key };
             foreach (var d in group)
