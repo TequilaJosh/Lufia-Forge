@@ -16,8 +16,12 @@ namespace LufiaForge.Core.Cave;
 /// <code>
 /// $01:BDA5  22 MapLoadHook          after a map is unpacked: a cave map gets a new floor (was JSL $00A47D)
 /// $01:9969  22 PostHeader EA        after the setup script: the floor's encounters and chest contents (was LDA $92 / CMP $078E)
-/// $01:C0D4  22 CaveNewGame 4C 3C C1 cave-only ROM: New Game starts on floor 1 with the four heroes (was LDA #$4F / JSR $BD70 ...)
+/// $01:C0D4  22 CaveStart            cave-only ROM: a new game starts on floor 1 with the four heroes (was LDA #$4F / JSR $BD70)
 /// </code>
+/// $01:C081 runs twice: at power-on for the opening (demo flag $0D9E = FF) and again for New Game after the file
+/// select ($0D9E = 0, $01:853F). CaveStart sends only the second one to the cave; the opening runs as usual (the
+/// project's hook sent the power-on opening to the cave too, still flagged as the demo, so any button press later
+/// brought up the file select).
 /// RAM: $7F:FF20-$FF27 (floor, active, RNG, spawn), $7F:E000-$EDFF (generator), as in the project.
 /// </summary>
 public static partial class AncientCave
@@ -32,7 +36,7 @@ public static partial class AncientCave
     private static readonly byte[] PostHeaderOriginal = { 0xA5, 0x92, 0xCD, 0x8E, 0x07 };
     private static readonly byte[] NewGameOriginal = { 0xA9, 0x4F, 0x20, 0x70, 0xBD, 0x20, 0xB4 };
     private static readonly byte[] Magic = "LFAC"u8.ToArray();
-    private const byte Version = 2;
+    private const byte Version = 5;
     // block: magic, version, map 1, map 2, options (bit 0 = cave-only New Game), then the code
     private const int Header = 8;
 
@@ -103,8 +107,8 @@ public static partial class AncientCave
         byte[] Jsl(string label) { int a = snes + Header + asm.Offset(label); return new byte[] { 0x22, (byte)a, (byte)(a >> 8), (byte)(a >> 16) }; }
         rom.WriteBytes(MapLoadSite, Jsl("MapLoadHook"));
         rom.WriteBytes(PostHeaderSite, Jsl("PostHeader")); rom.WriteByte(PostHeaderSite + 4, 0xEA);
-        if (caveOnly) { rom.WriteBytes(NewGameSite, Jsl("CaveNewGame")); rom.WriteBytes(NewGameSite + 4, new byte[] { 0x4C, 0x3C, 0xC1 }); }
-        else rom.WriteBytes(NewGameSite, NewGameOriginal);
+        rom.WriteBytes(NewGameSite, NewGameOriginal);
+        if (caveOnly) rom.WriteBytes(NewGameSite, Jsl("CaveStart"));
         rom.FixChecksum();
     }
 
@@ -210,6 +214,22 @@ public static partial class AncientCave
         return Enumerable.Range(0, 100).Select(i => (byte)rows[Math.Min(rows.Count - 1, i * rows.Count / 100)].Group).ToArray();
     }
 
+    /// <summary>From $01:C0D4 (M = 8, X = 16, inside $01:C081), in place of LDA #$4F / JSR $BD70.</summary>
+    private const string StartSource = """
+        CaveStart:
+            PLA                     ; drop the JSL's return address
+            PLA
+            PLA
+            LDA $7E0D9E
+            BNE .opening            ; FF: power-on, the opening plays as usual
+            JSL CaveNewGame         ; 0: New Game from the file select -> floor 1
+            JML $01C13C             ; carry on like Continue (map $1345, position $134A/C)
+        .opening
+            PEA $C0D8               ; $BD70's RTS comes back to $01:C0D9 (JSR $BAB4), as before
+            LDA.b #$4F
+            JML $01BD70
+        """;
+
     private static string MonsterName(RomBuffer rom, int m)
     {
         var b = rom.ReadBytes(MonsterTable.RecordOffset(rom, m), 10);
@@ -220,7 +240,11 @@ public static partial class AncientCave
     {
         var a = new Asm65816();
         a.Source($"!CAVEMAP = ${map1:X2}\n!CAVEMAP2 = ${map2:X2}\n" + Source);
+        a.Source(StartSource);
         a.Source(Level1Source);
+        a.Source(LootSource);
+        a.Label("ChestLoot").B(ChestLoot(rom));
+        a.Label("LootTier").B(LootTiers());
         a.Label("EncounterByFloor").B(EncountersByFloor(rom));
         a.Label("Level1Data").B(Level1Data(rom));
         return a;

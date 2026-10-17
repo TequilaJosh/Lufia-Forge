@@ -101,15 +101,7 @@ public static partial class AncientCave
         -   TYA
             CMP !OCOUNT
             BCS +
-            PHX
-            LDA.b #8
-            JSR RandL
-            XBA
-            LDA.b #$00
-            XBA
-            TAX
-            LDA.l ChestLoot,x
-            PLX
+            JSR ChestItem           ; (Lufia Forge: by depth, see AncientCave.Loot.cs)
             STA !OBJS+1,x
             REP #$20
             TXA
@@ -1233,7 +1225,6 @@ public static partial class AncientCave
         ;---------------------------------------------------------------------
         ; RAM header script for map $85
         ;---------------------------------------------------------------------
-        ChestLoot:  db $94,$94,$94,$95,$99,$94,$95,$94   ; placeholder loot (Potion, Hi-Potion, Antidote)
 
         BuildHeader:                ; new floor: all cave chests closed again
             REP #$20
@@ -1299,16 +1290,7 @@ public static partial class AncientCave
             STZ $14CF               ; (joining the Hero gives 100 GP: the cave starts with none)
             STZ $14D0
             STZ $14D1
-            ; names: 6 bytes each at $14B6 (+ the hero name-entry buffer at $14B0)
-            LDX.w #$0000
-        -   LDA.l CaveNames,x
-            STA $14B6,x
-            CPX.w #6
-            BCS +
-            STA $14B0,x
-        +   INX
-            CPX.w #24
-            BCC -
+            ; (names: the join gives the Hero the name the player typed, the others theirs)
             ; cave state
             LDA.b #$01
             STA !AC_FLOOR
@@ -1326,7 +1308,5 @@ public static partial class AncientCave
             PLP
             RTL
 
-        CaveNames:
-            db "Hero",0,0, "Lufia",0, "Aguro",0, "Jerin",0
         """;
 }
