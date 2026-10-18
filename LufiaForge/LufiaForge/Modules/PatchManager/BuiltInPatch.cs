@@ -124,8 +124,23 @@ public partial class BuiltInPatch : ObservableObject
         new()
         {
             Name = "Ancient Cave (cave-only game)", Category = "Maps", Icon = "🕳", Summary = "New Game starts in a cave of random floors, like Lufia 2's Ancient Cave.",
-            Description = "Turns the game into an Ancient Cave run: New Game puts the Hero, Lufia, Aguro and Jerin on floor 1 with nothing, and every staircase leads to a new floor built at random (rooms, corridors, chests). Battles get harder floor by floor, using this ROM's own encounter groups sorted by EXP. The rest of the game can't be reached. Uses two free map numbers and its own copy of map 8E (the Old Cave floor), which must be unchanged. From the Ancient Cave project (ac.asm).",
-            IsApplied = AncientCave.IsApplied, IsOriginal = AncientCave.IsOriginal, Apply = rom => AncientCave.Apply(rom, true), Remove = AncientCave.Remove,
+            Description = "Turns the game into an Ancient Cave run: New Game puts the Hero, Lufia, Aguro and Jerin on floor 1 with nothing, and every staircase leads to a new floor built at random (rooms, corridors, chests). Battles get harder floor by floor, using this ROM's own encounter groups sorted by EXP. The floor number shows in the bottom right corner. The rest of the game can't be reached. Uses two free map numbers and its own copy of map 8E (the Old Cave floor), which must be unchanged. From the Ancient Cave project (ac.asm).",
+            IsApplied = rom => AncientCave.IsAppliedAs(rom, AncientCave.CaveMode.CaveOnly), IsOriginal = rom => AncientCave.IsOriginal(rom) || AncientCave.IsApplied(rom),
+            Apply = rom => AncientCave.Apply(rom, AncientCave.CaveMode.CaveOnly), Remove = AncientCave.Remove,
+        },
+        new()
+        {
+            Name = "Ancient Cave (from the Old Cave)", Category = "Maps", Icon = "🕳", Summary = "The man at the Old Cave's elevator offers a way down to an Ancient Cave of random floors.",
+            Description = "Keeps the normal game and adds an Ancient Cave run to it: the man by the Old Cave's elevator asks whether to take the party down. The party goes in at level 1 with nothing (the same members, in the same order) and comes back as it was when it leaves (the arrival door), wins on floor 100, or quits. Saving in the cave keeps the run. The floor number shows in the bottom right corner. Uses two free map numbers and its own copy of map 8E (the Old Cave floor), which must be unchanged. Replaces the cave-only or elevator start version when one is in.",
+            IsApplied = rom => AncientCave.IsAppliedAs(rom, AncientCave.CaveMode.NormalGame), IsOriginal = rom => AncientCave.IsOriginal(rom) || AncientCave.IsApplied(rom),
+            Apply = rom => AncientCave.Apply(rom, AncientCave.CaveMode.NormalGame), Remove = AncientCave.Remove,
+        },
+        new()
+        {
+            Name = "Ancient Cave (start at the elevator)", Category = "Maps", Icon = "🕳", Summary = "New Game starts next to the Old Cave's elevator man, and the cave is all there is.",
+            Description = "As the Old Cave version, but New Game skips the Fortress conversation and starts in the Old Cave's elevator room with the prologue's party, where the man asks right away whether to take them down. The room's way out and its elevator are closed, so the Ancient Cave is all there is. The floor number shows in the bottom right corner. Replaces the other versions when one is in.",
+            IsApplied = rom => AncientCave.IsAppliedAs(rom, AncientCave.CaveMode.ElevatorStart), IsOriginal = rom => AncientCave.IsOriginal(rom) || AncientCave.IsApplied(rom),
+            Apply = rom => AncientCave.Apply(rom, AncientCave.CaveMode.ElevatorStart), Remove = AncientCave.Remove,
         },
         new()
         {

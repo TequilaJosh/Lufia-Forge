@@ -46,7 +46,7 @@ public static class RomEdits
         if (SubgroupPatch.IsApplied(rom)) patches.Add("more than 67 encounter subgroups");
         if (RenamePatch.IsApplied(rom)) patches.Add("rename command for events");
         if (EmotePatch.IsApplied(rom)) patches.Add("emote bubbles for cutscenes");
-        if (Cave.AncientCave.Read(rom) is { } cave) patches.Add($"Ancient Cave (maps {cave.Map1:X2}/{cave.Map2:X2}{(cave.CaveOnly ? ", cave-only New Game" : "")})");
+        if (Cave.AncientCave.Read(rom) is { } cave) patches.Add($"Ancient Cave (maps {cave.Map1:X2}/{cave.Map2:X2}{cave.Mode switch { Cave.AncientCave.CaveMode.CaveOnly => ", cave-only New Game", Cave.AncientCave.CaveMode.ElevatorStart => ", New Game at the Old Cave elevator", _ => ", from the Old Cave" }})");
         if (AguroMagicPatch.IsApplied(rom)) patches.Add("spells and MP for Guy / Aguro");
         else if (AguroMagicPatch.NeedsUpdate(rom)) patches.Add("spells and MP for Guy / Aguro (older version: click Update in the Patch Manager)");
         if (SpellTablePatch.IsApplied(rom)) patches.Add($"up to 128 spells, 64 per character ({SpellTablePatch.NewCount(rom)} added)");

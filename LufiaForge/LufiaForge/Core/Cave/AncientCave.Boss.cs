@@ -6,7 +6,7 @@ public static partial class AncientCave
 {
     /// <summary>The Sinistrals of the floor 100 battle, in formation order (Gades, Amon, Erim, Daos).</summary>
     public static readonly int[] Sinistrals = { 0x91, 0x92, 0x93, 0x94 };
-    public const int BossFormation = 0xE6;
+    public const int BossFormation = 0xFA;   // a copy of F6 that no event uses (the story uses E6, F0, F5)
     public const int ShrunkWidth = 48;
 
     /// <summary>
@@ -14,14 +14,23 @@ public static partial class AncientCave
     /// groups and gives each a palette slot; a 4th group gets the 1st group's slot, because BG palette 7 is used by
     /// battle effects, so Gades and Daos share one palette. Their pictures are shrunk to 48 pixels wide to fit.
     /// <code>
-    /// $08:D2CD  A9 04                   up to 4 picture groups (was LDA #$03)
+    /// $08:D2CD  22 GroupCount           up to 4 picture groups in the floor 100 battle, 3 in any other (was LDA #$03 / STA $DF)
     /// $08:D8B8  22 PaletteSlot EA x4    palette slot of a group (was LDA $DF / SEC / SBC #$02 / EOR #$FF / INC)
     /// </code>
     /// The floor 100 monsters are new copies of the Sinistrals with the shrunken pictures, so the story's own
-    /// Sinistral fights look as before; formation E6 (the first, unwinnable Gades fight, which a cave-only game never
-    /// reaches) becomes the four of them.
+    /// Sinistral fights look as before; formation FA (a duplicate of F6 that no event uses) becomes the four of them.
     /// </summary>
     private const string BossSource = """
+        GroupCount:                 ; $DF = how many picture groups the battle loads: 4 only for the floor 100 formation
+            LDA $7E142D             ; (the battle's formation; with 4 in other battles a stale 4th entry loaded as a
+            CMP.b #$FA              ; group and took the first group's palette slot) - $FA = BossFormation
+            BEQ +
+            LDA.b #$03
+            BRA ++
+        +   LDA.b #$04
+        ++  STA $DF
+            RTL
+
         PaletteSlot:                ; A = palette slot 0-3 for this picture group
             LDA $DF
             SEC
@@ -35,7 +44,7 @@ public static partial class AncientCave
         """;
 
     private const int GroupsSite = 0x452CD, PaletteSite = 0x458B8;
-    private static readonly byte[] GroupsOriginal = { 0xA9, 0x03 };
+    private static readonly byte[] GroupsOriginal = { 0xA9, 0x03, 0x85, 0xDF };
     private static readonly byte[] PaletteOriginal = { 0xA5, 0xDF, 0x38, 0xE9, 0x02, 0x49, 0xFF, 0x1A };
 
     /// <summary>Makes the four floor 100 monsters (copies with 48-pixel pictures). Returns their ids.</summary>

@@ -32,8 +32,14 @@ public static partial class AncientCave
             SEC
             SBC.b #$F0-4            ; event 4 + k
             STA !SPELLEVENT
-            JML $0186C0             ; opened flag, then the message (MsgHook runs our event instead)
+            LDA $18                 ; the chest's object, for drawing it opened (the item path keeps it in $02 too)
+            STA $02
+            JML $0186E8             ; as an item that fit: sound, the chest drawn opened, the statistic, then the
+                                    ; message (MsgHook runs our event instead). ($01:86C0 is the bag-full path: it
+                                    ; flips the opened flag back and leaves the chest closed)
         .normal
+            LDA.b #$00              ; (no spell event: the byte isn't set at power-on, and an item chest's message
+            STA !SPELLEVENT         ; must stay the item's)
             LDA $04
             CMP.b #$FF
             BEQ +
