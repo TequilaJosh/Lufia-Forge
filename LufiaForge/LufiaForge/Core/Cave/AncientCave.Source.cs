@@ -69,6 +69,16 @@ public static partial class AncientCave
             LDA.b #$01
             STA !AC_INCAVE
             JSL GenerateFloor
+            PHX
+            LDA !AC_FLOOR           ; (Lufia Forge) the cave's colours change every 25 floors (tileset 6's palettes)
+            DEC A
+            REP #$20
+            AND.w #$007F
+            TAX
+            SEP #$20
+            LDA.l FloorPalette,x
+            STA $7F0009             ; the map's palette (read from the unpacked header, as the intro's own override)
+            PLX
             BRA ++
         +   CMP.b #$10              ; (the game-over room doesn't count as leaving)
             BEQ ++
