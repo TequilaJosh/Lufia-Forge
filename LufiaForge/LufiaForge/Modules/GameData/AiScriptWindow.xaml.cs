@@ -59,6 +59,7 @@ public partial class AiScriptWindow : Window
         new(0x1B, "Phase: switch on"), new(0x1C, "Phase: switch off"),
         new(0x20, "Numbers: set a number"), new(0x21, "Numbers: add to a number"), new(0x24, "Numbers: set a number from the party"),
         new(0x22, "If: a number compares, go to"), new(0x23, "Do: bonus damage this turn (a share of the target's HP)"),
+        new(0x25, "Do: several actions this turn"),
         new(0x09, "Go to"), new(0x00, "End of the script"),
         new(0x0F, "Other: show a battle message"), new(0x0E, "Other: next action makes no sound"), new(0x12, "Other: set its HP"), new(0x13, "Other: set its MP"),
     };
@@ -96,9 +97,11 @@ public partial class AiScriptWindow : Window
         string StepName(int off) => byOffset.TryGetValue(off, out int i) ? $"step {i + 1}" : "(no step)";
         string Spell(int id) => id < _spells.Count ? _spells[id][3..].Trim() : $"spell {id:X2}";
         string Item(int id) => id < _items.Count ? _items[id][3..].Trim() : $"item {id:X2}";
+        bool multi = false;   // after a command 25 (several actions a turn) an action doesn't end the turn
         for (int i = 0; i < _steps.Count; i++)
         {
             var s = _steps[i].Step;
+            if (s.Op == 0x25) multi = true;
             var args = (byte[])s.Args.Clone();
             int ja = MonsterAi.JumpArg(s.Op);
             int? jump = null;
@@ -108,7 +111,7 @@ public partial class AiScriptWindow : Window
                 jump = to;
                 args[ja] = (byte)to; args[ja + 1] = (byte)(to >> 8);
             }
-            var cmd = new MonsterAi.Command(offsets[s], s.Op, args, MonsterAi.Name(s.Op), jump, MonsterAi.EndsTurn(s.Op));
+            var cmd = new MonsterAi.Command(offsets[s], s.Op, args, MonsterAi.Name(s.Op), jump, MonsterAi.EndsTurn(s.Op) && !multi);
             string text = s.Op == 0 ? "End of the script." : MonsterAi.Plain(cmd, StepName, Spell, Item);
             if (ja >= 0 && s.Target == null) text += "  (pick the step to go to)";
             _steps[i].Line = $"{i + 1,2}.  {text}";
@@ -170,6 +173,7 @@ public partial class AiScriptWindow : Window
             case 0x21: a[1] = 1; break;
             case 0x23: a[1] = 25; break;
             case 0x24: a[1] = 0x13; break;
+            case 0x25: a[0] = 2; break;
             case 0x08: a[1] = 10; break;
             case 0x07: a[0] = 1; break;
             case 0x06: a[0] = 1; break;
@@ -187,6 +191,7 @@ public partial class AiScriptWindow : Window
         0x17 or 0x18 or 0x1F => "Choose the target first, then the action (attack, spell...). Only party members who are still standing count.",
         0x1E => "\"Any\" is true when one standing member passes, \"every\" when all of them do. HP % is 0-100. Status bits: KO is 32 (use \"has any of the bits\" with 32). From Ok Impala's AI extensions.",
         0x20 or 0x21 or 0x22 or 0x24 => "Each monster has 4 numbers (0-255), all 0 when the battle starts: count hits, turns since something happened, how often it healed... From Ok Impala's AI extensions.",
+        0x25 => "Put it first, then the actions one after another (each with its own target or bonus damage if you like): after each action the monster acts again at once, and the script carries on from the step after that action. 1-8. From Ok Impala's AI extensions (their 1B).",
         0x23 => "Set it before the attack or spell: every hit this turn that does damage gets the extra, up to 9999. It is cleared at the start of the monster's next turn. 0% = none. From Ok Impala's AI extensions.",
         0x0A or 0x10 => "50% = half of its max. While it's above, the script goes to the chosen step; once it drops below, it carries on.",
         0x04 => "The chance is out of 100%: 25% means a quarter of the turns go to the chosen step.",
@@ -302,6 +307,7 @@ public partial class AiScriptWindow : Window
             case 0x22: list.Add(Pick(0, "Number", numbers)); list.Add(Pick(1, "Is", cmps)); list.Add(Byte(2, "Than")); list.Add(Step("Go to")); break;
             case 0x23: list.Add(Pick(0, "Of the target's", new List<string> { "Max HP", "Current HP" })); list.Add(Byte(1, "Extra damage", "% (0 = none)")); break;
             case 0x24: list.Add(Pick(0, "Number", numbers)); list.Add(PickValue(1, "From", MonsterAi.WhoValueChoices)); list.Add(Pick(2, "Value", stats)); break;
+            case 0x25: list.Add(Byte(0, "Actions this turn", "1-8", 8)); break;
         }
         return list;
     }
