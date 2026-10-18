@@ -128,13 +128,31 @@ public static partial class AncientCave
     }
 
     // pieces of each kind of gear per tier: weapons, armor, shields, head (helmets, hair bands...), shoes, rings
-    private static readonly (int Slot, int Count)[] GearMix = { (1, 6), (2, 4), (3, 3), (4, 4), (5, 2), (6, 3) };
+    private static readonly (int Slot, int Count)[] GearMix = { (1, 6), (2, 4), (3, 3), (4, 3), (5, 2), (6, 2) };
+    private const int BattleItemsPerTier = 5, HealingPerTier = 4;
+
+    // stat potions (Power, Spell, Speed, Mind; Great Potion deeper down), one entry per tier
+    private static readonly string[] StatPotionNames = { "Power Potion", "Spell Potion", "Speed Potion", "Mind Potion", "Great Potion" };
+
+    private static List<int> StatPotions(RomBuffer rom)
+    {
+        var items = Items(rom);
+        return StatPotionNames.Select(n => items.FirstOrDefault(i => i.Name.Replace('@', ' ') == n)?.Id ?? 0).ToList();
+    }
+
+    // battle items (type 81): arrows, bombs, pins and the like; not the quest odds and ends of the same type
+    private static readonly string[] BattleItemWords = { "Arrow", "Bomb", "Pin", "Shriek", "Smoke", "Tooth", "Gourd", "Magic Guard" };
+
+    private static List<ItemInfo> BattleItems(RomBuffer rom) =>
+        Items(rom).Where(i => i.Type == 0x81 && i.Price > 0 && BattleItemWords.Any(w => i.Name.Replace('@', ' ').Contains(w, StringComparison.OrdinalIgnoreCase)))
+                  .OrderBy(i => i.Price).ThenBy(i => i.Id).ToList();
 
     /// <summary>
-    /// The 10 tiers x 32 chest items: 22 pieces of gear, every kind in each tier (6 weapons, 4 armors, 3 shields, 4 for
-    /// the head, 2 shoes, 3 rings), each kind from its own price band for the depth (tier t: the t/10 to (t+2)/10 share
-    /// of that kind sorted by price, different pieces spread over it), then 8 healing items (stronger deeper down) and
-    /// 2 spell chests (marker F0: the spell is picked when the chest opens, see <see cref="AncientCave"/> spells).
+    /// The 10 tiers x 32 chest items: 20 pieces of gear, every kind in each tier (6 weapons, 4 armors, 3 shields, 3 for
+    /// the head, 2 shoes, 2 rings), and 5 battle items (arrows, bombs...), each kind from its own price band for the
+    /// depth (tier t: the t/10 to (t+2)/10 share of that kind sorted by price, different ones spread over it), then 5
+    /// healing items (stronger deeper down), a stat potion (Power, Spell, Speed and Mind in turn; from tier 7 every
+    /// other tier a Great Potion) and 2 spell chests (marker F0: the spell is picked when the chest opens).
     /// </summary>
     public static byte[] ChestLoot(RomBuffer rom)
     {
@@ -145,6 +163,8 @@ public static partial class AncientCave
         int potion = Pick(Potion, items.FirstOrDefault(i => (i.Type & 0x41) != 0)?.Id ?? 1);
         int hi = Pick(HiPotion, potion), ex = Pick(ExPotion, hi), anti = Pick(Antidote, potion);
         bool spells = AllSpells(rom).Count > 0;
+        var battle = BattleItems(rom).Select(i => i.Id).ToList();
+        var statPotions = StatPotions(rom);
         var data = new byte[Tiers * PerTier];
         for (int t = 0; t < Tiers; t++)
         {
@@ -158,12 +178,15 @@ public static partial class AncientCave
                 lo = Math.Max(0, Math.Min(lo, hiIx - count));
                 for (int k = 0; k < count; k++) row.Add(kind[Math.Min(kind.Count - 1, lo + (hiIx - lo) * k / count)].Id);
             }
-            row.AddRange(t switch
+            row.AddRange(Band(battle, t, BattleItemsPerTier));
+            row.AddRange((t switch
             {
-                <= 2 => new[] { potion, potion, potion, potion, anti, anti, hi, hi },
-                <= 6 => new[] { potion, potion, hi, hi, hi, anti, anti, ex },
-                _ => new[] { hi, hi, hi, ex, ex, ex, anti, anti },
-            });
+                <= 2 => new[] { potion, potion, potion, anti, hi },
+                <= 6 => new[] { potion, hi, hi, anti, ex },
+                _ => new[] { hi, hi, ex, ex, anti },
+            }).Take(HealingPerTier));
+            int stat = t >= 7 && t % 2 == 1 && statPotions[4] != 0 ? statPotions[4] : statPotions[t % 4];
+            row.Add(stat != 0 ? stat : potion);
             while (row.Count < PerTier - 2) row.Add(potion);
             row = row.Take(PerTier - 2).ToList();
             row.Add(spells ? FirstMarker : potion);
@@ -171,6 +194,17 @@ public static partial class AncientCave
             for (int k = 0; k < PerTier; k++) data[t * PerTier + k] = (byte)row[k];
         }
         return data;
+    }
+
+    /// <summary><paramref name="count"/> different entries of a price-sorted list for tier <paramref name="t"/>: spread
+    /// over its t/10 to (t+2)/10 share.</summary>
+    private static IEnumerable<int> Band(List<int> sorted, int t, int count)
+    {
+        if (sorted.Count == 0) yield break;
+        int lo = Math.Min(sorted.Count - 1, sorted.Count * t / Tiers);
+        int hi = Math.Min(sorted.Count, Math.Max(lo + count, sorted.Count * (t + 2) / Tiers));
+        lo = Math.Max(0, Math.Min(lo, hi - count));
+        for (int k = 0; k < count; k++) yield return sorted[Math.Min(sorted.Count - 1, lo + (hi - lo) * k / count)];
     }
 
     /// <summary>Items a floor may have more than once (healing items, the spell chest marker).</summary>
