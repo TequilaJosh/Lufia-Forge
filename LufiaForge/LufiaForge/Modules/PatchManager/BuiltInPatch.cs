@@ -144,6 +144,12 @@ public partial class BuiltInPatch : ObservableObject
         },
         new()
         {
+            Name = "Ancient Cave demo", Category = "Maps", Icon = "🕳", Summary = "The Ancient Cave demo in one click: start at the Old Cave elevator, faster walking, party retargeting.",
+            Description = "Everything the Ancient Cave demo has, added at once: the Ancient Cave with New Game starting by the Old Cave's elevator man (see \"Ancient Cave (start at the elevator)\"), faster walking on the world map and in dungeons (the Game Data setting), and party members retargeting instead of missing (see \"Party members retarget instead of missing\"). Removing it takes all three out again.",
+            IsApplied = AncientCave.IsDemo, IsOriginal = AncientCave.CanApplyDemo, Apply = AncientCave.ApplyDemo, Remove = AncientCave.RemoveDemo,
+        },
+        new()
+        {
             Name = "Emote bubbles for cutscenes", Category = "Events", Icon = "💭", Summary = "A cutscene command that shows a little bubble (!, ?, a heart...) over a character's head.",
             Description = "Adds cutscene command 6F \"Emote bubble\" (Cutscenes tab, ＋ > Characters): shows one of 12 bubbles (surprise, question, heart, laugh, tears, anger, sweat, music, idea, sleep, silence, shock) over the leader, a party member or a map character for a number of frames, or until hidden. The bubble follows the character. Added by itself the first time a cutscene uses it; it also adds the rename command, which it is built on.",
             IsApplied = EmotePatch.IsApplied, IsOriginal = EmotePatch.IsOriginal, Apply = EmotePatch.Apply, Remove = EmotePatch.Remove,

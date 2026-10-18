@@ -178,8 +178,8 @@ public static partial class AncientCave
         {
             rom.WriteBytes(SaveSite, Jsl("SaveHook")); rom.WriteByte(SaveSite + 4, 0xEA);
             rom.WriteBytes(LoadSite, Jsl("LoadHook"));
-            AddEntrance(rom, map1, locked);
-            if (locked) AddStart(rom); else RemoveStart(rom);
+            AddEntrance(rom, map1, locked, finalFlag);
+            if (locked) AddStart(rom, finalFlag); else RemoveStart(rom);
         }
         rom.WriteBytes(PaletteSite, Jsl("PaletteSlot")); rom.WriteBytes(PaletteSite + 4, new byte[] { 0xEA, 0xEA, 0xEA, 0xEA });
         rom.FixChecksum();
