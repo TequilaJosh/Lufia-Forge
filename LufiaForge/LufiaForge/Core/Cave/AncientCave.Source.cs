@@ -216,7 +216,9 @@ public static partial class AncientCave
             STA $7E1296+$1E
             LDA !AC_FLOOR
             CMP.b #100
-            BCS +
+            BCC .down
+            LDA.b #$00              ; (Lufia Forge) past floor 100 (after the Sinistrals): a new run from floor 1
+        .down
             INC A
             STA !AC_FLOOR
         +   LDA !AC_FLOOR
@@ -244,6 +246,17 @@ public static partial class AncientCave
             LDA !SAVEBYTE
             ORA.b #!SAVEBIT
             STA !SAVEBYTE
+        +
+            ; (Lufia Forge) floor 100: the stairs start the battle with the four Sinistrals (flag !FINALBYTE / !FINALBIT)
+            LDA !FINALBYTE
+            AND.b #!FINALBIT^$FF
+            STA !FINALBYTE
+            LDA !AC_FLOOR
+            CMP.b #100
+            BNE +
+            LDA !FINALBYTE
+            ORA.b #!FINALBIT
+            STA !FINALBYTE
         +
             ; --- mix the frame counter into the RNG
             REP #$20
@@ -1017,6 +1030,10 @@ public static partial class AncientCave
             STA !AC_SPAWNX
             SEC
             SBC.w #!CAMX
+            BPL .camx               ; (Lufia Forge) near the left edge: the map wraps, so does the camera (was -1..-5)
+            CLC
+            ADC.w #!MAPW
+        .camx
             STA $7E134A             ; camera top-left = player - screen offset
             LDA !y1
             AND.w #$00FF
@@ -1024,6 +1041,10 @@ public static partial class AncientCave
             STA !AC_SPAWNY
             SEC
             SBC.w #!CAMY
+            BPL .camy
+            CLC
+            ADC.w #!MAPH
+        .camy
             STA $7E134C
             ; every entrance of the template map leads to the arrival spot
             LDX.w #$0000
@@ -1317,6 +1338,11 @@ public static partial class AncientCave
             JSL $08EA8F
             LDA.b #$03
             JSR Level1
+            LDX.w #$0000            ; (Lufia Forge) the play statistics ($134E-$1363: deaths, battles, boxes...) from 0
+        -   STZ $134E,x
+            INX
+            CPX.w #$0016
+            BCC -
             STZ $14CF               ; (joining the Hero gives 100 GP: the cave starts with none)
             STZ $14D0
             STZ $14D1
