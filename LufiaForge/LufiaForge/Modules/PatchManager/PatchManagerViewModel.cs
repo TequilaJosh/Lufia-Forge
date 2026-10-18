@@ -23,8 +23,9 @@ public partial class PatchManagerViewModel : ObservableObject
 
     /// <summary>Fixes and features Lufia Forge adds with one click.</summary>
     public List<BuiltInPatch> BuiltInPatches { get; } = BuiltInPatch.All();
+    private static readonly string[] GroupOrder = { "Community", "Battle", "Magic", "Items", "Maps", "Events", "Testing", "Other" };
     /// <summary>The patches grouped for the cards (in this order).</summary>
-    public List<PatchGroup> PatchGroups => new[] { "Community", "Battle", "Magic", "Items", "Events", "Testing", "Other" }
+    public List<PatchGroup> PatchGroups => GroupOrder.Concat(BuiltInPatches.Select(p => p.Category).Where(c => !GroupOrder.Contains(c)).Distinct())   // (a category not listed still shows, at the end)
         .Select(c => new PatchGroup(c == "Community" ? "Community patches (by fans, built in)" : c, BuiltInPatches.Where(p => p.Category == c).ToList())).Where(g => g.Patches.Count > 0).ToList();
 
     [ObservableProperty]
