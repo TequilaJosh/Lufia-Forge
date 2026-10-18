@@ -44,16 +44,17 @@ public static partial class AncientCave
     private static readonly byte[] GameOverOriginal = { 0xAD, 0x49, 0x13, 0xD0, 0x24 };
     private static readonly byte[] SaveNameOriginal = { 0xA0, 0x00, 0x00, 0xA5, 0x00 };
     private static readonly byte[] Magic = "LFAC"u8.ToArray();
-    private const byte Version = 19;
+    private const byte Version = 21;
     // block: magic, version, map 1, map 2, options (bit 0 = cave-only New Game, bit 1 = elevator start), save flag, floor 100 flag, 2 spare,
     // the 4 floor 100 monsters, the boss formation as it was (4); then the code
-    private const int Header = 20;
+    private const int Header = 24;   // (+ 20-22: the merchants' story flags, 23 spare; version 21 on)
 
     private static int FileOffset(int snes) => (snes >> 16 & 0x7F) * 0x8000 + (snes & 0x7FFF);
     private static int SnesAddress(int file) => (file / 0x8000 | 0x80) << 16 | (file % 0x8000 | 0x8000);
     private static bool Matches(RomBuffer rom, int at, byte[] b) => at >= 0 && at + b.Length <= rom.Length && rom.ReadBytes(at, b.Length).SequenceEqual(b);
 
-    public sealed record Info(int Map1, int Map2, bool CaveOnly, int Block, int SaveFlag, int FinalFlag, int[] Bosses, int[] OldFormation, bool ElevatorStart = false)
+    public sealed record Info(int Map1, int Map2, bool CaveOnly, int Block, int SaveFlag, int FinalFlag, int[] Bosses, int[] OldFormation, bool ElevatorStart = false,
+        bool People = false, int[]? ShopFlags = null)
     {
         public CaveMode Mode => CaveOnly ? CaveMode.CaveOnly : ElevatorStart ? CaveMode.ElevatorStart : CaveMode.NormalGame;
     }
@@ -77,7 +78,7 @@ public static partial class AncientCave
         Matches(rom, MapLoadSite, MapLoadOriginal) && Matches(rom, PostHeaderSite, PostHeaderOriginal) && Matches(rom, NewGameSite, NewGameOriginal) &&
         Matches(rom, GameOverSite, GameOverOriginal) && Matches(rom, ChestSite, ChestOriginal) && Matches(rom, MsgSite, MsgOriginal) &&
         Matches(rom, SaveNameSite, SaveNameOriginal) && Matches(rom, GroupsSite, GroupsOriginal) && Matches(rom, PaletteSite, PaletteOriginal) &&
-        Matches(rom, HudOamSite, HudOamOriginal) && Matches(rom, HudNmiSite, HudNmiOriginal);
+        Matches(rom, HudOamSite, HudOamOriginal) && Matches(rom, HudNmiSite, HudNmiOriginal) && Matches(rom, GoldSite, GoldOriginal);
 
     public static bool IsApplied(RomBuffer rom) => Read(rom) != null;
 
@@ -90,7 +91,8 @@ public static partial class AncientCave
             if (Matches(rom, b, Magic))
                 return new Info(rom.ReadByte(b + 5), rom.ReadByte(b + 6), (rom.ReadByte(b + 7) & 1) != 0, b, rom.ReadByte(b + 8),
                     rom.ReadByte(b + 9), rom.ReadBytes(b + 12, 4).Select(x => (int)x).ToArray(), rom.ReadBytes(b + 16, 4).Select(x => (int)x).ToArray(),
-                    (rom.ReadByte(b + 7) & 2) != 0);
+                    (rom.ReadByte(b + 7) & 2) != 0, (rom.ReadByte(b + 7) & 4) != 0,
+                    rom.ReadByte(b + 4) >= 21 ? rom.ReadBytes(b + 20, 3).Select(x => (int)x).ToArray() : null);
         return null;
     }
 
@@ -101,13 +103,18 @@ public static partial class AncientCave
     public static void Apply(RomBuffer rom, bool caveOnly) => Apply(rom, caveOnly ? CaveMode.CaveOnly : CaveMode.NormalGame);
 
     /// <summary>Adds the cave in the given mode (or switches an applied cave to it).</summary>
-    public static void Apply(RomBuffer rom, CaveMode mode)
+    public static void Apply(RomBuffer rom, CaveMode mode) => Apply(rom, mode, null);
+
+    /// <summary>Adds the cave in the given mode; <paramref name="people"/>: the priest and the merchants (null = as
+    /// they are, none for a new cave).</summary>
+    public static void Apply(RomBuffer rom, CaveMode mode, bool? people)
     {
         bool caveOnly = mode == CaveMode.CaveOnly, locked = mode == CaveMode.ElevatorStart;
         var old = Read(rom);
+        bool withPeople = people ?? old?.People ?? false;
         if (old == null && !IsOriginal(rom))
             throw new InvalidOperationException("The game's map loading or New Game code ($01:BDA5, $01:9969, $01:C0D4) isn't the original, so the Ancient Cave can't be added safely.");
-        if (old != null && old.Mode == mode && rom.ReadByte(old.Block + 4) == Version) return;
+        if (old != null && old.Mode == mode && old.People == withPeople && rom.ReadByte(old.Block + 4) == Version) return;
         CheckChestFlags(rom, old);
         if (!caveOnly && (!Matches(rom, SaveSite, SaveOriginal) && rom.ReadByte(SaveSite) != 0x22 || !Matches(rom, LoadSite, LoadOriginal) && rom.ReadByte(LoadSite) != 0x22))
             throw new InvalidOperationException("The game's save / load code ($00:922B, $00:931D) isn't the original, so the cave's party backup can't be added safely.");
@@ -121,15 +128,19 @@ public static partial class AncientCave
         int[] bosses = old != null && old.Bosses.Any(b => b != 0) ? old.Bosses : MakeBosses(rom);
         int[] oldFormation = old != null && old.Bosses.Any(b => b != 0) ? old.OldFormation : Encounters.BossMonsters(rom, BossFormation);
         Encounters.SetBossMonsters(rom, BossFormation, bosses);
+        int[] shopFlags = ShopFlags(rom, saveFlag, finalFlag);
         if (old != null)
         {
             map1 = old.Map1; map2 = old.Map2;
             WriteEvents(rom, map1, map2, saveFlag, finalFlag, caveOnly, EventScript.BlockOffset(rom, map1));
             WriteEvents(rom, map2, map1, saveFlag, finalFlag, caveOnly, EventScript.BlockOffset(rom, map2));
+            // (the cave's copy of map 8E and setup scripts again: an older cave gets the people)
+            ResourceWriter.Save(rom, rom.ReadByte(MapFactory.SelectTable + map1) + 0xB2, CaveTemplate(rom), allowExpand: true);
+            foreach (int m in new[] { map1, map2 }) SetupScripts.Replace(rom, m, SetupScript(m, saveFlag, shopFlags, withPeople));
         }
         else
         {
-            var template = TemplateData(rom);
+            var template = CaveTemplate(rom);
             var free = MapFactory.FreeIds(rom);
             if (free.Count < 2) throw new InvalidOperationException("The Ancient Cave needs two free map numbers and this ROM has fewer left (each New map takes one).");
             // the project's numbers when they're free, else the first free ones
@@ -139,21 +150,22 @@ public static partial class AncientCave
             {
                 rom.WriteByte(MapFactory.SelectTable + m, (byte)(res - 0xB2));
                 rom.WriteByte(MapFactory.AreaTable + m, rom.ReadByte(MapFactory.AreaTable + TemplateMap));
-                SetupScripts.Replace(rom, m, SetupScript(m));
+                SetupScripts.Replace(rom, m, SetupScript(m, saveFlag, shopFlags, withPeople));
                 WriteEvents(rom, m, other, saveFlag, finalFlag, caveOnly, 0);
             }
         }
 
         var space = ExpansionSpace.Load(rom);
         if (old != null) space.Free(old.Block);
-        var probe = Assemble(rom, map1, map2, saveFlag, finalFlag, caveOnly, locked).Build(0x808000);
+        var probe = Assemble(rom, map1, map2, saveFlag, finalFlag, caveOnly, locked, shopFlags).Build(0x808000);
         int at = space.AllocateInOneBank(Header + probe.Length, ExpansionSpace.Kind.Patch, 32);
         space.Save();
         int snes = SnesAddress(at);
-        var asm = Assemble(rom, map1, map2, saveFlag, finalFlag, caveOnly, locked);
+        var asm = Assemble(rom, map1, map2, saveFlag, finalFlag, caveOnly, locked, shopFlags);
         rom.WriteBytes(at, Magic);
-        rom.WriteBytes(at + 4, new[] { Version, (byte)map1, (byte)map2, (byte)((caveOnly ? 1 : 0) | (locked ? 2 : 0)), (byte)saveFlag, (byte)finalFlag, (byte)0, (byte)0 });
+        rom.WriteBytes(at + 4, new[] { Version, (byte)map1, (byte)map2, (byte)((caveOnly ? 1 : 0) | (locked ? 2 : 0) | (withPeople ? 4 : 0)), (byte)saveFlag, (byte)finalFlag, (byte)0, (byte)0 });
         rom.WriteBytes(at + 12, bosses.Select(b => (byte)b).Concat(oldFormation.Select(b => (byte)b)).ToArray());
+        rom.WriteBytes(at + 20, shopFlags.Select(f => (byte)f).Append((byte)0).ToArray());
         rom.WriteBytes(at + Header, asm.Build(snes + Header));
         byte[] Jsl(string label) { int a = snes + Header + asm.Offset(label); return new byte[] { 0x22, (byte)a, (byte)(a >> 8), (byte)(a >> 16) }; }
         rom.WriteBytes(MapLoadSite, Jsl("MapLoadHook"));
@@ -165,6 +177,7 @@ public static partial class AncientCave
         rom.WriteBytes(MsgSite, Jsl("MsgHook")); rom.WriteBytes(MsgSite + 4, new byte[] { 0xEA, 0xEA });
         rom.WriteBytes(SaveNameSite, Jsl("SaveName")); rom.WriteByte(SaveNameSite + 4, 0xEA);
         rom.WriteBytes(GroupsSite, Jsl("GroupCount"));
+        rom.WriteBytes(GoldSite, Jsl("GoldHook")); rom.WriteByte(GoldSite + 4, 0xEA);
         rom.WriteBytes(HudOamSite, Jsl("HudOam")); rom.WriteByte(HudOamSite + 4, 0xEA);
         rom.WriteBytes(HudNmiSite, Jsl("HudNmi"));
         if (caveOnly)
@@ -198,6 +211,7 @@ public static partial class AncientCave
         rom.WriteBytes(MsgSite, MsgOriginal);
         rom.WriteBytes(SaveNameSite, SaveNameOriginal);
         rom.WriteBytes(GroupsSite, GroupsOriginal);
+        rom.WriteBytes(GoldSite, GoldOriginal);
         rom.WriteBytes(HudOamSite, HudOamOriginal);
         rom.WriteBytes(HudNmiSite, HudNmiOriginal);
         if (rom.ReadByte(SaveSite) == 0x22) rom.WriteBytes(SaveSite, SaveOriginal);
@@ -261,17 +275,18 @@ public static partial class AncientCave
     /// <summary>A cave map's setup script: chest flag base, music 06, encounters (set per floor), its own events,
     /// zone 0 = arrival door (event 1), zone 1 = stairs (event 2), <see cref="MaxChests"/> chests.</summary>
     public const int MaxChests = 12;   // the generator places 8-12 (!MINCHESTS / !MAXCHESTS); map 8E has 30 spots
-    private static byte[] SetupScript(int map)
+    private static byte[] SetupScript(int map, int saveFlag, int[] shopFlags, bool people)
     {
         var b = new List<byte> { ChestFlagBase & 0xFF, ChestFlagBase >> 8, 0x02, 0x06, 0x0D, 0x00, 0x01, (byte)map, 0x81, 0xFF, 0x82, 0xFF };
         for (int i = 0; i < MaxChests; i++) b.AddRange(new byte[] { (byte)(0xC1 + i), 0x94, 0xFC, (byte)i });
+        if (people) b.AddRange(PeopleSetup(b.Count, saveFlag, shopFlags));   // (Lufia Forge) the priest and the merchants
         b.Add(0x00);
         return b.ToArray();
     }
 
-    /// <summary>Events: 0 and 3 do nothing; 1 (stepping into the arrival door) opens the save menu on a checkpoint floor
+    /// <summary>Events: 0 does nothing; 1 (stepping into the arrival door) opens the save menu on a checkpoint floor
     /// (<paramref name="saveFlag"/>, set by the generator); 2 (the stairs) sets flag F0 ("went down") and goes to the
-    /// other cave map; 4-19 are the spell chests. <paramref name="old"/>: the map's block now (freed, 0 = none).</summary>
+    /// other cave map; 3 the priest, 4-6 the merchants (talking to characters 2-5 runs events 3-6); 7 on the spell chests' spells. <paramref name="old"/>: the map's block now (freed, 0 = none).</summary>
     private static void WriteEvents(RomBuffer rom, int map, int other, int saveFlag, int finalFlag, bool caveOnly, int old)
     {
         var events = new List<byte[]>
@@ -279,7 +294,8 @@ public static partial class AncientCave
             new byte[] { 0x00 },                                               // 0: nothing
             DoorEvent(rom, saveFlag, caveOnly),                                // 1: the arrival door: save (checkpoints), leave (normal game)
             StairsEvent(rom, other, finalFlag, caveOnly),                      // 2: set flag F0, go to the other cave map (floor 100: the Sinistrals)
-            new byte[] { 0x00 },                                               // 3: nothing
+            PriestEvent(rom),                                                  // 3: the priest (character 2): church menu
+            ShopEvent(rom, 0), ShopEvent(rom, 1), ShopEvent(rom, 2),          // 4-6: the merchants of floors 25 / 50 / 75
         };
         var spells = Spells(rom);
         int potion = ChestPotion(rom);
@@ -467,12 +483,15 @@ public static partial class AncientCave
         throw new InvalidOperationException("Every story flag is in use: the Ancient Cave needs one for its save points.");
     }
 
-    private static Asm65816 Assemble(RomBuffer rom, int map1, int map2, int saveFlag, int finalFlag, bool caveOnly, bool locked)
+    private static Asm65816 Assemble(RomBuffer rom, int map1, int map2, int saveFlag, int finalFlag, bool caveOnly, bool locked, int[] shopFlags)
     {
         var a = new Asm65816();
         a.Source($"!CAVEMAP = ${map1:X2}\n!CAVEMAP2 = ${map2:X2}\n!SAVEBYTE = ${0x7E1296 + saveFlag / 8:X6}\n!SAVEBIT = ${1 << (saveFlag % 8):X2}\n" +
                  $"!FINALBYTE = ${0x7E1296 + finalFlag / 8:X6}\n!FINALBIT = ${1 << (finalFlag % 8):X2}\n" +
-                 $"!CHESTPOTION = ${ChestPotion(rom):X2}\n!FIRSTSPELLEVENT = ${FirstSpellEvent:X2}\n" + Source);
+                 $"!CHESTPOTION = ${ChestPotion(rom):X2}\n!FIRSTSPELLEVENT = ${FirstSpellEvent:X2}\n" +
+                 LayoutDefines(CaveTemplate(rom)) + FlagDefines(shopFlags) + Source);
+        a.Source(NpcSource);
+        a.Source(GoldSource);
         a.Source(StartSource);
         a.Source(GameOverSource);
         a.Source(SpellSource);

@@ -6,18 +6,18 @@ namespace LufiaForge.Core.Cave;
 public static partial class AncientCave
 {
     /// <summary>
-    /// The Ancient Cave demo in one go: the cave with New Game at the Old Cave elevator, faster walking (the Game Data
-    /// setting) and party members retargeting instead of missing (<see cref="RetargetPatch"/>).
+    /// The Ancient Cave demo in one go: the cave with New Game at the Old Cave elevator and its priest and merchants,
+    /// faster walking (the Game Data setting) and party members retargeting instead of missing (<see cref="RetargetPatch"/>).
     /// </summary>
     public static void ApplyDemo(RomBuffer rom)
     {
-        Apply(rom, CaveMode.ElevatorStart);
+        Apply(rom, CaveMode.ElevatorStart, people: true);
         if (!RetargetPatch.IsApplied(rom)) RetargetPatch.Apply(rom);
         SetFastWalk(rom, true);
         rom.FixChecksum();
     }
 
-    public static bool IsDemo(RomBuffer rom) => IsAppliedAs(rom, CaveMode.ElevatorStart) && RetargetPatch.IsApplied(rom) && IsFastWalk(rom);
+    public static bool IsDemo(RomBuffer rom) => IsAppliedAs(rom, CaveMode.ElevatorStart) && HasPeople(rom) && RetargetPatch.IsApplied(rom) && IsFastWalk(rom);
 
     /// <summary>The demo can be added: the cave's code is the game's (or the cave is in), and so is the battle code the
     /// retarget fix changes (or the fix is in).</summary>

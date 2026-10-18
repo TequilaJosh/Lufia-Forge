@@ -27,7 +27,7 @@ public static partial class AncientCave
         !CAMX = 7                   ; player is drawn this many tiles from the camera corner
         !CAMY = 7
         !CH   = 3                   ; cliff height above a room
-        !ENTRANCES = $7F151C    ; map $8E's entrance list in the loaded map data (6 bytes each: ?, x, y)
+        ; (!ENTRANCES, !NPCS, !ZONES, !OBJS: where the loaded copy keeps them, from AncientCave.LayoutDefines)
         !TPLMAP    = $8E            ; template map whose data we reuse
         !OBJBASE   = $03C0          ; $12B6 flag index base for cave chests
         !MINCHESTS = 8              ; (Lufia Forge) chests per floor (AncientCave.MaxChests spots in the setup script)
@@ -35,8 +35,6 @@ public static partial class AncientCave
         !CELLS     = $7F0040
         !ZCOUNT    = $7F133F
         !OCOUNT    = $7F1340
-        !ZONES     = $7F1570
-        !OBJS      = $7F1588
         !gx = $ED40
         !gy = $ED42
         !gw = $ED44
@@ -60,6 +58,8 @@ public static partial class AncientCave
         !nchest = $ED68
         !aroom = $ED6A
         !sroom = $ED6C
+        !npcn  = $ED6E              ; (Lufia Forge) people placed so far
+        !npcx  = $ED70
         ;---------------------------------------------------------------------
         MapLoadHook:
             ; (Lufia Forge) entering / leaving a run in the normal game, before the map is unpacked: the party code
@@ -309,6 +309,7 @@ public static partial class AncientCave
             ORA.b #!FINALBIT
             STA !FINALBYTE
         +
+            JSR SetShopFlags        ; (Lufia Forge) floors 25 / 50 / 75: a merchant
             ; --- mix the frame counter into the RNG
             REP #$20
             LDA $38
@@ -335,6 +336,7 @@ public static partial class AncientCave
             JSR RenderCells
             JSR PlaceDoors          ; C=1: no room for doorways, build another layout
             BCS .build
+            JSR PlaceNpcs           ; (Lufia Forge) the priest and the merchants by the arrival spot
             JSR PlaceChests         ; C=1: (Lufia Forge) fewer than !MINCHESTS fit, build another layout
             BCS .build
             JSR BuildHeader
