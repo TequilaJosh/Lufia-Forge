@@ -283,8 +283,7 @@ public static partial class AncientCave
         };
         var spells = Spells(rom);
         int potion = ChestPotion(rom);
-        for (int k = 0; k < SpellMarkers; k++)
-            events.Add(k < spells.Count ? SpellEvent(rom, spells[k], potion) : new byte[] { 0x00 });
+        foreach (var sp in spells) events.Add(SpellEvent(rom, sp, potion));   // 4 + k: spell k of the pool
         var block = new List<byte>();
         int at0 = events.Count * 2;
         foreach (var e in events) { block.Add((byte)at0); block.Add((byte)(at0 >> 8)); at0 += e.Length; }
@@ -472,7 +471,8 @@ public static partial class AncientCave
     {
         var a = new Asm65816();
         a.Source($"!CAVEMAP = ${map1:X2}\n!CAVEMAP2 = ${map2:X2}\n!SAVEBYTE = ${0x7E1296 + saveFlag / 8:X6}\n!SAVEBIT = ${1 << (saveFlag % 8):X2}\n" +
-                 $"!FINALBYTE = ${0x7E1296 + finalFlag / 8:X6}\n!FINALBIT = ${1 << (finalFlag % 8):X2}\n" + Source);
+                 $"!FINALBYTE = ${0x7E1296 + finalFlag / 8:X6}\n!FINALBIT = ${1 << (finalFlag % 8):X2}\n" +
+                 $"!CHESTPOTION = ${ChestPotion(rom):X2}\n!FIRSTSPELLEVENT = ${FirstSpellEvent:X2}\n" + Source);
         a.Source(StartSource);
         a.Source(GameOverSource);
         a.Source(SpellSource);
@@ -486,6 +486,9 @@ public static partial class AncientCave
         a.Source(LootSource);
         a.Label("ChestLoot").B(ChestLoot(rom));
         a.Label("LootTier").B(LootTiers());
+        a.Label("RepeatItems").B(RepeatItems(rom));
+        a.Label("SpellCount").B((byte)Spells(rom).Count);
+        a.Label("SpellPool").B(SpellPool(rom));
         a.Label("FloorPalette").B(FloorPalettes());
         a.Label("EncounterByFloor").B(EncountersByFloor(rom));
         a.Label("Level1Data").B(Level1Data(rom));
