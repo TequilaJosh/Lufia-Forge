@@ -30,6 +30,8 @@ public static partial class AncientCave
         !ENTRANCES = $7F151C    ; map $8E's entrance list in the loaded map data (6 bytes each: ?, x, y)
         !TPLMAP    = $8E            ; template map whose data we reuse
         !OBJBASE   = $03C0          ; $12B6 flag index base for cave chests
+        !MINCHESTS = 8              ; (Lufia Forge) chests per floor (AncientCave.MaxChests spots in the setup script)
+        !MAXCHESTS = 12
         !CELLS     = $7F0040
         !ZCOUNT    = $7F133F
         !OCOUNT    = $7F1340
@@ -60,12 +62,47 @@ public static partial class AncientCave
         !sroom = $ED6C
         ;---------------------------------------------------------------------
         MapLoadHook:
+            ; (Lufia Forge) entering / leaving a run in the normal game, before the map is unpacked: the party code
+            ; (joining, equipment, stats) uses the $7F work RAM the map data is unpacked to
+            PHP
+            REP #$30
+            PHA                     ; (the unpacker's arguments)
+            PHX
+            PHY
+            SEP #$20
+            LDA $7E077F
+            JSR IsCaveMap
+            BNE .outside
+            LDA !AC_INCAVE
+            BNE .unpack
+            LDA.l CaveOnlyFlag
+            BNE .unpack
+            JSR EnterCave           ; coming in from outside: back up the real party, then the run's party
+            LDA.b #$01
+            STA !AC_INCAVE
+            BRA .unpack
+        .outside
+            CMP.b #$10              ; (the game-over room doesn't count as leaving)
+            BEQ .unpack
+            LDA !AC_INCAVE
+            BEQ .unpack
+            LDA.b #$00
+            STA !AC_INCAVE
+            LDA.l CaveOnlyFlag
+            BNE .unpack
+            JSR LeaveCave           ; back from the cave: the real party again
+        .unpack
+            REP #$30
+            PLY
+            PLX
+            PLA
+            PLP
             JSL $00A47D             ; decompress the map resource (original call)
             PHP
             SEP #$20
             LDA $7E077F
             JSR IsCaveMap
-            BNE +
+            BNE ++
             LDA.b #$01
             STA !AC_INCAVE
             JSL GenerateFloor
@@ -79,11 +116,6 @@ public static partial class AncientCave
             LDA.l FloorPalette,x
             STA $7F0009             ; the map's palette (read from the unpacked header, as the intro's own override)
             PLX
-            BRA ++
-        +   CMP.b #$10              ; (the game-over room doesn't count as leaving)
-            BEQ ++
-            LDA.b #$00
-            STA !AC_INCAVE
         ++  PLP
             RTL
 
@@ -96,7 +128,16 @@ public static partial class AncientCave
         PostHeader:                 ; runs after map header parsing (DB=$03)
             PHP
             SEP #$20
+            LDA.l LockFlag          ; (Lufia Forge) elevator start: the elevator room's way out, its elevator (two
+            BEQ +                   ; step-on areas) and switch (two spots) are closed
             LDA $7E077F
+            CMP.b #$88              ; (AncientCave.ElevatorMap)
+            BNE +
+            LDA.b #$00
+            STA $7F133C             ; exits
+            STA $7F133F             ; step-on areas
+            STA $7F1340             ; spots
+        +   LDA $7E077F
             JSR IsCaveMap
             BNE .out
             REP #$30
@@ -290,10 +331,12 @@ public static partial class AncientCave
             JSR PlaceRooms
             JSR CarveRooms
             JSR Connect
+            JSR FillThin            ; (Lufia Forge) no walls too thin to draw as a cliff
             JSR RenderCells
             JSR PlaceDoors          ; C=1: no room for doorways, build another layout
             BCS .build
-            JSR PlaceChests
+            JSR PlaceChests         ; C=1: (Lufia Forge) fewer than !MINCHESTS fit, build another layout
+            BCS .build
             JSR BuildHeader
 
             REP #$30
@@ -732,6 +775,39 @@ public static partial class AncientCave
             TYA
             RTS
 
+        ; (Lufia Forge) A wall below a floor is drawn as a cliff of !CH rows (base, middle, top). One or two rows
+        ; of wall between two floors had no top row and showed as half a wall: they become floor. (Assumes !CH = 3.)
+        FillThin:
+            REP #$30
+            LDX.w #!FSTRIDE
+        .cell
+            TXA
+            AND.w #!FSTRIDE-1
+            CMP.w #!MAPW
+            BCS .next
+            SEP #$20
+            LDA !FGRID,x
+            BNE .next8
+            LDA !FGRID-!FSTRIDE,x   ; wall with floor above
+            BEQ .next8
+            LDA !FGRID+!FSTRIDE,x
+            BNE .fill1              ; one row of wall
+            LDA !FGRID+2*!FSTRIDE,x
+            BEQ .next8              ; three or more: a full cliff
+            LDA.b #$01              ; two rows of wall
+            STA !FGRID+!FSTRIDE,x
+        .fill1
+            LDA.b #$01
+            STA !FGRID,x
+        .next8
+            REP #$20
+        .next
+            INX
+            CPX.w #!FSTRIDE*(!MAPH-2)
+            BCC .cell
+            SEP #$20
+            RTS
+
         RenderCells:
             REP #$30
             STZ.w !t1
@@ -1140,11 +1216,11 @@ public static partial class AncientCave
         PlaceChests:
             SEP #$20
             REP #$10
-            LDA.b #4
+            LDA.b #!MAXCHESTS-!MINCHESTS+1
             JSR Rand
             CLC
-            ADC.b #2
-            STA !nchest             ; 2..5 (header script supports up to 8)
+            ADC.b #!MINCHESTS
+            STA !nchest             ; (Lufia Forge) !MINCHESTS..!MAXCHESTS (the setup script has !MAXCHESTS spots)
             STZ !i
         .next
             LDA !i
@@ -1152,8 +1228,9 @@ public static partial class AncientCave
             BCC +
             LDA !nchest
             STA !OCOUNT
+            CLC
             RTS
-        +   LDA.b #40
+        +   LDA.b #80
             STA !tries
         .try
             LDA !NROOMS
@@ -1240,8 +1317,13 @@ public static partial class AncientCave
             DEC !tries
             BEQ +
             JMP .try
-        +   INC !i                  ; give up on this chest
-            JMP .next
+        +   LDA !i                  ; (Lufia Forge) no room for this chest: stop here (it was counted before, leaving a
+            STA !nchest             ; template spot as a chest), and with fewer than !MINCHESTS build another layout
+            CMP.b #!MINCHESTS
+            BCS +
+            SEC
+            RTS
+        +   JMP .next
 
         ;---------------------------------------------------------------------
         NearDoor:                   ; carry set if (t0,t1) is within 2 cells of a doorway's floor cell
@@ -1298,7 +1380,90 @@ public static partial class AncientCave
         ;---------------------------------------------------------------------
         ; Cave-only New Game
         ;---------------------------------------------------------------------
-        CaveNewGame:
+        StartGear:                  ; (Lufia Forge) A(8) = character 4-7: the equipment character 0-3 of the same slot
+            PHP                     ; joins with (6 bytes at +23 of its 29-byte record at $08:ED25, to $16C0 + slot + 4n)
+            REP #$30
+            AND.w #$0003
+            PHA
+            ASL #5
+            SEC
+            SBC $01,s
+            SBC $01,s
+            SBC $01,s               ; slot * 29
+            CLC
+            ADC.w #23
+            TAX
+            PLY
+            SEP #$20
+            LDA.b #6
+        -   PHA
+            LDA.l $08ED25,x
+            STA $16C0,y
+            INY
+            INY
+            INY
+            INY
+            INX
+            PLA
+            DEC A
+            BNE -
+            REP #$30                ; the old gear's bonuses off ($1651 + slot*2 + 8n, as the join clears them)
+            LDA $14F1
+            AND.w #$0003
+            ASL
+            TAX
+            LDY.w #8
+        -   STZ $1651,x
+            TXA
+            CLC
+            ADC.w #8
+            TAX
+            DEY
+            BNE -
+            SEP #$20                ; and the new gear's on, as the join puts it on ($08:EC4B for each piece)
+            LDA $14F1
+            AND.b #$03
+            TAX
+            LDY.w #6
+        -   LDA $16C0,x
+            BEQ +
+            PHB
+            PHA
+            LDA.b #$08
+            PHA
+            PLB
+            PLA
+            JSL PutOn
+            PLB
+        +   INX
+            INX
+            INX
+            INX
+            DEY
+            BNE -
+            PLP
+            RTS
+
+        PutOn:                      ; A(8) = item, DB = 08: $08:EC4B ends in RTS, so it returns through the join's RTL
+            PEA $EBF6               ; ($08:EBF7)
+            JML $08EC4B
+
+        CaveNewGame:                ; cave-only New Game: the four heroes
+            LDA $7E0D03             ; (Lufia Forge) text waits for a button again, as event op 6A: the opening's text
+            BEQ +                   ; advances by itself, and the prologue that turns that off is skipped
+            DEC A
+            STA $7E0541             ; (the text speed it kept)
+            LDA.b #$00
+            STA $7E0D03
+        +   LDA.b #$00
+            STA $7FFF2C
+            INC A
+            STA $7FFF2D
+            INC A
+            STA $7FFF2E
+            INC A
+            STA $7FFF2F
+        CaveParty:                  ; (Lufia Forge) the characters listed at $7FFF2C-2F (FF = none), at level 1
             PHP
             PHB
             SEP #$20
@@ -1332,27 +1497,38 @@ public static partial class AncientCave
             STA $14D4
             STA $14D5
             STZ $14CE
-            LDA.b #$00
-            JSL $08EA8F
-            LDA.b #$00
-            JSR Level1
-            LDA.b #$01
-            JSL $08EA8F
-            LDA.b #$01
-            JSR Level1
-            LDA.b #$02
-            JSL $08EA8F
-            LDA.b #$02
-            JSR Level1
-            LDA.b #$03
-            JSL $08EA8F
-            LDA.b #$03
-            JSR Level1
+            LDX.w #$0000
+        .join
+            PHX
+            LDA $7FFF2C,x
+            CMP.b #$FF
+            BEQ .skip
+            PHA
+            JSL $08EA8F             ; joins (as at the start of the game)
+            LDA $01,s
+            CMP.b #$04
+            BCC +
+            JSR StartGear           ; (Lufia Forge) the prologue heroes join with their last gear: the starting gear instead
+        +   PLA
+            JSR Level1              ; then level 1
+        .skip
+            PLX
+            INX
+            CPX.w #4
+            BCC .join
+            LDX.w #$0000            ; (Lufia Forge) no spells: they come from the cave's spell chests (joining gives some)
+        -   STZ $158F,x
+            INX
+            CPX.w #$60
+            BCC -
+            LDA.l CaveOnlyFlag      ; (a run in the normal game keeps the game's statistics)
+            BEQ +
             LDX.w #$0000            ; (Lufia Forge) the play statistics ($134E-$1363: deaths, battles, boxes...) from 0
         -   STZ $134E,x
             INX
             CPX.w #$0016
             BCC -
+        +
             STZ $14CF               ; (joining the Hero gives 100 GP: the cave starts with none)
             STZ $14D0
             STZ $14D1

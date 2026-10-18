@@ -15,8 +15,8 @@ namespace LufiaForge.Core.Maps;
 /// <item><see cref="Mode.SkipPrologue"/>: the prologue's first event (map 93 event 02) does what its last event (map
 /// 97 event 10) does: the four prologue heroes leave (1B 04-07), warp to map 02 and chain to its event 01 (the "90
 /// years had passed" text), then the Hero's game starts in Alekia as usual.</item>
-/// <item><see cref="Mode.ChosenMap"/>: the prologue's first event (which sets the party up) ends with a warp to the
-/// chosen map and arrival point (4C mm ee): the prologue party on any map.</item>
+/// <item><see cref="Mode.ChosenMap"/>: the prologue's first event sets the party up, then (before the Fortress's
+/// conversation) warps to the chosen map and arrival point (4C mm ee): the prologue party on any map.</item>
 /// </list>
 /// What was changed is kept in a small block ("LFST") so Off puts it back. (Test starts made before kept the opening's
 /// first bytes and the demo flag at $01:802D instead: Off puts those back too.)
@@ -101,9 +101,29 @@ public static class TestStartPatch
                 warp.Ops.Insert(0, new ScriptOp { Bytes = new byte[] { 0x4C, (byte)map, (byte)Math.Max(1, entrance) } });
                 warp.Save(true);
                 s = EventScript.Load(rom, PrologueMap, PrologueEvent)!;
-                int end = s.Ops.FindLastIndex(o => !o.IsText && o.Bytes.Length == 1 && o.Bytes[0] == 0x00);
+                // right after the party is set up (spells, items, gathering): before the first line of the Fortress's
+                // conversation, which a test start skips. Its "text advances by itself" (69) is left out too, and the
+                // screen fades in first (the Fortress starts dark, and its fade-in comes after the first lines: without
+                // it the party's sprites stay black on every map)
+                int end = s.Ops.FindIndex(o => o.IsText);
+                if (end > 0)
+                {
+                    while (end > 0 && !s.Ops[end - 1].IsText && s.Ops[end - 1].Bytes[0] == 0x69) end--;
+                    s.Ops.Insert(end++, new ScriptOp { Bytes = new byte[] { 0x6A } });   // text waits for a button (the opening's auto text is still on: the prologue turns it off later)
+                    s.Ops.Insert(end++, new ScriptOp { Bytes = new byte[] { 0x18, 0x02 } });
+                    s.Ops.Insert(end++, new ScriptOp { Bytes = new byte[] { 0x5A } });
+                }
+                else end = s.Ops.FindLastIndex(o => !o.IsText && o.Bytes.Length == 1 && o.Bytes[0] == 0x00);
                 if (end < 0) throw new InvalidOperationException("The prologue's first event has no end.");
                 s.Ops.Insert(end, new ScriptOp { Bytes = new byte[] { 0x51, (byte)map, (byte)((arrive - LufiaMap.EventBase(rom, map)) & 0xFF) } });
+                if (end < s.Ops.Count - 2)
+                {
+                    // the game can come back to this event after the chain (when a later event ends): it then goes
+                    // straight to its end instead of playing the Fortress's conversation where the party is
+                    var toEnd = new ScriptOp { Bytes = new byte[] { 0x01, 0x00, 0x00 } };
+                    toEnd.Targets.Add(new JumpRef { Op = s.Ops[^1] });
+                    s.Ops.Insert(end + 1, toEnd);
+                }
             }
             s.Save(true);
             rom.WriteByte(b + 7, 3);
