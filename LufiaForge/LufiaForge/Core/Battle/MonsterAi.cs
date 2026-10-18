@@ -51,6 +51,7 @@ public static class MonsterAi
         (5, "If a number compares, go to", false),                 // 22 n cmp val to
         (2, "Bonus damage this turn", false),                      // 23 mode pct
         (3, "Set a number from the party", false),                 // 24 n who stat
+        (1, "Take several actions this turn", false),             // 25 n (Ok Impala's 1B)
     };
 
     /// <summary>Commands 14 and up are Lufia Forge's own: they need <see cref="AiCommandsPatch"/> in the ROM.</summary>
@@ -124,6 +125,7 @@ public static class MonsterAi
             0x22 => $"If number {a[0] & 3} {Cmp(a[1])} {a[2]}, go to {step(Word(3))}.",
             0x23 => a[1] == 0 ? "No bonus damage this turn." : $"This turn its hits do {a[1]}% of the target's {(a[0] == 0 ? "max" : "current")} HP more (up to 9999).",
             0x24 => $"Number {a[0] & 3} = {Stat(a[2])} of {WhoValue(a[1])}.",
+            0x25 => a[0] <= 1 ? "One action this turn (as usual)." : $"{Math.Min((int)a[0], 8)} actions this turn: after each one it acts again at once, carrying on from the next line.",
             _ => c.Text,
         } + (c.EndsTurn && c.Op != 0x07 ? "  -> its turn ends here." : "");
     }
@@ -240,6 +242,7 @@ public static class MonsterAi
         if (start == 0) return list;
         var todo = new Queue<int>(); todo.Enqueue(start);
         var seen = new HashSet<int>();
+        bool multi = false;   // a command 25 (several actions a turn): the script goes on after an action
         while (todo.Count > 0 && list.Count < 200)
         {
             int at = todo.Dequeue();
@@ -249,8 +252,8 @@ public static class MonsterAi
                 if (op == 0) { list.Add(new Command(at, 0, Array.Empty<byte>(), "End", null, false)); break; }
                 if (op > Ops.Length)
                 {
-                    // after a last "use ability" the script simply ends (what follows is the next record)
-                    if (list.Count == 0 || list[^1].Op != 0x07 || list[^1].Offset + 2 != at)
+                    // after a last action the script simply ends (what follows is the next record)
+                    if (list.Count == 0 || !list[^1].EndsTurn || list[^1].Offset + 1 + list[^1].Args.Length != at)
                         list.Add(new Command(at, op, Array.Empty<byte>(), $"Unknown command {op:X2}", null, false));
                     break;
                 }
@@ -278,7 +281,8 @@ public static class MonsterAi
                 list.Add(new Command(at, op, args, text, jump, ends));
                 if (jump is int j && j > 0 && !seen.Contains(j)) todo.Enqueue(j);
                 if (op == 0x09) break;   // unconditional jump: the straight line ends here
-                if (ends && op != 0x07) break;   // the action is chosen: the script stops (07 carries on without the MP)
+                if (op == 0x25) multi = true;
+                if (ends && op != 0x07 && !multi) break;   // the action is chosen: the script stops (07 carries on without the MP)
                 at = (at + 1 + n) & 0xFFFF;
             }
         }

@@ -3,7 +3,7 @@ using LufiaForge.Core.Maps;
 namespace LufiaForge.Core.Battle;
 
 /// <summary>
-/// More monster AI commands (14-24) for every monster: the game's own and new ones (1E-24 and the party scan of
+/// More monster AI commands (14-25) for every monster: the game's own and new ones (1E-24 and the party scan of
 /// 17/18 are Ok Impala's AI extensions, see AiCommandsPatch.Ext.cs). The battle's AI interpreter
 /// ($08:CACB) reads a command and runs it through a table of 19 handlers ($08:CB0C), with no check of the number.
 /// Three hooks:
@@ -16,6 +16,7 @@ namespace LufiaForge.Core.Battle;
 ///           FC 0C CB                   JSR ($CB0C,X): the game's own commands 01-13 as before
 /// $01:F658  22 InitHook EA EA          a monster enters a battle: clear its counters (was LDA $13,X / STA $44,X)
 /// $08:C225  22 DamageHook EA EA        a hit's damage is about to be shown: add the 23 bonus (was LDA #$32 / STA $7EDAC6)
+/// $08:CAE2, $08:B578                    command 25 (several actions a turn), see AiCommandsPatch.Multi.cs
 /// </code>
 /// Each monster's battle record ($7E:E500 + slot x $80) keeps, in bytes the game never uses: +$70 its turn count and
 /// +$71 eight switches for phases, +$78-$7B numbers 0-3, +$7C/+$7D the bonus damage of command 23. Party: current HP $7E:DA48 (FFFF = empty slot), max HP $16E0, slot order;
@@ -23,7 +24,7 @@ namespace LufiaForge.Core.Battle;
 /// </summary>
 public static partial class AiCommandsPatch
 {
-    public const int First = 0x14, Count = 17;
+    public const int First = 0x14, Count = 18;
 
     private const int TurnSite = 0x44AC6;   // $08:CAC6
     private const int OpSite = 0x44ACB;     // $08:CACB
@@ -34,10 +35,11 @@ public static partial class AiCommandsPatch
     private static readonly byte[] InitOriginal = { 0xBD, 0x13, 0x00, 0x9D, 0x44, 0x00 };
     private static readonly byte[] DamageOriginal = { 0xA9, 0x32, 0x8F, 0xC6, 0xDA, 0x7E };
     private static readonly byte[] Magic = "LFAI"u8.ToArray();
-    private const byte Version = 2;
+    private const byte Version = 3;
 
     public static bool IsOriginal(RomBuffer rom) =>
-        Matches(rom, TurnSite, TurnOriginal) && Matches(rom, OpSite, OpOriginal) && Matches(rom, InitSite, InitOriginal) && Matches(rom, DamageSite, DamageOriginal);
+        Matches(rom, TurnSite, TurnOriginal) && Matches(rom, OpSite, OpOriginal) && Matches(rom, InitSite, InitOriginal) && Matches(rom, DamageSite, DamageOriginal) &&
+        Matches(rom, PostSite, PostOriginal) && Matches(rom, TimerSite, TimerOriginal);
 
     /// <summary>True when the ROM has Ok Impala's own AI extension patch (its ops 14-1A clash with Lufia Forge's).</summary>
     public static bool HasOkImpalaPatch(RomBuffer rom) =>
@@ -71,6 +73,8 @@ public static partial class AiCommandsPatch
             throw new InvalidOperationException("The game's monster AI code ($08:CAC6, $08:C225, $01:F658) isn't the original, so the new AI commands can't be added safely.");
         if (old > 0 && !Matches(rom, DamageSite, DamageOriginal) && rom.ReadByte(DamageSite) != 0x22)
             throw new InvalidOperationException("The game's damage code at $08:C225 isn't the original, so the new AI commands can't be added safely.");
+        if (old > 0 && (!Matches(rom, PostSite, PostOriginal) && rom.ReadByte(PostSite) != 0x22 || !Matches(rom, TimerSite, TimerOriginal) && rom.ReadByte(TimerSite) != 0x22))
+            throw new InvalidOperationException("The game's battle turn code ($08:CAE2, $08:B578) isn't the original, so the multi-action command can't be added safely.");
         if (rom.Length < MapWriter.ExpandedSize) rom.Expand(MapWriter.ExpandedSize);
         var space = ExpansionSpace.Load(rom);
         if (old > 0) space.Free(old);
@@ -90,15 +94,18 @@ public static partial class AiCommandsPatch
         rom.WriteBytes(OpSite + 6, new byte[] { 0xB0, 0x35, 0x70, 0x03, 0xFC, 0x0C, 0xCB });
         Jsl(InitSite, InitHookOffset); rom.WriteBytes(InitSite + 4, new byte[] { 0xEA, 0xEA });
         Jsl(DamageSite, DamageHookOffset); rom.WriteBytes(DamageSite + 4, new byte[] { 0xEA, 0xEA });
+        Jsl(PostSite, PostActionOffset); rom.WriteBytes(PostSite + 4, new byte[] { 0xD0, 0x20, 0x80, 0xE1, 0xEA });   // BNE $CB08, BRA $CACB
+        Jsl(TimerSite, TimerHookOffset);
         rom.FixChecksum();
     }
 
-    private static int TurnStartOffset, OpHookOffset, InitHookOffset, DamageHookOffset;
+    private static int TurnStartOffset, OpHookOffset, InitHookOffset, DamageHookOffset, PostActionOffset, TimerHookOffset;
 
     static AiCommandsPatch()
     {
         var a = Assemble();
         TurnStartOffset = a.Offset("TurnStart"); OpHookOffset = a.Offset("OpHook"); InitHookOffset = a.Offset("InitHook"); DamageHookOffset = a.Offset("DamageHook");
+        PostActionOffset = a.Offset("PostAction"); TimerHookOffset = a.Offset("TimerHook");
     }
 
     private static byte[] Build(int snes) => Assemble().Build(snes);
@@ -116,11 +123,7 @@ public static partial class AiCommandsPatch
         var a = new Asm65816();
         a.B(Magic).B(Version);
 
-        // ── a monster's turn starts (M = X = 16-bit): as the game, then its turn count + 1 (stops at 255) ──
-        a.Label("TurnStart").B(0xE2, 0x30).B(STZ_abs, 0x60, 0x14)
-         .Abs(JSR, "RecX")
-         .Long(LDA_longX, Rec + Turn).B(0x1A).Br(BEQ, "ts_full").Long(STA_longX, Rec + Turn)
-         .Label("ts_full").Abs(JSR, "ClearBonus").B(0xE2, 0x30).B(RTL);
+        // (a monster's turn starts: TurnStart, in AiCommandsPatch.Multi.cs)
 
         // ── reads a command (M = X = 8-bit, Y = 0): C = end, V = done here, else X = (op-1)*2 for the game's table ──
         a.Label("OpHook").B(LDA_indY, 0x09).Br(BNE, "oh_op").B(0x38, 0xB8, RTL)
@@ -133,7 +136,8 @@ public static partial class AiCommandsPatch
 
         a.Label("Table");
         foreach (var l in new[] { "op14", "op15", "op16", "Op17_LowestHp", "Op18_HighestHp", "op19", "op1A", "op1B", "op1C", "op1D",
-                                  "Op1E_HeroCheck", "Op1F_TargetHero", "Op20_VarSet", "Op21_VarAdd", "Op22_VarCmp", "Op23_HPBonus", "Op24_VarGet" }) a.Word(l);
+                                  "Op1E_HeroCheck", "Op1F_TargetHero", "Op20_VarSet", "Op21_VarAdd", "Op22_VarCmp", "Op23_HPBonus", "Op24_VarGet",
+                                  "Op25_MultiAction" }) a.Word(l);
 
         // ── a monster enters a battle (M = X = 16-bit, DB = 7E, X = its record): as the game, then clear +$70-$73, +$78-$7D ──
         a.Label("InitHook").B(LDA_absX, 0x13, 0x00, STA_absX, 0x44, 0x00).B(STZ_absX, Turn, 0x00).B(STZ_absX, 0x72, 0x00)
@@ -201,6 +205,7 @@ public static partial class AiCommandsPatch
          .Label("f_no").B(0x18, 0xC8).Abs(JMP, "Cond");
 
         a.Source(ExtSource);
+        a.Source(MultiSource);
         return a;
     }
 }
