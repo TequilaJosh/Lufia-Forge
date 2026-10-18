@@ -176,7 +176,7 @@ public static partial class AncientCave
 
     /// <summary>The elevator man's question at the start of his event (map 88 event 1): yes = down to the cave; no = his
     /// own lines, or (<paramref name="locked"/>, elevator start) nothing, as the elevator is closed.</summary>
-    private static void AddEntrance(RomBuffer rom, int caveMap, bool locked = false)
+    private static void AddEntrance(RomBuffer rom, int caveMap, bool locked = false, int neverFlag = 0)
     {
         RemoveEntrance(rom);
         var s = EventScript.Load(rom, ElevatorMap, ElevatorEvent) ?? throw new InvalidOperationException("Map 88's event 1 (the Old Cave elevator man) wasn't found.");
@@ -192,6 +192,14 @@ public static partial class AncientCave
         s.Ops.Insert(3, new ScriptOp { Bytes = new byte[] { 0x00 } });   // (the menu runs at this end, then goes to the answer's target)
         s.Ops.Insert(4, go);
         s.Ops.Insert(5, end);
+        if (locked)
+        {
+            // never taken (a flag that is never set here): keeps his own lines part of the event for Lufia Forge, so
+            // taking the question out again leaves the event as it was
+            var keep = new ScriptOp { Bytes = new byte[] { 0x04, (byte)neverFlag, 0x00, 0x00 } };
+            keep.Targets.Add(new JumpRef { Op = first });
+            s.Ops.Insert(5, keep);
+        }
         s.Save(true);
     }
 
@@ -203,26 +211,38 @@ public static partial class AncientCave
     /// Elevator start: the prologue's first event (map 93 event 2), once it has set the party up and before the
     /// Fortress's conversation, turns the opening's self-advancing text off (6A), fades in (the Fortress starts dark),
     /// warps to the elevator room, by the man (4C 88 01) and goes on with the elevator man's event (51 88 ee: his question, run in
-    /// map 88's own script block, so the room's events are its own afterwards), then goes to the event's end: the game
-    /// can come back to the event after the chain once a later event ends, and the Fortress's conversation then played
-    /// in the elevator room.
+    /// map 88's own script block, so the room's events are its own afterwards); see <see cref="AddStart"/> for what keeps
+    /// the Fortress's conversation from playing later.
     /// </summary>
-    private static void AddStart(RomBuffer rom)
+    private static void AddStart(RomBuffer rom, int neverFlag)
     {
         RemoveStart(rom);
         var s = EventScript.Load(rom, PrologueMap, PrologueEvent) ?? throw new InvalidOperationException("The prologue's first event (map 93 event 2) wasn't found.");
         int at = s.Ops.FindIndex(o => o.IsText);
         if (at < 0) throw new InvalidOperationException("The prologue's first event has no text to start the elevator room before.");
         while (at > 0 && !s.Ops[at - 1].IsText && s.Ops[at - 1].Bytes[0] == 0x69) at--;   // (its "text advances by itself" too)
-        foreach (var b in StartOps(rom)) s.Ops.Insert(at++, new ScriptOp { Bytes = b });
-        // the game can come back to this event after the chain (when a later event ends, e.g. leaving the cave): it
-        // then goes straight to its end instead of playing the Fortress's conversation
+        var conversation = s.Ops[at];
+        // the game can come back to this event after the chain (once a later event ends, e.g. leaving the cave): it
+        // lands on toEnd and the event ends, instead of the Fortress's conversation playing in the elevator room.
+        // The two jumps on a flag that is never set at New Game (the floor 100 flag) are never taken; they keep toEnd
+        // and the conversation part of the event for Lufia Forge (a chain ends an event as far as it can see), so
+        // taking the start out again leaves the event as it was
         var toEnd = new ScriptOp { Bytes = new byte[] { 0x01, 0x00, 0x00 } };
         toEnd.Targets.Add(new JumpRef { Op = s.Ops[^1] });
-        s.Ops.Insert(at, toEnd);
+        var keepEnd = new ScriptOp { Bytes = new byte[] { 0x04, (byte)neverFlag, 0x00, 0x00 } };
+        keepEnd.Targets.Add(new JumpRef { Op = toEnd });
+        var keepRest = new ScriptOp { Bytes = new byte[] { 0x04, (byte)neverFlag, 0x00, 0x00 } };
+        keepRest.Targets.Add(new JumpRef { Op = conversation });
+        var ops = StartOps(rom).Select(b => new ScriptOp { Bytes = b }).ToList();
+        ops.Insert(ops.Count - 1, keepEnd);
+        ops.Insert(ops.Count - 1, keepRest);
+        ops.Add(toEnd);
+        s.Ops.InsertRange(at, ops);
         s.Save(true);
     }
 
+    /// <summary>6A (text waits for a button), fade in, warp by the man, his event (the jumps and the go-to around the
+    /// chain are added by <see cref="AddStart"/>).</summary>
     private static byte[][] StartOps(RomBuffer rom) => new[]
     {
         new byte[] { 0x6A },
@@ -237,13 +257,13 @@ public static partial class AncientCave
     {
         var s = EventScript.Load(rom, PrologueMap, PrologueEvent);
         if (s == null) return;
-        var ops = StartOps(rom);
-        for (int i = 0; i + ops.Length <= s.Ops.Count; i++)
-            if (Enumerable.Range(0, ops.Length).All(k => !s.Ops[i + k].IsText && s.Ops[i + k].Bytes.SequenceEqual(ops[k])))
+        var head = StartOps(rom).Take(4).ToArray();
+        bool Is(int i, int op, int len) => i < s.Ops.Count && !s.Ops[i].IsText && s.Ops[i].Bytes.Length == len && s.Ops[i].Bytes[0] == op;
+        for (int i = 0; i + 8 <= s.Ops.Count; i++)
+            if (Enumerable.Range(0, 4).All(k => !s.Ops[i + k].IsText && s.Ops[i + k].Bytes.SequenceEqual(head[k])) &&
+                Is(i + 4, 0x04, 4) && Is(i + 5, 0x04, 4) && Is(i + 6, 0x51, 3) && Is(i + 7, 0x01, 3))
             {
-                int n = ops.Length;
-                if (i + n < s.Ops.Count && !s.Ops[i + n].IsText && s.Ops[i + n].Bytes.Length == 3 && s.Ops[i + n].Bytes[0] == 0x01) n++;   // (its go-to-the-end)
-                s.Ops.RemoveRange(i, n);
+                s.Ops.RemoveRange(i, 8);
                 s.Save(true);
                 return;
             }
@@ -255,7 +275,10 @@ public static partial class AncientCave
         var s = EventScript.Load(rom, ElevatorMap, ElevatorEvent);
         if (s == null || s.Ops.Count < 6 || s.Ops[0].IsText || !s.Ops[0].Bytes.Take(2).SequenceEqual(EntranceMark)) return;
         static bool Go(ScriptOp o) => !o.IsText && o.Bytes.Length == 3 && o.Bytes[0] == 0x4C;
-        int n = Go(s.Ops[3]) ? 5 : s.Ops.Count >= 7 && Go(s.Ops[4]) ? 6 : 0;   // (5: the first version, without the end before the warp)
+        static bool Keep(ScriptOp o) => !o.IsText && o.Bytes.Length == 4 && o.Bytes[0] == 0x04;
+        int n = Go(s.Ops[3]) ? 5                                           // (the first version, without the end before the warp)
+              : s.Ops.Count >= 7 && Go(s.Ops[4]) ? (Keep(s.Ops[5]) ? 7 : 6)   // (7: locked, with the jump that keeps his lines)
+              : 0;
         if (n == 0) return;
         s.Ops.RemoveRange(0, n);
         s.Save(true);
