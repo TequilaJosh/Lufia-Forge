@@ -144,8 +144,16 @@ public partial class BuiltInPatch : ObservableObject
         },
         new()
         {
+            Name = "Ancient Cave: priest and merchants", Category = "Maps", Icon = "⛪", Summary = "People in the Ancient Cave: a priest who saves on floors 11, 21 ... 91, a merchant on floors 25, 50 and 75.",
+            Description = "Adds people to the Ancient Cave (any of the versions above, which must be in first): on the save floors (11, 21 ... 91) a priest stands by the arrival door with the church menu (revive, lift curse, record), and on floors 25, 50 and 75 a merchant sells items (one of the game's item shops, better ones deeper down).",
+            IsApplied = AncientCave.HasPeople, IsOriginal = rom => AncientCave.IsApplied(rom) && !AncientCave.HasPeople(rom),
+            Apply = rom => AncientCave.SetPeople(rom, true), Remove = rom => AncientCave.SetPeople(rom, false),
+            BlockedText = "Add one of the Ancient Cave patches first.",
+        },
+        new()
+        {
             Name = "Ancient Cave demo", Category = "Maps", Icon = "🕳", Summary = "The Ancient Cave demo in one click: start at the Old Cave elevator, faster walking, party retargeting.",
-            Description = "Everything the Ancient Cave demo has, added at once: the Ancient Cave with New Game starting by the Old Cave's elevator man (see \"Ancient Cave (start at the elevator)\"), faster walking on the world map and in dungeons (the Game Data setting), and party members retargeting instead of missing (see \"Party members retarget instead of missing\"). Removing it takes all three out again.",
+            Description = "Everything the Ancient Cave demo has, added at once: the Ancient Cave with New Game starting by the Old Cave's elevator man (see \"Ancient Cave (start at the elevator)\") with its priest and merchants, faster walking on the world map and in dungeons (the Game Data setting), and party members retargeting instead of missing (see \"Party members retarget instead of missing\"). Removing it takes all three out again.",
             IsApplied = AncientCave.IsDemo, IsOriginal = AncientCave.CanApplyDemo, Apply = AncientCave.ApplyDemo, Remove = AncientCave.RemoveDemo,
         },
         new()

@@ -6,7 +6,7 @@ namespace LufiaForge.Core.Cave;
 
 public static partial class AncientCave
 {
-    public const int FirstMarker = 0xF0, FirstSpellEvent = 4, MaxSpells = 64;
+    public const int FirstMarker = 0xF0, FirstSpellEvent = 7, MaxSpells = 64;   // (events 3-6: the priest and the merchants)
 
     /// <summary>
     /// Spell chests: in the cave a chest item F0-FF (key items, which the cave never gives) is a spell chest. Opening one
