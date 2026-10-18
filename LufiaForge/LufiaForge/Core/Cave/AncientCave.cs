@@ -43,7 +43,7 @@ public static partial class AncientCave
     private static readonly byte[] GameOverOriginal = { 0xAD, 0x49, 0x13, 0xD0, 0x24 };
     private static readonly byte[] SaveNameOriginal = { 0xA0, 0x00, 0x00, 0xA5, 0x00 };
     private static readonly byte[] Magic = "LFAC"u8.ToArray();
-    private const byte Version = 14;
+    private const byte Version = 15;
     // block: magic, version, map 1, map 2, options (bit 0 = cave-only New Game), save flag, floor 100 flag, 2 spare,
     // the 4 floor 100 monsters, formation E6 as it was (4); then the code
     private const int Header = 20;
@@ -318,6 +318,12 @@ public static partial class AncientCave
         +   JML $018A3B
         """;
 
+    /// <summary>The cave's colours: tileset 6's four palettes (as the game's caves use them), 25 floors each.</summary>
+    public static readonly byte[] Themes = { 0x06, 0x07, 0x09, 0x08 };
+
+    /// <summary>Palette for floors 1-128 (index floor - 1): 25 floors per theme.</summary>
+    private static byte[] FloorPalettes() => Enumerable.Range(0, 128).Select(i => Themes[Math.Min(3, i / 25)]).ToArray();
+
     /// <summary>From $00:AB23 (M = 8, X = 16): $00 = the save's map. The name goes to $190D, ending with 0.</summary>
     private const string SaveNameSource = """
         SaveName:
@@ -395,6 +401,7 @@ public static partial class AncientCave
         a.Source(LootSource);
         a.Label("ChestLoot").B(ChestLoot(rom));
         a.Label("LootTier").B(LootTiers());
+        a.Label("FloorPalette").B(FloorPalettes());
         a.Label("EncounterByFloor").B(EncountersByFloor(rom));
         a.Label("Level1Data").B(Level1Data(rom));
         return a;
