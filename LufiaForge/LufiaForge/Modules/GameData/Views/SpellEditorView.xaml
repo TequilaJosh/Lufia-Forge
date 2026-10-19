@@ -82,7 +82,13 @@
                         </Border>
                         <TextBlock Text="{Binding AnimationInfo}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,6,0,0"/>
                         <Button Content="Export sheet…" Style="{StaticResource LufiaButton}" Command="{Binding ExportAnimationCommand}" HorizontalAlignment="Left" Margin="0,8,0,0"/>
-                        <TextBlock Text="NEW ANIMATION FROM A SHEET" Style="{StaticResource GdSection}" Margin="0,14,0,4"/>
+                        <TextBlock Text="PREVIEW" Style="{StaticResource GdSection}" Margin="0,14,0,4"/>
+                        <Border Background="#40000000" HorizontalAlignment="Left" Padding="6" MinWidth="120" MinHeight="120">
+                            <Image Source="{Binding PreviewFrame}" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <TextBlock Text="{Binding PreviewInfo}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                        <TextBlock Text="NEW ANIMATION FROM A PICTURE" Style="{StaticResource GdSection}" Margin="0,14,0,4"/>
                         <WrapPanel>
                             <TextBlock Text="Frame" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,4,0"/>
                             <TextBox Style="{StaticResource GdNumber}" Width="40" Text="{Binding FrameWidth}"/>
@@ -99,9 +105,31 @@
                             <TextBlock Text="Flash" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="10,0,4,0"/>
                             <TextBox Style="{StaticResource GdText}" Width="74" Text="{Binding FlashColour}" ToolTip="Tint the screen this web colour while it plays (e.g. #FFE080), or leave empty."/>
                         </WrapPanel>
-                        <Button Content="Import sheet as a new animation…" Style="{StaticResource LufiaButtonGold}" Command="{Binding ImportAnimationCommand}" HorizontalAlignment="Left" Margin="0,8,0,0"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                            <Button Content="Choose picture…" Style="{StaticResource LufiaButton}" Command="{Binding ImportAnimationCommand}"
+                                    ToolTip="Pick the picture: it's shown on the game's sheet and played in the preview. Nothing changes until Make the animation."/>
+                            <Button Content="Make the animation" Style="{StaticResource LufiaButtonGold}" Command="{Binding MakeAnimationCommand}" Margin="8,0,0,0"
+                                    IsEnabled="{Binding HasPending}" ToolTip="Adds the animation to the ROM and gives it to this spell."/>
+                            <Button Content="Clear" Style="{StaticResource LufiaButton}" Command="{Binding ClearPendingCommand}" Margin="8,0,0,0"
+                                    IsEnabled="{Binding HasPending}"/>
+                        </StackPanel>
+                        <Border Background="#40000000" HorizontalAlignment="Left" Padding="6" Margin="0,8,0,0"
+                                Visibility="{Binding HasPending, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <Image Source="{Binding PendingSheet}" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                        </Border>
+                        <TextBlock Text="{Binding PendingInfo}" TextWrapping="Wrap" Margin="0,6,0,0">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock" BasedOn="{StaticResource GdHint}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding PendingIsError}" Value="True">
+                                            <Setter Property="Foreground" Value="#FFFF7A6A"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
                         <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,6,0,0"
-                                   Text="The sheet is a 128 x 64 picture (PNG / GIF) with up to 15 colours plus see-through. Frames are read left to right, top to bottom, in multiples of 16 pixels: e.g. 8 frames of 32 x 32, 4 of 32 x 64 or 2 of 64 x 64. Tip: export an existing animation to see the layout. The new animation is given to this spell right away."/>
+                                   Text="Any picture with up to 15 colours plus see-through: frames side by side or in rows, with empty space between them (a ready 128 x 64 sheet works too, using the frame size above). Pixel art drawn bigger is shrunk back, and a picture without see-through uses its top-left colour as see-through. Frames can be up to 80 x 64 pixels."/>
                     </StackPanel>
                 </Border>
 

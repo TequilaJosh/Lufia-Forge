@@ -74,6 +74,27 @@ public static class SpellAnimations
         return new Info(Resource(rom, id), rom.ReadByte(h + 1), rom.ReadByte(h + 2) & 0x7F, (rom.ReadByte(h + 2) & 0x80) != 0, rom.ReadByte(h + 3));
     }
 
+    /// <summary>For an animation made by <see cref="Import"/>: its frames (where each is on the sheet, in play order),
+    /// their size and how many screen frames each stays. Null for the game's own animations (their track scripts move,
+    /// tint and combine shapes; not previewed).</summary>
+    public static (int Width, int Height, int Step, List<(int X, int Y)> Frames)? MadeFrames(RomBuffer rom, int id)
+    {
+        if (id <= 0 || id >= Count(rom) || Block(rom) == 0) return null;
+        int h = HeaderOffset(rom, id);
+        if (rom.ReadByte(h) != 0xFF || rom.ReadByte(h + 3) < 1) return null;
+        int w = rom.ReadByte(h + 1), hh = rom.ReadByte(h + 2) & 0x7F;
+        int t = At(rom, rom.ReadUInt16Le(h + 4));
+        int step = rom.ReadByte(t) & 0x0F;
+        if ((rom.ReadByte(t) & 0xF0) != 0x20) return null;
+        var frames = new List<(int, int)>();
+        for (int p = t + 1; frames.Count < 32 && rom.ReadByte(p) == 0x50 && rom.ReadByte(p + 4) == 0x0F; p += 5)
+        {
+            int o = rom.ReadByte(p + 3);
+            frames.Add((o % 16 * 8, o / 16 * 8));
+        }
+        return frames.Count > 0 ? (w, hh, Math.Max(1, step), frames) : null;
+    }
+
     // ── sheets ────────────────────────────────────────────────────────────
 
     public const int SheetWidth = 128, SheetHeight = 64;
