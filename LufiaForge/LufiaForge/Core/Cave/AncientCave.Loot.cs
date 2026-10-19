@@ -150,7 +150,8 @@ public static partial class AncientCave
     /// <summary>
     /// The 10 tiers x 32 chest items: 20 pieces of gear, every kind in each tier (6 weapons, 4 armors, 3 shields, 3 for
     /// the head, 2 shoes, 2 rings), and 5 battle items (arrows, bombs...), each kind from its own price band for the
-    /// depth (tier t: the t/10 to (t+2)/10 share of that kind sorted by price, different ones spread over it), then 5
+    /// depth (gear of tier t: the (t+0.5)/10 to (t+2.5)/10 share of that kind sorted by price, different ones spread over
+    /// it; battle items t/10 to (t+2)/10), then 5
     /// healing items (stronger deeper down), a stat potion (Power, Spell, Speed and Mind in turn; from tier 7 every
     /// other tier a Great Potion) and 2 spell chests (marker F0: the spell is picked when the chest opens).
     /// </summary>
@@ -173,8 +174,8 @@ public static partial class AncientCave
             {
                 var kind = gear.Where(g => g.Slot == slot).OrderBy(g => g.Price).ThenBy(g => g.Id).ToList();
                 if (kind.Count == 0) continue;
-                int lo = Math.Min(kind.Count - 1, kind.Count * t / Tiers);
-                int hiIx = Math.Min(kind.Count, Math.Max(lo + count, kind.Count * (t + 2) / Tiers));
+                int lo = Math.Min(kind.Count - 1, kind.Count * (2 * t + 1) / (2 * Tiers));
+                int hiIx = Math.Min(kind.Count, Math.Max(lo + count, kind.Count * (2 * t + 5) / (2 * Tiers)));
                 lo = Math.Max(0, Math.Min(lo, hiIx - count));
                 for (int k = 0; k < count; k++) row.Add(kind[Math.Min(kind.Count - 1, lo + (hiIx - lo) * k / count)].Id);
             }
@@ -218,8 +219,13 @@ public static partial class AncientCave
     /// <summary>The potion a spell chest gives when its hero knows the spell already.</summary>
     private static int ChestPotion(RomBuffer rom) => Items(rom).Any(i => i.Id == Potion && (i.Type & 0x41) != 0) ? Potion : 1;
 
-    /// <summary>Floor 1-100 -> its tier (row <see cref="PerTier"/> x tier of <see cref="ChestLoot"/>).</summary>
-    private static byte[] LootTiers() => Enumerable.Range(0, 100).Select(f => (byte)Math.Min(Tiers - 1, f / 10)).ToArray();
+    /// <summary>Floor 1-100 -> its tier (row <see cref="PerTier"/> x tier of <see cref="ChestLoot"/>): as far through the
+    /// tiers as the floor's monsters are through the groups, so the gear keeps up with the monsters.</summary>
+    private static byte[] LootTiers(RomBuffer rom)
+    {
+        var rows = CaveGroups(rom);
+        return GroupIndexByFloor(rom, rows).Select(i => (byte)Math.Min(Tiers - 1, (int)Math.Round(i * (double)Tiers / rows.Count))).ToArray();
+    }
 
     /// <summary>What the chests can hold, tier by tier (for the Patch Manager / tests).</summary>
     public static List<string> LootSummary(RomBuffer rom)

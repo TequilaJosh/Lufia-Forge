@@ -1,3 +1,4 @@
+using LufiaForge.Modules.GameData;
 using System.Security.Cryptography;
 using LufiaForge.Core.Battle;
 using LufiaForge.Core.Maps;
@@ -78,7 +79,8 @@ public static partial class AncientCave
         Matches(rom, MapLoadSite, MapLoadOriginal) && Matches(rom, PostHeaderSite, PostHeaderOriginal) && Matches(rom, NewGameSite, NewGameOriginal) &&
         Matches(rom, GameOverSite, GameOverOriginal) && Matches(rom, ChestSite, ChestOriginal) && Matches(rom, MsgSite, MsgOriginal) &&
         Matches(rom, SaveNameSite, SaveNameOriginal) && Matches(rom, GroupsSite, GroupsOriginal) && Matches(rom, PaletteSite, PaletteOriginal) &&
-        Matches(rom, HudOamSite, HudOamOriginal) && Matches(rom, HudNmiSite, HudNmiOriginal) && Matches(rom, GoldSite, GoldOriginal);
+        Matches(rom, HudOamSite, HudOamOriginal) && Matches(rom, HudNmiSite, HudNmiOriginal) && Matches(rom, GoldSite, GoldOriginal) &&
+        Matches(rom, ExpSite, ExpOriginal);
 
     public static bool IsApplied(RomBuffer rom) => Read(rom) != null;
 
@@ -178,6 +180,7 @@ public static partial class AncientCave
         rom.WriteBytes(SaveNameSite, Jsl("SaveName")); rom.WriteByte(SaveNameSite + 4, 0xEA);
         rom.WriteBytes(GroupsSite, Jsl("GroupCount"));
         rom.WriteBytes(GoldSite, Jsl("GoldHook")); rom.WriteByte(GoldSite + 4, 0xEA);
+        rom.WriteBytes(ExpSite, Jsl("ExpHook"));
         rom.WriteBytes(HudOamSite, Jsl("HudOam")); rom.WriteByte(HudOamSite + 4, 0xEA);
         rom.WriteBytes(HudNmiSite, Jsl("HudNmi"));
         if (caveOnly)
@@ -212,6 +215,7 @@ public static partial class AncientCave
         rom.WriteBytes(SaveNameSite, SaveNameOriginal);
         rom.WriteBytes(GroupsSite, GroupsOriginal);
         rom.WriteBytes(GoldSite, GoldOriginal);
+        rom.WriteBytes(ExpSite, ExpOriginal);
         rom.WriteBytes(HudOamSite, HudOamOriginal);
         rom.WriteBytes(HudNmiSite, HudNmiOriginal);
         if (rom.ReadByte(SaveSite) == 0x22) rom.WriteBytes(SaveSite, SaveOriginal);
@@ -313,25 +317,71 @@ public static partial class AncientCave
         rom.WriteBytes(MapFactory.ScriptTable + map * 5, new byte[] { (byte)t, (byte)(t >> 8), (byte)(t >> 16), 0x00, 0x00 });
     }
 
-    /// <summary>
-    /// Encounter group for each floor 1-100: the ROM's groups sorted by the median EXP of their monsters (groups with
-    /// pirates left out), spread over the 100 floors, as the project's groups.py does.
-    /// </summary>
-    public static byte[] EncountersByFloor(RomBuffer rom)
+    /// <summary>The cave's monster groups (pirates left out), easiest first: by the median attack of their monsters, with
+    /// the median EXP and the EXP of an average fight.</summary>
+    private sealed record CaveGroup(double Exp, double Attack, double FightExp, int Group);
+
+    private static List<CaveGroup> CaveGroups(RomBuffer rom)
     {
-        var rows = new List<(double Median, int Group)>();
+        static double Median(IEnumerable<double> v) { var l = v.OrderBy(x => x).ToList(); return l.Count % 2 == 1 ? l[l.Count / 2] : (l[l.Count / 2 - 1] + l[l.Count / 2]) / 2; }
+        double Stat(int m, int at) => rom.ReadUInt16Le(MonsterTable.RecordOffset(rom, m) + at);
+        var rows = new List<CaveGroup>();
         for (int g = 1; g <= Encounters.GroupCount(rom); g++)
         {
-            var monsters = Encounters.GroupSubgroups(rom, g).SelectMany(s => Encounters.SubgroupMonsters(rom, s)).Where(m => m != 0xFF).ToList();
+            var subs = Encounters.GroupSubgroups(rom, g).Select(s => Encounters.SubgroupMonsters(rom, s).Where(m => m != 0xFF).ToList()).Where(l => l.Count > 0).ToList();
+            var monsters = subs.SelectMany(l => l).ToList();
             if (monsters.Count == 0) continue;
             if (monsters.Any(m => MonsterName(rom, m).Contains("Pirate", StringComparison.OrdinalIgnoreCase))) continue;
-            var exp = monsters.Select(m => (double)rom.ReadUInt16Le(MonsterTable.RecordOffset(rom, m) + 27)).OrderBy(x => x).ToList();
-            double median = exp.Count % 2 == 1 ? exp[exp.Count / 2] : (exp[exp.Count / 2 - 1] + exp[exp.Count / 2]) / 2;
-            rows.Add((median, g));
+            // (a fight's EXP counts rare treasure monsters at most 5000, far above their group's)
+            rows.Add(new CaveGroup(Median(monsters.Select(m => Stat(m, 27))), Median(monsters.Select(m => Stat(m, 20))),
+                subs.Average(l => l.Sum(m => Math.Min(Stat(m, 27), 5000))), g));
         }
         if (rows.Count == 0) throw new InvalidOperationException("This ROM has no encounter groups to fill the cave with.");
-        rows = rows.OrderBy(r => r.Median).ThenBy(r => r.Group).ToList();
-        return Enumerable.Range(0, 100).Select(i => (byte)rows[Math.Min(rows.Count - 1, i * rows.Count / 100)].Group).ToArray();
+        return rows.OrderBy(r => r.Attack).ThenBy(r => r.Exp).ThenBy(r => r.Group).ToList();
+    }
+
+    /// <summary>How hard a floor's monsters may hit: their median attack at most this share of the Hero's HP at the level
+    /// the party should have by then (in the normal game the party meets a group at about 0.65-0.75), a little more
+    /// the deeper the floor (0.70 on floor 1, 0.85 on floor 100).</summary>
+    private static double Difficulty(int floor) => 0.70 + 0.0015 * floor;
+    private const int FightsPerFloor = 4;
+
+    /// <summary>
+    /// The group (index into <see cref="CaveGroups"/>) for each floor 1-100. The party starts at level 1 and only levels
+    /// up in the cave, so the floors follow the level it should have: a run of <see cref="FightsPerFloor"/> fights a
+    /// floor (EXP x <see cref="ExpMultiplier"/>) is played through, and a floor moves on to harder groups (at most 2 a
+    /// floor) only while their median attack is at most <see cref="Difficulty"/> x the Hero's HP at that level. Where
+    /// the levels come slowly, every 4th floor of the same group has the next one if it's within 0.12 more; and the last
+    /// floors catch up to the hardest groups if the run is behind (at least the ((floor - 1) / 99)^3 share of them).
+    /// Once there, the floors take turns with the 3 hardest groups.
+    /// </summary>
+    private static int[] GroupIndexByFloor(RomBuffer rom, List<CaveGroup> rows)
+    {
+        var hero = LevelGrowth.Simulate(LevelGrowth.Read(rom, 0));
+        var index = new int[100];
+        long exp = 0;
+        int idx = 0, same = 0;
+        for (int f = 1; f <= 100; f++)
+        {
+            int hp = hero.Last(l => l.ExpToReach <= exp).Stats[0];
+            int was = idx;
+            for (int steps = 0; steps < 2 && idx + 1 < rows.Count && rows[idx + 1].Attack <= Difficulty(f) * hp; steps++) idx++;
+            idx = Math.Max(idx, (int)Math.Round((rows.Count - 1) * Math.Pow((f - 1) / 99.0, 3)));
+            same = idx == was ? same + 1 : 0;
+            int floorIdx = idx;
+            if (same % 4 == 3 && idx + 1 < rows.Count && rows[idx + 1].Attack <= (Difficulty(f) + 0.12) * hp) floorIdx = idx + 1;
+            if (idx == rows.Count - 1) floorIdx = Math.Max(0, idx - f % 3);     // the deepest floors take turns with the top 3
+            index[f - 1] = floorIdx;
+            exp += (long)(rows[floorIdx].FightExp * FightsPerFloor * ExpMultiplier);
+        }
+        return index;
+    }
+
+    /// <summary>Encounter group for each floor 1-100 (see <see cref="GroupIndexByFloor"/>).</summary>
+    public static byte[] EncountersByFloor(RomBuffer rom)
+    {
+        var rows = CaveGroups(rom);
+        return GroupIndexByFloor(rom, rows).Select(i => (byte)rows[i].Group).ToArray();
     }
 
     /// <summary>From $01:C0D4 (M = 8, X = 16, inside $01:C081), in place of LDA #$4F / JSR $BD70.</summary>
@@ -492,6 +542,7 @@ public static partial class AncientCave
                  LayoutDefines(CaveTemplate(rom)) + FlagDefines(shopFlags) + Source);
         a.Source(NpcSource);
         a.Source(GoldSource);
+        a.Source(ExpSource);
         a.Source(StartSource);
         a.Source(GameOverSource);
         a.Source(SpellSource);
@@ -504,7 +555,7 @@ public static partial class AncientCave
         a.Source(Level1Source);
         a.Source(LootSource);
         a.Label("ChestLoot").B(ChestLoot(rom));
-        a.Label("LootTier").B(LootTiers());
+        a.Label("LootTier").B(LootTiers(rom));
         a.Label("RepeatItems").B(RepeatItems(rom));
         a.Label("SpellCount").B((byte)Spells(rom).Count);
         a.Label("SpellPool").B(SpellPool(rom));
