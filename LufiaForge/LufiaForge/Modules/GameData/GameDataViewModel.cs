@@ -17,6 +17,7 @@ public partial class GameDataViewModel : ObservableObject, LufiaForge.ViewModels
     public SpellEditorViewModel     Spells         { get; } = new();
     public MonsterEditorViewModel   Monsters       { get; } = new();
     public EncounterEditorViewModel Encounters     { get; } = new();
+    public BattleBackgroundEditorViewModel BattleBackgrounds { get; } = new();
     public MusicEditorViewModel     Music          { get; } = new();
     public CreditsEditorViewModel   Credits        { get; } = new();
     public TitleEditorViewModel     Title          { get; } = new();
@@ -29,7 +30,7 @@ public partial class GameDataViewModel : ObservableObject, LufiaForge.ViewModels
     private RomBuffer? _rom;
 
     private GameDataEditorBase[] Editors => new GameDataEditorBase[]
-        { Characters, CharacterMagic, Growth, Sprites, Items, PartyItems, Shops, Spells, Monsters, Encounters, Music, Credits, Title, Graphics, Palettes, Settings };
+        { Characters, CharacterMagic, Growth, Sprites, Items, PartyItems, Shops, Spells, Monsters, Encounters, BattleBackgrounds, Music, Credits, Title, Graphics, Palettes, Settings };
 
     public bool HasPendingEdits => _rom != null && Editors.Any(e => e.HasPendingEdits);
 
@@ -46,7 +47,7 @@ public partial class GameDataViewModel : ObservableObject, LufiaForge.ViewModels
         _rom = rom;
         var ctx = new GameDataContext(rom, mainVm);
         foreach (var editor in new GameDataEditorBase[]
-                 { Characters, CharacterMagic, Growth, Sprites, Items, PartyItems, Shops, Spells, Monsters, Encounters, Music, Credits, Title, Graphics, Palettes, Settings })
+                 { Characters, CharacterMagic, Growth, Sprites, Items, PartyItems, Shops, Spells, Monsters, Encounters, BattleBackgrounds, Music, Credits, Title, Graphics, Palettes, Settings })
             if (reload) editor.Reattach(ctx); else editor.Attach(ctx);
         IsRomLoaded = true;
     }

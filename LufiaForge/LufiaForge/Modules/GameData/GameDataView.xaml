@@ -40,6 +40,9 @@
             <TabItem Header="Encounters" Style="{StaticResource LufiaSideTab}">
                 <v:EncounterEditorView DataContext="{Binding Encounters}"/>
             </TabItem>
+            <TabItem Header="Backgrounds" Style="{StaticResource LufiaSideTab}">
+                <v:BattleBackgroundEditorView DataContext="{Binding BattleBackgrounds}"/>
+            </TabItem>
             <TabItem Header="Sound" Style="{StaticResource LufiaSideGroup}"/>
             <TabItem Header="Music" Style="{StaticResource LufiaSideTab}">
                 <v:MusicEditorView DataContext="{Binding Music}"/>
