@@ -89,6 +89,15 @@
                         </Border>
                         <TextBlock Text="{Binding PreviewInfo}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0"/>
                         <TextBlock Text="NEW ANIMATION FROM A PICTURE" Style="{StaticResource GdSection}" Margin="0,14,0,4"/>
+                        <WrapPanel Margin="0,0,0,6">
+                            <TextBlock Text="Part" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                            <ComboBox Style="{StaticResource GdCombo}" Width="90" ItemsSource="{Binding PartChoices}" SelectedIndex="{Binding SelectedPart}"
+                                      ToolTip="An animation can have three parts, each from its own picture: a start (once), a middle (repeated) and an end (once). A one-part animation is just a middle."/>
+                            <TextBlock Text="middle plays" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="10,0,4,0"/>
+                            <TextBox Style="{StaticResource GdNumber}" Width="36" Text="{Binding MiddleRepeats}" ToolTip="How many times the middle part plays (1-50)."/>
+                            <TextBlock Text="times" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="4,0,0,0"/>
+                        </WrapPanel>
+                        <TextBlock Text="{Binding PartsSummary}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,6"/>
                         <WrapPanel>
                             <TextBlock Text="Frame" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,4,0"/>
                             <TextBox Style="{StaticResource GdNumber}" Width="40" Text="{Binding FrameWidth}"/>
@@ -107,11 +116,11 @@
                         </WrapPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                             <Button Content="Choose picture…" Style="{StaticResource LufiaButton}" Command="{Binding ImportAnimationCommand}"
-                                    ToolTip="Pick the picture: it's shown on the game's sheet and played in the preview. Nothing changes until Make the animation."/>
+                                    ToolTip="Pick the picture for the part chosen above: it's shown on the game's sheet and played in the preview. Nothing changes until Make the animation."/>
                             <Button Content="Make the animation" Style="{StaticResource LufiaButtonGold}" Command="{Binding MakeAnimationCommand}" Margin="8,0,0,0"
                                     IsEnabled="{Binding HasPending}" ToolTip="Adds the animation to the ROM and gives it to this spell."/>
-                            <Button Content="Clear" Style="{StaticResource LufiaButton}" Command="{Binding ClearPendingCommand}" Margin="8,0,0,0"
-                                    IsEnabled="{Binding HasPending}"/>
+                            <Button Content="Clear part" Style="{StaticResource LufiaButton}" Command="{Binding ClearPendingCommand}" Margin="8,0,0,0"
+                                    ToolTip="Takes the picture of the part chosen above out."/>
                         </StackPanel>
                         <Border Background="#40000000" HorizontalAlignment="Left" Padding="6" Margin="0,8,0,0"
                                 Visibility="{Binding HasPending, Converter={StaticResource BoolToVisibilityConverter}}">
@@ -129,7 +138,7 @@
                             </TextBlock.Style>
                         </TextBlock>
                         <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,6,0,0"
-                                   Text="Any picture with up to 15 colours plus see-through: frames side by side or in rows, with empty space between them (a ready 128 x 64 sheet works too, using the frame size above). Pixel art drawn bigger is shrunk back, and a picture without see-through uses its top-left colour as see-through. Frames can be up to 80 x 64 pixels."/>
+                                   Text="Any picture with up to 15 colours plus see-through, the frames on an even grid (side by side or in rows). The grid is found by itself; if it's wrong, type the frame size (the cell size on your picture) and the frames to use. Pixel art drawn bigger is shrunk back first, and a picture without see-through uses its top-left colour as see-through. Frames can be up to 80 x 64 pixels. All parts share the game's sheet: 8 frames of 32 x 32, 15 colours in all."/>
                     </StackPanel>
                 </Border>
 
