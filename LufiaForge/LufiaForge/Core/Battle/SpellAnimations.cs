@@ -20,7 +20,7 @@ namespace LufiaForge.Core.Battle;
 /// bank, the shape table to 256, and a header whose resource byte is FF takes a 16-bit resource id from a table
 /// (hook at $08:DEDB), so imported sheets get new resource ids.
 /// </summary>
-public static class SpellAnimations
+public static partial class SpellAnimations
 {
     public const int OriginalCount = 0x33, OriginalShapes = 36, Capacity = 256;
     private const int AreaFile = 0xFEE00, AreaSize = 0x1200, AreaInBank = 0x6E00;
@@ -74,10 +74,10 @@ public static class SpellAnimations
         return new Info(Resource(rom, id), rom.ReadByte(h + 1), rom.ReadByte(h + 2) & 0x7F, (rom.ReadByte(h + 2) & 0x80) != 0, rom.ReadByte(h + 3));
     }
 
-    /// <summary>For an animation made by <see cref="Import"/>: its frames (where each is on the sheet, in play order),
-    /// their size and how many screen frames each stays. Null for the game's own animations (their track scripts move,
-    /// tint and combine shapes; not previewed).</summary>
-    public static (int Width, int Height, int Step, List<(int X, int Y)> Frames)? MadeFrames(RomBuffer rom, int id)
+    /// <summary>For an animation made by <see cref="Import"/> / <see cref="ImportParts"/>: its pictures in play order
+    /// (the sheet resource each is on and where), their size and how many screen frames each stays. Null for the game's
+    /// own animations (their track scripts move, tint and combine shapes; not previewed).</summary>
+    public static (int Width, int Height, int Step, List<(int Resource, int X, int Y)> Frames)? MadeFrames(RomBuffer rom, int id)
     {
         if (id <= 0 || id >= Count(rom) || Block(rom) == 0) return null;
         int h = HeaderOffset(rom, id);
@@ -86,23 +86,37 @@ public static class SpellAnimations
         int t = At(rom, rom.ReadUInt16Le(h + 4));
         int step = rom.ReadByte(t) & 0x0F;
         if ((rom.ReadByte(t) & 0xF0) != 0x20) return null;
-        var frames = new List<(int, int)>();
-        for (int p = t + 1; frames.Count < 32 && rom.ReadByte(p) == 0x50 && rom.ReadByte(p + 4) == 0x0F; p += 5)
+        int res = Resource(rom, id);
+        var frames = new List<(int, int, int)>();
+        for (int p = t + 1; frames.Count < 400;)
         {
+            int op = rom.ReadByte(p);
+            // a sheet kept unpacked (ImportParts): its address, negative to tell it from a resource
+            if (op == 0x70) { res = -(rom.ReadByte(p + 1) | rom.ReadByte(p + 2) << 8 | rom.ReadByte(p + 3) << 16); p += 4; continue; }
+            if (op != 0x50 || rom.ReadByte(p + 4) != 0x0F) break;
             int o = rom.ReadByte(p + 3);
-            frames.Add((o % 16 * 8, o / 16 * 8));
+            frames.Add((res, o % 16 * 8, o / 16 * 8));
+            p += 5;
         }
         return frames.Count > 0 ? (w, hh, Math.Max(1, step), frames) : null;
     }
+
+    /// <summary>A sheet's pictures (as <see cref="Sheet"/>): a resource, or (negative) the address of one kept unpacked.</summary>
+    public static (byte[] Indices, uint[] Palette) SheetOfResource(RomBuffer rom, int resource) =>
+        resource >= 0 ? SheetData(rom, resource) : SheetFromBytes(rom.ReadBytes(FileOffset(-resource), 0x40 + 128 * 32));
 
     // ── sheets ────────────────────────────────────────────────────────────
 
     public const int SheetWidth = 128, SheetHeight = 64;
 
     /// <summary>The animation's sheet: colour numbers (128 x 64) and its 16 colours (BGRA, 0 transparent).</summary>
-    public static (byte[] Indices, uint[] Palette) Sheet(RomBuffer rom, int id)
+    public static (byte[] Indices, uint[] Palette) Sheet(RomBuffer rom, int id) => SheetData(rom, Resource(rom, id));
+
+    private static (byte[] Indices, uint[] Palette) SheetData(RomBuffer rom, int resource) =>
+        SheetFromBytes(LufiaCompression.DecompressResource(rom, resource, out _));
+
+    private static (byte[] Indices, uint[] Palette) SheetFromBytes(byte[] d)
     {
-        var d = LufiaCompression.DecompressResource(rom, Resource(rom, id), out _);
         var pal = new uint[16];
         for (int c = 1; c < 16 && c * 2 + 1 < d.Length; c++)
         {
@@ -200,7 +214,9 @@ public static class SpellAnimations
         return (SnesAddress(b) & 0xFFFF) + free;
     }
 
-    public sealed record ImportOptions(int FrameWidth, int FrameHeight, int Frames, int StepFrames, bool FromBottom, uint? FlashColour);
+    /// <summary><see cref="Order"/>: the sheet frames to show, in play order (null = 0 to Frames - 1), so parts can repeat.</summary>
+    public sealed record ImportOptions(int FrameWidth, int FrameHeight, int Frames, int StepFrames, bool FromBottom, uint? FlashColour,
+        IReadOnlyList<int>? Order = null);
 
     /// <summary>The largest frame count for a frame size (the sheet is 8 x 4 cells of 16 x 16).</summary>
     public static int MaxFrames(int w, int h) => w % 16 != 0 || h % 16 != 0 || w < 16 || h < 16 || w > 80 || h > 64 ? 0 : 8 / (w / 16) * (4 / (h / 16));
@@ -231,8 +247,11 @@ public static class SpellAnimations
         // the frames
         var t = new List<byte> { (byte)(0x20 | Math.Clamp(o.StepFrames, 1, 15)) };
         int perRow = 8 / cols;
-        for (int f = 0; f < o.Frames; f++)
+        var order = o.Order ?? Enumerable.Range(0, o.Frames).ToList();
+        if (order.Count > 400) throw new InvalidOperationException("An animation can show at most 400 pictures (repeats included).");
+        foreach (int f in order)
         {
+            if (f < 0 || f >= o.Frames) throw new InvalidOperationException($"Frame {f} isn't on the sheet.");
             int cx = f % perRow * cols, cy = f / perRow * rows;
             t.AddRange(new byte[] { 0x50, (byte)shape, 0x03, (byte)(2 * cx + 0x20 * cy), 0x0F });
         }
@@ -242,7 +261,7 @@ public static class SpellAnimations
         if (o.FlashColour is uint fc)
         {
             int v = (int)(fc >> 16 & 255) >> 3 | ((int)(fc >> 8 & 255) >> 3) << 5 | ((int)(fc & 255) >> 3) << 10;
-            int steps = Math.Max(1, o.Frames * Math.Clamp(o.StepFrames, 1, 15) / 2);
+            int steps = Math.Max(1, order.Count * Math.Clamp(o.StepFrames, 1, 15) / 2);
             var fl = new List<byte> { 0x22, 0xBF, (byte)v, (byte)(v >> 8) };
             for (int k = 0; k < Math.Min(steps, 30); k++) fl.Add(0x0F);
             fl.AddRange(new byte[] { 0xBF, 0x00, 0x00, 0x01 });
