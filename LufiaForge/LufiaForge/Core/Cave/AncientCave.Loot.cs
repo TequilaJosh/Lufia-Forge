@@ -129,7 +129,20 @@ public static partial class AncientCave
 
     // pieces of each kind of gear per tier: weapons, armor, shields, head (helmets, hair bands...), shoes, rings
     private static readonly (int Slot, int Count)[] GearMix = { (1, 6), (2, 4), (3, 3), (4, 3), (5, 2), (6, 2) };
-    private const int BattleItemsPerTier = 5, HealingPerTier = 4;
+    private const int BattleItemsPerTier = 3, HealingPerTier = 3, SpellsPerTier = 5;
+
+    /// <summary>How strong a piece of gear is, for its kind: weapons by ATP, armor / shields / head by DFP, shoes and
+    /// rings (speed, protections) by price.</summary>
+    private static int Strength(RomBuffer rom, ItemInfo g)
+    {
+        int Prop(int id)
+        {
+            int o = ItemTable.RecordOffset(rom, g.Id) + 21;
+            for (int k = 0; k < 16 && rom.ReadByte(o) != 0; k++, o += 3) if (rom.ReadByte(o) == id) return rom.ReadUInt16Le(o + 1);
+            return 0;
+        }
+        return g.Slot switch { 1 => Prop(5), 2 or 3 or 4 => Prop(6), _ => g.Price };
+    }
 
     // stat potions (Power, Spell, Speed, Mind; Great Potion deeper down), one entry per tier
     private static readonly string[] StatPotionNames = { "Power Potion", "Spell Potion", "Speed Potion", "Mind Potion", "Great Potion" };
@@ -149,11 +162,12 @@ public static partial class AncientCave
 
     /// <summary>
     /// The 10 tiers x 32 chest items: 20 pieces of gear, every kind in each tier (6 weapons, 4 armors, 3 shields, 3 for
-    /// the head, 2 shoes, 2 rings), and 5 battle items (arrows, bombs...), each kind from its own price band for the
-    /// depth (gear of tier t: the (t+0.5)/10 to (t+2.5)/10 share of that kind sorted by price, different ones spread over
-    /// it; battle items t/10 to (t+2)/10), then 5
-    /// healing items (stronger deeper down), a stat potion (Power, Spell, Speed and Mind in turn; from tier 7 every
-    /// other tier a Great Potion) and 2 spell chests (marker F0: the spell is picked when the chest opens).
+    /// the head, 2 shoes, 2 rings). Each kind is a ladder sorted by <see cref="Strength"/>, one for the Hero and Aguro
+    /// and one for Lufia and Jerin (rings: one for all), and tier t takes the (t+1)/11 to (t+2)/11 step of it: the
+    /// steps don't overlap, so deeper tiers never give weaker gear. Then 3 battle items (arrows, bombs...; the t/10 to
+    /// (t+2)/10 share by price), 3 healing items (stronger deeper down), a stat potion (Power, Spell, Speed and Mind in
+    /// turn; from tier 7 every other tier a Great Potion) and 5 spell chests (marker F0: the spell is picked when the
+    /// chest opens), about 1 chest in 6.
     /// </summary>
     public static byte[] ChestLoot(RomBuffer rom)
     {
@@ -172,26 +186,34 @@ public static partial class AncientCave
             var row = new List<int>();
             foreach (var (slot, count) in GearMix)
             {
-                var kind = gear.Where(g => g.Slot == slot).OrderBy(g => g.Price).ThenBy(g => g.Id).ToList();
-                if (kind.Count == 0) continue;
-                int lo = Math.Min(kind.Count - 1, kind.Count * (2 * t + 1) / (2 * Tiers));
-                int hiIx = Math.Min(kind.Count, Math.Max(lo + count, kind.Count * (2 * t + 5) / (2 * Tiers)));
-                lo = Math.Max(0, Math.Min(lo, hiIx - count));
-                for (int k = 0; k < count; k++) row.Add(kind[Math.Min(kind.Count - 1, lo + (hiIx - lo) * k / count)].Id);
+                // two ladders where the kind has gear for both: the Hero and Aguro's, Lufia and Jerin's (gear for all
+                // is on both); rings are everyone's
+                var kind = gear.Where(g => g.Slot == slot).ToList();
+                var ladders = slot == 6 ? new List<List<ItemInfo>> { kind }
+                    : new[] { 0x50, 0xA0 }.Select(who => kind.Where(g => (g.Equip & who) != 0).ToList()).Where(l => l.Count > 0).ToList();
+                for (int k = 0; k < count && ladders.Count > 0; k++)
+                {
+                    var ladder = ladders[k % ladders.Count].OrderBy(g => Strength(rom, g)).ThenBy(g => g.Price).ThenBy(g => g.Id).ToList();
+                    int n = ladder.Count, per = (count + ladders.Count - 1 - k % ladders.Count) / ladders.Count, j = k / ladders.Count;
+                    // tier t: the (t+1)/11 to (t+2)/11 step of the ladder (the weakest step is left out); steps don't
+                    // overlap, so a deeper tier never has weaker gear than one before it
+                    int lo = Math.Min(n - 1, n * (t + 1) / (Tiers + 1));
+                    int top = Math.Max(lo + 1, Math.Min(n, n * (t + 2) / (Tiers + 1)));
+                    row.Add(ladder[Math.Min(n - 1, lo + (top - lo) * j / Math.Max(1, per))].Id);
+                }
             }
             row.AddRange(Band(battle, t, BattleItemsPerTier));
             row.AddRange((t switch
             {
-                <= 2 => new[] { potion, potion, potion, anti, hi },
-                <= 6 => new[] { potion, hi, hi, anti, ex },
-                _ => new[] { hi, hi, ex, ex, anti },
+                <= 2 => new[] { potion, potion, anti },
+                <= 6 => new[] { hi, hi, ex },
+                _ => new[] { hi, ex, ex },
             }).Take(HealingPerTier));
             int stat = t >= 7 && t % 2 == 1 && statPotions[4] != 0 ? statPotions[4] : statPotions[t % 4];
             row.Add(stat != 0 ? stat : potion);
-            while (row.Count < PerTier - 2) row.Add(potion);
-            row = row.Take(PerTier - 2).ToList();
-            row.Add(spells ? FirstMarker : potion);
-            row.Add(spells ? FirstMarker : potion);
+            while (row.Count < PerTier - SpellsPerTier) row.Add(potion);
+            row = row.Take(PerTier - SpellsPerTier).ToList();
+            for (int k = 0; k < SpellsPerTier; k++) row.Add(spells ? FirstMarker : potion);
             for (int k = 0; k < PerTier; k++) data[t * PerTier + k] = (byte)row[k];
         }
         return data;
@@ -224,7 +246,9 @@ public static partial class AncientCave
     private static byte[] LootTiers(RomBuffer rom)
     {
         var rows = CaveGroups(rom);
-        return GroupIndexByFloor(rom, rows).Select(i => (byte)Math.Min(Tiers - 1, (int)Math.Round(i * (double)Tiers / rows.Count))).ToArray();
+        // (never back down: floors that mix in an easier group keep the tier reached)
+        int best = 0;
+        return GroupIndexByFloor(rom, rows).Select(i => (byte)(best = Math.Max(best, Math.Min(Tiers - 1, (int)Math.Round(i * (double)Tiers / rows.Count))))).ToArray();
     }
 
     /// <summary>What the chests can hold, tier by tier (for the Patch Manager / tests).</summary>

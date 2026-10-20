@@ -70,6 +70,18 @@ public partial class BuiltInPatch : ObservableObject
         },
         new()
         {
+            Name = "Level-ups fill up the HP and MP gained", Category = "Battle", Icon = "⚔", Summary = "The HP and MP a level-up adds go to current HP and MP too, not only the maximum.",
+            Description = "When a character levels up, the HP and MP they gain are added to their current HP and MP as well (in the game only the maximums go up). In a fight too.",
+            IsApplied = LevelUpHealPatch.IsApplied, IsOriginal = LevelUpHealPatch.IsOriginal, Apply = LevelUpHealPatch.Apply, Remove = LevelUpHealPatch.Remove,
+        },
+        new()
+        {
+            Name = "Historic bows for Jerin / Artea", Category = "Items", Icon = "🏹", Summary = "Five new bows (Self Bow, Scythian Bow, Longbow, Yumi, Mongol Bow); Jerin starts with the Self Bow.",
+            Description = "Adds five bows named after historic bows, fitted around the game's three: Self Bow (ATP 18), Scythian Bow (36), Elven Bow (58), Longbow (80), Artea's Bow (100), Yumi (124), Might Bow (148), Mongol Bow (172). They use unused item numbers; give them out in shops, chests or events (the Ancient Cave's chests pick them up by themselves). Jerin starts with the Self Bow. They stay in once added (edit or rename them in Items).",
+            IsApplied = HistoricBows.IsApplied, IsOriginal = HistoricBows.IsOriginal, Apply = HistoricBows.Apply,
+        },
+        new()
+        {
             Name = "Hold L to avoid random battles", Category = "Battle", Icon = "⚔", Summary = "Holding L stops random battles (handy for testing and exploring).",
             Description = "While the L button is held there are no random battles (boss and story battles still happen).",
             IsApplied = EncounterPatch.IsApplied, IsOriginal = EncounterPatch.IsOriginal, Apply = EncounterPatch.Apply, Remove = EncounterPatch.Remove,
@@ -124,7 +136,7 @@ public partial class BuiltInPatch : ObservableObject
         new()
         {
             Name = "Ancient Cave (cave-only game)", Category = "Maps", Icon = "🕳", Summary = "New Game starts in a cave of random floors, like Lufia 2's Ancient Cave.",
-            Description = "Turns the game into an Ancient Cave run: New Game puts the Hero, Lufia, Aguro and Jerin on floor 1 with nothing, and every staircase leads to a new floor built at random (rooms, corridors, chests). Battles get harder floor by floor, using this ROM's own encounter groups sorted by EXP. The floor number shows in the bottom right corner. The rest of the game can't be reached. Uses two free map numbers and its own copy of map 8E (the Old Cave floor), which must be unchanged. From the Ancient Cave project (ac.asm).",
+            Description = "Turns the game into an Ancient Cave run: New Game puts the Hero, Lufia, Aguro and Jerin on floor 1 with nothing, and every staircase leads to a new floor built at random (rooms, corridors, chests). Battles get harder floor by floor with this ROM's own encounter groups, following the level the party should have by then (monsters give 3 x the EXP in the cave), and the chests' gear keeps up. The floor number shows in the bottom right corner. The rest of the game can't be reached. Uses two free map numbers and its own copy of map 8E (the Old Cave floor), which must be unchanged. From the Ancient Cave project (ac.asm).",
             IsApplied = rom => AncientCave.IsAppliedAs(rom, AncientCave.CaveMode.CaveOnly), IsOriginal = rom => AncientCave.IsOriginal(rom) || AncientCave.IsApplied(rom),
             Apply = rom => AncientCave.Apply(rom, AncientCave.CaveMode.CaveOnly), Remove = AncientCave.Remove,
         },
