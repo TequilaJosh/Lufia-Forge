@@ -155,8 +155,10 @@
                             <TextBlock Text="They roam" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,6,4"/>
                             <ComboBox Style="{StaticResource GdCombo}" Width="200" Margin="0,0,12,4" ItemsSource="{Binding MonsterRanges}" SelectedIndex="{Binding MonsterRangeIndex}"/>
                         </WrapPanel>
-                        <TextBlock Text="Sprite" Style="{StaticResource GdFieldLabel}" Margin="0,4,0,2"/>
-                        <ListBox ItemsSource="{Binding MonsterSpriteOptions}" SelectedIndex="{Binding SelectedMonsterSprite}" MaxHeight="96" Background="#20000000" BorderThickness="0"
+                        <TextBlock Text="Sprite" Style="{StaticResource GdFieldLabel}" Margin="0,4,0,0"/>
+                        <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,2"
+                                   Text="The game's sprites, then Lufia 2's field monsters (each goes into the ROM the first time you place it, with its own colours while one of the 4 spare sprite palettes is free). Hover a sprite for its name."/>
+                        <ListBox ItemsSource="{Binding MonsterSpriteOptions}" SelectedIndex="{Binding SelectedMonsterSprite}" MaxHeight="150" Background="#20000000" BorderThickness="0"
                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                             <ListBox.ItemsPanel>
                                 <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>

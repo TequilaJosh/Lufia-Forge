@@ -5,7 +5,8 @@ namespace LufiaForge.Core.Maps;
 ///
 /// Sprite number n → record pointer: u16 at $01:E25F + n*2, read only by the lookup at $01:AC50 (LDA $01E25F,X;
 /// TAY), whose callers then read the record with the data bank set to 01 - so records must be in bank 01.
-/// Record (17 bytes): [0] width and [1] height in 8x8 tiles, [4] OAM attribute (low 3 bits = palette row),
+/// Record (17 bytes): [0] width and [1] height in 8x8 tiles, [2] frames per pair (2), [3] which pairs of frames
+/// the map loader copies to VRAM ($01:AE7F: bit 1 = frames 2-3, 2 = 4-5, 3 = 6-7), [4] OAM attribute (low 3 bits = palette row),
 /// [6..8] LoROM address of the graphics (4bpp, uncompressed), [9..16] first tile of each of 8 frames.
 /// A frame is width*height tiles in row order. Colours: sprite palette resource 0xAF (8 rows of 16).
 /// The game's sprites are 16x16, 16x24 or 32x32.
@@ -265,6 +266,140 @@ public static class NpcSprites
         rom.FixChecksum();
         Forget();
         return n;
+    }
+
+    // ── sprites from a picture ───────────────────────────────────────────
+
+    /// <summary>The palette rows map characters don't use: the game's sprite palette has the same placeholder
+    /// colours in rows 0-3, and its map characters use rows 4-7.</summary>
+    public const int FirstCharacterRow = 4;
+
+    private static ushort Bgr555(uint argb) =>
+        (ushort)((argb >> 19 & 31) | (argb >> 11 & 31) << 5 | (argb >> 3 & 31) << 10);
+
+    /// <summary>
+    /// A sprite palette row for <paramref name="colours"/> (up to 15 BGR555 colours, colour 0 left out): a row that
+    /// already has them all, else one of rows 0-3 that no sprite uses (they get the colours: the palette resource is
+    /// rewritten), else -1.
+    /// </summary>
+    public static int PaletteRowFor(RomBuffer rom, IReadOnlyList<ushort> colours, bool allowExpand)
+    {
+        var raw = LufiaCompression.DecompressResource(rom, PaletteResource, out _);
+        ushort At(int row, int c) => (ushort)(raw[(row * 16 + c) * 2] | raw[(row * 16 + c) * 2 + 1] << 8);
+        for (int row = 0; row < 8; row++)
+        {
+            var have = Enumerable.Range(1, 15).Select(c => At(row, c)).ToHashSet();
+            if (colours.All(have.Contains)) return row;
+        }
+        var used = Enumerable.Range(0, Count(rom)).Select(s => Info(rom, s)?.Palette ?? -1).ToHashSet();
+        for (int row = 0; row < FirstCharacterRow; row++)
+        {
+            if (used.Contains(row)) continue;
+            for (int c = 1; c < 16; c++)
+            {
+                ushort v = c - 1 < colours.Count ? colours[c - 1] : (ushort)0;
+                raw[(row * 16 + c) * 2] = (byte)v; raw[(row * 16 + c) * 2 + 1] = (byte)(v >> 8);
+            }
+            ResourceWriter.Save(rom, PaletteResource, raw, allowExpand);
+            Forget();
+            return row;
+        }
+        return -1;
+    }
+
+    /// <summary>
+    /// A new sprite from a full-colour sheet: 8 frames side by side (side, side, side, side, front, front, back,
+    /// back; side frames face left, frames 0-1 are drawn as 2-3), each 16x24 or 32x32 (16x16 also works, as the
+    /// game's few small sprites).
+    /// Its colours get a palette row of their own when one is free (<see cref="PaletteRowFor"/>), else the
+    /// closest row; <paramref name="exact"/> says which. Frames that are the same share tiles. Returns its number.
+    /// </summary>
+    public static int AddFromSheet(RomBuffer rom, uint[] px, int frameWidth, int frameHeight, out bool exact, bool allowExpand = true)
+    {
+        int w = frameWidth / 8, h = frameHeight / 8;
+        if (frameWidth % 8 != 0 || frameHeight % 8 != 0 || px.Length != frameWidth * 8 * frameHeight)
+            throw new InvalidOperationException("The sheet must be 8 frames side by side, each a whole number of 8x8 tiles.");
+        // a game sprite of the same size gives the record's other bytes (how the game draws it)
+        // (a monster's first: 33 and 36 walk about as monsters in the game's dungeons)
+        int template = new[] { 0x33, 0x36 }.Concat(Enumerable.Range(0, SpriteCount)).FirstOrDefault(s => Info(rom, s) is { } i && i.Width == w && i.Height == h, -1);
+        if (template < 0) throw new InvalidOperationException($"The game has no {frameWidth}x{frameHeight} sprites to model one on: use 16x24 or 32x32.");
+        var colours = px.Where(p => p >> 24 >= 128).Select(Bgr555).Distinct().ToList();
+        if (colours.Count > 15) throw new InvalidOperationException($"The picture has {colours.Count} colours; a sprite can have 15 (and transparent).");
+        int row = PaletteRowFor(rom, colours, allowExpand);
+        exact = row >= 0;
+        if (row < 0)
+        {
+            // the closest row: the least colour error over the picture
+            var raw = LufiaCompression.DecompressResource(rom, PaletteResource, out _);
+            long Err(int r) => colours.Sum(c => Enumerable.Range(1, 15).Min(k => Dist(c, (ushort)(raw[(r * 16 + k) * 2] | raw[(r * 16 + k) * 2 + 1] << 8))));
+            // (rows 0-3 count when a sprite uses them: their colours are real then, e.g. another Lufia 2 monster's)
+            var used = Enumerable.Range(0, Count(rom)).Select(n => Info(rom, n)?.Palette ?? -1).ToHashSet();
+            row = Enumerable.Range(0, 8).Where(r => r >= FirstCharacterRow || used.Contains(r)).MinBy(Err);
+        }
+        var pal = LufiaCompression.DecompressResource(rom, PaletteResource, out _);
+        var rowColours = Enumerable.Range(0, 16).Select(k => (ushort)(pal[(row * 16 + k) * 2] | pal[(row * 16 + k) * 2 + 1] << 8)).ToArray();
+        byte Index(uint p)
+        {
+            if (p >> 24 < 128) return 0;
+            ushort c = Bgr555(p);
+            int best = 1; long be = long.MaxValue;
+            for (int k = 1; k < 16; k++) { long e = Dist(c, rowColours[k]); if (e < be) { be = e; best = k; } }
+            return (byte)best;
+        }
+        // tiles of each frame; the same frame twice uses the same tiles
+        int sw = frameWidth * 8, tiles = w * h;
+        var frameTiles = new List<byte[]>();
+        var first = new int[8];
+        for (int f = 0; f < 8; f++)
+        {
+            var data = new byte[tiles * 32];
+            for (int t = 0; t < tiles; t++)
+            {
+                var p64 = new byte[64];
+                for (int y = 0; y < 8; y++)
+                    for (int x = 0; x < 8; x++)
+                        p64[y * 8 + x] = Index(px[(t / w * 8 + y) * sw + f * frameWidth + t % w * 8 + x]);
+                Modules.TileViewer.SnesTileDecoder.EncodeTile(p64, Modules.TileViewer.BitDepth.Bpp4).CopyTo(data, t * 32);
+            }
+            int same = frameTiles.FindIndex(d => d.AsSpan().SequenceEqual(data));
+            if (same < 0) { same = frameTiles.Count; frameTiles.Add(data); }
+            first[f] = same * tiles;
+        }
+        // (the game draws frames 0-1 from the tiles of 2-3, so they are the same frames)
+        first[0] = first[2]; first[1] = first[3];
+        Move(rom);
+        int n = Count(rom);
+        if (n >= Capacity) throw new InvalidOperationException($"The ROM already has {Capacity} sprites.");
+        var slots = FreeRecordSlots(rom);
+        if (slots.Count == 0) throw new InvalidOperationException("There is no room left in bank 01 for another sprite record.");
+        var gfx = frameTiles.SelectMany(d => d).ToArray();
+        var space = ExpansionSpace.Load(rom);
+        int g = space.AllocateInOneBank(gfx.Length, ExpansionSpace.Kind.Patch, 0x100 + n);
+        space.Save();
+        rom.WriteBytes(g, gfx);
+        var r = rom.ReadBytes(RecordOffset(rom, template), RecordSize);
+        r[4] = (byte)(r[4] & ~7 | row);
+        // byte 3: which pairs of frames the map loader copies to VRAM ($01:AE7F; bit 1 = frames 2-3, 2 = 4-5,
+        // 3 = 6-7; frames 0-1 are 2-3 flipped): the game's 32x32 sprites load only 2-3 (they look the same
+        // every way), so a sheet with front and back views needs all three
+        r[3] = (byte)(first[4] == first[2] && first[5] == first[3] && first[6] == first[2] && first[7] == first[3] ? 0x02 : 0x0E);
+        int a = SnesAddress(g);
+        r[6] = (byte)a; r[7] = (byte)(a >> 8); r[8] = (byte)(a >> 16);
+        for (int f = 0; f < 8; f++) r[9 + f] = (byte)first[f];
+        int rec = slots[0];
+        rom.WriteBytes(rec, r);
+        int b = Block(rom);
+        rom.WriteUInt16Le(b + Header + n * 2, (ushort)rec);
+        rom.WriteByte(b + 4, (byte)(n + 1));
+        rom.FixChecksum();
+        Forget();
+        return n;
+    }
+
+    private static long Dist(ushort a, ushort b)
+    {
+        int dr = (a & 31) - (b & 31), dg = (a >> 5 & 31) - (b >> 5 & 31), db = (a >> 10 & 31) - (b >> 10 & 31);
+        return dr * dr * 3 + dg * dg * 4 + db * db * 2;
     }
 
     private static uint[] LoadPalette(RomBuffer rom)
