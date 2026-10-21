@@ -102,6 +102,14 @@ public partial class BattleBackgroundEditorViewModel : GameDataEditorBase
 
     private static readonly string[] Starters = { "Overworld", "Cave", "Fortress", "Town" };
 
+    /// <summary>Which Lufia II background goes to which area when they are added (areas that have none only).</summary>
+    private static readonly Dictionary<string, string> Lufia2For = new()
+    {
+        ["World map"] = "Grassland", ["Ancient Cave"] = "Dark Cave", ["Towns"] = "Grassland", ["Island"] = "Mountain Path",
+        ["Caves"] = "Red Cave", ["Ruins"] = "Mossy Rock", ["Castles"] = "Palace Hall", ["Palaces"] = "Temple",
+        ["Shrines"] = "Shrine", ["Towers"] = "Tower", ["Fortress of Doom"] = "Fortress",
+    };
+
     protected override void OnRomLoaded() => LoadSelected();
 
     protected override void LoadRecord()
@@ -355,6 +363,55 @@ public partial class BattleBackgroundEditorViewModel : GameDataEditorBase
         SelectedBackground = Backgrounds.FirstOrDefault(b => added.Contains(b.Name)) ?? SelectedBackground;
         Dirty = true;
         Status = (added.Count > 0 ? $"Added {string.Join(", ", added)}." : "The starters are already in.")
+               + (given.Count > 0 ? $" Given to the areas that had none ({string.Join(", ", given)})." : "");
+    }
+
+    /// <summary>Adds the 24 battle backgrounds of Lufia II, read from the user's own Lufia II ROM (Lufia Forge carries
+    /// none of its pictures), and gives them to the areas that have no background yet.</summary>
+    [RelayCommand]
+    private void AddLufia2()
+    {
+        if (Ctx == null) return;
+        var dlg = new OpenFileDialog { Title = "Choose your Lufia II: Rise of the Sinistrals (USA) ROM", Filter = "SNES ROMs|*.sfc;*.smc|All files|*.*" };
+        if (dlg.ShowDialog() != true) return;
+        AddLufia2From(dlg.FileName);
+    }
+
+    /// <summary>Add Lufia II backgrounds without the file dialog.</summary>
+    public void AddLufia2From(string path)
+    {
+        if (Ctx == null) return;
+        byte[]? rom;
+        try { rom = Lufia2Backgrounds.Rom(File.ReadAllBytes(path)); }
+        catch (Exception ex) { Status = $"That file can't be read: {ex.Message}"; return; }
+        if (rom == null) { Status = "That isn't a Lufia II: Rise of the Sinistrals (USA) ROM."; return; }
+        var added = new List<string>();
+        for (int k = 0; k < Lufia2Backgrounds.Count; k++)
+        {
+            string name = Clip("L2 " + Lufia2Backgrounds.Names[k]);
+            if (Backgrounds.Any(b => b.Name == name)) continue;
+            if (Backgrounds.Count >= BattleBackgrounds.MaxBackgrounds) { Status = $"There can be at most {BattleBackgrounds.MaxBackgrounds} backgrounds."; break; }
+            try
+            {
+                var (pic, notes) = BattleBackgrounds.Fit(Lufia2Backgrounds.Picture(rom, k), BattleBackgrounds.Width, BattleBackgrounds.Height);
+                AddItem(new BattleBackgroundItem { Name = name, Picture = pic, Notes = notes.Count == 0 ? "From Lufia II." : "From Lufia II, made to fit: " + string.Join("; ", notes) + "." });
+                added.Add(name);
+            }
+            catch (Exception ex) { Status = $"Lufia II background {k} can't be read: {ex.Message}"; }
+        }
+        RefreshChoices();
+        var given = new List<string>();
+        foreach (var area in Areas)
+        {
+            if (area.Choice != 0 || !Lufia2For.TryGetValue(area.Label, out var pick)) continue;
+            int n = Backgrounds.ToList().FindIndex(b => b.Name == "L2 " + pick) + 1;
+            if (n <= 0) continue;
+            area.Choice = n;
+            given.Add($"{area.Label}: {pick}");
+        }
+        SelectedBackground = Backgrounds.FirstOrDefault(b => added.Contains(b.Name)) ?? SelectedBackground;
+        Dirty = true;
+        Status = (added.Count > 0 ? $"Added {added.Count} Lufia II backgrounds." : "The Lufia II backgrounds are already in.")
                + (given.Count > 0 ? $" Given to the areas that had none ({string.Join(", ", given)})." : "");
     }
 
