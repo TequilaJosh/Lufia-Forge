@@ -29,7 +29,9 @@ public partial class MapGroupRow : ObservableObject
     public int Offset { get; init; }
     public string Map { get; init; } = "";
     public bool Conditional { get; init; }
-    public string Note => Conditional ? "(only in some story states)" : "";
+    /// <summary>The map has visible monsters (then no random battles).</summary>
+    public bool Monsters { get; init; }
+    public string Note => (Conditional ? "(only in some story states) " : "") + (Monsters ? "(visible monsters instead)" : "");
     [ObservableProperty] private string _group = "";
 }
 
@@ -100,6 +102,8 @@ public partial class EncounterEditorViewModel : GameDataEditorBase
         SelectedIndex = -1;
         SelectedIndex = 0;
         StartWorldMap();
+        MonsterSpriteOptions.Clear();
+        StartMonsterMaps();
     }
 
     private void BuildEntries()
@@ -179,7 +183,7 @@ public partial class EncounterEditorViewModel : GameDataEditorBase
         MapGroups.Clear();
         foreach (var (id, label) in _mapLabels.OrderBy(kv => kv.Key))
             foreach (var g in Encounters.MapGroups(Ctx!.Rom, id))
-                MapGroups.Add(new MapGroupRow { Offset = g.Offset, Map = label, Conditional = g.Conditional, Group = g.Group.ToString("X2") });
+                MapGroups.Add(new MapGroupRow { Offset = g.Offset, Map = label, Conditional = g.Conditional, Group = g.Group.ToString("X2"), Monsters = VisibleMonsters.Monsters(Ctx.Rom, id).Count > 0 });
     }
 
     partial void OnSelectedIndexChanged(int value)

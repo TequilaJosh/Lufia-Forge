@@ -184,6 +184,7 @@ public abstract partial class GameDataEditorBase : ObservableObject
         "AddChoice", "NewSpellText", "Cycle", "FrameCount", "FrameHeight", "FrameWidth", "WorksLike", "Summary", "Warning", "Info",
         "EncounterText", "HoverText", "InfoText", "LimitText", "LoopText", "OffsetText", "PaletteOffsetText", "RawOffsetText",
         "RegionText", "RoomText", "SizeText", "TeleportText", "WhereText", "WorldStatus", "Count",
+        "MonsterCount", "MonsterRangeIndex", "MonsterGroupText", "MonsterMapPixelWidth", "MonsterMapPixelHeight",
     };
 
     private static bool IsShownOnly(string name) =>
