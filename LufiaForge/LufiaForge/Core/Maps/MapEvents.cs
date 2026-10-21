@@ -15,7 +15,7 @@ public static class MapEvents
     /// <summary>Events made for "after another event" start this far above the event base, out of the way of new step-on areas.</summary>
     public const int ChainedFrom = 0x41;
 
-    private static int BlockLength(RomBuffer rom, int mapId)
+    public static int BlockLength(RomBuffer rom, int mapId)
     {
         int b = EventScript.BlockOffset(rom, mapId);
         if (b >= MapWriter.ExpansionStart && ExpansionSpace.Load(rom).At(b) is { } e && e.Start == b) return e.End - b;
@@ -45,31 +45,41 @@ public static class MapEvents
         return Math.Max(byCode, n);
     }
 
+    /// <summary>Whether the map has a script block at all (some have none: FFFFFF in the map script table, no events).</summary>
+    public static bool HasBlock(RomBuffer rom, int mapId)
+    {
+        int p = LufiaMap.MapScriptTable + mapId * 5;
+        return (rom.ReadByte(p) & rom.ReadByte(p + 1) & rom.ReadByte(p + 2)) != 0xFF;
+    }
+
     /// <summary>Gives the map a table of at least <paramref name="count"/> entries (new ones empty), copying its
-    /// script block to the added space with the longer table.</summary>
+    /// script block to the added space with the longer table (a map with no block gets a new one).</summary>
     public static void EnsureTable(RomBuffer rom, int mapId, int count)
     {
         count = Math.Min(256, count);
-        int have = TableLength(rom, mapId);
+        bool hasBlock = HasBlock(rom, mapId);
+        int have = hasBlock ? TableLength(rom, mapId) : 0;
         if (have >= count) return;
         if (rom.Length < MapWriter.ExpandedSize) rom.Expand(MapWriter.ExpandedSize);
-        int b = EventScript.BlockOffset(rom, mapId), len = BlockLength(rom, mapId);
+        int b = hasBlock ? EventScript.BlockOffset(rom, mapId) : -1, len = hasBlock ? BlockLength(rom, mapId) : 0;
         int shift = (count - have) * 2;
         var block = new byte[len + shift + 1];
         for (int i = 0; i < count; i++)
         {
             int rel = i < have ? rom.ReadUInt16Le(b + i * 2) : 0xFFFF;
-            if (rel != 0xFFFF) rel += shift;
+            // (0 and 1 mean "no event" here, as SlotCount reads them: shifted, they'd look like the first event and
+            // cut the table short, as map 09's event 0 did)
+            if (rel != 0xFFFF && rel >= 2) rel += shift;
             block[i * 2] = (byte)rel; block[i * 2 + 1] = (byte)(rel >> 8);
         }
-        rom.ReadBytes(b + have * 2, len - have * 2).CopyTo(block, count * 2);
+        if (hasBlock) rom.ReadBytes(b + have * 2, len - have * 2).CopyTo(block, count * 2);
         if (block.Length > 0xFFFF) throw new InvalidOperationException("This map's events are too big to add more.");
         var space = ExpansionSpace.Load(rom);
         int at = space.Allocate(block.Length, ExpansionSpace.Kind.ScriptBlock, mapId, EventScript.ScriptLimit);
         rom.WriteBytes(at, block);
         int t = at - 0x18000, p = LufiaMap.MapScriptTable + mapId * 5;
         rom.WriteBytes(p, new[] { (byte)t, (byte)(t >> 8), (byte)(t >> 16) });
-        if (b >= MapWriter.ExpansionStart && space.At(b)?.Start == b && !MapCatalog.Scan(rom).Any(m => m.MapId != mapId && EventScript.BlockOffset(rom, m.MapId) == b))
+        if (hasBlock && b >= MapWriter.ExpansionStart && space.At(b)?.Start == b && !MapCatalog.Scan(rom).Any(m => m.MapId != mapId && EventScript.BlockOffset(rom, m.MapId) == b))
             space.Free(b);
         space.Save();
         rom.FixChecksum();

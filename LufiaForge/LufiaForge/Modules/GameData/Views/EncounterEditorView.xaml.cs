@@ -45,4 +45,24 @@ public partial class EncounterEditorView : UserControl
     {
         if (!_down) Vm?.HoverCell(-1, -1);
     }
+
+    private (int X, int Y) MonsterTile(MouseEventArgs e)
+    {
+        var p = e.GetPosition(MonsterMap);
+        return ((int)(p.X / EncounterEditorViewModel.MonsterTilePixels), (int)(p.Y / EncounterEditorViewModel.MonsterTilePixels));
+    }
+
+    private void MonsterMap_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        var (x, y) = MonsterTile(e);
+        Vm?.MonsterMapClick(x, y);
+    }
+
+    private void MonsterMap_MouseMove(object sender, MouseEventArgs e)
+    {
+        var (x, y) = MonsterTile(e);
+        Vm?.MonsterMapHover(x, y);
+    }
+
+    private void MonsterMap_MouseLeave(object sender, MouseEventArgs e) => Vm?.MonsterMapHover(-1, -1);
 }
