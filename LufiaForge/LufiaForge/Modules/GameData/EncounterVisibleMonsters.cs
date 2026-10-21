@@ -12,9 +12,15 @@ namespace LufiaForge.Modules.GameData;
 /// <summary>A character sprite to pick for a map's monsters.</summary>
 public sealed class MonsterSpriteChoice
 {
+    /// <summary>The sprite's number in the ROM; -1 = a Lufia 2 monster not in the ROM yet (added when placed).</summary>
     public int Number { get; init; }
     public ImageSource? Image { get; init; }
-    public string Tip => $"Sprite {Number:X2}";
+    /// <summary>The Lufia 2 monster it is, if it is one.</summary>
+    public string? Lufia2Name { get; init; }
+    /// <summary>A Lufia 2 monster's sheet (8 frames side by side), to add it to the ROM.</summary>
+    public (uint[] Px, int FrameWidth, int Height)? Sheet { get; init; }
+    public string Tip => Lufia2Name == null ? $"Sprite {Number:X2}"
+        : Number >= 0 ? $"Lufia 2: {Lufia2Name} (sprite {Number:X2})" : $"Lufia 2: {Lufia2Name} (added to the ROM when you place it)";
 }
 
 /// <summary>
@@ -70,20 +76,82 @@ public partial class EncounterEditorViewModel
             MonsterMapOptions.Add($"{label}: {what}");
             _monsterMapIds.Add(id);
         }
-        if (MonsterSpriteOptions.Count == 0)
-        {
-            int count = NpcSprites.Count(rom);
-            for (int s = 0; s < count; s++)
-            {
-                if (NpcSprites.Render(rom, s) is not { } r) continue;
-                var bmp = BitmapSource.Create(r.W, r.H, 96, 96, PixelFormats.Bgra32, null, r.Px, r.W * 4);
-                bmp.Freeze();
-                MonsterSpriteOptions.Add(new MonsterSpriteChoice { Number = s, Image = bmp });
-            }
-        }
+        if (MonsterSpriteOptions.Count == 0) FillMonsterSprites();
         int at = keep >= 0 ? _monsterMapIds.IndexOf(keep) : _monsterMapIds.FindIndex(id => VisibleMonsters.Monsters(rom, id).Count > 0);
         SelectedMonsterMap = -1;
         SelectedMonsterMap = at >= 0 ? at : _monsterMapIds.FindIndex(id => { try { return VisibleMonsters.Group(rom, id) > 0; } catch { return false; } });
+    }
+
+    /// <summary>The ROM's sprites, then the Lufia 2 monsters built into Lufia Forge (Sprites\L2 *.png) that the ROM
+    /// doesn't have yet (one it has shows as its sprite, named).</summary>
+    private void FillMonsterSprites()
+    {
+        if (Ctx == null) return;
+        var rom = Ctx.Rom;
+        MonsterSpriteOptions.Clear();
+        var l2 = Lufia2Sheets();
+        var named = new Dictionary<int, string>();
+        int count = NpcSprites.Count(rom);
+        var have = Enumerable.Range(0, count).Where(n => NpcSprites.IsNew(rom, n))
+                             .Select(n => (n, sheet: NpcSprites.RenderSheet(rom, n))).Where(x => x.sheet != null).ToList();
+        var missing = new List<(string Name, uint[] Px, int Fw, int H)>();
+        foreach (var m in l2)
+        {
+            int found = have.FirstOrDefault(x => SameSheet(x.sheet!.Value.Px, x.sheet.Value.W, x.sheet.Value.H, m.Px, m.Fw * 8, m.H), (-1, null)).n;
+            if (found >= 0 && have.Any(x => x.n == found)) named[found] = m.Name; else missing.Add(m);
+        }
+        for (int n = 0; n < count; n++)
+        {
+            if (NpcSprites.Render(rom, n) is not { } r) continue;
+            MonsterSpriteOptions.Add(new MonsterSpriteChoice { Number = n, Image = Picture(r.Px, r.W, r.H), Lufia2Name = named.GetValueOrDefault(n) });
+        }
+        foreach (var m in missing)
+        {
+            // the front view (frame 4) as the picture
+            var front = new uint[m.Fw * m.H];
+            for (int y = 0; y < m.H; y++) Array.Copy(m.Px, y * m.Fw * 8 + 4 * m.Fw, front, y * m.Fw, m.Fw);
+            MonsterSpriteOptions.Add(new MonsterSpriteChoice { Number = -1, Image = Picture(front, m.Fw, m.H), Lufia2Name = m.Name, Sheet = (m.Px, m.Fw, m.H) });
+        }
+    }
+
+    private static ImageSource Picture(uint[] px, int w, int h)
+    {
+        var bmp = BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgra32, null, px, w * 4);
+        bmp.Freeze();
+        return bmp;
+    }
+
+    private static List<(string Name, uint[] Px, int Fw, int H)>? _lufia2Sheets;
+
+    /// <summary>The Lufia 2 monster sheets built into Lufia Forge, in <see cref="Lufia2Sprites.Monsters"/> order.</summary>
+    private static List<(string Name, uint[] Px, int Fw, int H)> Lufia2Sheets()
+    {
+        if (_lufia2Sheets != null) return _lufia2Sheets;
+        var list = new List<(string, uint[], int, int)>();
+        var asm = typeof(EncounterEditorViewModel).Assembly;
+        foreach (var (_, name) in Lufia2Sprites.Monsters)
+        {
+            using var st = asm.GetManifestResourceStream($"Sprites.L2 {name}.png");
+            if (st == null) continue;
+            var frame = BitmapDecoder.Create(st, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad).Frames[0];
+            var bmp = new FormatConvertedBitmap(frame, PixelFormats.Bgra32, null, 0);
+            var px = new uint[bmp.PixelWidth * bmp.PixelHeight];
+            bmp.CopyPixels(px, bmp.PixelWidth * 4, 0);
+            list.Add((name, px, bmp.PixelWidth / 8, bmp.PixelHeight));
+        }
+        return _lufia2Sheets = list;
+    }
+
+    /// <summary>Two sheets have the same shapes in every frame (frames 0-1 left out: the game draws 2-3). Colours
+    /// don't count: a monster added with the closest palette has other ones.</summary>
+    private static bool SameSheet(uint[] a, int aw, int ah, uint[] b, int bw, int bh)
+    {
+        if (aw != bw || ah != bh) return false;
+        int fw = aw / 8;
+        for (int y = 0; y < ah; y++)
+            for (int x = 2 * fw; x < aw; x++)
+                if ((a[y * aw + x] >> 24 < 128) != (b[y * aw + x] >> 24 < 128)) return false;
+        return true;
     }
 
     private int MonsterMapId => SelectedMonsterMap >= 0 && SelectedMonsterMap < _monsterMapIds.Count ? _monsterMapIds[SelectedMonsterMap] : -1;
@@ -193,7 +261,25 @@ public partial class EncounterEditorViewModel
         {
             if (ParseMonsterGroup() is not int g) return;
             int sprite = MonsterSpriteNumber, range = RangeTiles[Math.Clamp(MonsterRangeIndex, 0, RangeTiles.Length - 1)];
-            Commit(what, () => VisibleMonsters.AddToMap(rom, id, places, sprite, range, g));
+            var choice = SelectedMonsterSprite >= 0 && SelectedMonsterSprite < MonsterSpriteOptions.Count ? MonsterSpriteOptions[SelectedMonsterSprite] : null;
+            string? note = null;
+            Commit(what, () =>
+            {
+                if (choice is { Number: < 0, Sheet: { } sh })
+                {
+                    // a Lufia 2 monster: into the ROM first, as a sprite of its own
+                    sprite = NpcSprites.AddFromSheet(rom, sh.Px, sh.FrameWidth, sh.Height, out bool exact);
+                    note = exact ? $"{choice.Lufia2Name} is now sprite {sprite:X2}."
+                                 : $"{choice.Lufia2Name} is now sprite {sprite:X2}; the 4 spare sprite palettes were taken, so it uses the closest one.";
+                }
+                VisibleMonsters.AddToMap(rom, id, places, sprite, range, g);
+            });
+            if (note != null)
+            {
+                FillMonsterSprites();
+                SelectedMonsterSprite = MonsterSpriteOptions.ToList().FindIndex(c => c.Number == sprite);
+                Status += " " + note;
+            }
         }
         BuildMapGroups();   // (new places in the setup script, and the note on the map)
         Edited = false;
