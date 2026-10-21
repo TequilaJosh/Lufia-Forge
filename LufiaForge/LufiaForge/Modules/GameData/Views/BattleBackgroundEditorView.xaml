@@ -48,8 +48,6 @@
                         <WrapPanel Margin="0,8,0,0">
                             <Button Content="Add picture..." Style="{StaticResource BbButton}" Command="{Binding AddPictureCommand}"
                                     ToolTip="Any picture: it is made 256 x 224 and fitted to the game's colours and tiles"/>
-                            <Button Content="Add starter set" Style="{StaticResource BbButton}" Command="{Binding AddStartersCommand}"
-                                    ToolTip="Overworld, Cave, Fortress and Town, given to the areas that have no background yet"/>
                             <Button Content="Add Lufia 2 backgrounds..." Style="{StaticResource BbButton}" Command="{Binding AddLufia2Command}"
                                     ToolTip="All 24 battle backgrounds of Lufia II: Rise of the Sinistrals, given to the areas that have no background yet"/>
                             <Button Content="Replace picture..." Style="{StaticResource BbButton}" Command="{Binding ReplacePictureCommand}"/>

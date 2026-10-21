@@ -93,15 +93,6 @@ public partial class BattleBackgroundEditorViewModel : GameDataEditorBase
         ("Caves", new[] { 6 }), ("Towers", new[] { 7 }), ("Island", new[] { 8 }), ("Ruins", new[] { 9 }), ("Fortress of Doom", new[] { 10 }),
     };
 
-    /// <summary>Which starter goes to which area when the starters are added (areas that have none only).</summary>
-    private static readonly Dictionary<string, string> StarterFor = new()
-    {
-        ["World map"] = "Overworld", ["Ancient Cave"] = "Cave", ["Towns"] = "Town", ["Island"] = "Overworld", ["Caves"] = "Cave", ["Ruins"] = "Cave",
-        ["Castles"] = "Fortress", ["Palaces"] = "Fortress", ["Shrines"] = "Fortress", ["Towers"] = "Fortress", ["Fortress of Doom"] = "Fortress",
-    };
-
-    private static readonly string[] Starters = { "Overworld", "Cave", "Fortress", "Town" };
-
     /// <summary>Which Lufia II background goes to which area when they are added (areas that have none only).</summary>
     private static readonly Dictionary<string, string> Lufia2For = new()
     {
@@ -152,7 +143,7 @@ public partial class BattleBackgroundEditorViewModel : GameDataEditorBase
         UpdatePreview();
         Dirty = false;
         Status = Backgrounds.Count == 0
-            ? "No battle backgrounds yet: fights show the darkened map. Add a picture, or the starter set."
+            ? "No battle backgrounds yet: fights show the darkened map. Add a picture, or the Lufia 2 backgrounds."
             : $"{Backgrounds.Count} battle backgrounds.";
     }
 
@@ -331,39 +322,6 @@ public partial class BattleBackgroundEditorViewModel : GameDataEditorBase
         enc.Frames.Add(BitmapFrame.Create(bmp));
         enc.Save(f);
         Status = $"Saved {Path.GetFileName(dlg.FileName)} (256 x 224, the colours the game shows). Edit it and use Replace picture to bring it back.";
-    }
-
-    [RelayCommand]
-    private void AddStarters()
-    {
-        if (Ctx == null) return;
-        var asm = typeof(BattleBackgroundEditorViewModel).Assembly;
-        var added = new List<string>();
-        foreach (var name in Starters)
-        {
-            if (Backgrounds.Any(b => b.Name == name) || Backgrounds.Count >= BattleBackgrounds.MaxBackgrounds) continue;
-            using var s = asm.GetManifestResourceStream($"Backgrounds.{name}.png");
-            if (s == null) continue;
-            var item = MakeItem(name, s);
-            if (item == null) continue;
-            AddItem(item);
-            added.Add(name);
-        }
-        RefreshChoices();
-        // areas with no background take the matching starter
-        var given = new List<string>();
-        foreach (var area in Areas)
-        {
-            if (area.Choice != 0 || !StarterFor.TryGetValue(area.Label, out var starter)) continue;
-            int n = Backgrounds.ToList().FindIndex(b => b.Name == starter) + 1;
-            if (n <= 0) continue;
-            area.Choice = n;
-            given.Add($"{area.Label}: {starter}");
-        }
-        SelectedBackground = Backgrounds.FirstOrDefault(b => added.Contains(b.Name)) ?? SelectedBackground;
-        Dirty = true;
-        Status = (added.Count > 0 ? $"Added {string.Join(", ", added)}." : "The starters are already in.")
-               + (given.Count > 0 ? $" Given to the areas that had none ({string.Join(", ", given)})." : "");
     }
 
     /// <summary>Adds the 24 battle backgrounds of Lufia II and gives them to the areas that have no background yet:
