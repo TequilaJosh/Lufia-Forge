@@ -366,12 +366,23 @@ public partial class BattleBackgroundEditorViewModel : GameDataEditorBase
                + (given.Count > 0 ? $" Given to the areas that had none ({string.Join(", ", given)})." : "");
     }
 
-    /// <summary>Adds the 24 battle backgrounds of Lufia II, read from the user's own Lufia II ROM (Lufia Forge carries
-    /// none of its pictures), and gives them to the areas that have no background yet.</summary>
+    /// <summary>Adds the 24 battle backgrounds of Lufia II and gives them to the areas that have no background yet:
+    /// the pictures built into Lufia Forge (Backgrounds\L2 *.png) when it has them, else read from the user's own
+    /// Lufia II ROM.</summary>
     [RelayCommand]
     private void AddLufia2()
     {
         if (Ctx == null) return;
+        var asm = typeof(BattleBackgroundEditorViewModel).Assembly;
+        var builtIn = Lufia2Backgrounds.Names.Select(n => asm.GetManifestResourceStream($"Backgrounds.{Clip("L2 " + n)}.png")).ToList();
+        if (builtIn.All(st => st != null))
+        {
+            var pictures = new List<uint[]>();
+            foreach (var st in builtIn) using (st) pictures.Add(LoadPicture(st!).Px);
+            AddLufia2Pictures(pictures);
+            return;
+        }
+        foreach (var st in builtIn) st?.Dispose();
         var dlg = new OpenFileDialog { Title = "Choose your Lufia II: Rise of the Sinistrals (USA) ROM", Filter = "SNES ROMs|*.sfc;*.smc|All files|*.*" };
         if (dlg.ShowDialog() != true) return;
         AddLufia2From(dlg.FileName);
@@ -385,15 +396,25 @@ public partial class BattleBackgroundEditorViewModel : GameDataEditorBase
         try { rom = Lufia2Backgrounds.Rom(File.ReadAllBytes(path)); }
         catch (Exception ex) { Status = $"That file can't be read: {ex.Message}"; return; }
         if (rom == null) { Status = "That isn't a Lufia II: Rise of the Sinistrals (USA) ROM."; return; }
+        var pictures = new List<uint[]>();
+        try { for (int k = 0; k < Lufia2Backgrounds.Count; k++) pictures.Add(Lufia2Backgrounds.Picture(rom, k)); }
+        catch (Exception ex) { Status = $"The Lufia II backgrounds can't be read: {ex.Message}"; return; }
+        AddLufia2Pictures(pictures);
+    }
+
+    /// <summary>The 24 Lufia II backgrounds (256 x 224 ARGB, in <see cref="Lufia2Backgrounds.Names"/> order) into the
+    /// list, and to the areas that have none.</summary>
+    private void AddLufia2Pictures(List<uint[]> pictures)
+    {
         var added = new List<string>();
-        for (int k = 0; k < Lufia2Backgrounds.Count; k++)
+        for (int k = 0; k < pictures.Count; k++)
         {
             string name = Clip("L2 " + Lufia2Backgrounds.Names[k]);
             if (Backgrounds.Any(b => b.Name == name)) continue;
             if (Backgrounds.Count >= BattleBackgrounds.MaxBackgrounds) { Status = $"There can be at most {BattleBackgrounds.MaxBackgrounds} backgrounds."; break; }
             try
             {
-                var (pic, notes) = BattleBackgrounds.Fit(Lufia2Backgrounds.Picture(rom, k), BattleBackgrounds.Width, BattleBackgrounds.Height);
+                var (pic, notes) = BattleBackgrounds.Fit(pictures[k], BattleBackgrounds.Width, BattleBackgrounds.Height);
                 AddItem(new BattleBackgroundItem { Name = name, Picture = pic, Notes = notes.Count == 0 ? "From Lufia II." : "From Lufia II, made to fit: " + string.Join("; ", notes) + "." });
                 added.Add(name);
             }
