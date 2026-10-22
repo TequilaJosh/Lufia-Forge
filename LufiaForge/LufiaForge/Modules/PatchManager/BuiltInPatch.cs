@@ -102,6 +102,13 @@ public partial class BuiltInPatch : ObservableObject
         },
         new()
         {
+            Name = "32 KB cartridge RAM", Category = "Other", Icon = "💾", Summary = "24 KB more RAM ($70:2000-$70:7FFF) for patches, kept when the power is off.",
+            Description = "The game asks for 8 KB of cartridge (save) RAM and only uses that: its three save slots. This makes the header ask for 32 KB, so emulators and flash carts give the game 24 KB more at $70:2000-$70:7FFF for patches to use. Saves made before still load. On a real cartridge it needs a 32 KB RAM chip. The free RAM areas and what the patches use are listed in Core/RamMap.cs.",
+            NeedsExpandedRom = false,
+            IsApplied = SaveRamPatch.IsApplied, IsOriginal = SaveRamPatch.IsOriginal, Apply = SaveRamPatch.Apply, Remove = SaveRamPatch.Remove,
+        },
+        new()
+        {
             Name = "Test start (skip the opening)", Category = "Testing", Icon = "🧪", Summary = "Power-on goes straight to New Game / Continue, then the Fortress of Doom, the Hero's start, or any map.",
             Description = "For test runs: power-on skips the opening and goes straight to the file select, as when a button is pressed during the opening: Initial starts a new game (with the Hero's name) and Continue loads a save. A new game starts the prologue at the Fortress of Doom; the Map Editor (MAP settings > Test start) can instead skip the prologue or put the party on any map.",
             IsApplied = rom => Core.Maps.TestStartPatch.IsApplied(rom) && !Core.Maps.TestStartPatch.IsOldStyle(rom),
