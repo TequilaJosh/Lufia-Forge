@@ -859,10 +859,13 @@ public sealed class EventScript
     public static int SlotCount(RomBuffer rom, int mapId)
     {
         int b = BlockOffset(rom, mapId);
-        int len = new EventScript(rom, mapId, 0, b, b).BlockLength(), first = len;
+        int len = new EventScript(rom, mapId, 0, b, b).BlockLength(), first = len, baseEv = LufiaMap.EventBase(rom, mapId);
         for (int i = 0; i < 0x100 && i * 2 + 1 < first && b + i * 2 + 1 < rom.Length; i++)
         {
             int rel = rom.ReadUInt16Le(b + i * 2);
+            // (a block shared by maps with an event base: its entry 0 holds the base, not an event; e.g. map 97's
+            // 000C, whose events are 12-17: read as an event, the table looked 6 entries long)
+            if (i == 0 && baseEv > 0 && rel == baseEv) continue;
             if (rel != 0xFFFF && rel >= 2 && rel < first) first = rel;
         }
         return Math.Min(0x100, first / 2);

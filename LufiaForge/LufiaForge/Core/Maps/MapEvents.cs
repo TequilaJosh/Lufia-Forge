@@ -40,6 +40,7 @@ public static class MapEvents
             for (int i = 0; i < n; i++)
             {
                 int rel = rom.ReadUInt16Le(b + i * 2);
+                if (i == 0 && baseEv > 0 && rel == baseEv) continue;   // (the base, see EventScript.SlotCount)
                 if (rel != 0xFFFF && rel < n * 2 && i < byCode) { n = byCode; break; }
             }
         return Math.Max(byCode, n);
@@ -68,8 +69,9 @@ public static class MapEvents
         {
             int rel = i < have ? rom.ReadUInt16Le(b + i * 2) : 0xFFFF;
             // (0 and 1 mean "no event" here, as SlotCount reads them: shifted, they'd look like the first event and
-            // cut the table short, as map 09's event 0 did)
-            if (rel != 0xFFFF && rel >= 2) rel += shift;
+            // cut the table short, as map 09's event 0 did; entry 0 of a shared block holds the event base: kept)
+            bool baseMark = i == 0 && LufiaMap.EventBase(rom, mapId) is int eb && eb > 0 && rel == eb;
+            if (rel != 0xFFFF && rel >= 2 && !baseMark) rel += shift;
             block[i * 2] = (byte)rel; block[i * 2 + 1] = (byte)(rel >> 8);
         }
         if (hasBlock) rom.ReadBytes(b + have * 2, len - have * 2).CopyTo(block, count * 2);

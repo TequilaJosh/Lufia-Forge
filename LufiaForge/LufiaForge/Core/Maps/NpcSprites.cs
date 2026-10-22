@@ -282,8 +282,10 @@ public static class NpcSprites
     /// already has them all, else one of rows 0-3 that no sprite uses (they get the colours: the palette resource is
     /// rewritten), else -1.
     /// </summary>
-    public static int PaletteRowFor(RomBuffer rom, IReadOnlyList<ushort> colours, bool allowExpand)
+    public static int PaletteRowFor(RomBuffer rom, IReadOnlyList<ushort> colours, bool allowExpand, IReadOnlyList<ushort>? whole = null)
     {
+        // (a picture's whole palette, when it has one, goes into a new row: pictures sharing it then share the row)
+        if (whole != null && whole.Count <= 15 && colours.All(whole.Contains)) colours = whole;
         var raw = LufiaCompression.DecompressResource(rom, PaletteResource, out _);
         ushort At(int row, int c) => (ushort)(raw[(row * 16 + c) * 2] | raw[(row * 16 + c) * 2 + 1] << 8);
         for (int row = 0; row < 8; row++)
@@ -314,7 +316,8 @@ public static class NpcSprites
     /// Its colours get a palette row of their own when one is free (<see cref="PaletteRowFor"/>), else the
     /// closest row; <paramref name="exact"/> says which. Frames that are the same share tiles. Returns its number.
     /// </summary>
-    public static int AddFromSheet(RomBuffer rom, uint[] px, int frameWidth, int frameHeight, out bool exact, bool allowExpand = true)
+    public static int AddFromSheet(RomBuffer rom, uint[] px, int frameWidth, int frameHeight, out bool exact, bool allowExpand = true,
+                                   IReadOnlyList<ushort>? palette = null)
     {
         int w = frameWidth / 8, h = frameHeight / 8;
         if (frameWidth % 8 != 0 || frameHeight % 8 != 0 || px.Length != frameWidth * 8 * frameHeight)
@@ -325,7 +328,7 @@ public static class NpcSprites
         if (template < 0) throw new InvalidOperationException($"The game has no {frameWidth}x{frameHeight} sprites to model one on: use 16x24 or 32x32.");
         var colours = px.Where(p => p >> 24 >= 128).Select(Bgr555).Distinct().ToList();
         if (colours.Count > 15) throw new InvalidOperationException($"The picture has {colours.Count} colours; a sprite can have 15 (and transparent).");
-        int row = PaletteRowFor(rom, colours, allowExpand);
+        int row = PaletteRowFor(rom, colours, allowExpand, palette);
         exact = row >= 0;
         if (row < 0)
         {
