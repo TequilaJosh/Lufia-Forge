@@ -58,6 +58,12 @@ public partial class EncounterEditorView : UserControl
         Vm?.MonsterMapClick(x, y);
     }
 
+    private void MonsterMap_RightDown(object sender, MouseButtonEventArgs e)
+    {
+        var (x, y) = MonsterTile(e);
+        Vm?.MonsterMapRightClick(x, y);
+    }
+
     private void MonsterMap_MouseMove(object sender, MouseEventArgs e)
     {
         var (x, y) = MonsterTile(e);

@@ -8,7 +8,7 @@ namespace LufiaForge.Core.Battle;
 /// again. (Not on the world map.)
 /// <para>
 /// A monster is an ordinary map character n (sprite, place, wander box) whose talk event (n) is
-/// <c>1F gg</c> (a battle with the map's encounter group, as a random battle would pick: $142D = group) then
+/// <c>1F gg</c> (a battle with encounter group gg, its own, as a random battle would pick: $142D = group) then
 /// <c>5C n 00</c> (hide it). A 256-entry table (first monster character, count) says which characters of each map are
 /// monsters, and the step check for random battles ($01:881D) is hooked to make none on those maps (their setup scripts
 /// stay as they were, so taking the monsters off brings the random battles back):
@@ -53,7 +53,11 @@ public static class VisibleMonsters
     private const int RandomSite = 0x8820;      // $01:8820
     private static readonly byte[] RandomOriginal = { 0xAD, 0xB4, 0x07, 0xD0, 0x4F, 0xA5, 0x94 };
     private const string Magic = "LFVM";
-    private const int Header = 8, MapTable = 0x300, BlockSize = MapTable + 512;
+    private const int Header = 8, MapTable = 0x300, BehaviourTable = MapTable + 512, BlockSize = BehaviourTable + 256 * 16;
+    /// <summary>The block's version (header byte 4): 2 added the behaviour table; an older block is rebuilt.</summary>
+    private const int Version = 2;
+    /// <summary>Behaviour bits (a byte per monster: map x 16 + its number among the map's monsters).</summary>
+    private const int KeepsToItself = 0x01, ChasesInItsArea = 0x02;
     public const int ChaseRange = 6;
     /// <summary>Characters a map can have (actor records $07DE + 32 x (n + 8) run up to the event engine's RAM; the
     /// biggest towns have 32).</summary>
@@ -64,8 +68,10 @@ public static class VisibleMonsters
     private static int SnesAddress(int file) => (file / 0x8000 | 0x80) << 16 | (file % 0x8000 | 0x8000);
     private static int FileOffset(int snes) => (snes >> 16 & 0x7F) * 0x8000 + (snes & 0x7FFF);
 
-    private static string Source(int maps) => $$"""
+    private static string Source(int maps, int behaviour) => $$"""
         !MAPS = ${{maps:X6}}
+        !BEHAV = ${{behaviour:X6}}
+        !BEH = $7FFEC8
         !HEROX = $7FFEC0
         !HEROY = $7FFEC2
         !TURN = $7FFEC4
@@ -181,6 +187,33 @@ public static class VisibleMonsters
             PLY
             PLX
             PLB
+            RTS
+
+        Behav:                      ; A = this monster's behaviour byte (M = 8, X = 16; X kept)
+            PHX
+            REP #$20
+            LDA $077F
+            AND.w #$00FF
+            ASL
+            TAX
+            SEP #$20
+            LDA $18
+            SEC
+            SBC.b #$08
+            SEC
+            SBC !MAPS,x             ; its number among the map's monsters
+            REP #$20
+            AND.w #$000F
+            PHA
+            TXA
+            ASL #3                  ; map x 16
+            CLC
+            ADC $01,s
+            TAX
+            PLA
+            SEP #$20
+            LDA !BEHAV,x
+            PLX
             RTS
 
         IsMonster:                  ; C = this character is one of the map's monsters; X kept
@@ -310,7 +343,21 @@ public static class VisibleMonsters
             RTS
 
         Choose:                     ; A = a direction (0 right, 1 left, 2 down, 3 up): towards the hero when near
+            JSR Behav
+            STA !BEH
+            BIT.b #{{KeepsToItself}}
+            BNE .random             ; it doesn't come after the party
             JSR Hero
+            LDA $0001,y             ; the hero inside its roaming area
+            CMP $11,x
+            BCC .random
+            CMP $15,x
+            BCS .random
+            LDA $0004,y
+            CMP $13,x
+            BCC .random
+            CMP $17,x
+            BCS .random
             LDA $0001,y             ; dx = hero - monster
             SEC
             SBC $01,x
@@ -329,10 +376,15 @@ public static class VisibleMonsters
             EOR.b #$FF
             INC
         +   STA $17
+            LDA !BEH                ; (one that roams only part of the map comes from anywhere in it)
+            BIT.b #{{ChasesInItsArea}}
+            BNE +
+            LDA $17
             CLC
             ADC $16
             CMP.b #{{ChaseRange + 1}}
             BCS .random
+        +
             PHX                     ; now and then a random step anyway (round walls)
             LDA.b #$04
             JSL $08B829
@@ -452,20 +504,27 @@ public static class VisibleMonsters
     /// <summary>Puts the code in (once).</summary>
     public static void Apply(RomBuffer rom)
     {
-        if (IsApplied(rom)) return;
-        if (!IsOriginal(rom)) throw new InvalidOperationException("The game's code at $01:9FFF, $01:8394 or $01:8820 isn't the original (another patch changed it), so visible monsters can't be added safely.");
+        int old = Block(rom);
+        if (old > 0 && rom.ReadByte(old + 4) == Version) return;
+        if (old < 0 && !IsOriginal(rom)) throw new InvalidOperationException("The game's code at $01:9FFF, $01:8394 or $01:8820 isn't the original (another patch changed it), so visible monsters can't be added safely.");
         if (rom.Length < MapWriter.ExpandedSize) rom.Expand(MapWriter.ExpandedSize);
+        // (a block of an older version: its table of monsters comes along, the code is new)
+        var maps = old > 0 ? rom.ReadBytes(old + MapTable, 512) : new byte[512];
         var space = ExpansionSpace.Load(rom);
+        if (old > 0 && space.At(old)?.Start == old) space.Free(old);
         int b = space.AllocateInOneBank(BlockSize, ExpansionSpace.Kind.Patch, 0);
         space.Save();
         int snes = SnesAddress(b);
         var a = new Asm65816();
-        a.Source(Source(snes + MapTable));
+        a.Source(Source(snes + MapTable, snes + BehaviourTable));
         var code = a.Build(snes + Header);
         if (Header + code.Length > MapTable) throw new InvalidOperationException("The visible monster code doesn't fit.");
         rom.WriteBytes(b, Magic.Select(c => (byte)c).ToArray());
+        rom.WriteByte(b + 4, Version);
         rom.WriteBytes(b + Header, code);
-        rom.WriteBytes(b + MapTable, new byte[512]);
+        rom.WriteBytes(b + MapTable, maps);
+        // monsters of an older block came after the party within 6 tiles: bits 0
+        rom.WriteBytes(b + BehaviourTable, new byte[256 * 16]);
         int step = snes + Header + a.Offset("Step"), talk = snes + Header + a.Offset("Talk");
         rom.WriteBytes(StepSite, new byte[] { 0x22, (byte)step, (byte)(step >> 8), (byte)(step >> 16) });
         rom.WriteBytes(TalkSite, new byte[] { 0x22, (byte)talk, (byte)(talk >> 8), (byte)(talk >> 16) });
@@ -496,14 +555,28 @@ public static class VisibleMonsters
         catch { return -1; }
     }
 
-    /// <summary>The map's monsters as placed: where, the sprite, how far each may wander (0 = anywhere on the map).</summary>
-    public static List<(int X, int Y, int Sprite, int Range)> Placed(RomBuffer rom, LufiaMap map)
+    /// <summary>A monster on a map: where it starts, its sprite, how far it may wander (0 = anywhere on the map) and
+    /// the encounter group it fights.</summary>
+    public sealed record Monster(int X, int Y, int Sprite, int Range, int Group, bool Chases = true);
+
+    /// <summary>The block has the behaviour table (version 2; before it, every monster came after the party).</summary>
+    private static bool HasBehaviours(RomBuffer rom) => Block(rom) is int b && b > 0 && rom.ReadByte(b + 4) == Version;
+
+    /// <summary>The map's monsters as placed.</summary>
+    public static List<Monster> Placed(RomBuffer rom, LufiaMap map)
     {
         var (first, count) = Monsters(rom, map.MapId);
         if (count == 0) return new();
+        int GroupOf(int n)
+        {
+            int o = LufiaMap.EventScriptOffset(rom, map.MapId, n);
+            return o >= 0 && rom.ReadByte(o) == 0x1F ? rom.ReadByte(o + 1) : -1;
+        }
         return map.Npcs.Where(n => n.Index >= first && n.Index < first + count)
-                       .Select(n => (n.X, n.Y, n.Sprite,
-                                     n.BoxX1 == 0 && n.BoxY1 == 0 && n.BoxX2 >= map.Width && n.BoxY2 >= map.Height ? 0 : Math.Max(n.X - n.BoxX1, n.BoxX2 - 1 - n.X)))
+                       .Select(n => new Monster(n.X, n.Y, n.Sprite,
+                                     n.BoxX1 == 0 && n.BoxY1 == 0 && n.BoxX2 >= map.Width && n.BoxY2 >= map.Height ? 0 : Math.Max(n.X - n.BoxX1, n.BoxX2 - 1 - n.X),
+                                     GroupOf(n.Index),
+                                     !HasBehaviours(rom) || (rom.ReadByte(Block(rom) + BehaviourTable + map.MapId * 16 + Math.Min(15, n.Index - first)) & KeepsToItself) == 0))
                        .ToList();
     }
 
@@ -525,10 +598,11 @@ public static class VisibleMonsters
 
     /// <summary>The monster events of <paramref name="chars"/>: rewritten where a removed monster's script is, the
     /// rest added after the map's script block (copied to the added space once, for all of them).</summary>
-    private static void WriteEvents(RomBuffer rom, int mapId, List<int> chars, int group)
+    private static void WriteEvents(RomBuffer rom, int mapId, List<(int N, int Group)> chars)
     {
         var fresh = new List<int>();
-        foreach (int n in chars)
+        var groups = chars.ToDictionary(c => c.N, c => c.Group);
+        foreach (var (n, group) in chars)
         {
             if (IsRemovedMonster(rom, mapId, n)) rom.WriteBytes(LufiaMap.EventScriptOffset(rom, mapId, n), MonsterScript(n, group));
             else fresh.Add(n);
@@ -537,7 +611,7 @@ public static class VisibleMonsters
         int b = EventScript.BlockOffset(rom, mapId), len = MapEvents.BlockLength(rom, mapId);
         var block = new List<byte>(rom.ReadBytes(b, len));
         var rels = new List<int>();
-        foreach (int n in fresh) { rels.Add(block.Count); block.AddRange(MonsterScript(n, group)); }
+        foreach (int n in fresh) { rels.Add(block.Count); block.AddRange(MonsterScript(n, groups[n])); }
         block.Add(0x00);   // guard
         if (block.Count > 0xFFFF) throw new InvalidOperationException("This map's events are too big to add monsters.");
         var data = block.ToArray();
@@ -572,11 +646,25 @@ public static class VisibleMonsters
     /// </summary>
     public static void AddToMap(RomBuffer rom, int mapId, IReadOnlyList<(int X, int Y)> places, int sprite, int range = 0, int group = -1)
     {
-        if (mapId == LufiaMap.WorldMap) throw new InvalidOperationException("Visible monsters aren't for the world map.");
         if (places.Count == 0) { RemoveFromMap(rom, mapId); return; }
         if (group <= 0) group = MonsterGroup(rom, mapId);
         if (group <= 0) group = Group(rom, mapId);
         if (group <= 0) throw new InvalidOperationException($"Map {mapId:X2} has no random battles: pick the group its monsters fight.");
+        AddToMap(rom, mapId, places.Select(p => new Monster(p.X, p.Y, sprite, range, group)).ToList());
+    }
+
+    /// <summary>
+    /// Gives a map (not the world map) <paramref name="monsters"/>, in place of the ones it has: each its own sprite,
+    /// wandering range and encounter group (the fight its event starts when it reaches the party). The map has no
+    /// random battles while it has monsters.
+    /// </summary>
+    public static void AddToMap(RomBuffer rom, int mapId, IReadOnlyList<Monster> monsters)
+    {
+        if (mapId == LufiaMap.WorldMap) throw new InvalidOperationException("Visible monsters aren't for the world map.");
+        if (monsters.Count == 0) { RemoveFromMap(rom, mapId); return; }
+        if (monsters.FirstOrDefault(m => m.Group is < 1 or > 0xFF) is { } bad)
+            throw new InvalidOperationException($"The monster at {bad.X},{bad.Y} has no encounter group.");
+        var places = monsters.Select(m => (m.X, m.Y)).ToList();
         Apply(rom);
         RemoveFromMap(rom, mapId);
         var map = LufiaMap.Load(rom, mapId);
@@ -603,20 +691,24 @@ public static class VisibleMonsters
             throw new InvalidOperationException($"Map {mapId:X2} has no room for {places.Count} monsters: a map can have {MaxCharacters} characters, and the free ones (with no event of their own) don't reach that many.");
         for (int i = map.Npcs.Count; i < first + places.Count; i++)
             map.Npcs.Add(new MapNpc { Index = i, Sprite = 0xFF, X = 0, Y = 0, BoxX1 = 0, BoxY1 = 0, BoxX2 = 1, BoxY2 = 1 });
-        for (int i = 0; i < places.Count; i++)
+        for (int i = 0; i < monsters.Count; i++)
         {
-            var (x, y) = places[i];
+            var (x, y, sprite, range, _, _) = monsters[i];
             var (x1, y1, x2, y2) = range <= 0 ? (0, 0, map.Width, map.Height)
                 : (Math.Max(0, x - range), Math.Max(0, y - range), Math.Min(map.Width, x + range + 1), Math.Min(map.Height, y + range + 1));
             map.Npcs[first + i] = new MapNpc { Index = first + i, Sprite = sprite, Flags = 0x20, X = x, Y = y, BoxX1 = x1, BoxY1 = y1, BoxX2 = x2, BoxY2 = y2 };
         }
         MapEvents.EnsureTable(rom, mapId, first + places.Count + 1);
-        WriteEvents(rom, mapId, Enumerable.Range(first, places.Count).ToList(), group);
+        WriteEvents(rom, mapId, monsters.Select((m, i) => (first + i, m.Group)).ToList());
         MapWriter.Save(rom, map, true);
         CompactSetup(rom, mapId);
         int b = Block(rom);
         rom.WriteByte(b + MapTable + mapId * 2, (byte)first);
         rom.WriteByte(b + MapTable + mapId * 2 + 1, (byte)places.Count);
+        var behaviour = new byte[16];
+        for (int i = 0; i < monsters.Count && i < 16; i++)
+            behaviour[i] = (byte)((monsters[i].Chases ? 0 : KeepsToItself) | (monsters[i].Range > 0 ? ChasesInItsArea : 0));
+        rom.WriteBytes(b + BehaviourTable + mapId * 16, behaviour);
         rom.FixChecksum();
     }
 
@@ -664,6 +756,7 @@ public static class VisibleMonsters
         int b = Block(rom);
         rom.WriteByte(b + MapTable + mapId * 2, 0);
         rom.WriteByte(b + MapTable + mapId * 2 + 1, 0);
+        if (HasBehaviours(rom)) rom.WriteBytes(b + BehaviourTable + mapId * 16, new byte[16]);
         rom.FixChecksum();
     }
 

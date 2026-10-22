@@ -145,19 +145,49 @@
                             <ComboBox Style="{StaticResource GdCombo}" Width="380" Margin="0,0,8,4" ItemsSource="{Binding MonsterMapOptions}" SelectedIndex="{Binding SelectedMonsterMap}"/>
                         </WrapPanel>
                         <TextBlock Text="{Binding MonsterMapInfo}" Foreground="{StaticResource GoldLightBrush}" TextWrapping="Wrap" Margin="0,2,0,6"/>
-                        <WrapPanel>
+                        <TextBlock Text="MONSTERS ON THIS MAP" Style="{StaticResource GdSection}" Margin="0,4,0,2"/>
+                        <ListBox ItemsSource="{Binding MapMonsterOptions}" SelectedIndex="{Binding SelectedMapMonster}" MaxHeight="150" Background="#20000000" BorderThickness="0"
+                                 HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <DockPanel Margin="2">
+                                        <Image DockPanel.Dock="Left" Source="{Binding Image}" Width="{Binding Image.PixelWidth}" Height="{Binding Image.PixelHeight}"
+                                               RenderOptions.BitmapScalingMode="NearestNeighbor" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Title}" Foreground="{StaticResource GoldLightBrush}"/>
+                                            <TextBlock Text="{Binding Detail}" Style="{StaticResource GdHint}" TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                    </DockPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                        <WrapPanel Margin="0,4,0,0">
                             <TextBlock Text="How many" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,6,4"/>
-                            <ComboBox Style="{StaticResource GdCombo}" Width="64" MinWidth="64" Margin="0,0,12,4" ItemsSource="{Binding MonsterCounts}" SelectedItem="{Binding MonsterCount}"
+                            <ComboBox Style="{StaticResource GdCombo}" Width="64" MinWidth="64" Margin="0,0,6,4" ItemsSource="{Binding MonsterCounts}" SelectedItem="{Binding MonsterCount}"
                                       ToolTip="How many monsters Place monsters puts on the map."/>
-                            <TextBlock Text="Group" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,6,4"/>
-                            <TextBox Style="{StaticResource GdNumber}" Width="40" Margin="0,0,12,4" Text="{Binding MonsterGroupText, UpdateSourceTrigger=PropertyChanged}"
-                                     ToolTip="The battle group (hex, the list on the left) the monsters fight, as a random battle on this map would."/>
-                            <TextBlock Text="They roam" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,6,4"/>
-                            <ComboBox Style="{StaticResource GdCombo}" Width="200" Margin="0,0,12,4" ItemsSource="{Binding MonsterRanges}" SelectedIndex="{Binding MonsterRangeIndex}"/>
+                            <Button Content="Place monsters" Style="{StaticResource LufiaButtonGold}" Command="{Binding PlaceMonstersCommand}" Margin="0,0,6,4"
+                                    ToolTip="Puts that many monsters on the map's open floor in place of the ones it has, spread out, away from doors and arrival points (new places each click), all with the settings below."/>
+                            <Button Content="Take the picked one off" Style="{StaticResource LufiaButton}" Command="{Binding RemoveMonsterCommand}" Margin="0,0,6,4"/>
+                            <Button Content="Remove all" Style="{StaticResource LufiaButton}" Command="{Binding RemoveMonstersCommand}" Margin="0,0,6,4"
+                                    ToolTip="Takes the map's monsters off: its random battles come back."/>
                         </WrapPanel>
+
+                        <TextBlock Text="THE PICKED MONSTER (AND NEW ONES)" Style="{StaticResource GdSection}" Margin="0,8,0,2"/>
+                        <WrapPanel>
+                            <TextBlock Text="Fights group" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,6,4"/>
+                            <TextBox Style="{StaticResource GdNumber}" Width="40" Margin="0,0,6,4" Text="{Binding MonsterGroupText, UpdateSourceTrigger=PropertyChanged}"
+                                     ToolTip="The battle group (hex, the list on the left) this monster starts when it reaches the party: one of its subgroups, picked at random."/>
+                            <Button Content="＋ New group for it" Style="{StaticResource LufiaButton}" Command="{Binding NewGroupForMonsterCommand}" Margin="0,0,12,4"
+                                    ToolTip="Adds a group at the end of the list on the left and gives it to the picked monster; then fill in which monsters it has on the Monsters page."/>
+                            <TextBlock Text="Roams" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,6,4"/>
+                            <ComboBox Style="{StaticResource GdCombo}" Width="200" Margin="0,0,12,4" ItemsSource="{Binding MonsterRanges}" SelectedIndex="{Binding MonsterRangeIndex}"/>
+                            <CheckBox Content="Comes after the party" Style="{StaticResource GdCheck}" IsChecked="{Binding MonsterChases}" Margin="0,0,8,4" VerticalAlignment="Center"
+                                      ToolTip="On: it walks towards the party once the party is in its roaming area (within 6 tiles when it roams the whole map). Off: it only wanders, and fights when the party bumps into it."/>
+                        </WrapPanel>
+                        <TextBlock Text="{Binding MonsterGroupInfo}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,4"/>
                         <TextBlock Text="Sprite" Style="{StaticResource GdFieldLabel}" Margin="0,4,0,0"/>
                         <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,2"
-                                   Text="The game's sprites, then Lufia 2's field monsters (each goes into the ROM the first time you place it, with its own colours while one of the 4 spare sprite palettes is free). Hover a sprite for its name."/>
+                                   Text="The game's sprites, then Lufia 2's field monsters (each goes into the ROM the first time you use it, with its own colours while one of the 4 spare sprite palettes is free). Hover a sprite for its name."/>
                         <ListBox ItemsSource="{Binding MonsterSpriteOptions}" SelectedIndex="{Binding SelectedMonsterSprite}" MaxHeight="150" Background="#20000000" BorderThickness="0"
                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                             <ListBox.ItemsPanel>
@@ -171,22 +201,20 @@
                             </ListBox.ItemTemplate>
                         </ListBox>
                         <WrapPanel Margin="0,6,0,0">
-                            <Button Content="Place monsters" Style="{StaticResource LufiaButtonGold}" Command="{Binding PlaceMonstersCommand}" Margin="0,0,6,4"
-                                    ToolTip="Puts that many monsters on the map's open floor, spread out, away from doors and arrival points (new places each click)."/>
-                            <Button Content="Keep places, use these settings" Style="{StaticResource LufiaButton}" Command="{Binding UpdateMonstersCommand}" Margin="0,0,6,4"
-                                    ToolTip="The monsters stay where they are, with the sprite, group and roaming shown."/>
-                            <Button Content="Remove monsters" Style="{StaticResource LufiaButton}" Command="{Binding RemoveMonstersCommand}" Margin="0,0,6,4"
-                                    ToolTip="Takes the map's monsters off: its random battles come back."/>
+                            <Button Content="Use for the picked monster" Style="{StaticResource LufiaButtonGold}" Command="{Binding UpdateMonsterCommand}" Margin="0,0,6,4"
+                                    ToolTip="The picked monster gets this group, roaming and sprite; it stays where it is."/>
+                            <Button Content="Use for all of them" Style="{StaticResource LufiaButton}" Command="{Binding UpdateMonstersCommand}" Margin="0,0,6,4"
+                                    ToolTip="Every monster on the map gets this group, roaming and sprite; they stay where they are."/>
                         </WrapPanel>
                         <TextBlock Text="{Binding MonsterHoverInfo}" Foreground="{StaticResource GoldLightBrush}" Margin="0,2,0,2" MinHeight="18"/>
                         <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,4"
-                                   Text="Click a dotted (open floor) tile to put a monster there, click a monster to take it off. Changes go into your project at once."/>
+                                   Text="Click a dotted (open floor) tile to put a monster there with the settings above; click a monster to pick it, right click to take it off. Changes go into your project at once."/>
                     </StackPanel>
                     <ScrollViewer common:ScrollPan.MiddleDrag="True" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="#20000000"
                                   Visibility="{Binding IsMonsterMapShown, Converter={StaticResource BoolToVisibilityConverter}}">
                         <Image x:Name="MonsterMap" Source="{Binding MonsterMapImage}" Width="{Binding MonsterMapPixelWidth}" Height="{Binding MonsterMapPixelHeight}"
                                Stretch="Fill" RenderOptions.BitmapScalingMode="NearestNeighbor" HorizontalAlignment="Left" VerticalAlignment="Top" Cursor="Hand"
-                               MouseLeftButtonDown="MonsterMap_MouseDown" MouseMove="MonsterMap_MouseMove" MouseLeave="MonsterMap_MouseLeave"/>
+                               MouseLeftButtonDown="MonsterMap_MouseDown" MouseRightButtonDown="MonsterMap_RightDown" MouseMove="MonsterMap_MouseMove" MouseLeave="MonsterMap_MouseLeave"/>
                     </ScrollViewer>
                 </DockPanel>
             </TabItem>
