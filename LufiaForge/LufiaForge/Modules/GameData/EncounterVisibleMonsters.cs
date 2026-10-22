@@ -413,7 +413,7 @@ public partial class EncounterEditorViewModel
             if (monsters.Any(m => m.Sprite == PickedSprite) && choice is { Number: < 0, Sheet: { } sh })
             {
                 // a Lufia 2 monster: into the ROM first, as a sprite of its own
-                added = NpcSprites.AddFromSheet(rom, sh.Px, sh.FrameWidth, sh.Height, out bool exact);
+                added = NpcSprites.AddFromSheet(rom, sh.Px, sh.FrameWidth, sh.Height, out bool exact, true, Lufia2Sprites.PaletteOf(choice.Lufia2Name ?? ""));
                 note = exact ? $"{choice.Lufia2Name} is now sprite {added:X2}."
                              : $"{choice.Lufia2Name} is now sprite {added:X2}; the 4 spare sprite palettes were taken, so it uses the closest one.";
                 monsters = monsters.Select(m => m.Sprite == PickedSprite ? m with { Sprite = added } : m).ToList();

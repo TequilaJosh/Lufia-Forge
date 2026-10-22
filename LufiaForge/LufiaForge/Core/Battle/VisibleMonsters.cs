@@ -1161,6 +1161,7 @@ public static class VisibleMonsters
         // the way stay unused, never shown)
         int eventBase = LufiaMap.EventBase(rom, mapId), slots = MapEvents.HasBlock(rom, mapId) ? MapEvents.TableLength(rom, mapId) : 0;
         var taken = new HashSet<int>();
+        var cast = new HashSet<int>();
         foreach (var t in map.Triggers) taken.Add((eventBase + t.Index + 1) & 0xFF);
         for (int ev = 0; ev < slots; ev++)
         {
@@ -1170,9 +1171,21 @@ public static class VisibleMonsters
             try { es = EventScript.Load(rom, mapId, ev); } catch { continue; }
             if (es == null) continue;
             foreach (var op in es.Ops)
-                if (!op.IsText && op.Bytes.Length >= 3 && op.Bytes[0] == 0x51 && op.Bytes[1] == mapId) taken.Add(MapEvents.Chained(rom, op.Bytes));
+            {
+                if (op.IsText || op.Bytes.Length == 0) continue;
+                if (op.Bytes.Length >= 3 && op.Bytes[0] == 0x51 && op.Bytes[1] == mapId) taken.Add(MapEvents.Chained(rom, op.Bytes));
+                // characters a cutscene shows, moves or places (also ones the map doesn't list yet): not for monsters
+                // (the editor's "character k" and the game's can be one apart, so both)
+                if (EventCommands.Find(op.Bytes[0]) is { } def)
+                    foreach (var prm in def.Params.Where(pr => pr.Kind == ParamKind.Who))
+                    {
+                        int v;
+                        try { v = prm.Get(op.Bytes); } catch { continue; }
+                        if (v >= 0x100) { cast.Add(v - 0x100); cast.Add(v - 0x101); }
+                    }
+            }
         }
-        bool Free(int n) => !taken.Contains(n + 1) && (n >= map.Npcs.Count || map.Npcs[n].IsUnused);
+        bool Free(int n) => !taken.Contains(n + 1) && !cast.Contains(n) && (n >= map.Npcs.Count || map.Npcs[n].IsUnused);
         int first = 0;
         while (first < MaxCharacters && !Enumerable.Range(first, places.Count).All(Free)) first++;
         if (first + places.Count > MaxCharacters)

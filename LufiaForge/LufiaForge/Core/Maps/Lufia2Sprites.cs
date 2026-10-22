@@ -23,7 +23,7 @@ namespace LufiaForge.Core.Maps;
 /// </summary>
 public static class Lufia2Sprites
 {
-    private const int PointerTable = 0x27F000, Palettes = 0x133F00, SpriteCount = 251;
+    private const int PointerTable = 0x27F000, PaletteTable = 0x133F00, SpriteCount = 251;
 
     /// <summary>The monsters (Lufia II sprite number, a name: Lufia II gives them none).</summary>
     public static readonly (int Number, string Name)[] Monsters =
@@ -41,6 +41,36 @@ public static class Lufia2Sprites
         (0xC2, "Big Jelly"), (0xC3, "Wyvern"), (0xC4, "Gargoyle"), (0xC6, "Big Spider"), (0xD0, "Bone Beast"),
         (0xD3, "Blue Beast"), (0xD4, "Mantis"),
     };
+
+    /// <summary>Lufia II's 8 sprite palette rows (colours 1-15, BGR555; file 0x133F00), so a monster gets its whole row
+    /// and the monsters sharing a row in Lufia II share one in Lufia 1 too.</summary>
+    public static readonly ushort[][] Palettes =
+    {
+        new ushort[] { 0x0001, 0x0D30, 0x15F5, 0x473C, 0x08C2, 0x4549, 0x6230, 0x088A, 0x08F6, 0x2DAB, 0x56F5, 0x29F9, 0x5B1F, 0x7B17, 0x7FFF },
+        new ushort[] { 0x0042, 0x3864, 0x5109, 0x794B, 0x0902, 0x0008, 0x0096, 0x25C5, 0x4B0D, 0x45AD, 0x7318, 0x21F9, 0x531F, 0x499E, 0x7FFF },
+        new ushort[] { 0x0C22, 0x004C, 0x1617, 0x337F, 0x0902, 0x01A0, 0x02C0, 0x39C6, 0x6F72, 0x41D2, 0x5ADB, 0x361B, 0x531F, 0x37E0, 0x7FFF },
+        new ushort[] { 0x0842, 0x0C69, 0x0871, 0x24DA, 0x51BC, 0x3409, 0x58B1, 0x7156, 0x054B, 0x0E11, 0x0F1A, 0x2529, 0x4210, 0x5EF7, 0x739C },
+        new ushort[] { 0x0842, 0x3081, 0x4102, 0x5989, 0x6A50, 0x1922, 0x21E4, 0x32E7, 0x048B, 0x1531, 0x21DA, 0x150A, 0x25D2, 0x2ABA, 0x739C },
+        new ushort[] { 0x0842, 0x08E2, 0x1165, 0x1648, 0x3355, 0x108D, 0x1915, 0x2E3C, 0x3526, 0x51EC, 0x72D3, 0x1064, 0x20C9, 0x312D, 0x739C },
+        new ushort[] { 0x0421, 0x2108, 0x3DEF, 0x5EF7, 0x088C, 0x0CFA, 0x31DD, 0x0DC0, 0x3C21, 0x7C62, 0x7EAF, 0x0D30, 0x1637, 0x3B7E, 0x7FFF },
+        new ushort[] { 0x0421, 0x0429, 0x049B, 0x1C61, 0x2101, 0x3241, 0x19C6, 0x4B72, 0x00CC, 0x023A, 0x379F, 0x2927, 0x4E0D, 0x6F16, 0x7FFF },
+    };
+
+    private static readonly Dictionary<string, int> Rows = new()
+    {
+        ["Octopus"] = 1, ["Snail"] = 1, ["Ninja"] = 5, ["Worm"] = 5, ["Mammoth"] = 4, ["Deer"] = 1, ["Beetle"] = 4, ["Crab"] = 3,
+        ["Eyeball"] = 3, ["Spider"] = 3, ["Cat"] = 3, ["Scorpion"] = 3, ["Mushroom"] = 3, ["Rooster"] = 3, ["Stump"] = 4, ["Bat"] = 3,
+        ["Fly"] = 1, ["Butterfly"] = 4, ["Jelly"] = 3, ["Flower"] = 5, ["Blue Flower"] = 4, ["Hornet"] = 4, ["Armor"] = 4, ["Slime"] = 4,
+        ["Werewolf"] = 0, ["Dryad"] = 2, ["Imp"] = 1, ["Goblin"] = 1, ["Vampire"] = 3, ["Skeleton"] = 3, ["Ice Man"] = 5, ["Mud Man"] = 4,
+        ["Ghost"] = 5, ["Knight"] = 1, ["Orc"] = 1, ["Troll"] = 5, ["Mummy"] = 3, ["Witch"] = 5, ["Ogre"] = 4, ["Hood"] = 5,
+        ["Blue Man"] = 4, ["Wizard"] = 4, ["Siren"] = 1, ["Pumpkin"] = 4, ["Demon"] = 3, ["Wisp"] = 3, ["Shadow"] = 3, ["Snake"] = 2,
+        ["Man Eater"] = 5, ["Wolf"] = 4, ["Dragon"] = 4, ["Giant"] = 4, ["Bone Knight"] = 3, ["Kraken"] = 3, ["Plant"] = 5, ["Chomper"] = 2,
+        ["Frog"] = 1, ["Hydra"] = 2, ["Red Dragon"] = 3, ["Pink Demon"] = 3, ["Big Jelly"] = 4, ["Wyvern"] = 5, ["Gargoyle"] = 5,
+        ["Big Spider"] = 0, ["Bone Beast"] = 0, ["Blue Beast"] = 4, ["Mantis"] = 4,
+    };
+
+    /// <summary>The whole Lufia II palette row of monster <paramref name="name"/> (15 colours), or null.</summary>
+    public static ushort[]? PaletteOf(string name) => Rows.TryGetValue(name, out int r) ? Palettes[r] : null;
 
     /// <summary>A monster as a Lufia 1 sprite sheet: the 8 frames side by side (ARGB, alpha 0 = transparent),
     /// <paramref name="FrameWidth"/> x <paramref name="Height"/> pixels each (16x24 or 32x32).</summary>
@@ -68,7 +98,7 @@ public static class Lufia2Sprites
         var colours = new uint[16];
         for (int i = 1; i < 16; i++)
         {
-            int c = r[Palettes + row * 32 + i * 2] | r[Palettes + row * 32 + i * 2 + 1] << 8;
+            int c = r[PaletteTable + row * 32 + i * 2] | r[PaletteTable + row * 32 + i * 2 + 1] << 8;
             uint R = (uint)(c & 31), G = (uint)(c >> 5 & 31), B = (uint)(c >> 10 & 31);
             colours[i] = 0xFF000000 | (R << 3 | R >> 2) << 16 | (G << 3 | G >> 2) << 8 | (B << 3 | B >> 2);
         }
