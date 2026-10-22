@@ -18,7 +18,7 @@ namespace LufiaForge.Core.Maps;
 /// Lufia 1 draws a map character as 16x24 (two 16x16 objects, $01:A6D6), or 16x16 / 32x32 by its other routine;
 /// its frames are side, side (drawn flipped when it faces right), side, side, front, front, back, back. So 16x16
 /// monsters get 8 empty rows on top, 16x32 ones lose their top 8 rows when those are empty in every frame (else they
-/// go in the middle of a 32x32 frame).
+/// go on the left of a 32x32 frame: the game draws 32x32 characters from their tile's left edge, $01:A487).
 /// </para>
 /// </summary>
 public static class Lufia2Sprites
@@ -95,7 +95,7 @@ public static class Lufia2Sprites
         int fw, fh, dx, dy;
         if (ph == 16) (fw, fh, dx, dy) = pw == 16 ? (16, 24, 0, 8) : (pw, ph, 0, 0);
         else if (pw == 16 && ph == 32 && l2.All(px => px.Take(16 * 8).All(c => c == 0))) (fw, fh, dx, dy) = (16, 24, 0, -8);
-        else if (pw == 16 && ph == 32) (fw, fh, dx, dy) = (32, 32, 8, 0);
+        else if (pw == 16 && ph == 32) (fw, fh, dx, dy) = (32, 32, 0, 0);   // (left: the game draws a 32x32 character from its tile's left edge)
         else (fw, fh, dx, dy) = (pw, ph, 0, 0);
         // Lufia 1's order: side, side, side, side, front, front, back, back
         int[] order = frames == 6 ? new[] { 2, 3, 2, 3, 0, 1, 4, 5 } : new[] { 0, 1, 0, 1, 0, 1, 0, 1 };

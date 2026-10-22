@@ -378,7 +378,11 @@ public static class NpcSprites
         space.Save();
         rom.WriteBytes(g, gfx);
         var r = rom.ReadBytes(RecordOffset(rom, template), RecordSize);
-        r[4] = (byte)(r[4] & ~7 | row);
+        // byte 4: palette row, and bit 20: drawn flipped when it faces right ($01:AC10: the character's $0C = byte 4
+        // x 2 | 20, and bit 40 there flips frames 0-1). The game's 32x32 sprites (the same from every side) don't
+        // have it, so a sheet with side views copied from them walked right facing left.
+        bool sides = first[0] != first[4] || first[0] != first[6];
+        r[4] = (byte)(r[4] & ~0x27 | row | (sides ? 0x20 : r[4] & 0x20));
         // byte 3: which pairs of frames the map loader copies to VRAM ($01:AE7F; bit 1 = frames 2-3, 2 = 4-5,
         // 3 = 6-7; frames 0-1 are 2-3 flipped): the game's 32x32 sprites load only 2-3 (they look the same
         // every way), so a sheet with front and back views needs all three
