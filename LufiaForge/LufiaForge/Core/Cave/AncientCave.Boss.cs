@@ -16,6 +16,8 @@ public static partial class AncientCave
     /// <code>
     /// $08:D2CD  22 GroupCount           up to 4 picture groups in the floor 100 battle, 3 in any other (was LDA #$03 / STA $DF)
     /// $08:D8B8  22 PaletteSlot EA x4    palette slot of a group (was LDA $DF / SEC / SBC #$02 / EOR #$FF / INC)
+    /// $08:D1C1  22 CountLoop EA         count the 4th group's monsters too (was INX / CPX #$03 / BNE $D175)
+    /// $08:D20A  22 SetupLoop EA         and set it up (was INX / CPX #$03 / BNE $D1CD)
     /// </code>
     /// The floor 100 monsters are new copies of the Sinistrals with the shrunken pictures, so the story's own
     /// Sinistral fights look as before; formation FA (a duplicate of F6 that no event uses) becomes the four of them.
@@ -41,9 +43,52 @@ public static partial class AncientCave
             BNE +
             LDA.b #$00              ; group 4 shares group 1's slot
         +   RTL
+
+        ; The fight's group loops ($08:D175 counts each group's living monsters and how many groups are left, which
+        ; ends the fight at 0; $08:D1CD sets up each group) stopped after 3 groups, so in the floor 100 battle the
+        ; 4th was never counted: beating the first three ended it. These take their INX / CPX #$03 / BNE: one more
+        ; group in that battle. (M = X = 8 bits; A is free: both loops start with an LDA.)
+        CountLoop:
+            INX
+            JSR MoreGroups
+            BCC +
+            LDA.b #$74              ; go on at $08:D175 (RTL adds 1)
+            STA $01,s
+            LDA.b #$D1
+            STA $02,s
+        +   RTL
+
+        SetupLoop:
+            INX
+            JSR MoreGroups
+            BCC +
+            LDA.b #$CC              ; go on at $08:D1CD
+            STA $01,s
+            LDA.b #$D1
+            STA $02,s
+        +   RTL
+
+        MoreGroups:                 ; C = group X is still to do (X = 0-2, or 3 in the floor 100 battle)
+            CPX.b #$03
+            BCC ++
+            BNE +
+            LDA $7E142D
+            CMP.b #$FA
+            BNE +
+            SEC
+            RTS
+        +   CLC
+            RTS
+        ++  SEC
+            RTS
         """;
 
     private const int GroupsSite = 0x452CD, PaletteSite = 0x458B8;
+    /// <summary>The fight's two group loops: INX / CPX #$03 / BNE ($08:D1C1 back to $D175, $08:D20A back to $D1CD),
+    /// each becoming JSL + NOP.</summary>
+    private const int CountLoopSite = 0x451C1, SetupLoopSite = 0x4520A;
+    private static readonly byte[] CountLoopOriginal = { 0xE8, 0xE0, 0x03, 0xD0, 0xAF };
+    private static readonly byte[] SetupLoopOriginal = { 0xE8, 0xE0, 0x03, 0xD0, 0xBE };
     private static readonly byte[] GroupsOriginal = { 0xA9, 0x03, 0x85, 0xDF };
     private static readonly byte[] PaletteOriginal = { 0xA5, 0xDF, 0x38, 0xE9, 0x02, 0x49, 0xFF, 0x1A };
 

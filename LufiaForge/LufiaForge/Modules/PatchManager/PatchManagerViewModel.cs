@@ -57,7 +57,7 @@ public partial class PatchManagerViewModel : ObservableObject
     private void ToggleBuiltIn(BuiltInPatch? patch)
     {
         if (_rom == null || patch == null) return;
-        bool adding = !patch.IsApplied(_rom);
+        bool adding = patch.NeedsUpdate?.Invoke(_rom) == true || !patch.IsApplied(_rom);
         if (adding && patch.ConfirmText != null &&
             MessageBox.Show(patch.ConfirmText, patch.Name, MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
             return;
