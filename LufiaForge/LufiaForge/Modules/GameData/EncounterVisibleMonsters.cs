@@ -155,15 +155,69 @@ public partial class EncounterEditorViewModel
     }
 
     private int MonsterMapId => SelectedMonsterMap >= 0 && SelectedMonsterMap < _monsterMapIds.Count ? _monsterMapIds[SelectedMonsterMap] : -1;
+    private string MonsterMapName => SelectedMonsterMap >= 0 && SelectedMonsterMap < MonsterMapOptions.Count ? MonsterMapOptions[SelectedMonsterMap].Split(':')[0] : "";
 
     partial void OnSelectedMonsterMapChanged(int value) => LoadMonsterMap();
 
+    /// <summary>The selected map's monsters, as placed in the ROM.</summary>
+    private List<VisibleMonsters.Monster> _placed = new();
+
+    /// <summary>The map's monsters, one row each (picked: the one the settings below are for).</summary>
+    public ObservableCollection<MapMonsterRow> MapMonsterOptions { get; } = new();
+    [ObservableProperty] private int _selectedMapMonster = -1;
+    [ObservableProperty] private string _monsterGroupInfo = "";
+    /// <summary>The picked monster comes after the party (inside its roaming area; within 6 tiles when it roams the
+    /// whole map), else it only wanders.</summary>
+    [ObservableProperty] private bool _monsterChases = true;
+
+    partial void OnMonsterGroupTextChanged(string value) => MonsterGroupInfo = GroupSummary(value);
+
+    /// <summary>"Spider, Kobold, Giant Bat": the monsters a group's battles can have (hex group number), or why not.</summary>
+    private string GroupSummary(string text)
+    {
+        if (!int.TryParse(text.Trim(), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int g) || g < 1 || g > Count)
+            return text.Trim().Length == 0 ? "" : $"No group {text.Trim()}: 01-{Count:X2}.";
+        if (Ctx == null) return "";
+        var names = new List<string>();
+        foreach (int sub in _groups[g - 1].Distinct())
+            foreach (int m in Encounters.SubgroupMonsters(Ctx.Rom, sub))
+                if (m != 0xFF && m < MonsterChoices.Count - 1)
+                {
+                    string n = MonsterChoices[m][3..].Trim();
+                    if (!names.Contains(n)) names.Add(n);
+                }
+        return names.Count == 0 ? $"Group {g:X2} has no monsters yet: give it subgroups on the Monsters page." : $"Group {g:X2}: {string.Join(", ", names)}";
+    }
+
+    partial void OnSelectedMapMonsterChanged(int value)
+    {
+        // the picked monster's settings show below, to change
+        if (value < 0 || value >= _placed.Count) { DrawMonsterMap(); return; }
+        var m = _placed[value];
+        int sp = MonsterSpriteOptions.ToList().FindIndex(c => c.Number == m.Sprite);
+        if (sp >= 0) SelectedMonsterSprite = sp;
+        if (m.Group > 0) MonsterGroupText = m.Group.ToString("X2");
+        MonsterRangeIndex = RangeIndex(m.Range);
+        MonsterChases = m.Chases;
+        DrawMonsterMap();
+    }
+
+    private static int RangeIndex(int r)
+    {
+        int i = Array.FindIndex(RangeTiles, t => t == r);
+        if (i >= 0) return i;
+        i = Array.FindIndex(RangeTiles, t => t >= r);
+        return r == 0 ? 0 : i >= 0 ? i : RangeTiles.Length - 1;
+    }
+
     /// <summary>The selected map: its picture, its monsters and their settings.</summary>
-    private void LoadMonsterMap()
+    private void LoadMonsterMap(int pick = -1)
     {
         _monsterMap = null; _monsterMapPixels = null;
         MonsterMapImage = null;
         IsMonsterMapShown = false;
+        MapMonsterOptions.Clear();
+        _placed = new();
         int id = MonsterMapId;
         if (Ctx == null || id < 0) { MonsterMapInfo = ""; return; }
         var rom = Ctx.Rom;
@@ -172,47 +226,55 @@ public partial class EncounterEditorViewModel
             var map = LufiaMap.Load(rom, id);
             _monsterMap = map;
             _monsterOpen = VisibleMonsters.OpenTiles(rom, map).ToHashSet();
-            var placed = VisibleMonsters.Placed(rom, map);
-            int group = VisibleMonsters.MonsterGroup(rom, id);
-            if (group <= 0) { try { group = VisibleMonsters.Group(rom, id); } catch { group = -1; } }
-            MonsterGroupText = group > 0 ? group.ToString("X2") : "";
-            if (placed.Count > 0)
+            _placed = VisibleMonsters.Placed(rom, map);
+            int group = -1;
+            try { group = VisibleMonsters.Group(rom, id); } catch { }
+            for (int i = 0; i < _placed.Count; i++) MapMonsterOptions.Add(Row(i, _placed[i]));
+            if (_placed.Count == 0)
             {
-                MonsterCount = Math.Clamp(placed.Count, 1, MaxMonsters);
-                int sp = MonsterSpriteOptions.ToList().FindIndex(c => c.Number == placed[0].Sprite);
-                if (sp >= 0) SelectedMonsterSprite = sp;
-                int r = placed[0].Range, ri = Array.FindIndex(RangeTiles, t => t == r);
-                MonsterRangeIndex = ri >= 0 ? ri : r == 0 ? 0 : Array.FindIndex(RangeTiles, t => t >= r) is int k && k >= 0 ? k : RangeTiles.Length - 1;
+                MonsterGroupText = group > 0 ? group.ToString("X2") : "";
+                if (SelectedMonsterSprite < 0) SelectedMonsterSprite = Math.Max(0, MonsterSpriteOptions.ToList().FindIndex(c => c.Number == DefaultMonsterSprite));
             }
-            else if (SelectedMonsterSprite < 0)
-                SelectedMonsterSprite = Math.Max(0, MonsterSpriteOptions.ToList().FindIndex(c => c.Number == DefaultMonsterSprite));
             _monsterMapPixels = MapTileset.ForMap(rom, map).RenderMap(map);
             MonsterMapPixelWidth = map.Width * MonsterTilePixels;
             MonsterMapPixelHeight = map.Height * MonsterTilePixels;
-            DrawMonsterMap(placed);
             IsMonsterMapShown = true;
             var (firstChar, _) = VisibleMonsters.Monsters(rom, id);
-            MonsterMapInfo = placed.Count > 0
-                ? $"{placed.Count} monster{(placed.Count == 1 ? "" : "s")} fight group {group:X2} when they reach the party; this map has no random battles while it has them. " +
-                  $"They are its characters {firstChar}-{firstChar + placed.Count - 1}: if a cutscene on this map brings in characters of its own, try it in the game."
+            var groups = _placed.Select(m => m.Group).Distinct().ToList();
+            MonsterMapInfo = _placed.Count > 0
+                ? $"{_placed.Count} monster{(_placed.Count == 1 ? "" : "s")}, fighting group{(groups.Count == 1 ? "" : "s")} {string.Join(", ", groups.Select(g => g.ToString("X2")))} when they reach the party; this map has no random battles while it has them. " +
+                  $"They are its characters {firstChar}-{firstChar + _placed.Count - 1}: if a cutscene on this map brings in characters of its own, try it in the game."
                 : group > 0 ? $"Random battles with group {group:X2}. Put monsters here to have visible ones instead."
                             : "This map has no random battles: type the group its monsters fight.";
+            SelectedMapMonster = -1;
+            SelectedMapMonster = pick >= 0 && pick < _placed.Count ? pick : _placed.Count > 0 ? 0 : -1;
+            if (SelectedMapMonster < 0) DrawMonsterMap();
         }
         catch (Exception ex) { MonsterMapInfo = "This map can't be shown: " + ex.Message; }
     }
 
-    /// <summary>The map picture with the monsters drawn on it (and the floor they may be put on, faintly marked).</summary>
-    private void DrawMonsterMap(List<(int X, int Y, int Sprite, int Range)> placed)
+    private MapMonsterRow Row(int i, VisibleMonsters.Monster m)
+    {
+        ImageSource? img = null;
+        if (Ctx != null && NpcSprites.Render(Ctx.Rom, m.Sprite) is { } r) img = Picture(r.Px, r.W, r.H);
+        string name = MonsterSpriteOptions.FirstOrDefault(c => c.Number == m.Sprite)?.Lufia2Name ?? $"Sprite {m.Sprite:X2}";
+        string roam = (m.Range == 0 ? "roams the whole map" : $"roams up to {m.Range} tiles") + (m.Chases ? ", comes after the party" : ", keeps to itself");
+        return new MapMonsterRow { Image = img, Title = $"{i + 1}. {name} at {m.X},{m.Y}", Detail = $"{GroupSummary(m.Group.ToString("X2"))}; {roam}" };
+    }
+
+    /// <summary>The map picture with the monsters drawn on it (the picked one framed in yellow), and the floor they
+    /// may be put on faintly marked.</summary>
+    private void DrawMonsterMap()
     {
         if (Ctx == null || _monsterMap is not { } map || _monsterMapPixels == null) return;
         int w = map.Width * 16, h = map.Height * 16;
         var px = (uint[])_monsterMapPixels.Clone();
-        // floor where a monster can go: a light dot in the middle
         foreach (var (x, y) in _monsterOpen)
             for (int dy = 7; dy < 9; dy++) for (int dx = 7; dx < 9; dx++) px[(y * 16 + dy) * w + x * 16 + dx] = 0xFFE8E0A0;
-        foreach (var (x, y, sprite, range) in placed)
+        for (int i = 0; i < _placed.Count; i++)
         {
-            if (range > 0)
+            var (x, y, sprite, range, _, _) = _placed[i];
+            if (range > 0 && i == SelectedMapMonster)
                 Outline(px, w, h, Math.Max(0, x - range) * 16, Math.Max(0, y - range) * 16, Math.Min(map.Width, x + range + 1) * 16 - 1, Math.Min(map.Height, y + range + 1) * 16 - 1, 0xFFE05050);
             if (NpcSprites.Render(Ctx.Rom, sprite) is not { } r) { Outline(px, w, h, x * 16, y * 16, x * 16 + 15, y * 16 + 15, 0xFFFF4040); continue; }
             int ox = x * 16 + 8 - r.W / 2, oy = y * 16 + 16 - r.H;
@@ -223,6 +285,7 @@ public partial class EncounterEditorViewModel
                     int tx = ox + sx, ty = oy + sy;
                     if ((c >> 24) != 0 && tx >= 0 && ty >= 0 && tx < w && ty < h) px[ty * w + tx] = c;
                 }
+            if (i == SelectedMapMonster) Outline(px, w, h, ox - 1, oy - 1, ox + r.W, oy + r.H, 0xFFFFE040);
         }
         var bmp = BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgra32, null, px, w * 4);
         bmp.Freeze();
@@ -235,17 +298,31 @@ public partial class EncounterEditorViewModel
         for (int y = Math.Max(0, y1); y <= Math.Min(h - 1, y2); y++) { if (x1 >= 0 && x1 < w) px[y * w + x1] = c; if (x2 >= 0 && x2 < w) px[y * w + x2] = c; }
     }
 
-    private int MonsterSpriteNumber => SelectedMonsterSprite >= 0 && SelectedMonsterSprite < MonsterSpriteOptions.Count ? MonsterSpriteOptions[SelectedMonsterSprite].Number : DefaultMonsterSprite;
-
     private int? ParseMonsterGroup()
     {
         if (int.TryParse(MonsterGroupText.Trim(), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int g) && g >= 1 && g <= Count) return g;
-        Status = $"The group the monsters fight: 01-{Count:X2} (the list on the left).";
+        Status = $"The group the monster fights: 01-{Count:X2} (the list on the left).";
         return null;
     }
 
-    /// <summary>Writes the map's monsters at <paramref name="places"/> with the settings shown (none = take them off).</summary>
-    private void WriteMonsters(List<(int X, int Y)> places, string what)
+    private int RangeShown => RangeTiles[Math.Clamp(MonsterRangeIndex, 0, RangeTiles.Length - 1)];
+
+    /// <summary>Stands for the sprite picked below in a monster written by <see cref="WriteMonsters"/> (a Lufia 2
+    /// monster gets into the ROM first).</summary>
+    private const int PickedSprite = -2;
+
+    /// <summary>A monster with the settings shown (sprite, roaming, group) at x, y; null when the group isn't valid.</summary>
+    private VisibleMonsters.Monster? Shown(int x, int y)
+    {
+        if (ParseMonsterGroup() is not int g) return null;
+        var choice = SelectedMonsterSprite >= 0 && SelectedMonsterSprite < MonsterSpriteOptions.Count ? MonsterSpriteOptions[SelectedMonsterSprite] : null;
+        int sprite = choice == null ? DefaultMonsterSprite : choice.Number >= 0 ? choice.Number : PickedSprite;
+        return new VisibleMonsters.Monster(x, y, sprite, RangeShown, g, MonsterChases);
+    }
+
+    /// <summary>Writes the map's monsters (none = take them off), then shows the map again with monster
+    /// <paramref name="pick"/> picked.</summary>
+    private void WriteMonsters(List<VisibleMonsters.Monster> monsters, string what, int pick = -1)
     {
         if (Ctx == null || MonsterMapId < 0) return;
         int id = MonsterMapId;
@@ -253,96 +330,139 @@ public partial class EncounterEditorViewModel
         // edits of groups first: the list of each map's group holds places in the setup scripts, which adding or
         // taking off characters moves
         if (HasPendingEdits && WritePendingEdits() is string error) { Status = error; return; }
-        if (places.Count == 0)
+        var choice = SelectedMonsterSprite >= 0 && SelectedMonsterSprite < MonsterSpriteOptions.Count ? MonsterSpriteOptions[SelectedMonsterSprite] : null;
+        string? note = null;
+        int added = -1;
+        Commit(what, () =>
         {
-            Commit(what, () => VisibleMonsters.RemoveFromMap(rom, id));
-        }
-        else
-        {
-            if (ParseMonsterGroup() is not int g) return;
-            int sprite = MonsterSpriteNumber, range = RangeTiles[Math.Clamp(MonsterRangeIndex, 0, RangeTiles.Length - 1)];
-            var choice = SelectedMonsterSprite >= 0 && SelectedMonsterSprite < MonsterSpriteOptions.Count ? MonsterSpriteOptions[SelectedMonsterSprite] : null;
-            string? note = null;
-            Commit(what, () =>
+            if (monsters.Any(m => m.Sprite == PickedSprite) && choice is { Number: < 0, Sheet: { } sh })
             {
-                if (choice is { Number: < 0, Sheet: { } sh })
-                {
-                    // a Lufia 2 monster: into the ROM first, as a sprite of its own
-                    sprite = NpcSprites.AddFromSheet(rom, sh.Px, sh.FrameWidth, sh.Height, out bool exact);
-                    note = exact ? $"{choice.Lufia2Name} is now sprite {sprite:X2}."
-                                 : $"{choice.Lufia2Name} is now sprite {sprite:X2}; the 4 spare sprite palettes were taken, so it uses the closest one.";
-                }
-                VisibleMonsters.AddToMap(rom, id, places, sprite, range, g);
-            });
-            if (note != null)
-            {
-                FillMonsterSprites();
-                SelectedMonsterSprite = MonsterSpriteOptions.ToList().FindIndex(c => c.Number == sprite);
-                Status += " " + note;
+                // a Lufia 2 monster: into the ROM first, as a sprite of its own
+                added = NpcSprites.AddFromSheet(rom, sh.Px, sh.FrameWidth, sh.Height, out bool exact);
+                note = exact ? $"{choice.Lufia2Name} is now sprite {added:X2}."
+                             : $"{choice.Lufia2Name} is now sprite {added:X2}; the 4 spare sprite palettes were taken, so it uses the closest one.";
+                monsters = monsters.Select(m => m.Sprite == PickedSprite ? m with { Sprite = added } : m).ToList();
             }
-        }
+            VisibleMonsters.AddToMap(rom, id, monsters);
+        });
         BuildMapGroups();   // (new places in the setup script, and the note on the map)
         Edited = false;
+        if (note != null) FillMonsterSprites();
         int keep = SelectedMonsterMap;
         StartMonsterMaps();
         if (SelectedMonsterMap != keep) SelectedMonsterMap = keep;
+        LoadMonsterMap(pick);
+        if (note != null)
+        {
+            SelectedMonsterSprite = MonsterSpriteOptions.ToList().FindIndex(c => c.Number == added);
+            Status += " " + note;
+        }
     }
 
-    private List<(int X, int Y)> CurrentPlaces() =>
-        Ctx == null || _monsterMap == null ? new() : VisibleMonsters.Placed(Ctx.Rom, _monsterMap).Select(p => (p.X, p.Y)).ToList();
-
-    /// <summary>Puts <see cref="MonsterCount"/> monsters on the map, spread over its floor (new places each time).</summary>
+    /// <summary>Puts <see cref="MonsterCount"/> monsters on the map, spread over its floor (new places each time),
+    /// all with the settings shown.</summary>
     [RelayCommand]
     private void PlaceMonsters()
     {
         if (Ctx == null || _monsterMap == null) return;
         var places = VisibleMonsters.AutoPlaces(Ctx.Rom, _monsterMap, MonsterCount, _monsterSeed++);
         if (places.Count == 0) { Status = "This map has no open floor away from its doors for monsters."; return; }
-        WriteMonsters(places, $"Monsters on {MonsterMapOptions[SelectedMonsterMap].Split(':')[0]}");
+        var list = new List<VisibleMonsters.Monster>();
+        foreach (var (x, y) in places) { if (Shown(x, y) is not { } m) return; list.Add(m); }
+        WriteMonsters(list, $"Monsters on {MonsterMapName}", 0);
     }
 
-    /// <summary>Keeps the monsters where they are with the sprite, group and range shown.</summary>
+    /// <summary>The picked monster gets the sprite, group and roaming shown (it stays where it is).</summary>
+    [RelayCommand]
+    private void UpdateMonster()
+    {
+        int i = SelectedMapMonster;
+        if (i < 0 || i >= _placed.Count) { Status = "Pick a monster in the list (or on the map) first."; return; }
+        if (Shown(_placed[i].X, _placed[i].Y) is not { } m) return;
+        var list = _placed.ToList();
+        list[i] = m;
+        WriteMonsters(list, $"Monster {i + 1} on {MonsterMapName}", i);
+    }
+
+    /// <summary>Every monster of the map gets the sprite, group and roaming shown (they stay where they are).</summary>
     [RelayCommand]
     private void UpdateMonsters()
     {
-        var places = CurrentPlaces();
-        if (places.Count == 0) { PlaceMonsters(); return; }
-        WriteMonsters(places, $"Monsters on {MonsterMapOptions[SelectedMonsterMap].Split(':')[0]}");
+        if (_placed.Count == 0) { PlaceMonsters(); return; }
+        var list = new List<VisibleMonsters.Monster>();
+        foreach (var p in _placed) { if (Shown(p.X, p.Y) is not { } m) return; list.Add(m); }
+        WriteMonsters(list, $"Monsters on {MonsterMapName}", Math.Max(0, SelectedMapMonster));
+    }
+
+    [RelayCommand]
+    private void RemoveMonster()
+    {
+        int i = SelectedMapMonster;
+        if (i < 0 || i >= _placed.Count) { Status = "Pick a monster in the list (or on the map) first."; return; }
+        var list = _placed.ToList();
+        var m = list[i];
+        list.RemoveAt(i);
+        WriteMonsters(list, $"Monster at {m.X},{m.Y} taken off", Math.Min(i, list.Count - 1));
     }
 
     [RelayCommand]
     private void RemoveMonsters()
     {
-        if (CurrentPlaces().Count == 0) { Status = "This map has no monsters."; return; }
-        WriteMonsters(new(), $"Monsters taken off {MonsterMapOptions[SelectedMonsterMap].Split(':')[0]}");
+        if (_placed.Count == 0) { Status = "This map has no monsters."; return; }
+        WriteMonsters(new(), $"Monsters taken off {MonsterMapName}");
     }
 
-    /// <summary>A click on the map picture (in tiles): a monster there goes, else one is put there.</summary>
+    /// <summary>A new encounter group (at the end of the list on the left, opened there to fill in) for the picked
+    /// monster, or for the next ones put on the map when none is picked.</summary>
+    [RelayCommand]
+    private void NewGroupForMonster()
+    {
+        int before = Count;
+        NewGroupCommand.Execute(null);
+        if (Count == before) return;   // (NewGroup said why not)
+        string made = Status;
+        MonsterGroupText = Count.ToString("X2");
+        if (SelectedMapMonster >= 0 && SelectedMapMonster < _placed.Count) UpdateMonster();
+        Status = $"{made} The picked monster fights it: put the monsters it should have in its subgroups on the Monsters page.";
+    }
+
+    /// <summary>A click on the map picture (in tiles): a monster there is picked, else one with the settings shown
+    /// is put there.</summary>
     public void MonsterMapClick(int x, int y)
     {
         if (Ctx == null || _monsterMap is not { } map || x < 0 || y < 0 || x >= map.Width || y >= map.Height) return;
-        var places = CurrentPlaces();
-        int at = places.FindIndex(p => p.X == x && p.Y == y);
-        if (at >= 0) { places.RemoveAt(at); WriteMonsters(places, $"Monster at {x},{y} taken off"); return; }
+        int at = _placed.FindIndex(p => p.X == x && p.Y == y);
+        if (at >= 0) { SelectedMapMonster = at; return; }
         if (!_monsterOpen.Contains((x, y))) { Status = "Monsters go on open floor (the dotted tiles), away from doors and arrival points."; return; }
-        if (places.Count >= MaxMonsters) { Status = $"At most {MaxMonsters} monsters on a map."; return; }
-        places.Add((x, y));
-        WriteMonsters(places, $"Monster put at {x},{y}");
+        if (_placed.Count >= MaxMonsters) { Status = $"At most {MaxMonsters} monsters on a map."; return; }
+        if (Shown(x, y) is not { } m) return;
+        var list = _placed.ToList();
+        list.Add(m);
+        WriteMonsters(list, $"Monster put at {x},{y}", list.Count - 1);
+    }
+
+    /// <summary>A right click on the map picture: the monster there goes.</summary>
+    public void MonsterMapRightClick(int x, int y)
+    {
+        int at = _placed.FindIndex(p => p.X == x && p.Y == y);
+        if (at < 0) return;
+        SelectedMapMonster = at;
+        RemoveMonster();
     }
 
     public void MonsterMapHover(int x, int y)
     {
         if (_monsterMap is not { } map || x < 0 || y < 0 || x >= map.Width || y >= map.Height) { MonsterHoverInfo = ""; return; }
-        bool monster = CurrentPlacesCached().Contains((x, y));
-        MonsterHoverInfo = $"{x},{y}: " + (monster ? "a monster (click to take it off)" : _monsterOpen.Contains((x, y)) ? "open floor (click to put a monster here)" : "no monsters here");
+        int at = _placed.FindIndex(p => p.X == x && p.Y == y);
+        MonsterHoverInfo = $"{x},{y}: " + (at >= 0 ? $"monster {at + 1}, group {_placed[at].Group:X2} (click to pick it, right click to take it off)"
+            : _monsterOpen.Contains((x, y)) ? "open floor (click to put a monster here)" : "no monsters here");
     }
+}
 
-    private List<(int X, int Y)>? _placesCache;
-    private int _placesCacheMap = -1;
-    private List<(int X, int Y)> CurrentPlacesCached()
-    {
-        if (_placesCache == null || _placesCacheMap != MonsterMapId || MonsterMapImage != _cachedFor) { _placesCache = CurrentPlaces(); _placesCacheMap = MonsterMapId; _cachedFor = MonsterMapImage; }
-        return _placesCache;
-    }
-    private ImageSource? _cachedFor;
+/// <summary>A monster of the map, as listed.</summary>
+public sealed class MapMonsterRow
+{
+    public ImageSource? Image { get; init; }
+    public string Title { get; init; } = "";
+    public string Detail { get; init; } = "";
 }
