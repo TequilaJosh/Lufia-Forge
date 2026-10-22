@@ -49,13 +49,14 @@ public partial class BuiltInPatch : ObservableObject
         if (rom == null) { Added = false; CanClick = false; State = "Load a ROM first."; ButtonText = "Add"; return; }
         Added = IsApplied(rom);
         bool original = IsOriginal(rom);
-        CanClick = Added ? Remove != null : original;
-        bool update = !Added && NeedsUpdate?.Invoke(rom) == true;
-        ButtonText = Added ? (Remove != null ? "Remove" : "Added") : update ? "Update" : "Add";
-        Kind = Added ? "Added" : update ? "Update" : original ? "NotAdded" : "Blocked";
-        Badge = Added ? "✔ In this ROM" : update ? "⟳ Update available" : original ? "Not added" : "✖ Can't be added";
-        State = Added ? "✔ In this ROM." + (Remove == null ? " (It stays in: it can't be taken out again.)" : "")
-              : update ? "An older version is in this ROM: click Update to fix it."
+        // (an update is offered also for a patch that's in: an older version of it, which Add brings up to date)
+        bool update = NeedsUpdate?.Invoke(rom) == true;
+        CanClick = update || (Added ? Remove != null : original);
+        ButtonText = update ? "Update" : Added ? (Remove != null ? "Remove" : "Added") : "Add";
+        Kind = update ? "Update" : Added ? "Added" : original ? "NotAdded" : "Blocked";
+        Badge = update ? "⟳ Update available" : Added ? "✔ In this ROM" : original ? "Not added" : "✖ Can't be added";
+        State = update ? "An older version is in this ROM: click Update to fix it."
+              : Added ? "✔ In this ROM." + (Remove == null ? " (It stays in: it can't be taken out again.)" : "")
               : original ? "Not added."
               : BlockedText ?? "Can't be added: the game code it changes was already changed (by another patch?).";
     }
@@ -99,6 +100,15 @@ public partial class BuiltInPatch : ObservableObject
             Description = "Room for 72 new spells (38-7F) next to the game's 56: make them in Spells (\"New spell\" copies a spell, then rename it and choose what it does), teach them in Character Magic, give them to monsters and bosses in Monsters. Every character can learn up to 64 spells, in an order the player sets with the field Magic menu (kept in the save); saves from before keep their spells. The Guy / Aguro magic patch adds it with a first new spell, Trickstr (Trick on the whole party).",
             IsApplied = SpellTablePatch.IsApplied, IsOriginal = SpellTablePatch.IsOriginal, Apply = SpellTablePatch.Apply, Remove = SpellTablePatch.Remove,
             NeedsUpdate = SpellTablePatch.NeedsUpdate,
+        },
+        new()
+        {
+            Name = "Visible monsters (code update)", Category = "Maps", Icon = "👾", Summary = "Brings the walking monsters' code in this ROM up to date; their places and settings stay.",
+            Description = "Monsters that walk around maps are added on Game Data > Encounters > Visible monsters. When this ROM's monsters were added with an older Lufia Forge, Update puts in the current code (fixes included), keeping every monster, path and switch.",
+            NeedsExpandedRom = false,
+            BlockedText = "No visible monsters in this ROM: add them on Game Data > Encounters > Visible monsters.",
+            IsApplied = VisibleMonsters.IsCurrent, IsOriginal = _ => false, Apply = VisibleMonsters.Apply,
+            NeedsUpdate = VisibleMonsters.NeedsUpdate,
         },
         new()
         {
@@ -146,6 +156,7 @@ public partial class BuiltInPatch : ObservableObject
             Description = "Turns the game into an Ancient Cave run: New Game puts the Hero, Lufia, Aguro and Jerin on floor 1 with nothing, and every staircase leads to a new floor built at random (rooms, corridors, chests). Battles get harder floor by floor with this ROM's own encounter groups, following the level the party should have by then (monsters give 3 x the EXP in the cave), and the chests' gear keeps up. The floor number shows in the bottom right corner. The rest of the game can't be reached. Uses two free map numbers and its own copy of map 8E (the Old Cave floor), which must be unchanged. From the Ancient Cave project (ac.asm).",
             IsApplied = rom => AncientCave.IsAppliedAs(rom, AncientCave.CaveMode.CaveOnly), IsOriginal = rom => AncientCave.IsOriginal(rom) || AncientCave.IsApplied(rom),
             Apply = rom => AncientCave.Apply(rom, AncientCave.CaveMode.CaveOnly), Remove = AncientCave.Remove,
+            NeedsUpdate = rom => AncientCave.IsAppliedAs(rom, AncientCave.CaveMode.CaveOnly) && AncientCave.NeedsUpdate(rom),
         },
         new()
         {
@@ -153,6 +164,7 @@ public partial class BuiltInPatch : ObservableObject
             Description = "Keeps the normal game and adds an Ancient Cave run to it: the man by the Old Cave's elevator asks whether to take the party down. The party goes in at level 1 with nothing (the same members, in the same order) and comes back as it was when it leaves (the arrival door), wins on floor 100, or quits. Saving in the cave keeps the run. The floor number shows in the bottom right corner. Uses two free map numbers and its own copy of map 8E (the Old Cave floor), which must be unchanged. Replaces the cave-only or elevator start version when one is in.",
             IsApplied = rom => AncientCave.IsAppliedAs(rom, AncientCave.CaveMode.NormalGame), IsOriginal = rom => AncientCave.IsOriginal(rom) || AncientCave.IsApplied(rom),
             Apply = rom => AncientCave.Apply(rom, AncientCave.CaveMode.NormalGame), Remove = AncientCave.Remove,
+            NeedsUpdate = rom => AncientCave.IsAppliedAs(rom, AncientCave.CaveMode.NormalGame) && AncientCave.NeedsUpdate(rom),
         },
         new()
         {
@@ -160,6 +172,7 @@ public partial class BuiltInPatch : ObservableObject
             Description = "As the Old Cave version, but New Game skips the Fortress conversation and starts in the Old Cave's elevator room with the prologue's party, where the man asks right away whether to take them down. The room's way out and its elevator are closed, so the Ancient Cave is all there is. The floor number shows in the bottom right corner. Replaces the other versions when one is in.",
             IsApplied = rom => AncientCave.IsAppliedAs(rom, AncientCave.CaveMode.ElevatorStart), IsOriginal = rom => AncientCave.IsOriginal(rom) || AncientCave.IsApplied(rom),
             Apply = rom => AncientCave.Apply(rom, AncientCave.CaveMode.ElevatorStart), Remove = AncientCave.Remove,
+            NeedsUpdate = rom => AncientCave.IsAppliedAs(rom, AncientCave.CaveMode.ElevatorStart) && AncientCave.NeedsUpdate(rom),
         },
         new()
         {

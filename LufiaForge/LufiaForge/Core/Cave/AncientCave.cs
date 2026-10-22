@@ -45,7 +45,7 @@ public static partial class AncientCave
     private static readonly byte[] GameOverOriginal = { 0xAD, 0x49, 0x13, 0xD0, 0x24 };
     private static readonly byte[] SaveNameOriginal = { 0xA0, 0x00, 0x00, 0xA5, 0x00 };
     private static readonly byte[] Magic = "LFAC"u8.ToArray();
-    private const byte Version = 21;
+    private const byte Version = 22;   // 22: the floor 100 battle counts its 4th group (beating three no longer ends it)
     // block: magic, version, map 1, map 2, options (bit 0 = cave-only New Game, bit 1 = elevator start), save flag, floor 100 flag, 2 spare,
     // the 4 floor 100 monsters, the boss formation as it was (4); then the code
     private const int Header = 24;   // (+ 20-22: the merchants' story flags, 23 spare; version 21 on)
@@ -79,10 +79,15 @@ public static partial class AncientCave
         Matches(rom, MapLoadSite, MapLoadOriginal) && Matches(rom, PostHeaderSite, PostHeaderOriginal) && Matches(rom, NewGameSite, NewGameOriginal) &&
         Matches(rom, GameOverSite, GameOverOriginal) && Matches(rom, ChestSite, ChestOriginal) && Matches(rom, MsgSite, MsgOriginal) &&
         Matches(rom, SaveNameSite, SaveNameOriginal) && Matches(rom, GroupsSite, GroupsOriginal) && Matches(rom, PaletteSite, PaletteOriginal) &&
+        Matches(rom, CountLoopSite, CountLoopOriginal) && Matches(rom, SetupLoopSite, SetupLoopOriginal) &&
         Matches(rom, HudOamSite, HudOamOriginal) && Matches(rom, HudNmiSite, HudNmiOriginal) && Matches(rom, GoldSite, GoldOriginal) &&
         Matches(rom, ExpSite, ExpOriginal);
 
     public static bool IsApplied(RomBuffer rom) => Read(rom) != null;
+
+    /// <summary>The cave is in the ROM, made by an older version of this code (applying it again updates it, keeping its
+    /// mode, floors' flags and bosses).</summary>
+    public static bool NeedsUpdate(RomBuffer rom) => Read(rom) is { } i && rom.ReadByte(i.Block + 4) < Version;
 
     /// <summary>The cave in this ROM, or null.</summary>
     public static Info? Read(RomBuffer rom)
@@ -198,6 +203,8 @@ public static partial class AncientCave
             if (locked) AddStart(rom, finalFlag); else RemoveStart(rom);
         }
         rom.WriteBytes(PaletteSite, Jsl("PaletteSlot")); rom.WriteBytes(PaletteSite + 4, new byte[] { 0xEA, 0xEA, 0xEA, 0xEA });
+        rom.WriteBytes(CountLoopSite, Jsl("CountLoop")); rom.WriteByte(CountLoopSite + 4, 0xEA);
+        rom.WriteBytes(SetupLoopSite, Jsl("SetupLoop")); rom.WriteByte(SetupLoopSite + 4, 0xEA);
         rom.FixChecksum();
     }
 
@@ -223,6 +230,8 @@ public static partial class AncientCave
         RemoveEntrance(rom);
         RemoveStart(rom);
         rom.WriteBytes(PaletteSite, PaletteOriginal);
+        rom.WriteBytes(CountLoopSite, CountLoopOriginal);
+        rom.WriteBytes(SetupLoopSite, SetupLoopOriginal);
         if (info.Bosses.Any(b => b != 0)) Encounters.SetBossMonsters(rom, BossFormation, info.OldFormation);
         var space = ExpansionSpace.Load(rom);
         space.Free(info.Block);

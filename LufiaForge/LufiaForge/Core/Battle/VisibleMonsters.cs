@@ -62,13 +62,13 @@ public static class VisibleMonsters
     private const int Header = 8, MapTable = 0x1000, BehaviourTable = MapTable + 512, PathMaps = BehaviourTable + 256 * 16,
                       Heap = PathMaps + 512, BlockSize = 0x7000, HeapSize = BlockSize - Heap;
     /// <summary>The block's version (header byte 4); an older block is rebuilt, keeping its monsters.</summary>
-    private const int Version = 5;
+    private const int Version = 6;
     public const int MaxPathPoints = 32;
 
     /// <summary>Where the block keeps its tables (by its version).</summary>
     private static (int Maps, int Behaviours, int Paths) Layout(RomBuffer rom, int b) => rom.ReadByte(b + 4) switch
     {
-        Version or 4 or 3 => (MapTable, BehaviourTable, PathMaps),
+        Version or 5 or 4 or 3 => (MapTable, BehaviourTable, PathMaps),
         2 => (0x300, 0x500, -1),
         _ => (0x300, -1, -1),
     };
@@ -122,6 +122,8 @@ public static class VisibleMonsters
             RTL
         .monster
             JSR Fresh
+            LDA $077F               ; its events come from this map's script block, however it is talked to (the talk
+            STA $1C,x               ; reads the map from $1C, which after a trip out can still name the world map)
             LDA $1D,x               ; beaten (hidden by its event): out of the map's actor list, so it can't be
             BIT.b #$80              ; talked to (fought) again, until the map is entered again
             BNE .gone
@@ -778,6 +780,7 @@ public static class VisibleMonsters
         Talk:                       ; M = 8, in place of LDA $30 / AND #$80 (A pressed?) before BEQ
             JSR Fresh
             JSR Sweep               ; (a monster beaten just now can't be talked to)
+            JSR OwnMap
             LDA !PEND
             BNE .pend
             REP #$20                ; a step-on area a monster set off: its event, as the game runs it for the party
@@ -843,6 +846,42 @@ public static class VisibleMonsters
             LDA $30
             AND.b #$80
             RTL
+
+        OwnMap:                     ; M = 8, X = 16: every monster of this map takes its events from this map's block,
+            PHX                     ; also when A is pressed at one ($1C can still name the map the party came from,
+            PHY                     ; often the world map, whose event would run instead)
+            REP #$20
+            LDA $077F
+            AND.w #$00FF
+            ASL
+            TAX
+            LDA !MAPS+1,x           ; the map's monster count
+            AND.w #$00FF
+            BEQ .out
+            TAY
+            LDA !MAPS,x             ; its first character: record $07DE + 32 x (n + 8)
+            AND.w #$00FF
+            CLC
+            ADC.w #$0008
+            ASL #5
+            CLC
+            ADC.w #$07DE
+            TAX
+        .next
+            SEP #$20
+            LDA $077F
+            STA $1C,x
+            REP #$21                ; (and C clear)
+            TXA
+            ADC.w #$0020
+            TAX
+            DEY
+            BNE .next
+        .out
+            SEP #$20
+            PLY
+            PLX
+            RTS
 
         NoRandom:                   ; M = 8, X = 8: A not 0 = no random battle on this step
             PHP
@@ -969,6 +1008,10 @@ public static class VisibleMonsters
 
     /// <summary>The block keeps monster character n's event in slot n (versions 1-3, written before 2026-10-22: wrong,
     /// see the class notes) instead of n + 1.</summary>
+    /// <summary>Visible monsters are in the ROM with an older version of the code (<see cref="Apply"/> updates it).</summary>
+    public static bool NeedsUpdate(RomBuffer rom) => Block(rom) is int b && b > 0 && rom.ReadByte(b + 4) < Version;
+    public static bool IsCurrent(RomBuffer rom) => Block(rom) is int b && b > 0 && rom.ReadByte(b + 4) == Version;
+
     private static bool OldEvents(RomBuffer rom) => Block(rom) is int b && b > 0 && rom.ReadByte(b + 4) < 4;
 
     /// <summary>File offset of monster character <paramref name="n"/>'s event (1F gg 5C k 00 00), or -1.</summary>
