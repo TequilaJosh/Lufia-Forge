@@ -170,6 +170,21 @@ public partial class EncounterEditorViewModel
     /// whole map), else it only wanders.</summary>
     [ObservableProperty] private bool _monsterChases = true;
 
+    /// <summary>What a click on the map picture does: put / pick monsters, add points to the picked monster's path,
+    /// add switch tiles.</summary>
+    public string[] MonsterClickModeOptions { get; } = { "Puts monsters / picks them", "Draws the picked monster's path", "Adds switch tiles" };
+    [ObservableProperty] private int _monsterClickModeIndex;
+    public string[] MonsterPathModeOptions { get; } = { "No path: roams", "Walks its path round and round", "Walks its path there and back", "Walks its path once, then stays" };
+    [ObservableProperty] private int _monsterPathModeIndex;
+    /// <summary>What a new switch tile does: an event of its own (to write in the Events editor) or opening a door.</summary>
+    public ObservableCollection<string> SwitchActionOptions { get; } = new();
+    [ObservableProperty] private int _switchActionIndex;
+    private List<int> _doors = new();
+    /// <summary>The map's step-on areas that are switched on: number, rectangle.</summary>
+    private List<(int Index, int X1, int Y1, int X2, int Y2)> _areas = new();
+
+    partial void OnMonsterClickModeIndexChanged(int value) => DrawMonsterMap();
+
     partial void OnMonsterGroupTextChanged(string value) => MonsterGroupInfo = GroupSummary(value);
 
     /// <summary>"Spider, Kobold, Giant Bat": the monsters a group's battles can have (hex group number), or why not.</summary>
@@ -199,6 +214,7 @@ public partial class EncounterEditorViewModel
         if (m.Group > 0) MonsterGroupText = m.Group.ToString("X2");
         MonsterRangeIndex = RangeIndex(m.Range);
         MonsterChases = m.Chases;
+        MonsterPathModeIndex = (int)m.Mode;
         DrawMonsterMap();
     }
 
@@ -227,6 +243,14 @@ public partial class EncounterEditorViewModel
             _monsterMap = map;
             _monsterOpen = VisibleMonsters.OpenTiles(rom, map).ToHashSet();
             _placed = VisibleMonsters.Placed(rom, map);
+            var on = MapEvents.EnabledAreas(rom, id);
+            _areas = map.Triggers.Where(t => !t.IsUnused && on.Contains(t.Index)).Select(t => (t.Index, t.X1, t.Y1, t.X2, t.Y2)).ToList();
+            _doors = VisibleMonsters.Doors(rom, id);
+            int keepAction = SwitchActionIndex;
+            SwitchActionOptions.Clear();
+            SwitchActionOptions.Add("An event of its own (write it in the Events editor)");
+            foreach (int d in _doors) SwitchActionOptions.Add($"Opens door {d + 1} for good");
+            SwitchActionIndex = keepAction >= 0 && keepAction < SwitchActionOptions.Count ? keepAction : 0;
             int group = -1;
             try { group = VisibleMonsters.Group(rom, id); } catch { }
             for (int i = 0; i < _placed.Count; i++) MapMonsterOptions.Add(Row(i, _placed[i]));
@@ -258,7 +282,10 @@ public partial class EncounterEditorViewModel
         ImageSource? img = null;
         if (Ctx != null && NpcSprites.Render(Ctx.Rom, m.Sprite) is { } r) img = Picture(r.Px, r.W, r.H);
         string name = MonsterSpriteOptions.FirstOrDefault(c => c.Number == m.Sprite)?.Lufia2Name ?? $"Sprite {m.Sprite:X2}";
-        string roam = (m.Range == 0 ? "roams the whole map" : $"roams up to {m.Range} tiles") + (m.Chases ? ", comes after the party" : ", keeps to itself");
+        string roam = m.Mode != VisibleMonsters.PathMode.None && m.Path is { Count: > 0 }
+            ? $"walks a path of {m.Path.Count} points ({m.Mode switch { VisibleMonsters.PathMode.Loop => "round and round", VisibleMonsters.PathMode.BackAndForth => "there and back", _ => "once" }})"
+            : m.Range == 0 ? "roams the whole map" : $"roams up to {m.Range} tiles";
+        roam += m.Chases ? ", comes after the party" : ", keeps to itself";
         return new MapMonsterRow { Image = img, Title = $"{i + 1}. {name} at {m.X},{m.Y}", Detail = $"{GroupSummary(m.Group.ToString("X2"))}; {roam}" };
     }
 
@@ -271,9 +298,26 @@ public partial class EncounterEditorViewModel
         var px = (uint[])_monsterMapPixels.Clone();
         foreach (var (x, y) in _monsterOpen)
             for (int dy = 7; dy < 9; dy++) for (int dx = 7; dx < 9; dx++) px[(y * 16 + dy) * w + x * 16 + dx] = 0xFFE8E0A0;
+        // step-on areas (switch tiles too): what monsters and the party set off
+        foreach (var (_, x1, y1, x2, y2) in _areas)
+        {
+            Outline(px, w, h, x1 * 16, y1 * 16, x2 * 16 - 1, y2 * 16 - 1, 0xFF40E0F0);
+            Outline(px, w, h, x1 * 16 + 1, y1 * 16 + 1, x2 * 16 - 2, y2 * 16 - 2, 0xFF40E0F0);
+        }
+        // paths: the picked monster's in yellow, the others' in blue
         for (int i = 0; i < _placed.Count; i++)
         {
-            var (x, y, sprite, range, _, _) = _placed[i];
+            if (_placed[i].Mode == VisibleMonsters.PathMode.None || _placed[i].Path is not { Count: > 0 } pts) continue;
+            uint c = i == SelectedMapMonster ? 0xFFFFE040 : 0xFF6090FF;
+            var all = new List<(int X, int Y)> { (_placed[i].X, _placed[i].Y) };
+            all.AddRange(pts);
+            if (_placed[i].Mode == VisibleMonsters.PathMode.Loop) all.Add(pts[0]);
+            for (int k = 1; k < all.Count; k++) Line(px, w, h, all[k - 1].X * 16 + 8, all[k - 1].Y * 16 + 8, all[k].X * 16 + 8, all[k].Y * 16 + 8, c);
+            foreach (var (x, y) in pts) for (int dy = 5; dy < 11; dy++) for (int dx = 5; dx < 11; dx++) px[(y * 16 + dy) * w + x * 16 + dx] = c;
+        }
+        for (int i = 0; i < _placed.Count; i++)
+        {
+            var (x, y, sprite, range, _, _, _, _) = _placed[i];
             if (range > 0 && i == SelectedMapMonster)
                 Outline(px, w, h, Math.Max(0, x - range) * 16, Math.Max(0, y - range) * 16, Math.Min(map.Width, x + range + 1) * 16 - 1, Math.Min(map.Height, y + range + 1) * 16 - 1, 0xFFE05050);
             if (NpcSprites.Render(Ctx.Rom, sprite) is not { } r) { Outline(px, w, h, x * 16, y * 16, x * 16 + 15, y * 16 + 15, 0xFFFF4040); continue; }
@@ -290,6 +334,16 @@ public partial class EncounterEditorViewModel
         var bmp = BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgra32, null, px, w * 4);
         bmp.Freeze();
         MonsterMapImage = bmp;
+    }
+
+    private static void Line(uint[] px, int w, int h, int x1, int y1, int x2, int y2, uint c)
+    {
+        int n = Math.Max(Math.Abs(x2 - x1), Math.Abs(y2 - y1));
+        for (int i = 0; i <= n; i++)
+        {
+            int x = x1 + (n == 0 ? 0 : (x2 - x1) * i / n), y = y1 + (n == 0 ? 0 : (y2 - y1) * i / n);
+            if (x >= 0 && y >= 0 && x < w && y < h) px[y * w + x] = c;
+        }
     }
 
     private static void Outline(uint[] px, int w, int h, int x1, int y1, int x2, int y2, uint c)
@@ -359,6 +413,43 @@ public partial class EncounterEditorViewModel
         }
     }
 
+    /// <summary>A change to the map (switch tiles): written like the monsters, then the map shown again.</summary>
+    private void ChangeMap(string what, Action<Core.RomBuffer, int> write, int pick)
+    {
+        if (Ctx == null || MonsterMapId < 0) return;
+        int id = MonsterMapId;
+        var rom = Ctx.Rom;
+        if (HasPendingEdits && WritePendingEdits() is string error) { Status = error; return; }
+        Commit(what, () => write(rom, id));
+        BuildMapGroups();
+        Edited = false;
+        int keep = SelectedMonsterMap;
+        StartMonsterMaps();
+        if (SelectedMonsterMap != keep) SelectedMonsterMap = keep;
+        LoadMonsterMap(pick);
+    }
+
+    /// <summary>The picked monster's path with <paramref name="points"/> (none = it roams again).</summary>
+    private void SetPath(List<(int X, int Y)> points, string what)
+    {
+        int i = SelectedMapMonster;
+        if (i < 0 || i >= _placed.Count) { Status = "Pick a monster in the list (or on the map) first."; return; }
+        var mode = (VisibleMonsters.PathMode)Math.Clamp(MonsterPathModeIndex, 0, 3);
+        if (points.Count > 0 && mode == VisibleMonsters.PathMode.None) { mode = VisibleMonsters.PathMode.Loop; MonsterPathModeIndex = 1; }
+        if (points.Count > VisibleMonsters.MaxPathPoints) { Status = $"A path can have {VisibleMonsters.MaxPathPoints} points."; return; }
+        var list = _placed.ToList();
+        list[i] = list[i] with { Mode = points.Count > 0 ? mode : VisibleMonsters.PathMode.None, Path = points.Count > 0 ? points : null };
+        WriteMonsters(list, what, i);
+    }
+
+    [RelayCommand]
+    private void ClearPath()
+    {
+        int i = SelectedMapMonster;
+        if (i < 0 || i >= _placed.Count) { Status = "Pick a monster in the list (or on the map) first."; return; }
+        SetPath(new(), $"Path of monster {i + 1} cleared");
+    }
+
     /// <summary>Puts <see cref="MonsterCount"/> monsters on the map, spread over its floor (new places each time),
     /// all with the settings shown.</summary>
     [RelayCommand]
@@ -380,7 +471,8 @@ public partial class EncounterEditorViewModel
         if (i < 0 || i >= _placed.Count) { Status = "Pick a monster in the list (or on the map) first."; return; }
         if (Shown(_placed[i].X, _placed[i].Y) is not { } m) return;
         var list = _placed.ToList();
-        list[i] = m;
+        var mode = (VisibleMonsters.PathMode)Math.Clamp(MonsterPathModeIndex, 0, 3);
+        list[i] = _placed[i].Path is { Count: > 0 } && mode != VisibleMonsters.PathMode.None ? m with { Mode = mode, Path = _placed[i].Path } : m;
         WriteMonsters(list, $"Monster {i + 1} on {MonsterMapName}", i);
     }
 
@@ -390,7 +482,7 @@ public partial class EncounterEditorViewModel
     {
         if (_placed.Count == 0) { PlaceMonsters(); return; }
         var list = new List<VisibleMonsters.Monster>();
-        foreach (var p in _placed) { if (Shown(p.X, p.Y) is not { } m) return; list.Add(m); }
+        foreach (var p in _placed) { if (Shown(p.X, p.Y) is not { } m) return; list.Add(m with { Mode = p.Mode, Path = p.Path }); }
         WriteMonsters(list, $"Monsters on {MonsterMapName}", Math.Max(0, SelectedMapMonster));
     }
 
@@ -431,6 +523,27 @@ public partial class EncounterEditorViewModel
     public void MonsterMapClick(int x, int y)
     {
         if (Ctx == null || _monsterMap is not { } map || x < 0 || y < 0 || x >= map.Width || y >= map.Height) return;
+        if (MonsterClickModeIndex == 1)
+        {
+            int i = SelectedMapMonster;
+            if (i < 0 || i >= _placed.Count) { Status = "Pick the monster whose path to draw first (in the list)."; return; }
+            var pts = _placed[i].Path?.ToList() ?? new();
+            if (pts.Count > 0 && pts[^1] == (x, y)) return;
+            pts.Add((x, y));
+            SetPath(pts, $"Path of monster {i + 1}: point {pts.Count} at {x},{y}");
+            return;
+        }
+        if (MonsterClickModeIndex == 2)
+        {
+            if (_areas.Any(a => x >= a.X1 && x < a.X2 && y >= a.Y1 && y < a.Y2)) { Status = "There is a step-on area there already: right click to take a switch tile off."; return; }
+            int door = SwitchActionIndex > 0 && SwitchActionIndex - 1 < _doors.Count ? _doors[SwitchActionIndex - 1] : -1;
+            (int Area, int Event) made = (-1, -1);
+            ChangeMap($"Switch tile at {x},{y}", (rom, id) => made = VisibleMonsters.AddSwitch(rom, id, x, y, door), SelectedMapMonster);
+            if (made.Event >= 0)
+                Status += door >= 0 ? $" It opens door {door + 1} when the party or a monster steps on it (event {made.Event})."
+                                    : $" Its event is event {made.Event}: write what it does in the Events editor.";
+            return;
+        }
         int at = _placed.FindIndex(p => p.X == x && p.Y == y);
         if (at >= 0) { SelectedMapMonster = at; return; }
         if (!_monsterOpen.Contains((x, y))) { Status = "Monsters go on open floor (the dotted tiles), away from doors and arrival points."; return; }
@@ -444,6 +557,22 @@ public partial class EncounterEditorViewModel
     /// <summary>A right click on the map picture: the monster there goes.</summary>
     public void MonsterMapRightClick(int x, int y)
     {
+        if (MonsterClickModeIndex == 1)
+        {
+            int i = SelectedMapMonster;
+            if (i < 0 || i >= _placed.Count || _placed[i].Path is not { Count: > 0 } pts) return;
+            var less = pts.Take(pts.Count - 1).ToList();
+            SetPath(less, $"Path of monster {i + 1}: last point taken off");
+            return;
+        }
+        if (MonsterClickModeIndex == 2)
+        {
+            var area = _areas.FirstOrDefault(a => x >= a.X1 && x < a.X2 && y >= a.Y1 && y < a.Y2, (Index: -1, X1: 0, Y1: 0, X2: 0, Y2: 0));
+            if (area.Index < 0) return;
+            if (area.X2 - area.X1 != 1 || area.Y2 - area.Y1 != 1) { Status = "That is one of the map's own step-on areas: change it in the Map Editor."; return; }
+            ChangeMap($"Switch tile at {x},{y} taken off", (rom, id) => VisibleMonsters.RemoveArea(rom, id, area.Index), SelectedMapMonster);
+            return;
+        }
         int at = _placed.FindIndex(p => p.X == x && p.Y == y);
         if (at < 0) return;
         SelectedMapMonster = at;
@@ -454,8 +583,15 @@ public partial class EncounterEditorViewModel
     {
         if (_monsterMap is not { } map || x < 0 || y < 0 || x >= map.Width || y >= map.Height) { MonsterHoverInfo = ""; return; }
         int at = _placed.FindIndex(p => p.X == x && p.Y == y);
-        MonsterHoverInfo = $"{x},{y}: " + (at >= 0 ? $"monster {at + 1}, group {_placed[at].Group:X2} (click to pick it, right click to take it off)"
-            : _monsterOpen.Contains((x, y)) ? "open floor (click to put a monster here)" : "no monsters here");
+        bool area = _areas.Any(a => x >= a.X1 && x < a.X2 && y >= a.Y1 && y < a.Y2);
+        MonsterHoverInfo = $"{x},{y}: " + MonsterClickModeIndex switch
+        {
+            1 => "click to add a point to the picked monster's path, right click to take its last point off",
+            2 => area ? "a step-on area (right click to take a switch tile off)" : "click to put a switch tile here",
+            _ => at >= 0 ? $"monster {at + 1}, group {_placed[at].Group:X2} (click to pick it, right click to take it off)"
+               : area ? "a step-on area: monsters walking onto it set it off"
+               : _monsterOpen.Contains((x, y)) ? "open floor (click to put a monster here)" : "no monsters here",
+        };
     }
 }
 

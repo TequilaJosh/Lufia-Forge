@@ -7,9 +7,9 @@ namespace LufiaForge.Core.Battle;
 /// one reaches the party; random battles are off there. Beaten monsters vanish, and come back when the map is entered
 /// again. (Not on the world map.)
 /// <para>
-/// A monster is an ordinary map character n (sprite, place, wander box) whose talk event (n) is
+/// A monster is an ordinary map character n (sprite, place, wander box) whose talk event (n + 1) is
 /// <c>1F gg</c> (a battle with encounter group gg, its own, as a random battle would pick: $142D = group) then
-/// <c>5C n 00</c> (hide it). A 256-entry table (first monster character, count) says which characters of each map are
+/// <c>5C n+1 00</c> (hide it: 5C k hides character k - 1). A 256-entry table (first monster character, count) says which characters of each map are
 /// monsters, and the step check for random battles ($01:881D) is hooked to make none on those maps (their setup scripts
 /// stay as they were, so taking the monsters off brings the random battles back):
 /// <code>
@@ -37,7 +37,9 @@ namespace LufiaForge.Core.Battle;
 /// $7F:FF80-FFBF (the turn each actor last moved on).
 /// </para>
 /// <para>
-/// Talking to character n runs event n of the map's script block (the talk passes n + 1 and the table is read from 1),
+/// Talking to character n runs event n + 1 of the map's script block (the talk's $16 = actor - 7 = n + 1 is the event
+/// number, traced at $01:C2BA; ROMs made before 2026-10-22 had event n, which only worked while the monsters' events
+/// all had the same group, and froze on the last one: <see cref="EventOf"/> reads both),
 /// and from the map the character's record names ($1C), which can still be the map it came from: the talk is made to
 /// use the map the party is on. The monsters take characters whose events nobody else uses (no script, no step-on area,
 /// no "run event"); skipped ones stay unused. A cutscene that brings in characters a map doesn't list (the opening on
@@ -53,9 +55,22 @@ public static class VisibleMonsters
     private const int RandomSite = 0x8820;      // $01:8820
     private static readonly byte[] RandomOriginal = { 0xAD, 0xB4, 0x07, 0xD0, 0x4F, 0xA5, 0x94 };
     private const string Magic = "LFVM";
-    private const int Header = 8, MapTable = 0x300, BehaviourTable = MapTable + 512, BlockSize = BehaviourTable + 256 * 16;
-    /// <summary>The block's version (header byte 4): 2 added the behaviour table; an older block is rebuilt.</summary>
-    private const int Version = 2;
+    /// <summary>The block (version 3): header, code, the table of each map's monsters, a behaviour byte per monster,
+    /// each map's paths (u16 into the heap, 0 = none) and the heap: per map 16 u16 (each monster's path, 0 = none),
+    /// a path = [mode][count][x y]... Versions 1-2 had the code to 0x300 and the tables after it (2 added behaviours).</summary>
+    private const int Header = 8, MapTable = 0x1000, BehaviourTable = MapTable + 512, PathMaps = BehaviourTable + 256 * 16,
+                      Heap = PathMaps + 512, BlockSize = 0x7000, HeapSize = BlockSize - Heap;
+    /// <summary>The block's version (header byte 4); an older block is rebuilt, keeping its monsters.</summary>
+    private const int Version = 4;
+    public const int MaxPathPoints = 32;
+
+    /// <summary>Where the block keeps its tables (by its version).</summary>
+    private static (int Maps, int Behaviours, int Paths) Layout(RomBuffer rom, int b) => rom.ReadByte(b + 4) switch
+    {
+        Version or 3 => (MapTable, BehaviourTable, PathMaps),
+        2 => (0x300, 0x500, -1),
+        _ => (0x300, -1, -1),
+    };
     /// <summary>Behaviour bits (a byte per monster: map x 16 + its number among the map's monsters).</summary>
     private const int KeepsToItself = 0x01, ChasesInItsArea = 0x02;
     public const int ChaseRange = 6;
@@ -68,10 +83,28 @@ public static class VisibleMonsters
     private static int SnesAddress(int file) => (file / 0x8000 | 0x80) << 16 | (file % 0x8000 | 0x8000);
     private static int FileOffset(int snes) => (snes >> 16 & 0x7F) * 0x8000 + (snes & 0x7FFF);
 
-    private static string Source(int maps, int behaviour) => $$"""
+    private static string Source(int maps, int behaviour, int pathMaps, int heap) => $$"""
         !MAPS = ${{maps:X6}}
         !BEHAV = ${{behaviour:X6}}
+        !PMAPS = ${{pathMaps:X6}}
+        !HEAP = ${{heap:X6}}
         !BEH = $7FFEC8
+        !PIDX = $7FFD00
+        !PFLG = $7FFD30
+        !TX = $7FFD60
+        !TY = $7FFD90
+        !CURMAP = $7FFDC0
+        !QAREA = $7FFDC2
+        !ATRIG = $7FFDC8
+        !CNT = $7FFDD0
+        !AIDX = $7FFDD1
+        !TX16 = $7FFDD2
+        !TY16 = $7FFDD4
+        !PP = $7FFDD6
+        !PMODE = $7FFDD8
+        !PCNT = $7FFDD9
+        !TGX = $7FFDDA
+        !TGY = $7FFDDB
         !HEROX = $7FFEC0
         !HEROY = $7FFEC2
         !TURN = $7FFEC4
@@ -87,11 +120,13 @@ public static class VisibleMonsters
             BIT.b #$20
             RTL
         .monster
+            JSR Fresh
             LDA $1D,x               ; beaten (hidden by its event): out of the map's actor list, so it can't be
             BIT.b #$80              ; talked to (fought) again, until the map is entered again
             BNE .gone
             LDA $0A,x
             BNE .go                 ; a step under way: carry on
+            JSR Arrive              ; (on a tile: a step-on area there?)
             JSR Turn
             JSR Contact
             BCS .rest               ; next to the hero: wait for the talk check
@@ -107,6 +142,8 @@ public static class VisibleMonsters
             STA !LAST,x
             PLX
             JSR Choose
+            CMP.b #$80
+            BCS .rest               ; (at the end of a path it walks once)
             STA $1B
             PHX
             JSL Target              ; $12/$14 = the tile that way, $1A = its direction bit
@@ -342,22 +379,22 @@ public static class VisibleMonsters
             CLC
             RTS
 
-        Choose:                     ; A = a direction (0 right, 1 left, 2 down, 3 up): towards the hero when near
+        Choose:                     ; A = a direction (0 right, 1 left, 2 down, 3 up; 80 = stay): towards the hero when near, else along its path
             JSR Behav
             STA !BEH
             BIT.b #{{KeepsToItself}}
-            BNE .random             ; it doesn't come after the party
+            BNE .path               ; it doesn't come after the party
             JSR Hero
             LDA $0001,y             ; the hero inside its roaming area
             CMP $11,x
-            BCC .random
+            BCC .path
             CMP $15,x
-            BCS .random
+            BCS .path
             LDA $0004,y
             CMP $13,x
-            BCC .random
+            BCC .path
             CMP $17,x
-            BCS .random
+            BCS .path
             LDA $0001,y             ; dx = hero - monster
             SEC
             SBC $01,x
@@ -383,7 +420,7 @@ public static class VisibleMonsters
             CLC
             ADC $16
             CMP.b #{{ChaseRange + 1}}
-            BCS .random
+            BCS .path
         +
             PHX                     ; now and then a random step anyway (round walls)
             LDA.b #$04
@@ -409,6 +446,10 @@ public static class VisibleMonsters
             RTS
         +   LDA.b #$03
             RTS
+        .path
+            JSR PathDir
+            BCC .random
+            RTS
         .random
             PHX
             LDA.b #$04
@@ -416,10 +457,358 @@ public static class VisibleMonsters
             PLX
             RTS
 
+        Fresh:                      ; a map entered: paths from their start, no areas set off yet (X, Y kept)
+            PHX
+            REP #$20
+            LDA $077F
+            AND.w #$00FF
+            ORA.w #$A500            ; (with a mark, so RAM's power-on contents don't pass for a map)
+            CMP !CURMAP
+            BEQ .same
+            STA !CURMAP
+            LDA.w #$0000
+            STA !QAREA
+            SEP #$20
+            LDX.w #$002F
+        -   LDA.b #$00
+            STA !PIDX,x
+            STA !PFLG,x
+            LDA.b #$FF
+            STA !TX,x
+            STA !TY,x
+            DEX
+            BPL -
+            LDX.w #$0007
+        -   LDA.b #$00
+            STA !ATRIG,x
+            DEX
+            BPL -
+        .same
+            SEP #$20
+            PLX
+            RTS
+
+        Arrive:                     ; X = the monster's record, on a tile: a new one in a step-on area sets it off (X kept)
+            PHX
+            TXY
+            REP #$20
+            LDA $18
+            AND.w #$003F
+            TAX
+            SEP #$20
+            LDA $0001,y
+            CMP !TX,x
+            BNE .new
+            LDA $0004,y
+            CMP !TY,x
+            BEQ .out
+        .new
+            LDA !TX,x
+            CMP.b #$FF              ; (where it starts doesn't count)
+            PHP
+            LDA $0001,y
+            STA !TX,x
+            LDA $0004,y
+            STA !TY,x
+            PLP
+            BEQ .out
+            JSR AreaAt
+        .out
+            PLX
+            RTS
+
+        AreaAt:                     ; Y = a monster's record: queue the step-on area it stands in (once a map visit)
+            LDA $079C               ; the map's areas: $079C of them, 12 bytes each from $7F:($07A8) ($01:9494)
+            BNE +
+            RTS
+        +   STA !CNT
+            LDA.b #$00
+            STA !AIDX
+            REP #$20
+            LDA $0001,y
+            STA !TX16
+            LDA $0004,y
+            STA !TY16
+            LDX $07A8
+        .loop
+            REP #$20
+            LDA !TX16
+            CMP $7F0004,x
+            BCC .next
+            CMP $7F0008,x
+            BCS .next
+            LDA !TY16
+            CMP $7F0006,x
+            BCC .next
+            CMP $7F000A,x
+            BCS .next
+            SEP #$20
+            LDA $7F0002,x           ; switched on
+            BEQ .next
+            PHX
+            JSR AreaBit             ; X = its byte in !ATRIG, A = its bit
+            AND !ATRIG,x
+            BNE .done               ; set off already
+            JSR AreaBit
+            ORA !ATRIG,x
+            STA !ATRIG,x
+            PLX
+            REP #$20
+            LDA !QAREA
+            BNE +                   ; (one at a time: a second waits for the next step)
+            TXA
+            STA !QAREA
+        +   SEP #$20
+            RTS
+        .done
+            PLX
+        .next
+            REP #$20
+            TXA
+            CLC
+            ADC.w #$000C
+            TAX
+            SEP #$20
+            LDA !AIDX
+            INC
+            STA !AIDX
+            LDA !CNT
+            DEC
+            STA !CNT
+            BNE .loop
+        .none
+            SEP #$20
+            RTS
+
+        AreaBit:                    ; area !AIDX: X = its byte in !ATRIG, A = its bit
+            REP #$20
+            LDA !AIDX
+            AND.w #$0007
+            TAX
+            SEP #$20
+            LDA.b #$01
+        -   DEX
+            BMI +
+            ASL
+            BRA -
+        +   PHA
+            REP #$20
+            LDA !AIDX
+            AND.w #$0038
+            LSR #3
+            TAX
+            SEP #$20
+            PLA
+            RTS
+
+        PathDir:                    ; X = the monster's record: C = it has a path; A = the way to its next point (80 = stay)
+            PHX
+            TXY
+            REP #$20
+            LDA $077F
+            AND.w #$00FF
+            ASL
+            TAX
+            LDA !PMAPS,x            ; the map's paths in the heap (0 = none)
+            BNE +
+        .none
+            SEP #$20
+            PLX
+            CLC
+            RTS
+        +   STA !PP
+            SEP #$20
+            LDA $18
+            SEC
+            SBC.b #$08
+            SEC
+            SBC !MAPS,x             ; its number among the map's monsters
+            REP #$20
+            AND.w #$000F
+            ASL
+            CLC
+            ADC !PP
+            TAX
+            LDA !HEAP,x             ; its path (0 = none)
+            BEQ .none
+            STA !PP
+            TAX
+            SEP #$20
+            LDA !HEAP,x
+            STA !PMODE
+            LDA !HEAP+1,x
+            STA !PCNT
+            BEQ .none
+            REP #$20
+            LDA $18
+            AND.w #$003F
+            TAX
+            SEP #$20
+            LDA !PFLG,x
+            BMI .stay               ; walked a path that goes once
+            LDA !PIDX,x
+            CMP !PCNT
+            BCC +
+            LDA.b #$00
+            STA !PIDX,x
+        +   JSR Point
+            LDA $0001,y             ; at the point: on to the next
+            CMP !TGX
+            BNE .go
+            LDA $0004,y
+            CMP !TGY
+            BNE .go
+            JSR Advance
+            BCS .stay
+            LDA !PIDX,x
+            JSR Point
+        .go
+            LDA !TGX                ; the longer way first
+            SEC
+            SBC $0001,y
+            STA $1A
+            BPL +
+            EOR.b #$FF
+            INC
+        +   STA $16
+            LDA !TGY
+            SEC
+            SBC $0004,y
+            STA $1B
+            BPL +
+            EOR.b #$FF
+            INC
+        +   STA $17
+            CMP $16
+            BEQ +
+            BCS .vertical
+        +   LDA $16
+            BEQ .vertical
+            LDA $1A
+            BMI .left
+            LDA.b #$00
+            BRA .out
+        .left
+            LDA.b #$01
+            BRA .out
+        .vertical
+            LDA $1B
+            BMI .up
+            LDA.b #$02
+            BRA .out
+        .up
+            LDA.b #$03
+            BRA .out
+        .stay
+            LDA.b #$80
+        .out
+            PLX
+            SEC
+            RTS
+
+        Point:                      ; A = a point of the path at !PP: !TGX / !TGY (X kept)
+            PHX
+            REP #$20
+            AND.w #$00FF
+            ASL
+            CLC
+            ADC !PP
+            TAX
+            SEP #$20
+            LDA !HEAP+2,x
+            STA !TGX
+            LDA !HEAP+3,x
+            STA !TGY
+            PLX
+            RTS
+
+        Advance:                    ; X = actor id: the next point (loop, back and forth, once); C = the path is done
+            LDA !PMODE
+            CMP.b #$02
+            BEQ .both
+            LDA !PIDX,x
+            INC
+            CMP !PCNT
+            BCC .set
+            LDA !PMODE
+            CMP.b #$03
+            BEQ .end
+            LDA.b #$00
+        .set
+            STA !PIDX,x
+            CLC
+            RTS
+        .end
+            LDA.b #$80
+            STA !PFLG,x
+            SEC
+            RTS
+        .both
+            LDA !PFLG,x
+            BIT.b #$01
+            BNE .back
+            LDA !PIDX,x
+            INC
+            CMP !PCNT
+            BCC .set
+            LDA.b #$01
+            STA !PFLG,x
+            LDA !PCNT
+            SEC
+            SBC.b #$02
+            BCS .set
+            LDA.b #$00
+            BRA .set
+        .back
+            LDA !PIDX,x
+            BEQ .turn               ; back at the first point: forwards again
+            DEC
+            BRA .set
+        .turn
+            LDA.b #$00
+            STA !PFLG,x
+            LDA !PCNT
+            CMP.b #$02
+            LDA.b #$00
+            BCC .set
+            LDA.b #$01
+            BRA .set
+
         Talk:                       ; M = 8, in place of LDA $30 / AND #$80 (A pressed?) before BEQ
+            JSR Fresh
             JSR Sweep               ; (a monster beaten just now can't be talked to)
             LDA !PEND
-            BEQ .normal
+            BNE .pend
+            REP #$20                ; a step-on area a monster set off: its event, as the game runs it for the party
+            LDA !QAREA              ; ($01:90E8: "once" areas are marked done)
+            BEQ .normal8
+            PHX
+            TAX
+            LDA.w #$0000
+            STA !QAREA
+            SEP #$20
+            LDA $7F0000,x
+            STA $00
+            LDA $7F0001,x
+            STA $04
+            LDA $7F0002,x
+            STA $1A
+            LDA $7F0003,x
+            STA $16
+            PHB
+            LDA.b #$00
+            PHA
+            PLB
+            JSL RunArea
+            PLB
+            PLX
+            SEP #$20
+            LDA.b #$00              ; (no talk this time)
+            RTL
+        .normal8
+            SEP #$20
+            BRA .normal
+        .pend
             PHX
             REP #$20                ; its event comes from this map's script block (the talk reads the map from
             AND.w #$003F            ; the character's $1C, which can still name the map it came from)
@@ -455,6 +844,10 @@ public static class VisibleMonsters
             RTL
 
         NoRandom:                   ; M = 8, X = 8: A not 0 = no random battle on this step
+            PHP
+            REP #$10
+            JSR Fresh               ; (maps without monsters too: coming back is a new visit)
+            PLP
             LDA $07B4               ; (replaced: LDA $07B4 / BNE, LDA $94 / BNE)
             ORA $94
             BNE .out
@@ -473,6 +866,10 @@ public static class VisibleMonsters
             CMP.b #$00
         .out
             RTL
+
+        RunArea:
+            PEA $AF2B
+            JML $0190E8
 
         Target:
             PEA $AF2B               ; its RTS goes to the RTL at $01:AF2C
@@ -498,7 +895,9 @@ public static class VisibleMonsters
     public static (int First, int Count) Monsters(RomBuffer rom, int mapId)
     {
         int b = Block(rom);
-        return b < 0 ? (0, 0) : (rom.ReadByte(b + MapTable + mapId * 2), rom.ReadByte(b + MapTable + mapId * 2 + 1));
+        if (b < 0) return (0, 0);
+        int t = Layout(rom, b).Maps;
+        return (rom.ReadByte(b + t + mapId * 2), rom.ReadByte(b + t + mapId * 2 + 1));
     }
 
     /// <summary>Puts the code in (once).</summary>
@@ -506,31 +905,47 @@ public static class VisibleMonsters
     {
         int old = Block(rom);
         if (old > 0 && rom.ReadByte(old + 4) == Version) return;
+        // an older block: its monsters are read as it has them, taken off, and put back the way this version does
+        // (their events in slot n + 1)
+        var again = new Dictionary<int, List<Monster>>();
+        if (old > 0)
+        {
+            foreach (int m in Enumerable.Range(0, 256).Where(m => Monsters(rom, m).Count > 0))
+            {
+                again[m] = Placed(rom, LufiaMap.Load(rom, m));
+                RemoveFromMap(rom, m);
+            }
+            old = Block(rom);
+        }
         if (old < 0 && !IsOriginal(rom)) throw new InvalidOperationException("The game's code at $01:9FFF, $01:8394 or $01:8820 isn't the original (another patch changed it), so visible monsters can't be added safely.");
         if (rom.Length < MapWriter.ExpandedSize) rom.Expand(MapWriter.ExpandedSize);
-        // (a block of an older version: its table of monsters comes along, the code is new)
-        var maps = old > 0 ? rom.ReadBytes(old + MapTable, 512) : new byte[512];
+        // (a block of an older version: its tables come along, the code is new)
+        var lay = old > 0 ? Layout(rom, old) : (-1, -1, -1);
+        var maps = old > 0 ? rom.ReadBytes(old + lay.Item1, 512) : new byte[512];
+        var behaviours = lay.Item2 > 0 ? rom.ReadBytes(old + lay.Item2, 256 * 16) : new byte[256 * 16];
         var space = ExpansionSpace.Load(rom);
         if (old > 0 && space.At(old)?.Start == old) space.Free(old);
         int b = space.AllocateInOneBank(BlockSize, ExpansionSpace.Kind.Patch, 0);
         space.Save();
         int snes = SnesAddress(b);
         var a = new Asm65816();
-        a.Source(Source(snes + MapTable, snes + BehaviourTable));
+        a.Source(Source(snes + MapTable, snes + BehaviourTable, snes + PathMaps, snes + Heap));
         var code = a.Build(snes + Header);
         if (Header + code.Length > MapTable) throw new InvalidOperationException("The visible monster code doesn't fit.");
         rom.WriteBytes(b, Magic.Select(c => (byte)c).ToArray());
         rom.WriteByte(b + 4, Version);
         rom.WriteBytes(b + Header, code);
         rom.WriteBytes(b + MapTable, maps);
-        // monsters of an older block came after the party within 6 tiles: bits 0
-        rom.WriteBytes(b + BehaviourTable, new byte[256 * 16]);
+        // (monsters of a block without behaviours came after the party within 6 tiles: bits 0)
+        rom.WriteBytes(b + BehaviourTable, behaviours);
+        rom.WriteBytes(b + PathMaps, new byte[512 + HeapSize]);
         int step = snes + Header + a.Offset("Step"), talk = snes + Header + a.Offset("Talk");
         rom.WriteBytes(StepSite, new byte[] { 0x22, (byte)step, (byte)(step >> 8), (byte)(step >> 16) });
         rom.WriteBytes(TalkSite, new byte[] { 0x22, (byte)talk, (byte)(talk >> 8), (byte)(talk >> 16) });
         int noRandom = snes + Header + a.Offset("NoRandom");
         rom.WriteBytes(RandomSite, new byte[] { 0x22, (byte)noRandom, (byte)(noRandom >> 8), (byte)(noRandom >> 16), 0xD0, 0x4E, 0xEA });
         rom.FixChecksum();
+        foreach (var (m, list) in again) AddToMap(rom, m, list);
     }
 
     /// <summary>The map's encounter group from its setup script (command 0D gg), or -1.</summary>
@@ -547,20 +962,84 @@ public static class VisibleMonsters
     {
         var (first, count) = Monsters(rom, mapId);
         if (count == 0) return -1;
-        try
-        {
-            var ev = EventScript.Load(rom, mapId, first);
-            return ev?.Ops.FirstOrDefault(o => !o.IsText && o.Bytes is [0x1F, _])?.Bytes[1] ?? -1;
-        }
-        catch { return -1; }
+        int o = EventOf(rom, mapId, first);
+        return o >= 0 ? rom.ReadByte(o + 1) : -1;
+    }
+
+    /// <summary>The block keeps monster character n's event in slot n (versions 1-3, written before 2026-10-22: wrong,
+    /// see the class notes) instead of n + 1.</summary>
+    private static bool OldEvents(RomBuffer rom) => Block(rom) is int b && b > 0 && rom.ReadByte(b + 4) != Version;
+
+    /// <summary>File offset of monster character <paramref name="n"/>'s event (1F gg 5C k 00 00), or -1.</summary>
+    private static int EventOf(RomBuffer rom, int mapId, int n)
+    {
+        int slot = OldEvents(rom) ? n : n + 1;
+        if (!HasScript(rom, mapId, slot)) return -1;
+        int o = LufiaMap.EventScriptOffset(rom, mapId, slot);
+        return o >= 0 && o + 6 <= rom.Length && rom.ReadByte(o) == 0x1F && rom.ReadByte(o + 2) == 0x5C && rom.ReadByte(o + 3) == slot ? o : -1;
     }
 
     /// <summary>A monster on a map: where it starts, its sprite, how far it may wander (0 = anywhere on the map) and
     /// the encounter group it fights.</summary>
-    public sealed record Monster(int X, int Y, int Sprite, int Range, int Group, bool Chases = true);
+    public sealed record Monster(int X, int Y, int Sprite, int Range, int Group, bool Chases = true,
+                                 PathMode Mode = PathMode.None, IReadOnlyList<(int X, int Y)>? Path = null);
 
-    /// <summary>The block has the behaviour table (version 2; before it, every monster came after the party).</summary>
-    private static bool HasBehaviours(RomBuffer rom) => Block(rom) is int b && b > 0 && rom.ReadByte(b + 4) == Version;
+    /// <summary>How a monster walks its path: round and round, there and back, or once (then it stays at the end).</summary>
+    public enum PathMode { None = 0, Loop = 1, BackAndForth = 2, Once = 3 }
+
+    /// <summary>The block has the behaviour table (version 2 on; before it, every monster came after the party).</summary>
+    private static bool HasBehaviours(RomBuffer rom) => Block(rom) is int b && b > 0 && Layout(rom, b).Behaviours > 0;
+
+    /// <summary>Each map's paths, read from the heap (map → 16 paths, null = none).</summary>
+    private static Dictionary<int, (PathMode, List<(int, int)>)?[]> ReadPaths(RomBuffer rom)
+    {
+        var all = new Dictionary<int, (PathMode, List<(int, int)>)?[]>();
+        int b = Block(rom);
+        if (b < 0 || Layout(rom, b).Paths < 0) return all;
+        for (int m = 0; m < 256; m++)
+        {
+            int blob = rom.ReadUInt16Le(b + PathMaps + m * 2);
+            if (blob == 0) continue;
+            var paths = new (PathMode, List<(int, int)>)?[16];
+            for (int k = 0; k < 16; k++)
+            {
+                int o = rom.ReadUInt16Le(b + Heap + blob + k * 2);
+                if (o == 0) continue;
+                int mode = rom.ReadByte(b + Heap + o), n = rom.ReadByte(b + Heap + o + 1);
+                var pts = Enumerable.Range(0, n).Select(i => ((int)rom.ReadByte(b + Heap + o + 2 + i * 2), (int)rom.ReadByte(b + Heap + o + 3 + i * 2))).ToList();
+                paths[k] = ((PathMode)mode, pts);
+            }
+            all[m] = paths;
+        }
+        return all;
+    }
+
+    /// <summary>Writes every map's paths into the heap again (packed), with <paramref name="mapId"/>'s replaced.</summary>
+    private static void WritePaths(RomBuffer rom, int mapId, (PathMode, List<(int, int)>)?[]? paths)
+    {
+        int b = Block(rom);
+        var all = ReadPaths(rom);
+        if (paths != null && paths.Any(p => p != null)) all[mapId] = paths; else all.Remove(mapId);
+        var heap = new List<byte> { 0, 0 };   // (offset 0 means none)
+        var table = new byte[512];
+        foreach (var (m, ps) in all.OrderBy(kv => kv.Key))
+        {
+            int blob = heap.Count;
+            table[m * 2] = (byte)blob; table[m * 2 + 1] = (byte)(blob >> 8);
+            heap.AddRange(new byte[32]);
+            for (int k = 0; k < 16; k++)
+            {
+                if (ps[k] is not { } p || p.Item2.Count == 0) continue;
+                int o = heap.Count;
+                heap[blob + k * 2] = (byte)o; heap[blob + k * 2 + 1] = (byte)(o >> 8);
+                heap.Add((byte)p.Item1); heap.Add((byte)p.Item2.Count);
+                foreach (var (x, y) in p.Item2) { heap.Add((byte)x); heap.Add((byte)y); }
+            }
+        }
+        if (heap.Count > HeapSize) throw new InvalidOperationException($"The monsters' paths need {heap.Count} bytes and there are {HeapSize}: shorten some.");
+        rom.WriteBytes(b + PathMaps, table);
+        rom.WriteBytes(b + Heap, heap.Concat(new byte[HeapSize - heap.Count]).ToArray());
+    }
 
     /// <summary>The map's monsters as placed.</summary>
     public static List<Monster> Placed(RomBuffer rom, LufiaMap map)
@@ -569,14 +1048,23 @@ public static class VisibleMonsters
         if (count == 0) return new();
         int GroupOf(int n)
         {
-            int o = LufiaMap.EventScriptOffset(rom, map.MapId, n);
-            return o >= 0 && rom.ReadByte(o) == 0x1F ? rom.ReadByte(o + 1) : -1;
+            int o = EventOf(rom, map.MapId, n);
+            return o >= 0 ? rom.ReadByte(o + 1) : -1;
         }
+        int bb = Block(rom);
+        var behav = Layout(rom, bb).Behaviours;
+        ReadPaths(rom).TryGetValue(map.MapId, out var paths);
         return map.Npcs.Where(n => n.Index >= first && n.Index < first + count)
-                       .Select(n => new Monster(n.X, n.Y, n.Sprite,
-                                     n.BoxX1 == 0 && n.BoxY1 == 0 && n.BoxX2 >= map.Width && n.BoxY2 >= map.Height ? 0 : Math.Max(n.X - n.BoxX1, n.BoxX2 - 1 - n.X),
+                       .Select(n =>
+                       {
+                           int k = Math.Min(15, n.Index - first);
+                           var path = paths?[k];
+                           return new Monster(n.X, n.Y, n.Sprite,
+                                     path != null || (n.BoxX1 == 0 && n.BoxY1 == 0 && n.BoxX2 >= map.Width && n.BoxY2 >= map.Height) ? 0 : Math.Max(n.X - n.BoxX1, n.BoxX2 - 1 - n.X),
                                      GroupOf(n.Index),
-                                     !HasBehaviours(rom) || (rom.ReadByte(Block(rom) + BehaviourTable + map.MapId * 16 + Math.Min(15, n.Index - first)) & KeepsToItself) == 0))
+                                     behav < 0 || (rom.ReadByte(bb + behav + map.MapId * 16 + k) & KeepsToItself) == 0,
+                                     path?.Item1 ?? PathMode.None, path?.Item2);
+                       })
                        .ToList();
     }
 
@@ -668,9 +1156,9 @@ public static class VisibleMonsters
         Apply(rom);
         RemoveFromMap(rom, mapId);
         var map = LufiaMap.Load(rom, mapId);
-        // talking to character n runs event n of the block (seen in game: the talk passes n + 1, the table is read
-        // from 1), a step-on area runs event base + area + 1 and "run event" rr runs base + rr: the monsters take
-        // characters whose events nobody else uses (characters skipped on the way stay unused, never shown)
+        // talking to character n runs event n + 1 of the block, a step-on area runs event base + area + 1 and "run
+        // event" rr runs base + rr: the monsters take characters whose events nobody else uses (characters skipped on
+        // the way stay unused, never shown)
         int eventBase = LufiaMap.EventBase(rom, mapId), slots = MapEvents.HasBlock(rom, mapId) ? MapEvents.TableLength(rom, mapId) : 0;
         var taken = new HashSet<int>();
         foreach (var t in map.Triggers) taken.Add((eventBase + t.Index + 1) & 0xFF);
@@ -684,7 +1172,7 @@ public static class VisibleMonsters
             foreach (var op in es.Ops)
                 if (!op.IsText && op.Bytes.Length >= 3 && op.Bytes[0] == 0x51 && op.Bytes[1] == mapId) taken.Add(MapEvents.Chained(rom, op.Bytes));
         }
-        bool Free(int n) => !taken.Contains(n) && (n >= map.Npcs.Count || map.Npcs[n].IsUnused);
+        bool Free(int n) => !taken.Contains(n + 1) && (n >= map.Npcs.Count || map.Npcs[n].IsUnused);
         int first = 0;
         while (first < MaxCharacters && !Enumerable.Range(first, places.Count).All(Free)) first++;
         if (first + places.Count > MaxCharacters)
@@ -693,13 +1181,14 @@ public static class VisibleMonsters
             map.Npcs.Add(new MapNpc { Index = i, Sprite = 0xFF, X = 0, Y = 0, BoxX1 = 0, BoxY1 = 0, BoxX2 = 1, BoxY2 = 1 });
         for (int i = 0; i < monsters.Count; i++)
         {
-            var (x, y, sprite, range, _, _) = monsters[i];
+            var (x, y, sprite, range, _, _, mode, path) = monsters[i];
+            if (mode != PathMode.None && path is { Count: > 0 }) range = 0;   // (one on a path goes wherever its path does)
             var (x1, y1, x2, y2) = range <= 0 ? (0, 0, map.Width, map.Height)
                 : (Math.Max(0, x - range), Math.Max(0, y - range), Math.Min(map.Width, x + range + 1), Math.Min(map.Height, y + range + 1));
             map.Npcs[first + i] = new MapNpc { Index = first + i, Sprite = sprite, Flags = 0x20, X = x, Y = y, BoxX1 = x1, BoxY1 = y1, BoxX2 = x2, BoxY2 = y2 };
         }
-        MapEvents.EnsureTable(rom, mapId, first + places.Count + 1);
-        WriteEvents(rom, mapId, monsters.Select((m, i) => (first + i, m.Group)).ToList());
+        MapEvents.EnsureTable(rom, mapId, first + places.Count + 2);
+        WriteEvents(rom, mapId, monsters.Select((m, i) => (first + i + 1, m.Group)).ToList());   // (slot n + 1: 1F gg 5C n+1)
         MapWriter.Save(rom, map, true);
         CompactSetup(rom, mapId);
         int b = Block(rom);
@@ -707,8 +1196,58 @@ public static class VisibleMonsters
         rom.WriteByte(b + MapTable + mapId * 2 + 1, (byte)places.Count);
         var behaviour = new byte[16];
         for (int i = 0; i < monsters.Count && i < 16; i++)
-            behaviour[i] = (byte)((monsters[i].Chases ? 0 : KeepsToItself) | (monsters[i].Range > 0 ? ChasesInItsArea : 0));
+        {
+            bool onPath = monsters[i].Mode != PathMode.None && monsters[i].Path is { Count: > 0 };
+            behaviour[i] = (byte)((monsters[i].Chases ? 0 : KeepsToItself) | (monsters[i].Range > 0 && !onPath ? ChasesInItsArea : 0));
+        }
         rom.WriteBytes(b + BehaviourTable + mapId * 16, behaviour);
+        var paths = new (PathMode, List<(int, int)>)?[16];
+        for (int i = 0; i < monsters.Count && i < 16; i++)
+            if (monsters[i].Mode != PathMode.None && monsters[i].Path is { Count: > 0 } pts)
+            {
+                if (pts.Count > MaxPathPoints) throw new InvalidOperationException($"A path can have {MaxPathPoints} points.");
+                paths[i] = (monsters[i].Mode, pts.Select(p => (p.X, p.Y)).ToList());
+            }
+        WritePaths(rom, mapId, paths);
+        rom.FixChecksum();
+    }
+
+    /// <summary>The map's doors and gates: setup script spots with FE (event command 52 n + 1 opens spot n for good).</summary>
+    public static List<int> Doors(RomBuffer rom, int mapId) =>
+        MapSetupScript.ReadSpots(rom, mapId).Where(sp => sp.Kind == SpotKind.Door).Select(sp => sp.Spot).Distinct().OrderBy(n => n).ToList();
+
+    /// <summary>
+    /// A switch tile at x, y: a step-on area of one tile (the party and monsters set it off, once a visit; areas that
+    /// run only once stay done) whose event opens door <paramref name="door"/> for good (52 n), or does nothing yet
+    /// (-1: to write in the Events editor). Its area number is one whose event nobody uses. Returns (area, event).
+    /// </summary>
+    public static (int Area, int Event) AddSwitch(RomBuffer rom, int mapId, int x, int y, int door = -1)
+    {
+        if (mapId == LufiaMap.WorldMap) throw new InvalidOperationException("Switch tiles aren't for the world map.");
+        var map = LufiaMap.Load(rom, mapId);
+        int area = MapEvents.NextAreaIndex(rom, map);
+        map.AddTrigger(x, y, x + 1, y + 1, area);
+        MapWriter.Save(rom, map, true);   // (the new area gets its event and is switched on)
+        int ev = MapEvents.AreaEvent(rom, mapId, area);
+        if (door >= 0)
+        {
+            var es = EventScript.Load(rom, mapId, ev) ?? throw new InvalidOperationException($"Event {ev} of map {mapId:X2} can't be read.");
+            es.Ops.Clear();
+            es.Ops.Add(new ScriptOp { Bytes = new byte[] { 0x52, (byte)(door + 1) } });   // (52 counts objects from 1)
+            es.Ops.Add(new ScriptOp { Bytes = new byte[] { 0x00 } });
+            es.Save(true);
+        }
+        rom.FixChecksum();
+        return (area, ev);
+    }
+
+    /// <summary>Takes a step-on area off (the switch tiles of <see cref="AddSwitch"/>, or any area).</summary>
+    public static void RemoveArea(RomBuffer rom, int mapId, int area)
+    {
+        var map = LufiaMap.Load(rom, mapId);
+        var t = map.Triggers.FirstOrDefault(t => t.Index == area) ?? throw new InvalidOperationException($"Map {mapId:X2} has no area {area}.");
+        map.RemoveTrigger(t);
+        MapWriter.Save(rom, map, true);
         rom.FixChecksum();
     }
 
@@ -747,16 +1286,17 @@ public static class VisibleMonsters
         {
             var old = map.Npcs[n];
             map.Npcs[n] = new MapNpc { Index = n, Sprite = 0xFF, X = old.X, Y = old.Y, BoxX1 = 0, BoxY1 = 0, BoxX2 = 1, BoxY2 = 1 };
-            EventScript? ev = null;
-            try { ev = EventScript.Load(rom, mapId, n); } catch { }
-            if (IsMonsterEvent(ev, n)) rom.WriteByte(LufiaMap.EventScriptOffset(rom, mapId, n), 0x00);   // ends at once (the slot stays as it is)
+            int o = EventOf(rom, mapId, n);
+            if (o >= 0) rom.WriteByte(o, 0x00);   // ends at once (the slot stays as it is)
         }
         MapWriter.Save(rom, map, true);
         CompactSetup(rom, mapId);
         int b = Block(rom);
-        rom.WriteByte(b + MapTable + mapId * 2, 0);
-        rom.WriteByte(b + MapTable + mapId * 2 + 1, 0);
-        if (HasBehaviours(rom)) rom.WriteBytes(b + BehaviourTable + mapId * 16, new byte[16]);
+        var lay = Layout(rom, b);
+        rom.WriteByte(b + lay.Maps + mapId * 2, 0);
+        rom.WriteByte(b + lay.Maps + mapId * 2 + 1, 0);
+        if (lay.Behaviours > 0) rom.WriteBytes(b + lay.Behaviours + mapId * 16, new byte[16]);
+        if (lay.Paths > 0) WritePaths(rom, mapId, null);
         rom.FixChecksum();
     }
 
