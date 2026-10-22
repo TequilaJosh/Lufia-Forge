@@ -1322,6 +1322,7 @@ public static class VisibleMonsters
         int w = map.Width, h = map.Height;
         var open = new bool[w * h];
         var stand = new bool[w * h];
+        var blank = new Dictionary<int, bool>();
         for (int i = 0; i < open.Length; i++)
         {
             int blk = map.Layer[i] & 0x3FF, a;
@@ -1329,6 +1330,13 @@ public static class VisibleMonsters
             open[i] = (a & BlockSet.AttrBlocked) == 0;
             // (stand on floor with no one-sided walls either, so it can step off any way)
             stand[i] = (a & (BlockSet.AttrBlocked | BlockSet.AttrLeft | BlockSet.AttrRight | BlockSet.AttrUp | BlockSet.AttrDown)) == 0;
+            // (nor on the empty black around a building, open in the game but nowhere the party goes)
+            if (stand[i] && !blank.TryGetValue(blk, out _))
+            {
+                var px = ts.MetatilePixels(blk);
+                blank[blk] = px.All(c => c == px[0]) && (px[0] & 0xFF) < 0x20 && ((px[0] >> 8) & 0xFF) < 0x20 && ((px[0] >> 16) & 0xFF) < 0x20;
+            }
+            if (stand[i] && blank[blk]) stand[i] = false;
         }
         var avoid = new bool[w * h];
         void Mark(int x1, int y1, int x2, int y2)
