@@ -183,7 +183,22 @@ public partial class EncounterEditorViewModel
     /// <summary>The map's step-on areas that are switched on: number, rectangle.</summary>
     private List<(int Index, int X1, int Y1, int X2, int Y2)> _areas = new();
 
-    partial void OnMonsterClickModeIndexChanged(int value) => DrawMonsterMap();
+    partial void OnMonsterClickModeIndexChanged(int value)
+    {
+        OnPropertyChanged(nameof(IsClickMonsters)); OnPropertyChanged(nameof(IsClickPath)); OnPropertyChanged(nameof(IsClickSwitch));
+        DrawMonsterMap();
+    }
+
+    public bool IsClickMonsters { get => MonsterClickModeIndex == 0; set { if (value) MonsterClickModeIndex = 0; } }
+    public bool IsClickPath { get => MonsterClickModeIndex == 1; set { if (value) MonsterClickModeIndex = 1; } }
+    public bool IsClickSwitch { get => MonsterClickModeIndex == 2; set { if (value) MonsterClickModeIndex = 2; } }
+
+    /// <summary>The page shown (0 Monsters, 1 World map, 2 Visible monsters): the list of each map's group goes on the
+    /// last, which uses the room.</summary>
+    [ObservableProperty] private int _encounterTabIndex;
+    public bool IsMapGroupsShown => EncounterTabIndex != 2;
+    public int MiddleColumnSpan => EncounterTabIndex == 2 ? 2 : 1;
+    partial void OnEncounterTabIndexChanged(int value) { OnPropertyChanged(nameof(IsMapGroupsShown)); OnPropertyChanged(nameof(MiddleColumnSpan)); }
 
     partial void OnMonsterGroupTextChanged(string value) => MonsterGroupInfo = GroupSummary(value);
 
@@ -286,7 +301,13 @@ public partial class EncounterEditorViewModel
             ? $"walks a path of {m.Path.Count} points ({m.Mode switch { VisibleMonsters.PathMode.Loop => "round and round", VisibleMonsters.PathMode.BackAndForth => "there and back", _ => "once" }})"
             : m.Range == 0 ? "roams the whole map" : $"roams up to {m.Range} tiles";
         roam += m.Chases ? ", comes after the party" : ", keeps to itself";
-        return new MapMonsterRow { Image = img, Title = $"{i + 1}. {name} at {m.X},{m.Y}", Detail = $"{GroupSummary(m.Group.ToString("X2"))}; {roam}" };
+        string path = m.Mode != VisibleMonsters.PathMode.None && m.Path is { Count: > 0 } ? $", path ({m.Path.Count})" : "";
+        return new MapMonsterRow
+        {
+            Image = img, Title = $"{i + 1}. {name} at {m.X},{m.Y}",
+            Short = $"group {m.Group:X2}{path}{(m.Chases ? ", chases" : "")}",
+            Detail = $"{GroupSummary(m.Group.ToString("X2"))}; {roam}",
+        };
     }
 
     /// <summary>The map picture with the monsters drawn on it (the picked one framed in yellow), and the floor they
@@ -600,5 +621,7 @@ public sealed class MapMonsterRow
 {
     public ImageSource? Image { get; init; }
     public string Title { get; init; } = "";
+    /// <summary>One line under the title: group, path, chasing (the full sentence is the tooltip).</summary>
+    public string Short { get; init; } = "";
     public string Detail { get; init; } = "";
 }
