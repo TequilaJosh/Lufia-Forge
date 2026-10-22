@@ -34,7 +34,8 @@ namespace LufiaForge.Core.Battle;
 /// which the wandering and the "who is on that tile" check of talking ($01:87DC) go through.
 /// After a fight the other monsters can't start one until the hero has taken <see cref="GraceSteps"/> steps.
 /// RAM: $7F:FEC0-FEC7 (the hero's tile, the turn count, the waiting monster and its direction, the grace steps left),
-/// $7F:FF80-FFBF (the turn each actor last moved on).
+/// $7F:FC00-FC3F (the turn each actor last moved on; $7F:FF80-FFBF before version 5, which the Ancient Cave's spell
+/// chests also use).
 /// </para>
 /// <para>
 /// Talking to character n runs event n + 1 of the map's script block (the talk's $16 = actor - 7 = n + 1 is the event
@@ -61,13 +62,13 @@ public static class VisibleMonsters
     private const int Header = 8, MapTable = 0x1000, BehaviourTable = MapTable + 512, PathMaps = BehaviourTable + 256 * 16,
                       Heap = PathMaps + 512, BlockSize = 0x7000, HeapSize = BlockSize - Heap;
     /// <summary>The block's version (header byte 4); an older block is rebuilt, keeping its monsters.</summary>
-    private const int Version = 4;
+    private const int Version = 5;
     public const int MaxPathPoints = 32;
 
     /// <summary>Where the block keeps its tables (by its version).</summary>
     private static (int Maps, int Behaviours, int Paths) Layout(RomBuffer rom, int b) => rom.ReadByte(b + 4) switch
     {
-        Version or 3 => (MapTable, BehaviourTable, PathMaps),
+        Version or 4 or 3 => (MapTable, BehaviourTable, PathMaps),
         2 => (0x300, 0x500, -1),
         _ => (0x300, -1, -1),
     };
@@ -111,7 +112,7 @@ public static class VisibleMonsters
         !PEND = $7FFEC5
         !PDIR = $7FFEC6
         !SAFE = $7FFEC7
-        !LAST = $7FFF80
+        !LAST = $7FFC00
 
         Step:                       ; M = 8, X = 16, X = the character's record, $18 = its actor id
             JSR IsMonster
@@ -968,7 +969,7 @@ public static class VisibleMonsters
 
     /// <summary>The block keeps monster character n's event in slot n (versions 1-3, written before 2026-10-22: wrong,
     /// see the class notes) instead of n + 1.</summary>
-    private static bool OldEvents(RomBuffer rom) => Block(rom) is int b && b > 0 && rom.ReadByte(b + 4) != Version;
+    private static bool OldEvents(RomBuffer rom) => Block(rom) is int b && b > 0 && rom.ReadByte(b + 4) < 4;
 
     /// <summary>File offset of monster character <paramref name="n"/>'s event (1F gg 5C k 00 00), or -1.</summary>
     private static int EventOf(RomBuffer rom, int mapId, int n)
