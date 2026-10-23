@@ -14,10 +14,14 @@ namespace LufiaForge.Modules.MemoryMonitor;
 public static class Lufia1AddressMap
 {
     private static readonly List<KnownAddress> _builtIn = BuildMap();
+    private static readonly List<KnownAddress> _lufia2 = BuildLufia2Map();
     private static readonly List<KnownAddress> _custom  = new();
     private static readonly string _customPath = GetCustomPath();
 
-    public static IReadOnlyList<KnownAddress> All => _builtIn.Concat(_custom).ToList();
+    /// <summary>Which game's addresses are listed (set when a ROM is loaded).</summary>
+    public static Core.GameKind Game { get; set; } = Core.GameKind.Lufia1;
+
+    public static IReadOnlyList<KnownAddress> All => (Game == Core.GameKind.Lufia2 ? _lufia2 : _builtIn).Concat(_custom).ToList();
 
     /// <summary>Search by partial label (case-insensitive).</summary>
     public static IEnumerable<KnownAddress> Search(string query)
@@ -228,6 +232,52 @@ public static class Lufia1AddressMap
             (0x7E169C, "Jerin EXP (high)",         WatchSize.U8),
         ]);
 
+        return map;
+    }
+
+    /// <summary>Lufia II (US): LEdit's RAM notes (researched on the German game), checked in the US game in Tia's shop
+    /// (2026-10-22): map 04 at 9,13, gold 120, the hero's name, level 1 with 20 HP, his equipment and the item list.</summary>
+    private static List<KnownAddress> BuildLufia2Map()
+    {
+        var map = new List<KnownAddress>();
+        AddRange(map, "Map", [
+            (0x7E05AC, "Current map",              WatchSize.U8),
+            (0x7E06BA, "Hero X (tiles)",           WatchSize.U8),
+            (0x7E06E2, "Hero Y (tiles)",           WatchSize.U8),
+            (0x7E11F2, "World map X",              WatchSize.U8),
+            (0x7E11F4, "World map Y",              WatchSize.U8),
+        ]);
+        AddRange(map, "Inventory", [
+            (0x7E0A8A, "Gold",                     WatchSize.U16),
+            (0x7E0A8D, "Item slot 1 (item)",       WatchSize.U8),
+            (0x7E0A8E, "Item slot 1 (amount x2, bit 0 = item + 256)", WatchSize.U8),
+            (0x7E0A8F, "Item slot 2 (item)",       WatchSize.U8),
+            (0x7E0A90, "Item slot 2 (amount x2, bit 0 = item + 256)", WatchSize.U8),
+        ]);
+        AddRange(map, "Maxim", [
+            (0x7E0BBB, "Maxim Level",              WatchSize.U8),
+            (0x7E0BBC, "Maxim Status",             WatchSize.U8),
+            (0x7E0BBE, "Maxim HP",                 WatchSize.U16),
+            (0x7E0BC0, "Maxim MP",                 WatchSize.U16),
+            (0x7E0BD2, "Maxim Max HP",             WatchSize.U16),
+            (0x7E0BD6, "Maxim Max MP",             WatchSize.U16),
+            (0x7E0BD8, "Maxim ATP",                WatchSize.U16),
+            (0x7E0BDA, "Maxim DFP",                WatchSize.U16),
+            (0x7E0BDC, "Maxim STR",                WatchSize.U16),
+            (0x7E0BDE, "Maxim AGL",                WatchSize.U16),
+            (0x7E0BF0, "Maxim INT",                WatchSize.U16),
+            (0x7E0BF2, "Maxim GUT",                WatchSize.U16),
+            (0x7E0BF4, "Maxim MGR",                WatchSize.U16),
+            (0x7E0C0C, "Maxim EXP (low 2 bytes)",  WatchSize.U16),
+            (0x7E0C14, "Maxim Weapon",             WatchSize.U16),
+            (0x7E0C69, "Maxim IP gauge",           WatchSize.U8),
+        ]);
+        AddRange(map, "Battle", [
+            (0x7E1640, "Monster level (German notes)", WatchSize.U16),
+            (0x7E166B, "Monster number (German notes)", WatchSize.U16),
+            (0x7E1693, "Monster HP (German notes)", WatchSize.U16),
+            (0x7E1695, "Monster MP (German notes)", WatchSize.U16),
+        ]);
         return map;
     }
 

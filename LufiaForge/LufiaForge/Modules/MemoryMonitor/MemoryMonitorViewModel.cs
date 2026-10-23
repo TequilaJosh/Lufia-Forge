@@ -133,6 +133,8 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
         // the user manually clicks "Launch BizHawk". We don't auto-launch or
         // auto-load so the user stays in control of when the emulator starts.
         _pendingRomPath = rom.FilePath;
+        Lufia1AddressMap.Game = rom.Game;
+        OnPropertyChanged(nameof(AddressCategories));
     }
 
     /// <summary>Writes the ROM BizHawk should play (the project as it is now) and returns its path.</summary>
