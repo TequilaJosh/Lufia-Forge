@@ -25,7 +25,7 @@ public partial class PatchManagerViewModel : ObservableObject
     public List<BuiltInPatch> BuiltInPatches { get; } = BuiltInPatch.All();
     private static readonly string[] GroupOrder = { "Community", "Battle", "Magic", "Items", "Maps", "Events", "Testing", "Other" };
     /// <summary>The patches grouped for the cards (in this order).</summary>
-    public List<PatchGroup> PatchGroups => GroupOrder.Concat(BuiltInPatches.Select(p => p.Category).Where(c => !GroupOrder.Contains(c)).Distinct())   // (a category not listed still shows, at the end)
+    public List<PatchGroup> PatchGroups => _rom?.IsLufia2 == true ? new() : GroupOrder.Concat(BuiltInPatches.Select(p => p.Category).Where(c => !GroupOrder.Contains(c)).Distinct())   // (a category not listed still shows, at the end)
         .Select(c => new PatchGroup(c == "Community" ? "Community patches (by fans, built in)" : c, BuiltInPatches.Where(p => p.Category == c).ToList())).Where(g => g.Patches.Count > 0).ToList();
 
     [ObservableProperty]
@@ -45,7 +45,11 @@ public partial class PatchManagerViewModel : ObservableObject
     {
         _rom    = rom;
         _mainVm = mainVm;
-        StatusText = "ROM loaded. Load an IPS patch file or export a patch from your current edits.";
+        StatusText = rom.IsLufia2
+            ? "Lufia II ROM loaded. IPS patches can be applied and exported; the built-in patches are for Lufia 1 and aren't listed."
+            : "ROM loaded. Load an IPS patch file or export a patch from your current edits.";
+        OnPropertyChanged(nameof(PatchGroups));
+        OnPropertyChanged(nameof(IsLufia1));
         RefreshBuiltIn();
     }
 
@@ -92,8 +96,12 @@ public partial class PatchManagerViewModel : ObservableObject
     [ObservableProperty] private bool _smallFontToo = true;
     [ObservableProperty] private bool _canRestoreFont;
 
+    /// <summary>The ROM is Lufia 1 (the font and ROM size tools are for it).</summary>
+    public bool IsLufia1 => _rom?.IsLufia2 != true;
+
     private void RefreshFont()
     {
+        if (_rom?.IsLufia2 == true) { FontText = ""; CanRestoreFont = false; return; }
         CanRestoreFont = _rom != null && FontPatch.IsApplied(_rom);
         bool restored = _rom != null && CommunityPatches.RestoredApplied(_rom);
         FontText = _rom == null ? "" : CanRestoreFont
@@ -148,7 +156,7 @@ public partial class PatchManagerViewModel : ObservableObject
 
     private void RefreshSize()
     {
-        if (_rom == null) { RomSizeText = ""; CanExpandTo4Mb = false; return; }
+        if (_rom == null || _rom.IsLufia2) { RomSizeText = ""; CanExpandTo4Mb = false; return; }
         double mb = _rom.Length / 1048576.0;
         string free = "";
         if (_rom.Length >= Core.Maps.MapWriter.ExpandedSize)
@@ -303,7 +311,7 @@ public partial class PatchManagerViewModel : ObservableObject
         // Step 1: Select the original (unmodified) ROM to diff against
         var openDialog = new OpenFileDialog
         {
-            Title  = "Select Original (Unmodified) Lufia 1 ROM",
+            Title  = $"Select Original (Unmodified) {(_rom.IsLufia2 ? "Lufia II" : "Lufia 1")} ROM",
             Filter = "SNES ROM files (*.sfc;*.smc)|*.sfc;*.smc|All files (*.*)|*.*",
             FileName = Path.GetFileName(_rom.FilePath)
         };
@@ -315,7 +323,7 @@ public partial class PatchManagerViewModel : ObservableObject
         {
             Title            = "Save IPS Patch",
             Filter           = "IPS patch files (*.ips)|*.ips",
-            FileName         = $"Lufia1_patch_{DateTime.Now:yyyyMMdd_HHmmss}.ips",
+            FileName         = $"{(_rom.IsLufia2 ? "Lufia2" : "Lufia1")}_patch_{DateTime.Now:yyyyMMdd_HHmmss}.ips",
             InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.Desktop)
         };
 

@@ -102,8 +102,9 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
-                <TextBlock Text="Look and ROM" Style="{StaticResource PmGroupTitle}"/>
-                <WrapPanel>
+                <TextBlock Text="Look and ROM" Style="{StaticResource PmGroupTitle}"
+                           Visibility="{Binding IsLufia1, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                <WrapPanel Visibility="{Binding IsLufia1, Converter={StaticResource BoolToVisibilityConverter}}">
                     <!-- font -->
                     <Border Style="{StaticResource PmCard}">
                         <StackPanel>

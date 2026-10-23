@@ -80,7 +80,7 @@ public partial class MainWindow : Window
         // Lufia II: its own tab; the Lufia 1 editors are hidden and never see the ROM (they would read and write
         // Lufia 1 places in it). The generic tabs (Memory Monitor, Disassembler, ROM Info) stay.
         bool l2 = rom.IsLufia2;
-        foreach (var tab in new[] { MapTab, EventsTab, CutscenesTab, TextTab, GameDataTab, PatchTab })
+        foreach (var tab in new[] { MapTab, EventsTab, CutscenesTab, TextTab, GameDataTab })
             tab.Visibility = l2 ? Visibility.Collapsed : Visibility.Visible;
         Lufia2Tab.Visibility = l2 ? Visibility.Visible : Visibility.Collapsed;
         if (l2)
@@ -89,6 +89,7 @@ public partial class MainWindow : Window
             Lufia2Tab.IsSelected = true;
             if (DisassemblerView.DataContext is DisassemblerViewModel disVm2) disVm2.SetRom(rom);
             if (MemoryMonitorView.DataContext is MemoryMonitorViewModel mmVm2) mmVm2.SetRom(rom);
+            if (PatchManagerView.DataContext is PatchManagerViewModel patchVm2) patchVm2.SetRom(rom, vm);   // (IPS only)
             return;
         }
         if (Lufia2Tab.IsSelected) MapTab.IsSelected = true;
