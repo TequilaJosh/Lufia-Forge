@@ -7,6 +7,7 @@
         xmlns:cs="clr-namespace:LufiaForge.Modules.Cutscenes"
         xmlns:pm="clr-namespace:LufiaForge.Modules.PatchManager"
         xmlns:dis="clr-namespace:LufiaForge.Modules.Disassembler"
+        xmlns:l2="clr-namespace:LufiaForge.Modules.Lufia2"
         xmlns:gd="clr-namespace:LufiaForge.Modules.GameData"
         xmlns:me="clr-namespace:LufiaForge.Modules.MapEditor"
         xmlns:ev="clr-namespace:LufiaForge.Modules.Events"
@@ -187,7 +188,16 @@ Title="{Binding WindowTitle}"
                     SelectedIndex="{Binding SelectedTabIndex}"
                     Background="Transparent">
 
-            <TabItem Header="🗺  Map Editor"    Style="{StaticResource LufiaTabItem}">
+            <!-- Lufia II: its editors (shown instead of the Lufia 1 tabs when a Lufia II ROM is loaded) -->
+            <TabItem x:Name="Lufia2Tab" Header="🗡  Lufia II" Style="{StaticResource LufiaTabItem}" Visibility="Collapsed">
+                <l2:Lufia2View x:Name="Lufia2View">
+                    <l2:Lufia2View.DataContext>
+                        <l2:Lufia2ViewModel/>
+                    </l2:Lufia2View.DataContext>
+                </l2:Lufia2View>
+            </TabItem>
+
+            <TabItem x:Name="MapTab" Header="🗺  Map Editor"    Style="{StaticResource LufiaTabItem}">
                 <me:MapEditorView x:Name="MapEditorView">
                     <me:MapEditorView.DataContext>
                         <me:MapEditorViewModel/>
@@ -195,7 +205,7 @@ Title="{Binding WindowTitle}"
                 </me:MapEditorView>
             </TabItem>
 
-            <TabItem Header="💬  Events"         Style="{StaticResource LufiaTabItem}">
+            <TabItem x:Name="EventsTab" Header="💬  Events"         Style="{StaticResource LufiaTabItem}">
                 <ev:EventsView x:Name="EventsView">
                     <ev:EventsView.DataContext>
                         <ev:EventsViewModel/>
@@ -203,7 +213,7 @@ Title="{Binding WindowTitle}"
                 </ev:EventsView>
             </TabItem>
 
-            <TabItem Header="🎬  Cutscenes"     Style="{StaticResource LufiaTabItem}">
+            <TabItem x:Name="CutscenesTab" Header="🎬  Cutscenes"     Style="{StaticResource LufiaTabItem}">
                 <cs:CutscenesView x:Name="CutscenesView">
                     <cs:CutscenesView.DataContext>
                         <cs:CutscenesViewModel/>
@@ -211,7 +221,7 @@ Title="{Binding WindowTitle}"
                 </cs:CutscenesView>
             </TabItem>
 
-            <TabItem Header="📝  Text Editor" Style="{StaticResource LufiaTabItem}">
+            <TabItem x:Name="TextTab" Header="📝  Text Editor" Style="{StaticResource LufiaTabItem}">
                 <te:TextEditorView x:Name="TextEditorView">
                     <te:TextEditorView.DataContext>
                         <te:TextEditorViewModel/>
@@ -219,7 +229,7 @@ Title="{Binding WindowTitle}"
                 </te:TextEditorView>
             </TabItem>
 
-            <TabItem Header="⚔  Game Data"     Style="{StaticResource LufiaTabItem}">
+            <TabItem x:Name="GameDataTab" Header="⚔  Game Data"     Style="{StaticResource LufiaTabItem}">
                 <gd:GameDataView x:Name="GameDataView">
                     <gd:GameDataView.DataContext>
                         <gd:GameDataViewModel/>
@@ -227,7 +237,7 @@ Title="{Binding WindowTitle}"
                 </gd:GameDataView>
             </TabItem>
 
-            <TabItem Header="🔧  Patch Manager" Style="{StaticResource LufiaTabItem}">
+            <TabItem x:Name="PatchTab" Header="🔧  Patch Manager" Style="{StaticResource LufiaTabItem}">
                 <pm:PatchManagerView x:Name="PatchManagerView">
                     <pm:PatchManagerView.DataContext>
                         <pm:PatchManagerViewModel/>
@@ -235,7 +245,7 @@ Title="{Binding WindowTitle}"
                 </pm:PatchManagerView>
             </TabItem>
 
-            <TabItem Header="🔗  Memory Monitor" Style="{StaticResource LufiaTabItem}">
+            <TabItem x:Name="MemoryTab" Header="🔗  Memory Monitor" Style="{StaticResource LufiaTabItem}">
                 <mm:MemoryMonitorView x:Name="MemoryMonitorView">
                     <mm:MemoryMonitorView.DataContext>
                         <mm:MemoryMonitorViewModel/>
@@ -243,7 +253,7 @@ Title="{Binding WindowTitle}"
                 </mm:MemoryMonitorView>
             </TabItem>
 
-            <TabItem Header="⚙  Disassembler"  Style="{StaticResource LufiaTabItem}">
+            <TabItem x:Name="DisasmTab" Header="⚙  Disassembler"  Style="{StaticResource LufiaTabItem}">
                 <dis:DisassemblerView x:Name="DisassemblerView">
                     <dis:DisassemblerView.DataContext>
                         <dis:DisassemblerViewModel/>
@@ -251,7 +261,7 @@ Title="{Binding WindowTitle}"
                 </dis:DisassemblerView>
             </TabItem>
 
-            <TabItem Header="🔍  ROM Info"      Style="{StaticResource LufiaTabItem}">
+            <TabItem x:Name="RomInfoTab" Header="🔍  ROM Info"      Style="{StaticResource LufiaTabItem}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto"
                               Background="{StaticResource MidPurpleBrush}">
                     <StackPanel Margin="24" MaxWidth="700">

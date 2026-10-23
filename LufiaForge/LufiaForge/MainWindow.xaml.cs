@@ -77,6 +77,22 @@ public partial class MainWindow : Window
         var rom = vm.RomBuffer;
         if (rom == null) return;
 
+        // Lufia II: its own tab; the Lufia 1 editors are hidden and never see the ROM (they would read and write
+        // Lufia 1 places in it). The generic tabs (Memory Monitor, Disassembler, ROM Info) stay.
+        bool l2 = rom.IsLufia2;
+        foreach (var tab in new[] { MapTab, EventsTab, CutscenesTab, TextTab, GameDataTab, PatchTab })
+            tab.Visibility = l2 ? Visibility.Collapsed : Visibility.Visible;
+        Lufia2Tab.Visibility = l2 ? Visibility.Visible : Visibility.Collapsed;
+        if (l2)
+        {
+            if (Lufia2View.DataContext is LufiaForge.Modules.Lufia2.Lufia2ViewModel l2Vm) l2Vm.SetRom(rom, vm);
+            Lufia2Tab.IsSelected = true;
+            if (DisassemblerView.DataContext is DisassemblerViewModel disVm2) disVm2.SetRom(rom);
+            if (MemoryMonitorView.DataContext is MemoryMonitorViewModel mmVm2) mmVm2.SetRom(rom);
+            return;
+        }
+        if (Lufia2Tab.IsSelected) MapTab.IsSelected = true;
+
         // Text Editor
         if (TextEditorView.DataContext is TextEditorViewModel textVm)
             textVm.SetRom(rom, vm);
@@ -120,14 +136,15 @@ public partial class MainWindow : Window
         string title = rom.ReadAscii(Lufia1Constants.SnesHeaderOffset, 21).TrimEnd();
 
         byte mappingByte = rom.ReadByte(Lufia1Constants.SnesMappingOffset);
-        string mapping   = mappingByte == Lufia1Constants.LoRomMappingByte
-            ? "LoROM (0x20)" : $"Unknown (0x{mappingByte:X2})";
+        string mapping   = mappingByte == Lufia1Constants.LoRomMappingByte ? "LoROM (0x20)"
+                         : mappingByte == 0x30 ? "LoROM, FastROM (0x30)" : $"Unknown (0x{mappingByte:X2})";
 
         ushort checksum   = rom.ReadUInt16Le(Lufia1Constants.SnesChecksumOffset);
         ushort complement = rom.ReadUInt16Le(Lufia1Constants.SnesComplementOffset);
 
         var items = new List<KeyValuePair<string, string>>
         {
+            new("Game:",               GameDetect.Name(rom.Game)),
             new("Internal Title:",     title),
             new("File:",               System.IO.Path.GetFileName(rom.FilePath)),
             new("ROM Size:",           $"{size / 1024} KB  ({size:N0} bytes)"),
@@ -139,6 +156,7 @@ public partial class MainWindow : Window
             new("Dict Start:",         $"0x{Lufia1Constants.DictionaryStartOffset:X6}"),
             new("Dict End:",           $"0x{Lufia1Constants.DictionaryEndOffset:X6}"),
         };
+        if (rom.IsLufia2) { items.RemoveAll(i => i.Key.StartsWith("Dict")); RomInfoItems.ItemsSource = items; return; }
         // how this ROM has been edited (read from the ROM itself, the same in every session)
         try { foreach (var (label, value) in RomEdits.Describe(rom)) items.Add(new(label, value)); }
         catch (System.Exception ex) { items.Add(new("Edits:", "couldn't be read: " + ex.Message)); }

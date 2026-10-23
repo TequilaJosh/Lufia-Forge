@@ -23,7 +23,7 @@ public record RomLoadReport(
 
 /// <summary>
 /// Handles opening a ROM file, stripping optional SMC headers,
-/// validating that this is Lufia 1 US, and returning a RomBuffer.
+/// validating that this is Lufia 1 or Lufia II (US), and returning a RomBuffer (its Game says which).
 /// </summary>
 public static class RomLoader
 {
@@ -52,11 +52,12 @@ public static class RomLoader
             // Read the SNES internal header title (21 chars at 0x7FC0)
             string title = ReadAscii(raw, Lufia1Constants.SnesHeaderOffset, 21).TrimEnd();
 
-            if (!title.StartsWith("LUFIA", StringComparison.OrdinalIgnoreCase))
+            var game = GameDetect.Detect(raw);
+            if (game == GameKind.Unknown)
                 return new RomLoadReport(
                     RomLoadResult.WrongGame,
                     null,
-                    $"ROM title \"{title}\" does not match Lufia 1. Wrong game or wrong region?",
+                    $"ROM title \"{title}\" is neither Lufia 1 nor Lufia II (or the ROM is too small). Wrong game or wrong region?",
                     hadSmcHeader,
                     title,
                     raw.Length);
@@ -70,7 +71,7 @@ public static class RomLoader
                               (storedChecksum == computedChecksum);
 
             string message = checksumOk
-                ? $"Loaded successfully. Title: \"{title}\". SMC header: {hadSmcHeader}."
+                ? $"Loaded successfully: {GameDetect.Name(game)}. Title: \"{title}\". SMC header: {hadSmcHeader}."
                 : $"Loaded with checksum warning (stored: 0x{storedChecksum:X4}, computed: 0x{computedChecksum:X4}). " +
                   $"ROM may be modified or a bad dump.";
 

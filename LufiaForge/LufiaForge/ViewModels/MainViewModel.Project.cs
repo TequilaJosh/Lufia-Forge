@@ -114,7 +114,7 @@ public partial class MainViewModel
         if (!ConfirmLeaveProject()) return;
         var dialog = new OpenFileDialog
         {
-            Title = "Pick the Lufia 1 ROM to start a project from",
+            Title = "Pick the Lufia 1 or Lufia II ROM to start a project from",
             Filter = "SNES ROM files (*.sfc;*.smc)|*.sfc;*.smc|All files (*.*)|*.*"
         };
         if (dialog.ShowDialog() != true) return;
