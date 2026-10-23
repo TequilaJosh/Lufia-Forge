@@ -1,0 +1,43 @@
+<UserControl x:Class="LufiaForge.Modules.Lufia2.L2SettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
+    </UserControl.Resources>
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="12">
+        <StackPanel>
+            <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,6"
+                       Text="Settings for the whole game. Each change is written to the ROM at once (Edit, Undo takes it back). Walking in towns was checked in the game; the others are read from the game's code."/>
+            <TextBlock Text="{Binding Status}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,6"/>
+            <WrapPanel>
+                <Border Style="{StaticResource GdCard}">
+                    <StackPanel Width="330">
+                        <TextBlock Text="RANDOM BATTLES" Style="{StaticResource GdSection}"/>
+                        <ComboBox Style="{StaticResource GdCombo}" ItemsSource="{Binding EncounterOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding Encounter}" IsEnabled="{Binding CanEncounter}"/>
+                        <TextBlock Text="{Binding EncounterText}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                        <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0" Text="Only the world map has random battles; the monsters in dungeons walk around and are fought on touch."/>
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource GdCard}">
+                    <StackPanel Width="330">
+                        <TextBlock Text="WALKING" Style="{StaticResource GdSection}"/>
+                        <TextBlock Text="World map" Style="{StaticResource GdFieldLabel}"/>
+                        <ComboBox Style="{StaticResource GdCombo}" ItemsSource="{Binding WorldOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding WorldSpeed}" IsEnabled="{Binding CanWorld}"/>
+                        <TextBlock Text="Towns and dungeons" Style="{StaticResource GdFieldLabel}" Margin="0,6,0,0"/>
+                        <ComboBox Style="{StaticResource GdCombo}" ItemsSource="{Binding FieldOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding FieldSpeed}" IsEnabled="{Binding CanField}"/>
+                        <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0" Text="Running turns on code the developers left in the game (it ran with B; R is used here because B opens a window)."/>
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource GdCard}">
+                    <StackPanel Width="330">
+                        <TextBlock Text="SHOPS AND LEVELS" Style="{StaticResource GdSection}"/>
+                        <TextBlock Text="Shops buy items for" Style="{StaticResource GdFieldLabel}"/>
+                        <ComboBox Style="{StaticResource GdCombo}" ItemsSource="{Binding SellOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding Sell}" IsEnabled="{Binding CanSell}"/>
+                        <TextBlock Text="Highest level (2 to 99)" Style="{StaticResource GdFieldLabel}" Margin="0,6,0,0"/>
+                        <TextBox Style="{StaticResource GdNumber}" HorizontalAlignment="Left" Text="{Binding LevelCap, UpdateSourceTrigger=LostFocus}" IsEnabled="{Binding CanLevel}"/>
+                    </StackPanel>
+                </Border>
+            </WrapPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

@@ -16,6 +16,7 @@ the items marked as checked were also tested in the running game (BizHawk). The 
 | [capsules.md](capsules.md) | Capsule monsters: records, names, growth, attacks, evolution |
 | [music.md](music.md) | The sound driver, song format, samples, sound effects |
 | [graphics.md](graphics.md) | Every packed file classified; battle backgrounds, title, fonts, sprites |
+| [settings.md](settings.md) | Game-wide values: random battle rate, walking speed, run button, sell price, level cap, gold cap, inns |
 
 ## The ROM at a glance
 
@@ -44,6 +45,7 @@ The ROM is full: only about 0x14D bytes are unused FF runs, so data that grows g
 - A battle background redrawn through the Graphics page (mirrored, new sky colour).
 - The staff roll with an edited heading (event command 5B 05 runs it).
 - A song imported from MIDI (it replaced Elcid's music, and the game loaded it into sound RAM byte for byte).
+- Walking in towns: the run button on R, and always running (8 tiles in 32 frames instead of 4).
 - A capsule monster (event command 81 00 makes it join, at level 8): its HP, ATP and DFP follow the edited record and growth exactly.
 
 ## Corrections to the first-pass files

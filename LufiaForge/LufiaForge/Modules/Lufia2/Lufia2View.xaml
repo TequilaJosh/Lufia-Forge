@@ -58,6 +58,9 @@
             <TabItem Header="Graphics" Style="{StaticResource LufiaTabItem}">
                 <local:L2GraphicsView DataContext="{Binding Graphics}"/>
             </TabItem>
+            <TabItem Header="Settings" Style="{StaticResource LufiaTabItem}">
+                <local:L2SettingsView DataContext="{Binding Settings}"/>
+            </TabItem>
         </TabControl>
     </Grid>
 </UserControl>
