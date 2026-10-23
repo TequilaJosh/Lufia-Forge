@@ -43,6 +43,7 @@ The ROM is full: only about 0x14D bytes are unused FF runs, so data that grows g
 - A battle against an edited monster: its name, sprite, HP, EXP and gold ("Gets 500 EXP. Gets 777 GOLD.").
 - A battle background redrawn through the Graphics page (mirrored, new sky colour).
 - The staff roll with an edited heading (event command 5B 05 runs it).
+- A capsule monster (event command 81 00 makes it join, at level 8): its HP, ATP and DFP follow the edited record and growth exactly.
 
 ## Corrections to the first-pass files
 
@@ -54,8 +55,12 @@ The ROM is full: only about 0x14D bytes are unused FF runs, so data that grows g
 - Battle script opcode 42 is a call into the shared script library at $96:FADD, and 43 returns (battlescript.md).
 - LEdit's German addresses are often off for the US ROM; the files here are for the US ROM only.
 
+Shop menu bit 0 (shop 25) is not "several shops": the game builds that list itself ($82:E433) from every item with
+a count in the 4-bit table at $7F:F080, probably items sold earlier. The shop record has no data for it.
+
 ## Still open
 
 - A few event, puzzle and battle commands are only named from what they touch (marked L / guess in the files).
 - Five high-entropy blocks at bank ends in $8F-$A6 (about 0x1C00 bytes) have no reader yet.
-- The several-shops shop (25) layout, and which spell-effect tilemap goes with which tile file.
+- Which spell-effect tilemap goes with which tile file.
+- What the capsule monsters' default names ($8E:D558) are used for: the naming screen starts empty.
