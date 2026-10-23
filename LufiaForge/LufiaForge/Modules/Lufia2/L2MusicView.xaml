@@ -18,7 +18,8 @@
                         <StackPanel Orientation="Horizontal">
                             <Button Content="Play" Style="{StaticResource LufiaButtonGold}" Command="{Binding PlayCommand}" Margin="0,0,8,0"/>
                             <Button Content="Stop" Style="{StaticResource LufiaButton}" Command="{Binding StopCommand}" Margin="0,0,8,0"/>
-                            <Button Content="Export MIDI..." Style="{StaticResource LufiaButton}" Command="{Binding ExportMidiCommand}"/>
+                            <Button Content="Export MIDI..." Style="{StaticResource LufiaButton}" Command="{Binding ExportMidiCommand}" Margin="0,0,8,0"/>
+                            <Button Content="Import MIDI..." Style="{StaticResource LufiaButton}" Command="{Binding ImportMidiCommand}"/>
                         </StackPanel>
                         <TextBlock Text="{Binding Status}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,8,0,0"/>
                     </StackPanel>

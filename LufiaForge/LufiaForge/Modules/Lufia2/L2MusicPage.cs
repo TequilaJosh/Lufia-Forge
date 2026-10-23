@@ -104,4 +104,31 @@ public partial class L2MusicPage : L2Page
         }
         catch (Exception ex) { Status = "Not exported: " + ex.Message; }
     }
+
+    [RelayCommand]
+    private void ImportMidi()
+    {
+        if (Rom == null || Main == null || SelectedIndex < 0) return;
+        var dlg = new OpenFileDialog { Title = "Import MIDI", Filter = "MIDI file (*.mid;*.midi)|*.mid;*.midi" };
+        if (dlg.ShowDialog() != true) return;
+        int index = SelectedIndex;
+        byte[] data; List<string> warnings;
+        try { data = L2Songs.FromMidi(File.ReadAllBytes(dlg.FileName), L2Songs.Read(Rom, index), out warnings); }
+        catch (Exception ex) { Status = "Not imported: " + ex.Message; return; }
+        string notes = warnings.Count == 0 ? "" : "\n\n" + string.Join("\n", warnings.Select(w => "- " + w));
+        if (System.Windows.MessageBox.Show($"Replace song {Names[index]} with {Path.GetFileName(dlg.FileName)} ({data.Length - 2:N0} of {L2Songs.MaxSize:N0} bytes)?{notes}",
+                "Import MIDI", System.Windows.MessageBoxButton.OKCancel, System.Windows.MessageBoxImage.Question) != System.Windows.MessageBoxResult.OK) return;
+        StopPlaying();
+        try
+        {
+            int before = Rom.Length;
+            L2Rom.WriteFile(Rom, index, data);
+            Main.NotifyRomModified($"Lufia II: song {index:X2} from MIDI");
+            Load(index);
+            Status = $"Imported {Path.GetFileName(dlg.FileName)} into song {index:X2}." +
+                     (Rom.Length > before ? " The ROM grew to make room for it." : "") +
+                     (warnings.Count > 0 ? " " + string.Join(" ", warnings) : "");
+        }
+        catch (Exception ex) { Status = "Not written: " + ex.Message; }
+    }
 }
