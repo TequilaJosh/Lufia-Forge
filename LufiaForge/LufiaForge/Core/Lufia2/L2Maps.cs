@@ -73,6 +73,47 @@ public static class L2Maps
         };
     }
 
+    /// <summary>Writes the map's two layers back (block numbers and cell flags; sizes as they were): its packed file is
+    /// rebuilt and put back (<see cref="L2Rom.WriteFile"/>).</summary>
+    public static void Write(RomBuffer rom, Map map)
+    {
+        byte[] f = L2Rom.ReadFile(rom, MapFileBase + map.Id);
+        int p = 6;
+        for (int l = 0; l < 2 && l < map.Layers.Length; l++)
+        {
+            var L = map.Layers[l];
+            if (f[p + 2] != L.Width || f[p + 3] != L.Height) throw new InvalidOperationException("The map's size changed.");
+            p += 4;
+            for (int i = 0; i < L.Width * L.Height; i++, p += 2)
+            {
+                f[p] = (byte)L.Blocks[i];
+                f[p + 1] = (byte)(L.Flags[i] & 0xFC | L.Blocks[i] >> 8 & 3);
+            }
+        }
+        L2Rom.WriteFile(rom, MapFileBase + map.Id, f);
+    }
+
+    /// <summary>How many blocks the map's block set has.</summary>
+    public static int BlockCount(RomBuffer rom, int id)
+    {
+        byte[] bs = L2Rom.ReadFile(rom, BlockSetFileBase + rom.ReadByte(BlockSetList + id));
+        return (short)(bs[2] | bs[3] << 8);
+    }
+
+    /// <summary>Block <paramref name="block"/> of the map's block set as 16x16 ARGB pixels (for a block picker).</summary>
+    public static uint[] BlockPixels(RomBuffer rom, int id, int block)
+    {
+        var map = Read(rom, id);
+        byte[] blockSet = L2Rom.ReadFile(rom, map.BlockSet), tiles = L2Rom.ReadFile(rom, map.TileSet);
+        var pals = Palettes(rom, id);
+        var px = new uint[256];
+        int rec = 0x10 + block * 8;
+        if (rec + 8 > blockSet.Length) return px;
+        for (int q = 0; q < 4; q++)
+            DrawTile(px, 16, q >= 2 ? 8 : 0, (q & 1) * 8, blockSet[rec + q * 2] | blockSet[rec + q * 2 + 1] << 8, tiles, pals);
+        return px;
+    }
+
     /// <summary>The map's 6 background palettes (CGRAM rows 2-7), 16 ARGB colours each.</summary>
     public static uint[][] Palettes(RomBuffer rom, int id)
     {
@@ -98,9 +139,13 @@ public static class L2Maps
     /// <summary>Draws the map as ARGB pixels: the first layer (the ground) first, then the second (walls, furniture,
     /// roofs; its flags hold the collision) over it; block 0 is left out. (Checked against the game's own tile maps
     /// in Tia's shop.)</summary>
-    public static (int Width, int Height, uint[] Pixels) Render(RomBuffer rom, int id, bool layer0 = true, bool layer1 = true)
+    public static (int Width, int Height, uint[] Pixels) Render(RomBuffer rom, int id, bool layer0 = true, bool layer1 = true) =>
+        Render(rom, Read(rom, id), layer0, layer1);
+
+    /// <summary>Draws a map as given (an edited copy before it is written).</summary>
+    public static (int Width, int Height, uint[] Pixels) Render(RomBuffer rom, Map map, bool layer0 = true, bool layer1 = true)
     {
-        var map = Read(rom, id);
+        int id = map.Id;
         byte[] blockSet = L2Rom.ReadFile(rom, map.BlockSet);
         byte[] tiles = L2Rom.ReadFile(rom, map.TileSet);
         var pals = Palettes(rom, id);

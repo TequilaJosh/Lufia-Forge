@@ -261,15 +261,24 @@ public partial class L2IpPage : L2Page
 public partial class L2MapsPage : ObservableObject
 {
     private RomBuffer? _rom;
+    private MainViewModel? _main;
+    private L2Maps.Map? _work;
+    private int _blockCount;
+    public const int PickerColumns = 16;
+    [ObservableProperty] private BitmapSource? _pickerImage;
+    [ObservableProperty] private int _selectedBlock = 1;
+    [ObservableProperty] private bool _editUpper;
+    [ObservableProperty] private bool _isDirty;
+    [ObservableProperty] private string _editText = "";
     public ObservableCollection<string> Names { get; } = new();
     [ObservableProperty] private int _selectedIndex = -1;
     [ObservableProperty] private bool _showGround = true, _showUpper = true, _showCollision;
     [ObservableProperty] private BitmapSource? _mapImage;
     [ObservableProperty] private string _info = "";
 
-    public void SetRom(RomBuffer rom)
+    public void SetRom(RomBuffer rom, MainViewModel main)
     {
-        _rom = rom;
+        _rom = rom; _main = main;
         Names.Clear();
         for (int id = 0; id < L2Maps.Count; id++)
         {
@@ -280,7 +289,76 @@ public partial class L2MapsPage : ObservableObject
         SelectedIndex = 3;
     }
 
-    partial void OnSelectedIndexChanged(int value) => Draw();
+    partial void OnSelectedIndexChanged(int value)
+    {
+        _work = null; IsDirty = false;
+        if (_rom != null && value >= 2)
+        {
+            try { _work = L2Maps.Read(_rom, value); _blockCount = L2Maps.BlockCount(_rom, value); DrawPicker(); } catch { _work = null; }
+        }
+        else PickerImage = null;
+        Draw();
+    }
+
+    partial void OnSelectedBlockChanged(int value) =>
+        EditText = $"Block {value:X3} picked. Left-click or drag on the map paints it on the {(EditUpper ? "upper" : "ground")} layer; right-click picks the block under the mouse.";
+    partial void OnEditUpperChanged(bool value) => OnSelectedBlockChanged(SelectedBlock);
+
+    private void DrawPicker()
+    {
+        if (_rom == null || _work == null) return;
+        int rows = (_blockCount + PickerColumns - 1) / PickerColumns, w = PickerColumns * 16, h = Math.Max(16, rows * 16);
+        var px = new uint[w * h];
+        for (int b = 0; b < _blockCount; b++)
+        {
+            var bp = L2Maps.BlockPixels(_rom, _work.Id, b);
+            int x0 = b % PickerColumns * 16, y0 = b / PickerColumns * 16;
+            for (int y = 0; y < 16; y++) for (int x = 0; x < 16; x++) px[(y0 + y) * w + x0 + x] = bp[y * 16 + x] == 0 ? 0xFF202020u : bp[y * 16 + x];
+        }
+        PickerImage = BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgra32, null, px.Select(c => (int)c).ToArray(), w * 4);
+        OnSelectedBlockChanged(SelectedBlock);
+    }
+
+    /// <summary>A click on the block picker (pixel position in it).</summary>
+    public void PickFromPicker(double x, double y)
+    {
+        int b = (int)y / 16 * PickerColumns + (int)x / 16;
+        if (b >= 0 && b < _blockCount) SelectedBlock = b;
+    }
+
+    /// <summary>Paints the picked block at a map pixel position (or picks the block there).</summary>
+    public void PaintAt(double x, double y, bool pick)
+    {
+        int layer = EditUpper ? 1 : 0;
+        if (_work == null || _work.Layers.Length <= layer) return;
+        var L = _work.Layers[layer];
+        int cx = (int)x / 16, cy = (int)y / 16;
+        if (cx < 0 || cy < 0 || cx >= L.Width || cy >= L.Height) return;
+        int i = cy * L.Width + cx;
+        if (pick) { SelectedBlock = L.Blocks[i]; return; }
+        if (L.Blocks[i] == SelectedBlock) return;
+        L.Blocks[i] = SelectedBlock;
+        IsDirty = true;
+        Draw();
+    }
+
+    [CommunityToolkit.Mvvm.Input.RelayCommand]
+    private void ApplyMap()
+    {
+        if (_rom == null || _main == null || _work == null || !IsDirty) return;
+        try
+        {
+            int before = _rom.Length;
+            L2Maps.Write(_rom, _work);
+            _main.NotifyRomModified($"Lufia II: map {_work.Id:X2}");
+            IsDirty = false;
+            EditText = "Written to the ROM" + (_rom.Length > before ? " (it no longer fit where it was: the ROM grew to 3 MB and the map moved there)." : ".");
+        }
+        catch (Exception ex) { EditText = "Not written: " + ex.Message; }
+    }
+
+    [CommunityToolkit.Mvvm.Input.RelayCommand]
+    private void RevertMap() => OnSelectedIndexChanged(SelectedIndex);
     partial void OnShowGroundChanged(bool value) => Draw();
     partial void OnShowUpperChanged(bool value) => Draw();
     partial void OnShowCollisionChanged(bool value) => Draw();
@@ -298,8 +376,8 @@ public partial class L2MapsPage : ObservableObject
         if (_rom == null || SelectedIndex < 2) { MapImage = null; Info = SelectedIndex == 1 ? "The sea floor is drawn differently (coming later)." : ""; return; }
         try
         {
-            var map = L2Maps.Read(_rom, SelectedIndex);
-            var (w, h, px) = L2Maps.Render(_rom, SelectedIndex, ShowGround, ShowUpper);
+            var map = _work ?? L2Maps.Read(_rom, SelectedIndex);
+            var (w, h, px) = L2Maps.Render(_rom, map, ShowGround, ShowUpper);
             if (ShowCollision && map.Layers.Length > 1)
             {
                 var L = map.Layers[1];

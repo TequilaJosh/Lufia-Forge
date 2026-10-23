@@ -8,6 +8,7 @@
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="230"/>
             <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="300"/>
         </Grid.ColumnDefinitions>
         <ListBox Grid.Column="0" Margin="12" Style="{StaticResource GdFindList}" ItemsSource="{Binding Names}" SelectedIndex="{Binding SelectedIndex}"/>
         <DockPanel Grid.Column="1" Margin="0,12,12,12">
@@ -18,7 +19,24 @@
             </StackPanel>
             <TextBlock DockPanel.Dock="Top" Text="{Binding Info}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,6"/>
             <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="Black">
-                <Image Source="{Binding MapImage}" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor" HorizontalAlignment="Left" VerticalAlignment="Top"/>
+                <Image x:Name="MapImageControl" Source="{Binding MapImage}" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor"
+                       HorizontalAlignment="Left" VerticalAlignment="Top" Cursor="Pen"
+                       MouseLeftButtonDown="Map_MouseDown" MouseRightButtonDown="Map_MouseDown" MouseMove="Map_MouseMove"/>
+            </ScrollViewer>
+        </DockPanel>
+        <DockPanel Grid.Column="2" Margin="0,12,12,12">
+            <StackPanel DockPanel.Dock="Top">
+                <TextBlock Text="EDIT" Style="{StaticResource GdSection}"/>
+                <CheckBox Content="Paint the upper layer (else the ground)" IsChecked="{Binding EditUpper}" Style="{StaticResource GdCheck}" Margin="0,4,0,6"/>
+                <TextBlock Text="{Binding EditText}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                    <Button Content="Apply" Style="{StaticResource LufiaButtonGold}" Command="{Binding ApplyMapCommand}" IsEnabled="{Binding IsDirty}" Width="90" Margin="0,0,8,0"/>
+                    <Button Content="Revert" Style="{StaticResource LufiaButton}" Command="{Binding RevertMapCommand}" IsEnabled="{Binding IsDirty}" Width="90"/>
+                </StackPanel>
+            </StackPanel>
+            <ScrollViewer VerticalScrollBarVisibility="Auto" Background="Black">
+                <Image x:Name="PickerControl" Source="{Binding PickerImage}" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor"
+                       HorizontalAlignment="Left" VerticalAlignment="Top" MouseLeftButtonDown="Picker_MouseDown" Cursor="Hand"/>
             </ScrollViewer>
         </DockPanel>
     </Grid>
