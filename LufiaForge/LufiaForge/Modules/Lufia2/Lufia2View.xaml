@@ -55,6 +55,9 @@
             <TabItem Header="Credits" Style="{StaticResource LufiaTabItem}">
                 <local:L2CreditsView DataContext="{Binding Credits}"/>
             </TabItem>
+            <TabItem Header="Graphics" Style="{StaticResource LufiaTabItem}">
+                <local:L2GraphicsView DataContext="{Binding Graphics}"/>
+            </TabItem>
         </TabControl>
     </Grid>
 </UserControl>
