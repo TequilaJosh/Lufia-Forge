@@ -43,6 +43,7 @@ The ROM is full: only about 0x14D bytes are unused FF runs, so data that grows g
 - A battle against an edited monster: its name, sprite, HP, EXP and gold ("Gets 500 EXP. Gets 777 GOLD.").
 - A battle background redrawn through the Graphics page (mirrored, new sky colour).
 - The staff roll with an edited heading (event command 5B 05 runs it).
+- A song imported from MIDI (it replaced Elcid's music, and the game loaded it into sound RAM byte for byte).
 - A capsule monster (event command 81 00 makes it join, at level 8): its HP, ATP and DFP follow the edited record and growth exactly.
 
 ## Corrections to the first-pass files
