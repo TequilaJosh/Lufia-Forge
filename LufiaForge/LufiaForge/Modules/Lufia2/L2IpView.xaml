@@ -27,6 +27,14 @@
                     </UniformGrid>
                 </StackPanel>
             </Border>
+            <Border Style="{StaticResource GdCard}">
+                <StackPanel Width="300">
+                    <TextBlock Text="DESCRIPTION" Style="{StaticResource GdSection}"/>
+                    <TextBox Style="{StaticResource GdText}" Text="{Binding Description, UpdateSourceTrigger=LostFocus}" AcceptsReturn="True" TextWrapping="NoWrap"
+                             FontFamily="Consolas" MinHeight="80" HorizontalAlignment="Stretch"/>
+                    <TextBlock Text="{Binding DescriptionNote}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                </StackPanel>
+            </Border>
                 </WrapPanel>
             </StackPanel>
         </ScrollViewer>

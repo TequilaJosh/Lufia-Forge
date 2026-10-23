@@ -42,6 +42,13 @@ public abstract partial class L2Page : ObservableObject
     public ObservableCollection<string> Names { get; } = new();
     [ObservableProperty] private int _selectedIndex = -1;
     [ObservableProperty] private bool _isEditable;
+    /// <summary>The picked record's description (items, spells, IP attacks), new lines as line breaks.</summary>
+    [ObservableProperty] private string _description = "";
+    [ObservableProperty] private string _descriptionNote = "";
+
+    /// <summary>The description entry of record <paramref name="index"/> (<see cref="L2Descriptions"/>), or -1.</summary>
+    protected virtual int DescriptionEntry(int index) => -1;
+    public bool HasDescription => DescriptionEntry(0) >= 0;
 
     public void SetRom(RomBuffer rom, MainViewModel main)
     {
@@ -57,7 +64,30 @@ public abstract partial class L2Page : ObservableObject
     {
         if (Rom == null || value < 0) return;
         Loading = true;
-        try { Load(value); } finally { Loading = false; }
+        try
+        {
+            Load(value);
+            int e = DescriptionEntry(value);
+            if (e >= 0) { Description = L2Descriptions.Read(Rom, e).Replace("\n", Environment.NewLine); DescriptionNote = SpaceNote(); }
+        }
+        finally { Loading = false; }
+    }
+
+    private string SpaceNote()
+    {
+        var (used, room) = L2Descriptions.Space(Rom!);
+        return $"Descriptions use {used} of {room} bytes; the game shows this text in its menus.";
+    }
+
+    private void WriteDescription()
+    {
+        if (Loading || Rom == null || Main == null || SelectedIndex < 0) return;
+        int e = DescriptionEntry(SelectedIndex);
+        if (e < 0) return;
+        string? error = L2Descriptions.Write(Rom, e, Description.Replace("\r\n", "\n"));
+        if (error != null) { DescriptionNote = "Not written: " + error; return; }
+        Main.NotifyRomModified($"Lufia II: description of {Names[SelectedIndex].Trim()}");
+        DescriptionNote = SpaceNote();
     }
 
     protected abstract IEnumerable<string> ReadNames();
@@ -80,7 +110,8 @@ public abstract partial class L2Page : ObservableObject
     protected override void OnPropertyChanged(PropertyChangedEventArgs e)
     {
         base.OnPropertyChanged(e);
-        if (e.PropertyName is nameof(SelectedIndex) or nameof(IsEditable) or nameof(Names) || e.PropertyName!.StartsWith("Picture")) return;
+        if (e.PropertyName is nameof(SelectedIndex) or nameof(IsEditable) or nameof(Names) or nameof(DescriptionNote) || e.PropertyName!.StartsWith("Picture")) return;
+        if (e.PropertyName == nameof(Description)) { WriteDescription(); return; }
         if (IsField(e.PropertyName)) Edited();
     }
 
@@ -195,6 +226,7 @@ public partial class L2ItemsPage : L2Page
     }
 
     protected override bool IsField(string p) => p is nameof(Name) or nameof(Price) or nameof(EquipType) or nameof(Icon);
+    protected override int DescriptionEntry(int index) => index;
 
     protected override string? Write()
     {
@@ -230,6 +262,7 @@ public partial class L2SpellsPage : L2Page
     }
 
     protected override bool IsField(string p) => p is nameof(Name) or nameof(Mp) or nameof(Price) or nameof(InMenu) or nameof(InBattle);
+    protected override int DescriptionEntry(int index) => L2Descriptions.SpellBase + index;
 
     protected override string? Write()
     {
@@ -259,6 +292,7 @@ public partial class L2IpPage : L2Page
     }
 
     protected override bool IsField(string p) => p is nameof(Cost) or nameof(Animation);
+    protected override int DescriptionEntry(int index) => L2Descriptions.IpBase + index;
 
     protected override string? Write()
     {
