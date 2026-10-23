@@ -49,6 +49,9 @@
             <TabItem Header="IP attacks" Style="{StaticResource LufiaTabItem}">
                 <local:L2IpView DataContext="{Binding IpAttacks}"/>
             </TabItem>
+            <TabItem Header="Credits" Style="{StaticResource LufiaTabItem}">
+                <local:L2CreditsView DataContext="{Binding Credits}"/>
+            </TabItem>
         </TabControl>
     </Grid>
 </UserControl>
