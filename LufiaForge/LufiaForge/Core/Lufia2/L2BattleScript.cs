@@ -27,19 +27,19 @@ public static class L2BattleScript
         S(2, "stat up/down %", 0x25); S(2, "cure status %", 0x26); S(2, "cause status %", 0x27);
         S(0, "attack", 0x28); S(0, "defend", 0x29); S(0, "flee", 0x2A); S(2, "use item", 0x2B); S(1, "cast spell", 0x2C); S(1, "call monster", 0x2D);
         S(1, "target", 0x32); S(1, "special effect", 0x35); S(0, "weapon attack", 0x37); S(0, "wait for the effect", 0x3C);
-        S(1, "show capsule attack name", 0x3E); S(0, "wait", 0x41); S(2, "weakness / protection", 0x42); S(2, "IP: cast without MP", 0x47);
+        S(1, "use capsule attack", 0x3E); S(3, "if attack slot learned go to", 0x3F); S(1, "reg = learned attacks", 0x40); S(0, "wait", 0x41); S(2, "weakness / protection", 0x42); S(2, "IP: cast without MP", 0x47);
         S(0, "quit (do nothing)", 0x4F); S(0, "Dark reflector", 0x51); S(1, "cast spell (IP)", 0x54); S(2, "name shown for", 0x56);
         S(3, "item boosts this spell", 0x57); S(0, "Eerie light", 0x58); S(1, "battle animation", 0x5A); S(0, "lose if it kills itself", 0x5B);
         S(0, "hide damage number", 0x5C);
         // documented lengths, meaning unknown
-        S(0, "?", 0x02, 0x1D, 0x2E, 0x50); S(1, "?", 0x19, 0x1B, 0x1C, 0x2F, 0x30, 0x3D, 0x40, 0x4B, 0x4C);
+        S(0, "?", 0x02, 0x1D, 0x2E, 0x50); S(1, "?", 0x19, 0x1B, 0x1C, 0x2F, 0x30, 0x3D, 0x4B, 0x4C);
         S(2, "?", 0x12, 0x44); S(3, "?", 0x46);
         return o;
     }
 
     /// <summary>A readable listing of the script at <paramref name="at"/>; <paramref name="record"/> is the start
     /// of the record that owns it (jumps count from there).</summary>
-    public static string Disassemble(RomBuffer rom, int at, int record, string[]? spellNames = null, string[]? monsterNames = null)
+    public static string Disassemble(RomBuffer rom, int at, int record, string[]? spellNames = null, string[]? monsterNames = null, string[]? capsuleAttacks = null)
     {
         var sb = new StringBuilder();
         int p = at, furthest = at;
@@ -54,8 +54,11 @@ public static class L2BattleScript
             {
                 case 0x03 or 0x04: target = args[0] | args[1] << 8; text += $" {target:X4}"; break;
                 case 0x05: target = args[1] | args[2] << 8; text = $"with chance {args[0]}/256 go to {target:X4}"; break;
-                case >= 0x06 and <= 0x0B: target = args[3] | args[4] << 8; text = text.Replace("reg", $"reg {args[0]:X2}").Replace("value", $"{args[1] | args[2] << 8}") + $" {target:X4}"; break;
+                case >= 0x06 and <= 0x0B: target = args[3] | args[4] << 8; text = text.Replace("reg", $"reg {args[0]:X2}").Replace("value", Operand(args[1], args[2])) + $" {target:X4}"; break;
+                case >= 0x0C and <= 0x10 or >= 0x16 and <= 0x18 or 0x55: text = text.Replace("reg", $"reg {args[0]:X2}") + " " + Operand(args[1], args[2]); break;
                 case 0x2C or 0x54 when spellNames != null && args[0] < spellNames.Length: text += $" {spellNames[args[0]]}"; break;
+                case 0x3E when capsuleAttacks != null && args[0] < capsuleAttacks.Length: text += $" {capsuleAttacks[args[0]]}"; break;
+                case 0x3F: target = args[1] | args[2] << 8; text = $"if attack slot {args[0]} is learned go to {target:X4}"; break;
                 case 0x2D when monsterNames != null && args[0] < monsterNames.Length: text += $" {monsterNames[args[0]]}"; break;
                 case 0x24:
                     string what = args[0] switch { 0 => "HP", 1 => "MP", 2 => "max HP", 3 => "max MP", 4 => "ATP", 5 => "DFP", 6 => "STR", 7 => "AGL", 8 => "INT", 9 => "GUT", 10 => "MGR", _ => $"stat {args[0]:X2}" };
@@ -70,4 +73,7 @@ public static class L2BattleScript
         }
         return sb.ToString().TrimEnd();
     }
+
+    /// <summary>A value operand: 80 in the high byte means register lo, otherwise a number.</summary>
+    private static string Operand(byte lo, byte hi) => hi == 0x80 ? $"reg {lo:X2}" : $"{lo | hi << 8}";
 }

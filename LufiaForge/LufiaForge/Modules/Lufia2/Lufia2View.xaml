@@ -28,6 +28,9 @@
             <TabItem Header="Characters" Style="{StaticResource LufiaTabItem}">
                 <local:L2CharactersView DataContext="{Binding Characters}"/>
             </TabItem>
+            <TabItem Header="Capsule monsters" Style="{StaticResource LufiaTabItem}">
+                <local:L2CapsulesView DataContext="{Binding Capsules}"/>
+            </TabItem>
             <TabItem Header="Items" Style="{StaticResource LufiaTabItem}">
                 <local:L2ItemsView DataContext="{Binding Items}"/>
             </TabItem>
