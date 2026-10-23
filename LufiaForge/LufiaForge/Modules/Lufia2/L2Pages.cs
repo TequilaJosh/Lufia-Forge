@@ -426,6 +426,18 @@ public partial class L2MapsPage : ObservableObject
                     }
             }
             if (ShowInfo)
+            {
+                var sprites = L2MapInfo.CharacterSprites(_rom, SelectedIndex);
+                foreach (var e in _entries.Where(e => e.Kind == "Character start"))
+                {
+                    if (!sprites.TryGetValue(e.Id + 0x4F, out int spr) || L2Graphics.MapSprite(_rom, spr) is not var (sw, sh, spx)) continue;
+                    int x0 = e.X1 * 16 + 8 - sw / 2, y0 = e.Y1 * 16 + 16 - sh;
+                    for (int y = 0; y < sh; y++)
+                        for (int x = 0; x < sw; x++)
+                            if (spx[y * sw + x] != 0) Dot(px, w, h, x0 + x, y0 + y, spx[y * sw + x]);
+                }
+            }
+            if (ShowInfo)
                 foreach (var e in _entries)
                 {
                     uint col = e.Kind switch { "Exit" => 0xFF40FF40u, "Door" => 0xFFFFE040u, "Treasure" => 0xFFFF40FFu, "Character start" => 0xFF40C0FFu, "Cutscene trigger" => 0xFFFF8040u, _ => 0xFFFFFFFFu };
