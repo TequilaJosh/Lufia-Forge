@@ -1,3 +1,4 @@
+using System.Windows.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using LufiaForge.Core.Lufia2;
 
@@ -21,6 +22,7 @@ public partial class L2CapsulesPage : L2Page
     [ObservableProperty] private List<L2Row> _curveRows = new();
     [ObservableProperty] private string _preview = "";
     [ObservableProperty] private string _aiText = "";
+    [ObservableProperty] private BitmapSource? _pictureImage;
 
     protected override IEnumerable<string> ReadNames()
     {
@@ -35,6 +37,7 @@ public partial class L2CapsulesPage : L2Page
         _r = L2Capsules.Read(rom, index);
         MonsterName = L2Capsules.MonsterName(rom, _r.Monster);
         Name = _r.Name; Type = _r.Type;
+        PictureImage = Picture(L2Gfx.CapsuleSprite(rom, index));
         var names = _attackNames.Select((n, i) => new L2Option(i, i == 0 ? "(none)" : $"{i:X2} {n}")).ToList();
         AttackSlots = Enumerable.Range(0, 3).Select(s => new L2Slot { Label = $"Attack {s + 1}", Options = names, Value = _r.Attacks[s], Changed = Edited })
             .Concat(Enumerable.Range(0, 3).Select(s => new L2Slot { Label = $"Learned {s + 1}", Options = names, Value = _r.Learned[s], Changed = Edited })).ToList();

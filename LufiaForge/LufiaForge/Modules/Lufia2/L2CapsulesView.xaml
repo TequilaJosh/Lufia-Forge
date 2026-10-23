@@ -26,6 +26,9 @@
                                 <TextBlock Text="Type" Style="{StaticResource GdFieldLabel}"/>
                                 <ComboBox Style="{StaticResource GdCombo}" ItemsSource="{Binding TypeOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding Type}"/>
                             </UniformGrid>
+                            <Image Source="{Binding PictureImage}" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor" HorizontalAlignment="Left" Margin="0,10,0,0">
+                                <Image.LayoutTransform><ScaleTransform ScaleX="2" ScaleY="2"/></Image.LayoutTransform>
+                            </Image>
                         </StackPanel>
                     </Border>
                     <Border Style="{StaticResource GdCard}">
