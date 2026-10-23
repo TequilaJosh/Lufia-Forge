@@ -19,7 +19,12 @@ public class RomBuffer
     {
         _data    = data;
         FilePath = filePath;
+        Game     = GameDetect.Detect(data);
     }
+
+    /// <summary>Which game this ROM is (from its header title, read when the buffer is made).</summary>
+    public GameKind Game { get; private set; }
+    public bool IsLufia2 => Game == GameKind.Lufia2;
 
     // -------------------------------------------------------------------------
     // Read helpers
