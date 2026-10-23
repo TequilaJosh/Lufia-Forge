@@ -727,24 +727,3 @@ public partial class L2ShopsPage : ObservableObject
         _main.NotifyRomModified($"Lufia II: shop {shop.Id:X2}");
     }
 }
-
-// ------------------------------------------------------------------------------------------- characters
-
-public partial class L2CharactersPage : L2Page
-{
-    [ObservableProperty] private int _hp, _mp, _str, _agl, _int, _gut, _mgr;
-
-    protected override IEnumerable<string> ReadNames() => L2Characters.Names;
-
-    protected override void Load(int index)
-    {
-        var v = L2Characters.Read(Rom!, index);
-        Hp = v[0]; Mp = v[1]; Str = v[2]; Agl = v[3]; Int = v[4]; Gut = v[5]; Mgr = v[6];
-    }
-
-    protected override string? Write()
-    {
-        L2Characters.Write(Rom!, SelectedIndex, new[] { Hp, Mp, Str, Agl, Int, Gut, Mgr });
-        return L2Characters.Names[SelectedIndex] + "'s starting stats";
-    }
-}
