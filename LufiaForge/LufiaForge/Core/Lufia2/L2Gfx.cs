@@ -21,11 +21,15 @@ namespace LufiaForge.Core.Lufia2;
 /// </summary>
 public static class L2Gfx
 {
-    public enum Kind { BattleBackground, Capsule, Title, PackedSheet, RomSheet, Font8x16 }
+    public enum Kind { BattleBackground, Capsule, Title, PackedSheet, RomSheet, Font8x16, MapSprite, Palette }
 
     /// <summary>A set of colours a picture can be shown with: <paramref name="Offset"/> = file offset of its first
     /// colour (BGR555), -1 = grey levels (graphics with no colours of their own).</summary>
     public sealed record PaletteChoice(string Name, int Offset);
+
+    /// <summary>A row of a palette set (<see cref="Kind.Palette"/>): <paramref name="Count"/> colours (at most 16) at
+    /// file offset <paramref name="Offset"/>.</summary>
+    public sealed record PaletteRow(string Name, int Offset, int Count);
 
     public sealed class Asset
     {
@@ -44,6 +48,8 @@ public static class L2Gfx
         public int MapFile { get; init; }
         public int OtherMap { get; init; } = -1;
         public IReadOnlyList<PaletteChoice> Palettes { get; init; } = Array.Empty<PaletteChoice>();
+        /// <summary>Palette sets: the rows shown.</summary>
+        public IReadOnlyList<PaletteRow> PaletteRows { get; init; } = Array.Empty<PaletteRow>();
         public int DefaultPalette { get; init; }
         public string Note { get; init; } = "";
         public override string ToString() => Name;
@@ -61,6 +67,10 @@ public static class L2Gfx
         public bool Transparent0 { get; init; }
         /// <summary>The colours are the ROM's (so a picture's own colours can be written back).</summary>
         public bool RomColours { get; init; }
+        /// <summary>File offset of each colour (BGR555), -1 for one that isn't in the ROM; null when none are.</summary>
+        public int[]? ColourOffsets { get; init; }
+        /// <summary>Palette sets: the name of each row.</summary>
+        public string[]? RowNames { get; init; }
         public int Rows => Colours.Length / RowSize;
 
         public uint[] Argb()
@@ -160,6 +170,19 @@ public static class L2Gfx
         list.Add(new Asset { Group = "Battle graphics", Name = "Status bar (second)", Kind = Kind.PackedSheet, Id = 0x18E, Bpp = 4, Palettes = battle, Note = "Packed file 18E." });
         list.Add(new Asset { Group = "Battle graphics", Name = "Command icons", Kind = Kind.PackedSheet, Id = 0x18F, Bpp = 4, Palettes = battle, Note = "Packed file 18F: attack, spell, item, defend..." });
         list.Add(new Asset { Group = "Battle graphics", Name = "Status balloons", Kind = Kind.PackedSheet, Id = 0x190, Bpp = 4, Palettes = battle, Note = "Packed file 190: sleep, ?, !, skull..." });
+        for (int n = 0; n < L2Graphics.MapSpriteCount; n++)
+        {
+            var m = MapSpriteOf(rom, n);
+            int w = m.FrameWidth * 8, h = m.FrameHeight * 8;
+            list.Add(new Asset
+            {
+                Group = "Map sprites", Name = $"{n:X2} ({w} x {h}, {m.Frames} frame{(m.Frames == 1 ? "" : "s")})", Kind = Kind.MapSprite, Id = n,
+                Palettes = spritePals, DefaultPalette = m.Row,
+                Note = $"Sprite {n:X2}: {m.Frames} frame{(m.Frames == 1 ? "" : "s")} of {w} x {h} side by side, {m.FrameWidth * m.FrameHeight * m.Frames} tiles at {m.Tiles:X6} (${L2Rom.FileToSnes(m.Tiles):X6}), " +
+                       $"colours: map sprite row {m.Row}. Colour 0 is see-through. Import writes the tiles back in place (same size).",
+            });
+        }
+        list.AddRange(PaletteSets(rom));
         return list;
     }
 
@@ -198,6 +221,8 @@ public static class L2Gfx
     }
 
     private static int TileBytes(int bpp) => bpp * 8;
+
+    private static int[]? Offsets(int offset, int n) => offset < 0 ? null : Enumerable.Range(0, n).Select(i => offset + i * 2).ToArray();
 
     /// <summary>One 8x8 SNES planar tile (1bpp: 8 bytes, 2bpp: 16, 4bpp: 32) to 64 colour numbers.</summary>
     public static byte[] DecodeTile(byte[] d, int o, int bpp)
@@ -334,7 +359,8 @@ public static class L2Gfx
                 var cell = CellOf(map[cy * s.W + cx], tiles, n, s);
                 for (int y = 0; y < 8; y++) for (int x = 0; x < 8; x++) px[(cy * 8 + y) * w + cx * 8 + x] = cell[y * 8 + x];
             }
-        return new Picture { Width = w, Height = h, Pixels = px, Colours = Colours(rom, s.PaletteOffset, s.Rows * rs), RowSize = rs, RomColours = true };
+        return new Picture { Width = w, Height = h, Pixels = px, Colours = Colours(rom, s.PaletteOffset, s.Rows * rs), RowSize = rs, RomColours = true,
+                             ColourOffsets = Offsets(s.PaletteOffset, s.Rows * rs) };
     }
 
     /// <summary>The 64 colour numbers a map entry shows.</summary>
@@ -459,6 +485,110 @@ public static class L2Gfx
     private static (int X, int Y) SheetPos(Asset a, int t) =>
         a.Kind == Kind.Font8x16 ? (t % 16 * 8, t / 16 * 16) : (t % a.Columns * 8, t / a.Columns * 8);
 
+    // ── map sprites ─────────────────────────────────────────────────────────
+
+    /// <summary>A map sprite's entry (<see cref="L2Graphics.MapSpriteTable"/>): flags, palette row, the file offset of
+    /// its tiles and its frame size in tiles.</summary>
+    public sealed record MapSpriteEntry(int Flags, int Row, int Tiles, int FrameWidth, int FrameHeight, int Frames);
+
+    public static MapSpriteEntry MapSpriteOf(RomBuffer rom, int sprite)
+    {
+        int e = L2Rom.SnesToFile(0xCF0000 | rom.ReadUInt16Le(L2Graphics.MapSpriteTable + sprite * 2));
+        int flags = rom.ReadByte(e), row = rom.ReadByte(e + 1) & 7;
+        int gfx = L2Rom.SnesToFile((int)rom.ReadUInt24Le(e + 2));
+        int frames = (flags & 8) != 0 ? 2 : (flags & 0x10) != 0 ? 6 : 1;
+        return new MapSpriteEntry(flags, row, gfx, (flags & 2) != 0 ? 4 : 2, (flags & 1) != 0 ? 4 : 2, frames);
+    }
+
+    /// <summary>The tile number (from the sprite's first) of tile (x, y) of frame f: each frame's tiles are the upper
+    /// halves of its 16-pixel rows, then the lower halves (LEdit's L2MapSprite).</summary>
+    private static int MapSpriteTile(MapSpriteEntry m, int f, int x, int y)
+    {
+        int n = m.FrameWidth * m.FrameHeight;
+        return f * n + (y & 1) * (n / 2) + (y >> 1) * m.FrameWidth + x;
+    }
+
+    // ── palettes ────────────────────────────────────────────────────────────
+
+    /// <summary>The size of a colour square in a palette set's picture.</summary>
+    public const int PaletteCell = 8;
+
+    /// <summary>Writes one colour (BGR555) at <paramref name="offset"/>, keeping the unused top bit as it was. True
+    /// when it changed.</summary>
+    public static bool SetColour(RomBuffer rom, int offset, int bgr555)
+    {
+        int old = rom.ReadUInt16Le(offset);
+        ushort v = (ushort)(old & 0x8000 | bgr555 & 0x7FFF);
+        if (v == old) return false;
+        rom.WriteUInt16Le(offset, v);
+        return true;
+    }
+
+    private static List<PaletteRow> RowsOf(string name, int offset, int rows, int count = 16, int first = 0) =>
+        Enumerable.Range(0, rows).Select(r => new PaletteRow($"{name} {first + r}", offset + r * count * 2, count)).ToList();
+
+    /// <summary>The palette sets Lufia Forge knows, each a <see cref="Kind.Palette"/> asset.</summary>
+    public static List<Asset> PaletteSets(RomBuffer rom)
+    {
+        var list = new List<Asset>();
+        const string G = "Palettes";
+        string Snes(int file) => $"${L2Rom.FileToSnes(file) >> 16:X2}:{L2Rom.FileToSnes(file) & 0xFFFF:X4}";
+        for (int p = 0; p < 20; p++)
+        {
+            var users = Enumerable.Range(0, BgCount).Where(k => BgRecord(rom, k).Palette == p).Select(k => $"{k:X2} {BgNames[k]}").ToList();
+            list.Add(new Asset { Group = G, Name = $"Battle background colours {p:X2}", Kind = Kind.Palette, PaletteRows = RowsOf("Background row", BgPalettes + p * 0x40, 2, 16, 2),
+                Note = $"At $97:{0xCD58 + p * 0x40:X4}, 32 colours (rows 2 and 3 of the screen). " + (users.Count > 0 ? "Used by " + string.Join(", ", users) + "." : "No battle background uses it.") });
+        }
+        for (int c = 0; c < 7; c++)
+            list.Add(new Asset { Group = G, Name = $"Capsule monster colours: {L2Capsules.MonsterName(rom, c)}", Kind = Kind.Palette,
+                PaletteRows = Enumerable.Range(0, 5).Select(f => new PaletteRow($"Form {f + 1}", CapsulePalettes + (c * 5 + f) * 0x20, 16)).ToList(),
+                Note = $"A row of 16 per form, at $97:{0xD258 + c * 5 * 0x20:X4}. Colour 0 is see-through." });
+        list.Add(new Asset { Group = G, Name = "Map sprite colours", Kind = Kind.Palette, PaletteRows = RowsOf("Sprite row", MapSpritePalette, 8),
+            Note = "The 8 rows people, monsters and objects on maps use (each sprite names its row), at $A6:BF00. Colour 0 is see-through." });
+        list.Add(new Asset { Group = G, Name = "Title screen colours", Kind = Kind.Palette, PaletteRows = RowsOf("Row", TitlePalette, 16),
+            Note = "256 colours at $A6:B000: rows 0-7 the sea, sky and trees, rows 8-15 the sprites." });
+        list.Add(new Asset { Group = G, Name = "Title logo colours", Kind = Kind.Palette, PaletteRows = RowsOf("Sprite row", LogoPalette, 8),
+            Note = "Sprite colours at $A6:EA20; the logo uses row 6." });
+        int worldB = L2Rom.SnesToFile(0xA6B200), worldA = L2Rom.SnesToFile(0xA6B400), seaFloor = L2Rom.SnesToFile(0xA6BA00);
+        list.Add(new Asset { Group = G, Name = "World map colours", Kind = Kind.Palette, PaletteRows = RowsOf("Row", worldA, 8),
+            Note = "At $A6:B400 (the World map tab draws with these)." });
+        list.Add(new Asset { Group = G, Name = "World map colours (second set)", Kind = Kind.Palette, PaletteRows = RowsOf("Row", worldB, 8),
+            Note = "At $A6:B200, the world map's other set." });
+        list.Add(new Asset { Group = G, Name = "Sea floor map colours", Kind = Kind.Palette, PaletteRows = RowsOf("Row", seaFloor, 8),
+            Note = "At $A6:BA00, the map under the sea." });
+        list.Add(new Asset { Group = G, Name = "Menu colours", Kind = Kind.Palette, PaletteRows = RowsOf("Menu row", MenuPalette, 6, 16, 2),
+            Note = "Background rows 2-7 of the menus, at $9F:8040." });
+        list.Add(new Asset { Group = G, Name = "Menu sprite colours", Kind = Kind.Palette, PaletteRows = RowsOf("Sprite row", MenuObjPalette, 4),
+            Note = "At $9F:8100: cursor hands, digits, gems." });
+        list.Add(new Asset { Group = G, Name = "Menu text colours", Kind = Kind.Palette, PaletteRows = RowsOf("Text row", MenuPalette2bpp, 8, 4),
+            Note = "4 colours a row for the 2 bits per pixel font and labels, at $9F:8200." });
+        list.Add(new Asset { Group = G, Name = "Battle colours", Kind = Kind.Palette, PaletteRows = RowsOf("Row", BattlePalette, 8),
+            Note = "At $97:FC40: the status bar, command icons and balloons." });
+
+        // map palette sets: the map's set byte n (1 up) picks pointer n - 1; a map reads 6 rows (CGRAM rows 2-7) from
+        // 0x10 or 0x20 bytes into the set (L2Maps.Palettes)
+        const int sets = 0x57;
+        var ptrs = Enumerable.Range(0, sets).Select(i => (int)rom.ReadUInt16Le(L2Maps.PaletteSetPointers + i * 2)).ToArray();
+        var sorted = ptrs.Distinct().OrderBy(p => p).ToList();
+        for (int i = 0; i < sets; i++)
+        {
+            var maps = Enumerable.Range(0, L2Maps.Count).Where(m => rom.ReadByte(L2Maps.PaletteSetList + m) == i + 1).ToList();
+            int k = sorted.IndexOf(ptrs[i]);
+            int size = Math.Min(0x100, k + 1 < sorted.Count ? sorted[k + 1] - ptrs[i] : 0x10000 - ptrs[i]);
+            int head = maps.Count > 0 && rom.ReadByte(L2Maps.AnimData + rom.ReadByte(L2Maps.AnimIndexList + maps[0]) * 2 + 1) >> 4 != 0 ? 0x20 : 0x10;
+            int at = L2Rom.SnesToFile(0x9B0000 | ptrs[i]);
+            var rows = new List<PaletteRow> { new("Before the map rows", at, head / 2) };
+            for (int r = 0; head + r * 0x20 < size && r < 6; r++)
+                rows.Add(new PaletteRow($"Map row {r + 2}", at + head + r * 0x20, Math.Min(16, (size - head - r * 0x20) / 2)));
+            string first = maps.Count > 0 ? $"{maps[0]:X2} {L2Maps.Name(rom, maps[0])}" : "no map";
+            list.Add(new Asset { Group = "Map palettes", Name = $"{i + 1:X2} {first}" + (maps.Count > 1 ? $" (+{maps.Count - 1})" : ""), Kind = Kind.Palette, PaletteRows = rows,
+                Note = $"Map palette set {i + 1:X2} at {Snes(at)}. " +
+                       (maps.Count > 0 ? $"Used by map{(maps.Count == 1 ? "" : "s")} " + string.Join(", ", maps.Select(m => m.ToString("X2"))) + ". " : "") +
+                       $"A map shows 6 rows (rows 2-7 of the screen) from {head} bytes in; this set holds {rows.Count - 1}." });
+        }
+        return list;
+    }
+
     // ── decode / import ─────────────────────────────────────────────────────
 
     /// <summary>The picture of an asset, with colours <paramref name="palette"/> of its choices.</summary>
@@ -481,7 +611,45 @@ public static class L2Gfx
                         int ox = b % 3 * 16 + (t & 1) * 8, oy = b / 3 * 16 + (t >> 1) * 8;
                         for (int i = 0; i < 64; i++) px[(oy + i / 8) * 48 + ox + i % 8] = p[i];
                     }
-                return new Picture { Width = 48, Height = 48, Pixels = px, Colours = Colours(rom, CapsulePalettes + a.Id * 0x20, 16), RowSize = 16, Transparent0 = true, RomColours = true };
+                return new Picture { Width = 48, Height = 48, Pixels = px, Colours = Colours(rom, CapsulePalettes + a.Id * 0x20, 16), RowSize = 16, Transparent0 = true, RomColours = true,
+                                     ColourOffsets = Offsets(CapsulePalettes + a.Id * 0x20, 16) };
+            }
+            case Kind.MapSprite:
+            {
+                var m = MapSpriteOf(rom, a.Id);
+                int w = m.FrameWidth * 8 * m.Frames, h = m.FrameHeight * 8;
+                var px = new byte[w * h];
+                for (int f = 0; f < m.Frames; f++)
+                    for (int y = 0; y < m.FrameHeight; y++)
+                        for (int x = 0; x < m.FrameWidth; x++)
+                        {
+                            int at = m.Tiles + MapSpriteTile(m, f, x, y) * 32;
+                            if (at < 0 || at + 32 > rom.Length) continue;
+                            var p = DecodeTile(rom.ReadBytes(at, 32), 0, 4);
+                            int ox = (f * m.FrameWidth + x) * 8, oy = y * 8;
+                            for (int i = 0; i < 64; i++) px[(oy + i / 8) * w + ox + i % 8] = p[i];
+                        }
+                int off = PaletteOf(a, palette)?.Offset ?? MapSpritePalette + m.Row * 0x20;
+                return new Picture { Width = w, Height = h, Pixels = px, Colours = Colours(rom, off, 16), RowSize = 16, Transparent0 = true, RomColours = true,
+                                     ColourOffsets = Offsets(off, 16) };
+            }
+            case Kind.Palette:
+            {
+                var rows = a.PaletteRows;
+                int nr = Math.Max(1, rows.Count), w = 16 * PaletteCell, h = nr * PaletteCell;
+                var px = new byte[w * h];
+                for (int i = 0; i < px.Length; i++) px[i] = (byte)(i / w / PaletteCell * 16 + i % w / PaletteCell);
+                var colours = new uint[nr * 16];
+                var offs = new int[colours.Length];
+                for (int i = 0; i < offs.Length; i++) { offs[i] = -1; colours[i] = 0xFF101010u; }
+                for (int r = 0; r < rows.Count; r++)
+                    for (int c = 0; c < Math.Min(16, rows[r].Count); c++)
+                    {
+                        offs[r * 16 + c] = rows[r].Offset + c * 2;
+                        colours[r * 16 + c] = Argb(rom.ReadUInt16Le(rows[r].Offset + c * 2));
+                    }
+                return new Picture { Width = w, Height = h, Pixels = px, Colours = colours, RowSize = 16, RomColours = true, ColourOffsets = offs,
+                                     RowNames = rows.Select(r => r.Name).ToArray() };
             }
             default:
             {
@@ -502,7 +670,8 @@ public static class L2Gfx
                 int n = 1 << a.Bpp;
                 var choice = PaletteOf(a, palette);
                 uint[] colours = a.Kind == Kind.Font8x16 ? new[] { 0xFF000000u, 0xFFFFFFFFu } : Colours(rom, choice?.Offset ?? -1, n);
-                return new Picture { Width = w, Height = h, Pixels = px, Colours = colours, RowSize = n, RomColours = choice is { Offset: >= 0 } };
+                return new Picture { Width = w, Height = h, Pixels = px, Colours = colours, RowSize = n, RomColours = choice is { Offset: >= 0 },
+                                     ColourOffsets = a.Kind == Kind.Font8x16 ? null : Offsets(choice?.Offset ?? -1, n) };
             }
         }
     }
@@ -520,6 +689,7 @@ public static class L2Gfx
         Kind.BattleBackground => BgPalettes + BgRecord(rom, a.Id).Palette * 0x40,
         Kind.Title => TitlePalette,
         Kind.Capsule => CapsulePalettes + a.Id * 0x20,
+        Kind.MapSprite => PaletteOf(a, palette)?.Offset ?? MapSpritePalette + MapSpriteOf(rom, a.Id).Row * 0x20,
         Kind.Font8x16 => -1,
         _ => PaletteOf(a, palette)?.Offset ?? -1,
     };
@@ -564,6 +734,36 @@ public static class L2Gfx
                 rows = new HashSet<int> { 0 };
                 what = $"packed file {CapsuleFile + a.Id:X3}";
                 break;
+            }
+            case Kind.MapSprite:
+            {
+                var m = MapSpriteOf(rom, a.Id);
+                int n = m.FrameWidth * m.FrameHeight * m.Frames, w = before.Width;
+                if (m.Tiles < 0 || m.Tiles + n * 32 > rom.Length) throw new InvalidOperationException("This sprite's tiles are outside the ROM.");
+                var old = rom.ReadBytes(m.Tiles, n * 32);
+                var d = (byte[])old.Clone();
+                for (int f = 0; f < m.Frames; f++)
+                    for (int y = 0; y < m.FrameHeight; y++)
+                        for (int x = 0; x < m.FrameWidth; x++)
+                        {
+                            int ox = (f * m.FrameWidth + x) * 8, oy = y * 8;
+                            var p = new byte[64];
+                            for (int i = 0; i < 64; i++) p[i] = pixels[(oy + i / 8) * w + ox + i % 8];
+                            EncodeTile(p, 4).CopyTo(d, MapSpriteTile(m, f, x, y) * 32);
+                        }
+                if (!d.AsSpan().SequenceEqual(old)) rom.WriteBytes(m.Tiles, d);
+                rows = new HashSet<int> { 0 };
+                what = $"{n} tiles at {m.Tiles:X6}";
+                break;
+            }
+            case Kind.Palette:
+            {
+                if (colours == null) throw new InvalidOperationException("A palette is only colours: turn on \"Take the colours from the picture\" to bring them in.");
+                var offs = before.ColourOffsets!;
+                int changed = 0;
+                for (int i = 0; i < offs.Length && i < colours.Length; i++)
+                    if (offs[i] >= 0 && SetColour(rom, offs[i], Bgr555(colours[i]))) changed++;
+                return $"{changed} colour{(changed == 1 ? "" : "s")} changed";
             }
             default:
             {

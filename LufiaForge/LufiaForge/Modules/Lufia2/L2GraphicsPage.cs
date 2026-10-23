@@ -22,11 +22,13 @@ public sealed class L2GfxItem
     public override string ToString() => Label;
 }
 
-/// <summary>One colour of the palette shown.</summary>
-public sealed class L2Swatch
+/// <summary>One colour of the palette shown (click it to change it).</summary>
+public sealed partial class L2Swatch : ObservableObject
 {
+    public int Index { get; init; }
     public Brush Brush { get; init; } = Brushes.Black;
     public string Tip { get; init; } = "";
+    [ObservableProperty] private bool _isSelected;
 }
 
 /// <summary>Graphics: battle backgrounds, capsule monsters, hero battle sprites, the title screen, fonts and menu
@@ -49,6 +51,15 @@ public partial class L2GraphicsPage : L2Page
     [ObservableProperty] private string _info = "";
     [ObservableProperty] private string _status = "";
 
+    // the colour editor
+    [ObservableProperty] private bool _hasColour;
+    [ObservableProperty] private int _red, _green, _blue;
+    [ObservableProperty] private string _hex = "";
+    [ObservableProperty] private Brush _colourPreview = Brushes.Black;
+    [ObservableProperty] private string _colourInfo = "Click a colour above to change it.";
+    private int _colour = -1;
+    private bool _syncing;
+
     protected override IEnumerable<string> ReadNames()
     {
         _assets = L2Gfx.Assets(Rom!);
@@ -67,6 +78,7 @@ public partial class L2GraphicsPage : L2Page
         HasPaletteChoice = PaletteOptions.Count > 1;
         PaletteChoice = _asset.Palettes.Count > 0 ? _asset.DefaultPalette : 0;
         Status = "";
+        _colour = -1;
         Draw();
     }
 
@@ -89,12 +101,107 @@ public partial class L2GraphicsPage : L2Page
         PictureWidth = p.Width * scale; PictureHeight = p.Height * scale;
         Swatches = p.Colours.Select((c, i) => new L2Swatch
         {
+            Index = i,
             Brush = Frozen(c),
-            Tip = $"Colour {i} (row {i / p.RowSize}, {i % p.RowSize}): {L2Gfx.Bgr555(c):X4}" + (i % p.RowSize == 0 && (p.Transparent0 || p.Rows > 1) ? ", see-through" : ""),
+            IsSelected = i == _colour,
+            Tip = SwatchTip(p, i),
         }).ToList();
-        string colours = p.Rows > 1 ? $"{p.Colours.Length} colours ({p.Rows} rows of {p.RowSize}; each 8x8 square uses one row)" : $"{p.Colours.Length} colours";
-        Info = $"{p.Width} x {p.Height} pixels, {colours}{(p.RomColours ? "" : ", not stored with these graphics")}. {_asset.Note}";
+        if (_asset.Kind == L2Gfx.Kind.Palette)
+            Info = $"{p.RowNames?.Length ?? 0} rows, {p.ColourOffsets?.Count(o => o >= 0) ?? 0} colours. {_asset.Note}";
+        else
+        {
+            string colours = p.Rows > 1 ? $"{p.Colours.Length} colours ({p.Rows} rows of {p.RowSize}; each 8x8 square uses one row)" : $"{p.Colours.Length} colours";
+            Info = $"{p.Width} x {p.Height} pixels, {colours}{(p.RomColours ? "" : ", not stored with these graphics")}. {_asset.Note}";
+        }
+        ShowColour();
     }
+
+    private string SwatchTip(L2Gfx.Picture p, int i)
+    {
+        int off = OffsetOf(i);
+        if (p.RowNames != null)
+            return off < 0 ? "Not a colour of this set" : $"{p.RowNames[i / 16]}, colour {i % 16}: {Rom!.ReadUInt16Le(off) & 0x7FFF:X4} at {off:X6}";
+        return $"Colour {i} (row {i / p.RowSize}, {i % p.RowSize}): {L2Gfx.Bgr555(p.Colours[i]):X4}" + (i % p.RowSize == 0 && (p.Transparent0 || p.Rows > 1) ? ", see-through" : "") +
+               (off >= 0 ? $" at {off:X6}" : "");
+    }
+
+    private int OffsetOf(int i) => _pic?.ColourOffsets is { } o && i >= 0 && i < o.Length ? o[i] : -1;
+
+    // ── the colour editor ───────────────────────────────────────────────────
+
+    [RelayCommand]
+    private void PickColour(L2Swatch? s)
+    {
+        if (s == null) return;
+        _colour = s.Index;
+        foreach (var x in Swatches) x.IsSelected = x.Index == _colour;
+        ShowColour();
+    }
+
+    /// <summary>Picks colour <paramref name="index"/> of the picture shown (for tests and the swatches).</summary>
+    public void PickColourAt(int index) => PickColour(Swatches.FirstOrDefault(s => s.Index == index));
+
+    private void ShowColour()
+    {
+        int off = OffsetOf(_colour);
+        HasColour = off >= 0 && Rom != null;
+        _syncing = true;
+        if (HasColour)
+        {
+            int v = Rom!.ReadUInt16Le(off) & 0x7FFF;
+            Red = v & 31; Green = v >> 5 & 31; Blue = v >> 10 & 31;
+            Hex = v.ToString("X4");
+            int snes = L2Rom.FileToSnes(off);
+            ColourInfo = $"Colour {_colour % _pic!.RowSize} of row {_colour / _pic.RowSize}, at {off:X6} (${snes >> 16:X2}:{snes & 0xFFFF:X4}).";
+        }
+        else
+        {
+            Red = Green = Blue = 0; Hex = "";
+            ColourInfo = _colour < 0 ? "Click a colour above to change it." : "This colour isn't stored in the ROM (these graphics have no colours of their own; pick a set of colours above).";
+        }
+        _syncing = false;
+        UpdatePreview();
+    }
+
+    private int EditedValue => Math.Clamp(Red, 0, 31) | Math.Clamp(Green, 0, 31) << 5 | Math.Clamp(Blue, 0, 31) << 10;
+
+    private void UpdatePreview() => ColourPreview = Frozen(L2Gfx.Argb(EditedValue));
+
+    partial void OnRedChanged(int value) => FromSliders();
+    partial void OnGreenChanged(int value) => FromSliders();
+    partial void OnBlueChanged(int value) => FromSliders();
+
+    private void FromSliders()
+    {
+        if (_syncing) return;
+        _syncing = true; Hex = EditedValue.ToString("X4"); _syncing = false;
+        UpdatePreview();
+    }
+
+    partial void OnHexChanged(string value)
+    {
+        if (_syncing) return;
+        var t = value.Trim().TrimStart('$', '#');
+        if (t.Length is < 1 or > 4 || !int.TryParse(t, System.Globalization.NumberStyles.HexNumber, null, out int v) || v > 0x7FFF) return;
+        _syncing = true; Red = v & 31; Green = v >> 5 & 31; Blue = v >> 10 & 31; _syncing = false;
+        UpdatePreview();
+    }
+
+    /// <summary>Writes the colour in the editor to the ROM (one Undo step) and redraws the picture.</summary>
+    [RelayCommand]
+    private void ApplyColour()
+    {
+        if (Rom == null || Main == null || _asset == null) return;
+        int off = OffsetOf(_colour);
+        if (off < 0) { Status = "Pick a colour first."; return; }
+        if (!L2Gfx.SetColour(Rom, off, EditedValue)) { Status = "Nothing changed: the colour is the same."; return; }
+        Main.NotifyRomModified($"Lufia II: colour {EditedValue:X4} at {off:X6} ({_asset.Name})");
+        Draw();
+        Status = $"Colour written at {off:X6}. Every picture using it changes too. Edit, Undo takes it back.";
+    }
+
+    /// <summary>The colour editor's Apply (for tests).</summary>
+    public void ApplyColourNow() => ApplyColour();
 
     private static Brush Frozen(uint c)
     {
@@ -145,7 +252,7 @@ public partial class L2GraphicsPage : L2Page
         {
             if (png.Width != w || png.Height != h) { Status = $"The picture must be {w} x {h} pixels (as saved by Export PNG)."; return; }
             idx = png.Indices;
-            if (TakeColours && _pic.RomColours) colours = png.Palette;
+            if ((TakeColours || _asset.Kind == L2Gfx.Kind.Palette) && _pic.RomColours) colours = png.Palette;
             how = colours != null ? "colour numbers kept, colours taken from the picture" : "colour numbers kept";
         }
         else
@@ -157,8 +264,19 @@ public partial class L2GraphicsPage : L2Page
             var bgra = new FormatConvertedBitmap(src, PixelFormats.Bgra32, null, 0);
             var px = new uint[w * h];
             bgra.CopyPixels(px, w * 4, 0);
-            idx = L2Gfx.MatchColours(px, _pic);
-            how = "colours matched to the ones shown" + (_pic.Rows > 1 ? " (each 8x8 square to its best row)" : "");
+            if (_asset.Kind == L2Gfx.Kind.Palette)
+            {
+                // a palette is its squares: the colour in the middle of each
+                idx = _pic.Pixels;
+                int cell = L2Gfx.PaletteCell;
+                colours = Enumerable.Range(0, _pic.Colours.Length).Select(i => px[(i / 16 * cell + cell / 2) * w + i % 16 * cell + cell / 2]).ToArray();
+                how = "colours read from the middle of each square";
+            }
+            else
+            {
+                idx = L2Gfx.MatchColours(px, _pic);
+                how = "colours matched to the ones shown" + (_pic.Rows > 1 ? " (each 8x8 square to its best row)" : "");
+            }
         }
         var before = Rom.ToArray();
         string what;
