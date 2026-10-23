@@ -255,3 +255,67 @@ public partial class L2IpPage : L2Page
         return _a.Name + " (IP)";
     }
 }
+
+// ------------------------------------------------------------------------------------------- maps
+
+public partial class L2MapsPage : ObservableObject
+{
+    private RomBuffer? _rom;
+    public ObservableCollection<string> Names { get; } = new();
+    [ObservableProperty] private int _selectedIndex = -1;
+    [ObservableProperty] private bool _showGround = true, _showUpper = true, _showCollision;
+    [ObservableProperty] private BitmapSource? _mapImage;
+    [ObservableProperty] private string _info = "";
+
+    public void SetRom(RomBuffer rom)
+    {
+        _rom = rom;
+        Names.Clear();
+        for (int id = 0; id < L2Maps.Count; id++)
+        {
+            string n = L2Maps.Name(rom, id);
+            Names.Add($"{id:X2}  {(n.Length > 0 && !n.Contains('~') ? n : id < 2 ? (id == 0 ? "World map" : "Sea floor") : "Map " + id.ToString("X2"))}");
+        }
+        SelectedIndex = -1;
+        SelectedIndex = 3;
+    }
+
+    partial void OnSelectedIndexChanged(int value) => Draw();
+    partial void OnShowGroundChanged(bool value) => Draw();
+    partial void OnShowUpperChanged(bool value) => Draw();
+    partial void OnShowCollisionChanged(bool value) => Draw();
+
+    /// <summary>Redraws the picked map (also after an edit elsewhere).</summary>
+    public void Draw()
+    {
+        if (_rom == null || SelectedIndex < 2) { MapImage = null; Info = SelectedIndex is 0 or 1 ? "The world map and the sea floor are drawn differently (coming later)." : ""; return; }
+        try
+        {
+            var map = L2Maps.Read(_rom, SelectedIndex);
+            var (w, h, px) = L2Maps.Render(_rom, SelectedIndex, ShowGround, ShowUpper);
+            if (ShowCollision && map.Layers.Length > 1)
+            {
+                var L = map.Layers[1];
+                for (int cy = 0; cy < L.Height; cy++)
+                    for (int cx = 0; cx < L.Width; cx++)
+                    {
+                        byte f = L.Flags[cy * L.Width + cx];
+                        uint tint = (f & 0x80) != 0 ? 0xFFFF3030u : (f & 0x20) != 0 ? 0xFF30C0FFu : (f & 0x0C) != 0 ? 0xFFFFC030u : 0;
+                        if (tint == 0) continue;
+                        for (int y = 0; y < 16; y++)
+                            for (int x = 0; x < 16; x++)
+                            {
+                                bool edge = (f & 0x80) != 0 || (f & 0x20) != 0 || (f & 0x04) != 0 && y < 2 || (f & 0x08) != 0 && x < 2;
+                                if (!edge || (x + y) % 2 == 1 && (f & 0xA0) != 0) continue;
+                                int i = (cy * 16 + y) * w + cx * 16 + x;
+                                if (i < px.Length) px[i] = tint;
+                            }
+                    }
+            }
+            MapImage = BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgra32, null, px.Select(c => (int)(c == 0 ? 0xFF000000u : c)).ToArray(), w * 4);
+            Info = $"{map.Layers[0].Width} x {map.Layers[0].Height} blocks; block set file {map.BlockSet:X3}, tile set file {map.TileSet:X3}, map file {L2Maps.MapFileBase + SelectedIndex:X3}." +
+                   (ShowCollision ? "  Red: obstacle, blue: doorway, orange: wall on the top / left edge." : "");
+        }
+        catch (Exception ex) { MapImage = null; Info = "Couldn't draw it: " + ex.Message; }
+    }
+}

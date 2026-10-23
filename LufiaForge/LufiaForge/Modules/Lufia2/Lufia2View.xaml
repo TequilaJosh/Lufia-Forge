@@ -10,6 +10,9 @@
                     <TextBlock Text="{Binding Overview}" Style="{StaticResource LufiaLabel}" TextWrapping="Wrap"/>
                 </StackPanel>
             </TabItem>
+            <TabItem Header="Maps" Style="{StaticResource LufiaTabItem}">
+                <local:L2MapsView DataContext="{Binding Maps}"/>
+            </TabItem>
             <TabItem Header="Monsters" Style="{StaticResource LufiaTabItem}">
                 <local:L2MonstersView DataContext="{Binding Monsters}"/>
             </TabItem>
