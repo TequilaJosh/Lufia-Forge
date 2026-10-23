@@ -34,18 +34,32 @@ public static class L2Maps
         public int TileSet { get; init; }
     }
 
-    /// <summary>A map's name: zero-terminated at the header table + u16 (dictionary codes shown as "~").</summary>
-    public static string Name(RomBuffer rom, int id)
+    /// <summary>A map's name: zero-terminated at the header table + u16. It can use the text dictionary (05 / 06 /
+    /// 80-FF, as dialogue does) and 0A xx yy = the first (yyxx &gt;&gt; 12) + 2 letters of another name, at the header
+    /// table + (yyxx &amp; 0FFF) (e.g. "Elcid" for the houses of Elcid, "Cave" + " to Sundletan B" + "2").</summary>
+    public static string Name(RomBuffer rom, int id) => NameAt(rom, HeaderTable + rom.ReadUInt16Le(HeaderTable + 0x10 + id * 8 + 6), 0);
+
+    private static string NameAt(RomBuffer rom, int at, int depth, bool keepSpaces = false)
     {
-        int at = HeaderTable + rom.ReadUInt16Le(HeaderTable + 0x10 + id * 8 + 6);
+        var words = L2Text.Words(rom);
         var sb = new System.Text.StringBuilder();
-        for (int i = 0; i < 40; i++)
+        for (int p = at; p < at + 48 && depth < 4; )
         {
-            byte b = rom.ReadByte(at + i);
+            byte b = rom.ReadByte(p++);
             if (b == 0) break;
-            sb.Append(b is >= 0x20 and < 0x7F ? (char)b : '~');
+            if (b == 0x0A)
+            {
+                int w = rom.ReadUInt16Le(p); p += 2;
+                string part = NameAt(rom, HeaderTable + (w & 0x0FFF), depth + 1, keepSpaces: true);
+                int n = (w >> 12) + 2;
+                sb.Append(part.Length > n ? part[..n] : part);
+            }
+            else if (b == 5) sb.Append(words[rom.ReadByte(p++)]);
+            else if (b == 6) sb.Append(words[0x100 + rom.ReadByte(p++)]);
+            else if (b >= 0x80) sb.Append(words[0x200 + (b & 0x7F)]);
+            else sb.Append(b is >= 0x20 and < 0x7F ? (char)b : '~');
         }
-        return sb.ToString().Trim();
+        return keepSpaces ? sb.ToString() : sb.ToString().Trim();
     }
 
     public static Map Read(RomBuffer rom, int id)
