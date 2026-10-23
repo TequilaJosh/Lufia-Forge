@@ -41,6 +41,12 @@
                     </ItemsControl>
                 </StackPanel>
             </Border>
+            <Border Style="{StaticResource GdCard}">
+                <StackPanel>
+                    <TextBlock Text="EFFECT" Style="{StaticResource GdSection}"/>
+                    <TextBlock Text="{Binding EffectText}" Style="{StaticResource GdFieldLabel}" FontFamily="Consolas" TextWrapping="NoWrap"/>
+                </StackPanel>
+            </Border>
                 </WrapPanel>
             </StackPanel>
         </ScrollViewer>
