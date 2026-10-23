@@ -18,7 +18,7 @@ public partial class L2EventsPage : L2Page
 
     protected override void Load(int index)
     {
-        var scripts = L2Script.MapScripts(Rom!, index);
+        var scripts = L2Script.MapScripts(Rom!, index).Concat(L2Puzzles.MapScripts(Rom!, index)).ToList();
         var sb = new System.Text.StringBuilder();
         int commands = 0, texts = 0;
         foreach (var (title, ops) in scripts)
@@ -32,7 +32,7 @@ public partial class L2EventsPage : L2Page
             sb.AppendLine();
         }
         Listing = sb.ToString();
-        Summary = $"{scripts.Count} scripts, {commands} commands, {texts} pieces of text. Addresses are file offsets; flags are bits at $7E:077E, variables bytes at $7E:079E. Edit the text on the Text page.";
+        Summary = $"{scripts.Count} scripts, {commands} commands, {texts} pieces of text. Addresses are file offsets; flags are bits at $7E:077E, variables bytes at $7E:079E. Puzzle scripts (switches, doors, spots) follow the event scripts. Edit the text on the Text page.";
     }
 
     protected override bool IsField(string p) => false;
