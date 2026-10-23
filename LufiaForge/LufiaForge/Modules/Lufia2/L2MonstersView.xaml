@@ -1,0 +1,83 @@
+<UserControl x:Class="LufiaForge.Modules.Lufia2.L2MonstersView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
+    </UserControl.Resources>
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="230"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <ListBox Grid.Column="0" Margin="12" Style="{StaticResource GdFindList}" ItemsSource="{Binding Names}" SelectedIndex="{Binding SelectedIndex}"/>
+        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" Padding="0,12,0,0">
+            <StackPanel>
+                <TextBlock Text="Lufia II's 224 monsters. A change is written to the ROM at once (Edit, Undo takes it back)." Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="8,0,12,4"/>
+                <WrapPanel Orientation="Horizontal" IsEnabled="{Binding IsEditable}">
+            <Border Style="{StaticResource GdCard}">
+                <StackPanel>
+                    <TextBlock Text="MONSTER" Style="{StaticResource GdSection}"/>
+                    <UniformGrid Columns="2">
+                        <TextBlock Text="Name" Style="{StaticResource GdFieldLabel}"/>
+                        <TextBox Style="{StaticResource GdText}" Width="130" HorizontalAlignment="Left" Text="{Binding Name, UpdateSourceTrigger=LostFocus}" MaxLength="13"/>
+                        <TextBlock Text="Level" Style="{StaticResource GdFieldLabel}"/>
+                        <TextBox Style="{StaticResource GdNumber}" Text="{Binding Level, UpdateSourceTrigger=LostFocus}"/>
+                        <TextBlock Text="Battle sprite (1-134)" Style="{StaticResource GdFieldLabel}"/>
+                        <TextBox Style="{StaticResource GdNumber}" Text="{Binding Sprite, UpdateSourceTrigger=LostFocus}"/>
+                        <TextBlock Text="Palette" Style="{StaticResource GdFieldLabel}"/>
+                        <TextBox Style="{StaticResource GdNumber}" Text="{Binding Palette, UpdateSourceTrigger=LostFocus}"/>
+                    </UniformGrid>
+                </StackPanel>
+            </Border>
+            <Border Style="{StaticResource GdCard}">
+                <StackPanel>
+                    <TextBlock Text="STATS" Style="{StaticResource GdSection}"/>
+                    <UniformGrid Columns="2">
+                        <TextBlock Text="HP" Style="{StaticResource GdFieldLabel}"/>
+                        <TextBox Style="{StaticResource GdNumber}" Text="{Binding Hp, UpdateSourceTrigger=LostFocus}"/>
+                        <TextBlock Text="MP" Style="{StaticResource GdFieldLabel}"/>
+                        <TextBox Style="{StaticResource GdNumber}" Text="{Binding Mp, UpdateSourceTrigger=LostFocus}"/>
+                        <TextBlock Text="ATP" Style="{StaticResource GdFieldLabel}"/>
+                        <TextBox Style="{StaticResource GdNumber}" Text="{Binding Atp, UpdateSourceTrigger=LostFocus}"/>
+                        <TextBlock Text="DFP" Style="{StaticResource GdFieldLabel}"/>
+                        <TextBox Style="{StaticResource GdNumber}" Text="{Binding Dfp, UpdateSourceTrigger=LostFocus}"/>
+                        <TextBlock Text="AGL" Style="{StaticResource GdFieldLabel}"/>
+                        <TextBox Style="{StaticResource GdNumber}" Text="{Binding Agl, UpdateSourceTrigger=LostFocus}"/>
+                        <TextBlock Text="INT" Style="{StaticResource GdFieldLabel}"/>
+                        <TextBox Style="{StaticResource GdNumber}" Text="{Binding Int, UpdateSourceTrigger=LostFocus}"/>
+                        <TextBlock Text="GUT" Style="{StaticResource GdFieldLabel}"/>
+                        <TextBox Style="{StaticResource GdNumber}" Text="{Binding Gut, UpdateSourceTrigger=LostFocus}"/>
+                        <TextBlock Text="MGR" Style="{StaticResource GdFieldLabel}"/>
+                        <TextBox Style="{StaticResource GdNumber}" Text="{Binding Mgr, UpdateSourceTrigger=LostFocus}"/>
+                    </UniformGrid>
+                </StackPanel>
+            </Border>
+            <Border Style="{StaticResource GdCard}">
+                <StackPanel>
+                    <TextBlock Text="REWARD" Style="{StaticResource GdSection}"/>
+                    <UniformGrid Columns="2">
+                        <TextBlock Text="EXP" Style="{StaticResource GdFieldLabel}"/>
+                        <TextBox Style="{StaticResource GdNumber}" Text="{Binding Exp, UpdateSourceTrigger=LostFocus}"/>
+                        <TextBlock Text="Gold" Style="{StaticResource GdFieldLabel}"/>
+                        <TextBox Style="{StaticResource GdNumber}" Text="{Binding Gold, UpdateSourceTrigger=LostFocus}"/>
+                        <TextBlock Text="Drops" Style="{StaticResource GdFieldLabel}"/>
+                        <ComboBox Style="{StaticResource GdCombo}" Width="170" IsEnabled="{Binding HasDrop}" ItemsSource="{Binding ItemOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding DropItem}"/>
+                        <TextBlock Text="Drop chance (0-127)" Style="{StaticResource GdFieldLabel}"/>
+                        <TextBox Style="{StaticResource GdNumber}" Text="{Binding DropChance, UpdateSourceTrigger=LostFocus}" IsEnabled="{Binding HasDrop}"/>
+                    </UniformGrid>
+                </StackPanel>
+            </Border>
+            <Border Style="{StaticResource GdCard}">
+                <StackPanel>
+                    <TextBlock Text="BATTLE SPRITE" Style="{StaticResource GdSection}"/>
+                    <Image Source="{Binding PictureImage}" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor" HorizontalAlignment="Left">
+                        <Image.LayoutTransform><ScaleTransform ScaleX="2" ScaleY="2"/></Image.LayoutTransform>
+                    </Image>
+                    <TextBlock Text="{Binding ScriptText}" Style="{StaticResource GdHint}" TextWrapping="Wrap" MaxWidth="300" Margin="0,8,0,0"/>
+                </StackPanel>
+            </Border>
+                </WrapPanel>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

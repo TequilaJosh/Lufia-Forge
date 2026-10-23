@@ -1,0 +1,34 @@
+<UserControl x:Class="LufiaForge.Modules.Lufia2.L2IpView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
+    </UserControl.Resources>
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="230"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <ListBox Grid.Column="0" Margin="12" Style="{StaticResource GdFindList}" ItemsSource="{Binding Names}" SelectedIndex="{Binding SelectedIndex}"/>
+        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" Padding="0,12,0,0">
+            <StackPanel>
+                <TextBlock Text="Lufia II's 168 IP attacks (names can't be changed yet: they vary in length)." Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="8,0,12,4"/>
+                <WrapPanel Orientation="Horizontal" IsEnabled="{Binding IsEditable}">
+            <Border Style="{StaticResource GdCard}">
+                <StackPanel>
+                    <TextBlock Text="IP ATTACK" Style="{StaticResource GdSection}"/>
+                    <UniformGrid Columns="2">
+                        <TextBlock Text="Name" Style="{StaticResource GdFieldLabel}"/>
+                        <TextBlock Text="{Binding Name}" Style="{StaticResource GdFieldLabel}"/>
+                        <TextBlock Text="IP cost (0-255)" Style="{StaticResource GdFieldLabel}"/>
+                        <TextBox Style="{StaticResource GdNumber}" Text="{Binding Cost, UpdateSourceTrigger=LostFocus}"/>
+                        <TextBlock Text="Animation" Style="{StaticResource GdFieldLabel}"/>
+                        <TextBox Style="{StaticResource GdNumber}" Text="{Binding Animation, UpdateSourceTrigger=LostFocus}"/>
+                    </UniformGrid>
+                </StackPanel>
+            </Border>
+                </WrapPanel>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>
