@@ -10,7 +10,11 @@ public static class L2MapInfo
     public const int Pointers = 0x27FCBC;
 
     /// <summary>A thing on the map: a kind, an area (x1,y1)-(x2,y2) inclusive, and what it does.</summary>
-    public sealed record Entry(string Kind, int Id, int X1, int Y1, int X2, int Y2, string Detail, int DestMap = -1, int DestX = 0, int DestY = 0);
+    public sealed record Entry(string Kind, int Id, int X1, int Y1, int X2, int Y2, string Detail, int DestMap = -1, int DestX = 0, int DestY = 0)
+    {
+        /// <summary>File offset of the record.</summary>
+        public int At { get; init; }
+    }
 
     private static readonly (int Offset, string Kind, int Size)[] Lists =
     {
@@ -42,6 +46,14 @@ public static class L2MapInfo
         return a == 0 ? -1 : L2Rom.SnesToFile(a);
     }
 
+    /// <summary>Points an exit at another map and place (record bytes 6, 7 = x, y; 8 = map).</summary>
+    public static void WriteExit(RomBuffer rom, Entry exit, int map, int x, int y)
+    {
+        rom.WriteByte(exit.At + 6, (byte)x);
+        rom.WriteByte(exit.At + 7, (byte)y);
+        rom.WriteByte(exit.At + 8, (byte)map);
+    }
+
     public static List<Entry> Read(RomBuffer rom, int map)
     {
         var list = new List<Entry>();
@@ -54,7 +66,8 @@ public static class L2MapInfo
             for (int guard = 0; guard < 64 && p > b && p < b + size && rom.ReadByte(p) != 0xFF; guard++, p += sz)
             {
                 var r = rom.ReadBytes(p, sz);
-                list.Add(kind switch
+                int at = p;
+                list.Add((kind switch
                 {
                     "Door" => new Entry(kind, r[0], r[1], r[2], r[3], r[4], $"opens onto ({r[5]},{r[6]})-({r[7]},{r[8]})"),
                     "Exit" => new Entry(kind, r[0], r[1], r[2], r[3], r[4], $"to map {r[8]:X2} at ({r[6]},{r[7]})", r[8], r[6], r[7]),
@@ -62,7 +75,7 @@ public static class L2MapInfo
                     "Character start" => new Entry(kind, r[0], r[1], r[2], r[1], r[2], $"character {r[0] + 0x4F:X2}, walks in ({r[3]},{r[4]})-({r[5]},{r[6]})"),
                     "Treasure" => new Entry(kind, r[0], r[1], r[2], r[1], r[2], ""),
                     _ => new Entry(kind, r[0], r[1], r[2], r[1], r[2], ""),
-                });
+                }) with { At = at });
             }
         }
         return list;

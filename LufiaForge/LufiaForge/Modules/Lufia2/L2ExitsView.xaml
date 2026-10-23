@@ -1,0 +1,39 @@
+<UserControl x:Class="LufiaForge.Modules.Lufia2.L2ExitsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
+    </UserControl.Resources>
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="300"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <ListBox Grid.Column="0" Margin="12" Style="{StaticResource GdFindList}" ItemsSource="{Binding Names}" SelectedIndex="{Binding SelectedIndex}"/>
+        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" Padding="0,12,0,0">
+            <StackPanel>
+                <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="8,0,12,4"
+                           Text="Where each exit of the map leads: the map, and the place on it (in 16x16 blocks, as on the Maps page). A change is written to the ROM at once (Edit, Undo takes it back)."/>
+                <Border Style="{StaticResource GdCard}" HorizontalAlignment="Left" IsEnabled="{Binding IsEditable}">
+                    <StackPanel>
+                        <TextBlock Text="EXITS" Style="{StaticResource GdSection}"/>
+                        <ItemsControl ItemsSource="{Binding Rows}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal" Margin="0,2">
+                                        <TextBlock Text="{Binding Label}" Style="{StaticResource GdFieldLabel}" Width="190"/>
+                                        <ComboBox Style="{StaticResource GdCombo}" Width="250" ItemsSource="{Binding MapOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding Map}"/>
+                                        <TextBlock Text="x" Style="{StaticResource GdFieldLabel}" Margin="10,0,4,0"/>
+                                        <TextBox Style="{StaticResource GdNumber}" Width="50" Text="{Binding X, UpdateSourceTrigger=LostFocus}"/>
+                                        <TextBlock Text="y" Style="{StaticResource GdFieldLabel}" Margin="10,0,4,0"/>
+                                        <TextBox Style="{StaticResource GdNumber}" Width="50" Text="{Binding Y, UpdateSourceTrigger=LostFocus}"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>
