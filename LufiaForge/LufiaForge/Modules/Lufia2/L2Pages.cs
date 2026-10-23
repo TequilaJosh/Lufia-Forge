@@ -166,6 +166,7 @@ public partial class L2ItemsPage : L2Page
     [ObservableProperty] private List<L2Flag> _equipBy = new();
     [ObservableProperty] private List<L2Word> _words = new();
     [ObservableProperty] private string _wordsText = "";
+    [ObservableProperty] private string _effectText = "";
 
     protected override IEnumerable<string> ReadNames()
     {
@@ -186,6 +187,11 @@ public partial class L2ItemsPage : L2Page
         WordsText = (Words.Count == 0 ? "No stat bonus or IP attack. " : "") +
                     (scripts.Count > 0 ? "Scripts: " + string.Join(", ", scripts) + ". " : "") +
                     "Only the values this item already has can be changed (adding one would make the record grow).";
+        var spellNames = L2Battle.Spells(Rom!).Select(s => s.Name).ToArray();
+        var parts = new List<string>();
+        foreach (var (bit, label) in new[] { (1, "IN THE MENU"), (2, "IN BATTLE"), (4, "AS A WEAPON"), (8, "AS ARMOR") })
+            if (_it.Values.TryGetValue(bit, out var off)) parts.Add(label + "\n" + L2BattleScript.Disassemble(Rom!, _it.Offset + off, _it.Offset, spellNames));
+        EffectText = parts.Count > 0 ? string.Join("\n\n", parts) : "No effect script.";
     }
 
     protected override bool IsField(string p) => p is nameof(Name) or nameof(Price) or nameof(EquipType) or nameof(Icon);
@@ -210,6 +216,7 @@ public partial class L2SpellsPage : L2Page
     [ObservableProperty] private int _mp, _price;
     [ObservableProperty] private bool _inMenu, _inBattle;
     [ObservableProperty] private List<L2Flag> _learnBy = new();
+    [ObservableProperty] private string _effectText = "";
 
     protected override IEnumerable<string> ReadNames() => L2Battle.Spells(Rom!).Select(s => $"{s.Index:X2}  {s.Name}");
 
@@ -218,6 +225,8 @@ public partial class L2SpellsPage : L2Page
         _s = L2Battle.ReadSpell(Rom!, index);
         Name = _s.Name; Mp = _s.Mp; Price = _s.Price; InMenu = (_s.Flags & 0x40) != 0; InBattle = (_s.Flags & 0x80) != 0;
         LearnBy = Flags(L2Rom.Heroes, _s.LearnBy, Edited);
+        int script = Rom!.ReadUInt16Le(_s.Offset + 0x11);
+        EffectText = L2BattleScript.Disassemble(Rom!, _s.Offset + script, _s.Offset, L2Battle.Spells(Rom!).Select(x => x.Name).ToArray());
     }
 
     protected override bool IsField(string p) => p is nameof(Name) or nameof(Mp) or nameof(Price) or nameof(InMenu) or nameof(InBattle);

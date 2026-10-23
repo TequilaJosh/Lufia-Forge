@@ -57,6 +57,10 @@ public static class L2BattleScript
                 case >= 0x06 and <= 0x0B: target = args[3] | args[4] << 8; text = text.Replace("reg", $"reg {args[0]:X2}").Replace("value", $"{args[1] | args[2] << 8}") + $" {target:X4}"; break;
                 case 0x2C or 0x54 when spellNames != null && args[0] < spellNames.Length: text += $" {spellNames[args[0]]}"; break;
                 case 0x2D when monsterNames != null && args[0] < monsterNames.Length: text += $" {monsterNames[args[0]]}"; break;
+                case 0x24:
+                    string what = args[0] switch { 0 => "HP", 1 => "MP", 2 => "max HP", 3 => "max MP", 4 => "ATP", 5 => "DFP", 6 => "STR", 7 => "AGL", 8 => "INT", 9 => "GUT", 10 => "MGR", _ => $"stat {args[0]:X2}" };
+                    text = $"restore {what} by {args[1] | args[2] << 8} (give or take {args[3]})";
+                    break;
                 default: if (args.Length > 0) text += " " + string.Join(" ", args.Select(b => b.ToString("X2"))); break;
             }
             sb.AppendLine($"{p - record:X4}  {text}");
