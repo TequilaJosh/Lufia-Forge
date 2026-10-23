@@ -482,3 +482,95 @@ public partial class L2TextPage : ObservableObject
         Status = "Written. (Edit > Undo takes it back.)";
     }
 }
+
+
+// ------------------------------------------------------------------------------------------- encounters
+
+/// <summary>A choice in a list of choices (a monster in a group slot, a group in a map's list).</summary>
+public partial class L2Slot : ObservableObject
+{
+    public string Label { get; init; } = "";
+    public List<L2Option> Options { get; init; } = new();
+    [ObservableProperty] private int _value;
+    public Action? Changed { get; set; }
+    partial void OnValueChanged(int value) => Changed?.Invoke();
+}
+
+public partial class L2EncountersPage : ObservableObject
+{
+    private RomBuffer? _rom;
+    private MainViewModel? _main;
+    private bool _loading;
+    private List<L2Option> _monsters = new(), _groupOptions = new();
+
+    public ObservableCollection<string> GroupNames { get; } = new();
+    public ObservableCollection<string> MapNames { get; } = new();
+    [ObservableProperty] private int _selectedGroup = -1;
+    [ObservableProperty] private int _selectedMap = -1;
+    [ObservableProperty] private List<L2Slot> _groupSlots = new();
+    [ObservableProperty] private List<L2Slot> _mapSlots = new();
+    [ObservableProperty] private string _mapText = "";
+
+    public void SetRom(RomBuffer rom, MainViewModel main)
+    {
+        _rom = rom; _main = main;
+        _monsters = new[] { new L2Option(0xFF, "-") }.Concat(L2Battle.Monsters(rom).Select(m => new L2Option(m.Index, $"{m.Index:X2} {m.Name}"))).ToList();
+        RefreshGroups();
+        MapNames.Clear();
+        for (int m = 0; m < L2Maps.Count; m++)
+        {
+            string n = L2Maps.Name(rom, m);
+            MapNames.Add($"{m:X2}  {(n.Length > 0 && !n.Contains('~') ? n : "Map " + m.ToString("X2"))}  ({L2Encounters.MapList(rom, m).Length})");
+        }
+        SelectedGroup = -1; SelectedGroup = 0;
+        SelectedMap = -1; SelectedMap = 0x0E;
+    }
+
+    private string GroupLabel(int g) =>
+        $"{g:X2}  " + string.Join(", ", L2Encounters.Group(_rom!, g).Where(m => m != 0xFF).Select(m => _monsters.FirstOrDefault(o => o.Value == m)?.Label[3..] ?? m.ToString("X2")));
+
+    private void RefreshGroups()
+    {
+        int keep = SelectedGroup;
+        GroupNames.Clear();
+        for (int g = 0; g < L2Encounters.GroupCount; g++) GroupNames.Add(GroupLabel(g));
+        _groupOptions = Enumerable.Range(0, L2Encounters.GroupCount).Select(g => new L2Option(g, GroupLabel(g))).ToList();
+        if (keep >= 0) { _loading = true; SelectedGroup = keep; _loading = false; }
+    }
+
+    partial void OnSelectedGroupChanged(int value)
+    {
+        if (_rom == null || value < 0 || _loading) return;
+        var ms = L2Encounters.Group(_rom, value);
+        GroupSlots = ms.Select((m, i) => new L2Slot { Label = $"Monster {i + 1}", Options = _monsters, Value = m, Changed = GroupEdited }).ToList();
+    }
+
+    private void GroupEdited()
+    {
+        if (_rom == null || _main == null || SelectedGroup < 0) return;
+        L2Encounters.WriteGroup(_rom, SelectedGroup, GroupSlots.Select(s => s.Value).ToArray());
+        _main.NotifyRomModified($"Lufia II: monster group {SelectedGroup:X2}");
+        _loading = true; GroupNames[SelectedGroup] = GroupLabel(SelectedGroup); SelectedGroup = SelectedGroup; _loading = false;
+        _groupOptions = Enumerable.Range(0, L2Encounters.GroupCount).Select(g => new L2Option(g, GroupLabel(g))).ToList();
+        OnSelectedMapChanged(SelectedMap);   // (its group names)
+    }
+
+    partial void OnSelectedMapChanged(int value)
+    {
+        if (_rom == null || value < 0) return;
+        var (at, len) = L2Encounters.MapList(_rom, value);
+        MapSlots = Enumerable.Range(0, len).Select(i => new L2Slot { Label = $"Monster {i + 1}", Options = _groupOptions, Value = _rom.ReadByte(at + i), Changed = MapEdited }).ToList();
+        var shared = L2Encounters.SharingWith(_rom, value);
+        MapText = len == 0 ? "This map has no monsters." :
+            $"The group each of the map's {len} monsters fights (in the order the map places them)." +
+            (shared.Count > 0 ? $" Shared with map{(shared.Count > 1 ? "s" : "")} {string.Join(", ", shared.Select(m => m.ToString("X2")))}: a change here changes {(shared.Count > 1 ? "them" : "it")} too." : "");
+    }
+
+    private void MapEdited()
+    {
+        if (_rom == null || _main == null || SelectedMap < 0) return;
+        var (at, _) = L2Encounters.MapList(_rom, SelectedMap);
+        for (int i = 0; i < MapSlots.Count; i++) _rom.WriteByte(at + i, (byte)MapSlots[i].Value);
+        _main.NotifyRomModified($"Lufia II: monsters of map {SelectedMap:X2}");
+    }
+}
