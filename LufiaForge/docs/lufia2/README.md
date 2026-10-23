@@ -40,7 +40,9 @@ The ROM is full: only about 0x14D bytes are unused FF runs, so data that grows g
 - Shops: a changed item.
 - Item descriptions: the X button shows an edited one.
 - The new game: gold, level, EXP, and stats from the growth tables.
-- A battle against an edited monster: its name, sprite, HP, EXP and gold.
+- A battle against an edited monster: its name, sprite, HP, EXP and gold ("Gets 500 EXP. Gets 777 GOLD.").
+- A battle background redrawn through the Graphics page (mirrored, new sky colour).
+- The staff roll with an edited heading (event command 5B 05 runs it).
 
 ## Corrections to the first-pass files
 
