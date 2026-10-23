@@ -696,7 +696,7 @@ public partial class L2ShopsPage : ObservableObject
         {
             var maps = L2Shops.UsedOn(rom, s.Id);
             string where = maps.Count > 0 ? "  " + L2Maps.Name(rom, maps[0]) : "";
-            string what = s.IsComposite ? "several shops" : string.Join(", ", s.Sections.Select(x => x.Name));
+            string what = string.Join(", ", (s.IsComposite ? new[] { "second-hand" } : Array.Empty<string>()).Concat(s.Sections.Select(x => x.Name)));
             Names.Add($"{s.Id:X2}  {what}{where}");
         }
         SelectedIndex = -1;
@@ -717,7 +717,7 @@ public partial class L2ShopsPage : ObservableObject
             }).ToList(),
         }).ToList();
         var maps = L2Shops.UsedOn(_rom, shop.Id);
-        Info = (shop.IsComposite ? "A shop of several shops (its lists aren't read yet). " : "") +
+        Info = (shop.IsComposite ? "Its first list is made by the game: every item with a count in a table in RAM ($7F:F080), probably items sold earlier. It has nothing to edit. " : "") +
                (maps.Count > 0 ? $"Opened on map{(maps.Count > 1 ? "s" : "")} {string.Join(", ", maps.Select(m => $"{m:X2} {L2Maps.Name(_rom, m)}"))}. " : "") +
                (shop.Sells ? "It also buys (Sell). " : "") +
                "Each slot can be any item (or spell); the lists keep their length.";

@@ -2,8 +2,9 @@ namespace LufiaForge.Core.Lufia2;
 
 /// <summary>
 /// Lufia II shops (US ROM, found 2026-10-22: event command 18 xx opens shop xx; its routine at $82:E729 reads a u16
-/// offset per shop from $97:EE9F, file 0xBEE9F). A shop: a byte (its look), a u16 mask of its menu (bit 1 coins,
-/// 2 items, 3 weapons, 4 armor, 5 spells, 7 sell; bit 0 = a shop of several shops, not read here), then a list for
+/// offset per shop from $97:EE9F, file 0xBEE9F; read by $82:E297). A shop: a byte (its look), a u16 mask of its menu
+/// (bit 1 coins, 2 items, 3 weapons, 4 armor, 5 spells, 7 sell; bit 0 = a list the game builds itself ($82:E433):
+/// every item with a count in the 4-bit table at $7F:F080, probably items sold earlier; it has no data), then a list for
 /// each of bits 1-4 (u16 item numbers, 0000 ends it) and for bit 5 (spell numbers, FF ends it), in bit order.
 /// Checked in the game: shop 01 = Elcid's item shop, shop 02 = Elcid's spell shop (Strong, Spark, Poison).
 /// </summary>
@@ -29,7 +30,7 @@ public static class L2Shops
         public int At { get; init; }
         public int Mask { get; init; }
         public bool Sells => (Mask & 0x80) != 0;
-        /// <summary>A shop of several shops (bit 0): its lists aren't read.</summary>
+        /// <summary>Bit 0: a list the game builds from the items at $7F:F080 (no data in the ROM).</summary>
         public bool IsComposite => (Mask & 1) != 0;
         public List<Section> Sections { get; init; } = new();
     }
@@ -40,7 +41,6 @@ public static class L2Shops
         if (off == 0) return null;
         int at = Table + off, mask = rom.ReadUInt16Le(at + 1);
         var shop = new Shop { Id = id, At = at, Mask = mask };
-        if (shop.IsComposite) return shop;
         int p = at + 3;
         for (int bit = 1; bit <= 5; bit++)
         {
