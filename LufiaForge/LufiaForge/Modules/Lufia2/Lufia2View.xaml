@@ -22,6 +22,9 @@
             <TabItem Header="Music" Style="{StaticResource LufiaTabItem}">
                 <local:L2MusicView DataContext="{Binding Music}"/>
             </TabItem>
+            <TabItem Header="Treasure" Style="{StaticResource LufiaTabItem}">
+                <local:L2ChestsView DataContext="{Binding Chests}"/>
+            </TabItem>
             <TabItem Header="Monsters" Style="{StaticResource LufiaTabItem}">
                 <local:L2MonstersView DataContext="{Binding Monsters}"/>
             </TabItem>
