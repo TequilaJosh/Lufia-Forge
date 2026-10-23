@@ -272,7 +272,9 @@ public partial class L2MapsPage : ObservableObject
     [ObservableProperty] private string _editText = "";
     public ObservableCollection<string> Names { get; } = new();
     [ObservableProperty] private int _selectedIndex = -1;
-    [ObservableProperty] private bool _showGround = true, _showUpper = true, _showCollision;
+    [ObservableProperty] private bool _showGround = true, _showUpper = true, _showCollision, _showInfo = true;
+    public ObservableCollection<string> InfoLines { get; } = new();
+    private List<L2MapInfo.Entry> _entries = new();
     [ObservableProperty] private BitmapSource? _mapImage;
     [ObservableProperty] private string _info = "";
 
@@ -292,6 +294,9 @@ public partial class L2MapsPage : ObservableObject
     partial void OnSelectedIndexChanged(int value)
     {
         _work = null; IsDirty = false;
+        InfoLines.Clear();
+        _entries = _rom != null && value >= 0 ? L2MapInfo.Read(_rom, value) : new();
+        foreach (var e in _entries) InfoLines.Add($"{e.Kind} {e.Id:X2} at ({e.X1},{e.Y1}){(e.X2 != e.X1 || e.Y2 != e.Y1 ? $"-({e.X2},{e.Y2})" : "")} {e.Detail}".TrimEnd());
         if (_rom != null && value >= 2)
         {
             try { _work = L2Maps.Read(_rom, value); _blockCount = L2Maps.BlockCount(_rom, value); DrawPicker(); } catch { _work = null; }
@@ -359,9 +364,19 @@ public partial class L2MapsPage : ObservableObject
 
     [CommunityToolkit.Mvvm.Input.RelayCommand]
     private void RevertMap() => OnSelectedIndexChanged(SelectedIndex);
+
+    private static void Dot(uint[] px, int w, int h, int x, int y, uint c) { if (x >= 0 && y >= 0 && x < w && y < h) px[y * w + x] = c; }
     partial void OnShowGroundChanged(bool value) => Draw();
     partial void OnShowUpperChanged(bool value) => Draw();
     partial void OnShowCollisionChanged(bool value) => Draw();
+    partial void OnShowInfoChanged(bool value) => Draw();
+
+    /// <summary>Goes to the map an exit leads to (a double-click on the exit in the list).</summary>
+    public void FollowInfo(int index)
+    {
+        if (index < 0 || index >= _entries.Count || _entries[index].DestMap < 0) return;
+        SelectedIndex = _entries[index].DestMap;
+    }
 
     /// <summary>Redraws the picked map (also after an edit elsewhere).</summary>
     public void Draw()
@@ -397,6 +412,14 @@ public partial class L2MapsPage : ObservableObject
                             }
                     }
             }
+            if (ShowInfo)
+                foreach (var e in _entries)
+                {
+                    uint col = e.Kind switch { "Exit" => 0xFF40FF40u, "Door" => 0xFFFFE040u, "Treasure" => 0xFFFF40FFu, "Character start" => 0xFF40C0FFu, "Cutscene trigger" => 0xFFFF8040u, _ => 0xFFFFFFFFu };
+                    int x1 = e.X1 * 16, y1 = e.Y1 * 16, x2 = (e.X2 + 1) * 16 - 1, y2 = (e.Y2 + 1) * 16 - 1;
+                    for (int x = x1; x <= x2; x++) { Dot(px, w, h, x, y1, col); Dot(px, w, h, x, y2, col); }
+                    for (int y = y1; y <= y2; y++) { Dot(px, w, h, x1, y, col); Dot(px, w, h, x2, y, col); }
+                }
             MapImage = BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgra32, null, px.Select(c => (int)(c == 0 ? 0xFF000000u : c)).ToArray(), w * 4);
             Info = $"{map.Layers[0].Width} x {map.Layers[0].Height} blocks; block set file {map.BlockSet:X3}, tile set file {map.TileSet:X3}, map file {L2Maps.MapFileBase + SelectedIndex:X3}." +
                    (ShowCollision ? "  Red: obstacle, blue: doorway, orange: wall on the top / left edge." : "");

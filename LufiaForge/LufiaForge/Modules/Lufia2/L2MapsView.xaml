@@ -16,6 +16,8 @@
                 <CheckBox Content="Ground layer" IsChecked="{Binding ShowGround}" Style="{StaticResource GdCheck}" Margin="0,0,16,0"/>
                 <CheckBox Content="Upper layer" IsChecked="{Binding ShowUpper}" Style="{StaticResource GdCheck}" Margin="0,0,16,0"/>
                 <CheckBox Content="Collision" IsChecked="{Binding ShowCollision}" Style="{StaticResource GdCheck}" Margin="0,0,16,0"/>
+                <CheckBox Content="Exits, doors, characters, chests" IsChecked="{Binding ShowInfo}" Style="{StaticResource GdCheck}" Margin="0,0,16,0"
+                          ToolTip="Green: exits, yellow: doors, blue: where characters start, pink: treasure, orange: cutscene triggers"/>
             </StackPanel>
             <TextBlock DockPanel.Dock="Top" Text="{Binding Info}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,6"/>
             <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="Black">
@@ -34,6 +36,8 @@
                     <Button Content="Revert" Style="{StaticResource LufiaButton}" Command="{Binding RevertMapCommand}" IsEnabled="{Binding IsDirty}" Width="90"/>
                 </StackPanel>
             </StackPanel>
+            <ListBox DockPanel.Dock="Bottom" Height="170" Margin="0,8,0,0" Style="{StaticResource GdRecordList}" ItemsSource="{Binding InfoLines}"
+                     MouseDoubleClick="Info_DoubleClick" ToolTip="What the map has (double-click an exit to go to its map)"/>
             <ScrollViewer VerticalScrollBarVisibility="Auto" Background="Black">
                 <Image x:Name="PickerControl" Source="{Binding PickerImage}" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor"
                        HorizontalAlignment="Left" VerticalAlignment="Top" MouseLeftButtonDown="Picker_MouseDown" Cursor="Hand"/>
