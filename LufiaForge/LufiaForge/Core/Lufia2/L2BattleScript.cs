@@ -3,9 +3,10 @@ using System.Text;
 namespace LufiaForge.Core.Lufia2;
 
 /// <summary>
-/// Lufia II battle scripts (monster AI, item and spell effects): LEdit's L2BattleScript / L2_Effects.txt. A command
-/// byte, then its arguments; jump targets are u16 offsets from the start of the record that owns the script. A script
-/// ends at 00, 2A, 41 or 4F once no jump goes further.
+/// Lufia II battle scripts (monster AI, item and spell effects; handlers at $85:B483, opcodes 00-5C, all 828 scripts
+/// parse). A command byte, then its arguments; jump targets are u16 offsets from the start of the record that owns
+/// the script. 42 w calls shared script w (library at $96:FADD), 43 returns. A script ends at 00 or 4F (43 in a
+/// library script) once no jump goes further; 02, 31, 33, 34 and 38-3B aren't commands.
 /// </summary>
 public static class L2BattleScript
 {
@@ -26,14 +27,17 @@ public static class L2BattleScript
         S(5, "physical damage", 0x21); S(5, "magic damage", 0x22); S(2, "Bunny sword effect", 0x23); S(4, "restore", 0x24);
         S(2, "stat up/down %", 0x25); S(2, "cure status %", 0x26); S(2, "cause status %", 0x27);
         S(0, "attack", 0x28); S(0, "defend", 0x29); S(0, "flee", 0x2A); S(2, "use item", 0x2B); S(1, "cast spell", 0x2C); S(1, "call monster", 0x2D);
-        S(1, "target", 0x32); S(1, "special effect", 0x35); S(0, "weapon attack", 0x37); S(0, "wait for the effect", 0x3C);
-        S(1, "use capsule attack", 0x3E); S(3, "if attack slot learned go to", 0x3F); S(1, "reg = learned attacks", 0x40); S(0, "wait", 0x41); S(2, "weakness / protection", 0x42); S(2, "IP: cast without MP", 0x47);
-        S(0, "quit (do nothing)", 0x4F); S(0, "Dark reflector", 0x51); S(1, "cast spell (IP)", 0x54); S(2, "name shown for", 0x56);
+        S(1, "target", 0x32); S(1, "special effect / message", 0x35); S(0, "weapon attack", 0x37); S(0, "wait for the effect", 0x3C);
+        S(1, "use capsule attack", 0x3E); S(3, "if attack slot learned go to", 0x3F); S(1, "reg = learned attacks", 0x40); S(0, "check / wait (action 0C)", 0x41); S(2, "call library script", 0x42); S(0, "return", 0x43); S(2, "effect timer, timed effect", 0x47);
+        S(0, "quit (do nothing)", 0x4F); S(0, "Dark reflector", 0x51); S(1, "cast spell (IP)", 0x54); S(2, "message timer", 0x56);
         S(3, "item boosts this spell", 0x57); S(0, "Eerie light", 0x58); S(1, "battle animation", 0x5A); S(0, "lose if it kills itself", 0x5B);
         S(0, "hide damage number", 0x5C);
-        // documented lengths, meaning unknown
-        S(0, "?", 0x02, 0x1D, 0x2E, 0x50); S(1, "?", 0x19, 0x1B, 0x1C, 0x2F, 0x30, 0x3D, 0x4B, 0x4C);
-        S(2, "?", 0x12, 0x44); S(3, "?", 0x46);
+        S(2, "reg = ratio of reg, reg", 0x12); S(1, "reg = abs(reg)", 0x19); S(1, "reg = sign(reg)", 0x1B); S(1, "reg = battle counter", 0x1C);
+        S(0, "do the effect step", 0x1D); S(0, "action 0D", 0x2E); S(1, "reg = combatants flagged 04", 0x2F); S(1, "reg = side count", 0x30);
+        S(1, "if that failed: special effect", 0x36); S(1, "sound effect", 0x3D); S(2, "battle byte = value", 0x44); S(2, "reg = battle byte", 0x45);
+        S(3, "if battle byte is 0 go to", 0x46); S(0, "$85:9671", 0x48); S(0, "wait for the effect timer", 0x49); S(1, "flash / shake times", 0x4A);
+        S(0, "screen effect 4", 0x4B); S(1, "screen effect", 0x4C); S(0, "drop targets that can't be hit", 0x4D); S(2, "reg = attacker's stat", 0x4E);
+        S(0, "keep only allowed targets", 0x50); S(0, "reflect flag 4", 0x52); S(1, "action 9", 0x53); S(0, "$85:DA9C", 0x59);
         return o;
     }
 
@@ -53,6 +57,8 @@ public static class L2BattleScript
             switch (op)
             {
                 case 0x03 or 0x04: target = args[0] | args[1] << 8; text += $" {target:X4}"; break;
+                case 0x46: target = args[1] | args[2] << 8; text = $"if battle byte {args[0]:X2} is 0 go to {target:X4}"; break;
+                case 0x42: text = $"call library script {args[0] | args[1] << 8:X2}"; break;
                 case 0x05: target = args[1] | args[2] << 8; text = $"with chance {args[0]}/256 go to {target:X4}"; break;
                 case >= 0x06 and <= 0x0B: target = args[3] | args[4] << 8; text = text.Replace("reg", $"reg {args[0]:X2}").Replace("value", Operand(args[1], args[2])) + $" {target:X4}"; break;
                 case >= 0x0C and <= 0x10 or >= 0x16 and <= 0x18 or 0x55: text = text.Replace("reg", $"reg {args[0]:X2}") + " " + Operand(args[1], args[2]); break;
@@ -69,7 +75,7 @@ public static class L2BattleScript
             sb.AppendLine($"{p - record:X4}  {text}");
             if (target >= 0) furthest = Math.Max(furthest, record + target);
             p += 1 + def.Args;
-            if (op is 0x00 or 0x2A or 0x41 or 0x4F && p > furthest) break;
+            if (op is 0x00 or 0x43 or 0x4F && p > furthest) break;
         }
         return sb.ToString().TrimEnd();
     }
