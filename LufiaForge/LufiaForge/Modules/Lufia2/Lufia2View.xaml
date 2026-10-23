@@ -25,6 +25,9 @@
             <TabItem Header="Treasure" Style="{StaticResource LufiaTabItem}">
                 <local:L2ChestsView DataContext="{Binding Chests}"/>
             </TabItem>
+            <TabItem Header="Exits" Style="{StaticResource LufiaTabItem}">
+                <local:L2ExitsView DataContext="{Binding Exits}"/>
+            </TabItem>
             <TabItem Header="Monsters" Style="{StaticResource LufiaTabItem}">
                 <local:L2MonstersView DataContext="{Binding Monsters}"/>
             </TabItem>
