@@ -4,16 +4,45 @@
     <UserControl.Resources>
         <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
     </UserControl.Resources>
-    <Grid>
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="260"/>
-            <ColumnDefinition Width="*"/>
-        </Grid.ColumnDefinitions>
-        <ListBox Grid.Column="0" Margin="12" Style="{StaticResource GdFindList}" ItemsSource="{Binding Names}" SelectedIndex="{Binding SelectedIndex}"/>
-        <DockPanel Grid.Column="1" Margin="0,12,12,12">
-            <TextBlock DockPanel.Dock="Top" Text="{Binding Summary}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="8,0,0,6"/>
-            <TextBox Style="{StaticResource GdText}" Text="{Binding Listing, Mode=OneWay}" IsReadOnly="True" FontFamily="Consolas"
-                     TextWrapping="NoWrap" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" VerticalContentAlignment="Top"/>
-        </DockPanel>
-    </Grid>
+    <TabControl Background="Transparent" BorderThickness="0">
+        <TabItem Header="Scripts" Style="{StaticResource LufiaTabItem}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="240"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="320"/>
+                </Grid.ColumnDefinitions>
+                <ListBox Grid.Column="0" Margin="12" Style="{StaticResource GdFindList}" ItemsSource="{Binding Names}" SelectedIndex="{Binding SelectedIndex}"/>
+                <DockPanel Grid.Column="1" Margin="0,12,0,12">
+                    <TextBlock DockPanel.Dock="Top" Text="{Binding Summary}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="8,0,0,6"/>
+                    <ListBox Style="{StaticResource GdFindList}" ItemsSource="{Binding Lines}" SelectedIndex="{Binding SelectedLine}" FontFamily="Consolas"
+                             ScrollViewer.HorizontalScrollBarVisibility="Auto" VirtualizingStackPanel.IsVirtualizing="True"/>
+                </DockPanel>
+                <Border Grid.Column="2" Style="{StaticResource GdCard}" VerticalAlignment="Top" Margin="12">
+                    <StackPanel>
+                        <TextBlock Text="COMMAND BYTES" Style="{StaticResource GdSection}"/>
+                        <TextBox Style="{StaticResource GdText}" FontFamily="Consolas" Text="{Binding BytesText, UpdateSourceTrigger=PropertyChanged}"
+                                 IsEnabled="{Binding CanEdit}" TextWrapping="Wrap"/>
+                        <TextBlock Text="{Binding EditInfo}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,6,0,6"/>
+                        <Button Content="Apply" Command="{Binding ApplyBytesCommand}" IsEnabled="{Binding CanEdit}" HorizontalAlignment="Left" Padding="18,4"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </TabItem>
+        <TabItem Header="Story flags" Style="{StaticResource LufiaTabItem}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="240"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <ListBox Grid.Column="0" Margin="12" Style="{StaticResource GdFindList}" ItemsSource="{Binding Flags}" SelectedIndex="{Binding SelectedFlag}" FontFamily="Consolas"/>
+                <DockPanel Grid.Column="1" Margin="0,12,12,12">
+                    <TextBlock DockPanel.Dock="Top" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="8,0,0,6"
+                               Text="The 256 story flags (bits at $7E:077E) and every event script that sets, clears or tests one. Flag FF also holds the result of a few tests."/>
+                    <TextBox Style="{StaticResource GdText}" Text="{Binding FlagUsesText, Mode=OneWay}" IsReadOnly="True" FontFamily="Consolas"
+                             TextWrapping="NoWrap" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" VerticalContentAlignment="Top"/>
+                </DockPanel>
+            </Grid>
+        </TabItem>
+    </TabControl>
 </UserControl>
