@@ -22,6 +22,12 @@
             <TabItem Header="Encounters" Style="{StaticResource LufiaTabItem}">
                 <local:L2EncountersView DataContext="{Binding Encounters}"/>
             </TabItem>
+            <TabItem Header="Shops" Style="{StaticResource LufiaTabItem}">
+                <local:L2ShopsView DataContext="{Binding Shops}"/>
+            </TabItem>
+            <TabItem Header="Characters" Style="{StaticResource LufiaTabItem}">
+                <local:L2CharactersView DataContext="{Binding Characters}"/>
+            </TabItem>
             <TabItem Header="Items" Style="{StaticResource LufiaTabItem}">
                 <local:L2ItemsView DataContext="{Binding Items}"/>
             </TabItem>

@@ -128,7 +128,7 @@ public static class L2Events
     }
 
     /// <summary>The block's length: up to the next map's block when that follows it, else 0x3000 at most.</summary>
-    private static int BlockSize(RomBuffer rom, int map, int block)
+    public static int BlockSize(RomBuffer rom, int map, int block)
     {
         int next = int.MaxValue;
         for (int m = 0; m < 0xF2; m++) { int b = Block(rom, m); if (b > block && b < next) next = b; }

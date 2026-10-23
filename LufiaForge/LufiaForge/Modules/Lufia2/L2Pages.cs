@@ -622,3 +622,95 @@ public partial class L2EncountersPage : ObservableObject
         _main.NotifyRomModified($"Lufia II: monsters of map {SelectedMap:X2}");
     }
 }
+
+
+// ------------------------------------------------------------------------------------------- shops
+
+/// <summary>One list of a shop (items, weapons, ...), its slots as choices.</summary>
+public sealed class L2ShopSection
+{
+    public string Title { get; init; } = "";
+    public List<L2Slot> Slots { get; init; } = new();
+}
+
+public partial class L2ShopsPage : ObservableObject
+{
+    private RomBuffer? _rom;
+    private MainViewModel? _main;
+    private List<L2Shops.Shop> _shops = new();
+    private List<L2Option> _items = new(), _spells = new();
+
+    public ObservableCollection<string> Names { get; } = new();
+    [ObservableProperty] private int _selectedIndex = -1;
+    [ObservableProperty] private List<L2ShopSection> _sections = new();
+    [ObservableProperty] private string _info = "";
+
+    public void SetRom(RomBuffer rom, MainViewModel main)
+    {
+        _rom = rom; _main = main;
+        _items = L2Battle.Items(rom).Select(i => new L2Option(i.Index, $"{i.Index:X3} {i.Name}  ({i.Price} G)")).ToList();
+        _spells = L2Battle.Spells(rom).Select(s => new L2Option(s.Index, $"{s.Index:X2} {s.Name}  ({s.Price} G)")).ToList();
+        _shops = L2Shops.All(rom);
+        Names.Clear();
+        foreach (var s in _shops)
+        {
+            var maps = L2Shops.UsedOn(rom, s.Id);
+            string where = maps.Count > 0 ? "  " + L2Maps.Name(rom, maps[0]) : "";
+            string what = s.IsComposite ? "several shops" : string.Join(", ", s.Sections.Select(x => x.Name));
+            Names.Add($"{s.Id:X2}  {what}{where}");
+        }
+        SelectedIndex = -1;
+        SelectedIndex = _shops.Count > 0 ? 0 : -1;
+    }
+
+    partial void OnSelectedIndexChanged(int value)
+    {
+        if (_rom == null || value < 0 || value >= _shops.Count) { Sections = new(); return; }
+        var shop = _shops[value];
+        Sections = shop.Sections.Select(sec => new L2ShopSection
+        {
+            Title = sec.Name.ToUpperInvariant(),
+            Slots = sec.Entries.Select((e, i) => new L2Slot
+            {
+                Label = $"{i + 1}.", Options = sec.IsSpells ? _spells : _items, Value = e,
+                Changed = () => SlotEdited(shop, sec),
+            }).ToList(),
+        }).ToList();
+        var maps = L2Shops.UsedOn(_rom, shop.Id);
+        Info = (shop.IsComposite ? "A shop of several shops (its lists aren't read yet). " : "") +
+               (maps.Count > 0 ? $"Opened on map{(maps.Count > 1 ? "s" : "")} {string.Join(", ", maps.Select(m => $"{m:X2} {L2Maps.Name(_rom, m)}"))}. " : "") +
+               (shop.Sells ? "It also buys (Sell). " : "") +
+               "Each slot can be any item (or spell); the lists keep their length.";
+    }
+
+    private void SlotEdited(L2Shops.Shop shop, L2Shops.Section sec)
+    {
+        if (_rom == null || _main == null) return;
+        var ui = Sections.ElementAtOrDefault(shop.Sections.IndexOf(sec));
+        if (ui == null) return;
+        for (int i = 0; i < sec.Entries.Count; i++) sec.Entries[i] = ui.Slots[i].Value;
+        L2Shops.WriteSection(_rom, sec);
+        _main.NotifyRomModified($"Lufia II: shop {shop.Id:X2}");
+    }
+}
+
+// ------------------------------------------------------------------------------------------- characters
+
+public partial class L2CharactersPage : L2Page
+{
+    [ObservableProperty] private int _hp, _mp, _str, _agl, _int, _gut, _mgr;
+
+    protected override IEnumerable<string> ReadNames() => L2Characters.Names;
+
+    protected override void Load(int index)
+    {
+        var v = L2Characters.Read(Rom!, index);
+        Hp = v[0]; Mp = v[1]; Str = v[2]; Agl = v[3]; Int = v[4]; Gut = v[5]; Mgr = v[6];
+    }
+
+    protected override string? Write()
+    {
+        L2Characters.Write(Rom!, SelectedIndex, new[] { Hp, Mp, Str, Agl, Int, Gut, Mgr });
+        return L2Characters.Names[SelectedIndex] + "'s starting stats";
+    }
+}
