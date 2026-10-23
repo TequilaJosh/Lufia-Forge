@@ -19,6 +19,23 @@ public static class L2MapInfo
         (0x20, "Action spot", 3), (0x26, "Treasure", 4), (0x28, "Movable object", 3), (0x2A, "Hammer spot", 3),
     };
 
+    /// <summary>The sprite each character of the map is made with: the map's start-up script (the map header's second
+    /// u24, from $87:8000) creates them with 68 / 7B id sprite (id 0x50 + n = character start n + 1). The first one
+    /// per character is kept (later ones are other story stages).</summary>
+    public static Dictionary<int, int> CharacterSprites(RomBuffer rom, int map)
+    {
+        var sprites = new Dictionary<int, int>();
+        int e = L2Events.HeaderTable + 0x10 + map * 8;
+        int off = rom.ReadByte(e + 3) | rom.ReadByte(e + 4) << 8 | rom.ReadByte(e + 5) << 16;
+        int at = L2Rom.SnesToFile(0x878000 + off);
+        for (int p = at; p < at + 0x400 && p + 2 < rom.Length; p++)
+        {
+            byte op = rom.ReadByte(p), id = rom.ReadByte(p + 1), sprite = rom.ReadByte(p + 2);
+            if (op is 0x68 or 0x7B && id is >= 0x50 and < 0x80 && sprite < L2Graphics.MapSpriteCount) { sprites.TryAdd(id, sprite); p += 2; }
+        }
+        return sprites;
+    }
+
     public static int Block(RomBuffer rom, int map)
     {
         int a = rom.ReadByte(Pointers + map * 3) | rom.ReadByte(Pointers + map * 3 + 1) << 8 | rom.ReadByte(Pointers + map * 3 + 2) << 16;
