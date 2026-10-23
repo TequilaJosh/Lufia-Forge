@@ -1,0 +1,19 @@
+<UserControl x:Class="LufiaForge.Modules.Lufia2.L2EventsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
+    </UserControl.Resources>
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="260"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <ListBox Grid.Column="0" Margin="12" Style="{StaticResource GdFindList}" ItemsSource="{Binding Names}" SelectedIndex="{Binding SelectedIndex}"/>
+        <DockPanel Grid.Column="1" Margin="0,12,12,12">
+            <TextBlock DockPanel.Dock="Top" Text="{Binding Summary}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="8,0,0,6"/>
+            <TextBox Style="{StaticResource GdText}" Text="{Binding Listing, Mode=OneWay}" IsReadOnly="True" FontFamily="Consolas"
+                     TextWrapping="NoWrap" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" VerticalContentAlignment="Top"/>
+        </DockPanel>
+    </Grid>
+</UserControl>

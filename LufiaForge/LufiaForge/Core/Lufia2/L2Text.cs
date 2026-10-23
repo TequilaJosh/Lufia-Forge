@@ -6,7 +6,9 @@ namespace LufiaForge.Core.Lufia2;
 /// Lufia II text (US ROM, found 2026-10-22): plain ASCII plus a dictionary of 0x280 words at $8E:EA00 (file 0x76A00:
 /// u16 offsets from the table to zero-terminated words, longest first). In text: 05 xx = word xx, 06 xx = word
 /// 0x100 + xx, 80-FF = word 0x200 + (byte &amp; 7F); 00 ends the text and the script, 01 waits for a button and goes
-/// back to the script, 03 new line, 04 xx pause, 0C-0F = "?" "!" "," "." and a new line, 09 the hero's name.
+/// back to the script, 03 new line, 04 xx pause, 0C-0F = "?" "!" "," "." and a new line, 09 the hero's name,
+/// 07 xx a letter of the third page, 0B the choice cursor (ends the text), 0A lo hi = (hi &gt;&gt; 4) + 2 letters of the
+/// text lo + (hi &amp; 0F) * 256 bytes back (shown written out; written back as plain text).
 /// </summary>
 public static class L2Text
 {
@@ -30,7 +32,9 @@ public static class L2Text
 
     /// <summary>Decodes text from <paramref name="at"/> until 00 or 01 (included in <paramref name="end"/>). Control
     /// codes show as tags: [WAIT] [END] [PAUSE xx] [NAME] [xx].</summary>
-    public static string Decode(RomBuffer rom, int at, out int end, int max = 2000)
+    public static string Decode(RomBuffer rom, int at, out int end, int max = 2000) => DecodeAt(rom, at, out end, max, 0);
+
+    private static string DecodeAt(RomBuffer rom, int at, out int end, int max, int depth)
     {
         var words = Words(rom);
         var sb = new StringBuilder();
@@ -40,7 +44,18 @@ public static class L2Text
             byte b = rom.ReadByte(p++);
             if (b == 0) { sb.Append("[END]"); break; }
             if (b == 1) { sb.Append("[WAIT]"); break; }
-            if (b == 3) sb.Append('\n');
+            if (b == 0x0B) { sb.Append("[CHOICE]"); break; }
+            if (b == 0x0A && depth < 4)
+            {
+                // a back-reference: (hi >> 4) + 2 letters of the text d bytes back from here
+                byte lo = rom.ReadByte(p), hi = rom.ReadByte(p + 1);
+                int d = lo | (hi & 0x0F) << 8, n = (hi >> 4) + 2;
+                string earlier = DecodeAt(rom, p - d, out _, 400, depth + 1).Replace("[END]", "").Replace("[WAIT]", "");
+                sb.Append(earlier.Length > n ? earlier[..n] : earlier);
+                p += 2;
+            }
+            else if (b == 7) sb.Append($"[GLYPH {rom.ReadByte(p++):X2}]");
+            else if (b == 3) sb.Append('\n');
             else if (b == 4) sb.Append($"[PAUSE {rom.ReadByte(p++):X2}]");
             else if (b == 5) sb.Append(words[rom.ReadByte(p++)]);
             else if (b == 6) sb.Append(words[0x100 + rom.ReadByte(p++)]);
@@ -74,6 +89,8 @@ public static class L2Text
                     if (tag == "END") outp.Add(0);
                     else if (tag == "WAIT") outp.Add(1);
                     else if (tag == "NAME") outp.Add(9);
+                    else if (tag == "CHOICE") outp.Add(0x0B);
+                    else if (tag.StartsWith("GLYPH ")) { outp.Add(7); outp.Add(Convert.ToByte(tag[6..], 16)); }
                     else if (tag.StartsWith("PAUSE ")) { outp.Add(4); outp.Add(Convert.ToByte(tag[6..], 16)); }
                     else if (tag.Length == 2) outp.Add(Convert.ToByte(tag, 16));
                     i = close + 1;
