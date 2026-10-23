@@ -76,7 +76,7 @@ public abstract partial class L2Page : ObservableObject
     private string SpaceNote()
     {
         var (used, room) = L2Descriptions.Space(Rom!);
-        return $"Descriptions use {used} of {room} bytes; the game shows this text in its menus.";
+        return $"Descriptions use {used} of {room} bytes; the game shows it with the X button (checked in a shop).";
     }
 
     private void WriteDescription()
@@ -556,7 +556,13 @@ public partial class L2TextPage : ObservableObject
         if (_rom == null || _main == null || SelectedLine < 0) return;
         var l = _lines[SelectedLine];
         if (!Text.EndsWith("[WAIT]") && !Text.EndsWith("[END]")) { Status = "The text has to end with [WAIT] or [END] like the original."; return; }
-        if (!L2Events.WriteLine(_rom, l, Text)) { Status = "It doesn't fit: shorten it first."; return; }
+        if (!L2Events.WriteLine(_rom, l, Text))
+        {
+            Status = L2Events.HasBackReference(_rom, l)
+                ? "It doesn't fit: shorten it first. (This line reuses words from an earlier line in a short form; written out they take more room.)"
+                : "It doesn't fit: shorten it first.";
+            return;
+        }
         _main.NotifyRomModified($"Lufia II: text on map {l.Map:X2}");
         int keep = SelectedLine;
         OnSelectedMapChanged(SelectedMap);
