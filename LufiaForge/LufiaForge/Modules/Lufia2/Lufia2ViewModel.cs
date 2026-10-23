@@ -20,6 +20,7 @@ public partial class Lufia2ViewModel : ObservableObject
     public L2CharactersPage Characters { get; } = new();
     public L2CapsulesPage Capsules { get; } = new();
     public L2EventsPage Events { get; } = new();
+    public L2MusicPage Music { get; } = new();
 
     public void SetRom(RomBuffer rom, MainViewModel main)
     {
@@ -28,7 +29,7 @@ public partial class Lufia2ViewModel : ObservableObject
                    "stat bonuses), spells (names, MP, prices, who learns them), IP attacks (cost), the descriptions of items, spells and IP attacks, shops (what each sells), the heroes (starting stats, growth per level, EXP curve, what each starts with), the capsule monsters (all 35 forms, attacks, stats, growth), and encounters (the 216 monster groups, and which group each monster on a map fights). " +
                    "Every change goes straight into the ROM; Edit > Undo takes it back and Save Project keeps it.\n\n" +
                    "The Lufia 1 editors are hidden for this game. More Lufia II editors are on the way.";
-        try { Monsters.SetRom(rom, main); Items.SetRom(rom, main); Spells.SetRom(rom, main); IpAttacks.SetRom(rom, main); Maps.SetRom(rom, main); Text.SetRom(rom, main); Encounters.SetRom(rom, main); Shops.SetRom(rom, main); Characters.SetRom(rom, main); Capsules.SetRom(rom, main); Events.SetRom(rom, main); }
+        try { Monsters.SetRom(rom, main); Items.SetRom(rom, main); Spells.SetRom(rom, main); IpAttacks.SetRom(rom, main); Maps.SetRom(rom, main); Text.SetRom(rom, main); Encounters.SetRom(rom, main); Shops.SetRom(rom, main); Characters.SetRom(rom, main); Capsules.SetRom(rom, main); Events.SetRom(rom, main); Music.SetRom(rom, main); }
         catch (Exception ex) { Overview += $"\n\nCouldn't read part of the ROM: {ex.Message}"; }
     }
 }

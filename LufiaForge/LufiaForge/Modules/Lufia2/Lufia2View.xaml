@@ -19,6 +19,9 @@
             <TabItem Header="Events" Style="{StaticResource LufiaTabItem}">
                 <local:L2EventsView DataContext="{Binding Events}"/>
             </TabItem>
+            <TabItem Header="Music" Style="{StaticResource LufiaTabItem}">
+                <local:L2MusicView DataContext="{Binding Music}"/>
+            </TabItem>
             <TabItem Header="Monsters" Style="{StaticResource LufiaTabItem}">
                 <local:L2MonstersView DataContext="{Binding Monsters}"/>
             </TabItem>
