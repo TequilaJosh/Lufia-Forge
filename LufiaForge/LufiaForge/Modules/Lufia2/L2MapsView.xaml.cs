@@ -22,6 +22,11 @@ public partial class L2MapsView : UserControl
         Vm?.PaintAt(p.X, p.Y, false);
     }
 
+    private void Info_DoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is System.Windows.Controls.ListBox lb) Vm?.FollowInfo(lb.SelectedIndex);
+    }
+
     private void Picker_MouseDown(object sender, MouseButtonEventArgs e)
     {
         var p = e.GetPosition(PickerControl);
