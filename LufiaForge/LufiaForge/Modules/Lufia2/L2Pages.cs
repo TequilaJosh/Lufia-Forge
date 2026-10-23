@@ -112,6 +112,7 @@ public partial class L2MonstersPage : L2Page
     [ObservableProperty] private int _dropItem, _dropChance;
     [ObservableProperty] private bool _hasDrop;
     [ObservableProperty] private string _scriptText = "";
+    [ObservableProperty] private string _aiText = "";
     [ObservableProperty] private BitmapSource? _pictureImage;
 
     protected override IEnumerable<string> ReadNames()
@@ -127,12 +128,15 @@ public partial class L2MonstersPage : L2Page
         Name = _m.Name; Level = _m.Level; Hp = _m.Hp; Mp = _m.Mp; Atp = _m.Atp; Dfp = _m.Dfp; Agl = _m.Agl; Int = _m.Int; Gut = _m.Gut; Mgr = _m.Mgr;
         Exp = _m.Exp; Gold = _m.Gold; Sprite = _m.Sprite; Palette = _m.Palette;
         HasDrop = _m.DropAt > 0; DropItem = Math.Max(0, _m.DropItem); DropChance = _m.DropChance;
-        ScriptText = $"Attack script {(_m.AttackScript > 0 ? $"at {_m.AttackScript:X6}" : "none")}, defense script {(_m.DefenseScript > 0 ? $"at {_m.DefenseScript:X6}" : "none")}" +
-                     (HasDrop ? "" : ". It drops nothing (a drop can't be added yet: the record would grow).");
+        ScriptText = HasDrop ? "" : "It drops nothing (a drop can't be added yet: the record would grow).";
+        var spells = L2Battle.Spells(Rom!).Select(s => s.Name).ToArray();
+        var mons = L2Battle.Monsters(Rom!).Select(m => m.Name).ToArray();
+        AiText = (_m.AttackScript > 0 ? "ATTACK (its turn)\n" + L2BattleScript.Disassemble(Rom!, _m.AttackScript, _m.Offset, spells, mons) : "No attack script: it just attacks.") +
+                 (_m.DefenseScript > 0 ? "\n\nDEFENSE (when hit)\n" + L2BattleScript.Disassemble(Rom!, _m.DefenseScript, _m.Offset, spells, mons) : "");
         PictureImage = Picture(L2Graphics.MonsterSprite(Rom!, Sprite, Palette));
     }
 
-    protected override bool IsField(string p) => p is not (nameof(ScriptText) or nameof(HasDrop) or nameof(ItemOptions));
+    protected override bool IsField(string p) => p is not (nameof(ScriptText) or nameof(AiText) or nameof(HasDrop) or nameof(ItemOptions));
 
     protected override string? Write()
     {

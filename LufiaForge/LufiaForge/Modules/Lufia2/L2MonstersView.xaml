@@ -76,6 +76,12 @@
                     <TextBlock Text="{Binding ScriptText}" Style="{StaticResource GdHint}" TextWrapping="Wrap" MaxWidth="300" Margin="0,8,0,0"/>
                 </StackPanel>
             </Border>
+            <Border Style="{StaticResource GdCard}">
+                <StackPanel>
+                    <TextBlock Text="BATTLE AI" Style="{StaticResource GdSection}"/>
+                    <TextBlock Text="{Binding AiText}" Style="{StaticResource GdFieldLabel}" FontFamily="Consolas" TextWrapping="NoWrap"/>
+                </StackPanel>
+            </Border>
                 </WrapPanel>
             </StackPanel>
         </ScrollViewer>
