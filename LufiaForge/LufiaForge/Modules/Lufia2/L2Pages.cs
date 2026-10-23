@@ -319,3 +319,81 @@ public partial class L2MapsPage : ObservableObject
         catch (Exception ex) { MapImage = null; Info = "Couldn't draw it: " + ex.Message; }
     }
 }
+
+// ------------------------------------------------------------------------------------------- text
+
+public partial class L2TextPage : ObservableObject
+{
+    private RomBuffer? _rom;
+    private MainViewModel? _main;
+    private List<L2Events.Line> _lines = new();
+    private readonly List<int> _maps = new();
+
+    public ObservableCollection<string> MapNames { get; } = new();
+    public ObservableCollection<string> LineNames { get; } = new();
+    [ObservableProperty] private int _selectedMap = -1;
+    [ObservableProperty] private int _selectedLine = -1;
+    [ObservableProperty] private string _text = "";
+    [ObservableProperty] private string _speaker = "";
+    [ObservableProperty] private string _room = "";
+    [ObservableProperty] private string _status = "";
+
+    public void SetRom(RomBuffer rom, MainViewModel main)
+    {
+        _rom = rom; _main = main;
+        MapNames.Clear(); _maps.Clear();
+        int total = 0;
+        for (int m = 0; m < L2Maps.Count; m++)
+        {
+            int c = L2Events.Lines(rom, m).Count;
+            if (c == 0) continue;
+            string n = L2Maps.Name(rom, m);
+            _maps.Add(m);
+            MapNames.Add($"{m:X2}  {(n.Length > 0 && !n.Contains('~') ? n : "Map " + m.ToString("X2"))}  ({c})");
+            total += c;
+        }
+        Status = $"{total} lines on {_maps.Count} maps.";
+        SelectedMap = -1;
+        SelectedMap = _maps.Count > 0 ? 0 : -1;
+    }
+
+    partial void OnSelectedMapChanged(int value)
+    {
+        LineNames.Clear();
+        if (_rom == null || value < 0) { _lines = new(); return; }
+        _lines = L2Events.Lines(_rom, _maps[value]);
+        foreach (var l in _lines) LineNames.Add($"{l.Speaker}: {l.Text.Replace("\n", " ")}");
+        SelectedLine = -1;
+        SelectedLine = _lines.Count > 0 ? 0 : -1;
+    }
+
+    partial void OnSelectedLineChanged(int value)
+    {
+        if (value < 0 || value >= _lines.Count) { Text = ""; Speaker = ""; Room = ""; return; }
+        var l = _lines[value];
+        Speaker = $"{l.Speaker}, at {l.Offset:X6}";
+        Text = l.Text;
+        Room = $"{l.Length} bytes in the ROM.";
+    }
+
+    partial void OnTextChanged(string value)
+    {
+        if (_rom == null || SelectedLine < 0 || SelectedLine >= _lines.Count) return;
+        int n = L2Text.Encode(_rom, value).Length, room = _lines[SelectedLine].Length;
+        Room = n <= room ? $"{n} of {room} bytes." : $"{n} of {room} bytes: {n - room} too many (shorten it; words from the game's dictionary take 1 or 2 bytes).";
+    }
+
+    [CommunityToolkit.Mvvm.Input.RelayCommand]
+    private void Apply()
+    {
+        if (_rom == null || _main == null || SelectedLine < 0) return;
+        var l = _lines[SelectedLine];
+        if (!Text.EndsWith("[WAIT]") && !Text.EndsWith("[END]")) { Status = "The text has to end with [WAIT] or [END] like the original."; return; }
+        if (!L2Events.WriteLine(_rom, l, Text)) { Status = "It doesn't fit: shorten it first."; return; }
+        _main.NotifyRomModified($"Lufia II: text on map {l.Map:X2}");
+        int keep = SelectedLine;
+        OnSelectedMapChanged(SelectedMap);
+        SelectedLine = keep;
+        Status = "Written. (Edit > Undo takes it back.)";
+    }
+}

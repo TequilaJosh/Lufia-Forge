@@ -1,0 +1,31 @@
+<UserControl x:Class="LufiaForge.Modules.Lufia2.L2TextView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
+    </UserControl.Resources>
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="230"/>
+            <ColumnDefinition Width="360"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <ListBox Grid.Column="0" Margin="12" Style="{StaticResource GdFindList}" ItemsSource="{Binding MapNames}" SelectedIndex="{Binding SelectedMap}"/>
+        <ListBox Grid.Column="1" Margin="0,12,12,12" Style="{StaticResource GdFindList}" ItemsSource="{Binding LineNames}" SelectedIndex="{Binding SelectedLine}"/>
+        <StackPanel Grid.Column="2" Margin="0,12,12,12">
+            <TextBlock Text="{Binding Status}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,8"/>
+            <Border Style="{StaticResource GdCard}" HorizontalAlignment="Stretch">
+                <StackPanel>
+                    <TextBlock Text="LINE" Style="{StaticResource GdSection}"/>
+                    <TextBlock Text="{Binding Speaker}" Style="{StaticResource GdFieldLabel}" Margin="0,0,0,6"/>
+                    <TextBox Style="{StaticResource GdText}" Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" TextWrapping="Wrap"
+                             MinHeight="110" FontFamily="Consolas" VerticalContentAlignment="Top"/>
+                    <TextBlock Text="{Binding Room}" Style="{StaticResource GdHint}" Margin="0,6,0,0"/>
+                    <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,8"
+                               Text="A line break is a new line in the box (each box has 3 lines). [NAME] is the hero's name, [WAIT] waits for a button, [END] ends the scene, [PAUSE xx] waits a moment. The text is written in place, so it can't grow past its room."/>
+                    <Button Content="Apply" Style="{StaticResource LufiaButtonGold}" Command="{Binding ApplyCommand}" HorizontalAlignment="Left" Width="120"/>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </Grid>
+</UserControl>
