@@ -23,7 +23,7 @@
         </ListBox>
         <DockPanel Grid.Column="1" Margin="0,12,12,12">
             <TextBlock DockPanel.Dock="Top" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,6"
-                       Text="The game's pictures. Export PNG saves one as a palette PNG with the game's colour numbers; draw on it and Import PNG writes it back (a full-colour picture is matched to the colours shown). Written to the ROM at once; Edit, Undo takes it back."/>
+                       Text="The game's pictures. Export PNG saves one as a palette PNG with the game's colour numbers; draw on it and Import PNG writes it back (a full-colour picture is matched to the colours shown). Click a colour square to change that colour; the Palettes groups list the game's colour sets. Written to the ROM at once; Edit, Undo takes it back."/>
             <TextBlock DockPanel.Dock="Top" Text="{Binding Info}" Style="{StaticResource GdFieldLabel}" TextWrapping="Wrap" Margin="0,0,0,8"/>
             <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,8" IsEnabled="{Binding IsEditable}">
                 <StackPanel Orientation="Horizontal" Margin="0,0,16,4">
@@ -46,16 +46,62 @@
                           ToolTip="For a palette PNG: also write its colours (the rows the picture uses) into the game's colours. Off: only the colour numbers are taken."/>
             </WrapPanel>
             <TextBlock DockPanel.Dock="Top" Text="{Binding Status}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,8"/>
-            <ItemsControl DockPanel.Dock="Top" ItemsSource="{Binding Swatches}" Margin="0,0,0,8" MaxWidth="336" HorizontalAlignment="Left">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <Border Width="18" Height="18" Margin="0,0,3,3" Background="{Binding Brush}" BorderBrush="#40FFFFFF" BorderThickness="1" ToolTip="{Binding Tip}"/>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+            <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                <ItemsControl ItemsSource="{Binding Swatches}" Margin="0,0,16,0" Width="336" VerticalAlignment="Top">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Button Width="18" Height="18" Margin="0,0,3,3" Padding="0" Cursor="Hand" ToolTip="{Binding Tip}"
+                                    Command="{Binding DataContext.PickColourCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border x:Name="b" Background="{Binding Brush}" BorderBrush="#40FFFFFF" BorderThickness="1"/>
+                                        <ControlTemplate.Triggers>
+                                            <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                <Setter TargetName="b" Property="BorderBrush" Value="Gold"/>
+                                                <Setter TargetName="b" Property="BorderThickness" Value="3"/>
+                                            </DataTrigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Button.Template>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Border Style="{StaticResource GdCard}" VerticalAlignment="Top" IsEnabled="{Binding IsEditable}">
+                    <StackPanel Width="250">
+                        <TextBlock Text="COLOUR" Style="{StaticResource GdSection}"/>
+                        <TextBlock Text="{Binding ColourInfo}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                        <StackPanel IsEnabled="{Binding HasColour}">
+                            <Border Height="32" Background="{Binding ColourPreview}" BorderBrush="#40FFFFFF" BorderThickness="1" Margin="0,0,0,6"/>
+                            <DockPanel Margin="0,0,0,2">
+                                <TextBlock Text="Red" Width="44" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center"/>
+                                <TextBlock DockPanel.Dock="Right" Text="{Binding Red}" Width="22" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center"/>
+                                <Slider Minimum="0" Maximum="31" IsSnapToTickEnabled="True" TickFrequency="1" Value="{Binding Red}" VerticalAlignment="Center"/>
+                            </DockPanel>
+                            <DockPanel Margin="0,0,0,2">
+                                <TextBlock Text="Green" Width="44" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center"/>
+                                <TextBlock DockPanel.Dock="Right" Text="{Binding Green}" Width="22" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center"/>
+                                <Slider Minimum="0" Maximum="31" IsSnapToTickEnabled="True" TickFrequency="1" Value="{Binding Green}" VerticalAlignment="Center"/>
+                            </DockPanel>
+                            <DockPanel Margin="0,0,0,6">
+                                <TextBlock Text="Blue" Width="44" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center"/>
+                                <TextBlock DockPanel.Dock="Right" Text="{Binding Blue}" Width="22" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center"/>
+                                <Slider Minimum="0" Maximum="31" IsSnapToTickEnabled="True" TickFrequency="1" Value="{Binding Blue}" VerticalAlignment="Center"/>
+                            </DockPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="SNES value" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <TextBox Style="{StaticResource GdText}" Width="64" Text="{Binding Hex, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="The colour as the game stores it: 4 hex digits, 0000 to 7FFF (blue, green, red, 5 bits each)."/>
+                                <Button Content="Apply" Style="{StaticResource LufiaButtonGold}" Command="{Binding ApplyColourCommand}" Width="80" Margin="12,0,0,0"
+                                        ToolTip="Write this colour into the ROM; the picture is redrawn. Edit, Undo takes it back."/>
+                            </StackPanel>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </WrapPanel>
             <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="#202020">
                 <Image Source="{Binding PictureImage}" Width="{Binding PictureWidth}" Height="{Binding PictureHeight}" Stretch="Fill"
                        RenderOptions.BitmapScalingMode="NearestNeighbor" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="8"/>
