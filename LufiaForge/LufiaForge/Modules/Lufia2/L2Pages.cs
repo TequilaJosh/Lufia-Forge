@@ -288,7 +288,14 @@ public partial class L2MapsPage : ObservableObject
     /// <summary>Redraws the picked map (also after an edit elsewhere).</summary>
     public void Draw()
     {
-        if (_rom == null || SelectedIndex < 2) { MapImage = null; Info = SelectedIndex is 0 or 1 ? "The world map and the sea floor are drawn differently (coming later)." : ""; return; }
+        if (_rom != null && SelectedIndex == 0)
+        {
+            var (ww, wh, wpx) = L2WorldMap.Render(_rom, 2);
+            MapImage = BitmapSource.Create(ww, wh, 96, 96, PixelFormats.Bgra32, null, wpx.Select(c => (int)c).ToArray(), ww * 4);
+            Info = "The world map: 128 x 128 blocks of 32 x 32 pixels (shown at half size).";
+            return;
+        }
+        if (_rom == null || SelectedIndex < 2) { MapImage = null; Info = SelectedIndex == 1 ? "The sea floor is drawn differently (coming later)." : ""; return; }
         try
         {
             var map = L2Maps.Read(_rom, SelectedIndex);
