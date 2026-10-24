@@ -33,7 +33,8 @@ the items marked as checked were also tested in the running game (BizHawk). The 
 | 0x27F000-0x27FFFF | $CF | Map sprite table $CF:F000, map lists $CF:F72E.., map info pointers $CF:FCBC |
 
 The ROM is full: only about 0x14D bytes are unused FF runs, so data that grows goes into added space after
-0x280000 (Lufia Forge grows the ROM to 3 MB when it needs to).
+0x280000. Lufia Forge grows the ROM to 3 MB, then 4 MB, and uses the largest empty run there (the fan hacks Frue,
+Spekkio and Kureji Lufia v8.2 fill 0x280000-0x30DAC2 and 0x3FFC00-0x3FFDD5 and move the monster table to $D0:A000).
 
 ## Checked in the game
 
@@ -46,6 +47,10 @@ The ROM is full: only about 0x14D bytes are unused FF runs, so data that grows g
 - The staff roll with an edited heading (event command 5B 05 runs it).
 - A song imported from MIDI (it replaced Elcid's music, and the game loaded it into sound RAM byte for byte).
 - Walking in towns: the run button on R, and always running (8 tiles in 32 frames instead of 4).
+- The Patch Manager's Lufia II patches: fast world-map walking (114 steps in 480 frames instead of 57), hold B to avoid battles
+  (the step counter stays at 1 while B is held, and no battle can start before 6), free inns (500 gold stays 500 instead of 400),
+  faster IP gauge (255 instead of 206 after the same hit).
+- A ROM grown to 4 MB with a map moved past 0x300000, and Frue Lufia with a map moved into its free space: both draw the map.
 - A capsule monster (event command 81 00 makes it join, at level 8): its HP, ATP and DFP follow the edited record and growth exactly.
 
 ## Corrections to the first-pass files
