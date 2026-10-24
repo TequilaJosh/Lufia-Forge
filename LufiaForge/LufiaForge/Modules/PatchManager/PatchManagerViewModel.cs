@@ -25,7 +25,46 @@ public partial class PatchManagerViewModel : ObservableObject
     public List<BuiltInPatch> BuiltInPatches { get; } = BuiltInPatch.All();
     private static readonly string[] GroupOrder = { "Community", "Battle", "Magic", "Items", "Maps", "Events", "Testing", "Other" };
     /// <summary>The patches grouped for the cards (in this order).</summary>
-    public List<PatchGroup> PatchGroups => _rom?.IsLufia2 == true ? new() : GroupOrder.Concat(BuiltInPatches.Select(p => p.Category).Where(c => !GroupOrder.Contains(c)).Distinct())   // (a category not listed still shows, at the end)
+    /// <summary>Lufia II's patches (small same-size changes, Core/Lufia2/L2Patches).</summary>
+    public List<BuiltInPatch> Lufia2Patches { get; } = Core.Lufia2.L2Patches.All.Select(p => new BuiltInPatch
+    {
+        Name = p.Name, Summary = p.Summary, Description = p.Description, Category = "Lufia II", NeedsExpandedRom = false,
+        BlockedText = p.Id is "l2-townfast" or "l2-run" ? "Can't be added together with the other walking patch (take that one out first)." : null,
+        IsApplied = p.IsApplied, IsOriginal = p.IsOriginal, Apply = p.Apply, Remove = p.Remove,
+    }).ToList();
+
+    /// <summary>Lufia II fan hacks (whole-game patches for a clean ROM, Core/CommunityPatches).</summary>
+    public List<BuiltInPatch> Lufia2Community { get; } = new()
+    {
+        Hack("frue", "Frue Lufia v8.2", "Fixes a great many of the game's bugs and revises the translation (names, terms, dialogue).",
+            "Frue Lufia is Lufia II with a lot of bugs fixed and texts changed: relnqshd's fixer patches and many more (the Ancient Cave, " +
+            "equipment, spells, IP moves, map names, Arty becomes Artea), and a revised translation. See licenses/patches/Lufia2_FrueLufia_v8-2.txt " +
+            "and Lufia2_AboutTheProjects.txt next to Lufia Forge for the full list."),
+        Hack("spekkio", "Spekkio Lufia v8.2", "Frue Lufia plus a few gameplay changes: harder late bosses, Retry and Gift Mode from the start, more Iris treasures.",
+            "Almost the same as Frue Lufia, with some changed battles (Master, the Egg Dragon, the last Sinistral fights and some late bosses), " +
+            "Retry and Gift Mode available from the start (blue chest items for sale in Gift Mode), Iris treasures appearing more often, " +
+            "and a few shop and item changes. See licenses/patches/Lufia2_SpekkioLufia_v8-2.txt and Lufia2_SpekkioLufia_NotableChanges.txt."),
+        Hack("kureji", "Kureji Lufia v8.2", "A much harder Lufia II: every boss fight changed, and the regular enemies buffed too.",
+            "Kureji Lufia makes all the boss and special battles far more challenging; this is its \"difficult, with the regular enemy buff\" version. " +
+            "It also has most of the bug fixes. See licenses/patches/Lufia2_KurejiLufia_v8-2.txt for the battles and survival tips."),
+        Hack("foomy", "The Wrath of Foomy v8.2", "Frue Lufia, but the final boss is Foomy (50000 HP).",
+            "The same as Frue Lufia, except that instead of Daos the final boss is Foomy, \"Snoomy\": 50000 HP, ATP 2000, DFP 10000 " +
+            "(with some smaller changes to Erim, the Egg Dragon and Master). See licenses/patches/Lufia2_WrathOfFoomy_v8-2.txt."),
+    };
+
+    private static BuiltInPatch Hack(string id, string name, string summary, string description) => new()
+    {
+        Name = name, Category = "Community", Icon = "📜", Credit = "the Frue Lufia project, built on relnqshd's patches and many others' work (see its readme)",
+        Summary = summary, Description = description + " It rewrites much of the game and grows the ROM to 4 MB, so it goes on a clean, unedited ROM: add it first, then make your edits. Only one of these four can be in a ROM.",
+        IsApplied = rom => CommunityPatches.Lufia2HackIn(rom) == id, IsOriginal = CommunityPatches.IsCleanLufia2, Apply = rom => CommunityPatches.ApplyLufia2Hack(rom, id),
+        NeedsExpandedRom = false, ReloadsAll = true,
+        ConfirmText = $"Apply {name} to this ROM?\n\nIt rewrites much of the game and grows the ROM to 4 MB. It can't be taken out again: keep a copy of the clean ROM.",
+        BlockedText = "Can't be added here: it goes on a clean, unedited Lufia II (USA) ROM. Open a clean ROM, add it first, then make your edits.",
+    };
+
+    public List<PatchGroup> PatchGroups => _rom?.IsLufia2 == true
+        ? new() { new PatchGroup("Community patches (by fans, built in)", Lufia2Community), new PatchGroup("Lufia II", Lufia2Patches) }
+        : GroupOrder.Concat(BuiltInPatches.Select(p => p.Category).Where(c => !GroupOrder.Contains(c)).Distinct())   // (a category not listed still shows, at the end)
         .Select(c => new PatchGroup(c == "Community" ? "Community patches (by fans, built in)" : c, BuiltInPatches.Where(p => p.Category == c).ToList())).Where(g => g.Patches.Count > 0).ToList();
 
     [ObservableProperty]
@@ -46,7 +85,7 @@ public partial class PatchManagerViewModel : ObservableObject
         _rom    = rom;
         _mainVm = mainVm;
         StatusText = rom.IsLufia2
-            ? "Lufia II ROM loaded. IPS patches can be applied and exported; the built-in patches are for Lufia 1 and aren't listed."
+            ? "Lufia II ROM loaded. Add any of the Lufia II patches below, apply or export IPS patches, or expand the ROM."
             : "ROM loaded. Load an IPS patch file or export a patch from your current edits.";
         OnPropertyChanged(nameof(PatchGroups));
         OnPropertyChanged(nameof(IsLufia1));
@@ -84,6 +123,8 @@ public partial class PatchManagerViewModel : ObservableObject
     public void RefreshBuiltIn()
     {
         foreach (var p in BuiltInPatches) p.Refresh(_rom);
+        foreach (var p in Lufia2Patches) p.Refresh(_rom);
+        foreach (var p in Lufia2Community) p.Refresh(_rom);
         RefreshSize();
         RefreshFont();
     }
@@ -156,7 +197,14 @@ public partial class PatchManagerViewModel : ObservableObject
 
     private void RefreshSize()
     {
-        if (_rom == null || _rom.IsLufia2) { RomSizeText = ""; CanExpandTo4Mb = false; return; }
+        if (_rom == null) { RomSizeText = ""; CanExpandTo4Mb = false; return; }
+        if (_rom.IsLufia2)
+        {
+            RomSizeText = $"This ROM is {_rom.Length / 1048576.0:0.#} MB. Lufia Forge grows it by itself when edits need room (2.5 MB → 3 MB → 4 MB); " +
+                          $"about {Core.Lufia2.L2Rom.FreeSpace(_rom) / 1024:N0} KB of added space is still free, counting the growth to 4 MB, the most a Lufia II (LoROM) cartridge can address.";
+            CanExpandTo4Mb = _rom.Length < Core.Lufia2.L2Rom.MaxSize;
+            return;
+        }
         double mb = _rom.Length / 1048576.0;
         string free = "";
         if (_rom.Length >= Core.Maps.MapWriter.ExpandedSize)
@@ -174,11 +222,12 @@ public partial class PatchManagerViewModel : ObservableObject
     [RelayCommand]
     private void ExpandTo4Mb()
     {
-        if (_rom == null || _rom.Length >= Core.Maps.MapWriter.MaxSize) return;
+        int max = _rom?.IsLufia2 == true ? Core.Lufia2.L2Rom.MaxSize : Core.Maps.MapWriter.MaxSize;
+        if (_rom == null || _rom.Length >= max) return;
         if (MessageBox.Show("Expand the ROM to 4 MB now? The game plays the same; the new space is used for maps, events, text, music and graphics you add.",
                 "Expand to 4 MB", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
-        _rom.Expand(Core.Maps.MapWriter.MaxSize);
-        Core.Maps.ExpansionSpace.Load(_rom).Save();
+        _rom.Expand(max);
+        if (!_rom.IsLufia2) Core.Maps.ExpansionSpace.Load(_rom).Save();
         _rom.FixChecksum();
         _mainVm?.NotifyRomModified("ROM expanded to 4 MB");
         StatusText = "ROM expanded to 4 MB. Save Project keeps it.";

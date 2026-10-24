@@ -1,0 +1,565 @@
+
+
+            ******************************************************
+            *                                                    *
+            * First of all I want to thank the following people: *
+            *                                                    *
+            ******************************************************
+
+
+ relnqshd         for making all the stuff he did including his
+                  great tutorials and of course all his patches
+                  which were a great inspiration.
+                  And without his Expansion patch I wouldn't even
+                  have been able to start things like Kureji Lufia.
+
+
+ heavyarms525     who worked together with relnqshd on the
+                  "Four Master" patch which gave me some
+                  inspiration for especially the Sinistral battles.
+
+
+ Jigglysaint      who discovered a lot of data regarding Lufia
+                  like for example the location of the chest data.
+
+
+ kWhazit          for his effort in translating the original
+                  Japanese script and helping me with some questions.
+
+
+ suicune girl
+   &              for translating item, spell and enemy names.
+ pokeeiyuu
+
+
+ SinReVi          who provided a lot of useful information.
+
+
+ Gunty            for information regarding the Iris Items
+                  and fixing bugs like the spell shop bug.
+
+
+ Superdreuzel     who helped me a lot while making these patches
+                  i.e. testing some battles and making a list
+                  of attack names and battle animations.
+
+
+ Krastin_Klasko
+   &              for telling me about a major bug.
+ Quelex
+
+
+ Volt             for telling me about some errors as well.
+
+
+ r0xm2n           for information regarding the Safety Hat.
+
+
+ The n00b Avenger for a link to the Japanese monster data.
+
+
+ FlamePurge       for telling me about a bug as well as
+                  some translation suggestions and testing
+                  the whole Frue Lufia patch.
+
+
+ Cirne            for translation suggestions as well.
+
+
+ PaD              for his great Lufia Editor LEdit
+                  which was helpful especially for map issues.
+
+
+ Biquinho         for some testing as well.
+
+
+ drcossack        also for some testing.
+
+
+ Shadow_of_Deth   for pointing out another bug.
+
+
+ Wunderknabe      for pointing out another mistake.
+
+
+ Guard Daos       for some dialogue suggestions.
+
+
+ DarkMaster2101   for some dialogue suggestions as well.
+
+
+ Universal        for some ideas about some German enemy names.
+
+
+ Iron Knuckle     for his great Lufia FAQ.
+
+
+ LandonRay        for doing regular enemy buff to Kureji Lufia.
+
+
+ ti83magic
+     &            for helping convert and in general creating the Foomy image.
+ SinclairC
+
+
+ Swordmaster      for some more translation suggestions.
+
+
+ Antoids          for some more translation suggestions as well.
+
+
+ Martze           for revising the item names and creating the comparison list.
+
+
+ Michie           for some testing.
+
+
+ gadesx           for pointing out some bugs.
+
+
+ rainponcho       for fixing A LOT of stuff.
+
+
+ dank_meats       for some testing and inserting graphics.
+
+
+ eve___           for making the awesome new Erim sprite.
+
+
+ manmademimic     for creating some more fixes.
+
+
+ RealCritical     for creating and inserting some more fixes.
+
+
+ Abyssonym        for helping me with some ASM stuff.
+
+
+ Dindo            for fixing some graphical issues.
+
+
+ aGuGu            for helping Dindo with the romhacking.
+
+
+ Kotora           for helping Dindo with the Portugese translation.
+
+
+ And everyone else who helped me or others to make these patches.
+
+
+
+            ******************************************************
+            *                                                    *
+            *                                                    *
+            *                  Spekkio Lufia                     *
+            *                                                    *
+            *                                                    *
+            ******************************************************
+
+ Spekkio Lufia is almost the same as Frue Lufia, but there are a few differences.
+ There are some modified battles which are the Master and the Egg Dragon battle
+ as well as the last battles against the Sinistrals and some late game bosses.
+ Besides, non-boss Ghost Ships will summon Krakens, Night Lizards and Deathbringers,
+ whereas Dark Summoners will summon King Hydras, High Hydras and Lucifers.
+ (And Dark Summoners now are immune to instant death.)
+ Also, in the newest version Iris Treasures will appear more frequently,
+ in the Gratze basement the prisoners sell items and give you a Revive in case you lack one
+ and in the Gift Mode (which is available from start) you can buy blue chest items.
+ Besides, at the Ancient Cave entrance counter you'll also get a Revive if don't having one.
+
+ Quite notable, Artea and Lexis now can equip Miracle Plates/Mails so that everyone
+ has the potential to get an armor in the Ancient Cave right from the start.
+
+ Also quite notable, Silver and Gold Dragons now drop Dekar and Myth Blades (~10%).
+ However, the AGL of the Metal Dragons is increased by factor 1.5 now.
+
+ Besides, Orochis drop Taplowses now (~25%). As well as Blue Dragons now have
+ Magic Fruits as a rare drop (~0.25%) whereas some bosses have higher drop rates
+ as well as Web Spiders drop Ear Picks (~25%) and Gold Golems drop Hammer Rods (~1%).
+ And No Cores now can drop Engage Rings (~7.5%) as well as the elder of Narvick
+ now sells some rings after the last maiden has joined the party. And the stuff from
+ Chaed's weapon shop is no longer missable as you can buy it in Gruberik now.
+
+ However, some words about the battles:
+
+
+ 1) The Master
+
+ The Master has now a new additional move which makes the battle a little bit
+ harder as he can now heal himself completely every round. And suicide isn't
+ an option anymore. Therefore, the only way is to bring him down in one single
+ round. Or is there maybe another way as well...?
+
+ 
+ Name:                  HP:      MP:    ATP:   DFP:    AGL:  INT:  GUT:  MGR:  DROP:
+ Master               10000 infinite      10      1    510   510   510     2   ---
+
+
+ 2) The Sinistrals
+
+ The Sinistrals are also a little bit more difficult. However, they are nothing
+ a good level 50-party or even a level 40-party can't handle.
+ 
+ Name:                  HP:      MP:    ATP:   DFP:    AGL:  INT:  GUT:  MGR:  DROP:
+ Gades                30000        0    1000   1000    510   510   510   510   ---
+ Amon                 30000    10000    1000   1000    510   510   510   510   ---
+ Erim                 45000    10000    1500   1000    510   510   510   510   ---
+ Daos                 50000    10000    1500   1000    510   510   510   510   ---
+
+ There's also a surprise battle during the course of the game. And Erim and Daos
+ might have some surprises for higher leveled ones as well.
+
+
+ 3) The Egg Dragon
+
+ He's the name giver of this patch as he now - like Spekkio from Chrono Trigger -
+ changes his behaviour depending on the highest level of a party member.
+
+ There are 8 different versions you can fight:
+
+ - level 01-39: basically the original fight
+
+ - level 40-49: Scrambled Egg's attack power can't be lowered anymore + higher confusion rate
+
+ - level 50-59: now he has two turns per round + more spells + Cinder Blast
+
+ - level 60-69: can silence you and has single-targeted spells
+
+ - level 70-79: has Diamond Dust and Scrambled Egg drains MP as well
+
+ - level 80-89: now he has 3 turns per round + the Dread spell
+
+ - level 90-98: has Stardust Blow + ATP & DFP lowering attacks
+
+ - level 99:    ????????
+
+ Name:                  HP:      MP:    ATP:   DFP:    AGL:  INT:  GUT:  MGR:  DROP:
+ Egg Dragon           65535 infinite    1500   2000    510   510   510   510   Myth Blade
+
+
+ 4) La Puella
+
+ La Puella, the beloved pet of the Princess of Parcelyte, Cefia, is a new enemy
+ unique to Spekkio Lufia. You can fight her whenever you want after beating Gades
+ in the Ancient Tower. Just go to the throne room of Parcelyte Castle and talk to her.
+ Do you stand a chance against La Puella and everything which joins the battle?
+
+ Name:                  HP:      MP:    ATP:   DFP:    AGL:  INT:  GUT:  MGR:  DROP:
+ La Puella            30000    10000    1000   1000    320   510   510   510   Spider Jewel
+ Pet Dragon            7500     5000    1000   2000    320   510   510   510   Engage Ring
+ Lady Spider           5000        0    1000   1000    510   510   510   510   Jute/Warding Helm
+ Queen Spider          5000        0    1000   1000    510   510   510   510   Power/Spirit Brace
+
+
+ Maybe the Spiderweb IP move might be helpful against some of them. Good luck! ^_^
+
+
+
+            ******************************************************
+            *                                                    *
+            *                 Version history:                   *
+            *                                                    *
+            ******************************************************
+
+ 8.2   - 2026/10/01
+         - incorporated some of manmademimic/RealCritical's patches
+         - thanks to Dindo/aGuGu some graphical issues are fixed
+         - changed one enemy drop
+
+ 8.1.1 - 2026/07/17
+         - fixed potential softlock at Gruberik/Ancient Cave island
+
+ 8.1   - 2025/08/15
+         - fixed some hammer bugs by disabling using L for skill usage
+
+ 8.0   - 2025/06/30
+         - included manmademimic's AC floor generation fix
+         - slightly changed La Puella and level 99 Eggy
+
+ 7.2   - 2025/04/24
+         - changed Pet Dragon
+
+ 7.1   - 2024/09/15
+         - just changed one single enemy name (Serfaco/Selfaquo into Serfaq)
+
+ 7.0   - 2024/04/29
+         - fixed the Ferim Tower walk on air glitch
+         - fixed statue for real
+         - slightly changed Ancient Tower Gades
+
+ 6.2   - 2023/05/31
+         - changed some optional bosses
+
+ 6.1   - 2023/05/15
+         - changed level 99 Eggy
+         - rebalanced some IP moves
+         - changed something about Master
+
+ 6.0   - 2022/11/09
+         - small adjustment regarding FlamePurge's Frue Trilogizer patch
+
+ 5.2.1 - 2022/09/14
+         - changed Master for smaller parties
+
+ 5.2   - 2022/08/11
+         - revised some dialogue
+
+ 5.1   - 2022/07/26
+         - thanks to eve___ and dank_meats Erim got a new sprite
+
+ 5.0   - 2022/06/30
+         - fixed the Gratze hammer bug which lets you skip some dungeons
+         - revised some dialogue and changed two item names
+         - Egg Dragon has another additional reward
+
+ 4.16  - 2022/06/01
+         - slightly changed Ghost Ship
+
+ 4.15  - 2022/05/24
+         - slightly changed Ghost Ship
+
+ 4.14  - 2021/08/10
+         - slightly changed Gold Dragons
+
+ 4.13  - 2021/06/05
+         - fixed some potential softlocks
+
+ 4.12  - 2021/05/28
+         - further rebalanced the Tank battle
+         - added a small shop in the Gratze basement
+
+ 4.11  - 2021/05/07
+         - further rebalanced Gold Dragons, Ghost Ship and Tank
+
+ 4.10  - 2020/09/21
+         - further rebalanced Fire Dragon, Ghost Ship and Tank
+         - added more stuff to the final Narvick elder shop
+
+ 4.9   - 2020/05/13
+         - added an exploit to one of the optional superbosses
+
+ 4.8   - 2019/12/18
+         - slightly changed final Gades
+         - La Puella has a more satisfying reward
+         - Light and Hardboiled cost less IP
+
+ 4.7   - 2019/09/06
+         - changed the dialogue with La Puella
+
+ 4.6   - 2019/09/04
+         - changed the final dialogue with the Narvick elder
+
+ 4.5   - 2019/09/01
+         - added an Old Armor drop to the Ghost Ship boss
+
+ 4.4   - 2019/08/01
+         - replaced the second goblin battle in the Lake City by a jelly fight
+
+ 4.3   - 2019/06/30
+         - changed La Puella and Pet Dragon slightly (Happy Birthday Usagi!!!)
+
+ 4.2   - 2019/06/15
+         - changed final Idura, Devil Flower and Tank slightly
+         - increased Dragon Blade's critical hit chance and price
+
+ 4.1   - 2019/03/29
+         - no going back after fighting Erim for dramatic reasons
+
+ 4.0   - 2018/12/25
+         - changed some dialogue as well as item and monster names
+         - changed Excerion into Excelion to get the excellent+lion pun
+         - changed some drops and drop rates and changed Gruberik's weapon shop into the Chaed shop
+         - rebalanced some of the late game bosses starting when Artea joins (+changed Eggy slightly)
+
+ 3.2   - 2018/11/15
+         - added a nasty, little secret for Daos
+
+ 3.1   - 2018/08/30
+         - changed Egg Dragon's final level 99 form
+
+ 3.0   - 2018/03/24
+         - thanks to rainponcho a lot of stuff is fixed
+         - changed Red Jelly, Erim, Master, Pet Dragon, Queen Spider and a La Puella battle animation
+         - changed Metal Dragons' AGL and Dark Summoners' max MP and ID immunity
+         - changed some item drops and drop rates from late game/optional battles
+         - in the Gratze Basement there's now a way to always get a Revive
+         - changed the name of some equipment pieces and added one rare drop
+         - fixed the Mega/Bort Shield and slightly changed Daos and Eggy
+         - some very slight final balancing for Fire Dragon and Strahda Amon
+         - Lexis and Artea can now equip Mirac Plates
+         - fixed Gusto's Air Attack
+         - revised some dialogues
+         - changed Capsule Monster feeding lists
+         - changed some enemy names and one attack name
+         - changed some used sprites on some maps
+         - fixed some IP costs and changed some IP move belongings
+         - the elder of Narvick now sells Sea Rings
+         - Gift Mode now lets you start with 65000 GP as well
+
+ 2.16  - 2016/10/03
+         - changed some IP move names
+
+ 2.15  - 2016/09/25
+         - changed some attack names
+         - Gold Dragons now have their correct HP!!!
+
+ 2.14.2- 2016/06/23
+         - changed final Amon and Erim slightly
+         - changed Erim again slightly - into a real haki monster (2.14.2.1)
+         - changed Daos slightly (2.14.2.2)
+         - changed Eggy's higher level forms slightly (2.14.2.3)
+         - changed Orochi's drop (2.14.2.4)
+         - changed some of Eggy's attack names (2.14.2.5)
+
+ 2.14.1- 2016/06/02
+         - changed the called companions of Ghost Ships and Dark Summoners
+
+ 2.14  - 2016/02/28
+         - changed little dialogue stuff
+
+ 2.13.1- 2015/12/26
+         - changed La Puella reward
+
+ 2.13  - 2015/05/03
+         - changed little dialogue stuff
+
+ 2.12.1- 2015/04/26
+         - Retry and Gift Mode available from start
+         - blue chest items (+ Flame Jewel) buyable in Gift Mode
+
+ 2.12  - 2015/04/23
+         - changed little dialogue stuff
+         - changed metal dragon drops
+
+ 2.11.9- 2015/03/31
+         - changed Erim, Idura and Red Jelly slightly and made Iris Items easier obtainable
+
+ 2.11.8- 2014/08/01
+         - changed Erim slightly
+
+ 2.11.7- 2014/07/26
+         - changed Erim and Daos slightly
+
+ 2.11.6- 2013/11/27
+         - changed Daos slightly
+
+ 2.11.5- 2013/11/07
+         - changed Egg Dragon slightly and made him even more beasty
+
+ 2.11.4- 2013/10/25
+         - changed Egg Dragon slightly
+
+ 2.11.3- 2013/10/24
+         - changed Erim and Daos slightly
+
+ 2.11.2- 2013/10/21
+         - changed the new Sinistral battle slightly
+
+ 2.11.1- 2013/10/19
+         - added another Sinistral battle
+         - fixed a bug the let La Puella count towards beating Eggy in the report
+
+ 2.11  - 2013/07/18
+         - changed little grammar stuff
+         - Sinistrals now have different battles at sealed towers
+
+ 2.10  - 2013/06/19
+         - changed little grammar stuff
+
+ 2.9.8 - 2012/02/05
+         - changed a little dialogue inconsistency
+         - a very little dialogue thingie (2.9.8.1)
+
+ 2.9.7 - 2011/05/01
+         - thanks to Gunty the church menu bug is fixed now
+         - fixed Daos being not completely ailment protected (2.9.7.1)
+         - enhanced the Dark Reflector stuff (2.9.7.2)
+
+ 2.9.6 - 2011/03/21
+         - thanks to Gunty the spell shop bug is fixed now
+         - rebalanced the battles considering status ailment probability
+         - added Bestiary
+         - changed Revenge Ghost's/Ghost Ship's defense script (2.9.6.1)
+         - added Pet Dragon's Mystic Flame (2.9.6.2)
+         - Pearl Brace doesn't halve fire damage anymore except for Camu (2.9.6.2)
+
+ 2.9.5 - 2011/02/07
+         - fixed Egg Dragon's/La Puella's speech bubble sound
+
+ 2.9.4 - 2011/01/25
+         - a very minor dialogue change
+         - added earpick patch
+
+ 2.9.3 - 2011/01/07
+         - fixed a bug at the Ancient Cave exit
+
+ 2.9.2 - 2010/11/26
+         - a very minor change about Eggy's Scrambled Egg's attack power
+
+ 2.9.1 - 2010/11/15
+         - a very minor dialogue change
+         - fixed Eggy's level selection part
+         - added a level based attack for Erim and Daos
+
+ 2.9   - 2010/09/12
+         - changed some item names
+
+ 2.8.2 - 2010/09/03
+         - Eggy (I really wished not to always get some more stupid ideas)
+
+ 2.8.1 - 2010/09/01
+         - Eggy... :(
+
+ 2.8   - 2010/09/01
+         - Eggy fine tuning (I'm perfectionist I guess...)
+         - changed some dialogues
+
+ 2.7.1 - 2010/08/22
+         - Master/Eggy fine tuning
+
+ 2.7   - 2010/08/16
+         - fixed some IP moves
+
+ 2.6.1 - 2010/08/12
+         - added La Puella
+
+ 2.6   - 2010/05/23
+         - fixed some dialogue mistakes
+
+ 2.5   - 2010/03/08
+         - fixed the escape from Ancient Tower glitch
+
+ 2.4   - 2010/03/01
+         - fixed a description text and Nosferatu
+
+ 2.3   - 2010/01/13
+         - fixed a small thing about the tank battle
+
+ 2.2   - 2009/12/28
+         - fixed things regarding healing and changed a few descriptions
+
+ 2.1   - 2009/11/17
+         - replaced the priests with their Japenese version
+
+ 2.0   - 2009/11/07
+         - fixed the north dungeon bomb puzzle bug
+
+ 1.6   - 2009/10/20
+         - increased the Sinistrals' difficulty on Doom Island as well
+
+ 1.5   - 2009/09/22
+         - fixed some dialogue mistakes and changed some enemy names
+
+ 1.4   - 2009/08/26
+         - fixed some more bugs and changed some enemy names
+
+ 1.3   - 2009/07/14
+         - changed the Daos battle slightly + King Hydra/Kraken are fightable now
+
+ 1.2   - 2009/06/06
+         - correctly removed Jessy at Parcelyte and some text/dialogue changes
+
+ 1.1   - 2009/05/26
+         - fixed a bug and some text/dialogue changes
+
+ 1.0   - 2009/05/19

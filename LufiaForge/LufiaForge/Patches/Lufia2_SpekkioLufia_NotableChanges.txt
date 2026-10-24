@@ -1,0 +1,93 @@
+
+
+ Notable non-bugfixing and non-translation changes:
+
+
+
+  General changes:
+
+   - Retry and Gift Mode are available right from start
+
+   - Capsule Monsters sometimes demand a Wave Ring
+
+   - when fighting Erim the bridge disappears, so there's no way else to go aside from straightly facing Daos
+
+
+  Item/Shop changes:
+
+   - Miracles heal 16383 instead of only 999 HP/MP (also applies to Frue Lufia)
+
+   - Gruberik's weapon shop sells the same as the Chaed shop after its annihilation (and nothing beforehand)
+   - one of the prisoners in the Gratze basement always gives you a Revive in case you don't have one
+   - the other one of the prisoners in the Gratze basement also sells a few very basic items
+   - the Narvick elder provides Mystery/Curio, Ghost and Sea Rings after the final maiden joined your party
+
+   - the Ancient Cave red chest distribution is fixed (for sure a bug, but totally worth the special mention)
+
+   - Iris Items have a higher frequency to appear in red chests
+   - you can buy all of the blue chest items in Gift Mode
+   - the man at the Ancient Cave counter always gives you a Revive in case you don't have one
+
+
+  Equipment changes:
+
+   - Flame Jewel is a blue chest item just like these other elemental stones (also applies to Frue Lufia)
+
+   - some of the dummied out IP moves are included (also applies to Frue Lufia)
+     - Dragon Fury (Rage/Fury Knife)
+     - Double Slash (Deadly/Killer Sword)
+     - Sanity (Deadly/Killer Armor)
+     - Illumination (Mage Shield)
+     - Water Guard (Gold Shield)
+     - Weakener (Safety First)
+
+   - Rage/Fury Knife only is equipable by Tia and Selan, but its IP move costs less IP
+   - Dragon Blade has a critical hit chance of 50% instead of only 25%, but it's somewhat more expensive
+   - Silver Eye's Diamond Dust is a little bit stronger and Gold Eye's Stardust Blow costs slightly less IP
+   - Light Jewel's Light and Egg Sword's Hardboiled cost less IP (the latter doesn't need any IP at all)
+
+   - Miracle Plate/Mail also is equipable by Lexis and Artea
+
+   - Pearl Brace when worn reduces anti-sea damage instead of fire damage (and Camu uses anti-sea attacks)
+
+
+  Enemy changes:
+
+   - Red Jellies now have another behaviour that actually matches the big Master Jelly way better
+   - in the Lake Cave instead of a second goblin you have to fight a Bile Jelly together with 3 Red Jellies
+   - in the Ancient Tower the Snails have a slightly higher chance to call for Ammonites
+
+   - Pierre and Daniele can use multi-targeted attacks in case of lacking MP (also applies to Frue Lufia)
+   - Gades at the Ancient Tower is strong against neutral elemental attacks
+   - Idura has 320 MP instead of 300 in his second and third encounter
+   - Final Idura is protected against sleep and Devil Flower is protected against poison and sleep
+   - Revenge Ghost and Ghost Ship take less damage by Miracles than in Frue Lufia (but more than in vanilla)
+
+   - Big Catfish, Camu, Tarantula and Bodyguards have higher drop rates (100%/12.5%/12.5%/100%)
+   - Web Spiders drop Ear Picks with a 25% chance
+   - Gold Golems drop Pounder/Hammer Rods with a 1% chance
+   - Blue Dragons drop Magic Fruits with a 0.25% chance
+   - No Cores drop Engage Rings with a 7.5% chance
+
+
+   - Ghost Ships (the non-boss versions) summon Krakens, Night Lizards and Hadeses/Deathbringers
+   - Orochis drop Apple Ciders/Taplowses with a 25% chance
+
+   - Copper, Silver and Gold Dragons' AGL is increased by factor 1.5 (up to 210/210/214)
+   - Gold Dragons have 3500 HP and Stardust Blow is light elemental instead of neutral (same as in Frue Lufia)
+   - Gold Dragons use Champion instead of Stronger when low on HP (870 or less)
+   - Silver Dragons drop Dekar Blades with a 10% chance
+   - Gold Dragons drop Myth Blades with a 10% chance
+
+   - Dark Summoners summon King Hydras, High Hydras and Archfiends/Lucifers
+   - Dark Summoners are immune to instant death (and have 480 MP)
+
+
+
+   - the fights against Revenge Ghost, Fire Dragon and Gades/Amon at the towers are altered to some degree
+
+   - the Ghost Ship and Tank fights and especially the final fights on Doom Island are heavily altered
+
+   - there are two completely new optional boss fights added
+
+   - the Master of the Ancient Cave and especially the Egg Dragon are fundamentally altered

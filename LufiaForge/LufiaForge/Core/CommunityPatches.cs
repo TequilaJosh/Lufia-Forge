@@ -8,6 +8,9 @@ namespace LufiaForge.Core;
 /// Lufia Recolor patch 1.0 with its Just the Shadows part. Their readmes ship in licenses\patches.
 /// Restored rewrites much of the game (and grows it to 1.5 MB), so it only goes on a clean ROM; the others are small
 /// and come out again (Original_bytes.ips holds the clean ROM's bytes they change).
+/// For Lufia II: Frue Lufia, Spekkio Lufia and Kureji Lufia v8.2 and The Wrath of Foomy (the Frue Lufia project,
+/// built on relnqshd's patches and many others' work; readmes in licenses\patches), each a whole-game patch for a
+/// clean ROM.
 /// </summary>
 public static class CommunityPatches
 {
@@ -146,6 +149,55 @@ public static class CommunityPatches
     public static bool ShadowsOriginal(RomBuffer rom) => Untouched(rom, Records(ShadowsFile));
     public static void ApplyShadows(RomBuffer rom) => Write(rom, Records(ShadowsFile));
     public static void RemoveShadows(RomBuffer rom) => Unwrite(rom, Records(ShadowsFile));
+
+    // ---- Lufia II: Frue, Spekkio and Kureji Lufia v8.2, The Wrath of Foomy ------------------------
+
+    /// <summary>CRC32 of the clean Lufia II (USA) ROM, unheadered, the one the v8.2 patches are made for.</summary>
+    public const uint Lufia2CleanCrc = 0x20F2AC29;
+
+    /// <summary>The Lufia II hacks: id and patch file (headerless IPS; each grows the ROM to 4 MB).</summary>
+    public static readonly (string Id, string File)[] Lufia2Hacks =
+    {
+        ("frue", "Lufia2_FrueLufia_v8-2.ips"), ("spekkio", "Lufia2_SpekkioLufia_v8-2.ips"),
+        ("kureji", "Lufia2_KurejiLufia_v8-2.ips"), ("foomy", "Lufia2_WrathOfFoomy_v8-2.ips"),
+    };
+
+    private static uint _lastCrc;
+    private static byte[]? _lastCrcData;
+
+    public static bool IsCleanLufia2(RomBuffer rom)
+    {
+        if (rom.Length != 0x280000) return false;
+        var data = rom.ToArray();
+        if (_lastCrcData == null || !data.AsSpan().SequenceEqual(_lastCrcData)) { _lastCrc = Crc32(data); _lastCrcData = data; }
+        return _lastCrc == Lufia2CleanCrc;
+    }
+
+    /// <summary>Share of the patch's records the ROM holds.</summary>
+    private static double Match(RomBuffer rom, string file)
+    {
+        var recs = Records(file);
+        int same = recs.Count(r => r.Offset + r.Data.Length <= rom.Length && rom.ReadBytes(r.Offset, r.Data.Length).AsSpan().SequenceEqual(r.Data));
+        return recs.Count == 0 ? 0 : same / (double)recs.Count;
+    }
+
+    /// <summary>Which of the hacks is in the ROM (the best match, when at least 90% of its records are there; the
+    /// hacks share most of their bytes, so only the best counts), or null.</summary>
+    public static string? Lufia2HackIn(RomBuffer rom)
+    {
+        if (rom.Length < 0x400000) return null;
+        var best = Lufia2Hacks.Select(h => (h.Id, Score: Match(rom, h.File))).OrderByDescending(h => h.Score).First();
+        return best.Score >= 0.9 ? best.Id : null;
+    }
+
+    /// <summary>Applies hack <paramref name="id"/> to the whole ROM (it grows to 4 MB). Only on a clean ROM.</summary>
+    public static void ApplyLufia2Hack(RomBuffer rom, string id)
+    {
+        if (!IsCleanLufia2(rom)) throw new InvalidOperationException("These patches go on a clean, unedited Lufia II (USA) ROM.");
+        string file = Lufia2Hacks.First(h => h.Id == id).File;
+        rom.ReplaceAll(IpsHandler.ApplyPatch(rom.ToArray(), Load(file)));
+        rom.FixChecksum();
+    }
 
     // ---------------------------------------------------------------------------------------------
 

@@ -1,0 +1,1035 @@
+
+
+            ******************************************************
+            *                                                    *
+            * First of all I want to thank the following people: *
+            *                                                    *
+            ******************************************************
+
+
+ relnqshd         for making all the stuff he did including his
+                  great tutorials and of course all his patches
+                  which were a great inspiration.
+                  And without his Expansion patch I wouldn't even
+                  have been able to start things like Kureji Lufia.
+
+
+ heavyarms525     who worked together with relnqshd on the
+                  "Four Master" patch which gave me some
+                  inspiration for especially the Sinistral battles.
+
+
+ Jigglysaint      who discovered a lot of data regarding Lufia
+                  like for example the location of the chest data.
+
+
+ kWhazit          for his effort in translating the original
+                  Japanese script and helping me with some questions.
+
+
+ suicune girl
+   &              for translating item, spell and enemy names.
+ pokeeiyuu
+
+
+ SinReVi          who provided a lot of useful information.
+
+
+ Gunty            for information regarding the Iris Items
+                  and fixing bugs like the spell shop bug.
+
+
+ Superdreuzel     who helped me a lot while making these patches
+                  i.e. testing some battles and making a list
+                  of attack names and battle animations.
+
+
+ Krastin_Klasko
+   &              for telling me about a major bug.
+ Quelex
+
+
+ Volt             for telling me about some errors as well.
+
+
+ r0xm2n           for information regarding the Safety Hat.
+
+
+ The n00b Avenger for a link to the Japanese monster data.
+
+
+ FlamePurge       for telling me about a bug as well as
+                  some translation suggestions and testing
+                  the whole Frue Lufia patch.
+
+
+ Cirne            for translation suggestions as well.
+
+
+ PaD              for his great Lufia Editor LEdit
+                  which was helpful especially for map issues.
+
+
+ Biquinho         for some testing as well.
+
+
+ drcossack        also for some testing.
+
+
+ Shadow_of_Deth   for pointing out another bug.
+
+
+ Wunderknabe      for pointing out another mistake.
+
+
+ Guard Daos       for some dialogue suggestions.
+
+
+ DarkMaster2101   for some dialogue suggestions as well.
+
+
+ Universal        for some ideas about some German enemy names.
+
+
+ Iron Knuckle     for his great Lufia FAQ.
+
+
+ LandonRay        for doing regular enemy buff to Kureji Lufia.
+
+
+ ti83magic
+     &            for helping convert and in general creating the Foomy image.
+ SinclairC
+
+
+ Swordmaster      for some more translation suggestions.
+
+
+ Antoids          for some more translation suggestions as well.
+
+
+ Martze           for revising the item names and creating the comparison list.
+
+
+ Michie           for some testing.
+
+
+ gadesx           for pointing out some bugs.
+
+
+ rainponcho       for fixing A LOT of stuff.
+
+
+ dank_meats       for some testing and inserting graphics.
+
+
+ eve___           for making the awesome new Erim sprite.
+
+
+ manmademimic     for creating some more fixes.
+
+
+ RealCritical     for creating and inserting some more fixes.
+
+
+ Abyssonym        for helping me with some ASM stuff.
+
+
+ Dindo            for fixing some graphical issues.
+
+
+ aGuGu            for helping Dindo with the romhacking.
+
+
+ Kotora           for helping Dindo with the Portugese translation.
+
+
+ And everyone else who helped me or others to make these patches.
+
+
+
+
+            ******************************************************
+            *                                                    *
+            *                                                    *
+            *                  Kureji Lufia                      *
+            *                                                    *
+            *              Rise of the FRUE Gods                 *
+            *                                                    *
+            *                                                    *
+            ******************************************************
+
+                               Version 8.2
+
+                      by Artemis (artemis-sama@gmx.de)
+
+
+
+
+            ******************************************************
+            *                                                    *
+            *                  Introduction:                     *
+            *                                                    *
+            ******************************************************
+
+
+ Kureji Lufia is a modified version of Lufia 2 - Rise of the Sinistrals.
+ It changes all the not normal battles and makes them way more challenging.
+ There are two patches with different difficulty which are both made
+ for the US version.
+ Besides, now for each difficulty there's an alternate version available
+ which buffs up the regular enemies as well. (So, there are four patches
+ now from which you can choose.)
+ I also used most of the bugfixes made by relnqshd, so there won't be
+ most of the known bugs, but I want to emphasize that this part isn't my work.
+
+
+ I'd suggest to play it in Retry Mode. If you don't have a save,
+ you can use the enclosed one. However, in the newest versions
+ Gift Mode is available right at the beginning, anyway.
+
+
+
+
+            ******************************************************
+            *                                                    *
+            *                     Features:                      *
+            *                                                    *
+            ******************************************************
+
+
+ - all boss battles are more difficult now (see below for stats)
+
+ - optionally the regular enemies are also buffed (or altered in some cases)
+
+ - Retry and Gift Mode are available right from start
+
+ - all the texts and dialogues are decensored now
+
+ - you can buy other items in some shops (see below)
+
+ - the Dual Blade is light + strong against sea enemies elemental now
+
+ - there are some new monster drops (see below)
+
+ - there are a very few chests with other content (see below)
+
+ - some regular monster call for other companions (see below)
+
+ - the Capsule Monsters are way more snobbish and snooty
+
+ - Iris Items appear with a way higher probability
+
+ - the red chests of the Ancient Cave provide slightly different items
+
+ - thanks to relnqshd's, Gunty's, rainponcho's and my bugfixes a lot of bugs are fixed
+
+ - Light Jewel now has a slightly different IP move and Hardboiled is slightly modified
+
+ - the elder of Narvick has some other special dialogue/purpose at the end
+
+ - in the fruely hardcore version there now is a boss rush at the very end
+
+
+
+
+            ******************************************************
+            *                                                    *
+            *  Differences between the "fruely hardcore" patch:  *
+            *                                                    *
+            ******************************************************
+
+
+ The main difference between the difficult and the fruely hardcore patch
+ is that it's much easier to get the better equipment/items
+ in the difficult version.
+
+ This affects:
+
+ a) the shops at Gruberik and Narvick and the new shop in Gratze
+    as well as the casino at Forfeit Island (see below)
+
+ b) some new monster drops and monster drop rates
+    as well as the modified content from a few chests (see below)
+
+
+
+ Battle-wise the only difference between the difficult and the fruely
+ hardcore patch are the following six battles:
+
+ 1) Gades at Doom Island
+
+ 2) Amon at Doom Island
+
+ 3) Erim
+
+ 4) Daos
+
+ 5) Master
+
+ 6) Egg Dragon
+
+ Especially Erim and Daos will pose a much bigger threat on Doom Island,
+ but the battle which is changed the most is definitely the Egg Dragon battle.
+ Not only does he have better stats and more aggressive moves,
+ he also has a new and really devastating attack which he doesn't use otherwise.
+
+ Also in the fruely hardcore version there is a BOSS RUSH available
+ at the end of the game as soon as you get the final maiden in Narvick.
+ Just visit the throne room of Parcelyte Castle whenever you're ready.
+
+
+
+
+            ******************************************************
+            *                                                    *
+            *        Protection against status ailments:         *
+            *                                                    *
+            ******************************************************
+
+
+ Because some of the later bosses really like it to spam various status
+ effects including instant death with a really high probability
+ (=100% in all the later battles), it is important to know which
+ equipment parts can completely protect you against a status.
+
+
+ Protection against Poisoning:
+ - Bright Armor (All)
+ - Bright Cloth/Diamond Gown (Lexis only)
+ - Bunny Suit (Selan, Artea, Tia)
+ - Camu Armor (Guy, Dekar)
+ - Crystal Mail (Maxim, Guy, Dekar)
+ - Crystal Robe (Selan, Artea, Tia)
+ - Holy Robe/God Robe (Selan, Artea, Tia)
+ - Holy Wings/Angel Wings (Selan, Tia)
+ - Lab Coat (Lexis only)
+ - Old Armor (Guy, Dekar)
+ - Pearl Armor/Divine Armor (Maxim only)
+ - Pearl Brace (Selan, Tia)
+ - Quilted Silk (Selan, Tia)
+ - Royal Dress (Selan, Tia)
+ - Seethru/Sheer Cape (Selan, Tia)
+ - Seethru/Sheer Silk (Selan, Tia)
+ - Silk Robe (Selan, Artea, Tia)
+ - Silk Toga (Selan, Tia)
+ - Silver Armor (Maxim, Guy, Dekar)
+ - Silver Mail (Maxim, Guy, Artea, Dekar, Lexis)
+ - Silver Robe (Selan, Artea, Tia)
+
+ Protection against Silence:
+ - Bunny Tray (Selan, Artea, Tia)
+ - Hairpin/Yasha Pin (Selan, Tia)
+ - Long Robe/Cotehardie (Selan, Tia) (This is not full protection, but the chance is 1/2)
+ - Mage Shield (Maxim, Selan, Artea, Tia, Lexis)
+ - Old Shield (Guy, Artea, Dekar)
+ - Pearl Shield/Divine Targe (Maxim only)
+ - Royal Dress (Selan, Tia)
+ - Rune Gloves (Artea only)
+ - S-Myst/S-Curio Ring (All)
+ - Seethru/Sheer Cape (Selan, Tia)
+ - Seethru/Sheer Silk (Selan, Tia)
+ - Silk Toga (Selan, Tia)
+
+ Protection against Instant Death:
+ - Bright Cloth/Diamond Gown (Lexis only)
+ - Bunny Ring (Selan, Artea, Tia)
+ - Dark Mirror (uncursed) (All)
+ - Ghost Ring (All)
+ - Holy Robe/God Robe (Selan, Artea, Tia)
+ - Holy Wings/Angel Wings (Selan, Tia)
+ - Jute Helmet/Warding Helm (Maxim, Guy, Dekar)
+ - Pearl Armor/Divine Armor (Maxim only)
+ - Ruse Armor/Lucina Armor (Selan, Tia)
+ - Undead Ring (All)
+
+ Protection against Paralysis:
+ - Bright Armor (All)
+ - Bunny Suit (Selan, Artea, Tia)
+ - Holy Robe/God Robe (Selan, Artea, Tia)
+ - Magic Bikini (Selan, Tia)
+ - Miracle Plate/Mail (Maxim, Guy, Dekar)
+ - Old Armor (Guy, Dekar)
+ - Pearl Armor/Divine Armor (Maxim only)
+ - Pearl Brace (Selan, Tia)
+ - Seethru/Sheer Cape (Selan, Tia)
+ - Seethru/Sheer Silk (Selan, Tia)
+
+ Protection against Confusion:
+ - Brill Helm/Radiant Helm (All)
+ - Bunny Ears (Selan, Artea, Tia)
+ - Ghostclothes/Soul Clothes (All)
+ - Jute Helmet/Warding Helm (Maxim, Guy, Dekar)
+ - Legend Helm/Creator Helm (Maxim, Guy, Dekar)
+ - Old Helmet (Guy, Dekar)
+ - Pearl Helmet/Divine Helm (Maxim only)
+ - Power Brace/Spirit Brace (Maxim, Selan, Artea, Tia, Lexis)
+ - Safety Hat/Safety First (Lexis only)
+ - Seethru/Sheer Cape (Selan, Tia)
+ - Seethru/Sheer Silk (Selan, Tia)
+
+ Protection against Sleep:
+ - Agony Helm/Agni Helm (Maxim, Guy, Dekar)
+ - Anger Brace/Fury Brace (All)
+ - Boom Turban/Indra Turban (Selan, Artea, Tia, Lexis)
+ - Bunny Ears (Selan, Artea, Tia)
+ - Fury Helmet (Maxim, Guy, Dekar)
+ - Fury Ribbon (Selan, Artea, Tia)
+ - Ice Hairband (Selan, Tia)
+ - Mystery/Curio Ring (All)
+ - S-Myst/S-Curio Ring (All)
+ - Seethru/Sheer Cape (Selan, Tia)
+ - Seethru/Sheer Silk (Selan, Tia)
+
+
+
+
+            ******************************************************
+            *                                                    *
+            *                   Changed shops:                   *
+            *                                                    *
+            ******************************************************
+
+
+ Location:               New Items:               Price:
+
+
+ Gruberik                Suhr Custom               4980 G
+ (both versions)         Multi Sword               9450 G
+
+ Gruberik                Miracle Plate/Mail       55000 G
+ (difficult only)        Ruse/Lucina Armor        58000 G
+                         Flame Shield             35000 G
+                         Water Gaunt              35000 G
+                         Bolt Shield              37000 G
+                         Cryst Shield             37000 G
+                         Dark Mirror (uncursed)   40000 G
+                         Apron/Apollo Shield      40000 G
+
+ Forfeit Island/Markao   Miracle                  25000 C (difficult)
+ (both versions)                                 100000 C (fruely hardcore)
+
+ Chaed                   Ice Ball                   200 G
+ (difficult only)
+
+ Preamarl                Buster/Bastard Edge      45500 G
+ (both versions)         Great Ax                 47500 G
+                         Rune Rapier              49300 G
+                         Zircon Rod               48000 G
+                         Zircon Flail             52000 G
+                         Zircon Sword             51000 G
+                         Erin Dress               22000 G
+                         Metal Jacket             20000 G
+                         Rune Gloves              18800 G
+
+ Gratze                  Potion                       8 G
+ (both versions)         Hi-Potion                  100 G
+                         Ex-Potion                  500 G
+                         Antidote                     6 G
+                         Revive                     500 G
+                         Awake/Waking Voice          10 G
+                         Shriek/Piercing Cry          5 G
+                         Mystery Pin                 30 G
+
+ Gratze                  Fire Ball                  200 G
+ (difficult only)        Apple Cider/Taplows       1000 G
+                         Zircon Rod               48000 G
+                         Zircon Flail             52000 G
+                         Zircon Sword             51000 G
+                         Silver Mail               8700 G
+                         Quilted Silk              9200 G
+                         Jute/Warding Helm         6000 G
+                         Power/Spirit Brace        2000 G
+                         Mage Shield               8000 G
+                         Mystery/Curio Ring        5000 G
+
+ Narvick                 Sleep Rod                 6000 G
+ (both versions)         Holy Staff                8000 G
+                         Flying Blow/Flyslayer    30000 G
+                         Bright Clo./Diamond Gown 28000 G
+                         Safety First             19700 G
+
+ Narvick                 Power Source             50000 G
+ (difficult only)        Speed Source             50000 G
+                         Mind Source              50000 G
+                         Brave Source             50000 G
+
+ ?????????               ????????                 ???????
+ (hardcore only)
+
+
+
+
+            ******************************************************
+            *                                                    *
+            *             Changed content of chests:             *
+            *                                                    *
+            ******************************************************
+
+
+ Location:               New content:
+
+
+ Capsule Monsters Cave   Agony Helm/Agni Helm
+ (difficult only)        Boom Turban/Indra Turban
+
+ Capsule Monsters Cave   Flame Charm
+ (fruely hardcore only)  Bolt Charm
+
+
+
+
+            ******************************************************
+            *                                                    *
+            *           Changed calls for companions:            *
+            *                                                    *
+            ******************************************************
+
+
+ Monster:              Calls now for:
+
+
+ Anglerfish            Futabasaurus, Moray, Seahorse
+
+ Ghost Ship            Anglerfish, Kraken, King Hydra (only in case of buffed enemies)
+
+ Dark Summoner         Anglerfish, Kraken, King Hydra (in case of non-buffed enemies)
+                       Lucifer, Hades, Ice Devil (in case of buffed enemies)
+
+
+
+
+            ******************************************************
+            *                                                    *
+            *               Changed monster drops:               *
+            *                                                    *
+            ******************************************************
+
+
+ Boss monster drops (both versions):
+
+
+ Monster:              Item:               Probability:
+
+ Big Catfish           Catfish Rock        100%
+ Camu                  Camu Jewel          100%
+ Tarantula             Spider Jewel        100%
+ Money Spider          Wind Jewel          100%
+ Follower              Magic Fruit         100%
+ Zealot                Magic Fruit         100%
+ White Dragon          Magic Fruit         100%
+ Shinigami (blue)      Old Shield          100%
+ Shinigami (green)     Old Shield          100%
+ Gades (Shuman)        Blood Sword         100%
+ Amon (Strahda)        Blood Rod           100%
+ Egg Dragon            Myth Blade          100%
+
+
+
+ New regular monster drops (difficult):
+
+
+ Monster:              Item:               Probability:
+
+ Basilisk              Snake Rock          7.5%
+ Blue Dragon           Ghost Ring          1%
+ Blue-Roy/Brokion      Power/Spirit Brace  2.5%
+ Dullahan              Jute/Warding Helm   2.5%
+ Eagle                 Eagle Rock          2.5%
+ Gold Dragon           Trick/Tweak Ring    10%/12.5%
+ Gold Golem            Mist Rapier         2.5%
+ Lich                  Old Sword           2.5%
+ Merman                Engage Ring         2.5%
+ Narwhal/Unicorn       Unicorn Rock        1%
+ Needle Lizard         Bracelet            1.25%
+ No Core               S-Myst/S-Curio Ring 25%
+ Orochi                Fake Ring           5%/7.5%
+ Poison Lizard         Bronze Helm         2.5%
+ Ryogen/Mega Cyclops   Old Armor           2.5%
+ Silver Dragon         Sea Ring            10%/12.5%
+ Snow Cocka            Power Source        0.25%
+ Sphinx                Old Helmet          2.5%
+ Squid                 Kraken Rock         12.5%
+
+
+
+ New regular monster drops (fruely hardcore):
+
+
+ Monster:              Item:               Probability:
+
+ Basilisk              Snake Rock          7.5%
+ Blue Dragon           Ghost Ring          0.25%
+ Blue-Roy/Brokion      Power/Spirit Brace  0.25%
+ Dullahan              Jute/Warding Helm   0.25%
+ Gold Golem            Mist Rapier         1%
+ Merman                Mystery/Curio Ring  1%
+ Narwhal/Unicorn       Unicorn Rock        1%
+ Needle Lizard         Bracelet            0.25%
+ No Core               S-Myst/S-Curio Ring 1%
+ Poison Lizard         Bronze Helm         0.25%
+ Snow Cocka            Artea's Bow         1%
+ Squid                 Kraken Rock         12.5%
+
+
+
+
+            ******************************************************
+            *                                                    *
+            *           The new regular monster stats:           *
+            *                                                    *
+            ******************************************************
+
+
+ Name:                  HP:      MP:    ATP:   DFP:    AGL:  INT:  GUT:  MGR:
+
+
+ Dark Summoner (norm)   666      666     333    333    400   300   200   200
+ Dark Summoner (buff)   666      666     333    333    400   300   200   200
+
+ Copper Dragon (norm)  5000     5000     500    500    450   376   350   350
+ Copper Dragon (buff)  5000     5000     750    500    510   376   350   350
+
+ Silver Dragon (norm)  5000     5000     500    500    450   376   350   350
+ Silver Dragon (buff)  5000     5000     750    500    510   376   350   350
+
+ Gold Dragon (norm)    5000     5000     500    500    450   376   350   350
+ Gold Dragon (buff)    5000     5000     750    500    510   510   350   350
+
+
+
+
+            ******************************************************
+            *                                                    *
+            *                The new boss stats:                 *
+            *                                                    *
+            ******************************************************
+
+
+ Name:                  HP:      MP:    ATP:   DFP:    AGL:  INT:  GUT:  MGR:  DROP:
+
+
+ Lizard Man             150        0      32     32     80    16    16    24   ---
+
+ Big Catfish            300     1000      45     35    150    20    40    80   Catfish Rock
+
+ Goblin                  75       15      60     50     30    20    20    30   ---
+ Skeleton                75       15      60     50     30    20    20    30   ---
+
+ Regal Goblin           800     1000     100     60    150    40    40    80   ---
+ Goblin                  75       15      60     50     30    20    20    30   ---
+ Goblin Mage            125      250      45     50     36    40    32    40   ---
+
+ Minion                 500      500     140     80     40    30    40    40   ---
+
+ Camu                  2000     2000     210    100    250   100   100   200   Camu Jewel
+ Servant                500     1000     120     80     40    30    40    40   ---
+
+ Tarantula             3000     3000     240    120    300   130   100   200   Spider Jewel
+ Money Spider           500     1000     160     90     40    40    40    40   Wind Jewel
+
+ Pierre (1st fight)    1500     1500     140    100    100    60    40    40   ---
+ Daniele (1st fight)   1500     1500     140    100    100    60    40    40   ---
+
+ Pierre (2nd fight)    2500     2500     250    150    300   180   120   200   ---
+ Daniele (2nd fight)   2500     2500     250    150    300   180   120   200   ---
+
+ Gades (Gordovan)     10000        0     600    200    184   192   184   400   ---
+
+ Mummy                  650        0     180    200    150   100   100   200   ---
+ Troll                  800        0     200    200    150   100   100   200   ---
+
+ Gades (Ancient Twr.) 10000    10000     400    500    500   400   300   300   ---
+
+ Idura (1st fight)     6000     5000     300    300    400   300   200   300   ---
+ Follower              1000     2000     200    200    200   180   100   200   Magic Fruit 
+
+ Lion                  3000        0     300    300    350   200   200   250   ---
+
+ Idura (2nd fight)     9000     7500     350    400    450   350   300   300   ---
+ Zealot                1500     2000     300    300    250   330   200   250   Magic Fruit
+
+ Idura (3rd fight)    15000    15000     400    500    500   400   350   350   ---
+ Zealot                1500     2000     300    300    250   330   200   250   Magic Fruit
+
+ Devil Flower         10000        0     400    450    450   350   300   300   ---
+
+ Soldier               3000     2000     350    350    400   350   300   300   ---
+
+ Gargoyle              4000     2000     400    400    450   350   300   300   ---
+
+ Revenge Ghost        20000    20000     800    600    500   450   400   400   ---
+
+ White Dragon          7500     5000     500    500    450   376   350   350   Magic Fruit
+ White Dragon (fake)   7500        0     500    500    500   376   350   350   ---
+ Devil Flower         10000        0     400    450    450   350   300   300   ---
+
+ Fire Dragon          25000    25000    1000    800    500   450   450   450   ---
+
+ Ghost Ship           30000    30000    1200    800    500   510   450   450   ---
+ Shinigami (blue)     10000        0     500    500    450   400   400   400   Old Shield
+ Shinigami (green)    10000        0     500    500    450   400   400   400   Old Shield
+
+ Tank                 40000    30000    1200   1000    500   510   500   510   ---
+
+ Gades (Shuman)       60000 infinite    1250   2000    510   510   510   510   Blood Sword
+
+ Amon (Strahda)       60000 infinite    1250   2000    510   510   510   510   Blood Rod
+
+
+ Gades (normal)      120000 infinite    1500   2000    510   510   510   510   ---
+ Gades (frue)        120000 infinite    1500   2500    510   510   510   510   ---
+
+
+ Amon (normal)       120000 infinite    1500   2000    510   510   510   510   ---
+ Amon (frue)         120000 infinite    1500   2500    510   510   510   510   ---
+
+
+ Erim (normal)       120000 infinite    2000   2000    510   510   510   510   ---
+ Erim (frue)         120000 infinite    2000   2500    510   510   510   510   ---
+
+
+ Daos (normal)       120000 infinite    2000   2000    510   510   510   510   ---
+ Daos (frue)         120000 infinite    2000   2500    510   510   510   510   ---
+
+
+ Master (normal)      10100 infinite    2000      1    510   510   510   510   --- 
+ Master (frue)        10101 infinite    2000      1    510   510   510   510   --- 
+
+
+ Egg Dragon (normal) 120000 infinite    2000   2500    510   510   510   510   Myth Blade
+ Egg Dragon (frue)   180000 infinite    2000  10000    510   510   510   510   Myth Blade
+
+
+
+
+            ******************************************************
+            *                                                    *
+            *                 Version history:                   *
+            *                                                    *
+            ******************************************************
+
+
+ 8.2   - 2026/10/01
+         - incorporated some of manmademimic/RealCritical's patches
+         - thanks to Dindo/aGuGu some graphical issues are fixed
+         - slightly changed Final Idura's final attack
+         - changed some final boss music
+         - changed one enemy drop
+
+ 8.1.4 - 2026/07/11
+         - slightly changed Metal Dragons
+
+ 8.1.3 - 2026/07/02
+         - slightly changed Gratze shop and Tank
+
+ 8.1.2 - 2025/12/29
+         - slightly changed Egg Dragon
+
+ 8.1.1 - 2025/09/08
+         - slightly changed Ghost Ship, Egg Dragon and the Snail enemy
+
+ 8.1   - 2025/08/15
+         - fixed some hammer bugs by disabling using L for skill usage
+
+ 8.0.1 - 2025/07/25
+         - slightly changed difficult version Daos and Eggy
+         - changed one droprate in difficult version
+
+ 8.0   - 2025/06/30
+         - included manmademimic's AC floor generation fix
+         - changed the non-boss Ghost Ship
+         - slightly changed difficult version final Gades
+
+ 7.2   - 2025/04/21
+         - slightly changed Tank
+
+ 7.1.2 - 2025/01/21
+         - changed one drop in fruely hardcore
+
+ 7.1.1 - 2024/12/30
+         - changed Fruely Hardcore Eggy
+
+ 7.1   - 2024/09/23
+         - slightly changed Ancient Tower Gades
+
+ 7.0   - 2024/04/29
+         - fixed the Ferim Tower walk on air glitch
+         - fixed statue for real
+         - slightly changed Camu's minions
+
+ 6.4   - 2023/07/09
+         - changed Ghost Ship, Sinis, Master and Eggy
+
+ 6.3   - 2023/07/04
+         - changed Ghost Ship, Tank and Amon text
+
+ 6.2   - 2023/06/07
+         - changed Lions, White Dragons and Fire Dragon
+
+ 6.1   - 2023/05/15
+         - changed something about Master
+
+ 6.0   - 2022/11/09
+         - small adjustment regarding FlamePurge's Frue Trilogizer patch
+
+ 5.2   - 2022/08/11
+         - revised some dialogue
+
+ 5.1   - 2022/07/26
+         - thanks to eve___ and dank_meats Erim got a new sprite
+
+ 5.0   - 2022/06/30
+         - fixed the Gratze hammer bug which lets you skip some dungeons
+         - revised some dialogue and changed two item names
+
+ 4.6   - 2021/05/30
+         - changed some shops
+
+ 4.5   - 2020/09/19
+         - changed some monster drops
+
+ 4.4   - 2019/09/29
+         - changed Tank, the Gratze shop and some monster drops
+
+ 4.3   - 2019/07/19
+         - changed Fire Dragon, Tank and a monster name
+
+ 4.2   - 2018/12/09
+         - changed some dialogue as well as item and monster names
+         - changed Excerion into Excelion to get the excellent+lion pun
+
+ 4.1   - 2018/10/13
+         - changed names of game modes in file selection screen
+         - fixed a pointless error in the White Dragons' script
+
+ 4.0   - 2018/01/16
+         - thanks to rainponcho a lot of stuff is fixed
+         - changed the name of some equipment pieces
+         - changed Camu's Buster Attack slightly
+         - changed Fire Dragon's accumulating fire and shadow damage reaction
+         - changed Tank's fire resistance properties due to consistency issues
+         - fixed a bug in Daos' attack script
+         - fixed some other issue with the final Sinistrals' and Eggy's script
+         - changed some of the optional reward item behaviours (from AC and Eggy)
+         - fixed the Mega/Bort Shield and Gusto's Air Attack
+         - revised some dialogues
+         - changed Capsule Monster feeding lists
+         - changed some enemy names
+         - changed some used sprites on some maps
+         - fixed some IP costs and changed some IP move belongings
+         - changed a few monster drops and droprates
+         - changed Narvick's shop slightly as well as the elder in hardcore mode
+         - changed the CM cave chests in hardcore mode
+         - added boss rush in the fruely hardcore version
+         - Gold Dragons sure as hell still as strong as ever...
+
+ 3.16  - 2016/10/03
+         - changed some IP move names
+         - Gold Dragons still as strong as ever...
+
+ 3.15  - 2016/09/25
+         - changed some attack names
+         - Gold Dragons as strong as ever...
+
+ 3.14.2- 2016/05/28
+         - changed some of the INT values for the buffed enemies
+         - changed some of the buffed late AC enemies
+         - changed Ancient Tower Gades slightly
+         - changed Revenge Ghost slightly as well as the Capsule Monsters Cave chests
+         - changed the metal dragon in the buffed version slightly as well (3.14.2.1)
+         - changed one of Eggy's attack names (3.14.2.2)
+         - changed Orochi's drop in the difficult version (3.14.2.3)
+
+ 3.14.1- 2016/03/26
+         - changed little stuff for buffed enemies
+
+ 3.14  - 2016/02/28
+         - changed little dialogue stuff
+         - alternative version with buffed enemies available
+
+ 3.13  - 2015/05/03
+         - changed little dialogue stuff
+         - changed some monetary stuff
+
+ 3.12  - 2015/04/23
+         - changed little dialogue stuff
+
+ 3.11.4- 2013/12/25
+         - fixed a little error regarding Tarantula
+
+ 3.11.3- 2013/10/14
+         - little fine tuning for Egg Sword's IP move
+
+ 3.11.2- 2013/08/05
+         - little fine tuning for Light Jewel's IP move
+
+ 3.11.1- 2013/08/03
+         - changed Light Jewel's IP move
+
+ 3.11  - 2013/07/18
+         - changed little grammar stuff
+         - Fire Dragon's accumulating now actually does something (pointless)
+
+ 3.10  - 2013/06/19
+         - changed little grammar stuff
+
+ 3.9.8 - 2012/02/05
+         - changed a little dialogue inconsistency
+         - changed a few monster drops (3.9.8.1)
+         - changed a shop and a very little dialogue thingie (3.9.8.2)
+         - changed enemy names (3.9.8.3)
+         - slightly changed Tarantula and final Amon (3.9.8.4)
+         - slightly changed Daos (3.9.8.5)
+         - slightly changed Camu's servants (3.9.8.6)
+         - slightly changed Egg Dragon (3.9.8.7)
+         - slightly changed Tarantula (3.9.8.8)
+         - fixed Gades and Daos and slightly changed hardcore Gades (3.9.8.9)
+
+ 3.9.7 - 2011/05/01
+         - thanks to Gunty the church menu bug is fixed now
+         - rebalanced Ghost Ship and Tank (3.9.7.1)
+         - rebalanced final Amon (3.9.7.2)
+         - rebalanced Erim and Daos and Eggy (3.9.7.3)
+         - replaced Gold Dragon's Tweak with Energy Steroid (3.9.7.4)
+         - changed Ghost Ship's Absorb behaviour (3.9.7.5)
+         - changed final Idura (3.9.7.6)
+         - slightly modified Revenge Ghost, Ghost Ship and Tank battle (3.9.7.7)
+         - slightly changed Camu (3.9.7.8)
+         - slightly changed Revenge Ghost, (difficult) Daos and (frue) Master (3.9.7.9)
+         - changed Daos' Merciless (3.9.7.10)
+         - changed the metal dragons, Ghost Ship and Tank (3.9.7.11)
+         - slightly changed Tank (3.9.7.12)
+
+ 3.9.6 - 2011/03/21
+         - thanks to Gunty the spell shop bug is fixed now
+         - added Bestiary
+         - changed Revenge Ghost's defense script (3.9.6.1)
+         - changed Camu, Gades (Shuman) and Amon - was bored (3.9.6.2)
+         - Pearl Brace doesn't halve fire damage anymore except in one case (3.9.6.2)
+         - rebalanced Camu as well as the Gargoyles, Soldiers and Minions (3.9.6.3)
+         - extended the final shops' offer (3.9.6.4)
+         - changed Devil Flower (3.9.6.4)
+
+ 3.9.5 - 2011/02/07
+         - fixed Egg Dragon's speech bubble sound
+
+ 3.9.4 - 2011/01/25
+         - a very minor dialogue change
+         - added earpick patch
+         - changed Pierre/Daniele round 1
+         - fixed an Egg Dragon overflow glitch
+         - fixed a little mistake at Amon (3.9.4.1)
+
+ 3.9.3 - 2011/01/07
+         - fixed a bug at the Ancient Cave exit
+
+ 3.9.2 - 2010/11/26
+         - a very minor change about the clowns
+
+ 3.9.1 - 2010/11/15
+         - a very minor dialogue change
+
+ 3.9   - 2010/09/12
+         - changed some item names
+         - changed Ghost Ship and Tank very slightly
+         - changed slightly what gets reflected by Erim's Final Guardian
+
+ 3.8   - 2010/09/01
+         - changed some dialogues
+
+ 3.7   - 2010/08/16
+         - fixed some IP moves
+
+ 3.6.2 - 2010/06/05
+         - Eggy/Master fine tuning
+         - Retry/Gift Mode available from the very beginning
+
+ 3.6.1 - 2010/05/28
+         - replaced Erim's/Daos' Zap with more unique spells
+
+ 3.6   - 2010/05/23
+         - fixed some dialogue mistakes
+         - toned down Erim and Daos on difficult a bit
+         - gave Camu's followers and servants a little more HP/MP
+         - Green Shinigami now can inflict silence/have altered behaviour
+         - changed Gruberik's shop
+         - changed Erim's Divine Force animation
+
+ 3.5.2 - 2010/03/13
+         - added a new shop in the jail of Gratze
+
+ 3.5.1 - 2010/03/09
+         - changed Erim slightly (Well... Once again, that's all... ^_^)
+
+ 3.5   - 2010/03/08
+         - fixed the escape from Ancient Tower glitch
+         - changed Erim (hardcore) and Egg Dragon (difficult) slightly
+
+ 3.4   - 2010/03/01
+         - fixed a description text and Nosferatu
+         - changed the clowns and the final battles a bit
+
+ 3.3   - 2010/01/13
+         - changed the Devil Flower and the Gargoyle battle
+
+ 3.2   - 2009/12/28
+         - fixed things regarding healing and changed a few descriptions
+         - changed very minor things regarding Fire Dragon, Ghost Ship and Tank
+         - changed Amon and Egg Dragon slightly (again^^)
+
+ 3.1   - 2009/11/17
+         - replaced the priests with their Japenese version
+         - changed the difficult version Egg Dragon battle slightly
+
+ 3.0   - 2009/11/07
+         - fixed the north dungeon bomb puzzle bug
+
+ 2.5   - 2009/09/22
+         - fixed some dialogue mistakes and changed some enemy names
+
+ 2.4   - 2009/08/26
+         - fixed some more bugs and changed some enemy names
+
+ 2.3.2 - 2009/07/29
+         - changed the hardcore Egg Dragon battle; the difficult version is unchanged
+
+ 2.3.1 - 2009/07/19
+         - fixed a problem regarding the Dark Summoner battles
+
+ 2.3   - 2009/07/14
+         - changed the Ancient Cave dragons and Dark Summoners + the final Amon
+
+ 2.2.1 - 2009/06/16
+         - fixed a problem regarding the final Amon battle
+
+ 2.2   - 2009/06/06
+         - correctly removed Jessy at Parcelyte and some text/dialogue changes
+
+ 2.1   - 2009/05/26
+         - some text/dialogue changes
+
+ 2.0   - 2009/05/19
+         - A LOT of text/dialogue changes
+         - some more bugfixes (like master suicide glitch or Octo-strike)
+
+ 1.3   - 2008/12/06
+         - some more name changes
+         - some more monster drops (difficult version only)
+         - changed the offer of some shops (difficult version only)
+         - changed the value of some items
+
+ 1.2   - 2008/11/22
+         - fixed two bugs regarding Gades/Amon at the sealed towers
+
+ 1.1   - 2008/11/19
+         - some more name changes
+         - some more monster drops
+           (like Mist rapier from Gold Golems which may help beating the Tank)
+         - Dark Summoner and Angler Fish call now for other companions
+         - Iris Items appear more often in the Ancient Cave
+         - some boss battles are slightly changed
+           (Fire Dragon/Ghost Ship are the only notable ones;
+            they are more difficult, but just a little bit)
+
+ 1.0   - 2008/10/30
