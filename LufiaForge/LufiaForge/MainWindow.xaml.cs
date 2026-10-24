@@ -134,6 +134,7 @@ public partial class MainWindow : Window
 
         var rom   = vm.RomBuffer;
         int size  = rom.Length;
+        GameStatusText.Text = $"Lufia Forge  |  {GameDetect.Name(rom.Game)} (US SNES)";
         string title = rom.ReadAscii(Lufia1Constants.SnesHeaderOffset, 21).TrimEnd();
 
         byte mappingByte = rom.ReadByte(Lufia1Constants.SnesMappingOffset);

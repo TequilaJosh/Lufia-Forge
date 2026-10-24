@@ -389,9 +389,9 @@ Title="{Binding WindowTitle}"
                                Foreground="{StaticResource TextDisabledBrush}"/>
                 </StackPanel>
 
-                <TextBlock Grid.Column="1"
+                <TextBlock Grid.Column="1" x:Name="GameStatusText"
                            Style="{StaticResource StatusBarText}"
-                           Text="Lufia Forge v1.0  |  Lufia 1 US SNES"
+                           Text="Lufia Forge"
                            Foreground="{StaticResource GoldDimBrush}"/>
             </Grid>
         </Border>
