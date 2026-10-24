@@ -1,0 +1,121 @@
+ 
+ The project patches include a lot of various bug
+ fixing patches so you don't have to bother to use
+ all of these patches on your own.
+
+ The following patches are used for Frue Lufia,
+ Spekkio Lufia and Kureji Lufia, as well as
+ for The New Fierce Battle and The Wrath of Foomy,
+ but not for the Danger Nose patch:
+
+
+
+            *****************
+            *               *
+            * Used Patches: *
+            *               *
+            *****************
+
+
+ Relnqshd's patches:
+
+ - Ancient Cave/Submarine Shrine Fixer
+ - Arty to Artea
+ - Bunnyfier
+ - Chence Fixer
+ - Egg Fixer
+ - Enemies Fixer (includes Expansion patch)
+ - Equip Menu Fixer
+ - Grassei Fixer
+ - Lucky Blade Fixer
+ - Map b4 Battle BG Fixer (for the Shrine of Vengeance)
+ - Map Names Fixer (for Gratze or the Capsule Monster cave)
+ - Music Menu Fixer
+ - Percelyte Fixer
+ - Sea Ring Fixer (not used for Kureji Lufia - which doesn't mean the Sea Ring is completely unchanged, though)
+
+
+ other patches:
+
+ - Air Attack Fixer
+ - Ancient Cave Exit Fixer
+ - Bomb Puzzle Fixer
+ - Church Menu Fixer
+ - Cleric Fixer
+ - Dark Spirit Fixer (only the lite version is used)
+ - Dragon Egg Glitch Fixer
+ - Ex-Boomerang Fixer
+ - Ferim Northeast Tower Fixer
+ - Gratze Hammer Fixer
+ - Hammer Fixer
+ - Healing Fixer
+ - Healing Fixer 2
+ - IP Costs Fixer
+ - Map Fixer
+ - Master Suicide Fixer
+ - Mega Shield Fixer (the alternative version is used in case of Kureji Lufia)
+ - Monster and Monster Names Fixer (fixes some more enemies)
+ - Octo-strike Fixer
+ - Sealed Tower Mapnames Fixer
+ - Sealed Tower Mapnames Fixer 2
+ - Spell Shop Fixer
+ - Statue Fixer 2 (makes original statue fixer obsolete)
+ - Tower Escape Fixer
+ - Warpmenu Fixer and Retranslation (for Karon or Piko)
+ - White Dragon Fixer
+
+ - Capsule Monster Names
+ - Copy Protection Remover
+ - Ear Pick and IP moves (in Spekkio and Kureji Lufia the alternative version is used)
+ - Icons (in Kureji Lufia the version including sheos is used)
+ - Iris Items (only used in Kureji Lufia - in Spekkio Lufia the lite version is used instead)
+ - Map Sprites
+ - Mirac Plate (only used in Spekkio Lufia)
+ - No Return after Erim (only used in Spekkio Lufia)
+ - Retry and Gift Mode (only used in Spekkio Lufia and Kureji Lufia)
+ - Saves and Itemnames Consistency
+
+ - Retranslation (changes dialogues, descriptions, map names)
+
+
+ Rainponcho's patches:
+
+ - Amon Spear Fixer
+ - Ancient Cave Items Fixer
+ - Ancient Cave Stairs Fixer
+ - Ancient Tower Fixer
+ - Capsule Monsters Wishes Fixer (PAL lists used in Frue/Spekkio without/with ring - Haute Cuisine used in Kureji)
+ - Chaed Submarine Cave Fixer
+ - Config Menu Save Fixer
+ - Churches and Crosses Restorer
+ - Flame Jewel Blue Chest Item
+ - Frue Zap Restorer
+ - Guaranteed Enemy Drop Possible
+ - Inn Stay Fixer
+ - Lufia Report Fixer
+ - Merix Shop Fixer
+ - Mirror Bug Fixer
+ - More than 999 HP/MP Save Fixer
+ - Phantom Drop Fixer
+ - Pico Village Fixer
+ - Poison Bug Fixer
+ - Pot and Monster Glitch Fixer
+ - Sealed Towers Fixer
+ - Shrine of Daos Fixer
+ - Vengeance and Spirit Shrine Fixer
+
+ Eve___/Dank_Meats's patches:
+
+ - New Erim Sprite
+
+ Manmademimic/RealCritical's patches:
+
+ - Ancient Cave Floor Generation Fixer
+ - Exclusion Zone Fixer (only used in Frue Lufia)
+ - Music Continuation
+ - Object Passability Fixer
+ - Save File Independent RNG
+
+ Dindo/AGuGu's patches:
+
+ - Graphic Bugs Fixer

@@ -113,6 +113,13 @@ public static class L2Battle
 
     // ---------------------------------------------------------------- monsters
     public const int MonsterTable = 0xB05C0, MonsterCount = 0xE0, MonsterNameLength = 13;
+    /// <summary>The game reads the monster table with LDA long,X at $81:FB27 (file 0xFB27); hacks that move it (the
+    /// Expansion patch in Frue, Spekkio and Kureji Lufia puts it at $D0:A000) change that operand, so it's read from there.</summary>
+    private const int MonsterTableRef = 0xFB27;
+
+    /// <summary>File offset of the monster table in this ROM.</summary>
+    public static int MonsterTableAt(RomBuffer rom) =>
+        rom.ReadByte(MonsterTableRef) == 0xBF ? L2Rom.SnesToFile((int)rom.ReadUInt24Le(MonsterTableRef + 1)) : MonsterTable;
 
     public sealed class Monster
     {
@@ -143,7 +150,8 @@ public static class L2Battle
 
     public static Monster ReadMonster(RomBuffer rom, int i)
     {
-        int o = MonsterTable + rom.ReadUInt16Le(MonsterTable + i * 2);
+        int table = MonsterTableAt(rom);
+        int o = table + rom.ReadUInt16Le(table + i * 2);
         int dropAt = -1, item = -1, chance = 0, atk = -1, def = -1;
         for (int p = o + 0x21, guard = 0; guard < 16; guard++)
         {
