@@ -212,6 +212,18 @@ public sealed class EventScript
         int npcs = 0, areas = 0;
         try { var m = LufiaMap.Load(rom, mapId); npcs = m.Npcs.Count; areas = Math.Max(m.SectionCounts[3], m.SectionCounts[4]); } catch { }
         int max = Math.Max(npcs - 1, LufiaMap.EventBase(rom, mapId) + areas + 1);
+        // a block written in the added space (a new map's, or a cutscene's) may use any event number: its table runs
+        // up to where the first event's code starts
+        if (block >= MapWriter.ExpansionStart && end > block)
+        {
+            int tableEnd = end - block;
+            for (int ev = 0; ev * 2 + 2 <= tableEnd && ev <= 255; ev++)
+            {
+                int rel = rom.ReadUInt16Le(block + ev * 2);
+                if (rel != 0xFFFF && rel >= ev * 2 + 2) tableEnd = Math.Min(tableEnd, rel);
+                max = Math.Max(max, ev);
+            }
+        }
         var list = new List<int>();
         var texts = new List<(int From, int To, int Ev)>();
         for (int ev = 0; ev <= Math.Min(max, 255); ev++)
