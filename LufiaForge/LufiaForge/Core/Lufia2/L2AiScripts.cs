@@ -189,11 +189,26 @@ public static class L2AiScripts
     /// lands inside a command, or on bytes that aren't commands, stays in <see cref="Step.OutsideTargets"/>.</summary>
     public static List<Step> Parse(RomBuffer rom, int start, int baseAt)
     {
+        var steps = Parse(rom, start, baseAt, straight: true);
+        if (!steps.Any(s => s.OutsideTargets.Any(o => o >= 0))) return steps;
+        // a jump into the middle of a command can mean data was read as commands: try following the jumps
+        try
+        {
+            var follow = Parse(rom, start, baseAt, straight: false);
+            int Outside(List<Step> l) => l.Sum(s => s.OutsideTargets.Count(o => o >= 0));
+            return Outside(follow) < Outside(steps) ? follow : steps;
+        }
+        catch (InvalidDataException) { return steps; }
+    }
+
+    private static List<Step> Parse(RomBuffer rom, int start, int baseAt, bool straight)
+    {
         var steps = new List<Step>();
         var byOffset = new Dictionary<int, Step>();
         var jumps = new List<(Step S, int Arg, int To)>();
         var covered = new List<(int Start, int End)>();
         // one straight run of commands from file offset p (stops at an end, or where it reaches steps already read)
+        // straight: read on to the furthest jump (the game's layout), else stop at each end and follow the jumps
         List<Step> Run(int p, bool first)
         {
             var run = new List<Step>();
@@ -214,7 +229,7 @@ public static class L2AiScripts
                     if (d.Args[i] != Arg.Jump) continue;
                     int at = ArgAt(d, i), to = s.Args[at] | s.Args[at + 1] << 8;
                     runJumps.Add((s, j++, to));
-                    if (baseAt + to > furthest && baseAt + to < p + 0x400) furthest = baseAt + to;
+                    if (straight && baseAt + to > furthest && baseAt + to < p + 0x400) furthest = baseAt + to;
                 }
                 run.Add(s);
                 p += d.Length;
@@ -234,7 +249,12 @@ public static class L2AiScripts
             }
             return run;
         }
-        steps.AddRange(Run(start, true));
+        try { steps.AddRange(Run(start, true)); }
+        catch (InvalidDataException) when (straight)
+        {
+            // (some fan hacks jump ahead over other data: follow the jumps instead of reading straight on)
+            return Parse(rom, start, baseAt, straight: false);
+        }
         for (int k = 0; k < jumps.Count; k++)
         {
             int to = jumps[k].To, abs = baseAt + to;
@@ -529,12 +549,15 @@ public static class L2AiScripts
         int block = Install(rom);
         int key = RecordKey(rom, kind, index);
         var entry = Entries(rom, block).FirstOrDefault(e => e.Record == key && e.Kind == kind);
+        if (entry.At <= 0 && Entries(rom, block).Count() >= TableCapacity) throw new InvalidOperationException("Lufia Forge's script table is full.");
+        // [00][script][00]: a last step that doesn't end the script still stops at the 00 after it
+        int need = body.Length + 2;
         int baseAt;
-        if (entry.At > 0 && rom.ReadUInt16Le(entry.Script - 2) >= body.Length + 1)
+        if (entry.At > 0 && rom.ReadUInt16Le(entry.Script - 2) >= need)
             baseAt = entry.Script;   // fits where it was
         else
         {
-            int cap = Math.Max(body.Length + 1 + 16, 32);
+            int cap = Math.Max(need + 16, 32);
             int at = L2Rom.Allocate(rom, cap + 2);
             rom.WriteUInt16Le(at, (ushort)cap);
             baseAt = at + 2;

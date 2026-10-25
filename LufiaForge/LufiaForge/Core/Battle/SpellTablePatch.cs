@@ -329,7 +329,7 @@ public static class SpellTablePatch
         }
         catch (Exception) { }
         foreach (var (record, cmd) in MonsterAi.AllCommands(rom))
-            if (cmd.Op == 0x07 && gone(cmd.Args[0])) { rom.WriteByte(record + cmd.Offset, 0x05); rom.WriteByte(record + cmd.Offset + 1, 0x00); }
+            if (cmd.Op == 0x07 && gone(cmd.Args[0])) { rom.WriteByte(MonsterAi.ByteAt(rom, record, cmd.Offset), 0x05); rom.WriteByte(MonsterAi.ByteAt(rom, record, cmd.Offset + 1), 0x00); }
     }
 }
 

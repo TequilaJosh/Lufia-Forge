@@ -61,9 +61,10 @@ public static class AiScript
     /// <summary>Bytes free for monster scripts in bank 0 (not counting this monster's own script).</summary>
     public static int FreeSpace(RomBuffer rom, int monster)
     {
+        var used = MonsterTable.UsedSpace(rom, monster);
         int best = 0;
         for (int len = 8; len <= 0x800; len += 8)
-            if (MonsterTable.FindSpace(rom, len, MonsterTable.ScriptAreas, skipScriptOf: monster) >= 0) best = len; else break;
+            if (MonsterTable.FindSpace(used, len, MonsterTable.ScriptAreas) >= 0) best = len; else break;
         return best;
     }
 

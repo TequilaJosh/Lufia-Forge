@@ -43,7 +43,8 @@ public partial class L2ScriptWindow : Window
         _rom = rom; _kind = kind; _index = index;
         _names = L2AiScripts.NameLists.From(rom);
         string unreadable = "";
-        try { (_steps, _edited) = L2AiScripts.Load(rom, kind, index); }
+        _edited = L2AiScripts.Override(rom, kind, index) != null;
+        try { _steps = L2AiScripts.Load(rom, kind, index).Steps; }
         catch (Exception e)
         {
             // (some hacks point a few monsters' scripts at other data)
@@ -144,7 +145,9 @@ public partial class L2ScriptWindow : Window
         var fresh = L2AiScripts.New(c.Def.Op);
         s.Op = fresh.Op; s.Args = fresh.Args; s.Targets = fresh.Targets; s.OutsideTargets = fresh.OutsideTargets;
         if (c.Def.Op == 0x32) L2AiScripts.SetArg(s, 0, 1);   // the usual target: one random foe
-        for (int j = 0; j < s.Targets.Length; j++) s.Targets[j] = _steps.ElementAtOrDefault(StepList.SelectedIndex + 1) ?? s;
+        // a new "go to" goes to the next step (none after the last one: Save asks for one; a step going to
+        // itself would loop forever in the battle)
+        for (int j = 0; j < s.Targets.Length; j++) s.Targets[j] = _steps.ElementAtOrDefault(StepList.SelectedIndex + 1);
         Changed();
         ShowStep();
     }
@@ -359,6 +362,8 @@ public partial class L2ScriptWindow : Window
             if (_steps.Count == 0) throw new InvalidOperationException("The script has no steps: it needs at least an End.");
             int bad = _steps.FindIndex(s => s.Targets.Where((t, j) => t == null && s.OutsideTargets[j] < 0).Any());
             if (bad >= 0) throw new InvalidOperationException($"Step {bad + 1}'s \"go to\" has no step picked.");
+            int self = _steps.FindIndex(s => s.Op == 0x03 && s.Targets.Length > 0 && ReferenceEquals(s.Targets[0], s));
+            if (self >= 0) throw new InvalidOperationException($"Step {self + 1} goes to itself: the battle would never end.");
             if (!_steps.Any(s => s.Def?.EndsPath == true)) throw new InvalidOperationException("The script never ends: add an End (or Quit) step.");
             int at = L2AiScripts.Save(_rom, _kind, _index, _steps);
             Change = $"{Title}: {(_edited ? "edited" : "new script")} ({L2AiScripts.Build(_steps, 1).Length} bytes at 0x{at:X6})";

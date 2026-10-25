@@ -71,10 +71,24 @@ public class PopOutHost : ContentControl
     private void Unshrink()
     {
         if (_shrunk is not { } s) return;
-        // a view that sized the row or column itself meanwhile (showing or hiding a part) keeps its size
+        // a view that sized the row or column itself meanwhile (showing or hiding a part) keeps its size, and so
+        // does one whose section is hidden now (the view sizes it again when it shows it)
+        _shrunk = null;
+        if (Content is UIElement { Visibility: not Visibility.Visible }) return;
         if (s.Def is ColumnDefinition c && c.Width.IsAuto) c.Width = s.Size;
         else if (s.Def is RowDefinition r && r.Height.IsAuto) r.Height = s.Size;
-        _shrunk = null;
+    }
+
+    /// <summary>The size a popped-out section's row or column had before it shrank (what LayoutMemory keeps).</summary>
+    public static GridLength? SizeBeforePopOut(DefinitionBase d, Grid g) =>
+        g.Children.OfType<PopOutHost>().FirstOrDefault(h => h._shrunk is { } s && ReferenceEquals(s.Def, d))?._shrunk?.Size;
+
+    /// <summary>Whether a section inside <paramref name="root"/> is in its own window now.</summary>
+    public static bool AnyPoppedOut(DependencyObject root)
+    {
+        foreach (var c in LogicalTreeHelper.GetChildren(root).OfType<DependencyObject>())
+            if (c is PopOutHost { IsPoppedOut: true } || AnyPoppedOut(c)) return true;
+        return false;
     }
 
     public override void OnApplyTemplate()
@@ -152,9 +166,12 @@ public class PopOutHost : ContentControl
 
     private bool Forward(System.Windows.Input.KeyEventArgs e, RoutedEvent kind)
     {
-        if (e.Handled || !IsLoaded || PresentationSource.FromVisual(this) is not { } source) return false;
+        if (e.Handled) return false;
+        // the section's home view, or the main window when its tab isn't on screen (the app's keys still work)
+        UIElement? to = IsLoaded ? this : Application.Current?.MainWindow;
+        if (to == null || PresentationSource.FromVisual(to) is not { } source) return false;
         var copy = new System.Windows.Input.KeyEventArgs(e.KeyboardDevice, source, e.Timestamp, e.Key) { RoutedEvent = kind };
-        RaiseEvent(copy);
+        to.RaiseEvent(copy);
         return copy.Handled;
     }
 

@@ -355,6 +355,8 @@ public partial class EventEditorPanel : UserControl, LufiaForge.ViewModels.IPend
         Unloaded += (_, _) =>
         {
             if (HasPendingEdits) WritePendingEdits();
+            // a part popped out into its own window keeps working while this tab is away: its edits stay registered
+            if (Common.PopOutHost.AnyPoppedOut(this)) return;
             (Application.Current?.MainWindow?.DataContext as LufiaForge.ViewModels.MainViewModel)?.Unregister(this);
         };
     }
