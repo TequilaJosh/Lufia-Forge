@@ -503,7 +503,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost, LufiaFor
     private Dictionary<int, string> _generatedNames = new();
     [ObservableProperty] private string _mapNameText = "";
 
-    /// <summary>Rename the selected map (empty = back to the generated name). Saved for all ROM copies.</summary>
+    /// <summary>Rename the selected map (empty = back to the generated name). Kept in the open project.</summary>
     partial void OnMapNameTextChanged(string value)
     {
         if (_populatingName || SelectedMap is not { } info) return;

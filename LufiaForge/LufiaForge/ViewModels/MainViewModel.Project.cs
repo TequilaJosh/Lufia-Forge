@@ -88,6 +88,12 @@ public partial class MainViewModel
         _autosave = new DispatcherTimer { Interval = AutosaveEvery };
         _autosave.Tick += (_, _) => Autosave();
         _autosave.Start();
+        Core.Maps.MapNames.ProjectNamesChanged += () =>
+        {
+            if (Project == null) return;
+            Project.MapNamesChanged = true;
+            OnPropertyChanged(nameof(WindowTitle));
+        };
     }
 
     public void RefreshRecent()
@@ -101,7 +107,7 @@ public partial class MainViewModel
     public bool HasUnsavedProjectChanges()
     {
         if (Project == null || RomBuffer == null) return false;
-        if (HasPendingEdits) return true;
+        if (HasPendingEdits || Project.MapNamesChanged) return true;
         return _savedRom == null || !RomBuffer.SameAs(_savedRom);
     }
 
@@ -201,6 +207,7 @@ public partial class MainViewModel
     {
         _pendingChanges.Clear();
         Project = project;
+        Core.Maps.MapNames.ProjectNames = project.MapNames;
         _savedRom = (byte[])rom.Clone();
         RomBuffer = new RomBuffer(rom, PlayRomPath(project));
         RecentProjects.Add(project.Path, project.Name);

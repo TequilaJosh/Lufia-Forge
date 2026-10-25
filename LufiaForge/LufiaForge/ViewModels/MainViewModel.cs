@@ -114,7 +114,7 @@ public partial class MainViewModel : ObservableObject
             : $"Lufia Forge - {Path.GetFileName(RomBuffer.FilePath)}";
 
     /// <summary>Whether the title shows "*": changed since the project was saved.</summary>
-    private bool TitleDirty => Project != null && RomBuffer != null && (_savedRom == null || !RomBuffer.SameAs(_savedRom));
+    private bool TitleDirty => Project != null && RomBuffer != null && (Project.MapNamesChanged || _savedRom == null || !RomBuffer.SameAs(_savedRom));
 
     // -------------------------------------------------------------------------
     // Commands
