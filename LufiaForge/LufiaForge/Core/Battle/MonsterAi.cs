@@ -178,7 +178,11 @@ public static class MonsterAi
     }
 
     public static Home HomeOf(RomBuffer rom, int record) =>
-        IdOf(rom, record) is var id && id >= 0 && AiFarScripts.Base(rom, id) is int b ? new Home(b, 1, true) : new Home(record, ScriptOffset(rom, record), false);
+        AiFarScripts.Count(rom) > 0 && IdOf(rom, record) is var id && id >= 0 ? HomeOf(rom, record, id) : new Home(record, ScriptOffset(rom, record), false);
+
+    /// <summary><see cref="HomeOf(RomBuffer, int)"/> when the monster's id is known.</summary>
+    public static Home HomeOf(RomBuffer rom, int record, int id) =>
+        AiFarScripts.Base(rom, id) is int b ? new Home(b, 1, true) : new Home(record, ScriptOffset(rom, record), false);
 
     /// <summary>File offset of byte <paramref name="rel"/> of the monster's script (offsets as <see cref="Decode"/> gives them).</summary>
     public static int ByteAt(RomBuffer rom, int record, int rel) => HomeOf(rom, record).At(rel);

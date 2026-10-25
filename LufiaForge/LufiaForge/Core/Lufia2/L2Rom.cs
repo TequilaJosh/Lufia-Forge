@@ -95,7 +95,22 @@ public static class L2Rom
     /// <summary>Bytes of added space still free (counting the growth to 4 MB).</summary>
     public static int FreeSpace(RomBuffer rom)
     {
-        if (FindMark(rom) is not var (mark, next)) return rom.Length >= ExpandedSize ? 0 : (MaxSize - OriginalSize);
+        if (FindMark(rom) is not var (mark, next))
+        {
+            if (rom.Length < ExpandedSize) return MaxSize - OriginalSize;
+            // grown (Expand, or a fan hack) but nothing placed by Lufia Forge yet: the largest empty run is what it would use
+            int best = 0;
+            for (int p = OriginalSize; p < rom.Length;)
+            {
+                byte v = rom.ReadByte(p);
+                if (v is not (0x00 or 0xFF)) { p++; continue; }
+                int q = p;
+                while (q < rom.Length && rom.ReadByte(q) == v) q++;
+                best = Math.Max(best, q - p);
+                p = q;
+            }
+            return Math.Max(0, best - 48) + Math.Max(0, MaxSize - rom.Length);
+        }
         return Math.Max(0, mark - next) + Math.Max(0, MaxSize - Math.Max(rom.Length, ExpandedSize));
     }
 

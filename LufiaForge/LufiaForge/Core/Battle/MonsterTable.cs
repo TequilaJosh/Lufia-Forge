@@ -114,16 +114,23 @@ public static class MonsterTable
             used.Add((r, r + RecordLength(rom, r)));
             if (m == skipScriptOf) continue;
             // (a script in Lufia Forge's script space takes no room in bank 0)
+            if (MonsterAi.HomeOf(rom, r, m).Far) continue;
             var (s, l) = MonsterAi.ScriptRange(rom, r);
-            if (l > 0 && !MonsterAi.HomeOf(rom, r).Far) { int a = MonsterAi.At(r, s); used.Add((a, a + l)); }
+            if (l > 0) { int a = MonsterAi.At(r, s); used.Add((a, a + l)); }
         }
         return used;
     }
 
     /// <summary>A free spot of <paramref name="len"/> bytes in one of <paramref name="areas"/>, or -1.</summary>
-    public static int FindSpace(RomBuffer rom, int len, (int Start, int End)[] areas, int skipScriptOf = -1)
+    public static int FindSpace(RomBuffer rom, int len, (int Start, int End)[] areas, int skipScriptOf = -1) =>
+        FindSpace(Used(rom, skipScriptOf), len, areas);
+
+    /// <summary>Bank 00 bytes in use, for several FindSpace calls in a row.</summary>
+    public static List<(int Start, int End)> UsedSpace(RomBuffer rom, int skipScriptOf = -1) => Used(rom, skipScriptOf);
+
+    /// <summary>A free spot of <paramref name="len"/> bytes in one of <paramref name="areas"/>, given the bytes in use.</summary>
+    public static int FindSpace(List<(int Start, int End)> used, int len, (int Start, int End)[] areas)
     {
-        var used = Used(rom, skipScriptOf);
         foreach (var (start, end) in areas)
             for (int p = start; p + len <= end; p++)
             {
@@ -209,6 +216,13 @@ public static class MonsterTable
         if (sLen > 0)
         {
             int scr = FindSpace(rom, sLen, ScriptAreas, skipScriptOf: id);
+            if (scr < 0 && AiFarScripts.CanInstall(rom))
+            {
+                // bank 0 is full: the copy goes to Lufia Forge's script space
+                AiFarScripts.Save(rom, id, rec, AiScript.Build(AiScript.Read(rom, scriptFrom), 1));
+                rom.FixChecksum();
+                return;
+            }
             if (scr < 0)
             {
                 if (isNew) rom.WriteByte(b + 4, (byte)n);

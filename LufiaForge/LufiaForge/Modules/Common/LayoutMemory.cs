@@ -105,7 +105,10 @@ public static class LayoutMemory
     private static void Grid_DragCompleted(object sender, DragCompletedEventArgs e)
     {
         if (!Moved(e) || e.OriginalSource is not GridSplitter s || sender is not Grid g || s.Parent != g || GetKey(g) is not string key) return;
-        Set(key, string.Join(";", Sizes(g).Select(Format)));
+        // a section popped out into its own window shrank its row or column: keep the size it has when it is back
+        var sizes = g.ColumnDefinitions.Select(c => PopOutHost.SizeBeforePopOut(c, g) ?? c.Width)
+                     .Concat(g.RowDefinitions.Select(r => PopOutHost.SizeBeforePopOut(r, g) ?? r.Height));
+        Set(key, string.Join(";", sizes.Select(Format)));
     }
 
     /// <summary>A drag that really moved the splitter (a click, or the first click of a double-click, doesn't).</summary>

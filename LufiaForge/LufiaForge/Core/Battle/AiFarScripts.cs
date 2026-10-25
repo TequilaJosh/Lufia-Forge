@@ -23,8 +23,10 @@ public static class AiFarScripts
     public const int Site = 0x44AB5;                       // $08:CAB5
     private static readonly byte[] Original = { 0xBD, 0x22, 0xD8, 0xF0, 0x31 };
     public const int Buffer = 0x1C00, BufferSize = 0x200;   // $7E:1C00-$1DFF (RamMap: low RAM, free)
-    /// <summary>The longest script (bytes) that fits the buffer (one byte is the 00 in front).</summary>
-    public const int MaxLength = BufferSize - 1;
+    /// <summary>The longest script (bytes) that fits the buffer: a 00 goes in front and one after (a script that
+    /// carries on past its last line, e.g. after an extra action of command 25, then ends there instead of running
+    /// what an earlier, longer script left in the buffer).</summary>
+    public const int MaxLength = BufferSize - 2;
 
     private static readonly byte[] Magic = "LFAF"u8.ToArray();
     private const byte Version = 1;
@@ -134,11 +136,16 @@ public static class AiFarScripts
         if (script.Length > MaxLength) throw new InvalidOperationException($"The script is {script.Length} bytes; a monster's script can be at most {MaxLength}.");
         int block = Install(rom);
         var entry = Entries(rom, block).FirstOrDefault(e => e.Id == id);
+        if (entry.At <= 0 && Entries(rom, block).Count() >= TableCapacity) throw new InvalidOperationException("Lufia Forge's AI script table is full.");
+        int bytes = script.Length + 2;
         int baseAt;
-        if (entry.At > 0 && rom.ReadUInt16Le(entry.Script - 2) >= script.Length + 1) baseAt = entry.Script;
+        if (entry.At > 0 && rom.ReadUInt16Le(entry.Script - 2) >= bytes) baseAt = entry.Script;
         else
         {
-            int next = rom.ReadUInt16Le(block + 6), cap = Math.Max(script.Length + 1 + 8, 16);
+            int cap = Math.Max(bytes + 8, 16);
+            // the slots of scripts that grew or were taken out come back by packing the live ones together
+            if (rom.ReadUInt16Le(block + 6) + 2 + cap > BlockSize) { Compact(rom, block); entry = Entries(rom, block).FirstOrDefault(e => e.Id == id); }
+            int next = rom.ReadUInt16Le(block + 6);
             if (next + 2 + cap > BlockSize) throw new InvalidOperationException("Lufia Forge's AI script space is full.");
             rom.WriteUInt16Le(block + next, (ushort)cap);
             baseAt = block + next + 2;
@@ -154,9 +161,26 @@ public static class AiFarScripts
             rom.WriteBytes(e + EntrySize, new byte[] { 0xFF, 0xFF, 0, 0, 0, 0 });
         }
         int addr = SnesAddress(baseAt) & 0xFFFF;
-        rom.WriteBytes(e, new[] { (byte)id, (byte)(id >> 8), (byte)addr, (byte)(addr >> 8), (byte)(script.Length + 1), (byte)((script.Length + 1) >> 8) });
+        rom.WriteBytes(e, new[] { (byte)id, (byte)(id >> 8), (byte)addr, (byte)(addr >> 8), (byte)bytes, (byte)(bytes >> 8) });
         rom.WriteUInt16Le(record + 0x22, 0);
         return baseAt;
+    }
+
+    /// <summary>Packs the live scripts together from the start of the script area (each keeps a little room to grow).</summary>
+    private static void Compact(RomBuffer rom, int block)
+    {
+        var live = Entries(rom, block).Select(e => (e.At, Data: rom.ReadBytes(e.Script, e.Bytes))).ToList();
+        rom.WriteBytes(block + ScriptsAt, new byte[BlockSize - ScriptsAt]);
+        int next = ScriptsAt;
+        foreach (var (at, data) in live)
+        {
+            int cap = Math.Max(data.Length + 8, 16);
+            rom.WriteUInt16Le(block + next, (ushort)cap);
+            rom.WriteBytes(block + next + 2, data);
+            rom.WriteUInt16Le(at + 2, (ushort)(SnesAddress(block + next + 2) & 0xFFFF));
+            next += 2 + cap;
+        }
+        rom.WriteUInt16Le(block + 6, (ushort)next);
     }
 
     /// <summary>Takes monster <paramref name="id"/>'s script out of the table (it then has none, unless its record
@@ -181,7 +205,7 @@ public static class AiFarScripts
         if (Base(rom, from) is not int b) return false;
         int block = Block(rom);
         int bytes = Entries(rom, block).First(e => e.Id == from).Bytes;
-        Save(rom, to, toRecord, rom.ReadBytes(b + 1, bytes - 1));
+        Save(rom, to, toRecord, rom.ReadBytes(b + 1, bytes - 2));
         return true;
     }
 

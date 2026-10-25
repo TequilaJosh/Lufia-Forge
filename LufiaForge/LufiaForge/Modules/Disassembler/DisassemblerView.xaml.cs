@@ -14,12 +14,16 @@ public partial class DisassemblerView : UserControl
         Loaded += (_, _) =>
         {
             if (DataContext is DisassemblerViewModel vm)
+            {
+                vm.ScrollRequested -= ScrollToLine;   // (still hooked when a section stayed popped out while away)
                 vm.ScrollRequested += ScrollToLine;
+            }
         };
 
         Unloaded += (_, _) =>
         {
-            if (DataContext is DisassemblerViewModel vm)
+            // the disassembly popped out into its own window keeps following jumps while this tab is away
+            if (DataContext is DisassemblerViewModel vm && !LufiaForge.Modules.Common.PopOutHost.AnyPoppedOut(this))
                 vm.ScrollRequested -= ScrollToLine;
         };
     }

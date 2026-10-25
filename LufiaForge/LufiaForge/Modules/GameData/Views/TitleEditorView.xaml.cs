@@ -80,7 +80,7 @@ public partial class TitleEditorView : UserControl
 
     private void OnKeys(object sender, KeyEventArgs e)
     {
-        if (Vm == null || e.OriginalSource is TextBox) return;
+        if (Vm == null || System.Windows.Input.Keyboard.FocusedElement is System.Windows.Controls.Primitives.TextBoxBase) return;
         bool ctrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
         if (ctrl && e.Key == Key.Z) { Vm.UndoCommand.Execute(null); e.Handled = true; }
         else if (ctrl && e.Key == Key.Y) { Vm.RedoCommand.Execute(null); e.Handled = true; }
