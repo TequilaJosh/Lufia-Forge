@@ -194,7 +194,7 @@ public partial class MonsterEditorViewModel : GameDataEditorBase
         SpellSteps.Clear();
         GiveSpells.Clear();
         GiveSpellsNote = "Writes a new AI script: each spell is tried that share of turns (a monster needs MP for it, or it attacks instead), the rest of the turns it attacks. " +
-                         "Its old script (calling for help, special attacks...) is replaced. It fits in place when the old script is long enough, otherwise it goes in the free space at the end of bank 0.";
+                         "Its old script (calling for help, special attacks...) is replaced. It fits in place when the old script is long enough, otherwise it goes in the free space at the end of bank 0, and when that is used up in the ROM's added space.";
         var cmds = LufiaForge.Core.Battle.MonsterAi.Decode(rom, record,
             id => id < SpellNames.Count ? SpellNames[id][3..].Trim() : $"spell {id:X2}");
         if (cmds.Count == 0)
@@ -219,9 +219,11 @@ public partial class MonsterEditorViewModel : GameDataEditorBase
         foreach (int sp in known) GiveSpells.Add(new GiveSpellRow { Spell = sp, Percent = Math.Max(1, 60 / known.Count) });
         _aiStart = cmds.Min(c => c.Offset);
         _aiLength = cmds.Max(c => c.Offset + 1 + c.Args.Length) - _aiStart;
-        AiHex = ItemEditorViewModel.ToHex(Enumerable.Range(0, _aiLength).Select(k => rom.ReadByte(Core.Battle.MonsterAi.At(record, _aiStart + k))).ToArray());
+        AiHex = ItemEditorViewModel.ToHex(Enumerable.Range(0, _aiLength).Select(k => rom.ReadByte(Core.Battle.MonsterAi.ByteAt(rom, record, _aiStart + k))).ToArray());
         AiNote = "Every turn the monster starts at step 1 and works down the list until a step chooses what it does (attack, spell, ability...). " +
-                 $"The bytes below are the script itself ({_aiLength} bytes at record +{_aiStart:X2}); edit them in place, the length can't change.";
+                 (Core.Battle.MonsterAi.HomeOf(rom, record).Far
+                     ? $"The bytes below are the script itself ({_aiLength} bytes, in Lufia Forge's script space: bank 0 was full); edit them in place, the length can't change."
+                     : $"The bytes below are the script itself ({_aiLength} bytes at record +{_aiStart:X2}); edit them in place, the length can't change.");
     }
 
     /// <summary>The AI script editor (steps, every command incl. Lufia Forge's own); writes the script when it closes with Use.</summary>
@@ -295,9 +297,9 @@ public partial class MonsterEditorViewModel : GameDataEditorBase
             rom.WriteByte(o + 33, (byte)Clamp(DropRate, 0, 255));
             for (int i = 0; i < UnknownFields.Length; i++)
                 rom.WriteByte(o + UnknownFields[i], unknown[i]);
-            for (int i = 0; i < ai.Length; i++) rom.WriteByte(Core.Battle.MonsterAi.At(o, _aiStart + i), ai[i]);
+            for (int i = 0; i < ai.Length; i++) rom.WriteByte(Core.Battle.MonsterAi.ByteAt(rom, o, _aiStart + i), ai[i]);
             foreach (var st in SpellSteps)
-                if (st.Spell != st.Original && st.Spell >= 0) rom.WriteByte(Core.Battle.MonsterAi.At(o, st.Offset + 1), (byte)st.Spell);
+                if (st.Spell != st.Original && st.Spell >= 0) rom.WriteByte(Core.Battle.MonsterAi.ByteAt(rom, o, st.Offset + 1), (byte)st.Spell);
             // spell damage per element: the record's tail changes length, so it may have to move
             var want = MagicElements.Select(e => e.Percent == 100 ? 0 : ToSixteenths(e.Percent)).ToArray();
             if (!want.SequenceEqual(Core.Battle.MonsterTable.ReadElements(rom, o)))

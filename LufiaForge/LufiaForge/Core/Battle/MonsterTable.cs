@@ -106,13 +106,16 @@ public static class MonsterTable
     private static List<(int Start, int End)> Used(RomBuffer rom, int skipScriptOf = -1)
     {
         var used = new List<(int, int)>();
+        // the game's offset table is only free once it has moved to the added space (a new monster moves it)
+        if (!IsMoved(rom)) used.Add((OriginalTable, OriginalTable + OriginalCount * 2));
         for (int m = 0, n = Count(rom); m < n; m++)
         {
             int r = RecordOffset(rom, m);
             used.Add((r, r + RecordLength(rom, r)));
             if (m == skipScriptOf) continue;
+            // (a script in Lufia Forge's script space takes no room in bank 0)
             var (s, l) = MonsterAi.ScriptRange(rom, r);
-            if (l > 0) { int a = MonsterAi.At(r, s); used.Add((a, a + l)); }
+            if (l > 0 && !MonsterAi.HomeOf(rom, r).Far) { int a = MonsterAi.At(r, s); used.Add((a, a + l)); }
         }
         return used;
     }
@@ -187,7 +190,10 @@ public static class MonsterTable
     /// <paramref name="scriptFrom"/>'s AI script whose jumps (counted from the record) are moved with it.</summary>
     private static void Place(RomBuffer rom, int id, byte[] record, int scriptFrom, bool isNew)
     {
-        var (sStart, sLen) = MonsterAi.ScriptRange(rom, scriptFrom);
+        // a script in Lufia Forge's script space stays there (keyed by monster id): a new monster gets a copy of it
+        int fromId = MonsterAi.IdOf(rom, scriptFrom);
+        bool far = MonsterAi.HomeOf(rom, scriptFrom).Far;
+        var (sStart, sLen) = far ? (0, 0) : MonsterAi.ScriptRange(rom, scriptFrom);
         var cmds = MonsterAi.Decode(rom, scriptFrom);
         int oldAt = sLen > 0 ? MonsterAi.At(scriptFrom, sStart) : 0;
         var script = sLen > 0 ? rom.ReadBytes(oldAt, sLen) : Array.Empty<byte>();
@@ -215,12 +221,13 @@ public static class MonsterTable
             foreach (var c in cmds)
             {
                 if (c.Jump is not int j) continue;
-                int at = scr + (MonsterAi.At(scriptFrom, c.Offset) - oldAt) + 1 + (c.Op == 0x09 ? 0 : 1);
+                int at = scr + (MonsterAi.At(scriptFrom, c.Offset) - oldAt) + 1 + MonsterAi.JumpArg(c.Op);
                 rom.WriteUInt16Le(at, (ushort)((j + delta) & 0xFFFF));
             }
             rom.WriteUInt16Le(rec + 0x22, (ushort)((sStart + delta) & 0xFFFF));
         }
         else rom.WriteUInt16Le(rec + 0x22, 0);
+        if (far && isNew && fromId >= 0) AiFarScripts.Copy(rom, fromId, id, rec);
         rom.FixChecksum();
     }
 

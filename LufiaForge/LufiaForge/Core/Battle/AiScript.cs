@@ -3,7 +3,9 @@ namespace LufiaForge.Core.Battle;
 /// <summary>
 /// A monster's AI script as a list of steps that can be edited: "go to" commands point at a step (not at an offset),
 /// so steps can be added, removed and moved. Built back into bytes in step order (jump words counted from the
-/// monster's record, as the game wants) and written in place when it fits, else in the free space of bank 0.
+/// monster's record, as the game wants) and written in place when it fits, else in the free space of bank 0, and
+/// when that is used up in Lufia Forge's script space (<see cref="AiFarScripts"/>: no limit but the 511 bytes one
+/// script can have).
 /// </summary>
 public static class AiScript
 {
@@ -74,11 +76,14 @@ public static class AiScript
     {
         if (steps.Count == 0)
         {
+            AiFarScripts.Remove(rom, id);
             rom.WriteUInt16Le(MonsterTable.RecordOffset(rom, id) + 0x22, 0);   // no script: it just attacks
             return 0;
         }
         if (UsesNewCommands(steps)) AiCommandsPatch.Apply(rom);
         int record = MonsterTable.RecordOffset(rom, id);
+        // a script already in Lufia Forge's space stays there
+        if (MonsterAi.HomeOf(rom, record).Far) return AiFarScripts.Save(rom, id, record, Build(steps, 1));
         var (oldStart, oldLen) = MonsterAi.ScriptRange(rom, record);
         int len = Length(steps);
         int at;
@@ -87,7 +92,12 @@ public static class AiScript
         else
         {
             at = MonsterTable.FindSpace(rom, len, MonsterTable.ScriptAreas, skipScriptOf: id);
-            if (at < 0) throw new InvalidOperationException($"No room left for a {len}-byte script: monster scripts must be in bank 0, which has {FreeSpace(rom, id)} bytes free. Make the script shorter.");
+            if (at < 0)
+            {
+                if (!AiFarScripts.CanInstall(rom))
+                    throw new InvalidOperationException($"No room left for a {len}-byte script: bank 0 has {FreeSpace(rom, id)} bytes free, and this ROM's AI code was changed by another patch, so scripts can't go to the added space. Make the script shorter.");
+                return AiFarScripts.Save(rom, id, record, Build(steps, 1));
+            }
         }
         int rel = (at - record) & 0xFFFF;
         rom.WriteBytes(at, Build(steps, rel));
