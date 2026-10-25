@@ -1,5 +1,6 @@
 using System.Windows.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using LufiaForge.Core.Lufia2;
 
 namespace LufiaForge.Modules.Lufia2;
@@ -46,9 +47,7 @@ public partial class L2CapsulesPage : L2Page
             .Select(c => new L2Option(c, $"{c:X2}: {string.Join(" ", L2Capsules.Curve(rom, c).Take(7))}")).ToList();
         CurveSlots = _r.Curves.Select((c, i) => new L2Slot { Label = L2Capsules.CurveStats[i], Options = curves, Value = c, Changed = Edited }).ToList();
         LoadCurves();
-        var aiNames = L2Battle.Spells(rom).Select(s => s.Name).ToArray();
-        AiText = "ITS TURN\n" + L2BattleScript.Disassemble(rom, _r.At + _r.AiScript, _r.At, aiNames, null, _attacks) +
-                 "\n\nWHEN HIT\n" + L2BattleScript.Disassemble(rom, _r.At + _r.DefenseScript, _r.At, aiNames, null, _attacks);
+        AiText = ScriptsText(rom, L2AiScripts.Kind.CapsuleAi, L2AiScripts.Kind.CapsuleDefense, index);
         Refresh();
     }
 
@@ -70,6 +69,9 @@ public partial class L2CapsulesPage : L2Page
     }
 
     protected override bool IsField(string p) => p is nameof(MonsterName) or nameof(Name) or nameof(Type);
+
+    [RelayCommand] private void EditTurnScript() { if (_r != null) EditScript(L2AiScripts.Kind.CapsuleAi, _r.Index, $"{MonsterName} {_r.Form} {_r.Name}"); }
+    [RelayCommand] private void EditHitScript() { if (_r != null) EditScript(L2AiScripts.Kind.CapsuleDefense, _r.Index, $"{MonsterName} {_r.Form} {_r.Name}"); }
 
     protected override string? Write()
     {

@@ -147,3 +147,28 @@ Not covered: IP attacks (`$84:8F10` records start with a u16 "effect" = 0x2C for
 script offset; the IP scripts are probably reached through op 54/action 0x19, not traced). Built-in scripts in
 bank $85 (e.g. 0x2EF20 `32 01 28 00`, 0x2EF24 `37 00`, 0x2EF2B `15 11 0B 0C 62 11 80 ...` = LEdit's "Maxim's
 script" at 0x2EF2A) decode cleanly with this table but their pointer tables were not traced.
+
+## 5. Where monster and capsule scripts start, and Lufia Forge's script hooks (2026-10-24)
+
+Found by reading the code, checked in battles in BizHawk (bsnes core).
+
+* **Combatant builder** `$81:FC0B`: copies the monster record into a WRAM combatant struct at [$B2] (bank $7E). +$45/+$47 = the
+  record's address (24-bit, bank $96), +$50 = the monster id, and every record tag >= 06 is stored at +$48 + (tag - 6) * 2:
+  **tag 07 (attack script offset) at +$4A, tag 08 (defense) at +$4C**. Record addresses come from `$81:FCE2` (A = id ->
+  X = table + offset, bank $96).
+* **A monster's turn** `$81:B1C9`: Y = +$4A; 0 runs the built-in plain attack `$85:EF20` (`32 01 28 00`); else base = record
+  (`$81:FCE2`), bank **`LDA #$96` at `$81:B1E3`** (the hacks that moved the monster data change only this byte, to `D0`).
+* **When hit** `$85:D153` and `$85:D194` (two copies): base/bank = +$45/+$47, offset +$4C.
+* **A capsule monster's turn** `$81:B1A3`: offset `$1129` (record +$25), base/bank `$1124`/`$1126` (bank $97).
+* **Script runner** `$81:FAC9`: Y = offset (0 = none), `$BB` = `$0A42` + Y, bank `$0A44`, then `JSL $85:B452`.
+* `$81:F1C5` ($0B8D-$0B91) is the **item** script loader (menu/battle/weapon/armor property words), not monsters.
+* Banks $85 and $96 have no free run of 32+ bytes; $97 has about 700 bytes in four pieces.
+
+**Lufia Forge's hooks** (Core/Lufia2/L2AiScripts.cs): a block in the added space (`LF2AI`, code at +$10, table at +$200 of
+6-byte entries: record lo/hi, kind 0-3 (monster turn, monster hit, capsule turn, capsule hit), script 24-bit; FF ends) and
+four patches: `JML` at `$81:B1D4` and `$81:B1A3`, `JSL` + 5 NOP at `$85:D165` and `$85:D1A6`. Each looks up (record, kind);
+found: `$0A42`/`$0A44` = the script's base, Y = 1 (the script is stored as `[capacity u16][00][script]`, jumps counted from
+the 00); not found: the game's own path. The game's bytes stay, so shared scripts are safe, monsters without a script can
+get one, and taking the entry out restores the game's. All 461 game scripts (monsters and capsules) parse and build back
+byte for byte; checked in battles: a monster with no script given "Defend" (attack and defense hooks each round), the
+capsule hook, and Frue Lufia v8.2 (monster data in bank $D0).

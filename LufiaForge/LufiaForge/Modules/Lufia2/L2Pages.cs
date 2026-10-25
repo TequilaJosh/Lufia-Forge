@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using LufiaForge.Core;
 using LufiaForge.Core.Lufia2;
 using LufiaForge.ViewModels;
@@ -125,6 +126,34 @@ public abstract partial class L2Page : ObservableObject
         return bmp;
     }
 
+    /// <summary>Opens the battle script editor for (kind, index); after a change the page shows the record again.</summary>
+    protected void EditScript(L2AiScripts.Kind kind, int index, string who)
+    {
+        if (Rom == null || Main == null) return;
+        var w = new L2ScriptWindow(Rom, kind, index, who) { Owner = System.Windows.Application.Current?.MainWindow };
+        if (w.ShowDialog() != true) return;
+        Main.NotifyRomModified("Lufia II: " + w.Change);
+        int i = SelectedIndex;
+        Loading = true;
+        try { Load(i); } finally { Loading = false; }
+    }
+
+    /// <summary>A record's two battle scripts as text (what runs now: Lufia Forge's edited one or the game's).</summary>
+    protected static string ScriptsText(RomBuffer rom, L2AiScripts.Kind turn, L2AiScripts.Kind hit, int index)
+    {
+        var names = L2AiScripts.NameLists.From(rom);
+        string Part(L2AiScripts.Kind k, string title, string none)
+        {
+            try
+            {
+                var (steps, edited) = L2AiScripts.Load(rom, k, index);
+                return title + (edited ? "  (edited in Lufia Forge)" : "") + "\n" + (steps.Count == 0 ? none : L2AiScripts.Listing(steps, names));
+            }
+            catch (Exception e) { return title + "\n" + e.Message; }
+        }
+        return Part(turn, "ITS TURN", "No script: it just attacks.") + "\n\n" + Part(hit, "WHEN HIT", "No script.");
+    }
+
     protected static List<L2Flag> Flags(string[] labels, int value, Action changed) =>
         labels.Select((l, i) => new L2Flag { Label = l, Bit = 1 << i, IsChecked = (value & 1 << i) != 0, Changed = changed }).ToList();
 
@@ -160,14 +189,14 @@ public partial class L2MonstersPage : L2Page
         Exp = _m.Exp; Gold = _m.Gold; Sprite = _m.Sprite; Palette = _m.Palette;
         HasDrop = _m.DropAt > 0; DropItem = Math.Max(0, _m.DropItem); DropChance = _m.DropChance;
         ScriptText = HasDrop ? "" : "It drops nothing (a drop can't be added yet: the record would grow).";
-        var spells = L2Battle.Spells(Rom!).Select(s => s.Name).ToArray();
-        var mons = L2Battle.Monsters(Rom!).Select(m => m.Name).ToArray();
-        AiText = (_m.AttackScript > 0 ? "ATTACK (its turn)\n" + L2BattleScript.Disassemble(Rom!, _m.AttackScript, _m.Offset, spells, mons) : "No attack script: it just attacks.") +
-                 (_m.DefenseScript > 0 ? "\n\nDEFENSE (when hit)\n" + L2BattleScript.Disassemble(Rom!, _m.DefenseScript, _m.Offset, spells, mons) : "");
+        AiText = ScriptsText(Rom!, L2AiScripts.Kind.MonsterAttack, L2AiScripts.Kind.MonsterDefense, index);
         PictureImage = Picture(L2Graphics.MonsterSprite(Rom!, Sprite, Palette));
     }
 
     protected override bool IsField(string p) => p is not (nameof(ScriptText) or nameof(AiText) or nameof(HasDrop) or nameof(ItemOptions));
+
+    [RelayCommand] private void EditTurnScript() { if (_m != null) EditScript(L2AiScripts.Kind.MonsterAttack, _m.Index, _m.Name); }
+    [RelayCommand] private void EditHitScript() { if (_m != null) EditScript(L2AiScripts.Kind.MonsterDefense, _m.Index, _m.Name); }
 
     protected override string? Write()
     {

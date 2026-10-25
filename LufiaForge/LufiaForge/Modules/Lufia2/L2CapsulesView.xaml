@@ -112,6 +112,12 @@
                     <Border Style="{StaticResource GdCard}">
                         <StackPanel>
                             <TextBlock Text="AI" Style="{StaticResource GdSection}"/>
+                            <WrapPanel Margin="0,4,0,8">
+                                <Button Content="✎  Edit its turn (AI)..." Style="{StaticResource LufiaButtonGold}" Padding="10,4" Margin="0,0,8,0" Command="{Binding EditTurnScriptCommand}"
+                                        ToolTip="What it does on its turn, step by step: capsule attacks, spells and targets by name"/>
+                                <Button Content="✎  Edit when hit..." Style="{StaticResource LufiaButton}" Padding="10,4" Command="{Binding EditHitScriptCommand}"
+                                        ToolTip="What runs when it is hit (its defense script: resistances...)"/>
+                            </WrapPanel>
                             <TextBlock Text="{Binding AiText}" Style="{StaticResource GdFieldLabel}" FontFamily="Consolas" TextWrapping="NoWrap"/>
                         </StackPanel>
                     </Border>
