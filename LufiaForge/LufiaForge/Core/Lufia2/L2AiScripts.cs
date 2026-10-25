@@ -183,33 +183,64 @@ public static class L2AiScripts
     public static int ArgAt(OpDef d, int index) => d.Args.Take(index).Sum(Size);
 
     /// <summary>Reads the script at file offset <paramref name="start"/>; jumps count from file offset
-    /// <paramref name="baseAt"/>. Stops at 00, 4F, 03 or 43 once no jump goes further.</summary>
+    /// <paramref name="baseAt"/>. Stops at 00, 4F, 03 or 43 once no jump goes further. A jump to code outside that
+    /// run (some fan hacks share code between scripts) brings that code in too, as more steps after the script (with
+    /// a "go to" where it runs into steps already read), so the script still works when it is moved. A jump that
+    /// lands inside a command, or on bytes that aren't commands, stays in <see cref="Step.OutsideTargets"/>.</summary>
     public static List<Step> Parse(RomBuffer rom, int start, int baseAt)
     {
         var steps = new List<Step>();
-        int p = start, furthest = start;
+        var byOffset = new Dictionary<int, Step>();
         var jumps = new List<(Step S, int Arg, int To)>();
-        for (int guard = 0; guard < 2000 && p < rom.Length; guard++)
+        var covered = new List<(int Start, int End)>();
+        // one straight run of commands from file offset p (stops at an end, or where it reaches steps already read)
+        List<Step> Run(int p, bool first)
         {
-            byte op = rom.ReadByte(p);
-            var d = Def(op) ?? throw new InvalidDataException($"Unknown command {op:X2} at 0x{p:X6}.");
-            var s = new Step { Op = op, Args = rom.ReadBytes(p + 1, d.Length - 1), Offset = p - baseAt };
-            int jumpN = d.Args.Count(a => a == Arg.Jump);
-            s.Targets = new Step?[jumpN];
-            s.OutsideTargets = Enumerable.Repeat(-1, jumpN).ToArray();
-            int j = 0;
-            for (int i = 0; i < d.Args.Length; i++)
+            var run = new List<Step>();
+            int furthest = p, runStart = p;
+            var runJumps = new List<(Step, int, int)>();
+            for (int guard = 0; guard < 2000 && p < rom.Length; guard++)
             {
-                if (d.Args[i] != Arg.Jump) continue;
-                int at = ArgAt(d, i), to = s.Args[at] | s.Args[at + 1] << 8;
-                jumps.Add((s, j++, to));
-                furthest = Math.Max(furthest, baseAt + to);
+                if (!first && byOffset.ContainsKey(p - baseAt)) break;
+                byte op = rom.ReadByte(p);
+                var d = Def(op) ?? throw new InvalidDataException($"Unknown command {op:X2} at 0x{p:X6}.");
+                var s = new Step { Op = op, Args = rom.ReadBytes(p + 1, d.Length - 1), Offset = p - baseAt };
+                int jumpN = d.Args.Count(a => a == Arg.Jump);
+                s.Targets = new Step?[jumpN];
+                s.OutsideTargets = Enumerable.Repeat(-1, jumpN).ToArray();
+                int j = 0;
+                for (int i = 0; i < d.Args.Length; i++)
+                {
+                    if (d.Args[i] != Arg.Jump) continue;
+                    int at = ArgAt(d, i), to = s.Args[at] | s.Args[at + 1] << 8;
+                    runJumps.Add((s, j++, to));
+                    if (baseAt + to > furthest && baseAt + to < p + 0x400) furthest = baseAt + to;
+                }
+                run.Add(s);
+                p += d.Length;
+                if (d.EndsPath && p > furthest) break;
             }
-            steps.Add(s);
-            p += d.Length;
-            if (d.EndsPath && p > furthest) break;
+            // nothing is added unless the whole run reads as commands
+            foreach (var s in run) byOffset[s.Offset] = s;
+            jumps.AddRange(runJumps);
+            covered.Add((runStart, p));
+            // a run that ran into steps already read carries on there
+            if (!first && run.Count > 0 && run[^1].Def?.EndsPath != true && byOffset.TryGetValue(p - baseAt, out var next))
+            {
+                var go = New(0x03);
+                go.Targets[0] = next;
+                go.Offset = -1;
+                run.Add(go);
+            }
+            return run;
         }
-        var byOffset = steps.ToDictionary(s => s.Offset);
+        steps.AddRange(Run(start, true));
+        for (int k = 0; k < jumps.Count; k++)
+        {
+            int to = jumps[k].To, abs = baseAt + to;
+            if (byOffset.ContainsKey(to) || covered.Any(c => abs >= c.Start && abs < c.End)) continue;
+            try { steps.AddRange(Run(abs, false)); } catch (InvalidDataException) { }
+        }
         foreach (var (s, j, to) in jumps)
             if (byOffset.TryGetValue(to, out var t)) s.Targets[j] = t; else s.OutsideTargets[j] = to;
         return steps;
@@ -491,6 +522,8 @@ public static class L2AiScripts
     public static int Save(RomBuffer rom, Kind kind, int index, IReadOnlyList<Step> steps)
     {
         if (steps.Count == 0) throw new InvalidOperationException("The script is empty: it needs at least an End.");
+        if (steps.Any(st => st.OutsideTargets.Any(o => o >= 0)))
+            throw new InvalidOperationException("A \"go to\" jumps into the middle of a command or onto data, so the script can't be moved: point it at a step.");
         var body = Build(steps, 1);
         if (body.Length > 0x7F00) throw new InvalidOperationException("The script is too long.");
         int block = Install(rom);
