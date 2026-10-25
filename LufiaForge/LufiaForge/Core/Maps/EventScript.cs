@@ -214,9 +214,10 @@ public sealed class EventScript
         int max = Math.Max(npcs - 1, LufiaMap.EventBase(rom, mapId) + areas + 1);
         // a block written in the added space (a new map's, or a cutscene's) may use any event number: its table runs
         // up to where the first event's code starts
-        if (block >= MapWriter.ExpansionStart && end > block)
+        // (a map without a block has entry FFFFFF, which points past the ROM)
+        if (block >= MapWriter.ExpansionStart && block < rom.Length && end > block)
         {
-            int tableEnd = end - block;
+            int tableEnd = Math.Min(end, rom.Length) - block;
             for (int ev = 0; ev * 2 + 2 <= tableEnd && ev <= 255; ev++)
             {
                 int rel = rom.ReadUInt16Le(block + ev * 2);
