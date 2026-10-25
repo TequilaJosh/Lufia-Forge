@@ -52,6 +52,7 @@ public static class RamMap
     {
         new(A(0x7E4F60, 0x7E4FFF), "Emotes", "state and saved colours"),
         new(A(0x7EE570, 0x7EE575), "Monster AI commands", "in each fight record (+$70-$75; slots 0-7, $80 apart)"),
+        new(A(0x7E1C00, 0x7E1DFF), "Monster AI script space", "the script of the monster whose turn it is, copied from the added space"),
         new(A(0x7FFD00, 0x7FFDDB), "Visible monsters", "path walking, step-on areas"),
         new(A(0x7FFEC0, 0x7FFEC8), "Visible monsters", "the hero's tile, turn count, waiting monster, grace steps"),
         new(A(0x7FFC00, 0x7FFC3F), "Visible monsters", "the turn each actor last moved on"),

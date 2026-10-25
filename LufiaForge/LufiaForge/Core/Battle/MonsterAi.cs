@@ -162,6 +162,27 @@ public static class MonsterAi
     /// bank 00, so a script can be anywhere in the bank (also before its record).</summary>
     public static int At(int record, int rel) => (record + rel) & 0xFFFF;
 
+    /// <summary>Where a monster's script bytes are: in bank 0 (offsets from its record) or in Lufia Forge's script
+    /// space (<see cref="AiFarScripts"/>, offsets from the 00 in front of the script, which starts at 1).</summary>
+    public readonly record struct Home(int Base, int Start, bool Far)
+    {
+        public int At(int rel) => Far ? Base + rel : MonsterAi.At(Base, rel);
+        public bool Inside(int rel) => Far ? rel >= 1 && rel < AiFarScripts.BufferSize : MonsterAi.At(Base, rel) < 0x8000;
+    }
+
+    /// <summary>The monster id whose record is at <paramref name="record"/>, or -1.</summary>
+    public static int IdOf(RomBuffer rom, int record)
+    {
+        for (int m = 0, n = MonsterTable.Count(rom); m < n; m++) if (RecordOffset(rom, m) == record) return m;
+        return -1;
+    }
+
+    public static Home HomeOf(RomBuffer rom, int record) =>
+        IdOf(rom, record) is var id && id >= 0 && AiFarScripts.Base(rom, id) is int b ? new Home(b, 1, true) : new Home(record, ScriptOffset(rom, record), false);
+
+    /// <summary>File offset of byte <paramref name="rel"/> of the monster's script (offsets as <see cref="Decode"/> gives them).</summary>
+    public static int ByteAt(RomBuffer rom, int record, int rel) => HomeOf(rom, record).At(rel);
+
     /// <summary>Every monster's script commands, with the record they belong to.</summary>
     public static IEnumerable<(int Record, Command Cmd)> AllCommands(RomBuffer rom)
     {
@@ -212,11 +233,13 @@ public static class MonsterAi
 
     /// <summary>
     /// Gives monster <paramref name="id"/> a spell-casting script (see <see cref="BuildSpellScript"/>): in place when
-    /// it fits in its old script, otherwise in the free space at the end of bank 0. Returns where it went.
+    /// it fits in its old script, otherwise in the free space at the end of bank 0, and when that is used up in
+    /// Lufia Forge's script space (<see cref="AiFarScripts"/>). Returns where it went.
     /// </summary>
     public static int WriteSpellScript(RomBuffer rom, int id, IReadOnlyList<(int Percent, int Spell)> spells)
     {
         int record = RecordOffset(rom, id);
+        if (HomeOf(rom, record).Far) return AiFarScripts.Save(rom, id, record, BuildSpellScript(spells, 1));
         var (oldStart, oldLen) = ScriptRange(rom, record);
         int len = SpellScriptLength(spells.Count);
         int at;
@@ -225,7 +248,11 @@ public static class MonsterAi
         {
             // free space not used by any other monster's record or script
             at = MonsterTable.FindSpace(rom, len, MonsterTable.ScriptAreas, skipScriptOf: id);
-            if (at < 0) throw new InvalidOperationException("No room left for a longer monster script (the free space in bank 0 is used up). Use fewer spells.");
+            if (at < 0)
+            {
+                if (!AiFarScripts.CanInstall(rom)) throw new InvalidOperationException("No room left for a longer monster script (the free space in bank 0 is used up). Use fewer spells.");
+                return AiFarScripts.Save(rom, id, record, BuildSpellScript(spells, 1));
+            }
         }
         int rel = (at - record) & 0xFFFF;
         var script = BuildSpellScript(spells, rel);
@@ -238,7 +265,8 @@ public static class MonsterAi
     public static List<Command> Decode(RomBuffer rom, int record, Func<int, string>? spellName = null, Func<int, string>? itemName = null)
     {
         var list = new List<Command>();
-        int start = ScriptOffset(rom, record);
+        var home = HomeOf(rom, record);
+        int start = home.Start;
         if (start == 0) return list;
         var todo = new Queue<int>(); todo.Enqueue(start);
         var seen = new HashSet<int>();
@@ -246,9 +274,9 @@ public static class MonsterAi
         while (todo.Count > 0 && list.Count < 200)
         {
             int at = todo.Dequeue();
-            while (At(record, at) < 0x8000 && seen.Add(at))
+            while (home.Inside(at) && seen.Add(at))
             {
-                int op = rom.ReadByte(At(record, at));
+                int op = rom.ReadByte(home.At(at));
                 if (op == 0) { list.Add(new Command(at, 0, Array.Empty<byte>(), "End", null, false)); break; }
                 if (op > Ops.Length)
                 {
@@ -258,7 +286,7 @@ public static class MonsterAi
                     break;
                 }
                 var (n, name, ends) = Ops[op - 1];
-                var args = Enumerable.Range(1, n).Select(i => rom.ReadByte(At(record, at + i))).ToArray();
+                var args = Enumerable.Range(1, n).Select(i => rom.ReadByte(home.At(at + i))).ToArray();
                 int? jump = null;
                 string text = name;
                 switch (op)

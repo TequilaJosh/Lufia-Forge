@@ -118,10 +118,17 @@ public partial class AiScriptWindow : Window
             _steps[i].Title = $"Step {i + 1}: {(text.Length > 60 ? text[..60] + "..." : text)}";
         }
         int len = AiScript.Length(_steps.Select(s => s.Step).ToList());
-        var (oldStart, oldLen) = MonsterAi.ScriptRange(_rom, MonsterTable.RecordOffset(_rom, _monster));
+        int record = MonsterTable.RecordOffset(_rom, _monster);
+        var (oldStart, oldLen) = MonsterAi.ScriptRange(_rom, record);
         int free = AiScript.FreeSpace(_rom, _monster);
-        SizeText.Text = $"{_steps.Count} steps, {len} bytes. " + (len <= oldLen ? "It fits where the old script is." :
-            len <= free ? $"It goes in the free space for monster scripts ({free} bytes free)." : $"Too long: there are {Math.Max(free, oldLen)} bytes for it. Make it shorter.") +
+        bool far = MonsterAi.HomeOf(_rom, record).Far, canFar = AiFarScripts.CanInstall(_rom);
+        SizeText.Text = $"{_steps.Count} steps, {len} bytes. " + (
+            len > AiFarScripts.MaxLength ? $"Too long: a monster's script can be at most {AiFarScripts.MaxLength} bytes. Make it shorter." :
+            far ? "It goes in Lufia Forge's script space (where this monster's script already is)." :
+            len <= oldLen ? "It fits where the old script is." :
+            len <= free ? $"It goes in the free space for monster scripts in bank 0 ({free} bytes free)." :
+            canFar ? "Bank 0 is full, so it goes in Lufia Forge's script space (in the ROM's added space)." :
+            $"Too long: there are {Math.Max(free, oldLen)} bytes for it (another patch changed the battle's AI code, so the added space can't be used). Make it shorter.") +
             (AiScript.UsesNewCommands(_steps.Select(s => s.Step).ToList()) ? " Uses Lufia Forge's new commands (added to the ROM with it)." : "") +
             (_steps.Count > 0 && _steps[^1].Step.Op is not (0x00 or 0x09) && !(MonsterAi.EndsTurn(_steps[^1].Step.Op) && _steps[^1].Step.Op != 0x07)
                 ? " The last step can carry on past the end: add \"End of the script\" (or an attack) after it." : "");
