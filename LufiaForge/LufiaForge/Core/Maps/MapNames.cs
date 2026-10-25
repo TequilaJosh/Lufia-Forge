@@ -11,7 +11,9 @@ namespace LufiaForge.Core.Maps;
 /// <item>exits: maps that connect to each other (other than towns) form one place, named after where it is
 ///   entered — a world map entrance (“Cave near Treck”, nearest town entrance) or a town (“Medan Castle”).</item>
 /// </list>
-/// Names the user types are kept in %AppData%\LufiaForge\mapnames.json and win over generated ones.
+/// Names the user types win over generated ones. With a project open they are kept in the project (<see cref="ProjectNames"/>);
+/// names kept in %AppData%\LufiaForge\mapnames.json (from before projects had their own) apply to every project that
+/// hasn't named that map itself.
 /// </summary>
 public static class MapNames
 {
@@ -194,7 +196,43 @@ public static class MapNames
     private static string StorePath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "LufiaForge", "mapnames.json");
 
+    /// <summary>The open project's names (null = no project): they win over the shared ones, and renames are kept here.
+    /// An empty name means "the automatic name" (it hides a shared name in this project).</summary>
+    public static Dictionary<int, string>? ProjectNames { get; set; }
+
+    /// <summary>A rename changed <see cref="ProjectNames"/> (the project has something to save).</summary>
+    public static event Action? ProjectNamesChanged;
+
+    /// <summary>The names to show: the shared ones with the open project's on top.</summary>
     public static Dictionary<int, string> LoadCustom()
+    {
+        var names = LoadShared();
+        if (ProjectNames != null)
+            foreach (var (id, name) in ProjectNames)
+                if (string.IsNullOrWhiteSpace(name)) names.Remove(id); else names[id] = name;
+        return names;
+    }
+
+    /// <summary>Keeps the names to show (what <see cref="LoadCustom"/> gave, changed): in the open project when there is
+    /// one (only where they differ from the shared names), else in the shared file.</summary>
+    public static void SaveCustom(Dictionary<int, string> names)
+    {
+        if (ProjectNames == null) { SaveShared(names); return; }
+        var shared = LoadShared();
+        bool changed = false;
+        foreach (int id in shared.Keys.Concat(names.Keys).Concat(ProjectNames.Keys).Distinct().ToList())
+        {
+            string? want = names.TryGetValue(id, out var n) && !string.IsNullOrWhiteSpace(n) ? n.Trim() : null;
+            string? keep = want == shared.GetValueOrDefault(id) ? null : want ?? "";
+            string? had = ProjectNames.TryGetValue(id, out var h) ? h : null;
+            if (keep == had) continue;
+            if (keep == null) ProjectNames.Remove(id); else ProjectNames[id] = keep;
+            changed = true;
+        }
+        if (changed) ProjectNamesChanged?.Invoke();
+    }
+
+    private static Dictionary<int, string> LoadShared()
     {
         try
         {
@@ -206,7 +244,7 @@ public static class MapNames
         catch { return new(); }
     }
 
-    public static void SaveCustom(Dictionary<int, string> names)
+    private static void SaveShared(Dictionary<int, string> names)
     {
         try
         {

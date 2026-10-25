@@ -7,7 +7,8 @@ namespace LufiaForge.Core;
 /// <summary>
 /// A project: the ROM someone started from and what they changed in it, kept in one file (.lfproj, a zip).
 /// <list type="bullet">
-/// <item><c>project.json</c>: name, dates, the starting ROM's file name and checksum, and the list of changes made.</item>
+/// <item><c>project.json</c>: name, dates, the starting ROM's file name and checksum, the list of changes made, and the
+/// project's own map names.</item>
 /// <item><c>base.sfc</c>: the ROM as it was when the project started (so the project works without it).</item>
 /// <item><c>changes.bin</c>: the bytes that differ from it now ("LFPD", the current length, then runs of
 /// offset, length and bytes).</item>
@@ -28,6 +29,11 @@ public sealed class LufiaProject
     public uint BaseCrc { get; private set; }
     /// <summary>What was changed, oldest first (from the edits' descriptions).</summary>
     public List<string> Changes { get; } = new();
+    /// <summary>Map names given in this project (map number → name; empty = the automatic name even where a name is kept
+    /// in %AppData% for every project). See <see cref="Maps.MapNames.ProjectNames"/>.</summary>
+    public Dictionary<int, string> MapNames { get; } = new();
+    /// <summary>A map was renamed since the last save (renames don't change the ROM).</summary>
+    public bool MapNamesChanged { get; set; }
 
     private byte[] _base;
 
@@ -70,6 +76,9 @@ public sealed class LufiaProject
         };
         if (info.TryGetProperty("changes", out var ch))
             foreach (var e in ch.EnumerateArray()) p.Changes.Add(e.GetString() ?? "");
+        if (info.TryGetProperty("mapNames", out var mn) && mn.ValueKind == JsonValueKind.Object)
+            foreach (var e in mn.EnumerateObject())
+                if (int.TryParse(e.Name, System.Globalization.NumberStyles.HexNumber, null, out int id)) p.MapNames[id] = e.Value.GetString() ?? "";
         return (p, ApplyDiff(p._base, Read(zip, "changes.bin")));
     }
 
@@ -91,6 +100,7 @@ public sealed class LufiaProject
                 baseRom = BaseRomFile,
                 baseCrc = BaseCrc,
                 changes = Changes,
+                mapNames = MapNames.OrderBy(kv => kv.Key).ToDictionary(kv => kv.Key.ToString("X2"), kv => kv.Value),
             }, new JsonSerializerOptions { WriteIndented = true });
             Write(zip, "project.json", json);
             Write(zip, "base.sfc", _base);
@@ -98,6 +108,7 @@ public sealed class LufiaProject
         }
         if (File.Exists(Path)) File.Replace(tmp, Path, Path + ".bak");
         else File.Move(tmp, Path);
+        MapNamesChanged = false;
     }
 
     /// <summary>Saves the project under another file (Save Project As).</summary>

@@ -80,7 +80,7 @@
                     <StackPanel Margin="0,4,0,0">
                         <TextBox Style="{StaticResource GdText}" Text="{Binding MapNameText}" HorizontalAlignment="Stretch" Width="Auto"
                                  ToolTip="Type a name and press Tab. Clear it to go back to the automatic name."/>
-                        <TextBlock Text="Town names come from the game; others are worked out from where each map is entered. Your names are kept for every copy of the ROM."
+                        <TextBlock Text="Town names come from the game; others are worked out from where each map is entered. Your names are kept in this project."
                                    Style="{StaticResource GdHint}" TextWrapping="Wrap"/>
                         <Button Content="🗑  Delete this map..." Style="{StaticResource LufiaButton}" Padding="10,4" Command="{Binding DeleteMapCommand}" HorizontalAlignment="Left" Margin="0,8,0,0"
                                 ToolTip="Frees the map's number (for New map) and its space; first lists every exit and event that still leads to it"/>
