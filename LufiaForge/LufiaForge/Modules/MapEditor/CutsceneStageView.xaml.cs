@@ -80,6 +80,9 @@ public partial class CutsceneStageView : UserControl
         LufiaForge.Modules.Common.MapNavigation.Attach(Scroller, () => Zoom.ScaleX, z => ZoomSlider.Value = z, ZoomSlider.Minimum, ZoomSlider.Maximum);
         foreach (var p in CutsceneStage.Parties) PartyBox.Items.Add(p.Name);
         StepList.ItemsSource = _steps;
+        PathSplitter.DragCompleted += (_, _) => LufiaForge.Modules.Common.LayoutMemory.Set("stage.walkeditor",
+            LufiaForge.Modules.Common.LayoutMemory.Format(new GridLength(PathRow.ActualHeight)));
+        PathSplitter.MouseDoubleClick += (_, _) => { LufiaForge.Modules.Common.LayoutMemory.Set("stage.walkeditor", null); PathRow.Height = GridLength.Auto; };
         SoundBox.IsChecked = SoundOn;
         if (!SpcNative.Available) { SoundBox.IsEnabled = false; SoundBox.ToolTip = "lufia_spc.dll is missing, so the music can't be played"; }
         _timer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(1000.0 / 60) };
@@ -585,6 +588,10 @@ public partial class CutsceneStageView : UserControl
         var op = SelectedOp;
         bool isPath = _map != null && op != null && !op.IsText && op.Bytes.Length >= 3 && op.Bytes[0] is 0x14 or 0x15;
         PathPanel.Visibility = isPath ? Visibility.Visible : Visibility.Collapsed;
+        // the splitter above the walk editor only while it's there; its height as the user last dragged it
+        PathSplitter.Visibility = PathPanel.Visibility;
+        PathSplitRow.Height = new GridLength(isPath ? 8 : 0);
+        PathRow.Height = isPath ? LufiaForge.Modules.Common.LayoutMemory.Parse(LufiaForge.Modules.Common.LayoutMemory.Get("stage.walkeditor")) ?? GridLength.Auto : GridLength.Auto;
         if (!isPath) { DrawToggle.IsChecked = false; return; }
         _filling = true;
         PathBox.Items.Clear();
