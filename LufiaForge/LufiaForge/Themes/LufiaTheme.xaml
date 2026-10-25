@@ -1,6 +1,7 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:conv="clr-namespace:LufiaForge.Converters">
+                    xmlns:conv="clr-namespace:LufiaForge.Converters"
+                    xmlns:common="clr-namespace:LufiaForge.Modules.Common">
 
     <!-- Converters -->
     <conv:BoolToVisibilityConverter        x:Key="BoolToVisibilityConverter"/>
@@ -449,6 +450,70 @@
     <!-- ScrollBar -->
     <Style TargetType="ScrollBar">
         <Setter Property="Background" Value="{StaticResource MidPurpleBrush}"/>
+    </Style>
+
+    <!-- =====================================================================
+         SPLITTERS AND POP-OUT SECTIONS
+         Every splitter shows as a thin band that lights up gold under the mouse (drag to resize, double-click puts the
+         sizes back where the view keeps them, see LayoutMemory); PopOutHost moves a section into a window of its own.
+         ===================================================================== -->
+    <Style TargetType="GridSplitter">
+        <Setter Property="Focusable" Value="False"/>
+        <Setter Property="ToolTip" Value="Drag to resize (double-click: back to the normal size)"/>
+        <Setter Property="ToolTipService.InitialShowDelay" Value="900"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="GridSplitter">
+                    <Border Background="Transparent">
+                        <Border x:Name="Band" Background="{StaticResource BorderPurpleBrush}" Opacity="0.55" Margin="1" CornerRadius="1"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Band" Property="Background" Value="{StaticResource GoldDimBrush}"/>
+                            <Setter TargetName="Band" Property="Opacity" Value="1"/>
+                        </Trigger>
+                        <Trigger Property="IsDragging" Value="True">
+                            <Setter TargetName="Band" Property="Background" Value="{StaticResource GoldBrush}"/>
+                            <Setter TargetName="Band" Property="Opacity" Value="1"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="common:PopOutHost">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="common:PopOutHost">
+                    <Grid>
+                        <ContentPresenter/>
+                        <Border x:Name="Placeholder" Visibility="Collapsed" Background="{StaticResource SurfacePurpleBrush}"
+                                BorderBrush="{StaticResource BorderPurpleBrush}" BorderThickness="1" CornerRadius="4" Padding="10,6" Margin="2">
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <TextBlock Text="{TemplateBinding PlaceholderText}" Foreground="{StaticResource TextSecondaryBrush}"
+                                           TextWrapping="Wrap" TextAlignment="Center"/>
+                                <Button x:Name="PART_Return" Content="⇲ Bring it back" Style="{StaticResource LufiaButton}" Padding="10,3"
+                                        Margin="0,6,0,0" HorizontalAlignment="Center" ToolTip="Closes its window and puts it back here"/>
+                            </StackPanel>
+                        </Border>
+                        <Button x:Name="PART_PopOut" Content="⧉" Visibility="Hidden" Panel.ZIndex="50"
+                                HorizontalAlignment="Right" VerticalAlignment="Top" Margin="{TemplateBinding ButtonMargin}"
+                                Padding="5,0" FontSize="12" Style="{StaticResource LufiaButton}"
+                                ToolTip="Pop this section out into its own window (close the window to put it back)"/>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="PART_PopOut" Property="Visibility" Value="Visible"/>
+                        </Trigger>
+                        <Trigger Property="IsPoppedOut" Value="True">
+                            <Setter TargetName="Placeholder" Property="Visibility" Value="Visible"/>
+                            <Setter TargetName="PART_PopOut" Property="Visibility" Value="Collapsed"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
 </ResourceDictionary>

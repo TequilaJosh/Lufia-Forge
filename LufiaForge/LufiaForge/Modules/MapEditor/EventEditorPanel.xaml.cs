@@ -342,6 +342,12 @@ public partial class EventEditorPanel : UserControl, LufiaForge.ViewModels.IPend
         InitializeComponent();
         ShowBytesBox.IsChecked = ShowCommandBytes;
         Lines.ItemsSource = _lines;
+        // splitters: the sizes dragged to are remembered (double-click a splitter: back to the normal sizes)
+        StageSplitter.DragCompleted += (_, _) =>
+            Common.LayoutMemory.Set(StageSplitKey, Common.LayoutMemory.Format(LinesColumn.Width) + ";" + Common.LayoutMemory.Format(StageColumn.Width));
+        StageSplitter.MouseDoubleClick += (_, _) => { Common.LayoutMemory.Set(StageSplitKey, null); if (Stage.Visibility == Visibility.Visible) ShowStage(true); };
+        TimelineSplitter.DragCompleted += (_, _) => Common.LayoutMemory.Set("eventeditor.timeline", Common.LayoutMemory.Format(new GridLength(TimelineRow.ActualHeight)));
+        TimelineSplitter.MouseDoubleClick += (_, _) => { Common.LayoutMemory.Set("eventeditor.timeline", null); TimelineRow.Height = new GridLength(240); };
         // while it's on screen its edits are written by themselves (saving the project, Apply to ROM in the top bar)
         Loaded += (_, _) => (Application.Current?.MainWindow?.DataContext as LufiaForge.ViewModels.MainViewModel)?.Register(this);
         Unloaded += (_, _) =>
@@ -457,6 +463,8 @@ public partial class EventEditorPanel : UserControl, LufiaForge.ViewModels.IPend
         }
     }
 
+    private string StageSplitKey => _cutsceneMode ? "cutscenes.stage" : "eventeditor.stage";
+
     private const string DefaultHelp =
         "Dialogue: Enter = new line in the box. Tags: [Hero] [Lufia] [Aguro] [Jerin] [Maxim] [Selan] [Guy] [Artea], [ITEM:xx] [SPELL:xx] [TOWN:xx], " +
         "and [xx] / [xx:yy] for other codes. Commands: pick values from the lists, jump targets by line, ＋ inserts below, ✕ deletes. " +
@@ -475,7 +483,8 @@ public partial class EventEditorPanel : UserControl, LufiaForge.ViewModels.IPend
     {
         TimelineToggle.IsChecked = show;
         TimelineCard.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
-        TimelineRow.Height = show ? new GridLength(240) : new GridLength(0);
+        TimelineSplitRow.Height = new GridLength(show ? 7 : 0);
+        TimelineRow.Height = show ? Common.LayoutMemory.Parse(Common.LayoutMemory.Get("eventeditor.timeline")) ?? new GridLength(240) : new GridLength(0);
         if (!show) return;
         if (Stage.Visibility != Visibility.Visible) ShowStage(true);
         Timeline.Bind(this, Stage);
@@ -488,6 +497,13 @@ public partial class EventEditorPanel : UserControl, LufiaForge.ViewModels.IPend
         Stage.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
         SplitterColumn.Width = new GridLength(show ? 6 : 0);
         StageColumn.Width = show ? new GridLength(_cutsceneMode ? 1.7 : 1.2, GridUnitType.Star) : new GridLength(0);
+        // the split the user dragged to last time (kept apart for the Cutscenes tab and the event editor)
+        if (show && Common.LayoutMemory.Get(StageSplitKey)?.Split(';') is { Length: 2 } split &&
+            Common.LayoutMemory.Parse(split[0]) is { } lines && Common.LayoutMemory.Parse(split[1]) is { } stage)
+        {
+            LinesColumn.Width = lines; StageColumn.Width = stage;
+        }
+        else LinesColumn.Width = new GridLength(1, GridUnitType.Star);
         if (show)
         {
             if (Window.GetWindow(this) is Window w && w.Width < 1400 && w.WindowState == WindowState.Normal && w is EventEditorWindow) w.Width = 1400;

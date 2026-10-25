@@ -2,20 +2,22 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:me="clr-namespace:LufiaForge.Modules.MapEditor"
+             xmlns:common="clr-namespace:LufiaForge.Modules.Common"
              Background="{DynamicResource DeepPurpleBrush}">
     <UserControl.Resources>
         <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
     </UserControl.Resources>
 
-    <Grid>
+    <Grid common:LayoutMemory.Key="cutscenes.main">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="300" MinWidth="220"/>
+            <ColumnDefinition Width="300" MinWidth="140"/>
             <ColumnDefinition Width="6"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
         <!-- cutscene list -->
-        <DockPanel Grid.Column="0" Margin="8">
+        <common:PopOutHost Grid.Column="0" Title="Cutscene list" ButtonMargin="0,10,10,0">
+        <DockPanel Margin="8">
             <StackPanel DockPanel.Dock="Top" Margin="0,0,0,6">
                 <TextBlock Text="🎬 Cutscenes" Style="{StaticResource GdSection}" FontSize="15"/>
                 <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,2,0,6"
@@ -50,8 +52,9 @@
                 </ListBox.ItemTemplate>
             </ListBox>
         </DockPanel>
+        </common:PopOutHost>
 
-        <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="Transparent"/>
+        <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch"/>
 
         <Grid Grid.Column="2">
             <TextBlock x:Name="EmptyText" Text="Pick a cutscene on the left." Style="{StaticResource GdHint}" FontSize="14"

@@ -2,6 +2,7 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:me="clr-namespace:LufiaForge.Modules.MapEditor"
+             xmlns:common="clr-namespace:LufiaForge.Modules.Common"
              Background="{DynamicResource MidPurpleBrush}">
     <UserControl.Resources>
         <ResourceDictionary>
@@ -120,6 +121,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
+            <RowDefinition x:Name="TimelineSplitRow" Height="0"/>
             <RowDefinition x:Name="TimelineRow" Height="0"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
@@ -150,19 +152,21 @@
                        Text="Dialogue: Enter = new line in the box. Tags: [Hero] [Lufia] [Aguro] [Jerin] [Maxim] [Selan] [Guy] [Artea], [ITEM:xx] [SPELL:xx] [TOWN:xx], and [xx] / [xx:yy] for other codes. Commands: change the command byte or its values (hex), pick jump targets by line, ＋ inserts below, ✕ deletes. Story flags are shared by the whole game, so change them with care."/>
         </StackPanel>
 
-        <Grid Grid.Row="1">
+        <Grid x:Name="BodyGrid" Grid.Row="1">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition x:Name="LinesColumn" Width="*" MinWidth="320"/>
+            <ColumnDefinition x:Name="LinesColumn" Width="*" MinWidth="200"/>
             <ColumnDefinition x:Name="SplitterColumn" Width="0"/>
             <ColumnDefinition x:Name="StageColumn" Width="0"/>
         </Grid.ColumnDefinitions>
-        <Border x:Name="LinesCard" Grid.Column="0" Style="{StaticResource GdCard}" Margin="0" Padding="6">
+        <common:PopOutHost Grid.Column="0" Title="Lines" ButtonMargin="0,4,26,0">
+        <Grid>
+        <Border x:Name="LinesCard" Style="{StaticResource GdCard}" Margin="0" Padding="6">
             <ScrollViewer x:Name="LinesScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                 <ItemsControl x:Name="Lines" ItemTemplate="{StaticResource LineTemplate}">
                 </ItemsControl>
             </ScrollViewer>
         </Border>
-        <Border x:Name="FlowCard" Grid.Column="0" Style="{StaticResource GdCard}" Margin="0" Padding="6" Visibility="Collapsed">
+        <Border x:Name="FlowCard" Style="{StaticResource GdCard}" Margin="0" Padding="6" Visibility="Collapsed">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -176,7 +180,7 @@
                                Text="Cards are runs of lines; gold arrows are jumps, grey arrows run on. Click a card to edit its lines below, drag cards to arrange them, drag a gold port onto a card to change where that jump goes, right-click for more. Middle mouse drags, Ctrl+wheel zooms."/>
                 </DockPanel>
                 <me:FlowGraphView x:Name="Flow" Grid.Row="1"/>
-                <GridSplitter Grid.Row="2" Height="6" HorizontalAlignment="Stretch" Background="Transparent"/>
+                <GridSplitter Grid.Row="2" Height="6" HorizontalAlignment="Stretch"/>
                 <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                     <StackPanel>
                         <TextBlock x:Name="FlowLinesHeader" Style="{StaticResource GdSection}" Margin="0,4,0,4" Text="Pick a card to edit its lines."/>
@@ -185,17 +189,25 @@
                 </ScrollViewer>
             </Grid>
         </Border>
-        <Border x:Name="BytesCard" Grid.Column="0" Style="{StaticResource GdCard}" Margin="0" Padding="6" Visibility="Collapsed">
+        <Border x:Name="BytesCard" Style="{StaticResource GdCard}" Margin="0" Padding="6" Visibility="Collapsed">
             <me:RawBytesView x:Name="Bytes"/>
         </Border>
-        <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="Transparent"/>
-        <me:CutsceneStageView x:Name="Stage" Grid.Column="2" Visibility="Collapsed"/>
+        </Grid>
+        </common:PopOutHost>
+        <GridSplitter x:Name="StageSplitter" Grid.Column="1" Width="6" HorizontalAlignment="Stretch"/>
+        <common:PopOutHost Grid.Column="2" Title="Stage" ButtonMargin="0,2,4,0">
+            <me:CutsceneStageView x:Name="Stage" Visibility="Collapsed"/>
+        </common:PopOutHost>
         </Grid>
 
-        <Border x:Name="TimelineCard" Grid.Row="2" Style="{StaticResource GdCard}" Margin="0,8,0,0" Padding="6" Visibility="Collapsed">
-            <me:CutsceneTimelineView x:Name="Timeline"/>
-        </Border>
-        <DockPanel Grid.Row="3" Margin="0,10,0,0" LastChildFill="True">
+        <GridSplitter x:Name="TimelineSplitter" Grid.Row="2" Height="6" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                      ResizeBehavior="PreviousAndNext" Margin="0,1,0,0"/>
+        <common:PopOutHost Grid.Row="3" Title="Timeline" ButtonMargin="0,8,10,0">
+            <Border x:Name="TimelineCard" Style="{StaticResource GdCard}" Margin="0" Padding="6" Visibility="Collapsed">
+                <me:CutsceneTimelineView x:Name="Timeline"/>
+            </Border>
+        </common:PopOutHost>
+        <DockPanel Grid.Row="4" Margin="0,10,0,0" LastChildFill="True">
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                 <Button x:Name="UndoButton" Content="↶ Undo" Style="{StaticResource LufiaButton}" Click="Undo_Click" Margin="0,0,4,0" IsEnabled="False"/>
                 <Button x:Name="RedoButton" Content="↷ Redo" Style="{StaticResource LufiaButton}" Click="Redo_Click" Margin="0,0,12,0" IsEnabled="False"/>
