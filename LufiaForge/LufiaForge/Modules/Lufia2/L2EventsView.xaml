@@ -1,24 +1,34 @@
 <UserControl x:Class="LufiaForge.Modules.Lufia2.L2EventsView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:common="clr-namespace:LufiaForge.Modules.Common">
     <UserControl.Resources>
         <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
     </UserControl.Resources>
     <TabControl Background="Transparent" BorderThickness="0">
         <TabItem Header="Scripts" Style="{StaticResource LufiaTabItem}">
-            <Grid>
+            <Grid common:LayoutMemory.Key="l2events.scripts">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="240"/>
+                    <ColumnDefinition Width="240" MinWidth="120"/>
+                    <ColumnDefinition Width="6"/>
                     <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="320"/>
+                    <ColumnDefinition Width="6"/>
+                    <ColumnDefinition Width="320" MinWidth="160"/>
                 </Grid.ColumnDefinitions>
-                <ListBox Grid.Column="0" Margin="12" Style="{StaticResource GdFindList}" ItemsSource="{Binding Names}" SelectedIndex="{Binding SelectedIndex}"/>
-                <DockPanel Grid.Column="1" Margin="0,12,0,12">
+                <common:PopOutHost Grid.Column="0" Title="Event script list" Key="l2events.list" ButtonMargin="0,14,32,0">
+                <ListBox Margin="12" Style="{StaticResource GdFindList}" ItemsSource="{Binding Names}" SelectedIndex="{Binding SelectedIndex}"/>
+                </common:PopOutHost>
+                <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch"/>
+                <common:PopOutHost Grid.Column="2" Title="Event script" Key="l2events.script" ButtonMargin="0,0,2,0">
+                <DockPanel Margin="0,12,0,12">
                     <TextBlock DockPanel.Dock="Top" Text="{Binding Summary}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="8,0,0,6"/>
                     <ListBox Style="{StaticResource GdFindList}" ItemsSource="{Binding Lines}" SelectedIndex="{Binding SelectedLine}" FontFamily="Consolas"
                              ScrollViewer.HorizontalScrollBarVisibility="Auto" VirtualizingStackPanel.IsVirtualizing="True"/>
                 </DockPanel>
-                <Border Grid.Column="2" Style="{StaticResource GdCard}" VerticalAlignment="Top" Margin="12">
+                </common:PopOutHost>
+                <GridSplitter Grid.Column="3" Width="6" HorizontalAlignment="Stretch"/>
+                <common:PopOutHost Grid.Column="4" Title="Command bytes" Key="l2events.bytes" ButtonMargin="0,14,14,0">
+                <Border Style="{StaticResource GdCard}" VerticalAlignment="Top" Margin="12">
                     <StackPanel>
                         <TextBlock Text="COMMAND BYTES" Style="{StaticResource GdSection}"/>
                         <TextBox Style="{StaticResource GdText}" FontFamily="Consolas" Text="{Binding BytesText, UpdateSourceTrigger=PropertyChanged}"
@@ -27,21 +37,28 @@
                         <Button Content="Apply" Command="{Binding ApplyBytesCommand}" IsEnabled="{Binding CanEdit}" HorizontalAlignment="Left" Padding="18,4"/>
                     </StackPanel>
                 </Border>
+                </common:PopOutHost>
             </Grid>
         </TabItem>
         <TabItem Header="Story flags" Style="{StaticResource LufiaTabItem}">
-            <Grid>
+            <Grid common:LayoutMemory.Key="l2events.flags">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="240"/>
+                    <ColumnDefinition Width="240" MinWidth="120"/>
+                    <ColumnDefinition Width="6"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
-                <ListBox Grid.Column="0" Margin="12" Style="{StaticResource GdFindList}" ItemsSource="{Binding Flags}" SelectedIndex="{Binding SelectedFlag}" FontFamily="Consolas"/>
-                <DockPanel Grid.Column="1" Margin="0,12,12,12">
+                <common:PopOutHost Grid.Column="0" Title="Story flag list" Key="l2events.flaglist" ButtonMargin="0,14,32,0">
+                <ListBox Margin="12" Style="{StaticResource GdFindList}" ItemsSource="{Binding Flags}" SelectedIndex="{Binding SelectedFlag}" FontFamily="Consolas"/>
+                </common:PopOutHost>
+                <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch"/>
+                <common:PopOutHost Grid.Column="2" Title="Story flag uses" Key="l2events.flaguses" ButtonMargin="0,0,12,0">
+                <DockPanel Margin="0,12,12,12">
                     <TextBlock DockPanel.Dock="Top" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="8,0,0,6"
                                Text="The 256 story flags (bits at $7E:077E) and every event script that sets, clears or tests one. Flag FF also holds the result of a few tests."/>
                     <TextBox Style="{StaticResource GdText}" Text="{Binding FlagUsesText, Mode=OneWay}" IsReadOnly="True" FontFamily="Consolas"
                              TextWrapping="NoWrap" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" VerticalContentAlignment="Top"/>
                 </DockPanel>
+                </common:PopOutHost>
             </Grid>
         </TabItem>
     </TabControl>

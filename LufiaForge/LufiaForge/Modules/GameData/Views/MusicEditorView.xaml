@@ -1,7 +1,8 @@
 <UserControl x:Class="LufiaForge.Modules.GameData.Views.MusicEditorView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:v="clr-namespace:LufiaForge.Modules.GameData.Views">
+             xmlns:v="clr-namespace:LufiaForge.Modules.GameData.Views"
+             xmlns:common="clr-namespace:LufiaForge.Modules.Common">
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
@@ -19,9 +20,10 @@
         </ResourceDictionary>
     </UserControl.Resources>
 
-    <Grid>
+    <Grid common:LayoutMemory.Key="gamedata.music.main">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="210"/>
+            <ColumnDefinition Width="210" MinWidth="120"/>
+            <ColumnDefinition Width="6"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
         <Grid.RowDefinitions>
@@ -29,9 +31,14 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <ListBox Grid.Column="0" Margin="12" Style="{StaticResource GdFindList}" ItemsSource="{Binding Songs}" SelectedIndex="{Binding SelectedIndex}"/>
+        <common:PopOutHost Grid.Column="0" Title="Song list" Key="gamedata.music.list" ButtonMargin="0,14,32,0">
+        <ListBox Margin="12" Style="{StaticResource GdFindList}" ItemsSource="{Binding Songs}" SelectedIndex="{Binding SelectedIndex}"/>
+        </common:PopOutHost>
 
-        <TabControl Grid.Column="1" Margin="0,8,8,0" Style="{StaticResource LufiaTabControl}" SelectedIndex="{Binding TabIndex}">
+        <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch"/>
+
+        <common:PopOutHost Grid.Column="2" Title="Music" Key="gamedata.music.detail" ButtonMargin="0,10,12,0">
+        <TabControl Margin="0,8,8,0" Style="{StaticResource LufiaTabControl}" SelectedIndex="{Binding TabIndex}">
             <!-- ═══ SONG: listen, instruments, files ═══ -->
             <TabItem Header="Song" Style="{StaticResource LufiaTabItem}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -153,16 +160,22 @@
                         <TextBlock Text="{Binding SizeText}" Style="{StaticResource GdHint}" VerticalAlignment="Center" Margin="6,0,0,4"/>
                     </WrapPanel>
 
-                    <Grid Grid.Row="2">
+                    <Grid Grid.Row="2" common:LayoutMemory.Key="gamedata.music.notes">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="262"/>
+                            <ColumnDefinition Width="6"/>
+                            <ColumnDefinition Width="262" MinWidth="150"/>
                         </Grid.ColumnDefinitions>
+                        <common:PopOutHost Grid.Column="0" Title="Piano roll" Key="gamedata.music.roll" ButtonMargin="0,2,20,0">
                         <Border BorderBrush="{StaticResource BorderPurpleBrush}" BorderThickness="1">
                             <v:PianoRoll x:Name="Roll" Model="{Binding}"/>
                         </Border>
+                        </common:PopOutHost>
 
-                        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" Margin="8,0,0,0">
+                        <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch"/>
+
+                        <common:PopOutHost Grid.Column="2" Title="Note inspector" Key="gamedata.music.inspector" ButtonMargin="0,2,20,0">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="8,0,0,0">
                             <StackPanel>
                                 <Border Style="{StaticResource GdCard}" Margin="0,0,0,8">
                                     <StackPanel>
@@ -257,11 +270,13 @@
                                 </Border>
                             </StackPanel>
                         </ScrollViewer>
+                        </common:PopOutHost>
                     </Grid>
                 </Grid>
             </TabItem>
         </TabControl>
+        </common:PopOutHost>
 
-        <v:EditorFooter Grid.Row="1" Grid.ColumnSpan="2"/>
+        <v:EditorFooter Grid.Row="1" Grid.ColumnSpan="3"/>
     </Grid>
 </UserControl>

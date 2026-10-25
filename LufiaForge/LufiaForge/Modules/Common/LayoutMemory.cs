@@ -104,9 +104,12 @@ public static class LayoutMemory
 
     private static void Grid_DragCompleted(object sender, DragCompletedEventArgs e)
     {
-        if (e.OriginalSource is not GridSplitter s || sender is not Grid g || s.Parent != g || GetKey(g) is not string key) return;
+        if (!Moved(e) || e.OriginalSource is not GridSplitter s || sender is not Grid g || s.Parent != g || GetKey(g) is not string key) return;
         Set(key, string.Join(";", Sizes(g).Select(Format)));
     }
+
+    /// <summary>A drag that really moved the splitter (a click, or the first click of a double-click, doesn't).</summary>
+    public static bool Moved(DragCompletedEventArgs e) => !e.Canceled && (Math.Abs(e.HorizontalChange) >= 1 || Math.Abs(e.VerticalChange) >= 1);
 
     private static void Grid_PreviewMouseDown(object sender, MouseButtonEventArgs e)
     {

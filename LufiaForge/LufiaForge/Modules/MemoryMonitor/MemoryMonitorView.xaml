@@ -4,6 +4,7 @@
              xmlns:wf="clr-namespace:System.Windows.Forms.Integration;assembly=WindowsFormsIntegration"
              xmlns:local="clr-namespace:LufiaForge.Modules.MemoryMonitor"
              xmlns:conv="clr-namespace:LufiaForge.Converters"
+             xmlns:common="clr-namespace:LufiaForge.Modules.Common"
              Background="{StaticResource DeepPurpleBrush}">
 
     <Grid>
@@ -88,11 +89,11 @@
         <!-- ================================================================
              MAIN: BizHawk (left) + Memory Tools (right)
              ================================================================ -->
-        <Grid Grid.Row="1">
+        <Grid Grid.Row="1" common:LayoutMemory.Key="memorymonitor.main">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="3*" MinWidth="300"/>  <!-- BizHawk game -->
-                <ColumnDefinition Width="Auto"/>               <!-- Splitter -->
-                <ColumnDefinition Width="2*" MinWidth="280"/>  <!-- Memory tools -->
+                <ColumnDefinition Width="3*" MinWidth="200"/>  <!-- BizHawk game -->
+                <ColumnDefinition Width="6"/>                  <!-- Splitter -->
+                <ColumnDefinition Width="2*" MinWidth="200"/>  <!-- Memory tools -->
             </Grid.ColumnDefinitions>
 
             <!-- ========== LEFT: Embedded BizHawk ========== -->
@@ -155,15 +156,14 @@
 
             <!-- Splitter -->
             <GridSplitter Grid.Column="1"
-                          Width="4"
-                          HorizontalAlignment="Center"
+                          Width="6"
+                          HorizontalAlignment="Stretch"
                           VerticalAlignment="Stretch"
-                          Background="{StaticResource BorderPurpleBrush}"
                           ResizeBehavior="PreviousAndNext"/>
 
-            <!-- ========== RIGHT: Memory tools sub-tabs ========== -->
-            <TabControl Grid.Column="2"
-                        Style="{StaticResource LufiaTabControl}"
+            <!-- ========== RIGHT: Memory tools sub-tabs (can pop out; the BizHawk side has its own Undock) ========== -->
+            <common:PopOutHost Grid.Column="2" Title="Memory tools" ButtonMargin="0,4,8,0">
+            <TabControl Style="{StaticResource LufiaTabControl}"
                         Background="Transparent">
 
                 <!-- ============ HEX VIEW ============ -->
@@ -469,6 +469,7 @@
                 </TabItem>
 
             </TabControl>
+            </common:PopOutHost>
         </Grid>
     </Grid>
 </UserControl>
