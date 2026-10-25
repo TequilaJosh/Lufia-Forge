@@ -1,0 +1,29 @@
+<Window x:Class="LufiaForge.Modules.Common.ClearStoryWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Start from a clean slate" Width="620" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{DynamicResource MidPurpleBrush}">
+    <StackPanel Margin="18">
+        <TextBlock Text="Start from a clean slate" Style="{StaticResource LufiaCardTitle}" FontSize="16"/>
+        <TextBlock Style="{StaticResource LufiaLabel}" TextWrapping="Wrap" Margin="0,6,0,0"
+                   Text="Takes the story out of the game so you can build your own: every event and cutscene, every character on the maps (shopkeepers, innkeepers and priests too), and all treasure (chests, gold and hidden items)."/>
+        <TextBlock Style="{StaticResource LufiaLabel}" TextWrapping="Wrap" Margin="0,8,0,0"
+                   Text="Kept: the maps as they are built (layout, tiles, exits, doors and arrival points), graphics, monsters, encounters, items, spells and music. Chests drawn into a map stay as scenery until you paint them over."/>
+
+        <TextBlock Text="A new game starts here, with the Hero" Style="{StaticResource LufiaLabel}" Margin="0,14,0,4"/>
+        <ComboBox x:Name="MapCombo" DisplayMemberPath="Label" SelectionChanged="MapCombo_SelectionChanged"/>
+        <DockPanel Margin="0,8,0,0">
+            <TextBlock Text="Arrival point" Style="{StaticResource LufiaLabel}" VerticalAlignment="Center" Width="110"/>
+            <ComboBox x:Name="ArrivalCombo" DisplayMemberPath="Label"/>
+        </DockPanel>
+
+        <TextBlock Style="{StaticResource LufiaLabel}" Foreground="{StaticResource TextDisabledBrush}" TextWrapping="Wrap" Margin="0,14,0,0"
+                   Text="Patches that work through the story's events (Test start, Visible monsters, the Ancient Cave) have nothing left to work with afterwards. Edit &gt; Undo takes the whole clear back."/>
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button x:Name="OkButton" Content="Clear the story" Style="{StaticResource LufiaButtonGold}" Padding="14,5" Margin="0,0,8,0" IsDefault="True" Click="Ok_Click"/>
+            <Button Content="Cancel" Style="{StaticResource LufiaButton}" Padding="14,5" IsCancel="True"/>
+        </StackPanel>
+    </StackPanel>
+</Window>

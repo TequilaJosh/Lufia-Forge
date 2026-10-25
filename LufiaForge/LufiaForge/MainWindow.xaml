@@ -95,6 +95,9 @@ Title="{Binding WindowTitle}"
                         </Style>
                     </MenuItem.ItemContainerStyle>
                 </MenuItem>
+                <Separator Style="{StaticResource LufiaSeparator}"/>
+                <MenuItem Header="Start from a Clean Slate..." Click="ClearStoryMenuItem_Click" Foreground="Black" IsEnabled="{Binding IsRomLoaded}"
+                          ToolTip="Takes out every event, cutscene, character and treasure (the maps, graphics, monsters, items, spells and music stay); a new game starts where you pick"/>
             </MenuItem>
 
             <MenuItem Header="_Help" Foreground="{StaticResource TextPrimaryBrush}">

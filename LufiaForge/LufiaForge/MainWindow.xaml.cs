@@ -194,6 +194,31 @@ public partial class MainWindow : Window
     private async void CheckUpdatesMenuItem_Click(object sender, RoutedEventArgs e) =>
         await UpdateService.CheckAsync(silentIfNone: false, HasUnsavedChanges);
 
+    private void ClearStoryMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        var vm = (MainViewModel)DataContext;
+        if (vm.RomBuffer is not { } rom) return;
+        if (rom.IsLufia2)
+        {
+            MessageBox.Show(this, "Clearing the story of Lufia II isn't ready yet.", "Start from a clean slate", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        var d = new Modules.Common.ClearStoryWindow(rom) { Owner = this };
+        if (d.ShowDialog() != true) return;
+        var before = rom.ToArray();
+        try
+        {
+            var r = Core.Maps.StoryClear.Clear(rom, d.StartMap, d.StartArrival);
+            vm.NotifyRomModified($"Story cleared: {r.Events} events, {r.People} characters, {r.Treasure} treasure spots; a new game starts on map {d.StartMap:X2}");
+            vm.ReloadModules();
+        }
+        catch (Exception ex)
+        {
+            rom.ReplaceAll(before);
+            MessageBox.Show(this, "The story couldn't be cleared (nothing was changed): " + ex.Message, "Start from a clean slate", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
     private void AboutMenuItem_Click(object sender, RoutedEventArgs e) =>
         new AboutWindow { Owner = this }.ShowDialog();
 }
