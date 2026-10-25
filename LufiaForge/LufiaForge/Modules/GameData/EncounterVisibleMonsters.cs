@@ -197,7 +197,7 @@ public partial class EncounterEditorViewModel
     /// last, which uses the room.</summary>
     [ObservableProperty] private int _encounterTabIndex;
     public bool IsMapGroupsShown => EncounterTabIndex != 2;
-    public int MiddleColumnSpan => EncounterTabIndex == 2 ? 2 : 1;
+    public int MiddleColumnSpan => EncounterTabIndex == 2 ? 3 : 1;
     partial void OnEncounterTabIndexChanged(int value) { OnPropertyChanged(nameof(IsMapGroupsShown)); OnPropertyChanged(nameof(MiddleColumnSpan)); }
 
     partial void OnMonsterGroupTextChanged(string value) => MonsterGroupInfo = GroupSummary(value);

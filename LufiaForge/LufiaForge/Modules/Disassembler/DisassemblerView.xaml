@@ -1,7 +1,8 @@
 <UserControl x:Class="LufiaForge.Modules.Disassembler.DisassemblerView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:local="clr-namespace:LufiaForge.Modules.Disassembler">
+             xmlns:local="clr-namespace:LufiaForge.Modules.Disassembler"
+             xmlns:common="clr-namespace:LufiaForge.Modules.Common">
 
     <UserControl.Resources>
         <!-- Color constants for syntax highlighting -->
@@ -266,15 +267,16 @@
         <!-- ================================================================
              MAIN CONTENT — disassembly list + side panels
              ================================================================ -->
-        <Grid Grid.Row="3">
+        <Grid Grid.Row="3" common:LayoutMemory.Key="disassembler.main">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="3*"/>  <!-- Disassembly -->
-                <ColumnDefinition Width="Auto"/> <!-- Splitter -->
-                <ColumnDefinition Width="220"/>  <!-- Side panels -->
+                <ColumnDefinition Width="3*" MinWidth="250"/>  <!-- Disassembly -->
+                <ColumnDefinition Width="6"/>                  <!-- Splitter -->
+                <ColumnDefinition Width="220" MinWidth="140"/> <!-- Side panels -->
             </Grid.ColumnDefinitions>
 
             <!-- ── Disassembly list ───────────────────────────────────────── -->
-            <DockPanel Grid.Column="0">
+            <common:PopOutHost Grid.Column="0" Title="Disassembly" ButtonMargin="0,1,20,0">
+            <DockPanel>
 
                 <!-- Column header row -->
                 <Border DockPanel.Dock="Top"
@@ -364,19 +366,21 @@
 
             </ListBox>
             </DockPanel>
+            </common:PopOutHost>
 
             <GridSplitter Grid.Column="1"
-                          Width="3"
-                          Background="{StaticResource BorderPurpleBrush}"
+                          Width="6"
+                          HorizontalAlignment="Stretch"
                           VerticalAlignment="Stretch"
                           ResizeBehavior="PreviousAndNext"/>
 
             <!-- ── Side panels ────────────────────────────────────────────── -->
-            <Grid Grid.Column="2" Background="{StaticResource DeepPurpleBrush}">
+            <common:PopOutHost Grid.Column="2" Title="Bookmarks and cross reference" ButtonMargin="0,2,6,0">
+            <Grid Background="{StaticResource DeepPurpleBrush}" common:LayoutMemory.Key="disassembler.side">
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="*"/>   <!-- Bookmarks -->
-                    <RowDefinition Height="Auto"/> <!-- XRef header -->
-                    <RowDefinition Height="*"/>    <!-- XRef content -->
+                    <RowDefinition Height="*" MinHeight="60"/>  <!-- Bookmarks -->
+                    <RowDefinition Height="6"/>                 <!-- Splitter -->
+                    <RowDefinition Height="*" MinHeight="60"/>  <!-- XRef header + content -->
                 </Grid.RowDefinitions>
 
                 <!-- Bookmarks panel -->
@@ -476,8 +480,11 @@
                     </ListBox>
                 </DockPanel>
 
+                <GridSplitter Grid.Row="1" Height="6" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" ResizeBehavior="PreviousAndNext"/>
+
                 <!-- Cross-Reference panel -->
-                <Border Grid.Row="1"
+                <DockPanel Grid.Row="2">
+                <Border DockPanel.Dock="Top"
                         Background="{StaticResource SurfacePurpleBrush}"
                         BorderBrush="{StaticResource BorderPurpleBrush}"
                         BorderThickness="0,1,0,1"
@@ -486,8 +493,7 @@
                                Style="{StaticResource LufiaLabelGold}"/>
                 </Border>
 
-                <ScrollViewer Grid.Row="2"
-                              VerticalScrollBarVisibility="Auto"
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
                               Background="{StaticResource DeepPurpleBrush}">
                     <StackPanel Margin="6,4">
 
@@ -549,8 +555,10 @@
                                                 Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
                     </StackPanel>
                 </ScrollViewer>
+                </DockPanel>
 
             </Grid>
+            </common:PopOutHost>
         </Grid>
 
         <!-- ================================================================

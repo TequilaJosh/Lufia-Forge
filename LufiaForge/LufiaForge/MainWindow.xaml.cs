@@ -22,7 +22,7 @@ public partial class MainWindow : Window
         vm.PropertyChanged += Vm_PropertyChanged;
 
         // Ctrl+Z / Ctrl+Y (Ctrl+Shift+Z): the app-wide history, unless a text box or a tab took the key first
-        // (also in sections popped out into their own windows)
+        // (also in sections popped out into their own windows: PopOutHost passes their keys on through here)
         System.Windows.Input.KeyEventHandler appKeys = (_, e) =>
         {
             if (e.Handled || System.Windows.Input.Keyboard.Modifiers.HasFlag(System.Windows.Input.ModifierKeys.Alt)) return;
@@ -43,7 +43,6 @@ public partial class MainWindow : Window
             else if (e.Key == System.Windows.Input.Key.Y || e.Key == System.Windows.Input.Key.Z && shift) { if (vm.RedoCommand.CanExecute(null)) vm.RedoCommand.Execute(null); e.Handled = true; }
         };
         KeyDown += appKeys;
-        Modules.Common.PopOutHost.AppKeys = appKeys;
 
         // Quietly check GitHub for a newer release once the window is up.
         Loaded += async (_, _) => await UpdateService.CheckAsync(silentIfNone: true, HasUnsavedChanges);

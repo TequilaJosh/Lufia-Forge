@@ -1,14 +1,16 @@
 <UserControl x:Class="LufiaForge.Modules.GameData.Views.PaletteEditorView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:v="clr-namespace:LufiaForge.Modules.GameData.Views">
+             xmlns:v="clr-namespace:LufiaForge.Modules.GameData.Views"
+             xmlns:common="clr-namespace:LufiaForge.Modules.Common">
     <UserControl.Resources>
         <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
     </UserControl.Resources>
 
-    <Grid>
+    <Grid common:LayoutMemory.Key="gamedata.palettes.main">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="260"/>
+            <ColumnDefinition Width="260" MinWidth="130"/>
+            <ColumnDefinition Width="6"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
         <Grid.RowDefinitions>
@@ -16,10 +18,15 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <ListBox Grid.Column="0" Margin="12" Style="{StaticResource GdFindList}"
+        <common:PopOutHost Grid.Column="0" Title="Palette list" Key="gamedata.palettes.list" ButtonMargin="0,14,32,0">
+        <ListBox Margin="12" Style="{StaticResource GdFindList}"
                  ItemsSource="{Binding Sources}" SelectedItem="{Binding SelectedSource}"/>
+        </common:PopOutHost>
 
-        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" Padding="0,12,0,0">
+        <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch"/>
+
+        <common:PopOutHost Grid.Column="2" Title="Palette" Key="gamedata.palettes.detail" ButtonMargin="0,2,22,0">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,12,0,0">
             <WrapPanel Orientation="Horizontal">
                 <Border Style="{StaticResource GdCard}">
                     <StackPanel>
@@ -87,7 +94,8 @@
                 </Border>
             </WrapPanel>
         </ScrollViewer>
+        </common:PopOutHost>
 
-        <v:EditorFooter Grid.Row="1" Grid.ColumnSpan="2"/>
+        <v:EditorFooter Grid.Row="1" Grid.ColumnSpan="3"/>
     </Grid>
 </UserControl>

@@ -1,16 +1,22 @@
 <UserControl x:Class="LufiaForge.Modules.Lufia2.L2ChestsView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:common="clr-namespace:LufiaForge.Modules.Common">
     <UserControl.Resources>
         <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
     </UserControl.Resources>
-    <Grid>
+    <Grid common:LayoutMemory.Key="l2chests.main">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="300"/>
+            <ColumnDefinition Width="300" MinWidth="120"/>
+            <ColumnDefinition Width="6"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
-        <ListBox Grid.Column="0" Margin="12" Style="{StaticResource GdFindList}" ItemsSource="{Binding Names}" SelectedIndex="{Binding SelectedIndex}"/>
-        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" Padding="0,12,0,0">
+        <common:PopOutHost Grid.Column="0" Title="Chest list" Key="l2chests.list" ButtonMargin="0,14,32,0">
+        <ListBox Margin="12" Style="{StaticResource GdFindList}" ItemsSource="{Binding Names}" SelectedIndex="{Binding SelectedIndex}"/>
+        </common:PopOutHost>
+        <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch"/>
+        <common:PopOutHost Grid.Column="2" Title="Treasure" Key="l2chests.detail" ButtonMargin="0,2,22,0">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,12,0,0">
             <StackPanel>
                 <TextBlock Text="{Binding Info}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="8,0,12,4"/>
                 <Border Style="{StaticResource GdCard}" HorizontalAlignment="Left" IsEnabled="{Binding IsEditable}">
@@ -30,5 +36,6 @@
                 </Border>
             </StackPanel>
         </ScrollViewer>
+        </common:PopOutHost>
     </Grid>
 </UserControl>

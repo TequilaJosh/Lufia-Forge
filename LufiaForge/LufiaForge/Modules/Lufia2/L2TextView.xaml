@@ -1,18 +1,28 @@
 <UserControl x:Class="LufiaForge.Modules.Lufia2.L2TextView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:common="clr-namespace:LufiaForge.Modules.Common">
     <UserControl.Resources>
         <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
     </UserControl.Resources>
-    <Grid>
+    <Grid common:LayoutMemory.Key="l2text.main">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="230"/>
-            <ColumnDefinition Width="360"/>
+            <ColumnDefinition Width="230" MinWidth="120"/>
+            <ColumnDefinition Width="6"/>
+            <ColumnDefinition Width="360" MinWidth="140"/>
+            <ColumnDefinition Width="6"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
-        <ListBox Grid.Column="0" Margin="12" Style="{StaticResource GdFindList}" ItemsSource="{Binding MapNames}" SelectedIndex="{Binding SelectedMap}"/>
-        <ListBox Grid.Column="1" Margin="0,12,12,12" Style="{StaticResource GdFindList}" ItemsSource="{Binding LineNames}" SelectedIndex="{Binding SelectedLine}"/>
-        <StackPanel Grid.Column="2" Margin="0,12,12,12">
+        <common:PopOutHost Grid.Column="0" Title="Text map list" Key="l2text.maps" ButtonMargin="0,14,32,0">
+        <ListBox Margin="12" Style="{StaticResource GdFindList}" ItemsSource="{Binding MapNames}" SelectedIndex="{Binding SelectedMap}"/>
+        </common:PopOutHost>
+        <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch"/>
+        <common:PopOutHost Grid.Column="2" Title="Text lines" Key="l2text.lines" ButtonMargin="0,14,32,0">
+        <ListBox Margin="0,12,12,12" Style="{StaticResource GdFindList}" ItemsSource="{Binding LineNames}" SelectedIndex="{Binding SelectedLine}"/>
+        </common:PopOutHost>
+        <GridSplitter Grid.Column="3" Width="6" HorizontalAlignment="Stretch"/>
+        <common:PopOutHost Grid.Column="4" Title="Text line" Key="l2text.line" ButtonMargin="0,0,12,0">
+        <StackPanel Margin="0,12,12,12">
             <TextBlock Text="{Binding Status}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,8"/>
             <Border Style="{StaticResource GdCard}" HorizontalAlignment="Stretch">
                 <StackPanel>
@@ -27,5 +37,6 @@
                 </StackPanel>
             </Border>
         </StackPanel>
+        </common:PopOutHost>
     </Grid>
 </UserControl>

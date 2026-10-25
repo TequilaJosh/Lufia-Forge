@@ -343,10 +343,12 @@ public partial class EventEditorPanel : UserControl, LufiaForge.ViewModels.IPend
         ShowBytesBox.IsChecked = ShowCommandBytes;
         Lines.ItemsSource = _lines;
         // splitters: the sizes dragged to are remembered (double-click a splitter: back to the normal sizes)
-        StageSplitter.DragCompleted += (_, _) =>
-            Common.LayoutMemory.Set(StageSplitKey, Common.LayoutMemory.Format(LinesColumn.Width) + ";" + Common.LayoutMemory.Format(StageColumn.Width));
+        StageSplitter.DragCompleted += (_, e) =>
+        {
+            if (Common.LayoutMemory.Moved(e)) Common.LayoutMemory.Set(StageSplitKey, Common.LayoutMemory.Format(LinesColumn.Width) + ";" + Common.LayoutMemory.Format(StageColumn.Width));
+        };
         StageSplitter.MouseDoubleClick += (_, _) => { Common.LayoutMemory.Set(StageSplitKey, null); if (Stage.Visibility == Visibility.Visible) ShowStage(true); };
-        TimelineSplitter.DragCompleted += (_, _) => Common.LayoutMemory.Set("eventeditor.timeline", Common.LayoutMemory.Format(new GridLength(TimelineRow.ActualHeight)));
+        TimelineSplitter.DragCompleted += (_, e) => { if (Common.LayoutMemory.Moved(e)) Common.LayoutMemory.Set("eventeditor.timeline", Common.LayoutMemory.Format(new GridLength(TimelineRow.ActualHeight))); };
         TimelineSplitter.MouseDoubleClick += (_, _) => { Common.LayoutMemory.Set("eventeditor.timeline", null); TimelineRow.Height = new GridLength(240); };
         // while it's on screen its edits are written by themselves (saving the project, Apply to ROM in the top bar)
         Loaded += (_, _) => (Application.Current?.MainWindow?.DataContext as LufiaForge.ViewModels.MainViewModel)?.Register(this);

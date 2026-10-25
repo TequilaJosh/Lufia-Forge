@@ -1,15 +1,18 @@
 <UserControl x:Class="LufiaForge.Modules.GameData.Views.GrowthEditorView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:v="clr-namespace:LufiaForge.Modules.GameData.Views">
+             xmlns:v="clr-namespace:LufiaForge.Modules.GameData.Views"
+             xmlns:common="clr-namespace:LufiaForge.Modules.Common">
     <UserControl.Resources>
         <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
     </UserControl.Resources>
 
-    <Grid>
+    <Grid common:LayoutMemory.Key="gamedata.growth.main">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="170"/>
+            <ColumnDefinition Width="170" MinWidth="110"/>
+            <ColumnDefinition Width="6"/>
             <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="6"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
         <Grid.RowDefinitions>
@@ -17,10 +20,15 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <ListBox Grid.Column="0" Margin="12" Style="{StaticResource GdFindList}"
+        <common:PopOutHost Grid.Column="0" Title="Growth character list" Key="gamedata.growth.list" ButtonMargin="0,14,32,0">
+        <ListBox Margin="12" Style="{StaticResource GdFindList}"
                  ItemsSource="{Binding Characters}" SelectedIndex="{Binding SelectedIndex}"/>
+        </common:PopOutHost>
 
-        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" Padding="0,12,0,0">
+        <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch"/>
+
+        <common:PopOutHost Grid.Column="2" Title="Growth" Key="gamedata.growth.detail" ButtonMargin="0,2,22,0">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,12,0,0">
             <StackPanel>
                 <Border Style="{StaticResource GdCard}">
                     <StackPanel>
@@ -75,8 +83,12 @@
                 </Border>
             </StackPanel>
         </ScrollViewer>
+        </common:PopOutHost>
 
-        <DockPanel Grid.Column="2" Margin="0,12,12,8">
+        <GridSplitter Grid.Column="3" Width="6" HorizontalAlignment="Stretch"/>
+
+        <common:PopOutHost Grid.Column="4" Title="Growth preview" Key="gamedata.growth.preview" ButtonMargin="0,12,14,0">
+        <DockPanel Margin="0,12,12,8">
             <TextBlock DockPanel.Dock="Top" Text="PREVIEW (without the random -2..+2)" Style="{StaticResource GdSection}"/>
             <TextBlock DockPanel.Dock="Top" Text="{Binding Summary}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,6"/>
             <DataGrid ItemsSource="{Binding Preview}" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
@@ -104,7 +116,8 @@
                 </DataGrid.Columns>
             </DataGrid>
         </DockPanel>
+        </common:PopOutHost>
 
-        <v:EditorFooter Grid.Row="1" Grid.ColumnSpan="3"/>
+        <v:EditorFooter Grid.Row="1" Grid.ColumnSpan="5"/>
     </Grid>
 </UserControl>

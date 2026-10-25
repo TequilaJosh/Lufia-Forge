@@ -1,6 +1,5 @@
 using System.Windows;
 using System.Windows.Controls;
-using KeyEventHandler = System.Windows.Input.KeyEventHandler;
 using Point = System.Windows.Point;
 using Button = System.Windows.Controls.Button;
 
@@ -19,9 +18,6 @@ public class PopOutHost : ContentControl
     {
         FocusableProperty.OverrideMetadata(typeof(PopOutHost), new FrameworkPropertyMetadata(false));
     }
-
-    /// <summary>The app's keys (Ctrl+S, Ctrl+Z…), so they work in popped-out windows too (set by the main window).</summary>
-    public static KeyEventHandler? AppKeys;
 
     public static readonly DependencyProperty TitleProperty = DependencyProperty.Register(
         nameof(Title), typeof(string), typeof(PopOutHost), new PropertyMetadata("Section"));
@@ -53,7 +49,6 @@ public class PopOutHost : ContentControl
 
     private Window? _window;
     private object? _content;
-    private bool _setDataContext;
     private (DefinitionBase Def, GridLength Size)? _shrunk;
 
     /// <summary>While the section is out, its row or column in the grid it sits in only takes what the "Bring it back"
@@ -108,17 +103,20 @@ public class PopOutHost : ContentControl
         if (PresentationSource.FromVisual(this)?.CompositionTarget is { } ct) at = ct.TransformFromDevice.Transform(at);
 
         _content = Content;
-        if (body is FrameworkElement fe && fe.ReadLocalValue(DataContextProperty) == DependencyProperty.UnsetValue)
-        {
-            fe.DataContext = DataContext;
-            _setDataContext = true;
-        }
+        // the section sees the same data as here (also a section whose own DataContext binds to a part of it) and finds
+        // the names its bindings use (ElementName) in the view it came from
+        // (a UserControl, so bindings that look for "the view I am in" still find one with the same data)
+        var frame = new UserControl { Padding = new Thickness(6) };
+        frame.SetBinding(DataContextProperty, new System.Windows.Data.Binding(nameof(DataContext)) { Source = this });
+        for (DependencyObject? p = this; p != null; p = LogicalTreeHelper.GetParent(p) ?? System.Windows.Media.VisualTreeHelper.GetParent(p))
+            if (NameScope.GetNameScope(p) is { } names) { NameScope.SetNameScope(frame, names); break; }
         var resources = new ResourceDictionary();
         // the styles and templates the section found where it was (its view's resources) go with it
         for (DependencyObject? p = this; p != null; p = LogicalTreeHelper.GetParent(p) ?? System.Windows.Media.VisualTreeHelper.GetParent(p))
             if (p is FrameworkElement f && (f.Resources.Count > 0 || f.Resources.MergedDictionaries.Count > 0) && p is not Window)
                 resources.MergedDictionaries.Insert(0, f.Resources);
         Content = null;
+        frame.Content = body;
 
         var win = new Window
         {
@@ -131,7 +129,7 @@ public class PopOutHost : ContentControl
             Resources = resources,
             Icon = owner?.Icon,
             ShowInTaskbar = true,
-            Content = new Border { Padding = new Thickness(6), Child = body },
+            Content = frame,
         };
         if (LayoutMemory.Get(PlaceKey) is string place && place.Split(',') is { Length: 4 } p4 &&
             p4.Select(s => double.TryParse(s, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : double.NaN).ToArray() is var r &&
@@ -140,13 +138,24 @@ public class PopOutHost : ContentControl
             win.Left = r[0]; win.Top = r[1]; win.Width = r[2]; win.Height = r[3];
         }
         if (owner != null && owner.IsVisible) win.Owner = owner;
-        win.KeyDown += (s, e) => AppKeys?.Invoke(s, e);
+        // keys pressed in the window go on to the view the section came from (its shortcuts, then the app's: Ctrl+S,
+        // Ctrl+Z...), as if the section were still there
+        win.PreviewKeyDown += (_, e) => e.Handled |= Forward(e, System.Windows.Input.Keyboard.PreviewKeyDownEvent);
+        win.KeyDown += (_, e) => e.Handled |= Forward(e, System.Windows.Input.Keyboard.KeyDownEvent);
         win.Closing += (_, _) => Return(win);
         _window = win;
         SetValue(IsPoppedOutKey, true);
         Shrink();
         SetValue(PlaceholderTextProperty, $"{Title} is in its own window.");
         win.Show();
+    }
+
+    private bool Forward(System.Windows.Input.KeyEventArgs e, RoutedEvent kind)
+    {
+        if (e.Handled || !IsLoaded || PresentationSource.FromVisual(this) is not { } source) return false;
+        var copy = new System.Windows.Input.KeyEventArgs(e.KeyboardDevice, source, e.Timestamp, e.Key) { RoutedEvent = kind };
+        RaiseEvent(copy);
+        return copy.Handled;
     }
 
     private static bool OnScreen(double left, double top, double width) =>
@@ -159,10 +168,8 @@ public class PopOutHost : ContentControl
         if (win.WindowState == WindowState.Normal)
             LayoutMemory.Set(PlaceKey, string.Join(",", new[] { win.Left, win.Top, win.Width, win.Height }
                 .Select(v => v.ToString("0", System.Globalization.CultureInfo.InvariantCulture))));
-        if (win.Content is Border b) b.Child = null;
+        if (win.Content is UserControl b) b.Content = null;
         win.Content = null;
-        if (_content is FrameworkElement fe && _setDataContext) fe.ClearValue(DataContextProperty);
-        _setDataContext = false;
         Content = _content;
         _content = null;
         _window = null;

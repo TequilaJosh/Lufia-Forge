@@ -80,8 +80,11 @@ public partial class CutsceneStageView : UserControl
         LufiaForge.Modules.Common.MapNavigation.Attach(Scroller, () => Zoom.ScaleX, z => ZoomSlider.Value = z, ZoomSlider.Minimum, ZoomSlider.Maximum);
         foreach (var p in CutsceneStage.Parties) PartyBox.Items.Add(p.Name);
         StepList.ItemsSource = _steps;
-        PathSplitter.DragCompleted += (_, _) => LufiaForge.Modules.Common.LayoutMemory.Set("stage.walkeditor",
-            LufiaForge.Modules.Common.LayoutMemory.Format(new GridLength(PathRow.ActualHeight)));
+        PathSplitter.DragCompleted += (_, e) =>
+        {
+            if (LufiaForge.Modules.Common.LayoutMemory.Moved(e))
+                LufiaForge.Modules.Common.LayoutMemory.Set("stage.walkeditor", LufiaForge.Modules.Common.LayoutMemory.Format(new GridLength(PathRow.ActualHeight)));
+        };
         PathSplitter.MouseDoubleClick += (_, _) => { LufiaForge.Modules.Common.LayoutMemory.Set("stage.walkeditor", null); PathRow.Height = GridLength.Auto; };
         SoundBox.IsChecked = SoundOn;
         if (!SpcNative.Available) { SoundBox.IsEnabled = false; SoundBox.ToolTip = "lufia_spc.dll is missing, so the music can't be played"; }

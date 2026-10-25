@@ -63,17 +63,18 @@
         </Border>
 
         <!-- ============ Body: maps | map | inspector + blocks ============ -->
-        <Grid Grid.Row="1">
+        <Grid Grid.Row="1" common:LayoutMemory.Key="mapeditor.main">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="240" MinWidth="170"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="*" MinWidth="300"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="330" MinWidth="260"/>
+                <ColumnDefinition Width="240" MinWidth="130"/>
+                <ColumnDefinition Width="6"/>
+                <ColumnDefinition Width="*" MinWidth="200"/>
+                <ColumnDefinition Width="6"/>
+                <ColumnDefinition Width="330" MinWidth="220"/>
             </Grid.ColumnDefinitions>
 
             <!-- Maps -->
-            <DockPanel Grid.Column="0" Margin="8,8,4,8">
+            <common:PopOutHost Grid.Column="0" Title="Map list" ButtonMargin="0,10,10,0">
+            <DockPanel x:Name="MapListSection" Margin="8,8,4,8">
                 <TextBox DockPanel.Dock="Top" Style="{StaticResource LufiaSearchBox}" Tag="Search maps (name or number)" Margin="0,0,0,6"
                          Text="{Binding MapSearch, UpdateSourceTrigger=PropertyChanged}"/>
                 <Expander DockPanel.Dock="Bottom" Header="Rename or delete this map" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,6,0,0">
@@ -94,11 +95,13 @@
                     </ListBox.ItemContainerStyle>
                 </ListBox>
             </DockPanel>
+            </common:PopOutHost>
 
-            <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Center" VerticalAlignment="Stretch" Background="Transparent" ResizeBehavior="PreviousAndNext"/>
+            <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" ResizeBehavior="PreviousAndNext"/>
 
             <!-- Map canvas with its view bar -->
-            <DockPanel Grid.Column="2" Margin="0,8,0,8">
+            <common:PopOutHost Grid.Column="2" Title="Map" ButtonMargin="0,10,20,0">
+            <DockPanel x:Name="MapSection" Margin="0,8,0,8">
                 <Border DockPanel.Dock="Bottom" Background="{StaticResource SurfacePurpleBrush}" BorderBrush="{StaticResource BorderPurpleBrush}"
                         BorderThickness="1,0,1,1" CornerRadius="0,0,6,6" Padding="8,6">
                     <StackPanel>
@@ -205,11 +208,13 @@
                     </ScrollViewer>
                 </Border>
             </DockPanel>
+            </common:PopOutHost>
 
-            <GridSplitter Grid.Column="3" Width="5" HorizontalAlignment="Center" VerticalAlignment="Stretch" Background="Transparent" ResizeBehavior="PreviousAndNext"/>
+            <GridSplitter Grid.Column="3" Width="6" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" ResizeBehavior="PreviousAndNext"/>
 
             <!-- Inspector, blocks, map settings -->
-            <Grid Grid.Column="4" Margin="4,8,8,8">
+            <common:PopOutHost Grid.Column="4" Title="Map inspector" ButtonMargin="0,10,12,0">
+            <Grid x:Name="InspectorSection" Margin="4,8,8,8">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" MaxHeight="420"/>
                     <RowDefinition Height="*" MinHeight="160"/>
@@ -478,6 +483,7 @@
                     </Expander>
                 </Border>
             </Grid>
+            </common:PopOutHost>
         </Grid>
 
         <!-- Status bar -->
