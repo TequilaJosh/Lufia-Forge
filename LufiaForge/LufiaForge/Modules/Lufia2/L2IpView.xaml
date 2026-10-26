@@ -34,6 +34,15 @@
                 </StackPanel>
             </Border>
             <Border Style="{StaticResource GdCard}">
+                <StackPanel>
+                    <TextBlock Text="EFFECT" Style="{StaticResource GdSection}"/>
+                    <TextBlock Text="{Binding EffectText}" Style="{StaticResource GdFieldLabel}" FontFamily="Consolas" TextWrapping="NoWrap"/>
+                    <TextBlock Text="{Binding EffectNote}" Style="{StaticResource GdHint}" TextWrapping="Wrap" MaxWidth="360" Margin="0,6,0,0"/>
+                    <Button Content="Edit the effect" Command="{Binding EditEffectCommand}" Style="{StaticResource LufiaButton}" Padding="10,3" Margin="0,8,0,0"
+                            HorizontalAlignment="Left"/>
+                </StackPanel>
+            </Border>
+            <Border Style="{StaticResource GdCard}">
                 <StackPanel Width="300">
                     <TextBlock Text="DESCRIPTION" Style="{StaticResource GdSection}"/>
                     <TextBox Style="{StaticResource GdText}" Text="{Binding Description, UpdateSourceTrigger=LostFocus}" AcceptsReturn="True" TextWrapping="NoWrap"

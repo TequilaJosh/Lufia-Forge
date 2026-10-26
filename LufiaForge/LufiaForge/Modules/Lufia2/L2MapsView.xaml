@@ -30,7 +30,7 @@
             <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="Black">
                 <Image x:Name="MapImageControl" Source="{Binding MapImage}" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor"
                        HorizontalAlignment="Left" VerticalAlignment="Top" Cursor="Pen"
-                       MouseLeftButtonDown="Map_MouseDown" MouseRightButtonDown="Map_MouseDown" MouseMove="Map_MouseMove"/>
+                       MouseLeftButtonDown="Map_MouseDown" MouseRightButtonDown="Map_MouseDown" MouseMove="Map_MouseMove" MouseLeftButtonUp="Map_MouseUp"/>
             </ScrollViewer>
         </DockPanel>
         </common:PopOutHost>

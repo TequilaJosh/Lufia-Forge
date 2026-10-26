@@ -25,9 +25,16 @@ public partial class L2Word : ObservableObject
 {
     public string Label { get; init; } = "";
     public int Bit { get; init; }
+    /// <summary>The record has this word (else Lufia Forge can add it, see <see cref="L2AiScripts.SetItemAddedWord"/>).</summary>
+    public bool InRecord { get; init; }
     [ObservableProperty] private int _value;
+    [ObservableProperty] private bool _has;
+    [ObservableProperty] private string _note = "";
+    public Func<int, string>? Describe { get; init; }
     public Action? Changed { get; set; }
-    partial void OnValueChanged(int value) => Changed?.Invoke();
+    public bool CanSwitch => !InRecord;
+    partial void OnValueChanged(int value) { Note = Describe?.Invoke(value) ?? ""; if (!Has && !InRecord) Has = true; else Changed?.Invoke(); }
+    partial void OnHasChanged(bool value) => Changed?.Invoke();
 }
 
 public sealed record L2Option(int Value, string Label);
@@ -154,6 +161,17 @@ public abstract partial class L2Page : ObservableObject
         return Part(turn, "ITS TURN", "No script: it just attacks.") + "\n\n" + Part(hit, "WHEN HIT", "No script.");
     }
 
+    /// <summary>A spell's or IP attack's effect as steps (what runs now: Lufia Forge's edited one or the game's).</summary>
+    protected static string EffectListing(RomBuffer rom, L2AiScripts.Kind kind, int index)
+    {
+        try
+        {
+            var (steps, edited) = L2AiScripts.Load(rom, kind, index);
+            return (edited ? "(edited in Lufia Forge)\n" : "") + (steps.Count == 0 ? "No effect script." : L2AiScripts.Listing(steps, L2AiScripts.NameLists.From(rom)));
+        }
+        catch (Exception e) { return e.Message; }
+    }
+
     protected static List<L2Flag> Flags(string[] labels, int value, Action changed) =>
         labels.Select((l, i) => new L2Flag { Label = l, Bit = 1 << i, IsChecked = (value & 1 << i) != 0, Changed = changed }).ToList();
 
@@ -227,13 +245,21 @@ public partial class L2ItemsPage : L2Page
     [ObservableProperty] private List<L2Word> _words = new();
     [ObservableProperty] private string _wordsText = "";
     [ObservableProperty] private string _effectText = "";
+    private string[] _ipNames = Array.Empty<string>();
 
     protected override IEnumerable<string> ReadNames()
     {
         IpOptions = L2Battle.IpAttacks(Rom!).Select(a => new L2Option(a.Index, $"{a.Index:X2} {a.Name}")).ToList();
+        _ipNames = L2Battle.IpAttacks(Rom!).Select(a => a.Name).ToArray();
         OnPropertyChanged(nameof(IpOptions));
         return L2Battle.Items(Rom!).Select(i => $"{i.Index:X3}  {i.Name}");
     }
+
+    [RelayCommand] private void EditMenuScript() => EditItem(L2AiScripts.Kind.ItemMenu);
+    [RelayCommand] private void EditBattleScript() => EditItem(L2AiScripts.Kind.ItemBattle);
+    [RelayCommand] private void EditWeaponScript() => EditItem(L2AiScripts.Kind.Weapon);
+    [RelayCommand] private void EditArmorScript() => EditItem(L2AiScripts.Kind.Armor);
+    private void EditItem(L2AiScripts.Kind k) { if (_it != null) EditScript(k, _it.Index, _it.Name.Trim()); }
 
     protected override void Load(int index)
     {
@@ -241,17 +267,27 @@ public partial class L2ItemsPage : L2Page
         Name = _it.Name; Price = _it.Price; EquipType = _it.EquipType; Icon = _it.Icon;
         UseFlags = Flags(L2Battle.ItemUse, _it.Use, Edited);
         EquipBy = Flags(L2Rom.Heroes, _it.EquipBy, Edited);
-        Words = L2Battle.ItemWords.Where(w => _it.Values.ContainsKey(w.Bit) && !w.Name.EndsWith("script"))
-            .Select(w => new L2Word { Label = w.Name, Bit = w.Bit, Value = _it.Values[w.Bit], Changed = Edited }).ToList();
-        var scripts = L2Battle.ItemWords.Where(w => _it.Values.ContainsKey(w.Bit) && w.Name.EndsWith("script")).Select(w => w.Name.ToLowerInvariant()).ToList();
-        WordsText = (Words.Count == 0 ? "No stat bonus or IP attack. " : "") +
-                    (scripts.Count > 0 ? "Scripts: " + string.Join(", ", scripts) + ". " : "") +
-                    "Only the values this item already has can be changed (adding one would make the record grow).";
-        var spellNames = L2Battle.Spells(Rom!).Select(s => s.Name).ToArray();
+        // every bonus word: the record's own, or one Lufia Forge adds (the item loader hook puts it in)
+        var added = L2AiScripts.ItemAddedWords(Rom!, index);
+        string Ip(int v) => v >= 0 && v < _ipNames.Length ? _ipNames[v] : "";
+        Words = L2Battle.ItemWords.Where(w => !w.Name.EndsWith("script") && w.Bit != 0x4000)
+            .Select(w =>
+            {
+                bool own = _it.Values.ContainsKey(w.Bit);
+                int v = own ? _it.Values[w.Bit] : added.GetValueOrDefault(w.Bit);
+                var word = new L2Word { Label = w.Name, Bit = w.Bit, InRecord = own, Describe = w.Bit == 0x8000 ? Ip : null, Changed = Edited };
+                word.Value = v; word.Has = own || added.ContainsKey(w.Bit); word.Note = w.Bit == 0x8000 ? Ip(v) : "";
+                return word;
+            }).ToList();
+        WordsText = "Tick a bonus to give it to the item (ATP for weapons, DFP for armor...). IP attack: its number in the IP attacks tab.";
+        var names = L2AiScripts.NameLists.From(Rom!);
         var parts = new List<string>();
-        foreach (var (bit, label) in new[] { (1, "IN THE MENU"), (2, "IN BATTLE"), (4, "AS A WEAPON"), (8, "AS ARMOR") })
-            if (_it.Values.TryGetValue(bit, out var off)) parts.Add(label + "\n" + L2BattleScript.Disassemble(Rom!, _it.Offset + off, _it.Offset, spellNames));
-        EffectText = parts.Count > 0 ? string.Join("\n\n", parts) : "No effect script.";
+        foreach (var k in new[] { L2AiScripts.Kind.ItemMenu, L2AiScripts.Kind.ItemBattle, L2AiScripts.Kind.Weapon, L2AiScripts.Kind.Armor })
+        {
+            var (steps, edited) = L2AiScripts.Load(Rom!, k, index);
+            if (steps.Count > 0) parts.Add(L2AiScripts.KindName(k).ToUpperInvariant() + (edited ? "  (edited in Lufia Forge)" : "") + "\n" + L2AiScripts.Listing(steps, names));
+        }
+        EffectText = parts.Count > 0 ? string.Join("\n\n", parts) : "No effect yet: the buttons below give it one.";
     }
 
     protected override bool IsField(string p) => p is nameof(Name) or nameof(Price) or nameof(EquipType) or nameof(Icon);
@@ -262,7 +298,11 @@ public partial class L2ItemsPage : L2Page
         if (_it == null) return null;
         _it.Name = Name; _it.Price = (ushort)Price; _it.EquipType = (byte)EquipType; _it.Icon = (byte)Icon;
         _it.Use = (byte)FlagValue(UseFlags); _it.EquipBy = (byte)FlagValue(EquipBy);
-        foreach (var w in Words) _it.Values[w.Bit] = (ushort)w.Value;
+        foreach (var w in Words)
+        {
+            if (w.InRecord) _it.Values[w.Bit] = (ushort)w.Value;
+            else L2AiScripts.SetItemAddedWord(Rom!, _it.Index, w.Bit, w.Has ? w.Value : null);
+        }
         L2Battle.WriteItem(Rom!, _it);
         return _it.Name;
     }
@@ -286,9 +326,10 @@ public partial class L2SpellsPage : L2Page
         _s = L2Battle.ReadSpell(Rom!, index);
         Name = _s.Name; Mp = _s.Mp; Price = _s.Price; InMenu = (_s.Flags & 0x40) != 0; InBattle = (_s.Flags & 0x80) != 0;
         LearnBy = Flags(L2Rom.Heroes, _s.LearnBy, Edited);
-        int script = Rom!.ReadUInt16Le(_s.Offset + 0x11);
-        EffectText = L2BattleScript.Disassemble(Rom!, _s.Offset + script, _s.Offset, L2Battle.Spells(Rom!).Select(x => x.Name).ToArray());
+        EffectText = EffectListing(Rom!, L2AiScripts.Kind.Spell, index);
     }
+
+    [RelayCommand] private void EditEffect() { if (_s != null) EditScript(L2AiScripts.Kind.Spell, _s.Index, _s.Name.Trim()); }
 
     protected override bool IsField(string p) => p is nameof(Name) or nameof(Mp) or nameof(Price) or nameof(InMenu) or nameof(InBattle);
     protected override int DescriptionEntry(int index) => L2Descriptions.SpellBase + index;
@@ -311,6 +352,8 @@ public partial class L2IpPage : L2Page
     private L2Battle.IpAttack? _a;
     [ObservableProperty] private string _name = "";
     [ObservableProperty] private int _cost, _animation;
+    [ObservableProperty] private string _effectText = "";
+    [ObservableProperty] private string _effectNote = "";
 
     protected override IEnumerable<string> ReadNames() => L2Battle.IpAttacks(Rom!).Select(a => $"{a.Index:X2}  {a.Name}");
 
@@ -318,7 +361,15 @@ public partial class L2IpPage : L2Page
     {
         _a = L2Battle.ReadIp(Rom!, index);
         Name = _a.Name; Cost = _a.Cost; Animation = _a.Animation;
+        EffectText = EffectListing(Rom!, L2AiScripts.Kind.IpAttack, index);
+        int effect = L2AiScripts.IpEffect(Rom!, index);
+        var sharing = L2AiScripts.IpAttacksWithEffect(Rom!, effect).Where(i => i != index).ToList();
+        EffectNote = $"Effect script {effect}." + (sharing.Count > 0
+            ? $" Also used by {string.Join(", ", sharing.Select(i => L2Battle.ReadIp(Rom!, i).Name))}: a change applies to them too."
+            : "");
     }
+
+    [RelayCommand] private void EditEffect() { if (_a != null) EditScript(L2AiScripts.Kind.IpAttack, _a.Index, _a.Name); }
 
     protected override bool IsField(string p) => p is nameof(Cost) or nameof(Animation);
     protected override int DescriptionEntry(int index) => L2Descriptions.IpBase + index;
@@ -370,6 +421,7 @@ public partial class L2MapsPage : ObservableObject
     partial void OnSelectedIndexChanged(int value)
     {
         _work = null; IsDirty = false;
+        _stroke = null; _undoStrokes.Clear(); _redoStrokes.Clear();
         InfoLines.Clear();
         _entries = _rom != null && value >= 0 ? L2MapInfo.Read(_rom, value) : new();
         foreach (var e in _entries) InfoLines.Add($"{e.Kind} {e.Id:X2} at ({e.X1},{e.Y1}){(e.X2 != e.X1 || e.Y2 != e.Y1 ? $"-({e.X2},{e.Y2})" : "")} {e.Detail}".TrimEnd());
@@ -418,9 +470,49 @@ public partial class L2MapsPage : ObservableObject
         int i = cy * L.Width + cx;
         if (pick) { SelectedBlock = L.Blocks[i]; return; }
         if (L.Blocks[i] == SelectedBlock) return;
+        _stroke ??= new();
+        _stroke.Add((layer, i, L.Blocks[i], SelectedBlock));
         L.Blocks[i] = SelectedBlock;
         IsDirty = true;
         Draw();
+    }
+
+    // painting is kept here until Apply, so Ctrl+Z / Ctrl+Y take back strokes (one press or drag each) before that
+    private List<(int Layer, int Index, int Before, int After)>? _stroke;
+    private readonly List<List<(int Layer, int Index, int Before, int After)>> _undoStrokes = new(), _redoStrokes = new();
+    public bool CanUndoPaint => _undoStrokes.Count > 0 || _stroke != null;
+    public bool CanRedoPaint => _redoStrokes.Count > 0;
+
+    /// <summary>Ends a press or drag: it becomes one step for Ctrl+Z.</summary>
+    public void EndStroke()
+    {
+        if (_stroke == null) return;
+        _undoStrokes.Add(_stroke); _redoStrokes.Clear(); _stroke = null;
+    }
+
+    public bool UndoPaint()
+    {
+        EndStroke();
+        if (_work == null || _undoStrokes.Count == 0) return false;
+        var s = _undoStrokes[^1]; _undoStrokes.RemoveAt(_undoStrokes.Count - 1);
+        for (int k = s.Count - 1; k >= 0; k--) _work.Layers[s[k].Layer].Blocks[s[k].Index] = s[k].Before;
+        _redoStrokes.Add(s);
+        IsDirty = _undoStrokes.Count > 0;
+        EditText = $"Undone ({s.Count} block{(s.Count == 1 ? "" : "s")}). Ctrl+Y puts it back.";
+        Draw();
+        return true;
+    }
+
+    public bool RedoPaint()
+    {
+        if (_work == null || _redoStrokes.Count == 0) return false;
+        var s = _redoStrokes[^1]; _redoStrokes.RemoveAt(_redoStrokes.Count - 1);
+        foreach (var c in s) _work.Layers[c.Layer].Blocks[c.Index] = c.After;
+        _undoStrokes.Add(s);
+        IsDirty = true;
+        EditText = $"Redone ({s.Count} block{(s.Count == 1 ? "" : "s")}).";
+        Draw();
+        return true;
     }
 
     [CommunityToolkit.Mvvm.Input.RelayCommand]
@@ -433,6 +525,7 @@ public partial class L2MapsPage : ObservableObject
             L2Maps.Write(_rom, _work);
             _main.NotifyRomModified($"Lufia II: map {_work.Id:X2}");
             IsDirty = false;
+            _stroke = null; _undoStrokes.Clear(); _redoStrokes.Clear();   // from here Ctrl+Z takes back the whole Apply (Edit > Undo)
             EditText = "Written to the ROM" + (_rom.Length > before ? " (it no longer fit where it was: the ROM grew to 3 MB and the map moved there)." : ".");
         }
         catch (Exception ex) { EditText = "Not written: " + ex.Message; }

@@ -66,8 +66,11 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
                                 <StackPanel Orientation="Horizontal" Margin="0,2">
+                                    <CheckBox IsChecked="{Binding Has}" IsEnabled="{Binding CanSwitch}" Style="{StaticResource GdCheck}" VerticalAlignment="Center" Margin="0,0,6,0"
+                                              ToolTip="Whether the item has this bonus (the game's own ones can be changed but not taken away; set them to 0)"/>
                                     <TextBlock Text="{Binding Label}" Style="{StaticResource GdFieldLabel}" Width="120"/>
                                     <TextBox Style="{StaticResource GdNumber}" Text="{Binding Value, UpdateSourceTrigger=LostFocus}"/>
+                                    <TextBlock Text="{Binding Note}" Style="{StaticResource GdHint}" VerticalAlignment="Center" Margin="6,0,0,0"/>
                                 </StackPanel>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
@@ -79,6 +82,14 @@
                 <StackPanel>
                     <TextBlock Text="EFFECT" Style="{StaticResource GdSection}"/>
                     <TextBlock Text="{Binding EffectText}" Style="{StaticResource GdFieldLabel}" FontFamily="Consolas" TextWrapping="NoWrap"/>
+                    <WrapPanel Margin="0,8,0,0" MaxWidth="420" HorizontalAlignment="Left">
+                        <Button Content="Edit: as a weapon" Command="{Binding EditWeaponScriptCommand}" Style="{StaticResource LufiaButton}" Padding="8,3" Margin="0,0,6,6"
+                                ToolTip="What happens when its wearer attacks (an element, a status, critical hits...)"/>
+                        <Button Content="Edit: as armor" Command="{Binding EditArmorScriptCommand}" Style="{StaticResource LufiaButton}" Padding="8,3" Margin="0,0,6,6"
+                                ToolTip="What happens when its wearer is hit"/>
+                        <Button Content="Edit: used in battle" Command="{Binding EditBattleScriptCommand}" Style="{StaticResource LufiaButton}" Padding="8,3" Margin="0,0,6,6"/>
+                        <Button Content="Edit: used from the menu" Command="{Binding EditMenuScriptCommand}" Style="{StaticResource LufiaButton}" Padding="8,3" Margin="0,0,6,6"/>
+                    </WrapPanel>
                 </StackPanel>
             </Border>
             <Border Style="{StaticResource GdCard}">

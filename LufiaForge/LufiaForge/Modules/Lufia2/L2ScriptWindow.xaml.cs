@@ -57,11 +57,26 @@ public partial class L2ScriptWindow : Window
         string start = "";
         if (_steps.Count == 0)
         {
-            // a monster without a script: start from what the game does then
-            _steps = attack ? new List<Step> { Make(0x32, 1), L2AiScripts.New(0x28), L2AiScripts.New(0x00) } : new List<Step> { L2AiScripts.New(0x00) };
-            start = attack ? " It had no script (the game then just attacks), so this starts as that plain attack."
-                           : " It had no script for being hit, so this starts as an empty one.";
+            // no script: start from what the game does then
+            if (kind == Kind.Weapon)
+            {
+                _steps = new List<Step> { L2AiScripts.New(0x37), L2AiScripts.New(0x00) };
+                start = " It had no weapon script (the game then just does a weapon attack), so this starts as that attack: add effects around it (an element, a status, critical hits...).";
+            }
+            else if (L2AiScripts.IsEffect(kind))
+            {
+                _steps = new List<Step> { L2AiScripts.New(0x00) };
+                start = $" It had no script for this ({L2AiScripts.KindName(kind)}), so this starts as an empty one.";
+            }
+            else
+            {
+                _steps = attack ? new List<Step> { Make(0x32, 1), L2AiScripts.New(0x28), L2AiScripts.New(0x00) } : new List<Step> { L2AiScripts.New(0x00) };
+                start = attack ? " It had no script (the game then just attacks), so this starts as that plain attack."
+                               : " It had no script for being hit, so this starts as an empty one.";
+            }
         }
+        if (kind == Kind.IpAttack && L2AiScripts.IpAttacksWithEffect(rom, L2AiScripts.IpEffect(rom, index)) is { Count: > 1 } sharing)
+            start += $" This effect is shared by {sharing.Count} IP attacks ({string.Join(", ", sharing.Select(i => L2Battle.ReadIp(rom, i).Name))}): a change applies to all of them.";
         InfoText.Text = (_edited ? "This script was edited in Lufia Forge (the game's own one is kept and comes back with 'Back to the game's script')."
                                  : "The game's own script. Saving keeps the game's bytes as they are and puts the edited script in the ROM's added space.") + start + unreadable;
         RevertButton.IsEnabled = _edited;
@@ -159,7 +174,7 @@ public partial class L2ScriptWindow : Window
         Arg.Jump => "go to",
         Arg.Chance => "chance (of 256)",
         Arg.Percent => "percent",
-        Arg.Register => d.Args.Count(x => x == Arg.Register) > 1 ? $"register {i + 1}" : "register",
+        Arg.Register => d.Args.Count(x => x == Arg.Register) > 1 ? $"number {i + 1}" : "number",
         Arg.Value => "value",
         Arg.Spell => "spell",
         Arg.Monster => "monster",
@@ -195,11 +210,51 @@ public partial class L2ScriptWindow : Window
             Arg.Restore => List(s, i, L2AiScripts.Restores),
             Arg.Element => Elements(s, i),
             Arg.Value => ValueField(s, i),
-            Arg.Register => Number(s, i, hex: true),
-            _ => Number(s, i, hex: a is Arg.Library or Arg.AttackName or Arg.Animation or Arg.Sound),
+            Arg.Register => RegisterField(s, i),
+            Arg.Library => LibraryField(s, i),
+            _ => Number(s, i, hex: a is Arg.AttackName or Arg.Animation or Arg.Sound),
         };
         row.Children.Add(editor);
         return row;
+    }
+
+    /// <summary>A shared script: picked from the list (each with what it does), and a button that copies its steps in
+    /// here so they can be changed for this monster alone.</summary>
+    private FrameworkElement LibraryField(Step s, int i)
+    {
+        var panel = new StackPanel();
+        var box = Combo();
+        for (int n = 0; n < L2AiScripts.LibraryCount; n++) box.Items.Add($"{n:X2}  {_names.Library[n]}");
+        int v = L2AiScripts.ArgValue(s, i);
+        if (v >= L2AiScripts.LibraryCount) box.Items.Add($"{v:X2}  (not in the game's list)");
+        box.SelectedIndex = Math.Min(v, box.Items.Count - 1);
+        box.SelectionChanged += (_, _) =>
+        {
+            if (_loading || box.SelectedIndex < 0 || box.SelectedIndex >= L2AiScripts.LibraryCount) return;
+            L2AiScripts.SetArg(s, i, box.SelectedIndex);
+            Changed();
+        };
+        panel.Children.Add(box);
+        var copy = new Button
+        {
+            Content = "Copy its steps in here, to change them",
+            Style = (Style)FindResource("LufiaButton"), Padding = new Thickness(10, 4, 10, 4), Margin = new Thickness(0, 8, 0, 0),
+            HorizontalAlignment = System.Windows.HorizontalAlignment.Left,
+            ToolTip = "Every monster that calls this shared script shares it. Copied in, its steps belong to this script alone and can be edited, removed or added to.",
+        };
+        copy.Click += (_, _) =>
+        {
+            int at = StepList.SelectedIndex;
+            try
+            {
+                int n = L2AiScripts.InlineLibrary(_rom, _steps, at);
+                RefreshList(at);
+                StatusText.Text = $"Shared script {v:X2} copied in as steps {at + 1}-{at + n}: change them as you like, then Save.";
+            }
+            catch (Exception ex) { StatusText.Text = ex.Message; }
+        };
+        panel.Children.Add(copy);
+        return panel;
     }
 
     private ComboBox Combo() => new() { Style = (Style)FindResource("GdCombo"), HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch, Width = double.NaN, MaxDropDownHeight = 480 };
@@ -258,32 +313,65 @@ public partial class L2ScriptWindow : Window
         return wrap;
     }
 
+    /// <summary>The registers offered by name (the known ones, then every other one as "shared value XX").</summary>
+    private static readonly int[] RegisterChoices = L2AiScripts.KnownRegisters
+        .Concat(Enumerable.Range(0, 0x100).Except(L2AiScripts.KnownRegisters)).ToArray();
+
+    private ComboBox RegisterBox(int value)
+    {
+        var box = Combo();
+        foreach (int r in RegisterChoices) box.Items.Add($"{L2AiScripts.RegisterName(r)}  ({r:X2})");
+        box.SelectedIndex = Array.IndexOf(RegisterChoices, value & 0xFF);
+        return box;
+    }
+
+    /// <summary>A register: picked by what it holds.</summary>
+    private FrameworkElement RegisterField(Step s, int i)
+    {
+        var box = RegisterBox(L2AiScripts.ArgValue(s, i));
+        box.SelectionChanged += (_, _) =>
+        {
+            if (_loading || box.SelectedIndex < 0) return;
+            L2AiScripts.SetArg(s, i, RegisterChoices[box.SelectedIndex]);
+            Changed();
+        };
+        return box;
+    }
+
+    /// <summary>A value: a number, or what a register holds.</summary>
     private FrameworkElement ValueField(Step s, int i)
     {
-        var panel = new StackPanel { Orientation = Orientation.Horizontal };
-        var mode = new ComboBox { Style = (Style)FindResource("GdCombo"), Width = 110 };
-        mode.Items.Add("a number"); mode.Items.Add("register");
-        var box = new TextBox { Style = (Style)FindResource("GdNumber"), Width = 70, Margin = new Thickness(6, 0, 0, 0) };
+        var panel = new StackPanel();
+        var mode = new ComboBox { Style = (Style)FindResource("GdCombo"), Width = 160, HorizontalAlignment = System.Windows.HorizontalAlignment.Left };
+        mode.Items.Add("a number"); mode.Items.Add("what a number holds");
+        var box = new TextBox { Style = (Style)FindResource("GdNumber"), Width = 90, Margin = new Thickness(0, 4, 0, 0), HorizontalAlignment = System.Windows.HorizontalAlignment.Left };
         int v = L2AiScripts.ArgValue(s, i);
         bool reg = (v >> 8) == 0x80;
+        var regBox = RegisterBox(reg ? v : 0x2A);
+        regBox.Margin = new Thickness(0, 4, 0, 0);
         mode.SelectedIndex = reg ? 1 : 0;
-        box.Text = reg ? (v & 0xFF).ToString("X2") : ((short)v).ToString(CultureInfo.InvariantCulture);
+        box.Text = reg ? "0" : ((short)v).ToString(CultureInfo.InvariantCulture);
+        void Show() { box.Visibility = mode.SelectedIndex == 0 ? Visibility.Visible : Visibility.Collapsed; regBox.Visibility = mode.SelectedIndex == 1 ? Visibility.Visible : Visibility.Collapsed; }
         void Write()
         {
+            Show();
             if (_loading) return;
-            bool r = mode.SelectedIndex == 1;
-            if (r && int.TryParse(box.Text, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int rv) && rv is >= 0 and <= 0xFF)
-                L2AiScripts.SetArg(s, i, 0x8000 | rv);
-            else if (!r && int.TryParse(box.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int nv) && nv is >= -32768 and <= 0x7FFF && (nv & 0xFF00) != 0x8000)
+            if (mode.SelectedIndex == 1)
+            {
+                if (regBox.SelectedIndex < 0) return;
+                L2AiScripts.SetArg(s, i, 0x8000 | RegisterChoices[regBox.SelectedIndex]);
+            }
+            else if (int.TryParse(box.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int nv) && nv is >= -32768 and <= 0x7FFF && (nv & 0xFF00) != 0x8000)
                 L2AiScripts.SetArg(s, i, nv & 0xFFFF);
-            else { StatusText.Text = r ? "A register is 00-FF (hex)." : "A number is -32768 to 32767."; return; }
+            else { StatusText.Text = "A number is -32768 to 32767."; return; }
             StatusText.Text = "";
             Changed();
         }
         mode.SelectionChanged += (_, _) => Write();
         box.TextChanged += (_, _) => Write();
-        panel.Children.Add(mode); panel.Children.Add(box);
-        panel.Children.Add(new TextBlock { Text = "register: hex", Style = (Style)FindResource("GdHint"), VerticalAlignment = System.Windows.VerticalAlignment.Center, Margin = new Thickness(6, 0, 0, 0) });
+        regBox.SelectionChanged += (_, _) => Write();
+        Show();
+        panel.Children.Add(mode); panel.Children.Add(box); panel.Children.Add(regBox);
         return panel;
     }
 
