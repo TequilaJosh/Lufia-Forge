@@ -51,6 +51,8 @@
                 <StackPanel>
                     <TextBlock Text="EFFECT" Style="{StaticResource GdSection}"/>
                     <TextBlock Text="{Binding EffectText}" Style="{StaticResource GdFieldLabel}" FontFamily="Consolas" TextWrapping="NoWrap"/>
+                    <Button Content="Edit the effect" Command="{Binding EditEffectCommand}" Style="{StaticResource LufiaButton}" Padding="10,3" Margin="0,8,0,0"
+                            HorizontalAlignment="Left" ToolTip="Damage, element, statuses, healing, stat changes... step by step"/>
                 </StackPanel>
             </Border>
             <Border Style="{StaticResource GdCard}">

@@ -21,11 +21,27 @@ namespace LufiaForge.Core.Lufia2;
 /// </summary>
 public static class L2AiScripts
 {
-    public enum Kind { MonsterAttack = 0, MonsterDefense = 1, CapsuleAi = 2, CapsuleDefense = 3 }
+    public enum Kind
+    {
+        MonsterAttack = 0, MonsterDefense = 1, CapsuleAi = 2, CapsuleDefense = 3,
+        // effects (item property words 0-3, a spell's word at +$11, an IP attack's effect script)
+        ItemMenu = 4, ItemBattle = 5, Weapon = 6, Armor = 7, Spell = 8, IpAttack = 9,
+    }
+
+    public static bool IsItem(Kind k) => k is Kind.ItemMenu or Kind.ItemBattle or Kind.Weapon or Kind.Armor;
+
+    /// <summary>Item, spell and IP effects (the hooks at the script runner and the item loader, block version 2).</summary>
+    public static bool IsEffect(Kind k) => k >= Kind.ItemMenu;
 
     public static string KindName(Kind k) => k switch
     {
         Kind.MonsterAttack or Kind.CapsuleAi => "its turn (AI)",
+        Kind.ItemMenu => "used from the menu",
+        Kind.ItemBattle => "used in battle",
+        Kind.Weapon => "as a weapon (its attack)",
+        Kind.Armor => "as armor (when its wearer is hit)",
+        Kind.Spell => "the spell's effect",
+        Kind.IpAttack => "the IP attack's effect",
         _ => "when it is hit (defense)",
     };
 
@@ -53,21 +69,21 @@ public static class L2AiScripts
     {
         var l = new List<OpDef>();
         void O(int op, string group, string name, string help, params Arg[] args) => l.Add(new OpDef((byte)op, name, group, args, help));
-        const string Act = "Actions", Flow = "Flow", Reg = "Registers", Eff = "Effects", Show = "Show and sound", Misc = "Other";
+        const string Act = "Actions", Flow = "Flow", Reg = "Numbers", Eff = "Effects", Show = "Show and sound", Misc = "Other";
         O(0x00, Flow, "End: do the chosen action", "Ends the script; the action chosen above happens.");
         O(0x01, Flow, "Do the action now, go on", "Does the action chosen so far and carries on (more than one action in a turn).");
         O(0x03, Flow, "Go to", "", Arg.Jump);
         O(0x04, Flow, "If the last action failed, go to", "For example no room to call a monster.", Arg.Jump);
         O(0x05, Flow, "With a chance, go to", "Chance out of 256.", Arg.Chance, Arg.Jump);
-        O(0x06, Flow, "If register = value, go to", "", Arg.Register, Arg.Value, Arg.Jump);
-        O(0x07, Flow, "If register ≠ value, go to", "", Arg.Register, Arg.Value, Arg.Jump);
-        O(0x08, Flow, "If register > value, go to", "", Arg.Register, Arg.Value, Arg.Jump);
-        O(0x09, Flow, "If register < value, go to", "", Arg.Register, Arg.Value, Arg.Jump);
-        O(0x0A, Flow, "If register ≥ value, go to", "", Arg.Register, Arg.Value, Arg.Jump);
-        O(0x0B, Flow, "If register ≤ value, go to", "", Arg.Register, Arg.Value, Arg.Jump);
+        O(0x06, Flow, "If a number is, go to", "", Arg.Register, Arg.Value, Arg.Jump);
+        O(0x07, Flow, "If a number is not, go to", "", Arg.Register, Arg.Value, Arg.Jump);
+        O(0x08, Flow, "If a number is more than, go to", "", Arg.Register, Arg.Value, Arg.Jump);
+        O(0x09, Flow, "If a number is less than, go to", "", Arg.Register, Arg.Value, Arg.Jump);
+        O(0x0A, Flow, "If a number is at least, go to", "", Arg.Register, Arg.Value, Arg.Jump);
+        O(0x0B, Flow, "If a number is at most, go to", "", Arg.Register, Arg.Value, Arg.Jump);
         O(0x3F, Flow, "If capsule attack slot is learned, go to", "Slot 1-3 (capsule monsters).", Arg.Byte, Arg.Jump);
         O(0x46, Flow, "If battle byte is 0, go to", "", Arg.Byte, Arg.Jump);
-        O(0x42, Flow, "Call a shared script", "The game's shared scripts: 11 = immune to the 5 statuses, 25-27 = the capsule monsters' common parts...", Arg.Library);
+        O(0x42, Flow, "Call a shared script", "Runs one of the game's shared scripts (the list says what each does; 11 makes it immune to the 5 statuses). Many monsters share each one: to change it for this one alone, copy its steps in here.", Arg.Library);
         O(0x43, Flow, "Return (end of a shared script)", "");
         O(0x4F, Flow, "Quit: do nothing this turn", "");
         O(0x32, Act, "Choose the target", "01 one random foe, 05 (after 01) all foes, 06 itself, 06 then 05 all its side.", Arg.Target);
@@ -83,29 +99,29 @@ public static class L2AiScripts
         O(0x41, Act, "Wait (check the situation)", "");
         O(0x2E, Act, "Action 0D", "");
         O(0x53, Act, "Action 9", "", Arg.Byte);
-        O(0x0C, Reg, "Register = value", "", Arg.Register, Arg.Value);
-        O(0x0D, Reg, "Register += value", "", Arg.Register, Arg.Value);
-        O(0x0E, Reg, "Register -= value", "", Arg.Register, Arg.Value);
-        O(0x0F, Reg, "Register ×= value", "", Arg.Register, Arg.Value);
-        O(0x10, Reg, "Register ÷= value", "", Arg.Register, Arg.Value);
-        O(0x55, Reg, "Register ÷= value (unsigned)", "", Arg.Register, Arg.Value);
-        O(0x16, Reg, "Register AND= value", "", Arg.Register, Arg.Value);
-        O(0x17, Reg, "Register OR= value", "", Arg.Register, Arg.Value);
-        O(0x18, Reg, "Register XOR= value", "", Arg.Register, Arg.Value);
-        O(0x11, Reg, "Register = random below itself", "", Arg.Register);
-        O(0x12, Reg, "Register = ratio of two registers", "", Arg.Register, Arg.Register);
-        O(0x19, Reg, "Register = its absolute value", "", Arg.Register);
-        O(0x1A, Reg, "Register = minus itself", "", Arg.Register);
-        O(0x1B, Reg, "Register = its sign (-1, 0, 1)", "", Arg.Register);
-        O(0x1C, Reg, "Register = battle counter", "", Arg.Register);
-        O(0x13, Reg, "Register = target's stat", "Choose the target first.", Arg.Register, Arg.Stat);
-        O(0x14, Reg, "Target's stat = register", "", Arg.Register, Arg.Stat);
-        O(0x15, Reg, "Register = its own stat", "", Arg.Register, Arg.Stat);
-        O(0x4E, Reg, "Register = attacker's stat", "", Arg.Register, Arg.Stat);
-        O(0x2F, Reg, "Register = combatants flagged 04", "", Arg.Register);
-        O(0x30, Reg, "Register = side count", "", Arg.Register);
-        O(0x40, Reg, "Register = learned capsule attacks", "", Arg.Register);
-        O(0x45, Reg, "Register = battle byte", "", Arg.Register, Arg.Byte);
+        O(0x0C, Reg, "Set a number", "", Arg.Register, Arg.Value);
+        O(0x0D, Reg, "Add to a number", "", Arg.Register, Arg.Value);
+        O(0x0E, Reg, "Take from a number", "", Arg.Register, Arg.Value);
+        O(0x0F, Reg, "Multiply a number", "", Arg.Register, Arg.Value);
+        O(0x10, Reg, "Divide a number", "", Arg.Register, Arg.Value);
+        O(0x55, Reg, "Divide a number (no minus)", "", Arg.Register, Arg.Value);
+        O(0x16, Reg, "Keep some bits of a number", "", Arg.Register, Arg.Value);
+        O(0x17, Reg, "Add bits to a number", "", Arg.Register, Arg.Value);
+        O(0x18, Reg, "Flip bits of a number", "", Arg.Register, Arg.Value);
+        O(0x11, Reg, "A random number below it", "", Arg.Register);
+        O(0x12, Reg, "Ratio of two numbers", "", Arg.Register, Arg.Register);
+        O(0x19, Reg, "Make a number positive", "", Arg.Register);
+        O(0x1A, Reg, "Turn a number negative (or back)", "", Arg.Register);
+        O(0x1B, Reg, "The sign of a number (-1, 0, 1)", "", Arg.Register);
+        O(0x1C, Reg, "A number = the battle round", "", Arg.Register);
+        O(0x13, Reg, "A number = the target's stat", "Choose the target first.", Arg.Register, Arg.Stat);
+        O(0x14, Reg, "Set the target's stat", "", Arg.Register, Arg.Stat);
+        O(0x15, Reg, "A number = its own stat", "", Arg.Register, Arg.Stat);
+        O(0x4E, Reg, "A number = the attacker's stat", "", Arg.Register, Arg.Stat);
+        O(0x2F, Reg, "A number = fighters flagged 04", "", Arg.Register);
+        O(0x30, Reg, "A number = how many on a side", "", Arg.Register);
+        O(0x40, Reg, "A number = learned capsule attacks", "", Arg.Register);
+        O(0x45, Reg, "A number = a battle byte", "", Arg.Register, Arg.Byte);
         O(0x44, Reg, "Battle byte = value", "", Arg.Byte, Arg.Byte);
         O(0x21, Eff, "Physical damage", "Element, damage (a value or a register, as a negative number), spread.", Arg.Element, Arg.Value, Arg.Byte);
         O(0x22, Eff, "Magic damage", "Element, damage, spread.", Arg.Element, Arg.Value, Arg.Byte);
@@ -149,16 +165,51 @@ public static class L2AiScripts
     public static readonly string[] Restores = { "HP", "MP", "max HP", "max MP", "ATP", "DFP", "STR", "AGL", "INT", "GUT", "MGR" };
     public static readonly (int Bit, string Name)[] Elements =
     {
-        (0x0001, "vs dragons"), (0x0002, "vs insects"), (0x0004, "ice"), (0x0008, "thunder"), (0x0010, "earth"), (0x0020, "vs sea"),
-        (0x0100, "wind"), (0x0200, "fire"), (0x0400, "water"), (0x0800, "soil"), (0x1000, "light"), (0x2000, "shadow"),
-        (0x4000, "vs hard"), (0x8000, "vs flying"),
+        // read from the game's own uses (2026-10-25): fire swords and Fireball 0002, Aqua sword and Droplet 0004, Silver
+        // sword and Light attack 0010, Deadly sword and Gades blade 0020, maces and rods 0040, boomerangs 0080, Dragon
+        // tooth and the dragon IP attacks 0100, Insect crush 0200, Cold rapier and Blizzard 0400, Thunder ax and Bolt
+        // 0800, Groundshock 1000; 0001, 0008 and 2000-8000 aren't used by any script
+        (0x0002, "fire"), (0x0004, "water"), (0x0400, "ice"), (0x0800, "thunder"), (0x1000, "earth"), (0x0010, "light"),
+        (0x0020, "dark"), (0x0040, "blunt (maces, rods)"), (0x0080, "thrown (boomerangs)"), (0x0100, "vs dragons"),
+        (0x0200, "vs insects"), (0x0001, "unused 0001"), (0x0008, "unused 0008"), (0x2000, "unused 2000"),
+        (0x4000, "unused 4000"), (0x8000, "unused 8000"),
     };
 
     public static string ElementText(int w) =>
         w == 0 ? "neutral" : string.Join(" + ", Elements.Where(e => (w & e.Bit) != 0).Select(e => e.Name).DefaultIfEmpty($"{w:X4}"));
 
     /// <summary>A value operand: 80 in the high byte = register (low byte), else a number.</summary>
-    public static string ValueText(int v) => (v >> 8) == 0x80 ? $"register {v & 0xFF:X2}" : $"{(short)v}";
+    public static string ValueText(int v) => (v >> 8) == 0x80 ? RegisterName(v & 0xFF) : $"{(short)v}";
+
+    /// <summary>What a register holds, in words. 00-7F are shared by the whole battle ($7F:F40E), 80-FF belong to the
+    /// fighter running the script (its counters). Named from the battle code's handlers and the game's scripts
+    /// (shared script 11, "immune to the 5 statuses", zeroes the chances 4E 50 54 56 58; 52, death, is left).</summary>
+    public static string RegisterName(int r) => r switch
+    {
+        0x10 => "the last action failed (0 = no)",
+        0x20 => "the attacker",
+        0x21 => "the targets",
+        0x23 => "the action's kind",
+        0x24 => "the action's number",
+        0x25 => "the attack's name",
+        0x27 => "the attack's element",
+        0x28 => "the critical chance",
+        0x29 => "the critical multiplier",
+        0x2A => "the damage",
+        0x2B => "the damage spread",
+        0x4E => "the poison chance",
+        0x50 => "the silence chance",
+        0x52 => "the death chance",
+        0x54 => "the paralysis chance",
+        0x56 => "the confusion chance",
+        0x58 => "the sleep chance",
+        >= 0x80 and <= 0x87 => $"its counter {r - 0x7F}",
+        >= 0x88 => $"its value {r:X2}",
+        _ => $"shared value {r:X2}",
+    };
+
+    public static readonly int[] KnownRegisters = { 0x2A, 0x27, 0x28, 0x29, 0x2B, 0x4E, 0x50, 0x52, 0x54, 0x56, 0x58, 0x10, 0x20, 0x21, 0x23, 0x24, 0x25,
+        0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87 };
 
     // ── steps ────────────────────────────────────────────────────────────────
 
@@ -306,14 +357,111 @@ public static class L2AiScripts
         return new Step { Op = op, Args = new byte[d.Length - 1], Targets = new Step?[jumps], OutsideTargets = Enumerable.Repeat(-1, jumps).ToArray() };
     }
 
+    // ── the shared library ($96:FADD) ─────────────────────────────────────────
+
+    /// <summary>The shared script table ($96:FADD): u16 offsets from the table, each script based at its own start.</summary>
+    public const int LibraryTable = 0xB7ADD, LibraryCount = 0x29;
+
+    public static int LibraryAt(RomBuffer rom, int n) =>
+        n >= 0 && n < LibraryCount ? LibraryTable + rom.ReadUInt16Le(LibraryTable + n * 2) : -1;
+
+    /// <summary>Shared script <paramref name="n"/> as steps (its jumps count from its own start).</summary>
+    public static List<Step> LoadLibrary(RomBuffer rom, int n)
+    {
+        int at = LibraryAt(rom, n);
+        if (at < 0) throw new ArgumentOutOfRangeException(nameof(n), $"There is no shared script {n:X2}.");
+        return Parse(rom, at, at);
+    }
+
+    /// <summary>Puts shared script <paramref name="n"/>'s own steps where step <paramref name="index"/> calls it (42), so
+    /// this script can change them without changing every monster that shares them. Its returns (43) become a "go to"
+    /// the step after the call (the last one simply goes away). Returns how many steps came in.</summary>
+    public static int InlineLibrary(RomBuffer rom, List<Step> steps, int index)
+    {
+        var call = steps[index];
+        if (call.Op != 0x42) throw new ArgumentException("That step doesn't call a shared script.");
+        var lib = LoadLibrary(rom, ArgValue(call, 0));
+        if (lib.Any(s => s.OutsideTargets.Any(o => o >= 0))) throw new InvalidOperationException("That shared script jumps outside itself and can't be copied in.");
+        if (lib.Any(s => s.Op == 0x42)) throw new InvalidOperationException("That shared script calls another one (the game allows one level only).");
+        var after = index + 1 < steps.Count ? steps[index + 1] : null;
+        // a "go to" pointing at the call now points at the first copied step
+        var copy = new List<Step>(lib);
+        if (copy.Count > 0 && copy[^1].Op == 0x43 && !lib.Any(s => s.Targets.Contains(copy[^1]))) copy.RemoveAt(copy.Count - 1);
+        for (int k = 0; k < copy.Count; k++)
+        {
+            if (copy[k].Op != 0x43) continue;
+            if (after == null) { copy[k] = New(0x00); continue; }   // nothing after the call: end
+            var go = New(0x03); go.Targets[0] = after;
+            foreach (var s in copy) for (int t = 0; t < s.Targets.Length; t++) if (s.Targets[t] == copy[k]) s.Targets[t] = go;
+            copy[k] = go;
+        }
+        if (copy.Count == 0) copy.Add(after != null ? GoTo(after) : New(0x00));
+        foreach (var s in steps) for (int t = 0; t < s.Targets.Length; t++) if (s.Targets[t] == call) s.Targets[t] = copy[0];
+        steps.RemoveAt(index);
+        steps.InsertRange(index, copy);
+        return copy.Count;
+
+        static Step GoTo(Step to) { var g = New(0x03); g.Targets[0] = to; return g; }
+    }
+
+    /// <summary>What the game's shared scripts do, read from their steps (2026-10-25). They are run when the fighter is hit
+    /// (most) or by an attack's effect; "the attack's element" is register 27, "the damage" 2A.</summary>
+    private static readonly Dictionary<int, string> LibraryNames = new()
+    {
+        [0x00] = "takes double damage from fire", [0x01] = "takes double damage from thunder", [0x02] = "takes double damage from water",
+        [0x03] = "takes double damage from ice", [0x04] = "double damage from thrown weapons, none from earth",
+        [0x05] = "takes double damage from light", [0x06] = "takes half damage from fire", [0x07] = "takes half damage from thunder",
+        [0x08] = "takes half damage from water", [0x09] = "takes half damage from ice", [0x0A] = "takes half damage from light",
+        [0x0B] = "takes half damage from plain (no element) attacks", [0x0C] = "takes double damage from dragon-slaying attacks",
+        [0x0D] = "takes double damage from dark", [0x0E] = "takes half damage from dark", [0x0F] = "takes double damage from blunt weapons",
+        [0x10] = "takes double damage from insect-slaying attacks", [0x11] = "immune to poison, silence, paralysis, confusion and sleep",
+        [0x12] = "healing hurts it instead, and instant death can't work on it", [0x21] = "works out 1.5 x its own ATP (counter 1)",
+        [0x23] = "works out its ATP with its battle bonus (counter 1)",
+    };
+
+    /// <summary>A shared script in words: the known ones by name, the others as their first steps.</summary>
+    public static string LibraryName(RomBuffer rom, int n, NameLists names) =>
+        LibraryNames.TryGetValue(n, out var known) ? known : LibrarySummary(rom, n, names);
+
+    /// <summary>What a shared script does, in a few words, from its steps.</summary>
+    public static string LibrarySummary(RomBuffer rom, int n, NameLists names)
+    {
+        try
+        {
+            var lib = LoadLibrary(rom, n);
+            var lines = lib.Where(s => s.Op != 0x43).Take(4).Select(s => Describe(s, lib, names)).ToList();
+            return lines.Count == 0 ? "(empty)" : string.Join("; ", lines) + (lib.Count(s => s.Op != 0x43) > 4 ? "..." : "");
+        }
+        catch (Exception ex) { return "(can't be read: " + ex.Message + ")"; }
+    }
+
     // ── owners ───────────────────────────────────────────────────────────────
 
     /// <summary>File offset of the record that owns the script.</summary>
     public static int RecordAt(RomBuffer rom, Kind kind, int index) => kind switch
     {
         Kind.MonsterAttack or Kind.MonsterDefense => L2Battle.ReadMonster(rom, index).Offset,
-        _ => L2Capsules.At(rom, index),
+        Kind.CapsuleAi or Kind.CapsuleDefense => L2Capsules.At(rom, index),
+        Kind.Spell => L2Battle.ReadSpell(rom, index).Offset,
+        Kind.IpAttack => IpEffectBase(rom, IpEffect(rom, index)),
+        _ => L2Battle.ItemOffset(rom, index),
     };
+
+    /// <summary>The item property word (bit) that holds the script of an item kind.</summary>
+    public static int ItemBit(Kind k) => 1 << (k - Kind.ItemMenu);
+
+    /// <summary>An IP attack's effect number (the first word of its record; several attacks can share one).</summary>
+    public static int IpEffect(RomBuffer rom, int ip) => rom.ReadUInt16Le(L2Battle.ReadIp(rom, ip).Offset);
+
+    /// <summary>IP effect scripts: table $95:F1EF of u16 offsets from the table ($81:F46B); the script is run with base =
+    /// table + offset and offset 1.</summary>
+    public const int IpEffectTable = 0xAF1EF;
+
+    public static int IpEffectBase(RomBuffer rom, int effect) => IpEffectTable + rom.ReadUInt16Le(IpEffectTable + effect * 2);
+
+    /// <summary>The IP attacks that use an effect.</summary>
+    public static List<int> IpAttacksWithEffect(RomBuffer rom, int effect) =>
+        Enumerable.Range(0, L2Battle.IpCount).Where(i => IpEffect(rom, i) == effect).ToList();
 
     /// <summary>File offset where the game's own script starts, or -1 when it has none.</summary>
     public static int OriginalAt(RomBuffer rom, Kind kind, int index)
@@ -322,6 +470,14 @@ public static class L2AiScripts
         {
             case Kind.MonsterAttack: return L2Battle.ReadMonster(rom, index).AttackScript;
             case Kind.MonsterDefense: return L2Battle.ReadMonster(rom, index).DefenseScript;
+            case Kind.Spell:
+                var sp = L2Battle.ReadSpell(rom, index);
+                int w = rom.ReadUInt16Le(sp.Offset + 0x11);
+                return w == 0 ? -1 : sp.Offset + w;
+            case Kind.IpAttack: return RecordAt(rom, kind, index) + 1;
+            case Kind.ItemMenu or Kind.ItemBattle or Kind.Weapon or Kind.Armor:
+                var it = L2Battle.ReadItem(rom, index);
+                return it.Values.TryGetValue(ItemBit(kind), out var v) && v != 0 ? it.Offset + v : -1;
             default:
                 var c = L2Capsules.Read(rom, index);
                 int off = kind == Kind.CapsuleAi ? c.AiScript : c.DefenseScript;
@@ -351,6 +507,11 @@ public static class L2AiScripts
     private const int TableCapacity = (BlockSize - TableAt) / EntrySize - 1;
 
     private const int AttackSite = 0xB1D4, CapsuleSite = 0xB1A3, DefenseSite1 = 0x2D165, DefenseSite2 = 0x2D1A6;
+    // version 2: the script runner $81:FAC9 and the item loader $81:F1C5
+    private const int RunnerSite = 0xFAC9, ItemLoaderSite = 0xF1C5;
+    private static readonly byte[] RunnerOriginal = Hex("08 8b c2 30 48 da 5a e2 20 4b ab c0 00 00");
+    private static readonly byte[] ItemLoaderOriginal = Hex("08 8b e2 20 c2 10 a2 ad 0b");
+    private const int CurrentVersion = 2;
     private static readonly byte[] AttackOriginal = Hex("bc 4a 00 f0 0e bd 50 00 22 e2 fc 81 8e 42 0a a9 96 80 08 8c 42 0a a0 20 ef a9 85 8d 44 0a 22 c9 fa 81 6b");
     private static readonly byte[] CapsuleOriginal = Hex("ac 29 11 f0 0e ae 24 11 8e 42 0a ad 26 11 8d 44 0a 80 0e a2 00 00 a0 20 ef 8e 42 0a a9 85 8d 44 0a 22 c9 fa 81 6b");
     private static readonly byte[] DefenseOriginal = Hex("bd 47 00 8d 44 0a bc 4c 00 22 c9 fa 81");
@@ -371,6 +532,8 @@ public static class L2AiScripts
 
     public static bool IsInstalled(RomBuffer rom) => Block(rom) >= 0;
 
+    private static int Version(RomBuffer rom, int block) => rom.ReadByte(block + Magic.Length);
+
     /// <summary>Whether the hooks can go in (the four places still have the game's code).</summary>
     public static bool CanInstall(RomBuffer rom, out string why)
     {
@@ -379,7 +542,8 @@ public static class L2AiScripts
         bool Same(int at, byte[] b) => at + b.Length <= rom.Length && rom.ReadBytes(at, b.Length).SequenceEqual(b);
         bool attack = AttackSite + AttackOriginal.Length <= rom.Length &&
                       Enumerable.Range(0, AttackOriginal.Length).All(i => i == MonsterBankAt || rom.ReadByte(AttackSite + i) == AttackOriginal[i]);
-        if (!attack || !Same(CapsuleSite, CapsuleOriginal) || !Same(DefenseSite1, DefenseOriginal) || !Same(DefenseSite2, DefenseOriginal))
+        if (!attack || !Same(CapsuleSite, CapsuleOriginal) || !Same(DefenseSite1, DefenseOriginal) || !Same(DefenseSite2, DefenseOriginal)
+            || !Same(RunnerSite, RunnerOriginal) || !Same(ItemLoaderSite, ItemLoaderOriginal))
         {
             why = "This ROM's battle code isn't the US game's where the script hooks go (another patch or hack changed it), so edited scripts can't be added.";
             return false;
@@ -388,7 +552,7 @@ public static class L2AiScripts
     }
 
     // where each routine starts in the code (set by Assemble)
-    private static int HookAOffset, HookCOffset, HookDOffset;
+    private static int HookAOffset, HookCOffset, HookDOffset, HookEOffset, HookFOffset;
 
     static L2AiScripts() => Assemble(0x808000, 0x808000, 0x96);
 
@@ -457,8 +621,62 @@ public static class L2AiScripts
         a.Label("findD"); a.Jsr("find");
         a.B(0xFA, 0x6B);                       // PLX / RTL
 
+        // (version 2, after the routines above so a version 1 block keeps their places)
+        // E: the script runner (JML from $81:FAC9, in place of PHP / PHB / REP #$30). Y = offset, $0A42/$0A44 = base.
+        // An item's marker offset ($8000 | key, from F) runs its script from the table (none: offset 0, nothing runs);
+        // any other script is looked up by its address (spells, IP attacks).
+        a.Label("hookE");
+        a.B(0x08, 0x8B, 0xC2, 0x30, 0x48, 0xDA, 0x5A);   // PHP PHB REP #$30 PHA PHX PHY (as the game)
+        a.B(0xC0, 0x00, 0x00); a.Br(0xF0, "outE");        // CPY #0 / BEQ
+        // a marker has bit 15 set and a base (the game's built-in scripts run with base 0 and offsets like $EF24)
+        a.B(0x98); a.Br(0x10, "absE");                    // TYA / BPL
+        a.B(0xAD, 0x42, 0x0A); a.Br(0xD0, "markE");       // LDA $0A42 / BNE
+        a.Label("absE");
+        a.B(0x98, 0x18, 0x6D, 0x42, 0x0A, 0xAA);          // TYA / CLC / ADC $0A42 / TAX (the script's address)
+        a.B(0xE2, 0x20, 0xAD, 0x44, 0x0A); a.Jsr("find"); // SEP #$20 / LDA $0A44 (its bank as the kind)
+        a.Br(0x80, "outE");
+        a.Label("markE");
+        a.B(0x98, 0x29, 0xFF, 0x7F, 0xAA, 0xE2, 0x20, 0xA9, ItemMarker); a.Jsr("find");   // TYA / AND #$7FFF / TAX / SEP / LDA #FD
+        a.Br(0xB0, "outE");
+        a.B(0xA0, 0x00, 0x00);                            // LDY #0 (not in the table: no script)
+        a.Label("outE"); Long(0x5C, 0x81FAD0);            // JML back (SEP #$20 / PHK / PLB / CPY #0...)
+
+        // F: the item loader ($81:F1C5, JML in place of PHP / PHB / SEP #$20): runs the game's loader, then gives each
+        // property the table has a script for the marker word $8000 | (item | property << 9) at $0B8D + 2 * property.
+        a.Label("hookF");
+        a.B(0x4B); a.Pea("retF");                         // PHK / PEA retF-1 (the loader's RTL comes back here)
+        a.B(0x08, 0x8B, 0xE2, 0x20); Long(0x5C, 0x81F1C9); // PHP PHB SEP #$20 (as the game) / JML on
+        a.Label("retF");
+        a.B(0x08, 0xC2, 0x30, 0x48, 0xDA, 0x5A);          // PHP / REP #$30 / PHA PHX PHY
+        Long(0xAF, 0x7E0A06); a.B(0x29, 0xFF, 0x01, 0x48); // LDA $7E:0A06 / AND #$01FF / PHA (1,S = the item)
+        a.B(0xA2, 0x00, 0x00);                            // LDX #0
+        a.Label("loopF");
+        Long(0xBF, table + 2); a.B(0x29, 0xFF, 0x00);     // LDA table+2,X / AND #$FF (kind)
+        a.B(0xC9, 0xFF, 0x00); a.Br(0xF0, "doneF");
+        a.B(0xC9, ItemMarker, 0x00); a.Br(0xF0, "isFD");
+        a.B(0xC9, ItemWordKind, 0x00); a.Br(0xD0, "nextF");
+        // FC: a property word the record doesn't have (key = item | bit << 9, the value in the script field)
+        Long(0xBF, table); a.B(0x29, 0xFF, 0x01, 0xC3, 0x01); a.Br(0xD0, "nextF");
+        Long(0xBF, table + 3); a.B(0x48);                 // LDA table+3,X / PHA (the value)
+        Long(0xBF, table); a.B(0xEB, 0x4A, 0x29, 0x0F, 0x00, 0x0A);   // XBA / LSR / AND #$0F / ASL (2 * bit)
+        a.B(0xDA, 0xAA, 0xA3, 0x03);                      // PHX / TAX / LDA 3,S
+        Long(0x9F, 0x7E0B8D);                             // STA $7E:0B8D,X
+        a.B(0xFA, 0x68); a.Br(0x80, "nextF");             // PLX / PLA
+        a.Label("isFD");
+        Long(0xBF, table); a.B(0x29, 0xFF, 0x01, 0xC3, 0x01); a.Br(0xD0, "nextF");   // key & $1FF == item?
+        Long(0xBF, table); a.B(0x09, 0x00, 0x80, 0x48);   // LDA table,X / ORA #$8000 / PHA (the marker)
+        Long(0xBF, table); a.B(0xEB, 0x4A, 0x29, 0x03, 0x00, 0x0A);   // XBA / LSR / AND #3 / ASL (2 * property)
+        a.B(0xDA, 0xAA, 0xA3, 0x03);                      // PHX / TAX / LDA 3,S
+        Long(0x9F, 0x7E0B8D);                             // STA $7E:0B8D,X
+        a.B(0xFA, 0x68);                                  // PLX / PLA
+        a.Label("nextF");
+        a.B(0x8A, 0x18, 0x69, 0x06, 0x00, 0xAA); a.Br(0x80, "loopF");   // X += 6
+        a.Label("doneF");
+        a.B(0x68, 0x7A, 0xFA, 0x68, 0x28, 0x6B);          // PLA PLY PLX PLA / PLP / RTL
+
         var bytes = a.Done();
         HookAOffset = a.At("hookA"); HookCOffset = a.At("hookC"); HookDOffset = a.At("hookD");
+        HookEOffset = a.At("hookE"); HookFOffset = a.At("hookF");
         return bytes;
     }
 
@@ -467,18 +685,20 @@ public static class L2AiScripts
     {
         private readonly List<byte> _b = new();
         private readonly Dictionary<string, int> _labels = new();
-        private readonly List<(int At, string Label, bool Jsr)> _fix = new();
+        // fix kinds: 0 = 8-bit branch, 1 = 16-bit address, 2 = 16-bit address - 1 (PEA for an RTL/RTS)
+        private readonly List<(int At, string Label, int Fix)> _fix = new();
         public void B(params byte[] b) => _b.AddRange(b);
         public void Label(string l) => _labels[l] = _b.Count;
-        public void Br(byte op, string l) { _b.Add(op); _fix.Add((_b.Count, l, false)); _b.Add(0); }
-        public void Jsr(string l) { _b.Add(0x20); _fix.Add((_b.Count, l, true)); _b.Add(0); _b.Add(0); }
+        public void Br(byte op, string l) { _b.Add(op); _fix.Add((_b.Count, l, 0)); _b.Add(0); }
+        public void Jsr(string l) { _b.Add(0x20); _fix.Add((_b.Count, l, 1)); _b.Add(0); _b.Add(0); }
+        public void Pea(string l) { _b.Add(0xF4); _fix.Add((_b.Count, l, 2)); _b.Add(0); _b.Add(0); }
         public int At(string l) => _labels[l];
         public byte[] Done()
         {
-            foreach (var (at, l, jsr) in _fix)
+            foreach (var (at, l, fix) in _fix)
             {
                 int to = _labels[l];
-                if (jsr) { int addr = (origin + to) & 0xFFFF; _b[at] = (byte)addr; _b[at + 1] = (byte)(addr >> 8); continue; }
+                if (fix > 0) { int addr = (origin + to - (fix == 2 ? 1 : 0)) & 0xFFFF; _b[at] = (byte)addr; _b[at + 1] = (byte)(addr >> 8); continue; }
                 int rel = to - (at + 1);
                 if (rel is < -128 or > 127) throw new InvalidOperationException($"Branch to {l} too far.");
                 _b[at] = (byte)rel;
@@ -491,7 +711,7 @@ public static class L2AiScripts
     public static int Install(RomBuffer rom)
     {
         int have = Block(rom);
-        if (have >= 0) return have;
+        if (have >= 0) return Version(rom, have) >= CurrentVersion ? have : Upgrade(rom, have);
         if (!CanInstall(rom, out var why)) throw new InvalidOperationException(why);
         int block = L2Rom.Allocate(rom, BlockSize);
         int code = L2Rom.FileToSnes(block + CodeAt), table = L2Rom.FileToSnes(block + TableAt);
@@ -500,7 +720,7 @@ public static class L2AiScripts
         if (CodeAt + bytes.Length > TableAt) throw new InvalidOperationException("The hook code doesn't fit.");
         rom.WriteBytes(block, new byte[BlockSize]);
         rom.WriteBytes(block, System.Text.Encoding.ASCII.GetBytes(Magic));
-        rom.WriteByte(block + Magic.Length, 1);   // version
+        rom.WriteByte(block + Magic.Length, CurrentVersion);
         rom.WriteByte(block + Magic.Length + 1, (byte)bank);   // the monster records' bank (the hook overwrites where it was)
         rom.WriteBytes(block + CodeAt, bytes);
         rom.WriteBytes(block + TableAt, new byte[] { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF });
@@ -510,19 +730,96 @@ public static class L2AiScripts
         var d = Jump(0x22, code + HookDOffset).Concat(Enumerable.Repeat((byte)0xEA, 5)).ToArray();
         rom.WriteBytes(DefenseSite1, d);
         rom.WriteBytes(DefenseSite2, d);
+        rom.WriteBytes(RunnerSite, Jump(0x5C, code + HookEOffset));
+        rom.WriteBytes(ItemLoaderSite, Jump(0x5C, code + HookFOffset));
         return block;
     }
 
-    private static int RecordKey(RomBuffer rom, Kind kind, int index) => L2Rom.FileToSnes(RecordAt(rom, kind, index)) & 0xFFFF;
+    /// <summary>A version 1 block (monster and capsule scripts only) gets the effect hooks: the code is assembled again
+    /// (the first routines keep their places) and the runner and item loader jump to it.</summary>
+    private static int Upgrade(RomBuffer rom, int block)
+    {
+        bool Same(int at, byte[] b) => at + b.Length <= rom.Length && rom.ReadBytes(at, b.Length).SequenceEqual(b);
+        if (!Same(RunnerSite, RunnerOriginal) || !Same(ItemLoaderSite, ItemLoaderOriginal))
+            throw new InvalidOperationException("This ROM's battle code isn't the US game's where the effect hooks go (another patch changed it), so item, spell and IP effects can't be edited.");
+        int code = L2Rom.FileToSnes(block + CodeAt), table = L2Rom.FileToSnes(block + TableAt);
+        var bytes = Assemble(code, table, rom.ReadByte(block + Magic.Length + 1));
+        if (CodeAt + bytes.Length > TableAt) throw new InvalidOperationException("The hook code doesn't fit.");
+        rom.WriteBytes(block + CodeAt, bytes);
+        byte[] Jump(byte op, int addr) => new[] { op, (byte)addr, (byte)(addr >> 8), (byte)(addr >> 16) };
+        rom.WriteBytes(RunnerSite, Jump(0x5C, code + HookEOffset));
+        rom.WriteBytes(ItemLoaderSite, Jump(0x5C, code + HookFOffset));
+        rom.WriteByte(block + Magic.Length, CurrentVersion);
+        return block;
+    }
 
-    private static IEnumerable<(int At, int Record, Kind Kind, int Script)> Entries(RomBuffer rom, int block)
+    /// <summary>The table entry's key: (record, kind 0-3) for monsters and capsules; (item | property << 9, FD) for items,
+    /// whose loader is given a marker word $8000 | key; (script address, bank) for spells and IP attacks, the script the
+    /// game would run.</summary>
+    private static (int Key, byte Kind) TableKey(RomBuffer rom, Kind kind, int index)
+    {
+        if (IsItem(kind)) return (index | (kind - Kind.ItemMenu) << 9, ItemMarker);
+        if (kind is Kind.Spell or Kind.IpAttack)
+        {
+            int snes = L2Rom.FileToSnes(OriginalAt(rom, kind, index));
+            return (snes & 0xFFFF, (byte)(snes >> 16));
+        }
+        return (L2Rom.FileToSnes(RecordAt(rom, kind, index)) & 0xFFFF, (byte)kind);
+    }
+
+    private const byte ItemMarker = 0xFD, ItemWordKind = 0xFC;
+
+    // ── property words an item record doesn't have (stat bonuses, IP attack, battle animation) ───────────────
+
+    /// <summary>The words Lufia Forge gives an item on top of its record (bit -> value): the item loader hook puts them
+    /// where the game keeps the record's own ($0B8D + 2 * bit), so the game reads them like any other.</summary>
+    public static Dictionary<int, int> ItemAddedWords(RomBuffer rom, int item)
+    {
+        var d = new Dictionary<int, int>();
+        int block = Block(rom);
+        if (block < 0 || Version(rom, block) < 2) return d;
+        foreach (var e in Entries(rom, block))
+            if (e.Kind == ItemWordKind && (e.Record & 0x1FF) == item)
+                d[1 << ((e.Record >> 9) & 0xF)] = rom.ReadUInt16Le(e.At + 3);
+        return d;
+    }
+
+    /// <summary>Gives an item a property word its record doesn't have (null takes it away again).</summary>
+    public static void SetItemAddedWord(RomBuffer rom, int item, int bit, int? value)
+    {
+        int b = System.Numerics.BitOperations.Log2((uint)bit);
+        if (bit <= 0 || (bit & (bit - 1)) != 0 || b < 4) throw new ArgumentException("Scripts go through Save; this is for the other words.");
+        int key = item | b << 9;
+        int block = value == null ? Block(rom) : Install(rom);
+        if (block < 0) return;
+        var all = Entries(rom, block).ToList();
+        int i = all.FindIndex(e => e.Kind == ItemWordKind && e.Record == key);
+        if (value == null)
+        {
+            if (i < 0) return;
+            var last = all[^1];
+            if (i != all.Count - 1) rom.WriteBytes(all[i].At, rom.ReadBytes(last.At, EntrySize));
+            rom.WriteBytes(last.At, new byte[] { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF });
+            return;
+        }
+        int at = i >= 0 ? all[i].At : block + TableAt + all.Count * EntrySize;
+        if (i < 0)
+        {
+            if (all.Count >= TableCapacity) throw new InvalidOperationException("Lufia Forge's script table is full.");
+            rom.WriteBytes(at + EntrySize, new byte[] { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF });
+        }
+        int v = value.Value & 0xFFFF;
+        rom.WriteBytes(at, new[] { (byte)key, (byte)(key >> 8), ItemWordKind, (byte)v, (byte)(v >> 8), (byte)0 });
+    }
+
+    private static IEnumerable<(int At, int Record, byte Kind, int Script)> Entries(RomBuffer rom, int block)
     {
         for (int i = 0; i < TableCapacity; i++)
         {
             int e = block + TableAt + i * EntrySize;
             byte k = rom.ReadByte(e + 2);
             if (k == 0xFF) yield break;
-            yield return (e, rom.ReadUInt16Le(e), (Kind)k, L2Rom.SnesToFile((int)rom.ReadUInt24Le(e + 3)));
+            yield return (e, rom.ReadUInt16Le(e), k, L2Rom.SnesToFile((int)rom.ReadUInt24Le(e + 3)));
         }
     }
 
@@ -530,10 +827,10 @@ public static class L2AiScripts
     public static int? Override(RomBuffer rom, Kind kind, int index)
     {
         int block = Block(rom);
-        if (block < 0) return null;
-        int key = RecordKey(rom, kind, index);
+        if (block < 0 || IsEffect(kind) && Version(rom, block) < 2) return null;
+        var (key, k) = TableKey(rom, kind, index);
         foreach (var e in Entries(rom, block))
-            if (e.Record == key && e.Kind == kind) return e.Script;
+            if (e.Record == key && e.Kind == k) return e.Script;
         return null;
     }
 
@@ -546,9 +843,11 @@ public static class L2AiScripts
             throw new InvalidOperationException("A \"go to\" jumps into the middle of a command or onto data, so the script can't be moved: point it at a step.");
         var body = Build(steps, 1);
         if (body.Length > 0x7F00) throw new InvalidOperationException("The script is too long.");
+        if (kind is Kind.Spell or Kind.IpAttack && OriginalAt(rom, kind, index) < 0)
+            throw new InvalidOperationException("It has no effect script for an edited one to take the place of.");
         int block = Install(rom);
-        int key = RecordKey(rom, kind, index);
-        var entry = Entries(rom, block).FirstOrDefault(e => e.Record == key && e.Kind == kind);
+        var (key, k) = TableKey(rom, kind, index);
+        var entry = Entries(rom, block).FirstOrDefault(e => e.Record == key && e.Kind == k);
         if (entry.At <= 0 && Entries(rom, block).Count() >= TableCapacity) throw new InvalidOperationException("Lufia Forge's script table is full.");
         // [00][script][00]: a last step that doesn't end the script still stops at the 00 after it
         int need = body.Length + 2;
@@ -573,7 +872,7 @@ public static class L2AiScripts
             if ((e - block - TableAt) / EntrySize >= TableCapacity) throw new InvalidOperationException("Lufia Forge's script table is full.");
             rom.WriteBytes(e + EntrySize, new byte[] { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF });
         }
-        rom.WriteBytes(e, new[] { (byte)key, (byte)(key >> 8), (byte)kind, (byte)snes, (byte)(snes >> 8), (byte)(snes >> 16) });
+        rom.WriteBytes(e, new[] { (byte)key, (byte)(key >> 8), k, (byte)snes, (byte)(snes >> 8), (byte)(snes >> 16) });
         return baseAt;
     }
 
@@ -582,9 +881,9 @@ public static class L2AiScripts
     {
         int block = Block(rom);
         if (block < 0) return false;
-        int key = RecordKey(rom, kind, index);
+        var (key, k) = TableKey(rom, kind, index);
         var all = Entries(rom, block).ToList();
-        int i = all.FindIndex(e => e.Record == key && e.Kind == kind);
+        int i = all.FindIndex(e => e.Record == key && e.Kind == k);
         if (i < 0) return false;
         // move the last entry into its place, end the table one entry earlier
         var last = all[^1];
@@ -605,14 +904,21 @@ public static class L2AiScripts
         public string[] Monsters { get; init; } = Array.Empty<string>();
         public string[] Items { get; init; } = Array.Empty<string>();
         public string[] CapsuleAttacks { get; init; } = Array.Empty<string>();
+        /// <summary>What each shared script does (<see cref="LibraryName"/>).</summary>
+        public string[] Library { get; set; } = Array.Empty<string>();
 
-        public static NameLists From(RomBuffer rom) => new()
+        public static NameLists From(RomBuffer rom)
         {
-            Spells = L2Battle.Spells(rom).Select(s => s.Name).ToArray(),
-            Monsters = L2Battle.Monsters(rom).Select(m => m.Name).ToArray(),
-            Items = L2Battle.Items(rom).Select(i => i.Name).ToArray(),
-            CapsuleAttacks = L2Capsules.AttackList(rom),
-        };
+            var n = new NameLists
+            {
+                Spells = L2Battle.Spells(rom).Select(s => s.Name).ToArray(),
+                Monsters = L2Battle.Monsters(rom).Select(m => m.Name).ToArray(),
+                Items = L2Battle.Items(rom).Select(i => i.Name).ToArray(),
+                CapsuleAttacks = L2Capsules.AttackList(rom),
+            };
+            n.Library = Enumerable.Range(0, LibraryCount).Select(i => LibraryName(rom, i, n)).ToArray();
+            return n;
+        }
     }
 
     private static string Pick(string[] names, int i) => i >= 0 && i < names.Length ? $"{i:X2} {names[i]}" : $"{i:X2}";
@@ -623,7 +929,7 @@ public static class L2AiScripts
         Arg.Jump => step > 0 ? $"step {step}" : $"offset {v:X4}",
         Arg.Chance => $"{v}/256 ({v * 100 / 256}%)",
         Arg.Percent => $"{v}%",
-        Arg.Register => $"register {v:X2}",
+        Arg.Register => RegisterName(v),
         Arg.Value => ValueText(v),
         Arg.Spell => Pick(n.Spells, v),
         Arg.Monster => Pick(n.Monsters, v),
@@ -634,7 +940,7 @@ public static class L2AiScripts
         Arg.Status => v < Statuses.Length ? Statuses[v] : $"status {v:X2}",
         Arg.Target => v < Targets.Length ? Targets[v] : $"{v:X2}",
         Arg.Restore => v < Restores.Length ? Restores[v] : $"{v:X2}",
-        Arg.Library => $"shared script {v:X2}",
+        Arg.Library => v < n.Library.Length ? $"shared script {v:X2} ({n.Library[v]})" : $"shared script {v:X2}",
         Arg.AttackName => $"attack name {v:X2}",
         Arg.Animation => $"animation {v:X2}",
         Arg.Sound => $"sound {v:X2}",
@@ -658,11 +964,12 @@ public static class L2AiScripts
         if (Size(d.Args[i]) == 2) s.Args[at + 1] = (byte)(v >> 8);
     }
 
-    /// <summary>One line for a step, e.g. "Cast a spell: 03 Fire" or "With a chance, go to: 81/256 (31%), step 7".</summary>
+    /// <summary>One line for a step, e.g. "Cast a spell: 03 Fire", "If the damage is more than 100, go to step 7".</summary>
     public static string Describe(Step s, IReadOnlyList<Step> all, NameLists n)
     {
         var d = s.Def;
         if (d == null) return $"command {s.Op:X2}";
+        if (Sentence(s, all, n) is { } said) return said;
         var parts = new List<string>();
         int j = 0;
         for (int i = 0; i < d.Args.Length; i++)
@@ -673,6 +980,50 @@ public static class L2AiScripts
         }
         return parts.Count == 0 ? d.Name : $"{d.Name}: {string.Join(", ", parts)}";
     }
+
+    /// <summary>Number and effect commands as a sentence ("Set the damage to 0", "Add 5 to its counter 1"); null for the
+    /// others, which read fine as "name: values".</summary>
+    private static string? Sentence(Step s, IReadOnlyList<Step> all, NameLists n)
+    {
+        string A(int i) => ArgText(s.Def!.Args[i], ArgValue(s, i), n);
+        string Go() { var t = s.Targets.Length > 0 ? s.Targets[0] : null; int k = t == null ? -1 : IndexOf(all, t); return k < 0 ? "(no step)" : $"step {k + 1}"; }
+        string Cap(string x) => x.Length == 0 ? x : char.ToUpperInvariant(x[0]) + x[1..];
+        return s.Op switch
+        {
+            0x06 => $"If {A(0)} is {A(1)}, go to {Go()}",
+            0x07 => $"If {A(0)} is not {A(1)}, go to {Go()}",
+            0x08 => $"If {A(0)} is more than {A(1)}, go to {Go()}",
+            0x09 => $"If {A(0)} is less than {A(1)}, go to {Go()}",
+            0x0A => $"If {A(0)} is at least {A(1)}, go to {Go()}",
+            0x0B => $"If {A(0)} is at most {A(1)}, go to {Go()}",
+            0x0C => $"Set {A(0)} to {A(1)}",
+            0x0D => $"Add {A(1)} to {A(0)}",
+            0x0E => $"Take {A(1)} from {A(0)}",
+            0x0F => $"Multiply {A(0)} by {A(1)}",
+            0x10 or 0x55 => $"Divide {A(0)} by {A(1)}",
+            0x16 => $"{Cap(A(0))}: keep only the bits {ArgValue(s, 1):X4}",
+            0x17 => $"{Cap(A(0))}: add the bits {ArgValue(s, 1):X4}",
+            0x18 => $"{Cap(A(0))}: flip the bits {ArgValue(s, 1):X4}",
+            0x11 => $"{Cap(A(0))} becomes a random number below it",
+            0x19 => $"Make {A(0)} positive",
+            0x1A => $"Turn {A(0)} negative (or back)",
+            0x13 => $"{Cap(A(0))} = the target's {A(1)}",
+            0x15 => $"{Cap(A(0))} = its own {A(1)}",
+            0x4E => $"{Cap(A(0))} = the attacker's {A(1)}",
+            0x14 => $"Set the target's {A(1)} to {A(0)}",
+            0x21 => $"Physical damage ({A(0)}): {DamageText(ArgValue(s, 1))}, spread {ArgValue(s, 2)}",
+            0x22 => $"Magic damage ({A(0)}): {DamageText(ArgValue(s, 1))}, spread {ArgValue(s, 2)}",
+            0x24 => $"Restore {A(0)} by {A(1)} (give or take {ArgValue(s, 2)})",
+            0x26 => $"Cure {A(0)} ({A(1)} chance)",
+            0x27 => $"Cause {A(0)} ({A(1)} chance)",
+            0x1F => $"The attack's element: {A(0)}",
+            0x20 => $"Critical hits: {A(0)} chance, damage x{ArgValue(s, 1)}/16",
+            _ => null,
+        };
+    }
+
+    /// <summary>A damage amount: the power as a number (Flash 65), or a number worked out above.</summary>
+    private static string DamageText(int v) => ValueText(v);
 
     private static int IndexOf(IReadOnlyList<Step> all, Step t) { for (int i = 0; i < all.Count; i++) if (ReferenceEquals(all[i], t)) return i; return -1; }
 

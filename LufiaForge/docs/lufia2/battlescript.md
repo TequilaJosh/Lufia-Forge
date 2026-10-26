@@ -172,3 +172,57 @@ the 00); not found: the game's own path. The game's bytes stay, so shared script
 get one, and taking the entry out restores the game's. All 461 game scripts (monsters and capsules) parse and build back
 byte for byte; checked in battles: a monster with no script given "Defend" (attack and defense hooks each round), the
 capsule hook, and Frue Lufia v8.2 (monster data in bank $D0).
+
+## 6. Item, spell and IP attack effects (2026-10-25)
+
+Every effect script is started through the runner `$81:FAC9` with `$0A42/$0A44` = the base and Y = the offset:
+
+| Owner | Where | Base | Offset |
+|---|---|---|---|
+| item (menu, battle, weapon, armor) | `$81:AA57`, `$81:A8EC`/`$81:A94D` (weapon), `$81:B203`/`$85:DA4C` (armor), `$81:EFB0`, `$81:F004` | the item record (`$0A09`, bank $96) | its property word, copied by the item loader `$81:F1C5` to `$0B8D` + 2 x bit (bits 0-3 = menu, battle, weapon, armor) |
+| spell | `$81:A9C4`, `$81:AFAD`, `$81:F313`, `$81:F389` | the spell record (`$0A0D`, bank $95) | the record's word at +$11 (`$0B89`) |
+| IP attack | `$81:AB4D` | `$95:F1EF` + table[the record's first word] (`$81:F46B`) | 1 |
+| capsule attack | `$81:AD4B` | `$97:F63B` + table[id] (`$81:F476`) | |
+
+The game's built-in scripts run with base 0 and offsets like `$EF20`/`$EF24` (bank $85).
+
+The item loader clears `$0B77-$0BAC`, copies the 9-byte head, the 4 bytes of property bits (`$09FC-$09FF`), then for each of
+the 32 bits stores the next word at `$0B84` + 9 + 2 x bit when the bit is set (so absent words are 0).
+
+**Lufia Forge's effect hooks** (version 2 of the `LF2AI` block, Core/Lufia2/L2AiScripts.cs; a version 1 block is upgraded
+in place, its first routines keep their addresses):
+
+* `JML` at `$81:FAC9` (in place of `PHP PHB REP #$30`): an offset with bit 15 set and a base other than 0 is an item marker
+  `$8000 | key`; any other script is looked up by its address (bank, base + offset). Found: base = Lufia Forge's script,
+  Y = 1. A marker that isn't in the table becomes offset 0 (no script).
+* `JML` at `$81:F1C5`: runs the game's loader (`PHK / PEA` return), then for every table entry of the item (`$0A06` & $1FF):
+  kind `FD`, key = item | property << 9: the marker `$8000 | key` goes to `$0B8D` + 2 x property, so an item without that
+  script gets one; kind `FC`, key = item | bit << 9: the value (the entry's script field) goes to `$0B8D` + 2 x bit, so an
+  item gets a stat bonus, IP attack or battle animation its record doesn't have.
+* Spells and IP attacks: entries keyed by the script's address (kind byte = its bank, $95). IP attacks that share an
+  effect script share the edit (effects 79 and 92 are used by 17 and 9 attacks).
+
+Checked in battles (BizHawk, bsnes core, a Goblin made weak and passive at the start of a new game):
+* weapon: the Small knife (no weapon script) given `37 00` (weapon attack, end): the battle is won as without hooks;
+  given `29 00` or `2A 00`: every attack misses (weapon scripts are what deal the damage);
+* spell: a monster casting the game's Flash takes Maxim from 20 HP to 0; with Flash edited to `00` the cast shows and
+  Maxim keeps 20 HP;
+* IP attack: Thunder blast deals 16; edited to `00` it misses;
+* added word: the Small knife given IP attack 07 (not in its record): Maxim uses it (IP 255, 191, 127, 63); without it
+  he never does.
+
+**Elements** (the word of 1F/21/22), read from the game's uses: 0002 fire, 0004 water, 0010 light, 0020 dark, 0040 blunt
+(maces, rods), 0080 thrown (boomerangs), 0100 vs dragons, 0200 vs insects, 0400 ice, 0800 thunder, 1000 earth; 0001, 0008
+and 2000-8000 are used by no script. (The first names in this file's table and in LEdit were wrong.)
+
+**Registers with a meaning**: 10 the last action failed, 20 the attacker, 21 the targets, 23 the action's kind, 24 its
+number, 25 the attack's name, 27 the attack's element, 28/29 critical chance and multiplier, 2A the damage (negative for
+damage worked out by a script), 2B the spread, 4E/50/52/54/56/58 the chance of poison, silence, death, paralysis,
+confusion, sleep working on the fighter (shared script 11 zeroes all but death); 80-87 the fighter's own counters.
+
+**Shared scripts** (the library): 00-05 double damage from fire, thunder, water, ice, thrown (none from earth), light;
+06-0A half damage from fire, thunder, water, ice, light; 0B half from plain attacks; 0C double from dragon-slaying; 0D/0E
+double/half from dark; 0F double from blunt; 10 double from insect-slaying; 11 immune to poison, silence, paralysis,
+confusion and sleep; 12 healing hurts it, no instant death; 21 counter 1 = 1.5 x own ATP; 23 counter 1 = ATP with the
+battle bonus. The editor can copy a shared script's steps into a script (its returns become "go to" the step after the
+call) so one monster can change them.
