@@ -198,18 +198,23 @@ public partial class MainWindow : Window
     {
         var vm = (MainViewModel)DataContext;
         if (vm.RomBuffer is not { } rom) return;
-        if (rom.IsLufia2)
-        {
-            MessageBox.Show(this, "Clearing the story of Lufia II isn't ready yet.", "Start from a clean slate", MessageBoxButton.OK, MessageBoxImage.Information);
-            return;
-        }
         var d = new Modules.Common.ClearStoryWindow(rom) { Owner = this };
         if (d.ShowDialog() != true) return;
         var before = rom.ToArray();
         try
         {
-            var r = Core.Maps.StoryClear.Clear(rom, d.StartMap, d.StartArrival);
-            vm.NotifyRomModified($"Story cleared: {r.Events} events, {r.People} characters, {r.Treasure} treasure spots; a new game starts on map {d.StartMap:X2}");
+            string what;
+            if (rom.IsLufia2)
+            {
+                var r2 = Core.Lufia2.L2StoryClear.Clear(rom, d.StartMap, d.StartArrival);
+                what = $"Story cleared: {r2.Events} events, {r2.People} characters, {r2.Treasure} chests; a new game starts on map {d.StartMap:X2}";
+            }
+            else
+            {
+                var r = Core.Maps.StoryClear.Clear(rom, d.StartMap, d.StartArrival);
+                what = $"Story cleared: {r.Events} events, {r.People} characters, {r.Treasure} treasure spots; a new game starts on map {d.StartMap:X2}";
+            }
+            vm.NotifyRomModified(what);
             vm.ReloadModules();
         }
         catch (Exception ex)
