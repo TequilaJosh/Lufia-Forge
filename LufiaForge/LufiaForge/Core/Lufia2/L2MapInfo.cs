@@ -41,6 +41,45 @@ public static class L2MapInfo
         return sprites;
     }
 
+    /// <summary>The raw records of one list of a map's info block (list at <paramref name="list"/>, records of
+    /// <paramref name="size"/> bytes): file offset and bytes of each.</summary>
+    public static List<(int At, byte[] Bytes)> Records(RomBuffer rom, int map, int list, int size)
+    {
+        var l = new List<(int, byte[])>();
+        int b = Block(rom, map);
+        if (b < 0 || b >= rom.Length) return l;
+        int end = b + rom.ReadUInt16Le(b);
+        int p = b + rom.ReadUInt16Le(b + list);
+        for (int guard = 0; guard < 128 && p > b && p + size <= end + 1 && rom.ReadByte(p) != 0xFF; guard++, p += size) l.Add((p, rom.ReadBytes(p, size)));
+        return l;
+    }
+
+    public const int Exits = 0x06, Doors = 0x02, Triggers = 0x0C, Characters = 0x10, Points = 0x0E, Paths = 0x12, Areas = 0x14;
+
+    /// <summary>Adds a record to a list of a map's info block. The block is copied to the added space with the list
+    /// rewritten at its end (the game copies the block to $7E:F000 and reads the lists by offset; any bank works, it must
+    /// stay inside one bank and under 4 KB). Returns false when it would be too big.</summary>
+    public static bool AddRecord(RomBuffer rom, int map, int list, int size, byte[] record)
+    {
+        int b = Block(rom, map);
+        if (b < 0) return false;
+        int blockSize = rom.ReadUInt16Le(b);
+        var records = Records(rom, map, list, size);
+        var data = rom.ReadBytes(b, blockSize).ToList();
+        int listAt = data.Count;
+        foreach (var (_, bytes) in records) data.AddRange(bytes);
+        data.AddRange(record);
+        data.Add(0xFF);
+        if (data.Count > 0x0FFF) return false;
+        data[0] = (byte)data.Count; data[1] = (byte)(data.Count >> 8);
+        data[list] = (byte)listAt; data[list + 1] = (byte)(listAt >> 8);
+        int at = L2Rom.Allocate(rom, data.Count + 1);
+        rom.WriteBytes(at, data.Append((byte)0).ToArray());
+        int snes = L2Rom.FileToSnes(at);
+        rom.WriteBytes(Pointers + map * 3, new[] { (byte)snes, (byte)(snes >> 8), (byte)(snes >> 16) });
+        return true;
+    }
+
     public static int Block(RomBuffer rom, int map)
     {
         int a = rom.ReadByte(Pointers + map * 3) | rom.ReadByte(Pointers + map * 3 + 1) << 8 | rom.ReadByte(Pointers + map * 3 + 2) << 16;

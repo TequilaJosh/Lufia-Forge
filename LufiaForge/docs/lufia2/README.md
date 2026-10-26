@@ -9,7 +9,7 @@ the items marked as checked were also tested in the running game (BizHawk). The 
 |---|---|
 | [rommap.md](rommap.md) | Whole-ROM classification: code, tables, packed files, text; code entry points and jump tables (first pass, see the corrections below) |
 | [banks_8F_A6.md](banks_8F_A6.md) | The data banks $8F-$A6 range by range |
-| [events.md](events.md) | The event script interpreter: all 205 commands, text codes, jumps, flags and variables |
+| [events.md](events.md) | The event script interpreter: all 205 commands in plain words, text codes, jumps, flags and variables, the event blocks and map info lists, and how the event editor saves and adds events |
 | [scripts3.md](scripts3.md) | The dungeon puzzle interpreter: 191 opcodes, the per-map puzzle blocks |
 | [battlescript.md](battlescript.md) | The battle script interpreter (monster AI, item, spell and capsule effects) |
 | [characters.md](characters.md) | Heroes: starting stats, growth, the EXP curve, new-game records, RAM layout |
@@ -33,7 +33,8 @@ the items marked as checked were also tested in the running game (BizHawk). The 
 | 0x27F000-0x27FFFF | $CF | Map sprite table $CF:F000, map lists $CF:F72E.., map info pointers $CF:FCBC |
 
 The ROM is full: only about 0x14D bytes are unused FF runs, so data that grows goes into added space after
-0x280000. Lufia Forge grows the ROM to 3 MB, then 4 MB, and uses the largest empty run there (the fan hacks Frue,
+0x280000 (event scripts can't: they must stay below 0x200000, so the event editor clears a bank of packed files in
+$A8-$BF for them, events.md section 8). Lufia Forge grows the ROM to 3 MB, then 4 MB, and uses the largest empty run there (the fan hacks Frue,
 Spekkio and Kureji Lufia v8.2 fill 0x280000-0x30DAC2 and 0x3FFC00-0x3FFDD5 and move the monster table to $D0:A000).
 
 ## Checked in the game
@@ -52,6 +53,10 @@ Spekkio and Kureji Lufia v8.2 fill 0x280000-0x30DAC2 and 0x3FFC00-0x3FFDD5 and m
   faster IP gauge (255 instead of 206 after the same hit).
 - A ROM grown to 4 MB with a map moved past 0x300000, and Frue Lufia with a map moved into its free space: both draw the map.
 - A capsule monster (event command 81 00 makes it join, at level 8): its HP, ATP and DFP follow the edited record and growth exactly.
+- Events (events.md section 10): an edited line and added steps in the opening scene (the map's events moved into the
+  event space in bank $B5), a shortened line written in place, a new character with a talk event, a new trigger area,
+  "plays once" story flags, an event going on with new steps, and a few commands tried on their own (B6, 7A, 5A / 8A,
+  47, 48, BB).
 
 ## Corrections to the first-pass files
 

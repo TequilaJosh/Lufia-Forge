@@ -1,16 +1,13 @@
-# Lufia II (US) event / script commands, from the game's code
+# Lufia II (US) events: the script commands, the event blocks, and how Lufia Forge edits them
 
-Static analysis only (no emulator). ROM: scratchpad\l2\lufia2.sfc. Tools written for this:
-`scratchpad\l2research\ev\flow.py` (flow-following disassembler, tracks REP/SEP), `ev\all.txt` (every handler
-dumped), `ev\parse.py` (script parser using the table below), `ev\crawl2.py` (parses every map's init script
-plus every PH-block script reachable through the +2/+6/+8 lists and through all jump/choice/condition
-targets). **Result: 2962 distinct scripts in the 242 maps parse with 0 errors** with the argument counts below,
-so the counts of every command that occurs in map scripts are confirmed by the data as well as by the code.
-Commands never seen in map scripts are listed at the end of section 6; their counts come from code only.
+ROM: the US Lufia II (2.5 MB LoROM FastROM). Everything here was read from the game's code and its 2962 map scripts
+(all 242 maps parse with 0 errors); the things marked **game** were also tried in the running game (BizHawk, see
+section 10). The editor's own copy of this knowledge is `Core/Lufia2/L2EventCommands.cs` (every command in plain words
+with its fields), `L2Conditions.cs` (command 14), `L2EventScript.cs` (scripts as steps), `L2EventBlocks.cs` (saving,
+new events) and `L2EventSpace.cs` (where moved scripts go).
 
-Confidence column: **H** = argument count read from the code and (if used) confirmed by the crawl, meaning clear
-from the code; **M** = count certain, meaning inferred from what RAM it touches; **L** = count certain, meaning
-a guess.
+How sure each meaning is: **game** = tried in the game, **code** = clear from the handler's code, **data** = from how
+the game's own scripts use it, **guess** = not confirmed.
 
 ---
 
@@ -20,320 +17,360 @@ a guess.
   `$80:9CCD`: B = `$09B9`, Y = `$09B7`, then the command loop at `$80:9D00`, which first does `STY $09B7`.
 * Byte reader `$80:C0B7`: `LDA $0000,Y; INY`; if Y wraps to 0 it increments `$09B9`/B and sets Y = `$8000`
   (so a script may run across a LoROM bank boundary). `$80:C0D0` = two C0B7 calls = **u16 little-endian**.
-  `$80:C0EC` = un-read one byte (DEY with the same bank fix-up). `$80:C0DA` = sign-extend A to 16 bit.
 * Dispatcher `$80:9D32`: `JSR $C0B7; ASL; TAX; JMP ($CA14,X)`. Table `$80:CA14` (file 0x4A14) has **0xCD
-  entries (commands 00..CC)**; the bytes after it ($80:CB7E) are code (`PHB PHP REP #$10 ...`), so CD..FF are not
-  commands. Crash handlers (a `BRK`): 02 (`$9DD4`), 11 (`$BF0A`), 5C (`$BF08`), 5D (`$BF09`).
-* Handler exits: `BRL $9D00` = continue with the next command in the same frame. `BRL $9DB0` (PLP/PLB/RTL)
-  = stop for this frame **without** saving Y, so the same command runs again next frame (this is how all the
-  "wait until ..." commands work; `JSR $C0EC` before it only matters for the bank fix-up). Handlers that
-  want to continue after a yield store Y first (`STY $09B7`): 01, 07-text, 0C-0F, 18, 19, B4.
-* Commands are executed back to back in one frame until one yields; text prints one character per frame.
+  entries (commands 00..CC)**; CD..FF are not commands. Crash handlers (a `BRK`): 02, 11, 5C, 5D.
+* Handler exits: `BRL $9D00` = continue with the next command in the same frame. `BRL $9DB0` = stop for this frame
+  without saving Y, so the same command runs again next frame (all the "wait until ..." commands).
+* **The handlers reach RAM through the data bank** (for example 1A `STA $077E,X`, 2B `LDA $0926,X`), and the data bank
+  is the script's own bank. That only works in banks $80-$BF (and $00-$3F), where low RAM is mirrored: **a script
+  must sit below file offset 0x200000**. The added space past 2.5 MB ($D0 and up) can't hold scripts (section 8).
+* Commands run back to back in one frame until one waits; text prints one letter per frame.
 
-## 2. Text mode
+## 2. Text
 
-* `$099B` bit 0 = text mode. Set (`$099B = $81`, then window open via `$80:C652` measure + `$80:C23D`) by
-  **08, 10, 13, 61-67, 9E**.
-* In text mode (`$80:9D0E`): byte < 0x10 -> dispatched through the same table (so 00-0F are the text control
-  codes); 0x10-0x7F -> printed character (`$80:BCE4`); 0x80-0xFF -> dictionary word `(b - 0x80) + 0x200`.
-* Text control codes (all are table commands):
-  * `00` end (returns from a dictionary word/name call if one is active, else ends text and the script; same
-    handler as 42).
-  * `01` end text mode, wait for a button, then continue with commands (stores Y).
-  * `03` newline. `0C 0D 0E 0F` = print `?` `!` `,` `.` and newline.
-  * `04 xx`: xx < 0x80: text "voice" sound = xx + 0x45 (`$1260`, played per character); xx >= 0x80: pause
-    (xx & 0x7F) * 10 frames.
-  * `05 xx` / `06 xx`: dictionary word xx / xx + 0x100 (table `$8E:EA00`, u16 offsets from `$8E:EA00`). This is a
-    **call**: return address saved in `$1252/$1254`, the word's terminating 00 returns.
-  * `07 xx`: character code 0x300 + xx (third glyph page; handler peeks the byte, the print routine consumes it).
-  * `08`: (as a command) open text mode with the current speaker.
-  * `09`: player name: call into RAM `$00:0BAD` (Maxim's name field), `$099B` bit 4 set while reading it.
-  * `0A lo hi`: **back-reference** (text compression): continue reading at (address of the 0A byte + 1 - d),
-    d = lo + (hi & 0x0F) * 256, for (hi >> 4) + 2 characters (counter `$125A`, decremented per frame at
-    `$80:9CE6`), then return after the 0A command (`$1257/$1259`). Matches the map-name finding "0A = first
-    (n + 2) letters of another name". Count is per printed character/frame (M).
-  * `0B`: choice cursor (see command 10); ends text mode.
-* Speakers: `$09AB` = actor id of the speaker; `$80:C1DF` sets the voice from it. 13 xx = speaker xx;
-  61..67 = speaker **0, 1, 2, 3, 5, 4, 6** (note: 65 -> id 5, 66 -> id 4).
+* `$099B` bit 0 = text mode. Opened by **08** (the one talked to), **13 xx** (character xx), **61-67** (a hero),
+  **9E xx** (narration box at row xx, centred) and **10** (a question).
+* In text mode: byte < 0x10 = a code (dispatched through the same table), 0x10-0x7F = a letter, 0x80-0xFF =
+  dictionary word `(b - 0x80) + 0x200` (dictionary `$8E:EA00`, 0x280 words).
+* Codes: `00` end of text and of the event; `01` wait for a button, then back to commands; `0B` the question cursor
+  (back to commands); `03` new line; `0C 0D 0E 0F` = `?` `!` `,` `.` and a new line; `04 xx` xx < 80: the letters'
+  sound (sound 0x45 + xx), xx >= 80: pause (xx & 7F) * 10 frames (04 80 is a pause of nothing); `05 xx` / `06 xx`
+  dictionary word xx / 0x100 + xx; `07 xx` letter 0x300 + xx; `09` the hero's name; `0A lo hi` repeat (hi >> 4) + 2
+  letters of the text d = lo + (hi & 0F) * 256 bytes back.
+* Speakers: 13 xx = character xx; **61-67 = Maxim, Selan, Guy, Artea, Dekar, Tia, Lexis** (the code maps them to actors
+  0, 1, 2, 3, 5, 4, 6; hero 4 is Tia, 5 Dekar: data, Tia speaks with 66 in Alunze Castle, Dekar with 65).
+* In the editor the text is plain text: Enter = new line, `[Name]` = the hero's name, `[Pause 20]` = 20 frames,
+  `[Voice 3]`, `[Glyph 41]`. Words of the dictionary and repeats are written out; changed text is packed with the
+  dictionary again. The box shows 3 lines; about 28 letters fit across the screen.
 
-## 3. Jump / pointer encoding
+## 3. Jumps
 
-* Every script pointer (1C, 15, 6A, 12, 10 choices, 14 condition jumps) is a **u16 offset added to the base
-  `$099E` in bank `$09A0`**, then normalised by `$80:C102` (a result below $8000 means it crossed into the next
-  bank: +$8000 and bank+1). So the target is the base plus the offset in **ROM-linear (file) terms**.
-* For event-block scripts the base is the map's **"PH" block start** (`$83:B5AD`: base = $87:8000 + header u24
-  at +0). So `file(target) = file(PH) + offset`. Verified by the crawl for every map.
-* For the **map init script** (`$80:BEAF`, header u24 at +3) the code temporarily sets `$099E = $8000`
-  (bank `$09A0` unchanged). All init scripts live in bank $87, and the data bank B is not switched by a jump
-  until the next frame, so in practice **init-script jumps are relative to $87:8000 = file 0x38000** (e.g. map 2
-  init `14 01 7B 30 64 11 FF` jumps to 0x39164; map A2 init `1C 1E 26` -> 0x3A61E). Every init script parses
-  cleanly with that base and not with the PH base. (An editor should write init jumps as file - 0x38000.)
-* Calls: only the text calls 05/06/09 (one level, `$1252/$1254`) and 0A (`$1257/$1259`). There is no script
-  gosub command.
-* Ends: 00/42 (end), B8 (end variant), 84 (halt forever on this command), 16/5E/83 (map change; the script is
-  replaced, Y is not advanced), A5 (abort to the field main loop), 5B 03 (game reset), 5B 06 (hang).
+* Every script pointer (1C, 15, 6A, 12, 10 answers, 14 checks) is a **u16 offset added to `$099E` in bank
+  `$09A0`**, then `$80:C102` moves it into the next bank when the 16-bit sum wrapped. For event-block scripts the base
+  is the map's **"PH" block** (`$83:B5AD`). A target reaches at most into the bank after the PH's; a jump from that next
+  bank back into the PH's bank is broken (the data bank isn't reloaded), so Lufia Forge keeps a moved block inside one
+  bank.
+* The **start-up script** (map header second u24, `$80:BEAF`) runs with `$099E` = $8000: its jumps are offsets from the
+  start of the bank it runs in (bank $87 for the game's own, file 0x38000).
+* Ends: 00 / 42 (end), B8 (message left up), 84 (stop forever), 16 / 5E / 83 (map change), A5 (game over),
+  5B 03 (reset), 5B 06 (hang). 18, 19, 81 and BC end the event too (`$80:A368`).
 
-## 4. State the commands use
+## 4. State
 
-* **Event flags**: 256 bits at `$7E:077E-$079D`; flag n = byte `$077E + (n >> 3)`, bit `1 << (n & 7)` (mask
-  table `$80:BE45` = 01 02 04 ... 80). Flag **FF** (`$079D` bit 7) doubles as the result of tests 91, 92, AB.
-* **Variables**: bytes at `$7E:079E + n` (1D/1E/1F, 12's counter, 14's 1x conditions).
-* Gold: u24 `$0A8A` (capped at 9,999,999 = 0x98967F). Inventory: `$0A8D`, 0x60 u16 (item id = low 9 bits,
-  count = bits 9-15). Character records: `$0BAD + n * 0xBE` (name +0, level +0x0E, HP +0x11, MP +0x13,
-  0x24 item/equipment bytes at +0x96). Party order: `$0926` (5 bytes, FF = empty).
-* Actors: 0x28 slots; id `$05FA,X`, flags `$0622,X` (01 script-held, 04 hidden, 08 moving), map sprite
-  `$05D2,X`, tile x/y `$06BA/$06E2,X`, pixel x/y `$7FDDAE/$7FDE3E` (16-bit, 16 per tile). `$80:BF92` finds an
-  actor by id, `$80:BF6F` the same but skips hidden ones. Ids 0x50 + n = character starts of the map info
-  (list +0x10); 0..6 = party members. Ids 0x10-0x4F also have a persistent "hidden" bit at `$081E + (id - 0x10)`
-  and a map/spot at `$085E/$089E + (id - 0x10)`.
-* Map info (copied to `$7E:F000`, l2ref 4.4) lists looked up by id with `$80:BFAA`: **preset points** list +0x0E
-  (`$80:C05C`, 3-byte records), **areas** list +0x14 (`$80:C093`), **paths** list +0x12 (`$80:BFD9`),
-  **exits/warps** list +0x06 (5E/83).
-* Script battles (53): table **`$97:C53D` (file 0xBC53D)**, u16 offsets relative to the table, 39 entries
-  (0x00-0x26), records 0x1E bytes: 6 monster ids (FF = empty) then per-slot data (`$81:82BD`).
+* **Story flags**: 256 bits at `$7E:077E-$079D`; flag n = byte `$077E + (n >> 3)`, bit `1 << (n & 7)`.
+  Flags the game's own code uses (the editor never hands them out as free):
 
-## 5. Command 14 (conditions) and 10 (choices)
+  | Flags | Used by |
+  |---|---|
+  | F0-FF | cleared on every map change that loads a map ($83:B2A8) |
+  | FF | the answer of 91 / 92 / AB, and "the party did not win" after a story battle (53) |
+  | FE | set after some story battles |
+  | C8-D0 | Iris treasures taken out of the Ancient Cave |
+  | 95 | where the ship can be parked |
+  | 41, 50, 5F, 62 | change the world map when set |
 
-**10 n p1..pn**: n u16 pointers follow; then text (text mode on) with the options; the text's `0B` runs the
-cursor: up/down, confirm -> jump to pointer [cursor], cancel (B) -> leave text mode and continue after the 0B.
+* **Counters** (event variables): bytes at `$7E:079E + n` (1D/1E/1F, 12, checks 1x of 14). New game zeroes 00-1F.
+* Gold u24 `$0A8A`; inventory `$0A8D`; hero records `$0BAD + n * 0xBE`; walking party `$0926`.
+* **Actors**: 0x28 slots; id `$05FA,X`, flags `$0622,X` (01 held by the event, 02 walks through things, 04 hidden,
+  08 walking a path, 80 an action runs), sprite `$05D2,X`, tile `$06BA/$06E2,X`, sprite frame `$066A`, facing `$0692`
+  (0 down, 2 left, 4 up, 6 right), drawing `$7FE316` (80 = not drawn).
+  Ids: **0-6 the heroes** (Maxim, Selan, Guy, Artea, Tia, Dekar, Lexis), **10-4F story characters** (they keep a map,
+  a start and a hidden bit across maps: `$085E`, `$089E`, `$081E` + id - 0x10; in Elcid 10 is Tia), **50 + n map
+  character n** (made by 68 / 7B in the start-up script and placed by character start n + 1).
 
-**12 v n p1..pn**: "say something different each time": i = var[v]; var[v]++; i = min(i, n - 1); jump to
-p[i] (`$80:A041`).
+## 5. Event blocks and map info
 
-**14 c ... FF** (`$80:A074`): a list of condition items, each starting with a byte c, ended by FF. A result
-register R (`$1267`) is computed; the list continues after FF if no jump was taken.
+**The event block** ("PH", the map header's first u24: bank $87 + hi, address lo + $8000): "PH", then six u16 offsets
+(+2..+C) to lists of (u8 id, u16 script offset) ended by FF. The lists are searched by `$80:C12E` (A = id, X = list).
 
-| c | Bytes after c | Meaning |
+| List | Started by | Ids |
 |---|---|---|
-| 00-0F, 40-4F, 80-8F | 1 (flag) | flag test; c bit 0 = 0: true if set, 1: true if clear. 0x: R = t; 4x: R = R or t; 8x: R = R and t |
-| 10-17 (also 50-57, 90-97) | 2 (var, value) | compare var[v] with value; op = c & 7: 0 ==, 1 !=, 2 >=, 3 <=, 4 >, 5-7 < (R = result) |
-| 2x (also 6x, Ax) | 2 (u16 ptr) | if R true: jump (ends 14) |
-| 3x (also 7x, Bx) | 2 (u16 ptr) | if R false: jump (ends 14) |
-| C0-C7 | 4 (u16 item, u16 value) | count of item (`$82:FB1F`) op value |
-| C8-CF | 3 (char, u16) | party member HP (+0x11) op value |
-| D0-D7 | 3 (char, u16) | MP (+0x13) op value |
-| D8-DF | 3 | reads 1 byte then u16, compares FF with it (broken/unused) |
-| E0-E7 | 2 (char, item) | R = member has item in his 0x24-byte list (+0x96) |
-| E8-EF | 2 (char, value) | level (+0x0E) op value |
-| F0-F7 | 2 (ignored, value) | world-map vehicle: (map $05AE < 2 ? $05B2 >> 4 : FF) op value |
-| F8-FF (not FF) | 2 (actor, ignored) | R = true if actor's `$0736` bit 0x20 is set (else unchanged) |
-| FF | 0 | end of 14 |
+| +2 | the game | 00 when the map is shown (`$83:B40A`, also the world maps); 01 on entering the map or one of its rooms (`$83:B420`, `$8E:B29D`); 02 before the map loads (`$83:B28D`, may change the arrival: 83, 85); **03 is not a script**: the locked-door key table (door + 1, u16 key item; ends with 00) |
+| +4 | "Go to another map" (16) with that scene number, and puzzle op BE | the scene number (`$05B8`); the game starts on map 02 scene 01 |
+| +6 | talking to a character | the character's actor id |
+| +8 | the leader stepping onto a tile of a trigger area | the area's id (map info list +0C) |
+| +A, +C | nothing | always empty |
 
----
+The +2 scripts and the start-up script run in one go: anything that waits (text, 37...) ends them. A trigger area fires
+**every time the leader finishes a step onto one of its tiles** (`$05B5` bit 4, `$83:B711`), never on loading the map,
+and the first area of the list that contains the leader wins: use a story flag for "only once". The game never checks
+that a looked-up script exists.
 
-## 6. Command table
+**Map info** (pointer table `$CF:FCBC`, u24 per map; copied to `$7E:F000` with its first u16 as the size): u16 size,
+then 21 u16 list offsets. Any bank works (the copy uses MVN with the pointer's bank), but the block must stay inside one
+bank and under 4 KB (`$7E:F000-$FFFF`; the biggest in the game is 0x5EB).
 
-Args = bytes after the command byte. "p" = u16 pointer (section 3). Handler = `$80:xxxx`.
+| List | Records | Bytes |
+|---|---|---|
+| +02 | doors | 15: id, x, y, ..., +0D key / lock |
+| +06 | exits | 9: id, x1, y1, x2, y2, arrival (facing / transition), x, y, map |
+| +0C | trigger areas | 5: id, x1, y1, x2, y2 (x1 <= x < x2, y1 <= y < y2) |
+| +0E | preset points | 3: id, x, y (30, 3B, 41 7n, 73, 98, 16's arrival point) |
+| +10 | character starts | 8: n (actor 0x4F + n), x, y, walk area x1, y1, x2, y2 (x2 / y2 not included), movement (32's values; 0 = the sprite's default) |
+| +12 | paths | 6: id, x, y (copy of the first target), flags (40 clear: the camera follows; 10: the event doesn't wait; 20: walk in the background), u16 program offset |
+| +14 | areas | 5: id, x1, y1, x2, y2 (43, 87, B4, 9C) |
 
-| Cmd | Args | Meaning | Handler | Conf |
-|---|---|---|---|---|
-| 00 | 0 | end (return from 05/06/09 call if active; else close text, restore camera, end script) | 9D4C | H |
-| 01 | 0 | end text mode, wait for button, continue | 9DB3 | H |
-| 02 | - | crash (BRK) | 9DD4 | H |
-| 03 | 0 | newline | 9DD5 | H |
-| 04 | 1 | text voice sound (xx<80) or pause (xx&7F)*10 frames | 9DFA | H |
-| 05 | 1 | dictionary word xx (call) | 9E45 | H |
-| 06 | 1 | dictionary word xx+0x100 (call) | 9E4E | H |
-| 07 | 1 | glyph 0x300+xx | 9EC8 | M |
-| 08 | 0 | open text mode, current speaker (the character talked to) | 9D3E | H |
-| 09 | 0 | player name (text) | 9ED6 | H |
-| 0A | 2 | text back-reference (section 2) | 9E83 | H |
-| 0B | 0 | choice cursor (text) | 9F37 | H |
-| 0C-0F | 0 | `?` `!` `,` `.` + newline | 9EF0.. | H |
-| 10 | 1+2n | choice: n, n pointers, then text | 9F10 | H |
-| 11 | - | crash | BF0A | H |
-| 12 | 2+2n | var v, n, n pointers: jump to p[min(var[v]++, n-1)] | A041 | H |
-| 13 | 1 | open text mode, speaker = actor xx | A06E | H |
-| 14 | var | condition list until FF (section 5) | A074 | H |
-| 15 | 3 | flag, p: jump if flag set | A288 | H |
-| 16 | 3 | change map: map ($05AE), $05B8, $05B0 (script replaced) | A2BA | M |
-| 17 | 1 | inn: music/fade/rest sequence, then pay xx gold | A2E1 | H |
-| 18 | 1 | shop xx | A32B | H |
-| 19 | 0 | church menu (menu 2 via $83:AFEA) | A372 | H |
-| 1A | 1 | set flag | A392 | H |
-| 1B | 1 | clear flag | A3AC | H |
-| 1C | 2 | jump p | A3C6 | H |
-| 1D | 2 | var[v] = value | A3DF | H |
-| 1E | 2 | var[v] += value | A3ED | H |
-| 1F | 2 | var[v] -= value | A3FF | H |
-| 20 | 2 | give item xx (0x000-0x0FF), count yy (with "got" message per item) | A414 | H |
-| 21 | 2 | give item xx+0x100, count yy | A41F | H |
-| 22 | 2 | add gold u16 | A480 | H |
-| 23 | 2 | party member xx learns spell yy ($82:FD3D) | A489 | M |
-| 24 | 2 | remove item xx, count yy ($82:FA57) | A49D | H |
-| 25 | 2 | remove item xx+0x100, count yy | A4A6 | H |
-| 26 | 2 | remove gold u16 | A4CB | H |
-| 27 | 2 | no-op (reads 2 bytes) | A4D4 | H |
-| 28 | 0 | $81:F629/F5ED/F60B (unknown) | A4DD | L |
-| 29 | 3 | member xx: raise stat yy by zz (tables $85:9EBA, $80:A596/A5A4) | A54A | M |
-| 2A | 3 | no-op | A5BC | H |
-| 2B | 1 | party member xx joins ($0926) | A5C8 | H |
-| 2C | 1 | party member xx leaves | A5FF | H |
-| 2D | 1 | show actor xx (clear hidden bit; ids 10-4F also persistent) | A63A | H |
-| 2E | 1 | hide actor xx (set hidden bit; ids 10-4F persistent) | A679 | H |
-| 2F | 3 | place actor xx at tile x, y ($80:A74D) | A71B | M |
-| 30 | 2 | place actor xx at preset point yy | A72E | M |
-| 31 | 2 | actor xx turns to direction yy (table $80:A7B6) | A794 | H |
-| 32 | 2 | release actor xx (FF = all) with movement mode yy ($070A) | A7BB | M |
-| 33 | 2 | path xx (list +0x12), actor yy walks it (waits for a free walker) | A80F | H |
-| 34 | 2 | actor xx map sprite yy | A8F8 | H |
-| 35 | 3 | persistent NPC xx (10-4F) moves to map yy, spot zz (hidden now if on this map) | B2B1 | M |
-| 36 | 1 | wait until actor xx stops moving | B005 | H |
-| 37 | 1 | wait xx frames | B2EB | H |
-| 38 | 1 | wait xx * 60 frames | B30C | H |
-| 39 | 0 | no-op | B33E | H |
-| 3A | 2 | scroll screen to tile x, y ($80:B374) | B341 | M |
-| 3B | 1 | scroll screen to preset point xx | B34F | M |
-| 3C | 0 | party gathers behind the leader (waits until done) | B397 | M |
-| 3D | 1 | party gathers instantly (byte unused) | B46B | M |
-| 3E | 0 | $0583 = 80 | B484 | L |
-| 3F | 0 | $0583 = 0F | B48C | L |
-| 40 | 0 | $83:8E4C | B494 | L |
-| 41 | 2 or 3 | camera: `0n 00` back to party (speed n), `dn yy` d=1-4 move yy tiles (direction table $80:B5BE), `6n x y` to tile, `7n pp` to preset, `xx FF` wait for camera | B4C4 | H |
-| 42 | 0 | = 00 | 9D4C | H |
-| 43 | 2 | effect between areas xx and yy (list +0x14), $83:8B6A | B72D | L |
-| 44 | 3 | word[$0320 + 2xx] += u16 | B7A6 | M |
-| 45 | 3 | word[$0320 + 2xx] -= u16 | B7B4 | M |
-| 46 | 3 | word[$0320 + 2xx] = u16 | B7C2 | M |
-| 47 | 1 | text box style ($1255; 10 = thought, no voice) | B7E6 | M |
-| 48 | 2 | text window position: column xx, row yy ($125D) | B7EF | M |
-| 49 | 1 | text auto-advance after xx frames (0 = wait for button) | B837 | M |
-| 4A | 1 | $09AD (text appearance?) | B840 | L |
-| 4B | 1 | play music xx (restarts) | B849 | H |
-| 4C | 1 | play sound xx ($84:8775) | B8BD | H |
-| 4D | 1 | wait until APU port 0 >= xx (music sync) | B8C7 | M |
-| 4E | 0 | wait while APU status bit 1 | B8DC | L |
-| 4F | 1 | no-op | B8ED | H |
-| 50 | 0 | text voice off ($1260 = 0) | B8F3 | M |
-| 51 | 0 | text voice from speaker | B8F9 | M |
-| 52 | 1 | text voice = xx | B900 | M |
-| 53 | 1 | script battle xx (table $97:C53D) | B909 | H |
-| 54 | 1 | door xx ($83:F559, A = xx<<8) | B92C | L |
-| 55 | 1 | door xx, variant 0x40 | B93D | L |
-| 56 | 0 | stop earthquake ($80:B97E) | B94E | M |
-| 57 | 0 | wait until screen effects done ($1261 = 0) | B98F | M |
-| 58 | 1 | fade, target 0F; low nibble -> $7FD08F, high -> $7FD090 | B9B2 | M |
-| 59 | 1 | fade, target 00; same nibbles | B9DA | M |
-| 5A | 3 | earthquake (3 parameters -> $7FD07E-80) | BA1C | M |
-| 5B | 1-2 | sub xx (table $80:BA55): 00 y, 01 y (bank $86 sequence), 02 y, 03 = reset (JML $80:8000, 1 arg), 04 y, 05 y, 06 = hang, 07 y, 08 y | BA39 | M |
-| 5C 5D | - | crash | BF08/9 | H |
-| 5E | 1 | use exit/warp xx of the map (list +0x06) | BBEB | M |
-| 5F | 1 | no-op | BC05 | H |
-| 60 | 2 | write PPU register $2100 + xx = yy | BC0B | H |
-| 61-67 | 0 | speaker 0,1,2,3,5,4,6 and open text mode | BC19.. | H |
-| 68 | 2 | create actor: id xx, map sprite yy (skipped if $05B3 bit 4) | BC3D | H |
-| 69 | 1 | map mode ($09A7) | BCBC | H |
-| 6A | 3 | flag, p: jump if flag clear | A29C | H |
-| 6B | 0 | refresh leader/camera ($80:ED9C) | A2B0 | L |
-| 6C | 3 | actor xx pixel offset x, y (signed; y - 16) | B078 | H |
-| 6D | 2+n+1 | credits text: u16 tilemap offset, bytes until 00 (table $80:B13E) | B128 | H |
-| 6E | 2+n+1 | same, 2-row font (table $80:B1D7) | B1BE | H |
-| 6F | 1 | change music xx | B887 | M |
-| 70 | 0 | fade music out (60 frames) | B871 | M |
-| 71 | 0 | wait for music fade | B89D | M |
-| 72 | 0 | stop music | B8B1 | M |
-| 73 | 2 | animation xx at preset point yy | B257 | H |
-| 74 | 1 | battle background | B2A7 | H |
-| 75 | 0 | scroll screen to the leader | B49B | M |
-| 76 | 0 | wait for fade/screen effect | B99D | M |
-| 77 | 1 | hold actor xx (flag 01) | A6AE | M |
-| 78 | 0 | reset NPCs 5-27 (mode 9) | A6C2 | L |
-| 79 | 0 | wait until no visible actor moves | A6E7 | M |
-| 7A | 2 | actor xx sprite frame yy ($066A) | A709 | H |
-| 7B | 2 | create actor xx, sprite yy (variant) | BC55 | H |
-| 7C-80 | 1 | ship: mode ($09DF), position mode ($09EE), on map ($09E0), party in ship ($09E1), sprite ($09E2) | BD6C.. | M |
-| 81 | 1 | capsule monster xx joins (message $30 = 3) | BD99 | M |
-| 82 | 0 | $80:F821 + $83:8E4C | BDBB | L |
-| 83 | 1 | use exit xx (variant, sets $05B3 bit 5) | BDCA | M |
-| 84 | 0 | halt (never advances) | 9DB0 | H |
-| 85 | 2 | world position = preset xx, vehicle/facing nibble yy ($05B0-$05B2) | BDF1 | M |
-| 86 | 2 | actor xx action yy relative to facing ($83:D350) | A936 | M |
-| 87 | 2 | effect between areas xx, yy (variant of 43) | B62B | L |
-| 88 | 0 | = 6B | B721 | L |
-| 89 | 1 | hold actor xx when it stops (waits) | AFE7 | M |
-| 8A | 0 | stop earthquake immediately | B962 | M |
-| 8B | 3 | move actor xx by signed dx, dy pixels | B0BD | H |
-| 8C | 3 | actor xx movement params ($7FE5CE, $7FE5A6) | A99D | L |
-| 8D | 6 | object/projectile: actor, preset, 4 bytes, speed 3C | A9BE | L |
-| 8E | 3 | effect object ($83:C6AA, type 0600) | AA43 | L |
-| 8F | 3 | effect object (type 06) | AA83 | L |
-| 90 | 3 | effect object (type 30) | AAA1 | L |
-| 91 | 2 | flag FF = (u24 $0B55 >= u16) | AE03 | M |
-| 92 | 1 | flag FF = $83:8AC9(xx) | AE24 | L |
-| 93 | 3 | colour fade (signed step) | AE42 | L |
-| 94/95/96 | 3 | screen tint (colour math $2131 = 93/53/D3) | AF5B.. | M |
-| 97 | 0 | end tint | AF6B | M |
-| 98 | 2 | actor xx to preset yy (action 62) | B021 | M |
-| 99 | 1 | actor action 61 | B054 | L |
-| 9A | 1 | remove effect objects with id xx | AABF | L |
-| 9B | 5 | colour fade (two BGR15 colours + 1) | AEF2 | L |
-| 9C | 3 | area xx + 2 bytes ($80:D533) | AFC0 | L |
-| 9D | 1 | actor action 63 | B066 | L |
-| 9E | 1 | open text mode, window at row xx, centred on the text width | B7FE | H |
-| 9F | 3 | effect object (as 8E, flag 04) | AA49 | L |
-| A0 | 6 | as 8D, actor-to-actor | A9B7 | L |
-| A1 | 2 | wait for effect object xx, field yy | AAE6 | M |
-| A2 | 1 | wait until effect object xx is gone | AB1D | M |
-| A3 | 2 | actor xx action yy ($83:D350) | A94E | M |
-| A4 | 0 | pixelate screen | BA00 | M |
-| A5 | 0 | reset stack, JML $83:ACEF (back to the field loop) | AB45 | M |
-| A6 | 0 | rebuild actors from $7EF600 (if $05B6 bit 0) | AB51 | L |
-| A7 | 1 | 00: set $09A6 bit 0, else clear | ADEC | L |
-| A8 | 1 | 01: $84:890B, else $84:878A | ABD0 | L |
-| A9 | 2 | xx < 2: $09E6 = yy; else $05C0/$05C1 = xx, yy | ABF9 | L |
-| AA | 0 | clear $7FD100-$7FD103 | AC18 | L |
-| AB | 1 | flag FF = (Dragon egg count >= xx) (item 0x2B) | AC28 | H |
-| AC | 2 | preset xx, yy -> $05BD-$05BF | AC48 | L |
-| AD | 0 | $8E:BCAD | AC6A | L |
-| AE | 1 | FF: clear $05B6 bit 1, else set | AC73 | L |
-| AF | 2 | actor xx $7FE35E = yy, $0736 bit 7 set | ACBD | L |
-| B0 | 1 | actor xx clear that bit | ACE2 | L |
-| B1 | 2 | $80:AD57 on actors xx, yy | AD02 | L |
-| B2 | 2 | same, both orders | AD12 | L |
-| B3 | 1 | $80:AD39 | AD2F | L |
-| B4 | 3 | as 43 with mode zz (stores Y, yields) | B6F4 | L |
-| B5 | 0 | $089D = 0, $085D = FF | ADD1 | L |
-| B6 | 2 | actor xx $7FE316 = yy | AC8A | L |
-| B7 | 1 | actor xx $8E:BAF6/BAE7 | ACA7 | L |
-| B8 | 0 | end script (variant of 00) | ADDC | M |
-| B9 | 1 | party member xx: $BC = FF unless status bit 2 | A4F0 | L |
-| BA | 1 | party member xx $82:FD15 | A50B | L |
-| BB | 0 | menu/message 7 (report) | A51D | M |
-| BC | 0 | $83:8C8A (menu), then continue | B646 | L |
-| BD | 2 | create effect actor (id - 0x48) xx, target yy | B6B3 | L |
-| BE | 1 | = 77 | A6AE | M |
-| BF | 3 | actor zz action xx toward actor yy | A95C | L |
-| C0 | 3 | as 8B, then snap tile position | B0C3 | M |
-| C1 | 2 | $7FD4F3/F4 | B117 | L |
-| C2 | 6 | as 8D, speed 4F | A9CC | L |
-| C3 | 6 | as A0, speed 4F | A9C5 | L |
-| C4 | 2 | scroll to tile x, y (mode 2) | B4AD | M |
-| C5 | 0 | clear tint/effect bits | B955 | L |
-| C6 | 2 | animation xx at actor yy | B269 | M |
-| C7 | 0 | screen refresh with NMI off | B659 | L |
-| C8 | 7 | as 8D with speed byte | A9D3 | L |
-| C9 | 7 | as A0 with speed byte | A9DB | L |
-| CA | 3 | $7FD020 + xx = yy, zz | B67D | L |
-| CB | 1 | $0B52 | B696 | L |
-| CC | 0 | $0B62 = max | B69F | L |
+**Making a map character**: the start-up script's `68 id sprite` (or `7B` for a field monster) fills the next actor
+slot from 8 on (at most 32), and the character start with n = id - 0x4F gives its place, walk area and movement. 68
+must come before any other command that uses characters in the start-up script.
 
-Not seen in any map script (counts from code only): 02 07 11 1F 24 26 27 2A 2F 36 39 3A 3E 3F 40 42 44 45 46
-4A 4D 4E 4F 50 51 52 57 5C 5D 5F 60 6D 6E 77 7A 80 84 93 96 9B AC B1 B2 B3 B5 B7 BB C8 CB.
+## 6. Command 14: check conditions
 
-## 7. Differences from LEdit (l2ref.md 4.5 / 4.6)
+**14 c ... FF** (`$80:A074`): checks in order; each sets the result R (story flag checks can combine with it); jump checks
+go somewhere on R; when no jump is taken the event carries on after the FF.
 
-* **2E is 1 arg** (hide actor); the opening's `2E 59 00` is `2E 59` + `00` (end). 2D likewise.
-* 14: variable length (condition list ending FF), not 6. 15 (map-command table) is 3, 1C is 2 (as the
-  Dialogs.txt list already says).
-* 19 church: **0** args (LEdit 1). 28: **0** (LEdit 1). 3D: **1** (LEdit 0). 83: **1** (LEdit 0).
-  25: **2** = remove item xx + 0x100 (LEdit 1). 60: **2** = PPU register write (LEdit 1).
-* 41: 2 **or 3** (3 when the first byte is 6x). 5B: 2 except 5B 03 / 5B 06 (1). 6D/6E: u16 + bytes until 00.
-  C8/C9: 7.
-* 0A is a text back-reference, 12 a "next line each time" counter, 1D-1F variable set/add/sub, 07 a glyph
-  page. 17's byte is the inn price. 5E is a warp through exit xx, not "end". 84 halts.
-* 61-67: the code gives speaker ids 0,1,2,3,**5,4**,6 (65 -> 5, 66 -> 4); LEdit has Tia = 65, Dekar = 66. If
-  actor 4 = Tia (sprite order) then 65 = Dekar, 66 = Tia. Unverified in game.
-* E0 is not a script command (table ends at CC).
-* PH list +2 records with id 03 do not point at scripts (8 such entries, e.g. map 30 0x4D59C, map D2 0x6D340
-  `01 BD 01 00`); only ids other than 03 are scripts.
-* Init-script jumps use base $87:8000 (section 3), not the PH block.
+| c | Bytes after | Meaning (op = c & 7: 0 is, 1 is not, 2 at least, 3 at most, 4 more than, 5-7 less than) |
+|---|---|---|
+| 00-0F, 40-4F, 80-8F | flag | story flag (bit 0 of c = 0: on, 1: off); 0x replaces R, 4x R or it, 8x R and it |
+| 1x (5x, 9x) | counter, value | counter op value |
+| 2x (6x, Ax) | u16 | if R: go to |
+| 3x (7x, Bx) | u16 | if not R: go to |
+| C0-C7 | u16 item, u16 n | number of the item op n |
+| C8-CF / D0-D7 | hero, u16 n | the hero's HP / MP op n (hero 0 Maxim .. 6 Lexis) |
+| D8-DF | 3 | broken, unused |
+| E0-E7 | hero, spell | **the hero knows the spell** |
+| E8-EF | hero, n | the hero's level op n |
+| F0-F7 | (ignored), v | the party came from the world map facing v (0 down, 2 left, 4 up, 6 right) |
+| F8-FE | actor, (ignored) | **the field monster was beaten** (`$0736` bit 20); never sets R false |
+
+The editor shows it as "Check whether story flag 1A is off: if not, go to step 24", with one row of fields per check
+and "add a check" / "take this check out".
+
+## 7. The commands
+
+Fields are what the editor shows; "rare" commands sit in the "Rarely used" menu.
+
+| Cmd | Bytes after | In the editor | Fields | What it does | Sure |
+|---|---|---|---|---|---|
+| 00 | 0 | End the event |  | Closes any text box, brings the camera back and ends. | game |
+| 01 | 0 | (text code) | | wait for a button, then back to commands | code |
+| 02 | - | Crash (rare) |  | Not a real command: the game stops here. | code |
+| 03-07, 09-0F | | (text codes) | | section 2 | code |
+| 08 | 0 | Text: the person talked to speaks |  | Opens the text box for the character the player talked to. | game |
+| 10 | 1+2n | Ask a question | answers, answer n goes to | Shows the text with a cursor on the answers (the last lines of the text, one per answer); each answer goes to its step. B closes the box and the event carries on with the next step. | code |
+| 11 | - | Crash (rare) |  | | code |
+| 12 | 2+2n | Say something different each time | counter, choices, time n goes to | Goes to the first step the first time, the second the next time, and so on (the last repeats); the counter is an event variable. | code |
+| 13 | 1 | Text: a character speaks | speaker | Opens the text box for this character. | code |
+| 14 | list to FF | Check conditions | per check | Section 6. | code |
+| 15 | 3 | If a story flag is on, go to a step | story flag, go to |  | game |
+| 16 | 3 | Go to another map | map, scene, arrival point | The scene (an event of that map's +4 list) runs on arrival; it must exist. The party faces down. Not for the world maps. | data |
+| 17 | 1 | Rest at the inn | price | Music, fade, everyone alive is healed, then the gold is paid (nothing when the party has less). Waits until the rest is over. | code |
+| 18 | 1 | Open a shop | shop | The event ends when the shop closes. | game |
+| 19 | 0 | Open the church |  | Save, cure and so on; the event ends there. | code |
+| 1A | 1 | Turn a story flag on | story flag |  | game |
+| 1B | 1 | Turn a story flag off | story flag |  | code |
+| 1C | 2 | Go to a step | go to |  | game |
+| 1D / 1E / 1F | 2 | Set / add to / take from a counter | counter, value | 8-bit, wraps; the game uses counters 01-0E. | code |
+| 20 / 21 | 2 | Give an item | item, how many | 21 = items 100-1FF. Added one at a time (a full bag shows its screen). No message by itself. Item 2B (Dragon egg) also counts in `$0B61`. | code |
+| 22 | 2 | Give gold | gold | Capped at 9,999,999. | code |
+| 23 | 2 | A hero learns a spell | hero, spell | Only when the spell can be learned by that hero; no message. | code |
+| 24 / 25 | 2 | Take an item | item, how many | Only if the party has it; a key item is switched (taking one the party doesn't have gives it). | code |
+| 26 | 2 | Take gold | gold | Nothing is taken when the party has less. | code |
+| 27, 2A, 39, 4F, 5F | 2, 3, 0, 1, 1 | Nothing (rare) |  | Do nothing. | code |
+| 28 | 0 | Fully restore the party |  | HP, MP and status of everyone (revives); no fade, unlike the inn. | code |
+| 29 | 3 | Raise a hero's stat | hero, stat, amount | Permanent bonus of base x amount / 256 (stats HP MP STR AGL INT GUT MGR). | code |
+| 2B | 1 | A hero joins the party | hero | Follow it with "Line up the party". | code |
+| 2C | 1 | A hero leaves the party | hero | The last member never leaves. | code |
+| 2D / 2E | 1 | Show / hide a character | who | Story characters keep the state. Nothing happens when the character isn't on the map. | code |
+| 2F | 3 | Put a character on a tile (rare) | who, x, y | At once; holds it still. | code |
+| 30 | 2 | Put a character on a point | who, point | At once; holds it still. | code |
+| 31 | 2 | A character turns | who, to face | 1 up, 2 down, 3 left, 4 right (0 is garbage). | code |
+| 32 | 2 | Let a character move on its own | who (FF everyone), moves | Movement modes below. | code |
+| 33 | 2 | A character walks a path | path, who | Note the order: path first. The event waits unless the path's flag 10 is set. | code |
+| 34 | 2 | Change a character's sprite | who, sprite |  | code |
+| 35 | 3 | Send a story character to another map | story character, map, start | From now on it stands on that map at that character start; hidden here at once. | code |
+| 36 | 1 | Wait for a character to stop walking (rare) | who | | code |
+| 37 / 38 | 1 | Wait (frames / seconds) | frames / seconds | 60 frames = 1 second. | code |
+| 3A / 3B | 2 / 1 | Camera jumps to a tile / point | x, y / point | At once (the map is drawn again). | code |
+| 3C | 0 | The party gathers on the leader |  | Waits until they are there. | code |
+| 3D | 1 | Line up the party |  | Rebuilds the party's sprites behind the leader (after joins and leaves); the byte is unused. | data |
+| 3E / 3F / 40 | 0 | Screen off / on / draw the map again (rare) | | | code |
+| 41 | 2 or 3 | Camera | form, then its values | Forms below. | code |
+| 42 | 0 | End the event (rare) | | Same as 00. | code |
+| 43 | 2 | Copy map tiles from one area to another | onto area, from area | Both layers; updates where the party can walk. | code |
+| 44 / 45 / 46 | 3 | Add to / take from / set a palette colour (rare) | colour, BGR15 value | `$0320` is the palette buffer. | code |
+| 47 | 1 | Text box style | style | 00 normal, 10 thought box (bubble tail, no voice). Stays until changed. | game |
+| 48 | 2 | Text box position | column, row | For the next box only; also turns its voice off. | game |
+| 49 | 1 | Text turns pages by itself | frames | 0 = wait for a button again. | code |
+| 4A | 1 | Text background (rare) | background | 01 = no box behind the letters (the game's opening). | game |
+| 4B | 1 | Set the map's music | song (00-3E) | Nothing changes when it already plays; it comes back after battles. | code |
+| 4C | 1 | Play a sound | sound (00-8E) | Skipped while sounds are off (AE). | code |
+| 4D | 1 | Wait for a music cue (rare) | cue | | code |
+| 4E | 0 | Wait for the sound to end (rare) | | | guess |
+| 50 / 51 / 52 | 0 / 0 / 1 | Text voice off / from the speaker / a sound (rare) | | | code |
+| 53 | 1 | Start a story battle | battle (00-26) | Afterwards flag FF is on when the party did not win; losing is game over except battles 0B and 25. | game |
+| 54 / 55 | 1 | Open / close a door | door | | data |
+| 56 | 0 | Stop all screen effects |  | Shaking, fades, colours and the camera hold. | code |
+| 57 | 0 | Wait for every screen effect (rare) |  | Never ends during a quake or while the event holds the camera. | code |
+| 58 / 59 | 1 | Fade the screen out / in | step (high nibble), frames per step (low) | Fade in: use step 1, 3, 5 or 15. Follow with 76. | code |
+| 5A | 3 | Shake the screen | (unused), strength, how often (of 255) | Until 8A or 56. | game |
+| 5B | 1 or 2 | Special scene (rare) | what, value | 00 y: darken (y > 0) / brighten the screen bars; 01 00: **the title sequence** (game); 02 y: cinema bars on / off; 03: reset; 04 y: ferry crossing (02 Aleyn to Narcysus, 03 back, 04 Aleyn to Gruberik, 05 back, 06 Narcysus to Gruberik, 07 back); 05: back from the staff roll (game, by an earlier test); 06: hang; 07 / 08: big / normal font. | code |
+| 5E | 1 | Leave through an exit | exit | As if the party walked through it. | code |
+| 60 | 2 | Write a screen register (rare) | register, value | | code |
+| 61-67 | 0 | Text: a hero speaks | hero | Maxim, Selan, Guy, Artea, Dekar, Tia, Lexis. | game |
+| 68 | 2 | Add a map character (start-up script) | who, sprite | Section 5. | game |
+| 69 | 1 | Map settings | settings | Bits: 01 dungeon controls, 02 special palette, 04 unknown, 08 no Escape, 10 no Warp, 20 can step down slopes, 40 no field tools, 80 no Reset spell. Towns 08 / 98, dungeons 01 / 11. | code |
+| 6A | 3 | If a story flag is off, go to a step | story flag, go to |  | code |
+| 6B / 88 | 0 | Update where the party can walk |  | After changing map tiles. | code |
+| 6C | 3 | Draw a character shifted | who, x, y (signed pixels) | Only the picture moves. | code |
+| 6D / 6E | 2 + text + 00 | Credits text (rare) | | u16 screen offset, then letters. | code |
+| 6F | 1 | Play a song now | song | For a scene; the map's music comes back later. | code |
+| 70 / 71 / 72 | 0 | Fade the music out / wait for it / stop the music | | | code |
+| 73 | 2 | Play an animation on a point | animation (00-5F), point | | code |
+| 74 | 1 | Battle background (rare) | background | Start-up script. | code |
+| 75 | 0 | Camera points at the leader | | | code |
+| 76 | 0 | Wait for the fade | | | code |
+| 77 / BE | 1 | Hold a character still | who | | code |
+| 78 | 0 | Everyone stands still | | 32 FF lets them move again. | data |
+| 79 | 0 | Wait for everyone to stop walking | | | code |
+| 7A | 2 | Show a sprite frame (rare) | who, frame | 00/01 down, 02/03 left, 04/05 up, 06/07 right; poses from 08. | game |
+| 7B | 2 | Add a field monster (start-up script) | who, sprite | Also makes it a field monster (formation from `$97:B9AC`). | code |
+| 7C-80 | 1 | Ship: abilities, parking point, state, party aboard, facing (rare) | | 7C 0 sail, 1 dive, 2 fly (guess); 7E FF none, 0 sea, 1 under the sea, 2 air. | code / guess |
+| 81 | 1 | A capsule monster joins | capsule monster | 0 Jelze, 1 Flash, 2 Gusto, 3 Zeppy, 4 Darbi, 5 Sully, 6 Blaze. Ends the event. | game |
+| 82 | 0 | Refresh around the hero (rare) | | | guess |
+| 83 / 85 | 1 / 2 | Send the player elsewhere / choose the arrival (rare) | exit / point, facing | Only in the +2 id 02 event. | code |
+| 84 | 0 | Stop here forever (rare) | | | code |
+| 86 | 2 | A character acts toward the leader's facing | who, action group | The group's up / down / left / right action by the leader's facing. | code |
+| 87 | 2 | Copy map tiles (quick, for animations) | onto area, from area | Follow with 6B / 88. | data |
+| 89 | 1 | Wait for the action | who | Then holds the character still. | code |
+| 8A | 0 | Stop the shaking | | | game |
+| 8B / C0 | 3 | Nudge a character (and settle it on the tile) | who, x, y (signed pixels) | | code |
+| 8C | 3 | Action settings | who, first, second | Before "hold up an item" (86 xx 40). | data |
+| 8D, A0, C2, C3, C8, C9 | 6 / 7 | Ring of sparkles around a point / character (rare) | ring, place, count, size, spin, other | | data |
+| 8E, 8F, 90, 9F, 9A, A1, A2 | | Change, tilt, remove, wait for a ring (rare) | | | code |
+| 91 | 2 | Check casino coins | coins | Answer in flag FF. | data |
+| 92 | 1 | Check whether a door is open | door | Answer in flag FF. | code |
+| 93, 9B | 3, 5 | Colour fades (rare) | | | code |
+| 94 / 95 / 96 | 3 | Darken / flash / darken half with a colour | colour, start, end strength, frames | Colour bits E0 white, 20 red, 40 green, 80 blue... 97 ends it. | code |
+| 97 | 0 | End the colour | | | code |
+| 98 / 99 / 9D | 2 / 1 / 1 | A character appears in a flash / vanishes / flickers away | who (, point) | | code |
+| 9C | 3 | Scatter animations over an area | area, count, animation | | code |
+| 9E | 1 | Text: narration | row | Centred box; voice off. | code |
+| A3 | 2 | A character does an action | who, action | Actions below; follow with 89. | code |
+| A4 | 0 | Fade in quickly | | | code |
+| A5 | 0 | Game over (rare) | | Back to the title screen. | code |
+| A6 | 0 | Place the cave floor's monsters (rare) | | | guess |
+| A7 | 1 | Followers stop / resume (rare) | | | code |
+| A8 | 1 | Enter / leave the Ancient Cave (rare) | | | data |
+| A9 | 2 | Where Escape leads (rare) | map, point | | data |
+| AA | 0 | Clear the puzzle movement flags (rare) | | | code |
+| AB | 1 | Check Dragon eggs | eggs | Answer in flag FF. | code |
+| AC | 2 | Where the party appears when the map reloads (rare) | point, facing | | code |
+| AD | 0 | Rebuild a treasure list (rare) | | | guess |
+| AE | 1 | Sounds on (FF) or off | | | code |
+| AF / B0 | 2 / 1 | A character blinks / stops blinking | who, rate | | code |
+| B1 / B2 / B3 | 2 / 2 / 1 | Face another / face each other / the party looks at (rare) | | | code |
+| B4 | 3 | Copy map tiles on chosen layers (rare) | | | code |
+| B5, B7, BD | | Story character 4F, bring back a field monster, effect character (rare) | | | guess |
+| B6 | 2 | Character drawing | who, setting | 20 normal, A0 not drawn (still blocks the way). | game |
+| B8 | 0 | Next message stays up while the player walks on | | Signs. | code |
+| B9 | 1 | Fill a hero's IP gauge | hero | | code |
+| BA | 1 | Take off a hero's equipment | hero | When a hero leaves for good. | data |
+| BB | 0 | Show the report screen (rare) | | "LUFIA 2 REPORT" (defeats...), then the event ends. | game |
+| BC | 0 | Draw the map again and end (rare) | | | code |
+| BF | 3 | A character rides along with another | action, carried by, rider | | code |
+| C1 | 2 | Effect settings (rare) | | Unknown; always before a ring. | guess |
+| C4 | 2 | Camera scrolls to a tile | x, y | | code |
+| C5 | 0 | Keep the colour as it is (rare) | | | guess |
+| C6 | 2 | Play an animation on a character | animation, who | | code |
+| C7 | 0 | Draw the map again while dark (rare) | | | data |
+| CA | 3 | Layer scrolling (rare) | layer, mode, setting | | code |
+| CB | 1 | Message speed (rare) | | | data |
+| CC | 0 | Remember the last story battle (rare) | | | guess |
+
+**Camera (41)**: `xx FF` wait until the camera stops; `0n 00` back to the leader at speed n, waits; `dn tt` move tt
+tiles (d: 1 up, 2 down, 3 left, 4 right) at speed n; `6n x y` scroll so tile (x + 1, y) is the top left; `7n pp` scroll
+to preset point pp. Speed n = pixels a frame, 0 = at once. Moves don't wait.
+
+**Movement modes (32, character start byte +7)**: 00 wander (inside the walk area), 02 wander more often, 04 stand
+still, 05 / 06 / 07 / 08 stand facing down / up / right / left (turn back after talking), 09 stand keeping the facing,
+0A follow the party. 0B-39 are monster and special behaviours (chase, vanish, walk squares...); 01, 03 and 3A+ are
+broken.
+
+**Actions (A3, 86, BF; table `$91:8000`)**: groups of four go up, down, left, right: 00-03 step one tile, 04-07 walk in
+place, 18-1B face, 40-43 hold up an item, 64 hop in surprise, 68-6B hop a tile, 79-7C collapse, 81-84 step back, 85 / 86
+vanish / appear in a flash, 94-97 walk through anything... The editor lists 116 of them by name
+(`L2EventCommands.Actions`).
+
+**Paths (33; map info +12)**: a small program from the block: 00-03 step up / down / left / right, 08 d face, 0C s
+speed, 12 x y walk to the tile, 18 x y jump to it, 1B n wait, 1C s sprite, 1D n sound, 29 offset loop, 4A-4D step
+back, 4F a action, 0F end.
+
+## 8. How Lufia Forge saves events
+
+The Events tab shows a map's events (the start-up script, scenes, talking to each character, the trigger areas, the
++2 events) as steps in plain words. Every step reachable from the event's start is shown, in ROM order, with its
+jumps as "go to step N"; code another event shares is marked "shared with ...".
+
+1. **Same size: written over the old bytes.** When every step keeps its place and size (text may get shorter: it is
+   filled up with `04 80` pauses of nothing and a space) and nothing another event shares changes, only the changed
+   bytes are written.
+2. **Otherwise the block moves into the event space**, once per map. The event space is a bank of $A8-$BF taken from
+   the packed files: the packed map files of that bank (the map editor moves those files too) are copied as they are to
+   the space added past 2.5 MB, the file table points at the copies, and the bank is cleared. A bank of map files is
+   taken first, then any bank whose bytes all belong to packed files. The bank's last 16 bytes hold `"LF2V"` and the
+   next free offset (u24). On the US ROM banks $A8-$BF hold nothing but packed files (18 banks were used when every map was moved).
+3. A moved block is `"LF2B"`, u16 room (from the PH), u16 size of the copied part, then the copy of the game's block
+   (header, lists, key table, every script the lists reach: offsets don't change), then the **added part**, laid out
+   again on every save: the six lists, then each script that lives there (a changed or new event, written whole with
+   the code it shares with others, so it depends on nothing else). The map header's u24 points at the copy
+   (bank $87 + hi, address lo + $8000), for every map that used the block. When the added part outgrows its room the
+   chunk grows in place (when it was the last thing put in its bank) or moves to a bigger one.
+4. A start-up script that grows moves on its own (`"LF2I"`, u16 room, then the script), its jumps counted from the
+   start of its new bank; only this map's header changes.
+5. Text that moves is packed again (repeats `0A` are written out).
+
+**New events** (the "New event" button):
+
+* *Talking to a character*: a +6 record with the character's id.
+* *Talking to a new character*: a character start (map info +10: the clicked tile, a walk area 2 tiles around, the
+  movement picked) and `68 id sprite` at the top of the start-up script, then a +6 record.
+* *Stepping onto an area*: a trigger area (map info +0C, the next free id) and a +8 record.
+* *Right after another event*: that event's ends go on to the new steps (an End at the very bottom is just removed;
+  others become "go to").
+* *Plays only once*: a story flag no event and no game code uses (from EF down) is checked first ("if it is on, go to
+  the end") and turned on right after.
+* The map info block grows into the added space (any bank works for it): the old block is copied with the changed list
+  rewritten at its end, and the map's pointer at `$CF:FCBC` changes.
+
+Edit > Undo takes back each save. In the tab, Undo / Redo work on the steps before saving; Revert drops them.
+
+## 9. Checked with the editor's own tests (not in the game)
+
+* All 1322 events of the 242 maps read with no problem; every event whose steps sit back to back is rebuilt byte for
+  byte the same.
+* Every event of every map grown by one step and saved, one after the other on one ROM (253 block moves, 18 event
+  space banks): every event reads back the same, the packed files unpack the same.
+* A new character with a talk event and a trigger area event added to every map (half the talk events removed again):
+  all 1679 events, 239 start-up scripts and every map info list read back as expected.
+* Same-size edits (a wait in each of 153 events) change exactly one byte; 745 of 784 shortened texts stay in place.
+
+## 10. Checked in the game (BizHawk, new game, the shop scene in Elcid, map 04)
+
+* The opening scene (map 04 scene 1) with a changed line and an added sound step: the map's events moved to $B5:8008
+  and the changed line shows. The game's intro (map 02 scene 1) moved the same way also showed its changed line.
+* A shortened line written in place ("Hi, [Name]! (in place)").
+* "Right after another event": the opening scene went on with a new line before control came back.
+* A new character (sprite 0C, standing facing down) on a clicked tile in Tia's shop, with "plays once": talking to it
+  showed its line and turned story flag EF on; the second time nothing was said.
+* A new trigger area under the player: stepping on it showed its line and turned flag EE on; stepping off and back on
+  again (still inside the area) showed nothing.
+* Added to the opening scene: B6 00 A0 (Maxim not drawn), 7A 00 10 (a pose frame), 5A / 8A (the screen shakes, then
+  stops), 47 10 (thought box), 48 01 14 (the box at column 1, row 20), BB (the "LUFIA 2 REPORT" screen).
+* The opening map's first event step 5B 01 00 plays the title sequence (night forest, title screen).
+
+## 11. Still uncertain
+
+4E, 82, A6, AD, B5, B7, BD, C1, C5, CC, 7C and 80 (ship values), the 0B-39 movement modes, the meaning of the ring
+parameters (8D family), 95's colours (a test flash wasn't clearly visible), 69 bit 04, the animation numbers of 73 / 9C
+/ C6, and which door values open or close beyond the game's own uses.
+
+## 12. Differences from LEdit (l2ref.md 4.5 / 4.6)
+
+* **2E and 2D are 1 byte** (show / hide a character). 14 is a check list ending in FF, not 6 bytes. 19 church: 0
+  bytes. 28: 0. 3D: 1. 83: 1. 25: 2 (items 100-1FF). 60: 2. 41: 2 or 3. 5B: 2 except 5B 03 / 5B 06. 6D / 6E: u16 +
+  text + 00. C8 / C9: 7.
+* 0A is a text repeat, 12 a "different each time" counter, 1D-1F counters, 07 a letter of the third page, 17's byte is
+  the inn price, 5E a walk through exit xx, 84 stops forever, E0 (in 14) is "knows a spell".
+* 61-67 speak as Maxim, Selan, Guy, Artea, **Dekar, Tia**, Lexis (LEdit has Tia = 65, Dekar = 66).
+* E0 is not a command (the table ends at CC).
