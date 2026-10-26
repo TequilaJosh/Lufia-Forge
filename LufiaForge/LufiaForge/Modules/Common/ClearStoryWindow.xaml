@@ -11,15 +11,15 @@
         <TextBlock Style="{StaticResource LufiaLabel}" TextWrapping="Wrap" Margin="0,8,0,0"
                    Text="Kept: the maps as they are built (layout, tiles, exits, doors and arrival points), graphics, monsters, encounters, items, spells and music. Chests drawn into a map stay as scenery until you paint them over."/>
 
-        <TextBlock Text="A new game starts here, with the Hero" Style="{StaticResource LufiaLabel}" Margin="0,14,0,4"/>
-        <ComboBox x:Name="MapCombo" DisplayMemberPath="Label" SelectionChanged="MapCombo_SelectionChanged"/>
+        <TextBlock x:Name="StartLabel" Text="A new game starts here, with the Hero" Style="{StaticResource LufiaLabel}" Margin="0,14,0,4"/>
+        <ComboBox x:Name="MapCombo" DisplayMemberPath="Label" SelectionChanged="MapCombo_SelectionChanged" MaxDropDownHeight="480"/>
         <DockPanel Margin="0,8,0,0">
-            <TextBlock Text="Arrival point" Style="{StaticResource LufiaLabel}" VerticalAlignment="Center" Width="110"/>
+            <TextBlock x:Name="PointLabel" Text="Arrival point" Style="{StaticResource LufiaLabel}" VerticalAlignment="Center" Width="110"/>
             <ComboBox x:Name="ArrivalCombo" DisplayMemberPath="Label"/>
         </DockPanel>
 
         <TextBlock Style="{StaticResource LufiaLabel}" Foreground="{StaticResource TextDisabledBrush}" TextWrapping="Wrap" Margin="0,14,0,0"
-                   Text="Patches that work through the story's events (Test start, Visible monsters, the Ancient Cave) have nothing left to work with afterwards. Edit &gt; Undo takes the whole clear back."/>
+                   Text="Patches that work through the story's events (Lufia 1's Test start, Visible monsters, the Ancient Cave) have nothing left to work with afterwards. Edit &gt; Undo takes the whole clear back."/>
 
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
             <Button x:Name="OkButton" Content="Clear the story" Style="{StaticResource LufiaButtonGold}" Padding="14,5" Margin="0,0,8,0" IsDefault="True" Click="Ok_Click"/>

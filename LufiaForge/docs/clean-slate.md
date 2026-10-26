@@ -39,3 +39,27 @@ spells and music.
 
 Checked in BizHawk (US ROM): name entry, then the Hero alone (party list `00 FF FF FF`) on Alekia arrival 1 and on
 map 14 arrival 2, in colour, with the town empty; the start map's song is loaded into the sound RAM.
+
+## Lufia II (Core/Lufia2/L2StoryClear.cs)
+
+- **People:** each map's start-up script (map header's second u24, from $87:8000) creates its characters with
+  `68 id sprite` / `7B id sprite`. Each of those becomes `1C`, a jump to the next command (start-up jumps count from
+  $87:8000), so the rest of the script still runs: map mode (69), music (4B, with the game's own story conditions),
+  battle background (74). The map info list +0x10 (character starts) is emptied too: a character listed there shows
+  up even without a create.
+- **Events:** the map's event block ("PH") lists +2 (as the map loads), +4 (scenes), +6 (talking), +8 (stepping on a
+  trigger), +A and +C are emptied. Load entries with id 03 stay: they are the key item of the map's locked doors.
+- **Treasure and cutscene triggers:** the map info lists +0x26 (chests) and +0x0C (cutscene triggers) are emptied.
+  Chests are drawn into the map's tiles here too (checked on map 06), so they stay as scenery.
+- **Puzzles, doors, exits, secret passages and preset points stay.**
+- **The new game:** the code at $83:ACCD loads map 02, runs its scene 01 and puts the party at preset point 06
+  (`LDA #$02 / STA $05AC / STA $05AE`, `LDA #$01 / STA $05B8`, `LDA #$06 / STA $05B0`). The map and the preset point
+  (map info list +0x0E: id, x, y) are changed there. The scene must exist: a scene id that isn't in the map's +4 list
+  makes `$80:C12E` return $FFFF as the script pointer. So the start map gets a scene 01, `2D 00 59 18 76 00` (show
+  Maxim, fade in, wait for the fade, end), written where one of its old scripts was, and its +4 list points at it.
+- How a change of map works (command `16 map scene preset`): `$05B3` bit 0 makes the map loader run the scene
+  `$05B8` of the new map's +4 list (`$83:B45A`) and place the party at preset point `$05B0` (`$83:B2E2`, `$80:C05C`
+  reads the map info copy at $7E:F000, list +0x0E). Without bit 0 (an exit), `$05B0/$05B1` are the tile x and y.
+
+Checked in BizHawk (US ROM): a new game starts in Elcid (map 03, preset 01) with Maxim alone, no townspeople, and
+walks out to the world map; a start in the Cave to Sundletan (map 06, preset 01) works the same way.
