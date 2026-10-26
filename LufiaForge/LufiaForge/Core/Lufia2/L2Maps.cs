@@ -32,6 +32,8 @@ public static class L2Maps
         public Layer[] Layers { get; init; } = Array.Empty<Layer>();
         public int BlockSet { get; init; }
         public int TileSet { get; init; }
+        /// <summary>The palette set to draw it with (-1: the one the ROM gives the map).</summary>
+        public int PaletteSet { get; init; } = -1;
     }
 
     /// <summary>A map's name: zero-terminated at the header table + u16. It can use the text dictionary (05 / 06 /
@@ -87,24 +89,28 @@ public static class L2Maps
         };
     }
 
-    /// <summary>Writes the map's two layers back (block numbers and cell flags; sizes as they were): its packed file is
-    /// rebuilt and put back (<see cref="L2Rom.WriteFile"/>).</summary>
+    /// <summary>Writes the map's two layers back (block numbers and cell flags): its packed file is rebuilt and put back
+    /// (<see cref="L2Rom.WriteFile"/>). A map whose size changed gets its file laid out again (the 6-byte head and each
+    /// layer's u16 head kept, the new width and height, the cells).</summary>
     public static void Write(RomBuffer rom, Map map)
     {
         byte[] f = L2Rom.ReadFile(rom, MapFileBase + map.Id);
+        var outp = new List<byte>(f.Take(6));
         int p = 6;
         for (int l = 0; l < 2 && l < map.Layers.Length; l++)
         {
             var L = map.Layers[l];
-            if (f[p + 2] != L.Width || f[p + 3] != L.Height) throw new InvalidOperationException("The map's size changed.");
-            p += 4;
-            for (int i = 0; i < L.Width * L.Height; i++, p += 2)
+            int ow = f[p + 2], oh = f[p + 3];
+            outp.Add(f[p]); outp.Add(f[p + 1]); outp.Add((byte)L.Width); outp.Add((byte)L.Height);
+            p += 4 + ow * oh * 2;
+            for (int i = 0; i < L.Width * L.Height; i++)
             {
-                f[p] = (byte)L.Blocks[i];
-                f[p + 1] = (byte)(L.Flags[i] & 0xFC | L.Blocks[i] >> 8 & 3);
+                outp.Add((byte)L.Blocks[i]);
+                outp.Add((byte)(L.Flags[i] & 0xFC | L.Blocks[i] >> 8 & 3));
             }
         }
-        L2Rom.WriteFile(rom, MapFileBase + map.Id, f);
+        if (p < f.Length) outp.AddRange(f.Skip(p));
+        L2Rom.WriteFile(rom, MapFileBase + map.Id, outp.ToArray());
     }
 
     /// <summary>How many blocks the map's block set has.</summary>
@@ -128,10 +134,30 @@ public static class L2Maps
         return px;
     }
 
-    /// <summary>The map's 6 background palettes (CGRAM rows 2-7), 16 ARGB colours each.</summary>
-    public static uint[][] Palettes(RomBuffer rom, int id)
+    /// <summary>Every block of the map's block set (as the map is drawn: its block set, tile set and palette set), 16x16
+    /// ARGB pixels each (0 = see-through).</summary>
+    public static uint[][] AllBlocks(RomBuffer rom, Map map)
     {
-        int set = rom.ReadByte(PaletteSetList + id);
+        byte[] blockSet = L2Rom.ReadFile(rom, map.BlockSet), tiles = L2Rom.ReadFile(rom, map.TileSet);
+        var pals = Palettes(rom, map.Id, map.PaletteSet);
+        int count = blockSet.Length >= 4 ? Math.Max(0, (int)(short)(blockSet[2] | blockSet[3] << 8)) : 0;
+        var all = new uint[count][];
+        for (int b = 0; b < count; b++)
+        {
+            var px = new uint[256];
+            int rec = 0x10 + b * 8;
+            if (rec + 8 <= blockSet.Length)
+                for (int q = 0; q < 4; q++)
+                    DrawTile(px, 16, q >= 2 ? 8 : 0, (q & 1) * 8, blockSet[rec + q * 2] | blockSet[rec + q * 2 + 1] << 8, tiles, pals);
+            all[b] = px;
+        }
+        return all;
+    }
+
+    /// <summary>The map's 6 background palettes (CGRAM rows 2-7), 16 ARGB colours each.</summary>
+    public static uint[][] Palettes(RomBuffer rom, int id, int paletteSet = -1)
+    {
+        int set = paletteSet >= 0 ? paletteSet : rom.ReadByte(PaletteSetList + id);
         int anim = rom.ReadByte(AnimIndexList + id);
         int v29 = rom.ReadByte(AnimData + anim * 2 + 1);
         int palOff = (v29 >> 4) != 0 ? 0x20 : 0x10;
@@ -162,7 +188,7 @@ public static class L2Maps
         int id = map.Id;
         byte[] blockSet = L2Rom.ReadFile(rom, map.BlockSet);
         byte[] tiles = L2Rom.ReadFile(rom, map.TileSet);
-        var pals = Palettes(rom, id);
+        var pals = Palettes(rom, id, map.PaletteSet);
         int w = map.Layers.Max(l => l.Width) * 16, h = map.Layers.Max(l => l.Height) * 16;
         var px = new uint[w * h];
         int blockCount = blockSet.Length >= 4 ? (short)(blockSet[2] | blockSet[3] << 8) : 0;

@@ -15,6 +15,7 @@ the items marked as checked were also tested in the running game (BizHawk). The 
 | [characters.md](characters.md) | Heroes: starting stats, growth, the EXP curve, new-game records, RAM layout |
 | [capsules.md](capsules.md) | Capsule monsters: records, names, growth, attacks, evolution |
 | [music.md](music.md) | The sound driver, song format, samples, sound effects |
+| [maps.md](maps.md) | The Maps tab: tools, inspector, block editor, pieces and presets, map settings, test start, the world map and battle zones, and how each change is written |
 | [graphics.md](graphics.md) | Every packed file classified; battle backgrounds, title, fonts, sprites; map sprites, painting, new sprites and palettes |
 | [settings.md](settings.md) | Game-wide values: random battle rate, walking speed, run button, sell price, level cap, gold cap, inns |
 

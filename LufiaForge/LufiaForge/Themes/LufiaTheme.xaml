@@ -486,7 +486,9 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="common:PopOutHost">
-                    <Grid>
+                    <!-- a background so the whole section counts as "the mouse is over it", gaps and margins too: the
+                         button stays shown while the mouse crosses empty space on its way to it -->
+                    <Grid Background="Transparent">
                         <ContentPresenter/>
                         <Border x:Name="Placeholder" Visibility="Collapsed" Background="{StaticResource SurfacePurpleBrush}"
                                 BorderBrush="{StaticResource BorderPurpleBrush}" BorderThickness="1" CornerRadius="4" Padding="10,6" Margin="2">

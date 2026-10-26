@@ -818,6 +818,15 @@ public partial class L2EventsPage : L2Page
 
     // ------------------------------------------------------------------ new and removed events
 
+    /// <summary>Shows one event of a map (from the Maps tab: a character's talk event, a step-on area's event).</summary>
+    public void ShowEvent(int map, int head, int id)
+    {
+        if (Rom == null) return;
+        if (SelectedIndex != map) SelectedIndex = map; else { ReadMapNames(map); FillEvents(null); }
+        var item = Events.FirstOrDefault(e => e.Entry?.Head == head && e.Entry?.Id == id);
+        if (item != null) SelectedEvent = item;
+    }
+
     /// <summary>Opens the event list on a new event made by <see cref="L2NewEventWindow"/>.</summary>
     public void EventCreated(L2EventBlocks.Entry? entry, string what)
     {
