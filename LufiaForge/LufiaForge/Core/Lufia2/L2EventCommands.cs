@@ -149,6 +149,9 @@ public static class L2EventCommands
     /// <summary>Who speaks for 61-67 (the code maps them to actors 0, 1, 2, 3, 5, 4, 6).</summary>
     public static readonly int[] SpeakerOf61 = { 0, 1, 2, 3, 5, 4, 6 };
 
+    /// <summary>A character's name without its ", sprite xx" (the command says which sprite it gets).</summary>
+    private static string NoSprite(string who) => System.Text.RegularExpressions.Regex.Replace(who, @", sprite [0-9A-F]{2}$", "");
+
     private static (int, string)[] L(params string[] names) => names.Select((n, i) => (i, n)).ToArray();
     private static (int, string)[] L(params (int, string)[] items) => items;
 
@@ -379,9 +382,9 @@ public static class L2EventCommands
         One(0x35, "Send a story character to another map", Chars, (b, w) => $"{Cap(w.Who(b[1]))} goes to {w.Map(b[2])}, character start {b[3]}",
             new byte[] { 0x35, 0x10, 0x03, 0x01 }, "For story characters (10-4F): from now on they stand on that map at that start. Hidden here at once.",
             ps: new[] { P("story character", L2Kind.Who, 1, 0x4F, min: 0x10), P("map", L2Kind.Map, 2), P("start", L2Kind.Number, 3) });
-        One(0x68, "Add a map character (start-up script)", Chars, (b, w) => $"Add {w.Who(b[1])} with sprite {b[2]:X2}", null,
+        One(0x68, "Add a map character (start-up script)", Chars, (b, w) => $"Add {NoSprite(w.Who(b[1]))} with sprite {b[2]:X2}", null,
             "Only in a map's start-up script, before anything else that uses characters.", 'G', rare: true, ps: new[] { Who(1), P("sprite", L2Kind.Sprite, 2) });
-        One(0x7B, "Add a field monster (start-up script)", Chars, (b, w) => $"Add field monster {w.Who(b[1])} with sprite {b[2]:X2}", null,
+        One(0x7B, "Add a field monster (start-up script)", Chars, (b, w) => $"Add field monster {NoSprite(w.Who(b[1]))} with sprite {b[2]:X2}", null,
             "Only in a map's start-up script.", rare: true, ps: new[] { Who(1), P("sprite", L2Kind.Sprite, 2) });
         One(0x6C, "Draw a character shifted", Chars, (b, w) => $"Draw {w.Who(b[1])} shifted by ({(sbyte)b[2]}, {(sbyte)b[3]}) pixels", new byte[] { 0x6C, 0x50, 0, 0 },
             "Only the picture moves; the character stays on its tile.", ps: new[] { Who(1), P("x pixels", L2Kind.Signed, 2, 127, min: -128), P("y pixels", L2Kind.Signed, 3, 127, min: -128) });
