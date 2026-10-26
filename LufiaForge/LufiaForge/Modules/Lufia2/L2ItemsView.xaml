@@ -69,7 +69,10 @@
                                     <CheckBox IsChecked="{Binding Has}" IsEnabled="{Binding CanSwitch}" Style="{StaticResource GdCheck}" VerticalAlignment="Center" Margin="0,0,6,0"
                                               ToolTip="Whether the item has this bonus (the game's own ones can be changed but not taken away; set them to 0)"/>
                                     <TextBlock Text="{Binding Label}" Style="{StaticResource GdFieldLabel}" Width="120"/>
-                                    <TextBox Style="{StaticResource GdNumber}" Text="{Binding Value, UpdateSourceTrigger=LostFocus}"/>
+                                    <TextBox Style="{StaticResource GdNumber}" Text="{Binding Value, UpdateSourceTrigger=LostFocus}"
+                                             Visibility="{Binding IsNumber, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                    <ComboBox Style="{StaticResource GdCombo}" Width="150" ItemsSource="{Binding Options}" DisplayMemberPath="Label" SelectedValuePath="Value"
+                                              SelectedValue="{Binding Value}" Visibility="{Binding IsChoice, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                     <TextBlock Text="{Binding Note}" Style="{StaticResource GdHint}" VerticalAlignment="Center" Margin="6,0,0,0"/>
                                 </StackPanel>
                             </DataTemplate>

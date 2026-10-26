@@ -18,28 +18,49 @@
         <common:PopOutHost Grid.Column="2" Title="IP attack" Key="l2ip.detail" ButtonMargin="0,2,22,0">
         <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,12,0,0">
             <StackPanel>
-                <TextBlock Text="Lufia II's 168 IP attacks (names can't be changed yet: they vary in length)." Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="8,0,12,4"/>
+                <TextBlock Text="{Binding CountText}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="8,0,12,4"/>
+                <StackPanel Orientation="Horizontal" Margin="8,0,12,6" IsEnabled="{Binding IsEditable}">
+                    <Button Content="Add a new IP attack" Command="{Binding AddIpCommand}" Style="{StaticResource LufiaButton}" Padding="10,3"
+                            ToolTip="A copy of this IP attack (its numbers, description and effect, as an effect of its own) with a number of its own"/>
+                    <TextBlock Text="a copy of the attack shown; give it to a piece of equipment on the Items page." Style="{StaticResource GdHint}"
+                               VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="520" Margin="8,0,0,0"/>
+                </StackPanel>
                 <WrapPanel Orientation="Horizontal" IsEnabled="{Binding IsEditable}">
             <Border Style="{StaticResource GdCard}">
                 <StackPanel>
                     <TextBlock Text="IP ATTACK" Style="{StaticResource GdSection}"/>
                     <UniformGrid Columns="2">
                         <TextBlock Text="Name" Style="{StaticResource GdFieldLabel}"/>
-                        <TextBlock Text="{Binding Name}" Style="{StaticResource GdFieldLabel}"/>
-                        <TextBlock Text="IP cost (0-255)" Style="{StaticResource GdFieldLabel}"/>
+                        <TextBox Style="{StaticResource GdText}" Width="140" HorizontalAlignment="Left" Text="{Binding Name, UpdateSourceTrigger=LostFocus}" MaxLength="{Binding NameMax}"
+                                 ToolTip="Up to 14 letters (the battle list shows the first 13)"/>
+                        <TextBlock Text="IP cost (out of 255)" Style="{StaticResource GdFieldLabel}"/>
                         <TextBox Style="{StaticResource GdNumber}" Text="{Binding Cost, UpdateSourceTrigger=LostFocus}"/>
-                        <TextBlock Text="Animation" Style="{StaticResource GdFieldLabel}"/>
-                        <TextBox Style="{StaticResource GdNumber}" Text="{Binding Animation, UpdateSourceTrigger=LostFocus}"/>
                     </UniformGrid>
+                    <TextBlock Text="Who it targets" Style="{StaticResource GdFieldLabel}" Margin="0,8,0,2"/>
+                    <ComboBox Style="{StaticResource GdCombo}" Width="260" HorizontalAlignment="Left" ItemsSource="{Binding TargetOptions}"
+                              DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding Target}"/>
+                    <TextBlock Text="Target pointer" Style="{StaticResource GdFieldLabel}" Margin="0,8,0,2"/>
+                    <ComboBox Style="{StaticResource GdCombo}" Width="260" HorizontalAlignment="Left" ItemsSource="{Binding CursorOptions}"
+                              DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding Cursor}"
+                              ToolTip="The look of the hand that picks the target (as for an attack, a spell or an item)"/>
+                    <TextBlock Text="Animation" Style="{StaticResource GdFieldLabel}" Margin="0,8,0,2"/>
+                    <ComboBox Style="{StaticResource GdCombo}" Width="260" HorizontalAlignment="Left" ItemsSource="{Binding AnimationOptions}"
+                              DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding Animation}"
+                              ToolTip="The battle animation it shows, named by the spells, IP attacks and items that use it"/>
+                    <TextBlock Text="{Binding ItemsText}" Style="{StaticResource GdHint}" TextWrapping="Wrap" MaxWidth="300" HorizontalAlignment="Left" Margin="0,8,0,0"/>
                 </StackPanel>
             </Border>
             <Border Style="{StaticResource GdCard}">
                 <StackPanel>
                     <TextBlock Text="EFFECT" Style="{StaticResource GdSection}"/>
                     <TextBlock Text="{Binding EffectText}" Style="{StaticResource GdFieldLabel}" FontFamily="Consolas" TextWrapping="NoWrap"/>
-                    <TextBlock Text="{Binding EffectNote}" Style="{StaticResource GdHint}" TextWrapping="Wrap" MaxWidth="360" Margin="0,6,0,0"/>
-                    <Button Content="Edit the effect" Command="{Binding EditEffectCommand}" Style="{StaticResource LufiaButton}" Padding="10,3" Margin="0,8,0,0"
-                            HorizontalAlignment="Left"/>
+                    <TextBlock Text="{Binding EffectNote}" Style="{StaticResource GdHint}" TextWrapping="Wrap" MaxWidth="360" HorizontalAlignment="Left" Margin="0,6,0,0"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                        <Button Content="Edit the effect" Command="{Binding EditEffectCommand}" Style="{StaticResource LufiaButton}" Padding="10,3"/>
+                        <Button Content="Use its own copy" Command="{Binding OwnEffectCommand}" Style="{StaticResource LufiaButton}" Padding="10,3" Margin="6,0,0,0"
+                                Visibility="{Binding IsShared, Converter={StaticResource BoolToVisibilityConverter}}"
+                                ToolTip="This attack gets a copy of the effect it shares, so editing it no longer changes the others"/>
+                    </StackPanel>
                 </StackPanel>
             </Border>
             <Border Style="{StaticResource GdCard}">

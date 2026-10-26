@@ -33,6 +33,10 @@ public partial class L2Word : ObservableObject
     public Func<int, string>? Describe { get; init; }
     public Action? Changed { get; set; }
     public bool CanSwitch => !InRecord;
+    /// <summary>Picked from a list (the IP attack by its name) instead of typed as a number.</summary>
+    public List<L2Option>? Options { get; init; }
+    public bool IsChoice => Options != null;
+    public bool IsNumber => Options == null;
     partial void OnValueChanged(int value) { Note = Describe?.Invoke(value) ?? ""; if (!Has && !InRecord) Has = true; else Changed?.Invoke(); }
     partial void OnHasChanged(bool value) => Changed?.Invoke();
 }
@@ -61,11 +65,28 @@ public abstract partial class L2Page : ObservableObject
     public void SetRom(RomBuffer rom, MainViewModel main)
     {
         Rom = rom; Main = main;
+        OnListRead();
         Names.Clear();
         foreach (var n in ReadNames()) Names.Add(n);
         IsEditable = Names.Count > 0;
         SelectedIndex = -1;
         SelectedIndex = Names.Count > 0 ? 0 : -1;
+    }
+
+    /// <summary>Reads the list again (after a record was added) and picks <paramref name="select"/>.</summary>
+    protected void RefreshList(int select)
+    {
+        if (Rom == null) return;
+        Loading = true;
+        try
+        {
+            OnListRead();
+            Names.Clear();
+            foreach (var n in ReadNames()) Names.Add(n);
+        }
+        finally { Loading = false; }
+        SelectedIndex = -1;
+        SelectedIndex = Math.Min(select, Names.Count - 1);
     }
 
     partial void OnSelectedIndexChanged(int value)
@@ -99,6 +120,8 @@ public abstract partial class L2Page : ObservableObject
     }
 
     protected abstract IEnumerable<string> ReadNames();
+    /// <summary>Before the list is read for a ROM (or again after a record was added): lists the fields pick from.</summary>
+    protected virtual void OnListRead() { }
     protected abstract void Load(int index);
     /// <summary>Writes the shown record; returns what changed (for Undo), or null.</summary>
     protected abstract string? Write();
@@ -237,6 +260,8 @@ public partial class L2ItemsPage : L2Page
     public List<L2Option> EquipTypeOptions { get; } =
         new[] { new L2Option(0, "(not equipment)") }.Concat(L2Battle.EquipTypes.Select((t, i) => new L2Option(1 << i, t))).ToList();
     public List<L2Option> IpOptions { get; private set; } = new();
+    /// <summary>An item's battle animation word: the animation + 1 ($81:AA3D takes 1 off; 0 plays animation 00 too).</summary>
+    public List<L2Option> AnimationOptions { get; private set; } = new();
 
     [ObservableProperty] private string _name = "";
     [ObservableProperty] private int _price, _equipType, _icon;
@@ -247,13 +272,22 @@ public partial class L2ItemsPage : L2Page
     [ObservableProperty] private string _effectText = "";
     private string[] _ipNames = Array.Empty<string>();
 
-    protected override IEnumerable<string> ReadNames()
+    protected override void OnListRead()
     {
-        IpOptions = L2Battle.IpAttacks(Rom!).Select(a => new L2Option(a.Index, $"{a.Index:X2} {a.Name}")).ToList();
+        // items name an IP attack counted from 1 ($81:F45E takes 1 off), 0 = none
+        IpOptions = new[] { new L2Option(0, "(none)") }.Concat(L2Battle.IpAttacks(Rom!).Select(a => new L2Option(a.Index + 1, a.Name))).ToList();
         _ipNames = L2Battle.IpAttacks(Rom!).Select(a => a.Name).ToArray();
         OnPropertyChanged(nameof(IpOptions));
+        AnimationOptions = new[] { new L2Option(0, "(default)") }.Concat(L2Magic.Animations(Rom!).Select(a => new L2Option(a.Value + 1, a.Name))).ToList();
+        OnPropertyChanged(nameof(AnimationOptions));
+    }
+
+    protected override IEnumerable<string> ReadNames()
+    {
         return L2Battle.Items(Rom!).Select(i => $"{i.Index:X3}  {i.Name}");
     }
+
+    private static List<L2Option> WithValue(List<L2Option> l, int v) => l.Any(o => o.Value == v) ? l : l.Append(new L2Option(v, $"Animation {v - 1:X2}")).ToList();
 
     [RelayCommand] private void EditMenuScript() => EditItem(L2AiScripts.Kind.ItemMenu);
     [RelayCommand] private void EditBattleScript() => EditItem(L2AiScripts.Kind.ItemBattle);
@@ -269,17 +303,18 @@ public partial class L2ItemsPage : L2Page
         EquipBy = Flags(L2Rom.Heroes, _it.EquipBy, Edited);
         // every bonus word: the record's own, or one Lufia Forge adds (the item loader hook puts it in)
         var added = L2AiScripts.ItemAddedWords(Rom!, index);
-        string Ip(int v) => v >= 0 && v < _ipNames.Length ? _ipNames[v] : "";
+        string Ip(int v) => v >= 1 && v <= _ipNames.Length ? "" : v == 0 ? "" : "not an IP attack";
         Words = L2Battle.ItemWords.Where(w => !w.Name.EndsWith("script") && w.Bit != 0x4000)
             .Select(w =>
             {
                 bool own = _it.Values.ContainsKey(w.Bit);
                 int v = own ? _it.Values[w.Bit] : added.GetValueOrDefault(w.Bit);
-                var word = new L2Word { Label = w.Name, Bit = w.Bit, InRecord = own, Describe = w.Bit == 0x8000 ? Ip : null, Changed = Edited };
+                var word = new L2Word { Label = w.Name, Bit = w.Bit, InRecord = own, Describe = w.Bit == 0x8000 ? Ip : null, Changed = Edited,
+                                        Options = w.Bit == 0x8000 ? IpOptions : w.Bit == 0x2000 ? WithValue(AnimationOptions, v) : null };
                 word.Value = v; word.Has = own || added.ContainsKey(w.Bit); word.Note = w.Bit == 0x8000 ? Ip(v) : "";
                 return word;
             }).ToList();
-        WordsText = "Tick a bonus to give it to the item (ATP for weapons, DFP for armor...). IP attack: its number in the IP attacks tab.";
+        WordsText = "Tick a bonus to give it to the item (ATP for weapons, DFP for armor...). The IP attack is the one its wearer can use (new ones are made on the IP attacks page).";
         var names = L2AiScripts.NameLists.From(Rom!);
         var parts = new List<string>();
         foreach (var k in new[] { L2AiScripts.Kind.ItemMenu, L2AiScripts.Kind.ItemBattle, L2AiScripts.Kind.Weapon, L2AiScripts.Kind.Armor })
@@ -310,37 +345,89 @@ public partial class L2ItemsPage : L2Page
 
 // ------------------------------------------------------------------------------------------- spells
 
+/// <summary>Options for a target / pointer combo box: the known ones in words, and the record's own value when the game
+/// uses one that has no name.</summary>
+internal static class L2Choices
+{
+    public static List<L2Option> With(IEnumerable<(int Value, string Name)> known, int current)
+    {
+        var l = known.Select(k => new L2Option(k.Value, k.Name)).ToList();
+        if (l.All(o => o.Value != current)) l.Add(new L2Option(current, $"Other ({current:X2})"));
+        return l;
+    }
+}
+
 public partial class L2SpellsPage : L2Page
 {
     private L2Battle.Spell? _s;
     [ObservableProperty] private string _name = "";
-    [ObservableProperty] private int _mp, _price;
+    [ObservableProperty] private int _mp, _price, _target, _animation;
     [ObservableProperty] private bool _inMenu, _inBattle;
     [ObservableProperty] private List<L2Flag> _learnBy = new();
     [ObservableProperty] private string _effectText = "";
+    [ObservableProperty] private string _countText = "";
+    [ObservableProperty] private string _animationNote = "";
+    [ObservableProperty] private List<L2Option> _targetOptions = new();
+    [ObservableProperty] private List<L2Option> _animationOptions = new();
 
-    protected override IEnumerable<string> ReadNames() => L2Battle.Spells(Rom!).Select(s => $"{s.Index:X2}  {s.Name}");
+    protected override void OnListRead() => AnimationOptions = L2Magic.Animations(Rom!).Select(a => new L2Option(a.Value, a.Name)).ToList();
+
+    protected override IEnumerable<string> ReadNames()
+    {
+        var all = L2Battle.Spells(Rom!);
+        CountText = $"Lufia II's spells ({all.Count}; the game has 40, it can have {L2Magic.MaxSpells}). A change is written to the ROM at once (Edit, Undo takes it back).";
+        return all.Select(s => $"{s.Index:X2}  {s.Name}" + (s.Index >= L2Battle.SpellCountOriginal ? "  (new)" : ""));
+    }
 
     protected override void Load(int index)
     {
         _s = L2Battle.ReadSpell(Rom!, index);
         Name = _s.Name; Mp = _s.Mp; Price = _s.Price; InMenu = (_s.Flags & 0x40) != 0; InBattle = (_s.Flags & 0x80) != 0;
+        TargetOptions = L2Choices.With(L2Magic.Targets, _s.Target);
+        Target = _s.Target;
+        int anim = L2Magic.SpellAnimation(Rom!, index);
+        if (anim >= 0 && AnimationOptions.All(o => o.Value != anim)) AnimationOptions = AnimationOptions.Append(new L2Option(anim, $"Animation {anim:X2}")).ToList();
+        Animation = anim;
         LearnBy = Flags(L2Rom.Heroes, _s.LearnBy, Edited);
         EffectText = EffectListing(Rom!, L2AiScripts.Kind.Spell, index);
+        bool scriptAnim = L2AiScripts.Load(Rom!, L2AiScripts.Kind.Spell, index).Steps.Any(st => st.Op == 0x5A);
+        AnimationNote = (scriptAnim ? "Its effect starts an animation of its own (a \"Battle animation\" step), which plays instead of this one. " : "")
+            + "A monster casting it shows the same animation, aimed at the heroes.";
     }
 
     [RelayCommand] private void EditEffect() { if (_s != null) EditScript(L2AiScripts.Kind.Spell, _s.Index, _s.Name.Trim()); }
 
-    protected override bool IsField(string p) => p is nameof(Name) or nameof(Mp) or nameof(Price) or nameof(InMenu) or nameof(InBattle);
-    protected override int DescriptionEntry(int index) => L2Descriptions.SpellBase + index;
+    /// <summary>A new spell: a copy of the picked one (record, effect as it runs now, animation, description), named
+    /// "New nn". Heroes get it from a shop (Shops page), a start list (Characters page) or an event.</summary>
+    [RelayCommand]
+    private void AddSpell()
+    {
+        if (Rom == null || Main == null || _s == null) return;
+        try
+        {
+            int id = L2Magic.AddSpell(Rom, _s.Index);
+            Main.NotifyRomModified($"Lufia II: new spell {id:X2} (a copy of {_s.Name.Trim()})");
+            RefreshList(id);
+        }
+        catch (Exception e) { System.Windows.MessageBox.Show(e.Message, "New spell", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning); }
+    }
+
+    protected override bool IsField(string p) => p is nameof(Name) or nameof(Mp) or nameof(Price) or nameof(InMenu) or nameof(InBattle) or nameof(Target) or nameof(Animation);
+    protected override int DescriptionEntry(int index) => L2Descriptions.SpellEntry(index);
 
     protected override string? Write()
     {
         if (_s == null) return null;
-        _s.Name = Name; _s.Mp = (ushort)Mp; _s.Price = (ushort)Price;
+        _s.Name = Name; _s.Mp = (ushort)Mp; _s.Price = (ushort)Price; _s.Target = (byte)Target;
         _s.Flags = (byte)(_s.Flags & 0x3F | (InMenu ? 0x40 : 0) | (InBattle ? 0x80 : 0));
         _s.LearnBy = (byte)FlagValue(LearnBy);
         L2Battle.WriteSpell(Rom!, _s);
+        if (Animation >= 0 && Animation != L2Magic.SpellAnimation(Rom!, _s.Index))
+        {
+            try { L2Magic.SetSpellAnimation(Rom!, _s.Index, Animation); }
+            catch (Exception e) { System.Windows.MessageBox.Show(e.Message, "Animation", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning); }
+            _s = L2Battle.ReadSpell(Rom!, _s.Index);   // the first change moves the spells (L2Magic.Install)
+        }
         return _s.Name;
     }
 }
@@ -351,33 +438,91 @@ public partial class L2IpPage : L2Page
 {
     private L2Battle.IpAttack? _a;
     [ObservableProperty] private string _name = "";
-    [ObservableProperty] private int _cost, _animation;
+    [ObservableProperty] private int _cost, _animation, _target, _cursor;
     [ObservableProperty] private string _effectText = "";
     [ObservableProperty] private string _effectNote = "";
+    [ObservableProperty] private bool _isShared;
+    [ObservableProperty] private string _itemsText = "";
+    [ObservableProperty] private string _countText = "";
+    [ObservableProperty] private List<L2Option> _targetOptions = new();
+    [ObservableProperty] private List<L2Option> _cursorOptions = new();
+    [ObservableProperty] private List<L2Option> _animationOptions = new();
+    public int NameMax => L2Magic.IpNameLength;
 
-    protected override IEnumerable<string> ReadNames() => L2Battle.IpAttacks(Rom!).Select(a => $"{a.Index:X2}  {a.Name}");
+    protected override void OnListRead() => AnimationOptions = L2Magic.Animations(Rom!).Select(a => new L2Option(a.Value, a.Name)).ToList();
+
+    protected override IEnumerable<string> ReadNames()
+    {
+        var all = L2Battle.IpAttacks(Rom!);
+        CountText = $"Lufia II's IP attacks ({all.Count}; the game has 168, it can have {L2Magic.MaxIp}). A hero uses the IP attack of a piece of equipment (the Items page gives one to any item).";
+        return all.Select(a => $"{a.Index:X2}  {a.Name}" + (a.Index >= L2Battle.IpCountOriginal ? "  (new)" : ""));
+    }
 
     protected override void Load(int index)
     {
         _a = L2Battle.ReadIp(Rom!, index);
-        Name = _a.Name; Cost = _a.Cost; Animation = _a.Animation;
+        Name = _a.Name; Cost = _a.Cost;
+        if (AnimationOptions.All(o => o.Value != _a.Animation)) AnimationOptions = AnimationOptions.Append(new L2Option(_a.Animation, $"Animation {_a.Animation:X2}")).ToList();
+        Animation = _a.Animation;
+        TargetOptions = L2Choices.With(L2Magic.Targets, _a.Targeting); Target = _a.Targeting;
+        CursorOptions = L2Choices.With(L2Magic.Cursors, _a.Cursor); Cursor = _a.Cursor;
         EffectText = EffectListing(Rom!, L2AiScripts.Kind.IpAttack, index);
-        int effect = L2AiScripts.IpEffect(Rom!, index);
-        var sharing = L2AiScripts.IpAttacksWithEffect(Rom!, effect).Where(i => i != index).ToList();
-        EffectNote = $"Effect script {effect}." + (sharing.Count > 0
-            ? $" Also used by {string.Join(", ", sharing.Select(i => L2Battle.ReadIp(Rom!, i).Name))}: a change applies to them too."
-            : "");
+        var sharing = L2AiScripts.IpAttacksWithEffect(Rom!, _a.Effect).Where(i => i != index).ToList();
+        IsShared = sharing.Count > 0;
+        EffectNote = sharing.Count > 0
+            ? $"This effect is shared with {string.Join(", ", sharing.Take(6).Select(i => L2Battle.ReadIp(Rom!, i).Name))}{(sharing.Count > 6 ? $" and {sharing.Count - 6} more" : "")}: a change applies to them too. \"Use its own copy\" lets this one change alone."
+            : "Its effect is its own.";
+        var items = L2Battle.Items(Rom!).Where(it => (it.Values.TryGetValue(0x8000, out var v) ? v : L2AiScripts.ItemAddedWords(Rom!, it.Index).GetValueOrDefault(0x8000)) == index + 1)
+            .Select(it => it.Name.Trim()).ToList();
+        ItemsText = items.Count == 0 ? "No item gives it yet: pick an item on the Items page and choose this attack under \"IP attack\"."
+            : "Given by: " + string.Join(", ", items.Take(10)) + (items.Count > 10 ? $" and {items.Count - 10} more" : "") + ".";
     }
 
     [RelayCommand] private void EditEffect() { if (_a != null) EditScript(L2AiScripts.Kind.IpAttack, _a.Index, _a.Name); }
 
-    protected override bool IsField(string p) => p is nameof(Cost) or nameof(Animation);
-    protected override int DescriptionEntry(int index) => L2Descriptions.IpBase + index;
+    [RelayCommand]
+    private void OwnEffect()
+    {
+        if (Rom == null || Main == null || _a == null) return;
+        try
+        {
+            L2Magic.GiveIpOwnEffect(Rom, _a.Index);
+            Main.NotifyRomModified($"Lufia II: {_a.Name} has its own effect");
+            int i = SelectedIndex;
+            Loading = true;
+            try { Load(i); } finally { Loading = false; }
+        }
+        catch (Exception e) { System.Windows.MessageBox.Show(e.Message, "Own effect", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning); }
+    }
+
+    /// <summary>A new IP attack: a copy of the picked one (its numbers, description and effect as it runs now, as an effect
+    /// of its own), named "New attack".</summary>
+    [RelayCommand]
+    private void AddIp()
+    {
+        if (Rom == null || Main == null || _a == null) return;
+        try
+        {
+            int id = L2Magic.AddIp(Rom, _a.Index);
+            Main.NotifyRomModified($"Lufia II: new IP attack {id:X2} (a copy of {_a.Name})");
+            RefreshList(id);
+        }
+        catch (Exception e) { System.Windows.MessageBox.Show(e.Message, "New IP attack", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning); }
+    }
+
+    protected override bool IsField(string p) => p is nameof(Name) or nameof(Cost) or nameof(Animation) or nameof(Target) or nameof(Cursor);
+    protected override int DescriptionEntry(int index) => Rom == null ? L2Descriptions.IpBase + 1 + index : L2Descriptions.IpEntry(Rom, index);
 
     protected override string? Write()
     {
         if (_a == null) return null;
-        _a.Cost = (byte)Math.Clamp(Cost, 0, 255); _a.Animation = (byte)Animation;
+        if (Name.Trim() != _a.Name)
+        {
+            try { L2Magic.SetIpName(Rom!, _a.Index, Name); }
+            catch (Exception e) { System.Windows.MessageBox.Show(e.Message, "Name", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning); }
+            _a = L2Battle.ReadIp(Rom!, _a.Index);
+        }
+        _a.Cost = (byte)Math.Clamp(Cost, 0, 255); _a.Animation = (byte)Animation; _a.Targeting = (byte)Target; _a.Cursor = (byte)Cursor;
         L2Battle.WriteIp(Rom!, _a);
         return _a.Name + " (IP)";
     }

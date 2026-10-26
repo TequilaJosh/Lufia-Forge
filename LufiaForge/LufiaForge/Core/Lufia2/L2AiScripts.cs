@@ -453,15 +453,22 @@ public static class L2AiScripts
     /// <summary>An IP attack's effect number (the first word of its record; several attacks can share one).</summary>
     public static int IpEffect(RomBuffer rom, int ip) => rom.ReadUInt16Le(L2Battle.ReadIp(rom, ip).Offset);
 
-    /// <summary>IP effect scripts: table $95:F1EF of u16 offsets from the table ($81:F46B); the script is run with base =
-    /// table + offset and offset 1.</summary>
+    /// <summary>IP effect scripts: table $95:F1EF of u16 offsets from the table ($81:F46B: LDA $95F1EF,X / CLC / ADC
+    /// #$F1EF, file 0xF46D), bank $95 (LDA #$95 at $81:AB59); the script is run with base = table + offset and offset 1.
+    /// Lufia Forge moves them to add effects (<see cref="L2Magic"/>), so the table, the sum and the bank are read from the code.</summary>
     public const int IpEffectTable = 0xAF1EF;
+    private const int IpEffectTableRef = 0xF46D, IpEffectBankRef = 0xAB5A;
 
-    public static int IpEffectBase(RomBuffer rom, int effect) => IpEffectTable + rom.ReadUInt16Le(IpEffectTable + effect * 2);
+    public static int IpEffectBase(RomBuffer rom, int effect)
+    {
+        int table = L2Rom.SnesToFile((int)rom.ReadUInt24Le(IpEffectTableRef + 1));
+        int adc = rom.ReadUInt16Le(IpEffectTableRef + 6), bank = rom.ReadByte(IpEffectBankRef);
+        return L2Rom.SnesToFile(bank << 16 | (rom.ReadUInt16Le(table + effect * 2) + adc) & 0xFFFF);
+    }
 
     /// <summary>The IP attacks that use an effect.</summary>
     public static List<int> IpAttacksWithEffect(RomBuffer rom, int effect) =>
-        Enumerable.Range(0, L2Battle.IpCount).Where(i => IpEffect(rom, i) == effect).ToList();
+        Enumerable.Range(0, L2Battle.IpCount(rom)).Where(i => IpEffect(rom, i) == effect).ToList();
 
     /// <summary>File offset where the game's own script starts, or -1 when it has none.</summary>
     public static int OriginalAt(RomBuffer rom, Kind kind, int index)
@@ -892,6 +899,32 @@ public static class L2AiScripts
         return true;
     }
 
+    /// <summary>Spell and IP effect scripts are keyed by their address: when Lufia Forge moves those scripts
+    /// (<see cref="L2Magic"/>), the entries follow them. <paramref name="map"/> gives a script's new file offset from its
+    /// old one (null: it didn't move).</summary>
+    internal static void MoveEffectKeys(RomBuffer rom, Func<int, int?> map)
+    {
+        int block = Block(rom);
+        if (block < 0) return;
+        foreach (var e in Entries(rom, block).ToList())
+        {
+            if (e.Kind < 0x80 || e.Kind is ItemMarker or ItemWordKind or 0xFF) continue;
+            int old = L2Rom.SnesToFile(e.Kind << 16 | e.Record);
+            if (map(old) is not int moved) continue;
+            int snes = L2Rom.FileToSnes(moved);
+            rom.WriteBytes(e.At, new[] { (byte)snes, (byte)(snes >> 8), (byte)(snes >> 16) });
+        }
+    }
+
+    /// <summary>A script's bytes for a copy laid out from <paramref name="first"/> (counted from its jump base), or why it
+    /// can't be copied.</summary>
+    public static byte[] BuildCopy(IReadOnlyList<Step> steps, int first)
+    {
+        if (steps.Any(st => st.OutsideTargets.Any(o => o >= 0)))
+            throw new InvalidOperationException("A \"go to\" of this script jumps into the middle of a command or onto data, so it can't be copied: point it at a step first.");
+        return steps.Count == 0 ? new byte[] { 0 } : Build(steps, first);
+    }
+
     /// <summary>Every (kind, index) with an edited script.</summary>
     public static int EditedCount(RomBuffer rom) => Block(rom) is var b && b >= 0 ? Entries(rom, b).Count() : 0;
 
@@ -906,6 +939,8 @@ public static class L2AiScripts
         public string[] CapsuleAttacks { get; init; } = Array.Empty<string>();
         /// <summary>What each shared script does (<see cref="LibraryName"/>).</summary>
         public string[] Library { get; set; } = Array.Empty<string>();
+        /// <summary>Battle animations 00-FF named by what uses them (<see cref="L2Magic.Animations"/>).</summary>
+        public string[] Animations { get; set; } = Array.Empty<string>();
 
         public static NameLists From(RomBuffer rom)
         {
@@ -917,6 +952,8 @@ public static class L2AiScripts
                 CapsuleAttacks = L2Capsules.AttackList(rom),
             };
             n.Library = Enumerable.Range(0, LibraryCount).Select(i => LibraryName(rom, i, n)).ToArray();
+            var anims = L2Magic.Animations(rom).ToDictionary(a => a.Value, a => a.Name);
+            n.Animations = Enumerable.Range(0, 0x100).Select(k => anims.TryGetValue(k, out var a) ? a : k == 0xFF ? "none" : "(no animation here)").ToArray();
             return n;
         }
     }
@@ -942,7 +979,7 @@ public static class L2AiScripts
         Arg.Restore => v < Restores.Length ? Restores[v] : $"{v:X2}",
         Arg.Library => v < n.Library.Length ? $"shared script {v:X2} ({n.Library[v]})" : $"shared script {v:X2}",
         Arg.AttackName => $"attack name {v:X2}",
-        Arg.Animation => $"animation {v:X2}",
+        Arg.Animation => v < n.Animations.Length ? $"animation {v:X2} ({n.Animations[v]})" : $"animation {v:X2}",
         Arg.Sound => $"sound {v:X2}",
         Arg.Word => $"{v}",
         _ => $"{v}",
