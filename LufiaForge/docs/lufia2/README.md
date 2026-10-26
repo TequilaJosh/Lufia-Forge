@@ -11,7 +11,7 @@ the items marked as checked were also tested in the running game (BizHawk). The 
 | [banks_8F_A6.md](banks_8F_A6.md) | The data banks $8F-$A6 range by range |
 | [events.md](events.md) | The event script interpreter: all 205 commands in plain words, text codes, jumps, flags and variables, the event blocks and map info lists, and how the event editor saves and adds events |
 | [scripts3.md](scripts3.md) | The dungeon puzzle interpreter: 191 opcodes, the per-map puzzle blocks |
-| [battlescript.md](battlescript.md) | The battle script interpreter (monster AI, item, spell and capsule effects) |
+| [battlescript.md](battlescript.md) | The battle script interpreter (monster AI, item, spell and capsule effects); new spells, spell animations, IP attack names and new IP attacks (section 7) |
 | [characters.md](characters.md) | Heroes: starting stats, growth, the EXP curve, new-game records, RAM layout |
 | [capsules.md](capsules.md) | Capsule monsters: records, names, growth, attacks, evolution |
 | [music.md](music.md) | The sound driver, song format, samples, sound effects |
@@ -57,6 +57,9 @@ Spekkio and Kureji Lufia v8.2 fill 0x280000-0x30DAC2 and 0x3FFC00-0x3FFDD5 and m
   event space in bank $B5), a shortened line written in place, a new character with a talk event, a new trigger area,
   "plays once" story flags, an event going on with new steps, and a few commands tried on their own (B6, 7A, 5A / 8A,
   47, 48, BB).
+- Spells and IP attacks moved by Lufia Forge (battlescript.md section 7): a new spell cast by a monster and by Maxim with its own
+  name, effect and animation; a spell given another animation; a renamed IP attack; a new IP attack used from an item; a new spell
+  sold in a shop with its own description.
 
 ## Corrections to the first-pass files
 
@@ -66,6 +69,8 @@ Spekkio and Kureji Lufia v8.2 fill 0x280000-0x30DAC2 and 0x3FFC00-0x3FFDD5 and m
 - Packed files 0x03F and 0x040 are not maps: 0x03F is the licence screen, 0x040 the credits font. Maps 0 and 1 are
   the world maps, drawn from files 0x28B/0x28C and 0x28E/0x28F (graphics.md).
 - Battle script opcode 42 is a call into the shared script library at $96:FADD, and 43 returns (battlescript.md).
+- IP attack descriptions are entries 0x231 + n (the game asks for 0x300 + n counted from 1 and takes 0xD0 off), not 0x230 + n;
+  items give an IP attack counted from 1 (battlescript.md section 7).
 - LEdit's German addresses are often off for the US ROM; the files here are for the US ROM only.
 
 Shop menu bit 0 (shop 25) is not "several shops": the game builds that list itself ($82:E433) from every item with

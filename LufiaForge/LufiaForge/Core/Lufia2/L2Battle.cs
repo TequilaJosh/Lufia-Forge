@@ -79,8 +79,18 @@ public static class L2Battle
     }
 
     // ---------------------------------------------------------------- spells
-    public const int SpellTable = 0xAFA5B, SpellCount = 0x28, SpellNameLength = 8;
+    /// <summary>The game's spell table ($95:FA5B) and its 40 spells. Every spell read goes through $81:F446 (LDA $95FA5B,X /
+    /// CLC / ADC #$FA5B at file 0xF450), so the table's place is read from there: Lufia Forge moves the spells to the added
+    /// space to add new ones (<see cref="L2Magic"/>).</summary>
+    public const int SpellTable = 0xAFA5B, SpellCountOriginal = 0x28, SpellNameLength = 8;
+    private const int SpellTableRef = 0xF450, SpellBankRef = 0xF3FC;
 
+    /// <summary>How many spells the ROM has (40, more once Lufia Forge added some).</summary>
+    public static int SpellCount(RomBuffer rom) => L2Magic.SpellCount(rom);
+
+    /// <summary>A spell record (0x13 bytes): name 8, +08 flags (40 usable in the menu, 80 in battle), +09 (an icon or
+    /// group, read by no code found), +0A who can learn it (hero bits), +0B who it targets (<see cref="L2Magic.Targets"/>),
+    /// +0C MP, +0F price, +11 its effect script (offset from the record).</summary>
     public sealed class Spell
     {
         public int Index { get; init; }
@@ -88,26 +98,36 @@ public static class L2Battle
         public string Name { get; set; } = "";
         public byte Flags { get; set; }
         public byte LearnBy { get; set; }
+        public byte Target { get; set; }
         public ushort Mp { get; set; }
         public ushort Price { get; set; }
     }
 
+    /// <summary>File offset of spell <paramref name="i"/>'s record, read the way the game does ($81:F446 and the bank
+    /// its readers set, LDA #$95 at $81:F3FB).</summary>
+    public static int SpellOffset(RomBuffer rom, int i)
+    {
+        int table = L2Rom.SnesToFile((int)rom.ReadUInt24Le(SpellTableRef + 1));
+        int adc = rom.ReadUInt16Le(SpellTableRef + 6), bank = rom.ReadByte(SpellBankRef);
+        return L2Rom.SnesToFile(bank << 16 | (rom.ReadUInt16Le(table + i * 2) + adc) & 0xFFFF);
+    }
+
     public static Spell ReadSpell(RomBuffer rom, int i)
     {
-        int o = SpellTable + rom.ReadUInt16Le(SpellTable + i * 2);
+        int o = SpellOffset(rom, i);
         return new Spell
         {
             Index = i, Offset = o, Name = L2Rom.Name(rom, o, SpellNameLength), Flags = rom.ReadByte(o + 8), LearnBy = rom.ReadByte(o + 0x0A),
-            Mp = rom.ReadUInt16Le(o + 0x0C), Price = rom.ReadUInt16Le(o + 0x0F),
+            Target = rom.ReadByte(o + 0x0B), Mp = rom.ReadUInt16Le(o + 0x0C), Price = rom.ReadUInt16Le(o + 0x0F),
         };
     }
 
-    public static List<Spell> Spells(RomBuffer rom) => Enumerable.Range(0, SpellCount).Select(i => ReadSpell(rom, i)).ToList();
+    public static List<Spell> Spells(RomBuffer rom) => Enumerable.Range(0, SpellCount(rom)).Select(i => ReadSpell(rom, i)).ToList();
 
     public static void WriteSpell(RomBuffer rom, Spell s)
     {
         L2Rom.WriteName(rom, s.Offset, SpellNameLength, s.Name);
-        rom.WriteByte(s.Offset + 8, s.Flags); rom.WriteByte(s.Offset + 0x0A, s.LearnBy);
+        rom.WriteByte(s.Offset + 8, s.Flags); rom.WriteByte(s.Offset + 0x0A, s.LearnBy); rom.WriteByte(s.Offset + 0x0B, s.Target);
         rom.WriteUInt16Le(s.Offset + 0x0C, s.Mp); rom.WriteUInt16Le(s.Offset + 0x0F, s.Price);
     }
 
@@ -191,33 +211,52 @@ public static class L2Battle
     }
 
     // ---------------------------------------------------------------- IP attacks
-    public const int IpTable = 0x20F10, IpCount = 0xA8;
+    /// <summary>The game's IP attack table ($84:8F10, u16 pointers into bank $84, read by $81:F45E with the attack's number
+    /// counted from 1, as items give it, and by $82:FF15). Lufia Forge moves the table and the records to add attacks and
+    /// longer names (<see cref="L2Magic"/>), so their place is read from the code.</summary>
+    public const int IpTable = 0x20F10, IpCountOriginal = 0xA8;
+    private const int IpTableRef = 0xF463, IpBankRef = 0xC1C1;
 
+    /// <summary>How many IP attacks the ROM has (168, more once Lufia Forge added some).</summary>
+    public static int IpCount(RomBuffer rom) => L2Magic.IpCount(rom);
+
+    /// <summary>An IP attack record: u16 effect number (into the effect scripts' table), +2 animation, +3 the target
+    /// cursor's look, +4 who it targets, +5 IP cost (out of 255), +6 its name, 00 ends it.</summary>
     public sealed class IpAttack
     {
         public int Index { get; init; }
         public int Offset { get; init; }
-        public string Name { get; init; } = "";
+        public string Name { get; set; } = "";
         public int NameLength { get; init; }
+        public ushort Effect { get; set; }
         public byte Animation { get; set; }
         public byte Cursor { get; set; }
         public byte Targeting { get; set; }
         public byte Cost { get; set; }
     }
 
+    /// <summary>File offset of IP attack <paramref name="i"/>'s record (counted from 0).</summary>
+    public static int IpOffset(RomBuffer rom, int i)
+    {
+        int table = L2Rom.SnesToFile((int)rom.ReadUInt24Le(IpTableRef + 1));
+        int bank = rom.ReadByte(IpBankRef + 3);
+        return L2Rom.SnesToFile(bank << 16 | rom.ReadUInt16Le(table + i * 2));
+    }
+
     public static IpAttack ReadIp(RomBuffer rom, int i)
     {
-        int o = 0x20000 + rom.ReadUInt16Le(IpTable + i * 2) - 0x8000;
+        int o = IpOffset(rom, i);
         var raw = rom.ReadUntil(o + 6, 0, 32);
         return new IpAttack
         {
-            Index = i, Offset = o, Name = L2Rom.Name(rom, o + 6, raw.Length), NameLength = raw.Length,
+            Index = i, Offset = o, Name = L2Rom.Name(rom, o + 6, raw.Length), NameLength = raw.Length, Effect = rom.ReadUInt16Le(o),
             Animation = rom.ReadByte(o + 2), Cursor = rom.ReadByte(o + 3), Targeting = rom.ReadByte(o + 4), Cost = rom.ReadByte(o + 5),
         };
     }
 
-    public static List<IpAttack> IpAttacks(RomBuffer rom) => Enumerable.Range(0, IpCount).Select(i => ReadIp(rom, i)).ToList();
+    public static List<IpAttack> IpAttacks(RomBuffer rom) => Enumerable.Range(0, IpCount(rom)).Select(i => ReadIp(rom, i)).ToList();
 
+    /// <summary>Writes the attack's numbers (the name goes through <see cref="L2Magic.SetIpName"/>, as it can need room).</summary>
     public static void WriteIp(RomBuffer rom, IpAttack a)
     {
         rom.WriteByte(a.Offset + 2, a.Animation); rom.WriteByte(a.Offset + 3, a.Cursor);

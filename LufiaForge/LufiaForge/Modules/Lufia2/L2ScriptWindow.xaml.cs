@@ -208,6 +208,7 @@ public partial class L2ScriptWindow : Window
             Arg.Status => List(s, i, L2AiScripts.Statuses),
             Arg.Target => List(s, i, L2AiScripts.Targets, plain: true),
             Arg.Restore => List(s, i, L2AiScripts.Restores),
+            Arg.Animation when _names.Animations.Length == 0x100 => List(s, i, _names.Animations),
             Arg.Element => Elements(s, i),
             Arg.Value => ValueField(s, i),
             Arg.Register => RegisterField(s, i),

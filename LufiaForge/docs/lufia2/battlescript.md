@@ -226,3 +226,111 @@ double/half from dark; 0F double from blunt; 10 double from insect-slaying; 11 i
 confusion and sleep; 12 healing hurts it, no instant death; 21 counter 1 = 1.5 x own ATP; 23 counter 1 = ATP with the
 battle bonus. The editor can copy a shared script's steps into a script (its returns become "go to" the step after the
 call) so one monster can change them.
+
+## 7. New spells, spell animations, IP attack names and new IP attacks (2026-10-25)
+
+Found by reading the code, checked in battles and a shop in BizHawk (bsnes core). Lufia Forge: Core/Lufia2/L2Magic.cs,
+L2Descriptions.cs, L2Battle.cs; the Spells, IP attacks and Items pages.
+
+### How the game reads them
+
+**Spells.** Every read of a spell record goes through `$81:F446`: A = `$0A0B` (the spell, 8-bit), `LDA $95FA5B,X /
+CLC / ADC #$FA5B` (file 0xF450) -> `$0A0D` = the record's address in bank $95. Its users set the bank with
+`LDA #$95`: the loader `$81:F414` (PHB / LDA #$95 / PHA / PLB, then copies 0x14 bytes to `$0B77`: name 8, a 00, record
++08..+12), `$81:F3F4` (MP, +0C), `$81:F404` (flags, +08), `$81:F3E4` (+0A, never called), and the four script starts
+(`$81:A9CA`, `$81:AFB3`, `$81:F31E`, `$81:F394`: base `$0A0D`, bank $95, offset `$0B89` = record +11). No code
+anywhere else reads the table or limits spells to 40: menus, shops, learning (`$82:FD3D`, event command 23) and a
+hero's 36-slot list (`$0096,X`, FF = empty) take any number, so spells 28-FE work once they have records.
+
+Record (0x13 bytes): name 8; +08 flags (40 usable in the menu, 80 in battle; low bits a group, read by no code found);
++09 a group or icon (read by no code found); +0A who can learn it (hero bits); +0B **who it targets** (the battle spell
+menu passes it to the target picker `$81:D4E0` as its entry +0F, the field menu at `$82:B487`); +0C MP; +0E 00;
++0F price; +11 the effect script (offset from the record).
+
+**Spell animation.** Not in the record: the two cast handlers (action 12 at `$81:A9B3` and action 19, the IP-style
+cast of op 54, at `$81:AF9C`) do `LDA spell / CLC / ADC #$12 / STA $1262`, then after the script, for a monster,
+animation 17 (Firebird) becomes 36 (Firebird from the other side). An effect's own `5A` step overrides it (no spell of
+the game has one).
+
+**Battle animations.** `$1262` is played by `$81:895E` from the table `$95:8000` (u16 pointers, 0 = none: the game would
+crash on it). Valid: 00-36, 40-46, 60-72, 80-9B, DC-E9, F0, F1; FF = no animation. 00-11 are the weapon swings (00 sword,
+0E a punch with no weapon, ...), 12-39 the spells. Items give theirs as word 0x2000 = animation + 1 (`$81:AA3D` for
+items used in battle, `$81:A8B7` for weapons); monsters attack with E0, capsule monsters with F0.
+
+**IP attacks.** The table `$84:8F10` (u16 pointers into bank $84) is read by `$81:F45E` (A = the attack counted from 1,
+as items give it: 0 = none; callers `$81:AB23` use, `$81:C1BC` the battle IP list, `$85:958C` the name shown) and
+by `$82:FF15` (the item menu's IP attack line). Record: u16 effect number, +2 animation, +3 the target pointer's look
+(`$129E`: the menus use 1 attack, 2 spell, 3 item), +4 who it targets, +5 IP cost, +6 the name, 00 ends it (the battle
+list shows 13 letters, `$81:C1D2`). `$81:AB2A` and `$85:9585` set DB to the record's bank and reach RAM through it
+(`$00BC,X`, `$1262`, `$1269,X`), so the records must sit in a bank with RAM below $2000 ($80-$BF); `$81:C1C1/C1CA/C1D6`
+read them with `LDA $84000n,X`.
+
+**Who it targets** (spell +0B, IP +4), from `$81:D4E0`: bit 7 starts the pointer on the enemies' side; low bits 1 lets L
+or R pick the whole side, 2 one only; 00 has no pick (the effect's "choose the target" does). The game uses 82 one enemy,
+81 one enemy or all, 02 one ally, 01 one ally or all, 00.
+
+**IP effects.** `$81:F46B` (one caller, `$81:AB50`): `LDA $95F1EF,X / CLC / ADC #$F1EF` (file 0xF46D) -> base, bank
+`LDA #$95` at `$81:AB59`, the script run from offset 1. 141 effects (the table's first offset / 2), effects 79 and 92
+shared by 17 and 9 attacks.
+
+**Descriptions.** `$85:C4F1`, entry `$0A11`: item n = n, spell n = 0x200 + n, IP attack n (counted from 1) = 0x300 + n,
+and values from 0x300 get 0xD0 taken off (`$85:C4FD`), so the table's IP entries start at 0x231 (0x230 is empty; Lufia
+Forge read them one too early before). The table and the texts are read with four `LDA $978000,X` (`$85:C508`, C516,
+C53A, C56F). The game's texts fill their space to the last byte, and spells from 30 on would share the IP attacks'
+entries.
+
+### What Lufia Forge changes (only when needed: the first new spell or IP attack, an animation change, a longer IP name, an IP attack's own effect, a description that doesn't fit)
+
+Every place is checked to hold the game's bytes first; every spell and IP effect script must read as steps.
+
+| Site (file) | Game's bytes | Becomes | Why |
+|---|---|---|---|
+| 0x2C4FD | C9 00 03 90 04 38 E9 D0 00 | 9 x EA | descriptions indexed by the game's own number |
+| 0x2C509, 0x2C517, 0x2C53B, 0x2C570 | 00 80 97 | the new table | descriptions moved |
+| 0xF451 | 5B FA 95 | block A's spell table | spells moved |
+| 0xF456 | 5B FA | 00 00 | the table holds addresses |
+| 0xF414 | 8B A9 95 48 AB 20 46 F4 AC 0D 0A | 8B 20 46 F4 AC 0D 0A A9 bb 48 AB | read `$0A0B`/`$0A0D` before DB is the new bank (no RAM below $2000 there) |
+| 0xA9CB, 0xAFB4, 0xF31F, 0xF395, 0xF3EC, 0xF3FC, 0xF40C | 95 | block A's bank | the records' and scripts' bank |
+| 0xA9BA, 0xAFA3 | 18 69 12 8D 62 12 | 22 xx xx xx EA EA | JSL: animation = block A's byte for the spell |
+| 0xF46E | EF F1 95 | block A's effect table | IP effects moved |
+| 0xF473 | EF F1 | 00 00 | the table holds addresses |
+| 0xAB5A | 95 | block A's bank | IP effects' bank |
+| 0xF464, 0x17F16 | 10 8F 84 | block B's IP table ($97) | IP attacks moved |
+| 0xAB2B, 0x29586, 0x17EFF | 84 | 97 | the records' bank (DB) |
+| 0xC1C4, 0xC1CD, 0xC1D9 | 84 | 97 | the records' bank (long reads) |
+
+* **Descriptions** ("LF2DS", 0x6000 bytes in the added space): a 16-byte header, a table of 0x400 entries indexed as the
+  game asks (no remapping) and the texts, about 11 KB free. The old space `$97:8000-$97:B0A0` is cleared and marked
+  "LF2FREE". A description that doesn't fit where the game has them moves them on its own.
+* **Block A** ("LF2MG", 0x6000 bytes in the added space): header (+6 spell count, +8 effect count, +0A next free byte),
+  the animation routine at +10 (`PHX / REP #$20 / AND #$00FF / TAX / SEP #$20 / LDA anim,X / STA $1262 / PLX / RTL`), one
+  animation byte per spell at +100, the spell table (256 addresses) at +200, the IP effect table (256) at +400, then the
+  records and scripts. Each spell is its record with its script right after it (+11 = 13) and a 00; each IP effect its
+  base byte, its script and a 00. The scripts are laid out again from their steps (a fan hack's script that jumps to
+  code elsewhere brings it along); effects that shared a base still share one.
+* **Block B** ("LF2IP", `$97:8000-$97:B0A0`, freed by the descriptions): header (+6 IP attack count, +8 next free byte),
+  the table (255 addresses) at +10, the records packed from +210 (about 9 KB free).
+* Lufia Forge's edited spell and IP effect scripts (section 6, keyed by the script's address) follow their scripts.
+* A new spell is a copy of another (record, its effect as it runs now, animation, description) with the next number;
+  heroes learn it from a shop, their starting spells or event command 23. A new IP attack is a copy of another with an
+  effect of its own; items give it as its number + 1. "Use its own copy" gives an IP attack a new effect number with
+  a copy of the effect it shares. A longer IP name gets a new record in block B. Limits: spells 00-FE (FF ends a hero's
+  list), IP attacks 1-FF, 256 IP effects, names of 14 letters.
+* Checked on the US ROM and on Frue, Kureji, Spekkio Lufia and The Wrath of Foomy v8.2: after the move every spell, IP
+  attack, effect script and description reads the same.
+
+### Checked in the game
+
+A new game starting a battle against a Goblin made passive (0x3C0EE = 53 04 39), logging `$0BBE` (Maxim's HP), `$0C69`
+(IP), `$1262` (the animation) and `$1269` (the name shown):
+
+* the monster casting the game's Flash, before and after the move: the same (animation 12, "Flash", HP 20 -> 0);
+* Flash given Dragon's animation: animation 1A plays;
+* a new spell 28 (a copy of Firebird) named Meteor, with Thunder's animation and its damage edited to 7: cast by the
+  monster ("Meteor", animation 14, HP 20 -> 11 -> 3), and by Maxim from his battle spell list ("Meteor : 1" in the list)
+  after L2StartSpells gave it to him;
+* Thunder blast renamed "Storm of bolts" (longer, so a new record in block B): shown when Maxim uses it from the Battle
+  knife, 96 IP, 20 damage;
+* a new IP attack A8 (item word A9) "Star shower" with Firebird's animation and cost 32, given to the Battle knife:
+  "Star shower", animation 17, 20 damage, IP 255 -> 223 -> 191; with its effect edited to nothing it misses;
+* Elcid's spell shop (0x3C0EE = 18 02) selling Meteor at 1234 gold: listed, and X shows its new description.

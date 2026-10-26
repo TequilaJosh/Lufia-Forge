@@ -18,7 +18,13 @@
         <common:PopOutHost Grid.Column="2" Title="Spell" Key="l2spells.detail" ButtonMargin="0,2,22,0">
         <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,12,0,0">
             <StackPanel>
-                <TextBlock Text="Lufia II's 40 spells. A change is written to the ROM at once (Edit, Undo takes it back)." Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="8,0,12,4"/>
+                <TextBlock Text="{Binding CountText}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="8,0,12,4"/>
+                <StackPanel Orientation="Horizontal" Margin="8,0,12,6" IsEnabled="{Binding IsEditable}">
+                    <Button Content="Add a new spell" Command="{Binding AddSpellCommand}" Style="{StaticResource LufiaButton}" Padding="10,3"
+                            ToolTip="A copy of this spell (its numbers, effect, animation and description) with a number of its own; then change what you like"/>
+                    <TextBlock Text="a copy of the spell shown; heroes learn it from a shop (Shops page), their starting spells (Characters page) or an event." Style="{StaticResource GdHint}"
+                               VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="520" Margin="8,0,0,0"/>
+                </StackPanel>
                 <WrapPanel Orientation="Horizontal" IsEnabled="{Binding IsEditable}">
             <Border Style="{StaticResource GdCard}">
                 <StackPanel>
@@ -33,6 +39,9 @@
                         <CheckBox Content="Usable in the menu" IsChecked="{Binding InMenu}" Style="{StaticResource GdCheck}"/>
                         <CheckBox Content="Usable in battle" IsChecked="{Binding InBattle}" Style="{StaticResource GdCheck}"/>
                     </UniformGrid>
+                    <TextBlock Text="Who it targets" Style="{StaticResource GdFieldLabel}" Margin="0,8,0,2"/>
+                    <ComboBox Style="{StaticResource GdCombo}" Width="260" HorizontalAlignment="Left" ItemsSource="{Binding TargetOptions}"
+                              DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding Target}"/>
                 </StackPanel>
             </Border>
             <Border Style="{StaticResource GdCard}">
@@ -45,6 +54,15 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+                </StackPanel>
+            </Border>
+            <Border Style="{StaticResource GdCard}">
+                <StackPanel Width="300">
+                    <TextBlock Text="ANIMATION" Style="{StaticResource GdSection}"/>
+                    <ComboBox Style="{StaticResource GdCombo}" HorizontalAlignment="Stretch" ItemsSource="{Binding AnimationOptions}"
+                              DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding Animation}"
+                              ToolTip="The battle animation it shows, named by the spells, IP attacks and items that use it"/>
+                    <TextBlock Text="{Binding AnimationNote}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,6,0,0"/>
                 </StackPanel>
             </Border>
             <Border Style="{StaticResource GdCard}">
