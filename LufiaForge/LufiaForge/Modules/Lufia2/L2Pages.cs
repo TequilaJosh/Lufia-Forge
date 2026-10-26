@@ -54,6 +54,16 @@ public abstract partial class L2Page : ObservableObject
     public ObservableCollection<string> Names { get; } = new();
     [ObservableProperty] private int _selectedIndex = -1;
     [ObservableProperty] private bool _isEditable;
+    /// <summary>Why the page is read-only in this ROM (another hack moved a table it edits), or "".</summary>
+    [ObservableProperty] private string _lockNote = "";
+
+    /// <summary>The page's name for <see cref="TableGuard"/>.</summary>
+    protected virtual string PageName => GetType().Name switch
+    {
+        "L2ItemsPage" => "Items", "L2SpellsPage" => "Spells", "L2IpPage" => "IP attacks", "L2MonstersPage" => "Monsters",
+        "L2CharactersPage" => "Characters", "L2CapsulesPage" => "Capsule monsters", "L2ChestsPage" => "Treasure", "L2ExitsPage" => "Exits",
+        "L2EventsPage" => "Events", "L2GraphicsPage" => "Graphics", "L2MusicPage" => "Music", _ => "",
+    };
     /// <summary>The picked record's description (items, spells, IP attacks), new lines as line breaks.</summary>
     [ObservableProperty] private string _description = "";
     [ObservableProperty] private string _descriptionNote = "";
@@ -68,7 +78,8 @@ public abstract partial class L2Page : ObservableObject
         OnListRead();
         Names.Clear();
         foreach (var n in ReadNames()) Names.Add(n);
-        IsEditable = Names.Count > 0;
+        LockNote = TableGuard.LockReason(rom, PageName) ?? "";
+        IsEditable = Names.Count > 0 && LockNote.Length == 0;
         SelectedIndex = -1;
         SelectedIndex = Names.Count > 0 ? 0 : -1;
     }
@@ -664,6 +675,7 @@ public partial class L2MapsPage : ObservableObject
     private void ApplyMap()
     {
         if (_rom == null || _main == null || _work == null || !IsDirty) return;
+        if (TableGuard.LockReason(_rom, "Maps") is { } locked) { EditText = locked; return; }
         try
         {
             int before = _rom.Length;
@@ -903,6 +915,7 @@ public partial class L2EncountersPage : ObservableObject
     private void GroupEdited()
     {
         if (_rom == null || _main == null || SelectedGroup < 0) return;
+        if (TableGuard.LockReason(_rom, "Encounters") is { } locked) { System.Windows.MessageBox.Show(locked, "Encounters"); return; }
         L2Encounters.WriteGroup(_rom, SelectedGroup, GroupSlots.Select(s => s.Value).ToArray());
         _main.NotifyRomModified($"Lufia II: monster group {SelectedGroup:X2}");
         _loading = true; GroupNames[SelectedGroup] = GroupLabel(SelectedGroup); SelectedGroup = SelectedGroup; _loading = false;
@@ -995,6 +1008,7 @@ public partial class L2ShopsPage : ObservableObject
         if (_rom == null || _main == null) return;
         var ui = Sections.ElementAtOrDefault(shop.Sections.IndexOf(sec));
         if (ui == null) return;
+        if (TableGuard.LockReason(_rom, "Shops") is { } locked) { System.Windows.MessageBox.Show(locked, "Shops"); return; }
         for (int i = 0; i < sec.Entries.Count; i++) sec.Entries[i] = ui.Slots[i].Value;
         L2Shops.WriteSection(_rom, sec);
         _main.NotifyRomModified($"Lufia II: shop {shop.Id:X2}");

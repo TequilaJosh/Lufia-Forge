@@ -27,6 +27,7 @@
     <None Include="lufia_spc.dll" CopyToOutputDirectory="PreserveNewest" />
     <!-- community patches built into the Patch Manager (readmes ship with them for the credits and terms) -->
     <EmbeddedResource Include="Patches\*.ips" LogicalName="Patches.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Fingerprints\*.bin" LogicalName="Fingerprints.%(Filename)%(Extension)" />
     <EmbeddedResource Include="Backgrounds\*.png" LogicalName="Backgrounds.%(Filename)%(Extension)" />
     <EmbeddedResource Include="Sprites\*.png" LogicalName="Sprites.%(Filename)%(Extension)" />
     <None Include="Patches\*.txt" Link="licenses\patches\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />

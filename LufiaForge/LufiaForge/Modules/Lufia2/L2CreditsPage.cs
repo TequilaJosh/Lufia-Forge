@@ -27,6 +27,7 @@ public partial class L2CreditsPage : ObservableObject
     private void Apply()
     {
         if (_rom == null || _main == null) return;
+        if (TableGuard.LockReason(_rom, "Credits") is { } locked) { Status = locked; return; }
         string? error = L2Credits.Write(_rom, Text);
         if (error != null) { Status = "Not written: " + error; return; }
         _main.NotifyRomModified("Lufia II: credits");

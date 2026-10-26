@@ -8,6 +8,8 @@ namespace LufiaForge.Modules.Lufia2;
 public partial class Lufia2ViewModel : ObservableObject
 {
     [ObservableProperty] private string _overview = "Load a Lufia II ROM.";
+    /// <summary>Shown above the pages when another hack moved tables some pages edit (those stay read-only).</summary>
+    [ObservableProperty] private string _lockBanner = "";
 
     public L2MonstersPage Monsters { get; } = new();
     public L2ItemsPage Items { get; } = new();
@@ -35,6 +37,12 @@ public partial class Lufia2ViewModel : ObservableObject
                    "Heroes: starting stats, magic and equipment, and growth on a chart you can drag. Capsule monsters: all 35 forms with their growth curves. Also shops, treasure, exits, encounters, music, credits and game settings. Edit > Start from a Clean Slate takes the story out. " +
                    "Every change goes straight into the ROM; Edit > Undo takes it back and Save Project keeps it.\n\n" +
                    "The Lufia 1 editors are hidden for this game.";
+        var identity = RomIdentity.Identify(rom.Original ?? rom.ToArray(), rom.Game);
+        Overview += $"\n\nThis project started from {identity.What}" + (identity.ChangedParts.Count > 0 ? $" (changed: {string.Join(", ", identity.ChangedParts)})." : ".");
+        var moved = TableGuard.CheckAll(rom).Where(r => r.State == TableGuard.State.MovedByAnotherHack).ToList();
+        string movedList = string.Join(", ", moved.Select(r => r.Table.Name));
+        LockBanner = moved.Count == 0 ? "" : $"Another hack changed where this game keeps its {movedList}. The pages that edit them are read-only here, so nothing that hack put in the game's old places gets written over.";
+        if (moved.Count > 0) Overview += $" It changed where the game keeps its {movedList}: the pages that edit them stay read-only.";
         try { Monsters.SetRom(rom, main); Items.SetRom(rom, main); Spells.SetRom(rom, main); IpAttacks.SetRom(rom, main); Maps.SetRom(rom, main); Text.SetRom(rom, main); Encounters.SetRom(rom, main); Shops.SetRom(rom, main); Characters.SetRom(rom, main); Capsules.SetRom(rom, main); Events.SetRom(rom, main); Chests.SetRom(rom, main); Exits.SetRom(rom, main); Credits.SetRom(rom, main); Settings.SetRom(rom, main); Music.SetRom(rom, main); Graphics.SetRom(rom, main); }
         catch (Exception ex) { Overview += $"\n\nCouldn't read part of the ROM: {ex.Message}"; }
     }

@@ -14,6 +14,10 @@ public static class RomEdits
     public static List<(string Label, string Value)> Describe(RomBuffer rom)
     {
         var list = new List<(string, string)>();
+        var who = RomIdentity.Identify(rom.Original ?? rom.ToArray(), rom.Game);
+        list.Add(("Started from:", who.What + (who.ChangedParts.Count > 0 ? $" (it changed: {string.Join(", ", who.ChangedParts)})" : "")));
+        var moved = TableGuard.CheckAll(rom).Where(r => r.State == TableGuard.State.MovedByAnotherHack).Select(r => r.Table.Name).ToList();
+        if (moved.Count > 0) list.Add(("Kept as they are:", $"another hack moved the {string.Join(", ", moved)}; Lufia Forge doesn't write there"));
         int kb = rom.Length / 1024;
         string size = rom.Length switch
         {

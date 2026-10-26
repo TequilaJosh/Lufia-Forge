@@ -37,6 +37,9 @@ public sealed class LufiaProject
 
     private byte[] _base;
 
+    /// <summary>The ROM as it was when the project started (read only: don't change it).</summary>
+    public byte[] BaseRom => _base;
+
     private LufiaProject(string path, string name, byte[] baseRom)
     {
         Path = path; Name = name; _base = baseRom;

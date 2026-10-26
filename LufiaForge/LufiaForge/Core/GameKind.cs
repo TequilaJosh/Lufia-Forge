@@ -23,7 +23,9 @@ public static class GameDetect
         // ("LUFIA II" first: both titles start with "LUFIA")
         if (title.StartsWith("LUFIA II", StringComparison.OrdinalIgnoreCase)) return rom.Length >= Lufia2MinSize ? GameKind.Lufia2 : GameKind.Unknown;
         if (title.StartsWith("LUFIA", StringComparison.OrdinalIgnoreCase)) return rom.Length >= Lufia1MinSize ? GameKind.Lufia1 : GameKind.Unknown;
-        return GameKind.Unknown;
+        // a hack may rename the game: its own code still tells which it is
+        var byCode = RomIdentity.ByCode(rom);
+        return byCode == GameKind.Lufia2 && rom.Length >= Lufia2MinSize || byCode == GameKind.Lufia1 && rom.Length >= Lufia1MinSize ? byCode : GameKind.Unknown;
     }
 
     public static string Title(byte[] rom) =>
