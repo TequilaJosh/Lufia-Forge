@@ -1,9 +1,15 @@
 <UserControl x:Class="LufiaForge.Modules.Lufia2.L2GraphicsView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:common="clr-namespace:LufiaForge.Modules.Common">
+             xmlns:common="clr-namespace:LufiaForge.Modules.Common"
+             xmlns:local="clr-namespace:LufiaForge.Modules.Lufia2">
     <UserControl.Resources>
-        <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+            <BooleanToVisibilityConverter x:Key="Vis"/>
+        </ResourceDictionary>
     </UserControl.Resources>
     <Grid common:LayoutMemory.Key="l2graphics.main">
         <Grid.ColumnDefinitions>
@@ -27,9 +33,9 @@
         </common:PopOutHost>
         <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch"/>
         <common:PopOutHost Grid.Column="2" Title="Picture" Key="l2graphics.picture" ButtonMargin="0,0,12,0">
-        <DockPanel Margin="0,12,12,12">
+        <DockPanel x:Name="PicturePanel" Margin="0,12,12,12" KeyDown="Picture_KeyDown">
             <TextBlock DockPanel.Dock="Top" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,6"
-                       Text="The game's pictures. Export PNG saves one as a palette PNG with the game's colour numbers; draw on it and Import PNG writes it back (a full-colour picture is matched to the colours shown). Click a colour square to change that colour; the Palettes groups list the game's colour sets. Written to the ROM at once; Edit, Undo takes it back."/>
+                       Text="The game's pictures. Paint on one below (pick a colour, then click or drag; Ctrl+Z and Ctrl+Y take strokes back until you write the painting), or use Export PNG and Import PNG to draw in another program. Click a colour square to paint with it and to change that colour; the Palettes groups list the game's colour sets. Writes go into the ROM at once; Edit, Undo takes them back."/>
             <TextBlock DockPanel.Dock="Top" Text="{Binding Info}" Style="{StaticResource GdFieldLabel}" TextWrapping="Wrap" Margin="0,0,0,8"/>
             <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,8" IsEnabled="{Binding IsEditable}">
                 <StackPanel Orientation="Horizontal" Margin="0,0,16,4">
@@ -44,7 +50,7 @@
                     </StackPanel.Style>
                     <TextBlock Text="Colours" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,8,0"/>
                     <ComboBox Style="{StaticResource GdCombo}" Width="200" ItemsSource="{Binding PaletteOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding PaletteChoice}"
-                              ToolTip="The colours the picture is shown, saved and matched with. Import writes the picture's colours here when asked to."/>
+                              ToolTip="{Binding PaletteTip}"/>
                 </StackPanel>
                 <Button Content="Export PNG" Style="{StaticResource LufiaButton}" Command="{Binding ExportCommand}" Width="110" Margin="0,0,8,4"/>
                 <Button Content="Import PNG" Style="{StaticResource LufiaButtonGold}" Command="{Binding ImportCommand}" Width="110" Margin="0,0,16,4"/>
@@ -76,7 +82,7 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
-                <Border Style="{StaticResource GdCard}" VerticalAlignment="Top" IsEnabled="{Binding IsEditable}">
+                <Border Style="{StaticResource GdCard}" VerticalAlignment="Top" IsEnabled="{Binding IsEditable}" Margin="0,0,12,8">
                     <StackPanel Width="250">
                         <TextBlock Text="COLOUR" Style="{StaticResource GdSection}"/>
                         <TextBlock Text="{Binding ColourInfo}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,6"/>
@@ -107,10 +113,57 @@
                         </StackPanel>
                     </StackPanel>
                 </Border>
+                <Border Style="{StaticResource GdCard}" VerticalAlignment="Top" IsEnabled="{Binding IsEditable}" Margin="0,0,0,8"
+                        Visibility="{Binding IsMapSprite, Converter={StaticResource Vis}}">
+                    <StackPanel Width="340">
+                        <TextBlock Text="MAP SPRITE" Style="{StaticResource GdSection}"/>
+                        <TextBlock Text="New palette for this sprite" Style="{StaticResource GdFieldLabel}" Margin="0,2,0,4"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <Button Content="Empty (black)" Style="{StaticResource LufiaButton}" Command="{Binding AddPaletteCommand}" CommandParameter="empty" Width="150" Margin="0,0,8,0"
+                                    ToolTip="Make a new palette of 16 black colours and give it to this sprite; then click its colours above to set them."/>
+                            <Button Content="Copy of these colours" Style="{StaticResource LufiaButton}" Command="{Binding AddPaletteCommand}" CommandParameter="copy" Width="180"
+                                    ToolTip="Make a new palette that starts as the colours shown and give it to this sprite, so you can change them without changing other sprites."/>
+                        </StackPanel>
+                        <TextBlock Text="New map sprite (FB, FC, FD)" Style="{StaticResource GdFieldLabel}" Margin="0,0,0,4"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <Button Content="Copy of this sprite" Style="{StaticResource LufiaButton}" Command="{Binding AddSpriteCommand}" CommandParameter="copy" Width="150" Margin="0,0,8,0"
+                                    ToolTip="Make a new map sprite that starts as a copy of this one (its own tiles in the added space, so painting it leaves this one alone)."/>
+                            <Button Content="Empty, this size" Style="{StaticResource LufiaButton}" Command="{Binding AddSpriteCommand}" CommandParameter="empty" Width="180"
+                                    ToolTip="Make a new, empty map sprite with this one's size, frames, colours and way of walking, ready to paint."/>
+                        </StackPanel>
+                        <TextBlock Text="{Binding SpriteInfo}" Style="{StaticResource GdHint}" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
             </WrapPanel>
+            <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,6" IsEnabled="{Binding IsEditable}" Visibility="{Binding CanPaint, Converter={StaticResource Vis}}">
+                <RadioButton Content="Pencil" Style="{StaticResource LufiaToolRadio}" GroupName="l2paint" IsChecked="{Binding PencilTool}" Margin="0,0,2,4"
+                             ToolTip="Paint pixels with the chosen colour: click, or drag for a line."/>
+                <RadioButton Content="Fill" Style="{StaticResource LufiaToolRadio}" GroupName="l2paint" IsChecked="{Binding FillTool}" Margin="0,0,12,4"
+                             ToolTip="Fill the area of one colour you click with the chosen colour."/>
+                <TextBlock Text="Colour" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,6,4"/>
+                <Border Width="22" Height="22" Background="{Binding PaintBrush}" BorderBrush="Gold" BorderThickness="1" Margin="0,0,4,4"
+                        ToolTip="The colour painted with (see-through shows the dark squares). Click a colour square above, or right click the picture, to pick another."/>
+                <TextBlock Text="{Binding PaintColour}" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Width="26" Margin="0,0,10,4"/>
+                <Button Content="−" Style="{StaticResource LufiaButton}" Command="{Binding ZoomOutCommand}" Width="40" Padding="0,4" Margin="0,0,4,4" ToolTip="Zoom out"/>
+                <TextBlock Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,4,4" Text="{Binding Zoom, StringFormat=x{0}}" Width="28" TextAlignment="Center"/>
+                <Button Content="+" Style="{StaticResource LufiaButton}" Command="{Binding ZoomInCommand}" Width="40" Padding="0,4" Margin="0,0,10,4" ToolTip="Zoom in"/>
+                <CheckBox Content="Grid" IsChecked="{Binding ShowGrid}" Style="{StaticResource GdCheck}" VerticalAlignment="Center" Margin="0,0,12,4"
+                          ToolTip="Lines between pixels (when zoomed in), between 8x8 squares, and in gold between sprite frames."/>
+                <Button Content="Undo" Style="{StaticResource LufiaButton}" Command="{Binding PaintUndoCommand}" Width="60" Margin="0,0,4,4" ToolTip="Take the last stroke back (Ctrl+Z)."/>
+                <Button Content="Redo" Style="{StaticResource LufiaButton}" Command="{Binding PaintRedoCommand}" Width="60" Margin="0,0,12,4" ToolTip="Put it back again (Ctrl+Y)."/>
+                <Button Content="Write the painting" Style="{StaticResource LufiaButtonGold}" Command="{Binding WritePaintingCommand}" Width="140" Margin="0,0,8,4"
+                        ToolTip="Put the painting into the ROM (the same way Import PNG does). Edit, Undo takes it back."/>
+                <Button Content="Throw it away" Style="{StaticResource LufiaButton}" Command="{Binding DiscardPaintingCommand}" Width="110" Margin="0,0,0,4"
+                        ToolTip="Forget the painting: the picture goes back to the game's."/>
+            </WrapPanel>
+            <DockPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
+                <TextBlock DockPanel.Dock="Right" Text="{Binding Pointer}" Style="{StaticResource GdHint}" Margin="12,0,0,0"/>
+                <TextBlock Text="{Binding PaintInfo}" Style="{StaticResource GdHint}" TextWrapping="Wrap"/>
+            </DockPanel>
             <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="#202020">
-                <Image Source="{Binding PictureImage}" Width="{Binding PictureWidth}" Height="{Binding PictureHeight}" Stretch="Fill"
-                       RenderOptions.BitmapScalingMode="NearestNeighbor" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="8"/>
+                <local:L2PixelCanvas x:Name="Canvas" Source="{Binding PictureImage}" Zoom="{Binding Zoom}" ShowGrid="{Binding ShowGrid}"
+                                     CellWidth="{Binding CellWidth}" CellHeight="{Binding CellHeight}"
+                                     HorizontalAlignment="Left" VerticalAlignment="Top" Margin="8"/>
             </ScrollViewer>
         </DockPanel>
         </common:PopOutHost>

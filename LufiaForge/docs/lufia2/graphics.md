@@ -162,7 +162,7 @@ the WRAM destination from the script. `$83:E4C5` (field) uses a 4-entry table `$
 
 ## 5. Uncompressed graphics regions
 
-* **Map (field) sprites**: banks `$9C`-`$A6` almost entirely, through the table `$CF:F000` (251 sprites, known; covers
+* **Map (field) sprites** (format, colours and Lufia Forge's new sprites and palettes: section 7): banks `$9C`-`$A6` almost entirely, through the table `$CF:F000` (251 sprites, known; covers
   0x0E0000-0x0E2400, 0x0E6800-0x0EE000, 0x0FDA80-0x0FFE80, 0x100000-0x107800, 0x10B022-0x10FE22, 0x110000-0x11BC00,
   0x11C200-0x126C00, 0x127200-0x129200, 0x129700-0x12D700, 0x12E5FC-0x130F00, 0x132000-0x132A00, 0x134020-0x136020 ...).
   Palettes `$A6:BF00` (file 0x133F00).
@@ -187,3 +187,92 @@ the WRAM destination from the script. `$83:E4C5` (field) uses a 4-entry table `$
   (0x18D/0x18E + names from `$9F:8500`). The capsule monster is the only ally sprite (0x194-0x1B6).
 * Item icons are 2bpp glyphs inside the menu font `$9F:8500` (row 0x60+), not a separate file.
 * Ending: credits font 0x040 + text `$91:9AFF` (names) via `$8E:B2EE`; the ending scenes reuse map graphics.
+
+## 7. Map sprites: format, colours, new sprites and new palettes (2026-10-25)
+
+Read from the code and checked in the game (BizHawk, bsnes core). Lufia Forge: `Core/Lufia2/L2Sprites.cs`,
+`L2Gfx.cs`, the Graphics page (`Modules/Lufia2/L2GraphicsPage.cs`).
+
+### 7.1 The sprite table and its readers
+
+* `$CF:F000`: 251 u16 pointers (sprites 00-FA) into bank `$CF`; the 5-byte entries follow at `$CF:F1F6-$CF:F6B4`
+  (243 different entries: a few sprites share one, and some share their tiles).
+* Entry: **flags** (bits 0-2 to `$7FE216,X`: 01 = 4 tiles high, 02 = 4 tiles wide; bits 3-7 to `$1291,X`: 08 = 2
+  frames, 10 = 6 frames, the others animation/attribute bits), **colour row** (0-7, doubled into `$7FE1CE,X`, the
+  OAM palette bits), **u24 tiles** (to `$12B9,X`/`$12BB,X`, the DMA source of the actor's frames). A frame's tiles are
+  the top halves of its 16-pixel rows, then the bottom halves (`L2Gfx.MapSpriteTile`).
+* Only two places read the table: `$83:A9F5` in `$83:A9E5`, which sets an actor up from its sprite (called through
+  `$83:A9BA` and `$83:A9D0`: map load `$83:A82E`/`$83:A76D` and every event command that makes or changes a
+  character), and `$83:9A55` (Ancient Cave field monsters, flags only, sprites from `$94:DDF6`).
+* `$CF:F6B5 + sprite - $80`: the walking script (`$070A`, table `$91:A1D4`) of a sprite from `$80` up, used by
+  `$83:A94D` when the character's map info record (+7, `$1212`) names none; below `$80` it is 0. The bytes for FB-FF
+  there already belong to the map lists (`01 02 03 04 04`).
+* **Sprite numbers are one byte** (`$05D2,X` per actor). FF = no actor (`$83:A776`, `$83:A83B`, `$83:FC46`, ...),
+  FE = an event object (`$83:F718` sets it with `$7FE1CE` = 0F, so row 7), FD skips the walking script on the world
+  map (`$83:A933`). Nothing else compares a sprite number with FB-FD, so **FB, FC and FD are the only free numbers**:
+  at most 3 new sprites.
+* Who names a sprite: event commands 68 / 7B (create a character: id, sprite) and 34 (change a character's sprite);
+  story characters (ids 10-4F) keep theirs in `$08DE + id - 10`, filled at a new game (`$83:ADDF`) from the list at
+  `$87:8000` + u16 at `$87:8003` (4 bytes: id, sprite, map, spot; the first is Tia: `10 04 04 08`) and made into
+  actors by `$83:B364`.
+
+### 7.2 Colours
+
+* `$83:B062` (map load `$83:8637`, `$83:ACF9`, new game `$83:ADDF`, `$83:B220`) copies the 8 sprite rows at `$A6:BF00`
+  (0x100 bytes) to the CGRAM buffer `$0420` (sprite palettes 0-7) and `$A6:FB0D` (0x20) to `$0320`. `$73` bit 7 makes
+  the NMI (`$80:8736`) send all of `$0320-$051F` to CGRAM.
+* A sprite shows its entry's row. Rows in the game's sprites: 0 (vehicles 71-73 and a few people), 1 (the party and
+  most people, 82 sprites), 2 and 3 (people; field monsters from 3), 4 and 5 (field monsters), 6 (the item icons F1-F9
+  shown over a chest, 4B, 59, 7E), 7 (4C, 4E and the event objects).
+
+### 7.3 What Lufia Forge adds
+
+Two hooks, put in the first time a new sprite or palette is made (`L2Sprites.Install`; the game's other bytes stay):
+
+| At | Game's bytes | Becomes |
+|---|---|---|
+| `$83:A9F5` (file 0x1A9F5) | `BF 00 F0 CF` (LDA $CFF000,X) | `5C` JML to the lookup code; it does the rest of `$83:A9E5` and returns with its PLB / RTL |
+| `$83:A956` (file 0x1A956) | `BF B5 F6 CF` (LDA $CFF6B5,X) | `22` JSL to the walking code |
+
+The block (0x1400 bytes in the added space, never across a bank): `"LF2SP"`, version 1, the number of new sprites,
+the number of new palettes; +0x08 bit masks, +0x10 the row order 5 4 3 2 0 7 6 1, +0x20 the code, +0x200 a byte per
+sprite number (0 = the colours of its row, n = new palette n), +0x300 the entries of FB-FF (8 bytes: the game's 5,
+the walking script, 2 spare; FE and FF hold copies of sprite 00's), +0x400 new palettes 1-127 (16 colours each,
+colour 0 see-through).
+
+* **Lookup**: sprites FB-FD read their entry from the block (any bank), the others from `$CF:F000` as before.
+* **New palettes**: after the row is stored, a sprite with a new palette has its colours 1-15 copied into a sprite row
+  of `$0420` (and `$73` bit 7 set): a row that already shows exactly those colours; else its own row if no other actor
+  uses it; else the first row in the order 5 4 3 2 0 7 6 1 that no other actor uses (an actor's row = `$7FE1CE,X`; FE
+  objects count as row 7); else its own row. The row goes into `$7FE1CE,X`. No RAM of its own.
+* **Walking**: a new sprite's walking script is its entry's byte 5 (a copy keeps the original's: 0 for people).
+* Limits: 3 new sprites, 127 new palettes. A new palette borrows a row while its sprite is on the map: a character
+  made later in the same scene with a game sprite of that row shows the new colours (the row is chosen among the
+  rows free when the sprite appears).
+
+### 7.4 The Graphics page
+
+* Every picture except the palette sets can be painted: pencil, fill (on a map sprite within one frame), right click
+  picks the colour under the mouse, zoom, a grid (pixels, 8x8 squares, sprite frames in gold), Ctrl+Z / Ctrl+Y for
+  strokes. **Write the painting** goes through `L2Gfx.Import` like Import PNG (packed files packed again, moved to the
+  added space when they grow) and is one Edit, Undo step. On a battle background or title layer each 8x8 square shows
+  one row of colours, so a colour of another row is refused in a square that has colours of its own.
+* Map sprites: the Colours list sets the sprite's colours (one of the 8 rows, or a new palette); "New palette for this
+  sprite" makes a black one or a copy of the colours shown and gives it to the sprite; "New map sprite" makes FB, FC,
+  FD as a copy of the sprite shown or empty with its size, frames, colours and walking (tiles in the added space).
+* Not done: more battle background palettes. A background's record (`$97:FD40`) names a palette by number, but the
+  caller of `$81:B974` computes `$97:CD58 + palette * 0x40` and the 20 used ones end where the capsule colours start
+  (`$97:D258`), so more would need a hook there.
+
+### 7.5 Checked in the game
+
+New game through the opening to Elcid's shop (map 04), scratch ROMs built with the harness:
+* Sprite FB, a copy of 0E with a painted band on a new green palette, given to map 04's characters 50 and 53 (start-up
+  script `68 xx 0E` to `FB`) and to Tia (story list): Tia shows as FB behind the counter in the new colours (row 2,
+  `$7FE1CE` = 04); a second new palette on sprite 10 went to row 3; Maxim and the other characters unchanged.
+* Maxim's sprite 00 painted (a white band, written in place): shows in the game, colours unchanged.
+* Tia's sprite 04 on a new palette: her own row 1 is Maxim's, so it went to row 5 and both look right.
+* A sprite made, coloured and painted only through the Graphics page (FB from 0E, black palette then colours set,
+  a cross painted on each frame) shows in the game the same way.
+* After opening and closing the menu, and after a battle, the map's characters are set up again and the new palettes
+  are back in their rows (`$0420` and `$7FE1CE` read in RAM).

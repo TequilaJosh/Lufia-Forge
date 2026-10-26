@@ -29,13 +29,14 @@ public static class L2MapInfo
     public static Dictionary<int, int> CharacterSprites(RomBuffer rom, int map)
     {
         var sprites = new Dictionary<int, int>();
+        int count = L2Sprites.Count(rom);
         int e = L2Events.HeaderTable + 0x10 + map * 8;
         int off = rom.ReadByte(e + 3) | rom.ReadByte(e + 4) << 8 | rom.ReadByte(e + 5) << 16;
         int at = L2Rom.SnesToFile(0x878000 + off);
         for (int p = at; p < at + 0x400 && p + 2 < rom.Length; p++)
         {
             byte op = rom.ReadByte(p), id = rom.ReadByte(p + 1), sprite = rom.ReadByte(p + 2);
-            if (op is 0x68 or 0x7B && id is >= 0x50 and < 0x80 && sprite < L2Graphics.MapSpriteCount) { sprites.TryAdd(id, sprite); p += 2; }
+            if (op is 0x68 or 0x7B && id is >= 0x50 and < 0x80 && sprite < count) { sprites.TryAdd(id, sprite); p += 2; }
         }
         return sprites;
     }
