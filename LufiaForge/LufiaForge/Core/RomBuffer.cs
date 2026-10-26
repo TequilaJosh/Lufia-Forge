@@ -95,6 +95,7 @@ public class RomBuffer
     public void WriteByte(int offset, byte value)
     {
         ValidateOffset(offset, 1);
+        Guard(offset, 1);
         _data[offset] = value;
         _isDirty = true;
     }
@@ -102,6 +103,7 @@ public class RomBuffer
     public void WriteUInt16Le(int offset, ushort value)
     {
         ValidateOffset(offset, 2);
+        Guard(offset, 2);
         _data[offset]     = (byte)(value & 0xFF);
         _data[offset + 1] = (byte)(value >> 8);
         _isDirty = true;
@@ -110,6 +112,7 @@ public class RomBuffer
     public void WriteBytes(int offset, byte[] bytes)
     {
         ValidateOffset(offset, bytes.Length);
+        Guard(offset, bytes.Length);
         Array.Copy(bytes, 0, _data, offset, bytes.Length);
         _isDirty = true;
     }
@@ -270,6 +273,21 @@ public class RomBuffer
             if (match) results.Add(i);
         }
         return results;
+    }
+
+    /// <summary>The ROM as it was when the project started (or as it was opened): what another hack put in it, for
+    /// <see cref="RomIdentity.ForeignRanges"/>. Null when unknown.</summary>
+    public byte[]? Original { get; set; }
+
+    /// <summary>Places nothing may be written to: tables another hack moved away (their old bytes may be that hack's
+    /// data now). Set when a ROM is opened (<see cref="TableGuard.Protect"/>).</summary>
+    public List<(int Start, int End, string Why)> Protected { get; } = new();
+
+    private void Guard(int offset, int count)
+    {
+        if (Protected.Count == 0) return;
+        foreach (var (s, e, why) in Protected)
+            if (offset < e && offset + count > s) throw new InvalidOperationException(why);
     }
 
     private void ValidateOffset(int offset, int count)

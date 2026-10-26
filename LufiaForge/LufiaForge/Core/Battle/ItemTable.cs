@@ -122,6 +122,7 @@ public static class ItemTable
             int r = RecordOffset(rom, i);
             if (r >= FreeStart) used.Add((r, r + Room(rom, i)));
         }
+        used.AddRange(RomIdentity.ForeignRanges(rom, FreeStart, FreeEnd));   // what another hack put there
         for (int p = FreeStart; p + len <= FreeEnd; p++)
         {
             int q = p;

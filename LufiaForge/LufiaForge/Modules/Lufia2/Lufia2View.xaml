@@ -2,7 +2,18 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:LufiaForge.Modules.Lufia2">
-    <Grid Background="{StaticResource MidPurpleBrush}">
+    <DockPanel Background="{StaticResource MidPurpleBrush}">
+        <!-- another hack moved tables some pages edit: say so (those pages are read-only) -->
+        <Border DockPanel.Dock="Top" Margin="8,8,8,0" Padding="10,6" CornerRadius="4" Background="#40C9A227" BorderBrush="{StaticResource GoldLightBrush}" BorderThickness="1">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding LockBanner}" Value=""><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <TextBlock Text="{Binding LockBanner}" Style="{StaticResource LufiaLabel}" TextWrapping="Wrap"/>
+        </Border>
         <TabControl x:Name="Pages" Style="{StaticResource LufiaSideTabControl}" Background="Transparent" Margin="8">
             <TabItem Header="Overview" Style="{StaticResource LufiaSideTab}">
                 <StackPanel Margin="24" MaxWidth="760" HorizontalAlignment="Left">
@@ -66,5 +77,5 @@
                 <local:L2SettingsView DataContext="{Binding Settings}"/>
             </TabItem>
         </TabControl>
-    </Grid>
+    </DockPanel>
 </UserControl>

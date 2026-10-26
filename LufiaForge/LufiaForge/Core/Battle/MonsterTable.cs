@@ -118,6 +118,8 @@ public static class MonsterTable
             var (s, l) = MonsterAi.ScriptRange(rom, r);
             if (l > 0) { int a = MonsterAi.At(r, s); used.Add((a, a + l)); }
         }
+        // bytes another hack put in these areas (they differ from the clean game in the ROM the project started from)
+        foreach (var (start, end) in ScriptAreas) used.AddRange(RomIdentity.ForeignRanges(rom, start, end));
         return used;
     }
 

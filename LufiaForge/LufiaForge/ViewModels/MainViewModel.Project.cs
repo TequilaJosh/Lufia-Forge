@@ -209,7 +209,10 @@ public partial class MainViewModel
         Project = project;
         Core.Maps.MapNames.ProjectNames = project.MapNames;
         _savedRom = (byte[])rom.Clone();
-        RomBuffer = new RomBuffer(rom, PlayRomPath(project));
+        // what the project started from: another hack's data is known from it (RomIdentity, TableGuard)
+        var buffer = new RomBuffer(rom, PlayRomPath(project)) { Original = project.BaseRom };
+        TableGuard.Protect(buffer);
+        RomBuffer = buffer;
         RecentProjects.Add(project.Path, project.Name);
         RefreshRecent();
         OnPropertyChanged(nameof(WindowTitle));
