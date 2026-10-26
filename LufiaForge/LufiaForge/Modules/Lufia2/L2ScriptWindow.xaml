@@ -35,6 +35,8 @@
             <!-- the steps -->
             <DockPanel Grid.Column="0">
                 <WrapPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
+                    <Button Content="＋ Add a ready-made action ▴" Style="{StaticResource LufiaButtonGold}" Padding="8,3" Margin="0,0,6,4" Click="Ready_Click"
+                            ToolTip="The usual shapes of a turn (attack a random hero, a named special attack, a status attack, call for help...) added below the picked step"/>
                     <Button Content="＋ Add below" Style="{StaticResource LufiaButton}" Padding="8,3" Margin="0,0,6,4" Click="Add_Click"
                             ToolTip="A new step below the picked one (an End; pick its command on the right)"/>
                     <Button Content="＋ Add above" Style="{StaticResource LufiaButton}" Padding="8,3" Margin="0,0,6,4" Click="AddAbove_Click"/>

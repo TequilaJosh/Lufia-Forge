@@ -80,7 +80,7 @@ public partial class L2ScriptWindow : Window
         InfoText.Text = (_edited ? "This script was edited in Lufia Forge (the game's own one is kept and comes back with 'Back to the game's script')."
                                  : "The game's own script. Saving keeps the game's bytes as they are and puts the edited script in the ROM's added space.") + start + unreadable;
         RevertButton.IsEnabled = _edited;
-        foreach (var d in L2AiScripts.Ops.OrderBy(o => GroupOrder(o.Group)).ThenBy(o => o.Name)) OpBox.Items.Add(new OpChoice(d));
+        foreach (var d in L2AiScripts.Ops.OrderBy(o => GroupOrder(o.Group))) OpBox.Items.Add(new OpChoice(d));   // (the list's own order: the common ones first)
         RefreshList(0);
         // Ctrl+Z / Ctrl+Y take back changes to the steps (text boxes keep their own while typing)
         PreviewKeyDown += (_, e) =>
@@ -93,7 +93,10 @@ public partial class L2ScriptWindow : Window
         if (!L2AiScripts.IsInstalled(rom) && !L2AiScripts.CanInstall(rom, out var why)) StatusText.Text = why;
     }
 
-    private static int GroupOrder(string g) => g switch { "Actions" => 0, "Flow" => 1, "Effects" => 2, "Registers" => 3, "Show and sound" => 4, _ => 5 };
+    private static int GroupOrder(string g) => g switch
+    {
+        "Actions" => 0, "Choices and jumps" => 1, "Show and sound" => 2, "Effects of a special attack" => 3, "Numbers" => 4, _ => 5,
+    };
 
     private static Step Make(byte op, params int[] values)
     {
@@ -274,7 +277,8 @@ public partial class L2ScriptWindow : Window
         Arg.Target => "target",
         Arg.Restore => "what",
         Arg.Library => "shared script",
-        Arg.AttackName => "attack name",
+        Arg.AttackName => "name shown",
+        Arg.Change => "change (%)",
         Arg.Animation => "animation",
         Arg.Sound => "sound",
         _ => d.Args.Length > 1 ? $"value {i + 1}" : "value",
@@ -295,13 +299,15 @@ public partial class L2ScriptWindow : Window
             Arg.Stat => List(s, i, L2AiScripts.Stats),
             Arg.Status => List(s, i, L2AiScripts.Statuses),
             Arg.Target => List(s, i, L2AiScripts.Targets, plain: true),
+            Arg.AttackName => List(s, i, _names.AttackNames),
+            Arg.Change => Signed(s, i),
             Arg.Restore => List(s, i, L2AiScripts.Restores),
             Arg.Animation when _names.Animations.Length == 0x100 => List(s, i, _names.Animations),
             Arg.Element => Elements(s, i),
             Arg.Value => ValueField(s, i),
             Arg.Register => RegisterField(s, i),
             Arg.Library => LibraryField(s, i),
-            _ => Number(s, i, hex: a is Arg.AttackName or Arg.Animation or Arg.Sound),
+            _ => Number(s, i, hex: a is Arg.Animation or Arg.Sound),
         };
         row.Children.Add(editor);
         return row;
@@ -487,6 +493,78 @@ public partial class L2ScriptWindow : Window
         Hint();
         panel.Children.Add(box); panel.Children.Add(hint);
         return panel;
+    }
+
+    /// <summary>A signed percentage (-128 to 127), for raising or lowering a stat.</summary>
+    private FrameworkElement Signed(Step s, int i)
+    {
+        var panel = new StackPanel { Orientation = Orientation.Horizontal };
+        var box = new TextBox { Style = (Style)FindResource("GdNumber"), Width = 70, Text = ((sbyte)L2AiScripts.ArgValue(s, i)).ToString(CultureInfo.InvariantCulture) };
+        box.TextChanged += (_, _) =>
+        {
+            if (_loading) return;
+            if (!int.TryParse(box.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int v) || v is < -128 or > 127) { StatusText.Text = "A change is -128 to 127 (minus lowers the stat)."; return; }
+            StatusText.Text = "";
+            L2AiScripts.SetArg(s, i, v & 0xFF);
+            Changed();
+        };
+        panel.Children.Add(box);
+        panel.Children.Add(new TextBlock { Text = "% (minus lowers it)", Style = (Style)FindResource("GdHint"), VerticalAlignment = System.Windows.VerticalAlignment.Center, Margin = new Thickness(6, 0, 0, 0) });
+        return panel;
+    }
+
+    // ── ready-made actions ──────────────────────────────────────────────────
+
+    private static Step Op(byte op, params int[] values) => Make(op, values);
+
+    /// <summary>The usual shapes of a monster's turn, as the game's own scripts write them. Each is a list of steps; a
+    /// "go to" is given as the index of the step it goes to in the same list.</summary>
+    private static readonly (string Name, string Help, Func<List<Step>> Build)[] Ready =
+    {
+        ("Attack a random hero", "Pick a random hero, attack.", () => new() { Op(0x32, 1), Op(0x28), Op(0x00) }),
+        ("Cast a spell at a random hero", "Pick the spell after adding it (it needs the MP).", () => new() { Op(0x32, 1), Op(0x2C, 4), Op(0x00) }),
+        ("Cast a spell on itself", "For healing or raising its own stats.", () => new() { Op(0x32, 6), Op(0x2C, 0x19), Op(0x00) }),
+        ("Cast a spell on all heroes", "", () => new() { Op(0x32, 1), Op(0x32, 5), Op(0x2C, 4), Op(0x00) }),
+        ("A special attack with its own name", "Physical damage, a name at the top and an animation, like a dragon's breath. Set the damage, element, name and animation.",
+            () => new() { Op(0x32, 1), Op(0x21, 0, 100, 0), Op(0x1E, 1), Op(0x5A, 0xE0), Op(0x00) }),
+        ("A special attack on all heroes", "", () => new() { Op(0x32, 1), Op(0x32, 5), Op(0x21, 0, 60, 0), Op(0x1E, 1), Op(0x5A, 0xE0), Op(0x00) }),
+        ("A status attack (poison, sleep...)", "Causes a status with a chance, shows a name and an animation, as the game's poison bites and songs do.",
+            () => new() { Op(0x32, 1), Op(0x27, 0, 50), Op(0x1E, 1), Op(0x0C, 0x23, 5), Op(0x5A, 0x24), Op(0x00) }),
+        ("Raise or lower a stat", "Changes the target's stat for the battle by a percentage.",
+            () => new() { Op(0x32, 6), Op(0x25, 5, 25), Op(0x1E, 1), Op(0x0C, 0x23, 5), Op(0x5A, 0x28), Op(0x00) }),
+        ("Call for help (attack when there's no room)", "Calls another monster; when it can't, it attacks instead.",
+            () => Linked(new() { Op(0x2D, 0), Op(0x04), Op(0x00), Op(0x32, 1), Op(0x28), Op(0x00) }, (1, 3))),
+        ("Half the time attack, half the time a spell", "With a chance (128 of 256) it goes to the second action. Change the chance or the actions.",
+            () => Linked(new() { Op(0x05, 128), Op(0x32, 1), Op(0x28), Op(0x00), Op(0x32, 1), Op(0x2C, 4), Op(0x00) }, (0, 4))),
+        ("Taunt (show a name, do nothing)", "A laugh, a roar, a warning: the name shows and nothing else happens.",
+            () => new() { Op(0x1E, 0x6C), Op(0x41), Op(0x00) }),   // "Ha, ha, ha, ha, ha!"
+        ("Defend", "", () => new() { Op(0x29), Op(0x00) }),
+        ("Run away", "", () => new() { Op(0x2A), Op(0x00) }),
+    };
+
+    private static List<Step> Linked(List<Step> steps, params (int From, int To)[] jumps)
+    {
+        foreach (var (from, to) in jumps) steps[from].Targets[0] = steps[to];
+        return steps;
+    }
+
+    private void Ready_Click(object sender, RoutedEventArgs e)
+    {
+        var menu = new ContextMenu { PlacementTarget = (UIElement)sender, Placement = System.Windows.Controls.Primitives.PlacementMode.Top };
+        foreach (var (name, help, build) in Ready)
+        {
+            var item = new MenuItem { Header = name, ToolTip = help.Length > 0 ? help : null };
+            item.Click += (_, _) =>
+            {
+                var add = build();
+                int at = Math.Clamp(StepList.SelectedIndex + 1, 0, _steps.Count);
+                _steps.InsertRange(at, add);
+                RefreshList(at);
+                StatusText.Text = $"Added: {name} (steps {at + 1}-{at + add.Count}). Pick a step to change what it uses.";
+            };
+            menu.Items.Add(item);
+        }
+        menu.IsOpen = true;
     }
 
     // ── steps ───────────────────────────────────────────────────────────────
