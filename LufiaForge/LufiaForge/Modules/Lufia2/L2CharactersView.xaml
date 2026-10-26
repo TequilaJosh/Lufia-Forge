@@ -116,8 +116,8 @@
                         </StackPanel>
                         <WrapPanel>
                             <StackPanel Margin="0,0,16,0">
-                                <common:GrowthChart Series="{Binding Chart}" Width="560" Height="230"
-                                                    ToolTip="Move the mouse over the chart to read the values at a level"/>
+                                <common:GrowthChart x:Name="Chart" Series="{Binding Chart}" HandleLevels="{Binding ChartHandles}" HandleDropped="Chart_HandleDropped" Width="560" Height="230"
+                                                    ToolTip="Move the mouse over the chart to read the values at a level; drag a dot up or down to change the curve"/>
                                 <TextBlock Text="{Binding LevelTable}" Style="{StaticResource GdFieldLabel}" FontFamily="Consolas" TextWrapping="NoWrap" Margin="0,10,0,0"/>
                             </StackPanel>
                             <StackPanel Width="300">

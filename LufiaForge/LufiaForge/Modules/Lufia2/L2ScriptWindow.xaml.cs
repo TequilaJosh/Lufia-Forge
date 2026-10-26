@@ -82,6 +82,14 @@ public partial class L2ScriptWindow : Window
         RevertButton.IsEnabled = _edited;
         foreach (var d in L2AiScripts.Ops.OrderBy(o => GroupOrder(o.Group)).ThenBy(o => o.Name)) OpBox.Items.Add(new OpChoice(d));
         RefreshList(0);
+        // Ctrl+Z / Ctrl+Y take back changes to the steps (text boxes keep their own while typing)
+        PreviewKeyDown += (_, e) =>
+        {
+            if ((System.Windows.Input.Keyboard.Modifiers & System.Windows.Input.ModifierKeys.Control) == 0 || System.Windows.Input.Keyboard.FocusedElement is System.Windows.Controls.Primitives.TextBoxBase) return;
+            bool shift = (System.Windows.Input.Keyboard.Modifiers & System.Windows.Input.ModifierKeys.Shift) != 0;
+            if (e.Key == System.Windows.Input.Key.Z && !shift) { UndoStep(); e.Handled = true; }
+            else if (e.Key == System.Windows.Input.Key.Y || e.Key == System.Windows.Input.Key.Z && shift) { RedoStep(); e.Handled = true; }
+        };
         if (!L2AiScripts.IsInstalled(rom) && !L2AiScripts.CanInstall(rom, out var why)) StatusText.Text = why;
     }
 
@@ -107,7 +115,86 @@ public partial class L2ScriptWindow : Window
         StepList.SelectedIndex = Math.Clamp(select, -1, _steps.Count - 1);
         if (StepList.SelectedIndex < 0) ShowStep();
         StepList.ScrollIntoView(StepList.SelectedItem);
+        Record();
     }
+
+    // ── undo / redo inside the window (every change to the steps, until Save) ──────────────────────────────
+
+    private readonly List<(List<Step> Steps, int Selected)> _undo = new(), _redo = new();
+    private (List<Step> Steps, int Selected)? _last;
+    private bool _restoring;
+
+    /// <summary>A copy of the steps whose "go to"s point at the copies.</summary>
+    private static List<Step> CloneSteps(List<Step> steps)
+    {
+        var copy = steps.Select(s => s.Clone()).ToList();
+        for (int i = 0; i < steps.Count; i++)
+            for (int t = 0; t < steps[i].Targets.Length; t++)
+            {
+                var target = steps[i].Targets[t];
+                int k = target == null ? -1 : steps.IndexOf(target);
+                copy[i].Targets[t] = k >= 0 ? copy[k] : null;
+            }
+        return copy;
+    }
+
+    /// <summary>After a change: the state before it becomes an undo step.</summary>
+    private void Record()
+    {
+        if (_restoring) return;
+        var now = (CloneSteps(_steps), StepList.SelectedIndex);
+        if (_last is { } before && Same(before.Steps, now.Item1)) { _last = now; return; }
+        if (_last is { } prev) { _undo.Add(prev); _redo.Clear(); }
+        _last = now;
+        UpdateUndoButtons();
+    }
+
+    private static bool Same(List<Step> a, List<Step> b) =>
+        a.Count == b.Count && a.Zip(b).All(p => p.First.Op == p.Second.Op && p.First.Args.SequenceEqual(p.Second.Args)
+            && p.First.Targets.Select(t => t == null ? -1 : a.IndexOf(t)).SequenceEqual(p.Second.Targets.Select(t => t == null ? -1 : b.IndexOf(t))));
+
+    private void Restore((List<Step> Steps, int Selected) state)
+    {
+        _restoring = true;
+        try
+        {
+            _steps.Clear();
+            _steps.AddRange(CloneSteps(state.Steps));
+            RefreshList(state.Selected);
+            ShowStep();
+        }
+        finally { _restoring = false; }
+        _last = (CloneSteps(_steps), StepList.SelectedIndex);
+        UpdateUndoButtons();
+    }
+
+    private void UndoStep()
+    {
+        if (_undo.Count == 0 || _last is not { } now) return;
+        var s = _undo[^1]; _undo.RemoveAt(_undo.Count - 1);
+        _redo.Add(now);
+        Restore(s);
+        StatusText.Text = "Undone (Ctrl+Y puts it back).";
+    }
+
+    private void RedoStep()
+    {
+        if (_redo.Count == 0 || _last is not { } now) return;
+        var s = _redo[^1]; _redo.RemoveAt(_redo.Count - 1);
+        _undo.Add(now);
+        Restore(s);
+        StatusText.Text = "Redone.";
+    }
+
+    private void UpdateUndoButtons()
+    {
+        if (UndoButton == null) return;
+        UndoButton.IsEnabled = _undo.Count > 0;
+        RedoButton.IsEnabled = _redo.Count > 0;
+    }
+
+    private void Undo_Click(object sender, RoutedEventArgs e) => UndoStep();
+    private void Redo_Click(object sender, RoutedEventArgs e) => RedoStep();
 
     /// <summary>After a value changed: the lines (other steps' "go to" texts too) and the bytes.</summary>
     private void Changed()
@@ -118,6 +205,7 @@ public partial class L2ScriptWindow : Window
         StepList.SelectedIndex = keep;
         _loading = false;
         ShowBytes();
+        Record();
     }
 
     private void ShowBytes()

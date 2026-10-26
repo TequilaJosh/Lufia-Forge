@@ -43,6 +43,10 @@
                     <Button Content="▼" Style="{StaticResource LufiaButton}" Padding="8,3" Margin="0,0,6,4" Click="Down_Click" ToolTip="Move down"/>
                     <Button Content="✕ Delete" Style="{StaticResource LufiaButton}" Padding="8,3" Margin="0,0,6,4" Click="Delete_Click"
                             ToolTip="Steps that went to it go to the next step instead"/>
+                    <Button x:Name="UndoButton" Content="↶ Undo" Style="{StaticResource LufiaButton}" Padding="8,3" Margin="0,0,6,4" Click="Undo_Click" IsEnabled="False"
+                            ToolTip="Takes back the last change to the steps (Ctrl+Z), a shared script copied in too"/>
+                    <Button x:Name="RedoButton" Content="↷ Redo" Style="{StaticResource LufiaButton}" Padding="8,3" Margin="0,0,6,4" Click="Redo_Click" IsEnabled="False"
+                            ToolTip="Puts it back (Ctrl+Y)"/>
                 </WrapPanel>
                 <ListBox x:Name="StepList" Style="{StaticResource GdRecordList}" FontFamily="Consolas" SelectionChanged="StepList_SelectionChanged"
                          HorizontalContentAlignment="Stretch"/>

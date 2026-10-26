@@ -49,6 +49,8 @@ public partial class L2CharactersPage : L2Page
     [ObservableProperty] private List<L2Band> _bands = new();
     [ObservableProperty] private string _bandsHint = "";
     [ObservableProperty] private IReadOnlyList<ChartSeries>? _chart;
+    /// <summary>The levels the chart's line can be dragged at: the end of each band (none for EXP).</summary>
+    [ObservableProperty] private IReadOnlyList<int>? _chartHandles;
     [ObservableProperty] private string _levelTable = "";
 
     // the new game as a whole
@@ -129,6 +131,7 @@ public partial class L2CharactersPage : L2Page
         int c = SelectedIndex;
         var levels = Enumerable.Range(1, L2Characters.MaxLevel).ToArray();
         var stats = levels.Select(lv => L2Characters.StatsAt(Rom, c, lv)).ToArray();
+        ChartHandles = GrowthStat == 7 ? null : Enumerable.Range(0, _rows.Length).Select(BandEnd).ToList();
         if (GrowthStat == 7)
             Chart = new[] { new ChartSeries("EXP for the next level", levels.Take(97).Select(lv => (double)L2Characters.ExpNeeded(Rom, c, lv)).ToArray(), StatColors[7], true) };
         else
@@ -140,6 +143,28 @@ public partial class L2CharactersPage : L2Page
         ExpHint = Exp >= lo && Exp < hi
             ? $"Level {Level} covers {lo:N0} to {hi - 1:N0} EXP."
             : $"Level {Level} needs {lo:N0} to {hi - 1:N0} EXP: with {Exp:N0} the game would put the hero at another level.";
+    }
+
+    private static int BandEnd(int r) => Math.Min(r * 8 + 8, L2Characters.MaxLevel);
+
+    /// <summary>A handle of the chart was dragged to <paramref name="value"/>: the band before it gets the gain that
+    /// reaches that value, the band after it the gain that still reaches the next handle (the rest stays).</summary>
+    public void DragBand(int band, double value)
+    {
+        if (Rom == null || SelectedIndex < 0 || GrowthStat is < 0 or > 6 || band < 0 || band >= Bands.Count) return;
+        int c = SelectedIndex, s = GrowthStat;
+        int Stat(int lv) => L2Characters.StatsAt(Rom, c, lv)[s];
+        int start = band == 0 ? 1 : BandEnd(band - 1), end = BandEnd(band);
+        double Clamp(double g) => Math.Round(Math.Clamp(g, 0, 255 / 16.0), 2);
+        double after = band + 1 < Bands.Count ? Stat(BandEnd(band + 1)) : 0;
+        Loading = true;
+        try
+        {
+            Bands[band].Value = Clamp((value - Stat(start)) / Math.Max(1, end - start));
+            if (band + 1 < Bands.Count) Bands[band + 1].Value = Clamp((after - value) / Math.Max(1, BandEnd(band + 1) - end));
+        }
+        finally { Loading = false; }
+        Edited();
     }
 
     protected override bool IsField(string p) => p is nameof(Hp) or nameof(Mp) or nameof(Str) or nameof(Agl) or nameof(Int) or nameof(Gut) or nameof(Mgr)

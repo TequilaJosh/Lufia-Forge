@@ -29,6 +29,8 @@ public partial class L2CapsulesPage : L2Page
     [ObservableProperty] private List<L2Band> _bands = new();
     [ObservableProperty] private string _curveNote = "";
     [ObservableProperty] private IReadOnlyList<ChartSeries>? _chart;
+    /// <summary>The levels the chart's line can be dragged at: the end of each band of 16 levels.</summary>
+    public IReadOnlyList<int> ChartHandles { get; } = Enumerable.Range(0, 7).Select(BandEnd).ToList();
     [ObservableProperty] private string _levelTable = "";
     private static readonly int[] StatOfCurve = { 0, 3, 4, 5, 6, 7 };   // HP STR AGL INT GUT MGR in the record's stats
     private static readonly Color[] Colors =
@@ -127,6 +129,30 @@ public partial class L2CapsulesPage : L2Page
         if (curveChanged) { bool l = Loading; Loading = true; try { ShowCurve(); } finally { Loading = l; } }
         Refresh();
         return $"capsule {_r.Name}";
+    }
+
+    private static int BandEnd(int b) => Math.Min(b * 16 + 16, 99);
+
+    /// <summary>A handle of the chart was dragged to <paramref name="value"/>: the band before it gets the gain that
+    /// reaches that value, the band after it the gain that still reaches the next handle. The form gets all, half or a
+    /// quarter of a band's gain, so the curve's value is the gain divided by that.</summary>
+    public void DragBand(int band, double value)
+    {
+        if (Rom == null || _r == null || band < 0 || band >= Bands.Count) return;
+        int st = Math.Clamp(GrowthStat, 0, 5);
+        int Stat(int lv) => L2Capsules.StatsAt(Rom, _r, lv)[StatOfCurve[st]];
+        double Share(int b) => b < _r.Form ? 1 : b == _r.Form ? 0.5 : 0.25;
+        double Clamp(double g) => Math.Round(Math.Clamp(g, 0, 255 / 16.0), 2);
+        int start = band == 0 ? 1 : BandEnd(band - 1), end = BandEnd(band);
+        double after = band + 1 < Bands.Count ? Stat(BandEnd(band + 1)) : 0;
+        Loading = true;
+        try
+        {
+            Bands[band].Value = Clamp((value - Stat(start)) / Math.Max(1, end - start) / Share(band));
+            if (band + 1 < Bands.Count) Bands[band + 1].Value = Clamp((after - value) / Math.Max(1, BandEnd(band + 1) - end) / Share(band + 1));
+        }
+        finally { Loading = false; }
+        CurveEdited();
     }
 
     private void CurveEdited()
