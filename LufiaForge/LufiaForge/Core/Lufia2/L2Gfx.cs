@@ -170,16 +170,18 @@ public static class L2Gfx
         list.Add(new Asset { Group = "Battle graphics", Name = "Status bar (second)", Kind = Kind.PackedSheet, Id = 0x18E, Bpp = 4, Palettes = battle, Note = "Packed file 18E." });
         list.Add(new Asset { Group = "Battle graphics", Name = "Command icons", Kind = Kind.PackedSheet, Id = 0x18F, Bpp = 4, Palettes = battle, Note = "Packed file 18F: attack, spell, item, defend..." });
         list.Add(new Asset { Group = "Battle graphics", Name = "Status balloons", Kind = Kind.PackedSheet, Id = 0x190, Bpp = 4, Palettes = battle, Note = "Packed file 190: sleep, ?, !, skull..." });
-        for (int n = 0; n < L2Graphics.MapSpriteCount; n++)
+        var mapPals = MapSpritePalettes(rom);
+        for (int n = 0; n < L2Sprites.Count(rom); n++)
         {
             var m = MapSpriteOf(rom, n);
-            int w = m.FrameWidth * 8, h = m.FrameHeight * 8;
+            int w = m.FrameWidth * 8, h = m.FrameHeight * 8, p = L2Sprites.PaletteOf(rom, n);
+            bool added = L2Sprites.IsNew(n);
             list.Add(new Asset
             {
-                Group = "Map sprites", Name = $"{n:X2} ({w} x {h}, {m.Frames} frame{(m.Frames == 1 ? "" : "s")})", Kind = Kind.MapSprite, Id = n,
-                Palettes = spritePals, DefaultPalette = m.Row,
-                Note = $"Sprite {n:X2}: {m.Frames} frame{(m.Frames == 1 ? "" : "s")} of {w} x {h} side by side, {m.FrameWidth * m.FrameHeight * m.Frames} tiles at {m.Tiles:X6} (${L2Rom.FileToSnes(m.Tiles):X6}), " +
-                       $"colours: map sprite row {m.Row}. Colour 0 is see-through. Import writes the tiles back in place (same size).",
+                Group = "Map sprites", Name = $"{n:X2} ({w} x {h}, {m.Frames} frame{(m.Frames == 1 ? "" : "s")}{(added ? ", new" : "")})", Kind = Kind.MapSprite, Id = n,
+                Palettes = mapPals, DefaultPalette = p > 0 ? 7 + p : m.Row,
+                Note = $"Sprite {n:X2}{(added ? " (added by Lufia Forge)" : "")}: {m.Frames} frame{(m.Frames == 1 ? "" : "s")} of {w} x {h} side by side, {m.FrameWidth * m.FrameHeight * m.Frames} tiles at {m.Tiles:X6} (${L2Rom.FileToSnes(m.Tiles):X6}), " +
+                       (p > 0 ? $"colours: new palette {p}" : $"colours: map sprite row {m.Row}") + ". Colour 0 is see-through. Import and painting write the tiles back in place (same size).",
             });
         }
         list.AddRange(PaletteSets(rom));
@@ -493,12 +495,17 @@ public static class L2Gfx
 
     public static MapSpriteEntry MapSpriteOf(RomBuffer rom, int sprite)
     {
-        int e = L2Rom.SnesToFile(0xCF0000 | rom.ReadUInt16Le(L2Graphics.MapSpriteTable + sprite * 2));
+        int e = L2Sprites.EntryAt(rom, sprite);
         int flags = rom.ReadByte(e), row = rom.ReadByte(e + 1) & 7;
         int gfx = L2Rom.SnesToFile((int)rom.ReadUInt24Le(e + 2));
         int frames = (flags & 8) != 0 ? 2 : (flags & 0x10) != 0 ? 6 : 1;
         return new MapSpriteEntry(flags, row, gfx, (flags & 2) != 0 ? 4 : 2, (flags & 1) != 0 ? 4 : 2, frames);
     }
+
+    /// <summary>The colours a map sprite can use: the 8 sprite rows, then the new palettes (<see cref="L2Sprites"/>).</summary>
+    public static List<PaletteChoice> MapSpritePalettes(RomBuffer rom) =>
+        Rows("Map sprite colours", MapSpritePalette, 8, 0x20)
+            .Concat(Enumerable.Range(1, L2Sprites.PaletteCount(rom)).Select(p => new PaletteChoice($"New palette {p}", L2Sprites.PaletteAt(rom, p)))).ToList();
 
     /// <summary>The tile number (from the sprite's first) of tile (x, y) of frame f: each frame's tiles are the upper
     /// halves of its 16-pixel rows, then the lower halves (LEdit's L2MapSprite).</summary>
@@ -545,6 +552,11 @@ public static class L2Gfx
                 Note = $"A row of 16 per form, at $97:{0xD258 + c * 5 * 0x20:X4}. Colour 0 is see-through." });
         list.Add(new Asset { Group = G, Name = "Map sprite colours", Kind = Kind.Palette, PaletteRows = RowsOf("Sprite row", MapSpritePalette, 8),
             Note = "The 8 rows people, monsters and objects on maps use (each sprite names its row), at $A6:BF00. Colour 0 is see-through." });
+        int newPals = L2Sprites.PaletteCount(rom);
+        if (newPals > 0)
+            list.Add(new Asset { Group = G, Name = "New map sprite palettes", Kind = Kind.Palette,
+                PaletteRows = Enumerable.Range(1, newPals).Select(p => new PaletteRow($"New palette {p}", L2Sprites.PaletteAt(rom, p), 16)).ToList(),
+                Note = "Palettes added by Lufia Forge for map sprites. On a map the game puts one into a sprite row no other character there is using. Colour 0 is see-through." });
         list.Add(new Asset { Group = G, Name = "Title screen colours", Kind = Kind.Palette, PaletteRows = RowsOf("Row", TitlePalette, 16),
             Note = "256 colours at $A6:B000: rows 0-7 the sea, sky and trees, rows 8-15 the sprites." });
         list.Add(new Asset { Group = G, Name = "Title logo colours", Kind = Kind.Palette, PaletteRows = RowsOf("Sprite row", LogoPalette, 8),

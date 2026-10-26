@@ -8,7 +8,7 @@ public static class L2Graphics
     public const int MonsterSpriteFileBase = 0x1B6, MonsterSpriteSizes = 0xBCA64, MonsterSpriteCount = 0x86;
 
     /// <summary>Map sprites (people, monsters, objects): a u16 per sprite at $CF:F000 (file 0x27F000) to a 5-byte entry
-    /// in the same bank: flags (01 tall: 4 tiles high, 02 wide: 4 tiles across, 08 two frames, 10 six frames), palette
+    /// in the same bank (new sprites FB-FD: <see cref="L2Sprites"/>): flags (01 tall: 4 tiles high, 02 wide: 4 tiles across, 08 two frames, 10 six frames), palette
     /// row (of the 8 at file 0x133F00), and the 24-bit address of plain 4bpp tiles. Frame f's tile (x, y) =
     /// f*n + (y&amp;1)*(n/2) + (y&gt;&gt;1)*width + x, n = the frame's tile count (LEdit's L2MapSprite).</summary>
     public const int MapSpriteTable = 0x27F000, MapSpritePalettes = 0x133F00, MapSpriteCount = 251;
@@ -16,15 +16,16 @@ public static class L2Graphics
     /// <summary>Map sprite <paramref name="sprite"/>'s first frame (facing the screen), ARGB; null when out of range.</summary>
     public static (int Width, int Height, uint[] Pixels)? MapSprite(RomBuffer rom, int sprite, int frame = 0)
     {
-        if (sprite < 0 || sprite >= MapSpriteCount) return null;
-        int e = L2Rom.SnesToFile(0xCF0000 | rom.ReadUInt16Le(MapSpriteTable + sprite * 2));
+        if (sprite < 0 || sprite >= L2Sprites.Count(rom)) return null;
+        int e = L2Sprites.EntryAt(rom, sprite);
         int flags = rom.ReadByte(e), row = rom.ReadByte(e + 1) & 7;
         int gfx = L2Rom.SnesToFile(rom.ReadByte(e + 2) | rom.ReadByte(e + 3) << 8 | rom.ReadByte(e + 4) << 16);
         int fx = (flags & 2) != 0 ? 4 : 2, fy = (flags & 1) != 0 ? 4 : 2, n = fx * fy;
+        int p = L2Sprites.PaletteOf(rom, sprite), pal = p > 0 ? L2Sprites.PaletteAt(rom, p) : MapSpritePalettes + row * 32;
         var colours = new uint[16];
         for (int c = 1; c < 16; c++)
         {
-            int v = rom.ReadUInt16Le(MapSpritePalettes + row * 32 + c * 2);
+            int v = rom.ReadUInt16Le(pal + c * 2);
             colours[c] = 0xFF000000u | (uint)((v & 31) * 255 / 31) << 16 | (uint)((v >> 5 & 31) * 255 / 31) << 8 | (uint)((v >> 10 & 31) * 255 / 31);
         }
         int w = fx * 8, h = fy * 8;
