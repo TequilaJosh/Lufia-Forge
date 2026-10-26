@@ -3,62 +3,66 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:LufiaForge.Modules.Lufia2">
     <Grid Background="{StaticResource MidPurpleBrush}">
-        <TabControl x:Name="Pages" Style="{StaticResource LufiaTabControl}" Background="Transparent" Margin="8">
-            <TabItem Header="Overview" Style="{StaticResource LufiaTabItem}">
+        <TabControl x:Name="Pages" Style="{StaticResource LufiaSideTabControl}" Background="Transparent" Margin="8">
+            <TabItem Header="Overview" Style="{StaticResource LufiaSideTab}">
                 <StackPanel Margin="24" MaxWidth="760" HorizontalAlignment="Left">
                     <TextBlock Text="Lufia II" Style="{StaticResource LufiaLabelGold}" FontSize="18" Margin="0,0,0,12"/>
                     <TextBlock Text="{Binding Overview}" Style="{StaticResource LufiaLabel}" TextWrapping="Wrap"/>
                 </StackPanel>
             </TabItem>
-            <TabItem Header="Maps" Style="{StaticResource LufiaTabItem}">
+            <TabItem Header="World" Style="{StaticResource LufiaSideGroup}"/>
+            <TabItem Header="Maps" Style="{StaticResource LufiaSideTab}">
                 <local:L2MapsView DataContext="{Binding Maps}"/>
             </TabItem>
-            <TabItem Header="Text" Style="{StaticResource LufiaTabItem}">
+            <TabItem Header="Text" Style="{StaticResource LufiaSideTab}">
                 <local:L2TextView DataContext="{Binding Text}"/>
             </TabItem>
-            <TabItem Header="Events" Style="{StaticResource LufiaTabItem}">
+            <TabItem Header="Events" Style="{StaticResource LufiaSideTab}">
                 <local:L2EventsView DataContext="{Binding Events}"/>
             </TabItem>
-            <TabItem Header="Music" Style="{StaticResource LufiaTabItem}">
-                <local:L2MusicView DataContext="{Binding Music}"/>
-            </TabItem>
-            <TabItem Header="Treasure" Style="{StaticResource LufiaTabItem}">
+            <TabItem Header="Treasure" Style="{StaticResource LufiaSideTab}">
                 <local:L2ChestsView DataContext="{Binding Chests}"/>
             </TabItem>
-            <TabItem Header="Exits" Style="{StaticResource LufiaTabItem}">
+            <TabItem Header="Exits" Style="{StaticResource LufiaSideTab}">
                 <local:L2ExitsView DataContext="{Binding Exits}"/>
             </TabItem>
-            <TabItem Header="Monsters" Style="{StaticResource LufiaTabItem}">
+            <TabItem Header="Music" Style="{StaticResource LufiaSideTab}">
+                <local:L2MusicView DataContext="{Binding Music}"/>
+            </TabItem>
+            <TabItem Header="Battle" Style="{StaticResource LufiaSideGroup}"/>
+            <TabItem Header="Monsters" Style="{StaticResource LufiaSideTab}">
                 <local:L2MonstersView DataContext="{Binding Monsters}"/>
             </TabItem>
-            <TabItem Header="Encounters" Style="{StaticResource LufiaTabItem}">
+            <TabItem Header="Encounters" Style="{StaticResource LufiaSideTab}">
                 <local:L2EncountersView DataContext="{Binding Encounters}"/>
             </TabItem>
-            <TabItem Header="Shops" Style="{StaticResource LufiaTabItem}">
-                <local:L2ShopsView DataContext="{Binding Shops}"/>
-            </TabItem>
-            <TabItem Header="Characters" Style="{StaticResource LufiaTabItem}">
-                <local:L2CharactersView DataContext="{Binding Characters}"/>
-            </TabItem>
-            <TabItem Header="Capsule monsters" Style="{StaticResource LufiaTabItem}">
-                <local:L2CapsulesView DataContext="{Binding Capsules}"/>
-            </TabItem>
-            <TabItem Header="Items" Style="{StaticResource LufiaTabItem}">
+            <TabItem Header="Items" Style="{StaticResource LufiaSideTab}">
                 <local:L2ItemsView DataContext="{Binding Items}"/>
             </TabItem>
-            <TabItem Header="Spells" Style="{StaticResource LufiaTabItem}">
+            <TabItem Header="Spells" Style="{StaticResource LufiaSideTab}">
                 <local:L2SpellsView DataContext="{Binding Spells}"/>
             </TabItem>
-            <TabItem Header="IP attacks" Style="{StaticResource LufiaTabItem}">
+            <TabItem Header="IP attacks" Style="{StaticResource LufiaSideTab}">
                 <local:L2IpView DataContext="{Binding IpAttacks}"/>
             </TabItem>
-            <TabItem Header="Credits" Style="{StaticResource LufiaTabItem}">
-                <local:L2CreditsView DataContext="{Binding Credits}"/>
+            <TabItem Header="Shops" Style="{StaticResource LufiaSideTab}">
+                <local:L2ShopsView DataContext="{Binding Shops}"/>
             </TabItem>
-            <TabItem Header="Graphics" Style="{StaticResource LufiaTabItem}">
+            <TabItem Header="Heroes" Style="{StaticResource LufiaSideGroup}"/>
+            <TabItem Header="Characters" Style="{StaticResource LufiaSideTab}">
+                <local:L2CharactersView DataContext="{Binding Characters}"/>
+            </TabItem>
+            <TabItem Header="Capsule monsters" Style="{StaticResource LufiaSideTab}">
+                <local:L2CapsulesView DataContext="{Binding Capsules}"/>
+            </TabItem>
+            <TabItem Header="Other" Style="{StaticResource LufiaSideGroup}"/>
+            <TabItem Header="Graphics" Style="{StaticResource LufiaSideTab}">
                 <local:L2GraphicsView DataContext="{Binding Graphics}"/>
             </TabItem>
-            <TabItem Header="Settings" Style="{StaticResource LufiaTabItem}">
+            <TabItem Header="Credits" Style="{StaticResource LufiaSideTab}">
+                <local:L2CreditsView DataContext="{Binding Credits}"/>
+            </TabItem>
+            <TabItem Header="Settings" Style="{StaticResource LufiaSideTab}">
                 <local:L2SettingsView DataContext="{Binding Settings}"/>
             </TabItem>
         </TabControl>
