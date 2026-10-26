@@ -6,7 +6,8 @@ namespace LufiaForge.Core.Lufia2;
 /// a new game starts on a chosen map at one of its preset points.
 /// <list type="bullet">
 /// <item>People: the map's start-up script (map header's second u24, from $87:8000) creates them with 68 / 7B id
-/// sprite. Each of those becomes 1C, a jump to the next command (start-up jumps count from $87:8000), so the rest of
+/// sprite. Each of those becomes 1C, a jump to the next command (start-up jumps count from the start of the script's
+/// bank: $87:8000, or the event space bank an edited one was moved to), so the rest of
 /// the script (map mode 69, music 4B and its story conditions, battle background 74) runs as before.</item>
 /// <item>Events: the map's event block ("PH") lists +2 (run as the map loads; entries with id 03 are the key item of
 /// its locked doors and stay), +4 (scenes), +6 (talking), +8 (stepping on a trigger), +A and +C are emptied (FF).</item>
@@ -64,15 +65,17 @@ public static class L2StoryClear
         {
             bool any = false;
             // people: the start-up script's 68 / 7B become a jump to the next command
+            // (start-up jumps count from the start of the script's bank: $87:8000, or the event space bank it was moved to)
+            int init = L2EventBlocks.InitScript(rom, m), initBase = L2EventBlocks.InitBase(init);
             foreach (var (title, ops) in L2Script.MapScripts(rom, m))
             {
                 if (!title.StartsWith("Start-up")) continue;
                 foreach (var o in ops)
                 {
-                    if (o.IsText || o.Length != 3 || o.At < 0x38000 || o.At + 3 > 0x40000) continue;
+                    if (o.IsText || o.Length != 3 || o.At < initBase || o.At + 3 > initBase + 0x8000) continue;
                     byte op = rom.ReadByte(o.At);
                     if (op is not (0x68 or 0x7B)) continue;
-                    int next = o.At + 3 - 0x38000;
+                    int next = o.At + 3 - initBase;
                     rom.WriteBytes(o.At, new byte[] { 0x1C, (byte)next, (byte)(next >> 8) });
                     people++; any = true;
                 }
