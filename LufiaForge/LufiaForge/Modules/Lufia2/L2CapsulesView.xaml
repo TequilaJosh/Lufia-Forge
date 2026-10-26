@@ -72,41 +72,43 @@
                     </Border>
                     <Border Style="{StaticResource GdCard}">
                         <StackPanel>
-                            <TextBlock Text="GROWTH CURVES" Style="{StaticResource GdSection}"/>
-                            <ItemsControl ItemsSource="{Binding CurveSlots}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <StackPanel Orientation="Horizontal" Margin="0,2">
-                                            <TextBlock Text="{Binding Label}" Style="{StaticResource GdFieldLabel}" Width="50"/>
-                                            <ComboBox Style="{StaticResource GdCombo}" Width="230" ItemsSource="{Binding Options}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding Value}"/>
-                                        </StackPanel>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                            <TextBlock Text="The curves (per 16 levels; shared by every form that uses one)" Style="{StaticResource GdFieldLabel}" Margin="0,10,0,2"/>
-                            <ItemsControl ItemsSource="{Binding CurveRows}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <StackPanel Orientation="Horizontal" Margin="0,1">
-                                            <TextBlock Text="{Binding Label}" Style="{StaticResource GdFieldLabel}" Width="80"/>
-                                            <ItemsControl ItemsSource="{Binding Cells}">
-                                                <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
-                                                <ItemsControl.ItemTemplate>
-                                                    <DataTemplate>
-                                                        <TextBox Style="{StaticResource GdNumber}" Width="46" Margin="0,0,4,0" Text="{Binding Value, UpdateSourceTrigger=LostFocus}"/>
-                                                    </DataTemplate>
-                                                </ItemsControl.ItemTemplate>
-                                            </ItemsControl>
-                                        </StackPanel>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
-                    </Border>
-                    <Border Style="{StaticResource GdCard}">
-                        <StackPanel>
-                            <TextBlock Text="WHAT THAT GIVES" Style="{StaticResource GdSection}"/>
-                            <TextBlock Text="{Binding Preview}" Style="{StaticResource GdFieldLabel}" FontFamily="Consolas" TextWrapping="NoWrap"/>
+                            <TextBlock Text="GROWTH" Style="{StaticResource GdSection}"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                <TextBlock Text="Show and edit" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <ListBox ItemsSource="{Binding GrowthStats}" SelectedValuePath="Value" SelectedValue="{Binding GrowthStat}" DisplayMemberPath="Label"
+                                         Background="Transparent" BorderThickness="0" Foreground="{StaticResource TextPrimaryBrush}">
+                                    <ListBox.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate></ListBox.ItemsPanel>
+                                    <ListBox.ItemContainerStyle>
+                                        <Style TargetType="ListBoxItem">
+                                            <Setter Property="Padding" Value="10,3"/>
+                                            <Setter Property="Margin" Value="0,0,4,0"/>
+                                        </Style>
+                                    </ListBox.ItemContainerStyle>
+                                </ListBox>
+                            </StackPanel>
+                            <WrapPanel>
+                                <StackPanel Margin="0,0,16,0">
+                                    <common:GrowthChart Series="{Binding Chart}" Width="520" Height="220" ToolTip="Move the mouse over the chart to read the values at a level"/>
+                                    <TextBlock Text="{Binding LevelTable}" Style="{StaticResource GdFieldLabel}" FontFamily="Consolas" TextWrapping="NoWrap" Margin="0,10,0,0"/>
+                                </StackPanel>
+                                <StackPanel Width="360">
+                                    <TextBlock Text="Curve" Style="{StaticResource GdFieldLabel}"/>
+                                    <ComboBox Style="{StaticResource GdCombo}" Width="Auto" HorizontalAlignment="Stretch" ItemsSource="{Binding CurveOptions}" DisplayMemberPath="Label"
+                                              SelectedValuePath="Value" SelectedValue="{Binding Curve}"/>
+                                    <TextBlock Text="{Binding CurveNote}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,6,0,6"/>
+                                    <ItemsControl ItemsSource="{Binding Bands}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Orientation="Horizontal" Margin="0,1">
+                                                    <TextBlock Text="{Binding Label}" Style="{StaticResource GdFieldLabel}" Width="90"/>
+                                                    <TextBox Style="{StaticResource GdNumber}" Width="64" Text="{Binding Value, UpdateSourceTrigger=LostFocus}"/>
+                                                    <TextBlock Text="{Binding Unit}" Style="{StaticResource GdHint}" VerticalAlignment="Center" Margin="6,0,0,0"/>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </WrapPanel>
                         </StackPanel>
                     </Border>
                     <Border Style="{StaticResource GdCard}">
