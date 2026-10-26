@@ -2,6 +2,8 @@ using System.Windows.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LufiaForge.Core.Lufia2;
+using LufiaForge.Modules.Common;
+using Color = System.Windows.Media.Color;
 
 namespace LufiaForge.Modules.Lufia2;
 
@@ -19,9 +21,21 @@ public partial class L2CapsulesPage : L2Page
     [ObservableProperty] private int _type;
     [ObservableProperty] private List<L2Slot> _attackSlots = new();
     [ObservableProperty] private List<L2Word> _stats = new();
-    [ObservableProperty] private List<L2Slot> _curveSlots = new();
-    [ObservableProperty] private List<L2Row> _curveRows = new();
-    [ObservableProperty] private string _preview = "";
+    // growth: the stat shown, its curve (shared by the forms that use it) as gains per level, the chart and a table
+    public List<L2Option> GrowthStats { get; } = L2Capsules.CurveStats.Select((s, i) => new L2Option(i, s)).ToList();
+    [ObservableProperty] private int _growthStat;
+    [ObservableProperty] private List<L2Option> _curveOptions = new();
+    [ObservableProperty] private int _curve;
+    [ObservableProperty] private List<L2Band> _bands = new();
+    [ObservableProperty] private string _curveNote = "";
+    [ObservableProperty] private IReadOnlyList<ChartSeries>? _chart;
+    [ObservableProperty] private string _levelTable = "";
+    private static readonly int[] StatOfCurve = { 0, 3, 4, 5, 6, 7 };   // HP STR AGL INT GUT MGR in the record's stats
+    private static readonly Color[] Colors =
+    {
+        Color.FromRgb(0xE8, 0x60, 0x60), Color.FromRgb(0xF0, 0xB0, 0x40), Color.FromRgb(0x60, 0xD0, 0x80),
+        Color.FromRgb(0xB0, 0x80, 0xF0), Color.FromRgb(0xD0, 0xD0, 0x60), Color.FromRgb(0x60, 0xD0, 0xD0),
+    };
     [ObservableProperty] private string _aiText = "";
     [ObservableProperty] private BitmapSource? _pictureImage;
 
@@ -43,32 +57,59 @@ public partial class L2CapsulesPage : L2Page
         AttackSlots = Enumerable.Range(0, 3).Select(s => new L2Slot { Label = $"Attack {s + 1}", Options = names, Value = _r.Attacks[s], Changed = Edited })
             .Concat(Enumerable.Range(0, 3).Select(s => new L2Slot { Label = $"Learned {s + 1}", Options = names, Value = _r.Learned[s], Changed = Edited })).ToList();
         Stats = _r.Stats.Select((v, i) => new L2Word { Label = L2Capsules.StatNames[i], Bit = i, Value = v, Changed = Edited }).ToList();
-        var curves = Enumerable.Range(0, L2Capsules.CurveCount)
-            .Select(c => new L2Option(c, $"{c:X2}: {string.Join(" ", L2Capsules.Curve(rom, c).Take(7))}")).ToList();
-        CurveSlots = _r.Curves.Select((c, i) => new L2Slot { Label = L2Capsules.CurveStats[i], Options = curves, Value = c, Changed = Edited }).ToList();
-        LoadCurves();
+        CurveOptions = Enumerable.Range(0, L2Capsules.CurveCount).Select(c => new L2Option(c, CurveLabel(rom, c))).ToList();
         AiText = ScriptsText(rom, L2AiScripts.Kind.CapsuleAi, L2AiScripts.Kind.CapsuleDefense, index);
+        ShowCurve();
         Refresh();
     }
 
-    private void LoadCurves()
+    /// <summary>A curve in words: its gain per level in the first, middle and last bands, and how many forms use it.</summary>
+    private static string CurveLabel(Core.RomBuffer rom, int c)
     {
-        CurveRows = _r!.Curves.Select((c, i) => new L2Row
+        var v = L2Capsules.Curve(rom, c);
+        int users = L2Capsules.All(rom).Sum(r => r.Curves.Count(x => x == c));
+        return $"{c:X2}: +{v[0] / 16.0:0.##} a level early, +{v[3] / 16.0:0.##} mid, +{v[6] / 16.0:0.##} late  ({users} use{(users == 1 ? "s" : "")} it)";
+    }
+
+    partial void OnGrowthStatChanged(int value)
+    {
+        if (_r == null || Rom == null) return;
+        bool l = Loading; Loading = true;
+        try { ShowCurve(); } finally { Loading = l; }
+        Refresh();
+    }
+
+    /// <summary>The curve of the stat shown: its 7 bands of 16 levels as gains per level, and what this form gets of each.</summary>
+    private void ShowCurve()
+    {
+        int st = Math.Clamp(GrowthStat, 0, 5), c = _r!.Curves[st];
+        Curve = c;
+        var v = L2Capsules.Curve(Rom!, c);
+        Bands = Enumerable.Range(0, 7).Select(b => new L2Band
         {
-            Label = $"{L2Capsules.CurveStats[i]} ({c:X2})",
-            Cells = L2Capsules.Curve(Rom!, c).Select((v, b) => new L2Word { Label = $"{b * 16}", Bit = c, Value = v, Changed = CurveEdited }).ToList(),
+            Label = $"Levels {Math.Max(2, b * 16 + 1)}-{Math.Min(b * 16 + 16, 99)}",
+            Unit = b < _r.Form ? "per level (all of it in this form)" : b == _r.Form ? "per level (half of it in this form)" : "per level (a quarter in this form)",
+            Value = Math.Round(v[b] / 16.0, 2),
+            Changed = CurveEdited,
         }).ToList();
+        var users = L2Capsules.All(Rom!).Where(r => r.Curves.Contains(c)).Select(r => $"{L2Capsules.MonsterName(Rom!, r.Monster)} {r.Form}").ToList();
+        CurveNote = $"Curve {c:X2} gives {L2Capsules.CurveStats[st]} its growth. A form grows fully in the bands below its form number x 16 levels, " +
+                    $"by half in the next and by a quarter after (this is form {_r.Form}). " +
+                    (users.Count > 1 ? $"Shared by {users.Count} stats of: {string.Join(", ", users.Distinct())}. A change here changes them all; pick another curve to change just this one." : "Only this stat uses it.");
     }
 
     private void Refresh()
     {
         if (_r == null) return;
-        string Row(int lv) => $"Lv {lv,2}: " + string.Join("  ", L2Capsules.StatsAt(Rom!, _r, lv).Select((s, i) => $"{L2Capsules.StatNames[i]} {s}"));
-        Preview = string.Join("\n", new[] { 1, 10, 20, 30, 50, 75, 99 }.Select(Row)) +
-                  $"\n\nForm {_r.Form}: growth is full in the level bands below {_r.Form * 16}, half in {_r.Form * 16}-{_r.Form * 16 + 15}, a quarter above.";
+        var stats = Enumerable.Range(1, 99).Select(lv => L2Capsules.StatsAt(Rom!, _r, lv)).ToArray();
+        Chart = Enumerable.Range(0, 6).Select(i => new ChartSeries(L2Capsules.CurveStats[i], stats.Select(x => (double)x[StatOfCurve[i]]).ToArray(), Colors[i], i == GrowthStat)).ToList();
+        string Row(int lv) => $"{lv,5}  " + string.Join("", stats[lv - 1].Select(x => $"{x,6}"));
+        LevelTable = "Level" + string.Join("", L2Capsules.StatNames.Select(x => $"{x,6}")) + "\n" +
+                     string.Join("\n", new[] { 1, 10, 20, 30, 40, 50, 60, 70, 80, 90, 99 }.Select(Row)) +
+                     "\n(ATP and DFP don't grow; the game adds equipment-like bonuses on top)";
     }
 
-    protected override bool IsField(string p) => p is nameof(MonsterName) or nameof(Name) or nameof(Type);
+    protected override bool IsField(string p) => p is nameof(MonsterName) or nameof(Name) or nameof(Type) or nameof(Curve);
 
     [RelayCommand] private void EditTurnScript() { if (_r != null) EditScript(L2AiScripts.Kind.CapsuleAi, _r.Index, $"{MonsterName} {_r.Form} {_r.Name}"); }
     [RelayCommand] private void EditHitScript() { if (_r != null) EditScript(L2AiScripts.Kind.CapsuleDefense, _r.Index, $"{MonsterName} {_r.Form} {_r.Name}"); }
@@ -79,11 +120,11 @@ public partial class L2CapsulesPage : L2Page
         _r.Name = Name; _r.Type = Type;
         for (int s = 0; s < 3; s++) { _r.Attacks[s] = AttackSlots[s].Value; _r.Learned[s] = AttackSlots[s + 3].Value; }
         for (int s = 0; s < 8; s++) _r.Stats[s] = Stats[s].Value;
-        bool curvesChanged = false;
-        for (int s = 0; s < 6; s++) { curvesChanged |= _r.Curves[s] != CurveSlots[s].Value; _r.Curves[s] = CurveSlots[s].Value; }
+        bool curveChanged = _r.Curves[Math.Clamp(GrowthStat, 0, 5)] != Curve;
+        _r.Curves[Math.Clamp(GrowthStat, 0, 5)] = Curve;
         L2Capsules.Write(Rom!, _r);
         L2Capsules.WriteMonsterName(Rom!, _r.Monster, MonsterName);
-        if (curvesChanged) LoadCurves();
+        if (curveChanged) { bool l = Loading; Loading = true; try { ShowCurve(); } finally { Loading = l; } }
         Refresh();
         return $"capsule {_r.Name}";
     }
@@ -91,8 +132,11 @@ public partial class L2CapsulesPage : L2Page
     private void CurveEdited()
     {
         if (Loading || Rom == null || Main == null || _r == null) return;
-        foreach (var row in CurveRows) L2Capsules.WriteCurve(Rom, row.Cells[0].Bit, row.Cells.Select(c => c.Value).ToArray());
-        Main.NotifyRomModified("Lufia II: capsule growth curves");
+        var v = L2Capsules.Curve(Rom, Curve);
+        for (int b = 0; b < Bands.Count; b++) v[b] = Math.Clamp((int)Math.Round(Bands[b].Value * 16), 0, 255);
+        L2Capsules.WriteCurve(Rom, Curve, v);
+        Main.NotifyRomModified($"Lufia II: capsule growth curve {Curve:X2}");
+        CurveOptions[Curve] = new L2Option(Curve, CurveLabel(Rom, Curve));
         Refresh();
     }
 }
