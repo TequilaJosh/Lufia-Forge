@@ -14,6 +14,7 @@ public partial class L2GraphicsView : UserControl
         Canvas.PixelDragged += (x, y) => Vm?.PaintDrag(x, y);
         Canvas.PixelReleased += () => Vm?.PaintRelease();
         Canvas.PixelHover += (x, y) => Vm?.PaintHover(x, y);
+        Canvas.ZoomWheel += d => (d > 0 ? Vm?.ZoomInCommand : Vm?.ZoomOutCommand)?.Execute(null);
     }
 
     private L2GraphicsPage? Vm => Canvas.DataContext as L2GraphicsPage;

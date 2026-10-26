@@ -144,9 +144,9 @@
                 <Border Width="22" Height="22" Background="{Binding PaintBrush}" BorderBrush="Gold" BorderThickness="1" Margin="0,0,4,4"
                         ToolTip="The colour painted with (see-through shows the dark squares). Click a colour square above, or right click the picture, to pick another."/>
                 <TextBlock Text="{Binding PaintColour}" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Width="26" Margin="0,0,10,4"/>
-                <Button Content="−" Style="{StaticResource LufiaButton}" Command="{Binding ZoomOutCommand}" Width="40" Padding="0,4" Margin="0,0,4,4" ToolTip="Zoom out"/>
+                <Button Content="−" Style="{StaticResource LufiaButton}" Command="{Binding ZoomOutCommand}" Width="40" Padding="0,4" Margin="0,0,4,4" ToolTip="Zoom out (Ctrl + mouse wheel on the picture)"/>
                 <TextBlock Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,4,4" Text="{Binding Zoom, StringFormat=x{0}}" Width="28" TextAlignment="Center"/>
-                <Button Content="+" Style="{StaticResource LufiaButton}" Command="{Binding ZoomInCommand}" Width="40" Padding="0,4" Margin="0,0,10,4" ToolTip="Zoom in"/>
+                <Button Content="+" Style="{StaticResource LufiaButton}" Command="{Binding ZoomInCommand}" Width="40" Padding="0,4" Margin="0,0,10,4" ToolTip="Zoom in (Ctrl + mouse wheel on the picture)"/>
                 <CheckBox Content="Grid" IsChecked="{Binding ShowGrid}" Style="{StaticResource GdCheck}" VerticalAlignment="Center" Margin="0,0,12,4"
                           ToolTip="Lines between pixels (when zoomed in), between 8x8 squares, and in gold between sprite frames."/>
                 <Button Content="Undo" Style="{StaticResource LufiaButton}" Command="{Binding PaintUndoCommand}" Width="60" Margin="0,0,4,4" ToolTip="Take the last stroke back (Ctrl+Z)."/>

@@ -153,6 +153,17 @@ public sealed class L2PixelCanvas : FrameworkElement
         if (_lastX >= 0) { _lastX = _lastY = -1; PixelReleased?.Invoke(); }
     }
 
+    /// <summary>Ctrl + the mouse wheel: +1 to zoom in, -1 to zoom out.</summary>
+    public event Action<int>? ZoomWheel;
+
+    protected override void OnMouseWheel(MouseWheelEventArgs e)
+    {
+        base.OnMouseWheel(e);
+        if (!Keyboard.Modifiers.HasFlag(ModifierKeys.Control) || e.Delta == 0) return;
+        ZoomWheel?.Invoke(Math.Sign(e.Delta));
+        e.Handled = true;
+    }
+
     protected override void OnMouseLeave(MouseEventArgs e)
     {
         base.OnMouseLeave(e);
