@@ -17,45 +17,51 @@
         <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch"/>
         <common:PopOutHost Grid.Column="2" Title="Character" Key="l2characters.detail" ButtonMargin="0,2,22,0">
         <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,12,0,0">
-            <StackPanel>
+            <StackPanel IsEnabled="{Binding IsEditable}">
                 <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="8,0,12,4"
                            Text="Every hero's state is set when a new game starts (joining the party later only adds them). A change is written to the ROM at once (Edit, Undo takes it back)."/>
-                <WrapPanel IsEnabled="{Binding IsEditable}">
+
+                <!-- who they are when the game starts -->
+                <WrapPanel>
                     <Border Style="{StaticResource GdCard}">
-                        <StackPanel>
-                            <TextBlock Text="NEW GAME" Style="{StaticResource GdSection}"/>
-                            <UniformGrid Columns="2">
+                        <StackPanel Width="260">
+                            <TextBlock Text="AT THE START" Style="{StaticResource GdSection}"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="120"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
                                 <TextBlock Text="Name (6 letters)" Style="{StaticResource GdFieldLabel}"/>
-                                <TextBox Style="{StaticResource GdText}" MaxLength="6" Text="{Binding Name, UpdateSourceTrigger=LostFocus}"/>
-                                <TextBlock Text="Level" Style="{StaticResource GdFieldLabel}"/>
-                                <TextBox Style="{StaticResource GdNumber}" Text="{Binding Level, UpdateSourceTrigger=LostFocus}"/>
-                                <TextBlock Text="EXP" Style="{StaticResource GdFieldLabel}"/>
-                                <TextBox Style="{StaticResource GdNumber}" Text="{Binding Exp, UpdateSourceTrigger=LostFocus}"/>
-                                <TextBlock Text="IP gauge" Style="{StaticResource GdFieldLabel}"/>
-                                <TextBox Style="{StaticResource GdNumber}" Text="{Binding Ip, UpdateSourceTrigger=LostFocus}"/>
-                            </UniformGrid>
-                            <TextBlock Text="{Binding ExpHint}" Style="{StaticResource GdHint}" TextWrapping="Wrap" MaxWidth="280" Margin="0,6,0,0"/>
+                                <TextBox Grid.Column="1" Style="{StaticResource GdText}" MaxLength="6" Text="{Binding Name, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Grid.Row="1" Text="Level" Style="{StaticResource GdFieldLabel}"/>
+                                <TextBox Grid.Row="1" Grid.Column="1" Style="{StaticResource GdNumber}" HorizontalAlignment="Left" Text="{Binding Level, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Grid.Row="2" Text="EXP" Style="{StaticResource GdFieldLabel}"/>
+                                <TextBox Grid.Row="2" Grid.Column="1" Style="{StaticResource GdNumber}" HorizontalAlignment="Left" Text="{Binding Exp, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Grid.Row="3" Text="IP gauge (0-255)" Style="{StaticResource GdFieldLabel}"/>
+                                <TextBox Grid.Row="3" Grid.Column="1" Style="{StaticResource GdNumber}" HorizontalAlignment="Left" Text="{Binding Ip, UpdateSourceTrigger=LostFocus}"/>
+                            </Grid>
+                            <TextBlock Text="{Binding ExpHint}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,6,0,0"/>
                         </StackPanel>
                     </Border>
                     <Border Style="{StaticResource GdCard}">
-                        <StackPanel>
-                            <TextBlock Text="STARTING STATS (LEVEL 1)" Style="{StaticResource GdSection}"/>
-                            <UniformGrid Columns="2">
+                        <StackPanel Width="170">
+                            <TextBlock Text="STATS AT LEVEL 1" Style="{StaticResource GdSection}"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="60"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
                                 <TextBlock Text="HP" Style="{StaticResource GdFieldLabel}"/>
-                                <TextBox Style="{StaticResource GdNumber}" Text="{Binding Hp, UpdateSourceTrigger=LostFocus}"/>
-                                <TextBlock Text="MP" Style="{StaticResource GdFieldLabel}"/>
-                                <TextBox Style="{StaticResource GdNumber}" Text="{Binding Mp, UpdateSourceTrigger=LostFocus}"/>
-                                <TextBlock Text="STR" Style="{StaticResource GdFieldLabel}"/>
-                                <TextBox Style="{StaticResource GdNumber}" Text="{Binding Str, UpdateSourceTrigger=LostFocus}"/>
-                                <TextBlock Text="AGL" Style="{StaticResource GdFieldLabel}"/>
-                                <TextBox Style="{StaticResource GdNumber}" Text="{Binding Agl, UpdateSourceTrigger=LostFocus}"/>
-                                <TextBlock Text="INT" Style="{StaticResource GdFieldLabel}"/>
-                                <TextBox Style="{StaticResource GdNumber}" Text="{Binding Int, UpdateSourceTrigger=LostFocus}"/>
-                                <TextBlock Text="GUT" Style="{StaticResource GdFieldLabel}"/>
-                                <TextBox Style="{StaticResource GdNumber}" Text="{Binding Gut, UpdateSourceTrigger=LostFocus}"/>
-                                <TextBlock Text="MGR" Style="{StaticResource GdFieldLabel}"/>
-                                <TextBox Style="{StaticResource GdNumber}" Text="{Binding Mgr, UpdateSourceTrigger=LostFocus}"/>
-                            </UniformGrid>
+                                <TextBox Grid.Column="1" Style="{StaticResource GdNumber}" Text="{Binding Hp, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Grid.Row="1" Text="MP" Style="{StaticResource GdFieldLabel}"/>
+                                <TextBox Grid.Row="1" Grid.Column="1" Style="{StaticResource GdNumber}" Text="{Binding Mp, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Grid.Row="2" Text="STR" Style="{StaticResource GdFieldLabel}"/>
+                                <TextBox Grid.Row="2" Grid.Column="1" Style="{StaticResource GdNumber}" Text="{Binding Str, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Grid.Row="3" Text="AGL" Style="{StaticResource GdFieldLabel}"/>
+                                <TextBox Grid.Row="3" Grid.Column="1" Style="{StaticResource GdNumber}" Text="{Binding Agl, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Grid.Row="4" Text="INT" Style="{StaticResource GdFieldLabel}"/>
+                                <TextBox Grid.Row="4" Grid.Column="1" Style="{StaticResource GdNumber}" Text="{Binding Int, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Grid.Row="5" Text="GUT" Style="{StaticResource GdFieldLabel}"/>
+                                <TextBox Grid.Row="5" Grid.Column="1" Style="{StaticResource GdNumber}" Text="{Binding Gut, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Grid.Row="6" Text="MGR" Style="{StaticResource GdFieldLabel}"/>
+                                <TextBox Grid.Row="6" Grid.Column="1" Style="{StaticResource GdNumber}" Text="{Binding Mgr, UpdateSourceTrigger=LostFocus}"/>
+                            </Grid>
                         </StackPanel>
                     </Border>
                     <Border Style="{StaticResource GdCard}">
@@ -66,70 +72,77 @@
                                     <DataTemplate>
                                         <StackPanel Orientation="Horizontal" Margin="0,2">
                                             <TextBlock Text="{Binding Label}" Style="{StaticResource GdFieldLabel}" Width="80"/>
-                                            <ComboBox Style="{StaticResource GdCombo}" Width="200" ItemsSource="{Binding Options}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding Value}"/>
+                                            <ComboBox Style="{StaticResource GdCombo}" Width="210" ItemsSource="{Binding Options}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding Value}"/>
                                         </StackPanel>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
                         </StackPanel>
                     </Border>
-                    <Border Style="{StaticResource GdCard}">
-                        <StackPanel MaxWidth="300">
-                            <TextBlock Text="SPELLS" Style="{StaticResource GdSection}"/>
-                            <ItemsControl ItemsSource="{Binding Spells}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <StackPanel Orientation="Horizontal" Margin="0,2">
-                                            <TextBlock Text="{Binding Label}" Style="{StaticResource GdFieldLabel}" Width="26"/>
-                                            <ComboBox Style="{StaticResource GdCombo}" Width="200" ItemsSource="{Binding Options}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding Value}"/>
-                                        </StackPanel>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                            <TextBlock Text="{Binding SpellsHint}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                </WrapPanel>
+
+                <!-- magic -->
+                <Border Style="{StaticResource GdCard}" HorizontalAlignment="Left">
+                    <StackPanel MaxWidth="760">
+                        <TextBlock Text="STARTING MAGIC" Style="{StaticResource GdSection}"/>
+                        <TextBlock Text="{Binding SpellsHint}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                        <ItemsControl ItemsSource="{Binding StartSpells}">
+                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <CheckBox Content="{Binding Label}" IsChecked="{Binding IsChecked}" Style="{StaticResource GdCheck}" Width="150" Margin="0,2"/>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <!-- growth -->
+                <Border Style="{StaticResource GdCard}" HorizontalAlignment="Left">
+                    <StackPanel>
+                        <TextBlock Text="GROWTH" Style="{StaticResource GdSection}"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <TextBlock Text="Show and edit" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <ListBox ItemsSource="{Binding GrowthStats}" SelectedValuePath="Value" SelectedValue="{Binding GrowthStat}" DisplayMemberPath="Label"
+                                     Background="Transparent" BorderThickness="0" Foreground="{StaticResource TextPrimaryBrush}">
+                                <ListBox.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate></ListBox.ItemsPanel>
+                                <ListBox.ItemContainerStyle>
+                                    <Style TargetType="ListBoxItem">
+                                        <Setter Property="Padding" Value="10,3"/>
+                                        <Setter Property="Margin" Value="0,0,4,0"/>
+                                    </Style>
+                                </ListBox.ItemContainerStyle>
+                            </ListBox>
                         </StackPanel>
-                    </Border>
-                    <Border Style="{StaticResource GdCard}">
-                        <StackPanel>
-                            <TextBlock Text="GROWTH PER LEVEL" Style="{StaticResource GdSection}"/>
-                            <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" MaxWidth="560" Margin="0,0,0,6"
-                                       Text="Each level up in a row's range adds its number / 16 to the stat (a level up also adds 0 to 4 at random, except to GUT). EXP is how fast the EXP needed grows (the same for every hero in the original)."/>
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
-                                <TextBlock Text="" Width="90"/>
-                                <ItemsControl ItemsSource="{Binding GrowthColumns}">
-                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
-                                    <ItemsControl.ItemTemplate><DataTemplate><TextBlock Text="{Binding}" Style="{StaticResource GdFieldLabel}" Width="52" Margin="0,0,6,0" TextAlignment="Center"/></DataTemplate></ItemsControl.ItemTemplate>
+                        <WrapPanel>
+                            <StackPanel Margin="0,0,16,0">
+                                <common:GrowthChart Series="{Binding Chart}" Width="560" Height="230"
+                                                    ToolTip="Move the mouse over the chart to read the values at a level"/>
+                                <TextBlock Text="{Binding LevelTable}" Style="{StaticResource GdFieldLabel}" FontFamily="Consolas" TextWrapping="NoWrap" Margin="0,10,0,0"/>
+                            </StackPanel>
+                            <StackPanel Width="300">
+                                <TextBlock Text="{Binding BandsHint}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                                <ItemsControl ItemsSource="{Binding Bands}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal" Margin="0,1">
+                                                <TextBlock Text="{Binding Label}" Style="{StaticResource GdFieldLabel}" Width="90"/>
+                                                <TextBox Style="{StaticResource GdNumber}" Width="64" Text="{Binding Value, UpdateSourceTrigger=LostFocus}"/>
+                                                <TextBlock Text="{Binding Unit}" Style="{StaticResource GdHint}" VerticalAlignment="Center" Margin="6,0,0,0"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
                                 </ItemsControl>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <TextBlock Text="EXP curve start (20 in the game)" Style="{StaticResource GdFieldLabel}" Width="200"/>
+                                    <TextBox Style="{StaticResource GdNumber}" Text="{Binding ExpBase, UpdateSourceTrigger=LostFocus}"/>
+                                </StackPanel>
                             </StackPanel>
-                            <ItemsControl ItemsSource="{Binding Growth}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <StackPanel Orientation="Horizontal" Margin="0,1">
-                                            <TextBlock Text="{Binding Label}" Style="{StaticResource GdFieldLabel}" Width="80"/>
-                                            <ItemsControl ItemsSource="{Binding Cells}">
-                                                <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
-                                                <ItemsControl.ItemTemplate>
-                                                    <DataTemplate>
-                                                        <TextBox Style="{StaticResource GdNumber}" Width="52" Margin="0,0,6,0" Text="{Binding Value, UpdateSourceTrigger=LostFocus}"/>
-                                                    </DataTemplate>
-                                                </ItemsControl.ItemTemplate>
-                                            </ItemsControl>
-                                        </StackPanel>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                            <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
-                                <TextBlock Text="EXP curve start (20 in the original)" Style="{StaticResource GdFieldLabel}" Width="230"/>
-                                <TextBox Style="{StaticResource GdNumber}" Text="{Binding ExpBase, UpdateSourceTrigger=LostFocus}"/>
-                            </StackPanel>
-                        </StackPanel>
-                    </Border>
-                    <Border Style="{StaticResource GdCard}">
-                        <StackPanel>
-                            <TextBlock Text="WHAT THAT GIVES" Style="{StaticResource GdSection}"/>
-                            <TextBlock Text="{Binding Preview}" Style="{StaticResource GdFieldLabel}" FontFamily="Consolas" TextWrapping="NoWrap"/>
-                        </StackPanel>
-                    </Border>
+                        </WrapPanel>
+                    </StackPanel>
+                </Border>
+
+                <WrapPanel>
                     <Border Style="{StaticResource GdCard}">
                         <StackPanel>
                             <TextBlock Text="ANCIENT CAVE BONUSES" Style="{StaticResource GdSection}"/>
@@ -149,7 +162,7 @@
                     </Border>
                     <Border Style="{StaticResource GdCard}">
                         <StackPanel>
-                            <TextBlock Text="NEW GAME: PARTY, GOLD, ITEMS" Style="{StaticResource GdSection}"/>
+                            <TextBlock Text="NEW GAME: PARTY, GOLD, ITEMS (ALL HEROES)" Style="{StaticResource GdSection}"/>
                             <StackPanel Orientation="Horizontal" Margin="0,2">
                                 <TextBlock Text="Gold" Style="{StaticResource GdFieldLabel}" Width="80"/>
                                 <TextBox Style="{StaticResource GdNumber}" Text="{Binding Gold, UpdateSourceTrigger=LostFocus}"/>
