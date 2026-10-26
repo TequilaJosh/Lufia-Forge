@@ -3,7 +3,7 @@ using System.Windows.Input;
 
 namespace LufiaForge.Modules.Lufia2;
 
-public partial class L2MapsView : UserControl
+public partial class L2MapsView : UserControl, LufiaForge.Modules.Common.ILocalUndo
 {
     public L2MapsView()
     {
@@ -21,9 +21,13 @@ public partial class L2MapsView : UserControl
 
     private L2MapsPage? Vm => DataContext as L2MapsPage;
 
+    public bool LocalUndo() => Vm?.UndoPaint() == true;
+    public bool LocalRedo() => Vm?.RedoPaint() == true;
+
     private void Map_MouseDown(object sender, MouseButtonEventArgs e)
     {
         Focus();   // so Ctrl+Z reaches this tab
+        LufiaForge.Modules.Common.LocalUndoTarget.Set(this);
         Vm?.EndStroke();
         var p = e.GetPosition(MapImageControl);
         Vm?.PaintAt(p.X, p.Y, e.ChangedButton == MouseButton.Right);

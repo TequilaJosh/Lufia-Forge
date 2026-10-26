@@ -39,8 +39,9 @@ public partial class MainWindow : Window
             };
             if (project != null) { if (project.CanExecute(null)) project.Execute(null); e.Handled = true; return; }
             if (System.Windows.Input.Keyboard.FocusedElement is System.Windows.Controls.Primitives.TextBoxBase) return;
-            if (e.Key == System.Windows.Input.Key.Z && !shift) { if (vm.UndoCommand.CanExecute(null)) vm.UndoCommand.Execute(null); e.Handled = true; }
-            else if (e.Key == System.Windows.Input.Key.Y || e.Key == System.Windows.Input.Key.Z && shift) { if (vm.RedoCommand.CanExecute(null)) vm.RedoCommand.Execute(null); e.Handled = true; }
+            // a map editor's edits not yet applied come first (the last one worked in, while it is on screen)
+            if (e.Key == System.Windows.Input.Key.Z && !shift) { if (!Modules.Common.LocalUndoTarget.TryUndo() && vm.UndoCommand.CanExecute(null)) vm.UndoCommand.Execute(null); e.Handled = true; }
+            else if (e.Key == System.Windows.Input.Key.Y || e.Key == System.Windows.Input.Key.Z && shift) { if (!Modules.Common.LocalUndoTarget.TryRedo() && vm.RedoCommand.CanExecute(null)) vm.RedoCommand.Execute(null); e.Handled = true; }
         };
         KeyDown += appKeys;
 

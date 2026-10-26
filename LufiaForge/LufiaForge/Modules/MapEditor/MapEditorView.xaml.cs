@@ -6,7 +6,7 @@ using ToolTip = System.Windows.Controls.ToolTip;
 
 namespace LufiaForge.Modules.MapEditor;
 
-public partial class MapEditorView : UserControl
+public partial class MapEditorView : UserControl, LufiaForge.Modules.Common.ILocalUndo
 {
     // Floating tooltip that follows the mouse and describes what's under it (treasure, exits, arrivals).
     private readonly ToolTip _tip = new() { Placement = PlacementMode.Mouse, HorizontalOffset = 14, VerticalOffset = 14 };
@@ -28,6 +28,8 @@ public partial class MapEditorView : UserControl
             if (fit >= 1) Vm.PaletteZoom = Math.Min(4, fit);
         };
         DataContextChanged += (_, _) => HookVm();
+        // after working in the map, Ctrl+Z / Ctrl+Y come here first even when a tab or button has the focus
+        PreviewMouseDown += (_, _) => LufiaForge.Modules.Common.LocalUndoTarget.Set(this);
         // Alt + mouse wheel anywhere in the editor turns the brush block; letting go of Alt then doesn't open the menu bar
         PreviewMouseWheel += (_, e) =>
         {
@@ -53,6 +55,9 @@ public partial class MapEditorView : UserControl
     }
 
     private MapEditorViewModel? Vm => DataContext as MapEditorViewModel;
+
+    public bool LocalUndo() { if (Vm == null || !Vm.UndoCommand.CanExecute(null)) return false; Vm.UndoCommand.Execute(null); return true; }
+    public bool LocalRedo() { if (Vm == null || !Vm.RedoCommand.CanExecute(null)) return false; Vm.RedoCommand.Execute(null); return true; }
 
     private void HookVm()
     {
