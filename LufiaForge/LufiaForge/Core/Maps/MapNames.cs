@@ -203,6 +203,17 @@ public static class MapNames
     /// <summary>A rename changed <see cref="ProjectNames"/> (the project has something to save).</summary>
     public static event Action? ProjectNamesChanged;
 
+    /// <summary>Names one map in the open project only (Lufia II's maps: the shared names are Lufia 1's). Empty: back to
+    /// the game's name.</summary>
+    public static void SetProjectName(int id, string name)
+    {
+        if (ProjectNames == null) return;
+        if (string.IsNullOrWhiteSpace(name)) { if (!ProjectNames.Remove(id)) return; }
+        else if (ProjectNames.TryGetValue(id, out var had) && had == name) return;
+        else ProjectNames[id] = name;
+        ProjectNamesChanged?.Invoke();
+    }
+
     /// <summary>The names to show: the shared ones with the open project's on top.</summary>
     public static Dictionary<int, string> LoadCustom()
     {

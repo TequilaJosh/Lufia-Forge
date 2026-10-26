@@ -29,10 +29,19 @@ public partial class Lufia2ViewModel : ObservableObject
     public L2MusicPage Music { get; } = new();
     public L2GraphicsPage Graphics { get; } = new();
 
+    /// <summary>Asks the view to show a page (by its header).</summary>
+    public event Action<string>? ShowPage;
+
+    public Lufia2ViewModel()
+    {
+        // the Maps tab's "Talk event..." / "Event...": the event in the Events tab
+        Maps.OpenEventRequested += (map, head, id) => { Events.ShowEvent(map, head, id); ShowPage?.Invoke("Events"); };
+    }
+
     public void SetRom(RomBuffer rom, MainViewModel main)
     {
         Overview = $"{GameDetect.Name(rom.Game)}, {rom.Length / 1024} KB, title \"{rom.ReadAscii(GameDetect.HeaderTitle, GameDetect.TitleLength).TrimEnd()}\".\n\n" +
-                   "Maps: every map drawn and editable (paint blocks on either layer; Ctrl+Z takes back strokes). Text: the lines of the maps' scenes. Events: every event in plain words, edited step by step, and new events (talking to a character, stepping on an area, after another event). " +
+                   "Maps: every map drawn and edited as in Lufia 1's map editor: blocks on either layer (brushes, copy and paste, pieces of other maps, presets), collision, exits, step-on areas, characters, preset points and treasure, the block editor, graphics and size, a test start, and the world map with its battle zones. Text: the lines of the maps' scenes. Events: every event in plain words, edited step by step, and new events (talking to a character, stepping on an area, after another event). " +
                    "Graphics: every picture, painted pixel by pixel or through PNG, new palettes and new map sprites. Battles: monsters, items, spells and IP attacks, with their effects edited step by step (weapons, armor, spells, IP attacks, monster and capsule AI), new spells and new IP attacks. " +
                    "Heroes: starting stats, magic and equipment, and growth on a chart you can drag. Capsule monsters: all 35 forms with their growth curves. Also shops, treasure, exits, encounters, music, credits and game settings. Edit > Start from a Clean Slate takes the story out. " +
                    "Every change goes straight into the ROM; Edit > Undo takes it back and Save Project keeps it.\n\n" +
