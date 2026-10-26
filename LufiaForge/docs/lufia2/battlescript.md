@@ -328,7 +328,8 @@ A new game starting a battle against a Goblin made passive (0x3C0EE = 53 04 39),
 * Flash given Dragon's animation: animation 1A plays;
 * a new spell 28 (a copy of Firebird) named Meteor, with Thunder's animation and its damage edited to 7: cast by the
   monster ("Meteor", animation 14, HP 20 -> 11 -> 3), and by Maxim from his battle spell list ("Meteor : 1" in the list)
-  after L2StartSpells gave it to him;
+  after L2StartSpells gave it to him; cast by the monster IP-style (op 54, action 19, the second animation site) with
+  Ice Valk's animation: animation 1D, HP 20 -> 11 -> 3 (that path shows no name, as in the game);
 * Thunder blast renamed "Storm of bolts" (longer, so a new record in block B): shown when Maxim uses it from the Battle
   knife, 96 IP, 20 damage;
 * a new IP attack A8 (item word A9) "Star shower" with Firebird's animation and cost 32, given to the Battle knife:
