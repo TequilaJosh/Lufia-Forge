@@ -335,3 +335,30 @@ A new game starting a battle against a Goblin made passive (0x3C0EE = 53 04 39),
 * a new IP attack A8 (item word A9) "Star shower" with Firebird's animation and cost 32, given to the Battle knife:
   "Star shower", animation 17, 20 damage, IP 255 -> 223 -> 191; with its effect edited to nothing it misses;
 * Elcid's spell shop (0x3C0EE = 18 02) selling Meteor at 1234 gold: listed, and X shows its new description.
+
+## 8. What monsters do, in words (2026-10-25)
+
+Every monster, boss and capsule script was surveyed (commands and values used) and the editor names them from the code:
+
+* **Targets (32 b, modes at $85:BBB6):** 00 keep the target, 01 a random member of the other side (for a monster a random
+  hero), 05 everyone on the target's side (after 01: all heroes; after 06: all its own side), 06 itself, 07 a random member
+  of its own side, 08 a random hero. 02-04 pick by a rule and are never used by the game. The game uses 01 (314x), 05 (106x),
+  06 (30x).
+* **Attack names (1E n):** table `$85:F2D7` (file 0x2F2D7), u16 pointers in bank $85 read by `$85:9532`; record n - 1 is a
+  byte (default animation, E0) then the name, ended by 00. Names 01-8A ("Oink" 46 for the Ork, "Phoenix blast" 30 for
+  the Red Dragon, "Do-re-mi" 51 for the Seirein...). Checked in the game: a Goblin given `32 01 / 21 0000 000F 00 /
+  1E 30 / 5A E0 / 00` shows "Phoenix blast" and hits Maxim for 3-4.
+* **Stat changes (25 s p):** s in the Restore order (HP MP maxHP maxMP ATP DFP STR AGL INT GUT MGR): Bravery 05 +40 and
+  Courage 05 +60 "increase DFP", Dread 05 -20 "lowers DFP", Fake 07 +40 "increases AGL" (the in-game descriptions); p is
+  a signed percentage.
+* **Action kinds (register 23):** set by the action commands themselves: 21 physical damage sets 05, 22 magic damage 0A,
+  41 0B/0C, 53 09, 54 19... Monster scripts set 05 by hand after a status or stat effect with a name and an animation:
+  "make it a special attack".
+* **41** is an action that does nothing (the Ork's "Oink" then 41: a taunt). **26 / 2D** are the special effect's number
+  and amount (Absorb and the vampire monsters: 2D = minus its INT, 26 = 478). **3C** adds the user's weapon part to the
+  amount (the healing spells after Restore).
+
+The step editor shows all of this in words and has "Add a ready-made action": attack a random hero, cast a spell (at a
+hero, on itself, on all heroes), a named special attack (one hero or all), a status attack, a stat change, call for help
+(attack when there's no room), half the time one action and half another, a taunt, defend, run away. All 13 build; the
+named special attack was played in a battle.

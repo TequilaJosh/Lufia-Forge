@@ -48,7 +48,7 @@ public static class L2AiScripts
     // ── commands ─────────────────────────────────────────────────────────────
 
     /// <summary>What a command's argument is (for the editor's fields; the size is in <see cref="Size"/>).</summary>
-    public enum Arg { Byte, Word, Register, Value, Jump, Chance, Percent, Spell, Monster, CapsuleAttack, Element, Stat, Status, Target, Item, Library, AttackName, Animation, Sound, Restore }
+    public enum Arg { Byte, Word, Register, Value, Jump, Chance, Percent, Spell, Monster, CapsuleAttack, Element, Stat, Status, Target, Item, Library, AttackName, Animation, Sound, Restore, Change }
 
     public static int Size(Arg a) => a is Arg.Word or Arg.Value or Arg.Jump or Arg.Element or Arg.Item or Arg.Library ? 2 : 1;
 
@@ -69,96 +69,104 @@ public static class L2AiScripts
     {
         var l = new List<OpDef>();
         void O(int op, string group, string name, string help, params Arg[] args) => l.Add(new OpDef((byte)op, name, group, args, help));
-        const string Act = "Actions", Flow = "Flow", Reg = "Numbers", Eff = "Effects", Show = "Show and sound", Misc = "Other";
-        O(0x00, Flow, "End: do the chosen action", "Ends the script; the action chosen above happens.");
-        O(0x01, Flow, "Do the action now, go on", "Does the action chosen so far and carries on (more than one action in a turn).");
-        O(0x03, Flow, "Go to", "", Arg.Jump);
-        O(0x04, Flow, "If the last action failed, go to", "For example no room to call a monster.", Arg.Jump);
-        O(0x05, Flow, "With a chance, go to", "Chance out of 256.", Arg.Chance, Arg.Jump);
-        O(0x06, Flow, "If a number is, go to", "", Arg.Register, Arg.Value, Arg.Jump);
+        // groups, in the order the command list shows them
+        const string Act = "Actions", Flow = "Choices and jumps", Eff = "Effects of a special attack", Show = "Show and sound", Reg = "Numbers", Misc = "Rarely used";
+        O(0x32, Act, "Pick the target", "Who the action goes to: a random foe, itself... Most turns start with it. 'Everyone on that side' after picking a foe means all of them; after 'itself', all its own side.", Arg.Target);
+        O(0x28, Act, "Attack", "A normal physical attack on the target.");
+        O(0x2C, Act, "Cast a spell", "Casts the spell on the target. It needs the MP: without enough it attacks instead.", Arg.Spell);
+        O(0x54, Act, "Cast a spell for free", "Casts the spell without using MP (the game uses it for IP-like moves).", Arg.Spell);
+        O(0x2B, Act, "Use an item", "Uses the item on the target (it doesn't need to have it).", Arg.Item);
+        O(0x2D, Act, "Call for help", "Brings in another monster. It fails when there's no room: follow it with 'If that didn't work, go to'.", Arg.Monster);
+        O(0x29, Act, "Defend", "Guards this turn.");
+        O(0x2A, Act, "Run away", "Leaves the battle (the heroes get nothing for it).");
+        O(0x41, Act, "Just show it (no effect)", "An action that does nothing but show the attack name above it: a taunt, a laugh, a warning.");
+        O(0x4F, Act, "Do nothing this turn", "Ends the turn without acting.");
+        O(0x3E, Act, "Use a capsule monster attack", "", Arg.CapsuleAttack);
+        O(0x37, Act, "Weapon attack", "An attack with the wearer's weapon (what weapon effects start with).");
+        O(0x00, Act, "End: do the action", "The turn's action happens here and the script stops. Every path through the script ends with one.");
+        O(0x01, Act, "Do the action now, then go on", "Does the action picked so far and carries on with the next step: two or more actions in one turn.");
+        O(0x05, Flow, "With a chance, go to", "Picks between two actions: the chance is out of 256 (128 = half the time).", Arg.Chance, Arg.Jump);
+        O(0x04, Flow, "If that didn't work, go to", "After calling for help (no room) or another action that can fail.", Arg.Jump);
+        O(0x03, Flow, "Go to", "Carries on at another step.", Arg.Jump);
+        O(0x06, Flow, "If a number is, go to", "Compares one of the battle's numbers (its HP, a counter...) with a value.", Arg.Register, Arg.Value, Arg.Jump);
         O(0x07, Flow, "If a number is not, go to", "", Arg.Register, Arg.Value, Arg.Jump);
         O(0x08, Flow, "If a number is more than, go to", "", Arg.Register, Arg.Value, Arg.Jump);
         O(0x09, Flow, "If a number is less than, go to", "", Arg.Register, Arg.Value, Arg.Jump);
         O(0x0A, Flow, "If a number is at least, go to", "", Arg.Register, Arg.Value, Arg.Jump);
         O(0x0B, Flow, "If a number is at most, go to", "", Arg.Register, Arg.Value, Arg.Jump);
-        O(0x3F, Flow, "If capsule attack slot is learned, go to", "Slot 1-3 (capsule monsters).", Arg.Byte, Arg.Jump);
-        O(0x46, Flow, "If battle byte is 0, go to", "", Arg.Byte, Arg.Jump);
-        O(0x42, Flow, "Call a shared script", "Runs one of the game's shared scripts (the list says what each does; 11 makes it immune to the 5 statuses). Many monsters share each one: to change it for this one alone, copy its steps in here.", Arg.Library);
+        O(0x3F, Flow, "If it has learned capsule attack slot, go to", "Capsule monsters: slot 1-3 of the attacks they learn.", Arg.Byte, Arg.Jump);
+        O(0x46, Flow, "If battle setting is 0, go to", "", Arg.Byte, Arg.Jump);
+        O(0x42, Flow, "Run a shared script", "Runs one of the game's shared scripts (the list says what each does; 11 makes it immune to the 5 statuses). Many monsters share each one: to change it for this one alone, copy its steps in here.", Arg.Library);
         O(0x43, Flow, "Return (end of a shared script)", "");
-        O(0x4F, Flow, "Quit: do nothing this turn", "");
-        O(0x32, Act, "Choose the target", "01 one random foe, 05 (after 01) all foes, 06 itself, 06 then 05 all its side.", Arg.Target);
-        O(0x28, Act, "Attack (physical)", "");
-        O(0x37, Act, "Weapon attack", "");
-        O(0x29, Act, "Defend", "");
-        O(0x2A, Act, "Run away", "");
-        O(0x2C, Act, "Cast a spell", "Needs the MP; without them it attacks.", Arg.Spell);
-        O(0x54, Act, "Cast a spell (no MP, IP style)", "", Arg.Spell);
-        O(0x2B, Act, "Use an item", "", Arg.Item);
-        O(0x2D, Act, "Call a monster", "Fails when there is no room (see 'If the last action failed').", Arg.Monster);
-        O(0x3E, Act, "Use a capsule monster attack", "", Arg.CapsuleAttack);
-        O(0x41, Act, "Wait (check the situation)", "");
-        O(0x2E, Act, "Action 0D", "");
-        O(0x53, Act, "Action 9", "", Arg.Byte);
-        O(0x0C, Reg, "Set a number", "", Arg.Register, Arg.Value);
+        O(0x1E, Show, "Show an attack name", "The name shown at the top of the screen, from the game's list of monster attacks.", Arg.AttackName);
+        O(0x5A, Show, "Play a battle animation", "The animation of a spell, IP attack or monster attack.", Arg.Animation);
+        O(0x3D, Show, "Play a sound effect", "", Arg.Sound);
+        O(0x56, Show, "Keep the message up", "How long (frames, 60 a second) the attack name stays.", Arg.Value);
+        O(0x35, Show, "Show a battle message", "One of the battle's built-in messages and effects (the game's spells use them).", Arg.Byte);
+        O(0x36, Show, "If that didn't work: show a battle message", "", Arg.Byte);
+        O(0x4A, Show, "Flash and shake the screen", "How many times.", Arg.Byte);
+        O(0x4C, Show, "Screen effect", "", Arg.Byte);
+        O(0x4B, Show, "Screen effect 4", "");
+        O(0x21, Eff, "Physical damage", "A special attack's damage: its element, how much (a number, or one worked out above), and a spread. Blocked by DFP.", Arg.Element, Arg.Value, Arg.Byte);
+        O(0x22, Eff, "Magic damage", "Like physical damage, but magic (the spells' kind).", Arg.Element, Arg.Value, Arg.Byte);
+        O(0x23, Eff, "Fixed damage", "", Arg.Word);
+        O(0x27, Eff, "Cause a status", "Poison, sleep, confusion... with a chance in percent.", Arg.Status, Arg.Percent);
+        O(0x26, Eff, "Cure a status", "", Arg.Status, Arg.Percent);
+        O(0x24, Eff, "Restore", "Heals HP or MP (or a stat) by an amount, give or take a spread.", Arg.Restore, Arg.Value, Arg.Byte);
+        O(0x25, Eff, "Raise or lower a stat", "Changes the target's stat for the battle by a percentage (minus lowers it).", Arg.Restore, Arg.Change);
+        O(0x1F, Eff, "Set the attack's element", "", Arg.Element);
+        O(0x20, Eff, "Critical hits", "Chance in percent and the damage multiplier (16 = x1).", Arg.Percent, Arg.Byte);
+        O(0x3C, Eff, "Add the user's weapon part to the amount", "The game's healing spells add it after Restore.");
+        O(0x5C, Eff, "Hide the damage number", "");
+        O(0x5B, Eff, "Lose the battle if it dies by this", "");
+        O(0x51, Eff, "Reflect magic back (Dark reflector)", "");
+        O(0x52, Eff, "Reflect flag 4", "");
+        O(0x58, Eff, "Eerie light", "");
+        O(0x57, Eff, "Item boosts this spell", "", Arg.Item, Arg.Byte);
+        O(0x50, Eff, "Keep only allowed targets", "");
+        O(0x4D, Eff, "Drop targets that can't be hit", "");
+        O(0x1D, Eff, "Do the effect now (without an action)", "");
+        O(0x0C, Reg, "Set a number", "The battle's numbers: the damage, the attack's element, the status chances, its own counters 1-8 (kept from turn to turn)...", Arg.Register, Arg.Value);
         O(0x0D, Reg, "Add to a number", "", Arg.Register, Arg.Value);
         O(0x0E, Reg, "Take from a number", "", Arg.Register, Arg.Value);
         O(0x0F, Reg, "Multiply a number", "", Arg.Register, Arg.Value);
         O(0x10, Reg, "Divide a number", "", Arg.Register, Arg.Value);
+        O(0x15, Reg, "A number = its own stat", "", Arg.Register, Arg.Stat);
+        O(0x13, Reg, "A number = the target's stat", "Pick the target first.", Arg.Register, Arg.Stat);
+        O(0x4E, Reg, "A number = the attacker's stat", "", Arg.Register, Arg.Stat);
+        O(0x14, Reg, "Set the target's stat", "", Arg.Register, Arg.Stat);
+        O(0x11, Reg, "A random number below it", "", Arg.Register);
+        O(0x1A, Reg, "Turn a number negative (or back)", "", Arg.Register);
+        O(0x30, Reg, "A number = how many on a side", "", Arg.Register);
+        O(0x1C, Reg, "A number = the battle round", "", Arg.Register);
         O(0x55, Reg, "Divide a number (no minus)", "", Arg.Register, Arg.Value);
         O(0x16, Reg, "Keep some bits of a number", "", Arg.Register, Arg.Value);
         O(0x17, Reg, "Add bits to a number", "", Arg.Register, Arg.Value);
         O(0x18, Reg, "Flip bits of a number", "", Arg.Register, Arg.Value);
-        O(0x11, Reg, "A random number below it", "", Arg.Register);
         O(0x12, Reg, "Ratio of two numbers", "", Arg.Register, Arg.Register);
         O(0x19, Reg, "Make a number positive", "", Arg.Register);
-        O(0x1A, Reg, "Turn a number negative (or back)", "", Arg.Register);
         O(0x1B, Reg, "The sign of a number (-1, 0, 1)", "", Arg.Register);
-        O(0x1C, Reg, "A number = the battle round", "", Arg.Register);
-        O(0x13, Reg, "A number = the target's stat", "Choose the target first.", Arg.Register, Arg.Stat);
-        O(0x14, Reg, "Set the target's stat", "", Arg.Register, Arg.Stat);
-        O(0x15, Reg, "A number = its own stat", "", Arg.Register, Arg.Stat);
-        O(0x4E, Reg, "A number = the attacker's stat", "", Arg.Register, Arg.Stat);
         O(0x2F, Reg, "A number = fighters flagged 04", "", Arg.Register);
-        O(0x30, Reg, "A number = how many on a side", "", Arg.Register);
         O(0x40, Reg, "A number = learned capsule attacks", "", Arg.Register);
-        O(0x45, Reg, "A number = a battle byte", "", Arg.Register, Arg.Byte);
-        O(0x44, Reg, "Battle byte = value", "", Arg.Byte, Arg.Byte);
-        O(0x21, Eff, "Physical damage", "Element, damage (a value or a register, as a negative number), spread.", Arg.Element, Arg.Value, Arg.Byte);
-        O(0x22, Eff, "Magic damage", "Element, damage, spread.", Arg.Element, Arg.Value, Arg.Byte);
-        O(0x23, Eff, "Fixed damage", "", Arg.Word);
-        O(0x1F, Eff, "Element of the attack", "", Arg.Element);
-        O(0x20, Eff, "Critical chance and multiplier", "", Arg.Percent, Arg.Byte);
-        O(0x24, Eff, "Restore", "What, amount, spread.", Arg.Restore, Arg.Value, Arg.Byte);
-        O(0x25, Eff, "Stat up or down (%)", "", Arg.Byte, Arg.Byte);
-        O(0x26, Eff, "Cure a status", "", Arg.Status, Arg.Percent);
-        O(0x27, Eff, "Cause a status", "", Arg.Status, Arg.Percent);
-        O(0x1D, Eff, "Do the effect step", "");
-        O(0x3C, Eff, "Add the weapon's damage", "");
-        O(0x50, Eff, "Keep only allowed targets", "");
-        O(0x4D, Eff, "Drop targets that can't be hit", "");
-        O(0x51, Eff, "Dark reflector", "");
-        O(0x52, Eff, "Reflect flag 4", "");
-        O(0x57, Eff, "Item boosts this spell", "", Arg.Item, Arg.Byte);
-        O(0x58, Eff, "Eerie light", "");
-        O(0x59, Eff, "Effect $85:DA9C", "");
-        O(0x5B, Eff, "Lose if it kills itself", "");
-        O(0x5C, Eff, "Hide the damage number", "");
-        O(0x48, Eff, "Effect $85:9671", "");
-        O(0x1E, Show, "Show an attack name", "", Arg.AttackName);
-        O(0x56, Show, "Message time", "", Arg.Value);
-        O(0x5A, Show, "Battle animation", "", Arg.Animation);
-        O(0x3D, Show, "Sound effect", "", Arg.Sound);
-        O(0x35, Show, "Special effect / message", "", Arg.Byte);
-        O(0x36, Show, "If the last action failed: special effect", "", Arg.Byte);
-        O(0x4A, Show, "Flash / shake", "Times.", Arg.Byte);
-        O(0x4B, Show, "Screen effect 4", "");
-        O(0x4C, Show, "Screen effect", "", Arg.Byte);
-        O(0x47, Misc, "Effect timer, timed effect", "", Arg.Value);
+        O(0x45, Reg, "A number = a battle setting", "", Arg.Register, Arg.Byte);
+        O(0x44, Misc, "Set a battle setting", "", Arg.Byte, Arg.Byte);
+        O(0x2E, Misc, "Action 0D (not used by the game)", "");
+        O(0x53, Misc, "Action 9 (not used by the game)", "", Arg.Byte);
+        O(0x59, Misc, "Effect $85:DA9C (not used by the game)", "");
+        O(0x48, Misc, "Effect $85:9671 (not used by the game)", "");
+        O(0x47, Misc, "Effect timer", "", Arg.Value);
         O(0x49, Misc, "Wait for the effect timer", "");
         return l.ToArray();
     }
 
-    public static readonly string[] Targets = { "00", "01 one random foe", "02", "03", "04", "05 all of that side (after 01 or 06)", "06 itself", "07", "08" };
+    /// <summary>The target modes of 32 ($85:BBB6, read from the code): 01 a random member of the other side, 05 everyone on
+    /// the target's side, 06 itself, 07 a random member of its own side, 08 a random hero; 02-04 aren't used by the game.</summary>
+    public static readonly string[] Targets =
+    {
+        "keep the target it has", "a random foe", "a foe picked by a rule (02, not used by the game)",
+        "a foe picked by a rule (03, not used by the game)", "04 (not used by the game)",
+        "everyone on that side", "itself", "a random one of its own side", "a random hero",
+    };
     public static readonly string[] Stats = { "HP", "MP", "max HP", "max MP", "ATP", "DFP", "STR", "AGL", "INT", "GUT", "MGR", "IP", "level",
         "ATP+ (battle)", "DFP+ (battle)", "STR+ (battle)", "AGL+ (battle)", "INT+ (battle)", "GUT+ (battle)", "MGR+ (battle)", "status" };
     public static readonly string[] Statuses = { "poison", "silence", "death", "paralysis", "confusion", "sleep", "status 6", "mirror" };
@@ -189,7 +197,10 @@ public static class L2AiScripts
         0x10 => "the last action failed (0 = no)",
         0x20 => "the attacker",
         0x21 => "the targets",
+        0x11 => "a working number (11)",
         0x23 => "the action's kind",
+        0x26 => "the special effect's number",
+        0x2D => "the special effect's amount",
         0x24 => "the action's number",
         0x25 => "the attack's name",
         0x27 => "the attack's element",
@@ -355,6 +366,26 @@ public static class L2AiScripts
         var d = Def(op) ?? throw new ArgumentException($"Unknown command {op:X2}.");
         int jumps = d.Args.Count(a => a == Arg.Jump);
         return new Step { Op = op, Args = new byte[d.Length - 1], Targets = new Step?[jumps], OutsideTargets = Enumerable.Repeat(-1, jumps).ToArray() };
+    }
+
+    // ── monster attack names ($85:F2D7) ───────────────────────────────────────
+
+    /// <summary>The names 1E shows: 1E n (n from 1) reads record n - 1 of the table $85:F2D7 (u16 pointers in bank $85, read
+    /// by $85:9532): a byte (the default animation, E0 = none) then the name, ended by 00. The game's names run to 8A.</summary>
+    public const int AttackNameTable = 0x2F2D7, AttackNameCount = 0x8A;
+
+    public static string[] MonsterAttackNames(RomBuffer rom)
+    {
+        var names = new string[AttackNameCount + 1];
+        names[0] = "(none)";
+        for (int n = 1; n <= AttackNameCount; n++)
+        {
+            int at = 0x28000 + (rom.ReadUInt16Le(AttackNameTable + (n - 1) * 2) & 0x7FFF) + 1;
+            var sb = new System.Text.StringBuilder();
+            for (int i = 0; i < 37 && at + i < rom.Length; i++) { byte c = rom.ReadByte(at + i); if (c == 0) break; sb.Append(c is >= 0x20 and < 0x7F ? (char)c : '?'); }
+            names[n] = sb.ToString();
+        }
+        return names;
     }
 
     // ── the shared library ($96:FADD) ─────────────────────────────────────────
@@ -939,6 +970,8 @@ public static class L2AiScripts
         public string[] CapsuleAttacks { get; init; } = Array.Empty<string>();
         /// <summary>What each shared script does (<see cref="LibraryName"/>).</summary>
         public string[] Library { get; set; } = Array.Empty<string>();
+        /// <summary>The monster attack names shown by 1E (index 0 = none).</summary>
+        public string[] AttackNames { get; init; } = Array.Empty<string>();
         /// <summary>Battle animations 00-FF named by what uses them (<see cref="L2Magic.Animations"/>).</summary>
         public string[] Animations { get; set; } = Array.Empty<string>();
 
@@ -950,6 +983,7 @@ public static class L2AiScripts
                 Monsters = L2Battle.Monsters(rom).Select(m => m.Name).ToArray(),
                 Items = L2Battle.Items(rom).Select(i => i.Name).ToArray(),
                 CapsuleAttacks = L2Capsules.AttackList(rom),
+                AttackNames = MonsterAttackNames(rom),
             };
             n.Library = Enumerable.Range(0, LibraryCount).Select(i => LibraryName(rom, i, n)).ToArray();
             var anims = L2Magic.Animations(rom).ToDictionary(a => a.Value, a => a.Name);
@@ -978,7 +1012,8 @@ public static class L2AiScripts
         Arg.Target => v < Targets.Length ? Targets[v] : $"{v:X2}",
         Arg.Restore => v < Restores.Length ? Restores[v] : $"{v:X2}",
         Arg.Library => v < n.Library.Length ? $"shared script {v:X2} ({n.Library[v]})" : $"shared script {v:X2}",
-        Arg.AttackName => $"attack name {v:X2}",
+        Arg.AttackName => v > 0 && v < n.AttackNames.Length ? $"\"{n.AttackNames[v]}\"" : v == 0 ? "(none)" : $"attack name {v:X2}",
+        Arg.Change => $"{(sbyte)v:+0;-0;0}%",
         Arg.Animation => v < n.Animations.Length ? $"animation {v:X2} ({n.Animations[v]})" : $"animation {v:X2}",
         Arg.Sound => $"sound {v:X2}",
         Arg.Word => $"{v}",
@@ -1025,8 +1060,26 @@ public static class L2AiScripts
         string A(int i) => ArgText(s.Def!.Args[i], ArgValue(s, i), n);
         string Go() { var t = s.Targets.Length > 0 ? s.Targets[0] : null; int k = t == null ? -1 : IndexOf(all, t); return k < 0 ? "(no step)" : $"step {k + 1}"; }
         string Cap(string x) => x.Length == 0 ? x : char.ToUpperInvariant(x[0]) + x[1..];
+        string Pct(int v) => $"{v * 100 / 256}%";
         return s.Op switch
         {
+            0x32 => $"Target: {A(0)}",
+            0x28 => "Attack",
+            0x2C => $"Cast {A(0)}",
+            0x54 => $"Cast {A(0)} for free",
+            0x2B => $"Use the item {A(0)}",
+            0x2D => $"Call for help: {A(0)}",
+            0x1E => $"Show the name {A(0)}",
+            0x5A => $"Play {A(0)}",
+            0x3D => $"Play sound effect {ArgValue(s, 0):X2}",
+            0x05 => $"With a {Pct(ArgValue(s, 0))} chance, go to {Go()}",
+            0x04 => $"If that didn't work, go to {Go()}",
+            0x03 => $"Go to {Go()}",
+            0x3F => $"If it has learned capsule attack {ArgValue(s, 0)}, go to {Go()}",
+            0x56 => $"Keep the message up for {ValueText(ArgValue(s, 0))} frames",
+            0x25 => $"{((sbyte)ArgValue(s, 1) < 0 ? "Lower" : "Raise")} the target's {A(0)} by {Math.Abs((sbyte)ArgValue(s, 1))}%",
+            0x0C when ArgValue(s, 0) == 0x23 && ArgValue(s, 1) == 5 => "Make it a special attack (the effects above happen)",
+            0x0C when ArgValue(s, 0) == 0x23 && ArgValue(s, 1) == 0x0A => "Make it a magic attack (the effects above happen)",
             0x06 => $"If {A(0)} is {A(1)}, go to {Go()}",
             0x07 => $"If {A(0)} is not {A(1)}, go to {Go()}",
             0x08 => $"If {A(0)} is more than {A(1)}, go to {Go()}",
