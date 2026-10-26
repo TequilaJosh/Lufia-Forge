@@ -414,7 +414,7 @@ public static class L2Script
                     case 0xC8: parts.Add($"{L2Characters.Names.ElementAtOrDefault(a[i]) ?? "hero"} HP {op} {a[i + 1] | a[i + 2] << 8}"); i += 3; break;
                     case 0xD0: parts.Add($"{L2Characters.Names.ElementAtOrDefault(a[i]) ?? "hero"} MP {op} {a[i + 1] | a[i + 2] << 8}"); i += 3; break;
                     case 0xD8: parts.Add("(unused test)"); i += 3; break;
-                    case 0xE0: parts.Add($"{L2Characters.Names.ElementAtOrDefault(a[i]) ?? "hero"} has item {a[i + 1]:X2}"); i += 2; break;
+                    case 0xE0: parts.Add($"{L2Characters.Names.ElementAtOrDefault(a[i]) ?? "hero"} knows spell {a[i + 1]:X2}"); i += 2; break;
                     case 0xE8: parts.Add($"{L2Characters.Names.ElementAtOrDefault(a[i]) ?? "hero"} level {op} {a[i + 1]}"); i += 2; break;
                     case 0xF0: parts.Add($"vehicle {op} {a[i + 1]}"); i += 2; break;
                     default: parts.Add($"actor {a[i]:X2} flag 20"); i += 2; break;
@@ -473,9 +473,8 @@ public static class L2Script
     public static List<(string Title, List<Op> Ops)> MapScripts(RomBuffer rom, int map)
     {
         var list = new List<(string, List<Op>)>();
-        int e = L2Events.HeaderTable + 0x10 + map * 8;
-        int init = L2Rom.SnesToFile(0x878000 + (rom.ReadByte(e + 3) | rom.ReadByte(e + 4) << 8 | rom.ReadByte(e + 5) << 16));
-        list.Add(("Start-up script", Walk(rom, new[] { init }, InitBase)));
+        int init = L2EventBlocks.InitScript(rom, map);
+        list.Add(("Start-up script", Walk(rom, new[] { init }, L2EventBlocks.InitBase(init))));
         int block = L2Events.Block(rom, map);
         if (block < 0) return list;
         foreach (var (kind, id, off) in L2Events.Entries(rom, block))
