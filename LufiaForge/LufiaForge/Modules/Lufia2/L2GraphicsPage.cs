@@ -509,7 +509,7 @@ public partial class L2GraphicsPage : L2Page
         {
             $"A character shows sprite {id:X2} when a script makes it with that number: in the Events tab, 68 and 7B create a character (id, sprite) and 34 changes a character's sprite.",
             $"New sprites: {added} of {L2Sprites.MaxNew} made (FB, FC and FD are the only free numbers: the game keeps a sprite number in one byte, FE is an event object and FF no sprite).",
-            $"New palettes: {L2Sprites.PaletteCount(Rom)}. On a map the game puts a new palette into one of the 8 sprite colour rows that no other character there is using (this sprite's own row {L2Sprites.RowOf(Rom, id)} when it is free).",
+            $"New palettes: {L2Sprites.PaletteCount(Rom)}. On a map the game puts a new palette into one of the 8 sprite colour rows that no other character there is using (field monster rows first; row {L2Sprites.RowOf(Rom, id)}, this sprite's own, when all are taken).",
         };
         var t = L2Sprites.SharingTiles(Rom, id);
         if (t.Count > 0) parts.Add($"Uses the same tiles as {string.Join(", ", t.Select(s => s.ToString("X2")))}: painting one paints both.");

@@ -242,9 +242,10 @@ colour 0 see-through).
 
 * **Lookup**: sprites FB-FD read their entry from the block (any bank), the others from `$CF:F000` as before.
 * **New palettes**: after the row is stored, a sprite with a new palette has its colours 1-15 copied into a sprite row
-  of `$0420` (and `$73` bit 7 set): a row that already shows exactly those colours; else its own row if no other actor
-  uses it; else the first row in the order 5 4 3 2 0 7 6 1 that no other actor uses (an actor's row = `$7FE1CE,X`; FE
-  objects count as row 7); else its own row. The row goes into `$7FE1CE,X`. No RAM of its own.
+  of `$0420` (and `$73` bit 7 set): a row that already shows exactly those colours; else the first row in the order
+  5 4 3 2 0 7 6 1 that no other actor uses (an actor's row = `$7FE1CE,X`; FE objects count as row 7; the field monster
+  rows come first because a character made later in a scene is most likely a person, the party's row 1 last); else
+  the row its entry names. The row goes into `$7FE1CE,X`. No RAM of its own.
 * **Walking**: a new sprite's walking script is its entry's byte 5 (a copy keeps the original's: 0 for people).
 * Limits: 3 new sprites, 127 new palettes. A new palette borrows a row while its sprite is on the map: a character
   made later in the same scene with a game sprite of that row shows the new colours (the row is chosen among the
@@ -268,8 +269,10 @@ colour 0 see-through).
 
 New game through the opening to Elcid's shop (map 04), scratch ROMs built with the harness:
 * Sprite FB, a copy of 0E with a painted band on a new green palette, given to map 04's characters 50 and 53 (start-up
-  script `68 xx 0E` to `FB`) and to Tia (story list): Tia shows as FB behind the counter in the new colours (row 2,
-  `$7FE1CE` = 04); a second new palette on sprite 10 went to row 3; Maxim and the other characters unchanged.
+  script `68 xx 0E` to `FB`) and to Tia (story list): Tia shows as FB behind the counter in the new colours (row 3,
+  `$7FE1CE` = 06); a second new palette on sprite 10 went to row 2; Maxim and the other characters unchanged. Slots
+  left from the map before still count as used when the map's characters are made, so the first rows in the order
+  can be passed over then; after the menu the same characters took rows 4 and 5.
 * Maxim's sprite 00 painted (a white band, written in place): shows in the game, colours unchanged.
 * Tia's sprite 04 on a new palette: her own row 1 is Maxim's, so it went to row 5 and both look right.
 * A sprite made, coloured and painted only through the Graphics page (FB from 0E, black palette then colours set,

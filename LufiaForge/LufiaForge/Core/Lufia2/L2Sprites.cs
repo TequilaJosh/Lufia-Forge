@@ -10,8 +10,9 @@ namespace LufiaForge.Core.Lufia2;
 /// </list>
 /// Two hooks (the game's other bytes stay as they are): $83:A9F5 (LDA $CFF000,X) jumps to code in the added space
 /// that reads the entries of FB-FD from Lufia Forge's block, and, for a sprite given a new palette, copies its 15
-/// colours into a sprite row of the CGRAM buffer: a row that already shows them, else a row no other actor on the map
-/// uses (its own row first, then 5, 4, 3, 2, 0, 7, 6, 1), else its own row. $83:A956 (LDA $CFF6B5,X: the walking
+/// colours into a sprite row of the CGRAM buffer: a row that already shows them, else the first row no other actor on
+/// the map uses in the order 5, 4, 3, 2, 0, 7, 6, 1 (field monster rows first, the party's last), else the row its
+/// entry names. $83:A956 (LDA $CFF6B5,X: the walking
 /// script of a sprite from $80 up) reads a new sprite's from its entry.
 /// </summary>
 public static class L2Sprites
@@ -247,8 +248,8 @@ public static class L2Sprites
         Long(0xBF, bits); a.B(0x03, 0x03, 0x83, 0x03, 0xFA);       // LDA bits,X / ORA 3,S / STA 3,S / PLX
         a.Label("unext");
         a.B(0xCA); a.Br(0x10, "used");                             // DEX / BPL
-        // 3. its own row when free, else the first free row in the order, else its own row
-        a.Jsr("own"); Long(0xBF, bits); a.B(0x23, 0x01); a.Br(0xF0, "found");   // LDA bits,X / AND 1,S / BEQ
+        // 3. the first free row in the order (the rows people use last: a character made later in a scene is most
+        //    likely a person), else its own row
         a.B(0xA2, 0x00, 0x00);                                     // LDX #0
         a.Label("pick");
         Long(0xBF, order); a.B(0xDA); a.B(RowToX);                 // LDA order,X / PHX / X = row  (1-2 index, 3-4 used)
