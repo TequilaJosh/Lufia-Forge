@@ -13,8 +13,16 @@ public static class L2Rom
 {
     public const int FileTable = 0x138000, FileCount = 0x2A8;
 
-    public static int SnesToFile(int snes) => ((snes >> 16) & 0x7F) * 0x8000 + (snes & 0x7FFF);
-    public static int FileToSnes(int file) => (file / 0x8000 | 0x80) << 16 | (file % 0x8000 | 0x8000);
+    /// <summary>A SNES address as a file offset. Banks $80-$FF read the first 4 MB; banks $01-$7D (upper halves) read
+    /// the upper 4 MB of an 8 MB ROM (<see cref="ExpandTo8"/>); bank $00 is the copy of the first bank.</summary>
+    public static int SnesToFile(int snes)
+    {
+        int bank = snes >> 16 & 0xFF;
+        return bank is >= 1 and < 0x7E && (snes & 0x8000) != 0 ? UpperStart + bank * 0x8000 + (snes & 0x7FFF) : (bank & 0x7F) * 0x8000 + (snes & 0x7FFF);
+    }
+
+    public static int FileToSnes(int file) =>
+        file >= UpperStart ? ((file - UpperStart) / 0x8000) << 16 | (file % 0x8000 | 0x8000) : (file / 0x8000 | 0x80) << 16 | (file % 0x8000 | 0x8000);
 
     /// <summary>File offset of packed file <paramref name="id"/>.</summary>
     public static int FileOffset(RomBuffer rom, int id) =>
@@ -31,11 +39,62 @@ public static class L2Rom
     /// at 0x2FFFF0 (<see cref="SpaceMark"/>).</summary>
     public const int OriginalSize = 0x280000, ExpandedSize = 0x300000, MaxSize = 0x400000, SpaceMark = ExpandedSize - 16;
 
+    /// <summary>
+    /// 8 MB: past 4 MB a LoROM cartridge can be wired as "ExLoROM": banks $80-$FF read the first 4 MB as before and
+    /// banks $00-$7D (addresses $8000-$FFFF) the upper 4 MB. The game runs in $80-$FF, so it is unchanged; only the
+    /// console's start and its interrupts go through bank $00, which holds a copy of the first bank
+    /// (<see cref="RomBuffer.IsExLoRomCopy"/>). Measured in BizHawk (2026-10-27): the game reads nothing else from
+    /// banks $00-$7D. Banks $01-$3F also see the RAM at $0000-$1FFF, like $80-$BF, so event scripts can live there
+    /// (<see cref="L2EventSpace"/>); banks $40-$7D hold other data (<see cref="Allocate"/> with upper: true).
+    /// Works in Snes9x, bsnes / higan / BizHawk's "BSNESv115+" core and others that know ExLoROM; BizHawk's older
+    /// "BSNES" core can't run it.
+    /// </summary>
+    public const int UpperStart = 0x400000, ExSize = RomBuffer.ExLoRomSize, UpperDataStart = 0x600000, UpperDataEnd = 0x7F0000,
+        UpperMark = UpperDataEnd - 16;
+
+    /// <summary>Whether the ROM is 8 MB (ExLoROM).</summary>
+    public static bool IsExLoRom(RomBuffer rom) => rom.IsExLoRomCopy();
+
+    /// <summary>Why the ROM can't be made 8 MB, or null.</summary>
+    public static string? CantExpandTo8(RomBuffer rom)
+    {
+        if (IsExLoRom(rom)) return "The ROM is already 8 MB.";
+        if (rom.Length > MaxSize) return "The ROM is bigger than 4 MB already (another hack's layout), so Lufia Forge leaves its size alone.";
+        if (rom.ReadByte(0x7FD5) is var m && (m & 0x0F) != 0) return $"The ROM's header says map mode {m:X2}, not a LoROM game.";
+        return null;
+    }
+
+    /// <summary>Makes the ROM 8 MB (ExLoROM): 4 MB first if it is smaller, then the upper 4 MB, empty but for the copy
+    /// of the first bank; the header says 8 MB.</summary>
+    public static void ExpandTo8(RomBuffer rom)
+    {
+        if (CantExpandTo8(rom) is { } why) throw new InvalidOperationException(why);
+        if (rom.Length < MaxSize) rom.Expand(MaxSize);
+        rom.Expand(ExSize, 0x00);
+        rom.WriteBytes(UpperStart, rom.ReadBytes(0, 0x8000));
+        rom.FixChecksum();
+    }
+
+    /// <summary>Bytes still free in the upper 4 MB (data banks $40-$7D), 0 on a smaller ROM.</summary>
+    public static int UpperFree(RomBuffer rom) =>
+        !IsExLoRom(rom) ? 0 : IsMark(rom, UpperMark) ? UpperMark - (int)rom.ReadUInt24Le(UpperMark + 4) : UpperMark - UpperDataStart;
+
     /// <summary>Reserves <paramref name="length"/> bytes of added space, never across a 32 KB bank (so the game reads
-    /// them as one piece), growing the ROM when needed. Returns the file offset.</summary>
-    public static int Allocate(RomBuffer rom, int length)
+    /// them as one piece), growing the ROM when needed. Returns the file offset. <paramref name="upper"/>: the data is
+    /// read through a full 24-bit address, so on an 8 MB ROM it goes in the upper 4 MB (banks $40-$7D) first.</summary>
+    public static int Allocate(RomBuffer rom, int length, bool upper = false)
     {
         if (length <= 0 || length > 0x8000) throw new ArgumentOutOfRangeException(nameof(length));
+        if (upper && IsExLoRom(rom))
+        {
+            int up = IsMark(rom, UpperMark) ? (int)rom.ReadUInt24Le(UpperMark + 4) : UpperDataStart;
+            if (up / 0x8000 != (up + length - 1) / 0x8000) up = (up / 0x8000 + 1) * 0x8000;
+            if (up + length <= UpperMark)
+            {
+                WriteMark(rom, UpperMark, up + length);
+                return up;
+            }
+        }
         if (rom.Length < ExpandedSize) rom.Expand(ExpandedSize);
         var (mark, next) = FindMark(rom) ?? NewSpace(rom, OriginalSize) ?? throw new InvalidOperationException("The ROM has no empty space left.");
         while (true)
@@ -49,7 +108,9 @@ public static class L2Rom
             }
             // this run is full: grow the ROM if it can, and carry on in the next empty run
             if (rom.Length < MaxSize) rom.Expand(MaxSize);
-            var more = NewSpace(rom, mark + 16) ?? throw new InvalidOperationException("The ROM is full (4 MB, the most a Lufia II cartridge can address).");
+            var more = NewSpace(rom, mark + 16) ?? throw new InvalidOperationException(IsExLoRom(rom)
+                ? "The first 4 MB of the ROM are full (what goes there can't use the upper 4 MB)."
+                : "The ROM is full at 4 MB. Lufia II > Settings > Make the ROM 8 MB gives it 4 MB more.");
             rom.WriteBytes(mark, Enumerable.Repeat((byte)0xFF, 16).ToArray());
             (mark, next) = more;
         }
@@ -62,7 +123,7 @@ public static class L2Rom
     private static (int Mark, int Next)? FindMark(RomBuffer rom)
     {
         if (rom.Length >= ExpandedSize && IsMark(rom, SpaceMark)) return (SpaceMark, (int)rom.ReadUInt24Le(SpaceMark + 4));
-        for (int p = OriginalSize; p + 16 <= rom.Length; p += 16)
+        for (int p = OriginalSize; p + 16 <= Math.Min(rom.Length, MaxSize); p += 16)
             if (IsMark(rom, p)) return (p, (int)rom.ReadUInt24Le(p + 4));
         return null;
     }
@@ -75,14 +136,14 @@ public static class L2Rom
     /// in its last 16 bytes; the space starts 16 bytes into it (data may end in a 00 or FF).</summary>
     private static (int Mark, int Next)? NewSpace(RomBuffer rom, int from)
     {
-        int bestStart = -1, bestLen = 0;
+        int bestStart = -1, bestLen = 0, end = Math.Min(rom.Length, MaxSize);
         int p = from;
-        while (p < rom.Length)
+        while (p < end)
         {
             byte v = rom.ReadByte(p);
             if (v is not (0x00 or 0xFF)) { p++; continue; }
             int q = p;
-            while (q < rom.Length && rom.ReadByte(q) == v) q++;
+            while (q < end && rom.ReadByte(q) == v) q++;
             if (q - p > bestLen) { bestStart = p; bestLen = q - p; }
             p = q;
         }
@@ -100,12 +161,12 @@ public static class L2Rom
             if (rom.Length < ExpandedSize) return MaxSize - OriginalSize;
             // grown (Expand, or a fan hack) but nothing placed by Lufia Forge yet: the largest empty run is what it would use
             int best = 0;
-            for (int p = OriginalSize; p < rom.Length;)
+            for (int p = OriginalSize; p < Math.Min(rom.Length, MaxSize);)
             {
                 byte v = rom.ReadByte(p);
                 if (v is not (0x00 or 0xFF)) { p++; continue; }
                 int q = p;
-                while (q < rom.Length && rom.ReadByte(q) == v) q++;
+                while (q < Math.Min(rom.Length, MaxSize) && rom.ReadByte(q) == v) q++;
                 best = Math.Max(best, q - p);
                 p = q;
             }

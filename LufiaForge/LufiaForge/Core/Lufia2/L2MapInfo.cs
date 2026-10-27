@@ -25,7 +25,8 @@ public static class L2MapInfo
 
     /// <summary>The sprite each character of the map is made with: the map's start-up script (the map header's second
     /// u24, from $87:8000) creates them with 68 / 7B id sprite (id 0x50 + n = character start n + 1). The first one
-    /// per character is kept (later ones are other story stages).</summary>
+    /// per character is kept (later ones are other story stages). Sprites FB-FD are given as the new sprites they show
+    /// on this map (<see cref="L2Sprites.ToEditor"/>).</summary>
     public static Dictionary<int, int> CharacterSprites(RomBuffer rom, int map)
     {
         var sprites = new Dictionary<int, int>();
@@ -36,9 +37,25 @@ public static class L2MapInfo
         for (int p = at; p < at + 0x400 && p + 2 < rom.Length; p++)
         {
             byte op = rom.ReadByte(p), id = rom.ReadByte(p + 1), sprite = rom.ReadByte(p + 2);
-            if (op is 0x68 or 0x7B && id is >= 0x50 and < 0x80 && sprite < count) { sprites.TryAdd(id, sprite); p += 2; }
+            if (op is 0x68 or 0x7B && id is >= 0x50 and < 0x80 && L2Sprites.ToEditor(rom, map, sprite) is var s && s < count) { sprites.TryAdd(id, s); p += 2; }
         }
         return sprites;
+    }
+
+    /// <summary>The bytes FB, FC and FD (a map's new sprites) that the map's scripts make or change characters with
+    /// (34, 68, 7B), with or without its start-up script.</summary>
+    public static HashSet<int> NewSpriteBytesUsed(RomBuffer rom, int map, bool startUp)
+    {
+        var used = new HashSet<int>();
+        foreach (var (title, ops) in L2Script.MapScripts(rom, map))
+        {
+            if (!startUp && title == "Start-up script") continue;
+            foreach (var o in ops)
+                if (!o.IsText && o.Length >= 3 && o.At + 2 < rom.Length && rom.ReadByte(o.At) is 0x34 or 0x68 or 0x7B &&
+                    rom.ReadByte(o.At + 2) is var b && b >= L2Sprites.FirstSlot && b < L2Sprites.FirstSlot + L2Sprites.SlotsPerMap)
+                    used.Add(b);
+        }
+        return used;
     }
 
     /// <summary>The raw records of one list of a map's info block (list at <paramref name="list"/>, records of
@@ -73,7 +90,7 @@ public static class L2MapInfo
         if (data.Count > 0x0FFF) return false;
         data[0] = (byte)data.Count; data[1] = (byte)(data.Count >> 8);
         data[list] = (byte)listAt; data[list + 1] = (byte)(listAt >> 8);
-        int at = L2Rom.Allocate(rom, data.Count + 1);
+        int at = L2Rom.Allocate(rom, data.Count + 1, upper: true);
         rom.WriteBytes(at, data.Append((byte)0).ToArray());
         int snes = L2Rom.FileToSnes(at);
         rom.WriteBytes(Pointers + map * 3, new[] { (byte)snes, (byte)(snes >> 8), (byte)(snes >> 16) });

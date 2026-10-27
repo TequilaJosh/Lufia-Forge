@@ -37,6 +37,14 @@
                         <TextBox Style="{StaticResource GdNumber}" HorizontalAlignment="Left" Text="{Binding LevelCap, UpdateSourceTrigger=LostFocus}" IsEnabled="{Binding CanLevel}"/>
                     </StackPanel>
                 </Border>
+                <Border Style="{StaticResource GdCard}">
+                    <StackPanel Width="330">
+                        <TextBlock Text="ROM SIZE" Style="{StaticResource GdSection}"/>
+                        <TextBlock Text="{Binding SizeText}" Style="{StaticResource GdHint}" TextWrapping="Wrap"/>
+                        <Button Content="Make the ROM 8 MB..." Command="{Binding MakeEightCommand}" Padding="18,4" Margin="0,8,0,0" HorizontalAlignment="Left"/>
+                        <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,6,0,0" Text="8 MB adds 4 MB for new cutscenes and events (about 2 MB), map sprites and map characters' lists (about 2 MB). The game itself doesn't move. It plays in Snes9x, bsnes and BizHawk's BSNESv115+ core; BizHawk's older BSNES core can't run an 8 MB ROM."/>
+                    </StackPanel>
+                </Border>
             </WrapPanel>
         </StackPanel>
     </ScrollViewer>

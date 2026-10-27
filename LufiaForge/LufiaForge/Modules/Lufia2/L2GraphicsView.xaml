@@ -124,7 +124,7 @@
                             <Button Content="Copy of these colours" Style="{StaticResource LufiaButton}" Command="{Binding AddPaletteCommand}" CommandParameter="copy" Width="180"
                                     ToolTip="Make a new palette that starts as the colours shown and give it to this sprite, so you can change them without changing other sprites."/>
                         </StackPanel>
-                        <TextBlock Text="New map sprite (FB, FC, FD)" Style="{StaticResource GdFieldLabel}" Margin="0,0,0,4"/>
+                        <TextBlock Text="New map sprite (3 on one map)" Style="{StaticResource GdFieldLabel}" Margin="0,0,0,4"/>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                             <Button Content="Copy of this sprite" Style="{StaticResource LufiaButton}" Command="{Binding AddSpriteCommand}" CommandParameter="copy" Width="150" Margin="0,0,8,0"
                                     ToolTip="Make a new map sprite that starts as a copy of this one (its own tiles in the added space, so painting it leaves this one alone)."/>

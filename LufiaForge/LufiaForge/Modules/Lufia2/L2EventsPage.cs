@@ -245,9 +245,9 @@ public partial class L2EventsPage : L2Page
         {
             int id = 0x4F + b[0];
             int spr = sprites.TryGetValue(id, out int s) ? s : -1;
-            _who[id] = ($"character {b[0]} at ({b[1]},{b[2]}){(spr >= 0 ? $", sprite {spr:X2}" : "")}", spr);
+            _who[id] = ($"character {b[0]} at ({b[1]},{b[2]}){(spr >= 0 ? $", sprite {L2Sprites.Name(spr)}" : "")}", spr);
         }
-        foreach (var kv in sprites.Where(kv => !_who.ContainsKey(kv.Key))) _who[kv.Key] = ($"character {kv.Key - 0x4F}, sprite {kv.Value:X2}", kv.Value);
+        foreach (var kv in sprites.Where(kv => !_who.ContainsKey(kv.Key))) _who[kv.Key] = ($"character {kv.Key - 0x4F}, sprite {L2Sprites.Name(kv.Value)}", kv.Value);
         _points = L2MapInfo.Records(rom, map, L2MapInfo.Points, 3).Select(r => ((int)r.Bytes[0], $"point {r.Bytes[0]} ({r.Bytes[1]},{r.Bytes[2]})")).ToList();
         _paths = L2MapInfo.Records(rom, map, L2MapInfo.Paths, 6).Select(r => ((int)r.Bytes[0], $"path {r.Bytes[0]} (from {r.Bytes[1]},{r.Bytes[2]})")).ToList();
         _areas = L2MapInfo.Records(rom, map, L2MapInfo.Areas, 5).Select(r => ((int)r.Bytes[0], $"area {r.Bytes[0]} ({r.Bytes[1]},{r.Bytes[2]})-({r.Bytes[3] - 1},{r.Bytes[4] - 1})")).ToList();

@@ -54,7 +54,7 @@ public static class L2EventBlocks
 
     /// <summary>The u24 the map header holds for a block or start-up script at <paramref name="file"/> (bank $87 + hi,
     /// address lo + $8000).</summary>
-    public static int HeaderValue(int file) => ((file / 0x8000 | 0x80) - 0x87) << 16 | file % 0x8000;
+    public static int HeaderValue(int file) => ((L2Rom.FileToSnes(file) >> 16) - 0x87 & 0xFF) << 16 | file % 0x8000;
 
     private static void PointMaps(RomBuffer rom, int field, int oldAt, int newAt)
     {
@@ -75,7 +75,7 @@ public static class L2EventBlocks
     }
 
     /// <summary>The file offset a map header u24 points at.</summary>
-    public static int HeaderToFile(int v) => L2Rom.SnesToFile((0x87 + (v >> 16)) << 16 | (0x8000 + (v & 0xFFFF)) & 0xFFFF);
+    public static int HeaderToFile(int v) => L2Rom.SnesToFile((0x87 + (v >> 16) & 0xFF) << 16 | (0x8000 + (v & 0xFFFF)) & 0xFFFF);
 
     /// <summary>Init-script jumps are offsets from the start of the bank the script runs in.</summary>
     public static int InitBase(int init) => init / 0x8000 * 0x8000;
@@ -266,7 +266,7 @@ public static class L2EventBlocks
         rom.WriteBytes(phNew + scriptsFrom, scripts);
         return phNew == block
             ? $"Written in the map's added event space ({total} of {Chunk(rom, phNew)!.Value.Room} bytes used)."
-            : $"The map's events moved to {L2Rom.FileToSnes(phNew):X6} in the event space (bank {phNew / 0x8000 | 0x80:X2}) to make room.";
+            : $"The map's events moved to {L2Rom.FileToSnes(phNew):X6} in the event space (bank {L2Rom.FileToSnes(phNew) >> 16:X2}) to make room.";
     }
 
     /// <summary>A script read from the ROM keeps its jumps to its own steps; laid out elsewhere its jumps stay right.</summary>

@@ -58,7 +58,7 @@ public partial class L2MapsPage
             SelKind.Exit => $"exit {b[0]} to {(b[8] == 0 ? "the world map" : $"{b[8]:X2} {NameOf(b[8])}")} ({b[6]},{b[7]})",
             SelKind.Door => $"door {b[0]}",
             SelKind.Trigger => $"step-on area {b[0]}",
-            SelKind.Character => $"character {b[0]} (sprite {_edit.Sprites.GetValueOrDefault(0x4F + b[0], -1):X2})",
+            SelKind.Character => $"character {b[0]} (sprite {(_edit.Sprites.TryGetValue(0x4F + b[0], out int sp) ? L2Sprites.Name(sp) : "none")})",
             SelKind.Point => $"preset point {b[0]}",
             _ => $"treasure spot {b[0]}",
         };
@@ -201,7 +201,7 @@ public partial class L2MapsPage
         if (SpriteChoices.Count != L2Sprites.Count(_rom))
         {
             SpriteChoices.Clear();
-            for (int s = 0; s < L2Sprites.Count(_rom); s++) SpriteChoices.Add(s < 7 ? $"{s:X2}  {L2Rom.Heroes[s]}" : $"{s:X2}");
+            for (int s = 0; s < L2Sprites.Count(_rom); s++) SpriteChoices.Add(s < 7 ? $"{s:X2}  {L2Rom.Heroes[s]}" : L2Sprites.Name(s));
         }
         if (MoveChoices.Count == 0)
             foreach (var (v, name) in L2EventCommands.MoveModes) { MoveChoices.Add($"{v:X2}  {name}"); _moveValues.Add(v); }

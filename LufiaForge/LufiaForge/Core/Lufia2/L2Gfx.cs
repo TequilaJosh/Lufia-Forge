@@ -178,9 +178,9 @@ public static class L2Gfx
             bool added = L2Sprites.IsNew(n);
             list.Add(new Asset
             {
-                Group = "Map sprites", Name = $"{n:X2} ({w} x {h}, {m.Frames} frame{(m.Frames == 1 ? "" : "s")}{(added ? ", new" : "")})", Kind = Kind.MapSprite, Id = n,
+                Group = "Map sprites", Name = $"{L2Sprites.Name(n)} ({w} x {h}, {m.Frames} frame{(m.Frames == 1 ? "" : "s")})", Kind = Kind.MapSprite, Id = n,
                 Palettes = mapPals, DefaultPalette = p > 0 ? 7 + p : m.Row,
-                Note = $"Sprite {n:X2}{(added ? " (added by Lufia Forge)" : "")}: {m.Frames} frame{(m.Frames == 1 ? "" : "s")} of {w} x {h} side by side, {m.FrameWidth * m.FrameHeight * m.Frames} tiles at {m.Tiles:X6} (${L2Rom.FileToSnes(m.Tiles):X6}), " +
+                Note = $"Sprite {L2Sprites.Name(n)}{(added ? " (added by Lufia Forge; on a map it is FB, FC or FD)" : "")}: {m.Frames} frame{(m.Frames == 1 ? "" : "s")} of {w} x {h} side by side, {m.FrameWidth * m.FrameHeight * m.Frames} tiles at {m.Tiles:X6} (${L2Rom.FileToSnes(m.Tiles):X6}), " +
                        (p > 0 ? $"colours: new palette {p}" : $"colours: map sprite row {m.Row}") + ". Colour 0 is see-through. Import and painting write the tiles back in place (same size).",
             });
         }

@@ -498,7 +498,7 @@ public partial class L2GraphicsPage : L2Page
     {
         if (Rom == null || _asset?.Kind != L2Gfx.Kind.MapSprite) return "";
         var t = L2Sprites.SharingTiles(Rom, _asset.Id);
-        return t.Count > 0 ? $" Sprite{(t.Count == 1 ? "" : "s")} {string.Join(", ", t.Select(s => s.ToString("X2")))} use{(t.Count == 1 ? "s" : "")} the same tiles and changed too." : "";
+        return t.Count > 0 ? $" Sprite{(t.Count == 1 ? "" : "s")} {string.Join(", ", t.Select(L2Sprites.Name))} use{(t.Count == 1 ? "s" : "")} the same tiles and changed too." : "";
     }
 
     private void ShowSpriteInfo()
@@ -507,14 +507,16 @@ public partial class L2GraphicsPage : L2Page
         int id = _asset.Id, added = L2Sprites.Count(Rom) - L2Sprites.GameCount;
         var parts = new List<string>
         {
-            $"A character shows sprite {id:X2} when a script makes it with that number: in the Events tab, 68 and 7B create a character (id, sprite) and 34 changes a character's sprite.",
-            $"New sprites: {added} of {L2Sprites.MaxNew} made (FB, FC and FD are the only free numbers: the game keeps a sprite number in one byte, FE is an event object and FF no sprite).",
+            L2Sprites.IsNew(id)
+                ? $"A character shows {L2Sprites.Name(id)} when the Maps tab gives it this sprite: on each map a new sprite is FB, FC or FD (the game keeps a sprite number in one byte, and FE and FF mean an event object and no sprite), so one map can show 3 new sprites. In the Events tab, 68 and 7B create a character (id, sprite) and 34 changes a character's sprite."
+                : $"A character shows sprite {id:X2} when a script makes it with that number: in the Events tab, 68 and 7B create a character (id, sprite) and 34 changes a character's sprite.",
+            $"New sprites: {added} of {L2Sprites.MaxNew} made, any 3 of them on one map.",
             $"New palettes: {L2Sprites.PaletteCount(Rom)}. On a map the game puts a new palette into one of the 8 sprite colour rows that no other character there is using (field monster rows first; row {L2Sprites.RowOf(Rom, id)}, this sprite's own, when all are taken).",
         };
         var t = L2Sprites.SharingTiles(Rom, id);
-        if (t.Count > 0) parts.Add($"Uses the same tiles as {string.Join(", ", t.Select(s => s.ToString("X2")))}: painting one paints both.");
+        if (t.Count > 0) parts.Add($"Uses the same tiles as {string.Join(", ", t.Select(L2Sprites.Name))}: painting one paints both.");
         var e = L2Sprites.SharingEntry(Rom, id);
-        if (e.Count > 0) parts.Add($"Shares its entry with {string.Join(", ", e.Select(s => s.ToString("X2")))}: a colour row change changes both.");
+        if (e.Count > 0) parts.Add($"Shares its entry with {string.Join(", ", e.Select(L2Sprites.Name))}: a colour row change changes both.");
         SpriteInfo = string.Join(" ", parts);
     }
 
@@ -551,11 +553,11 @@ public partial class L2GraphicsPage : L2Page
         }
         catch (Exception ex) { Status = "Not changed: " + ex.Message; return; }
         if (!changed) { Draw(keep: true); return; }
-        Main.NotifyRomModified($"Lufia II: map sprite {id:X2} uses {what}");
+        Main.NotifyRomModified($"Lufia II: map sprite {L2Sprites.Name(id)} uses {what}");
         var shared = choice < 8 ? L2Sprites.SharingEntry(Rom, id) : new List<int>();
         int at = SelectedIndex;
         Refresh(() => at, keep: true);
-        Status = $"Sprite {id:X2} now uses {what}." + (shared.Count > 0 ? $" Sprite{(shared.Count == 1 ? "" : "s")} {string.Join(", ", shared.Select(s => s.ToString("X2")))} share{(shared.Count == 1 ? "s" : "")} its entry and changed too." : "") + " Edit, Undo takes it back.";
+        Status = $"Sprite {L2Sprites.Name(id)} now uses {what}." + (shared.Count > 0 ? $" Sprite{(shared.Count == 1 ? "" : "s")} {string.Join(", ", shared.Select(L2Sprites.Name))} share{(shared.Count == 1 ? "s" : "")} its entry and changed too." : "") + " Edit, Undo takes it back.";
     }
 
     private bool CanAdd() => !IsPainted;
@@ -577,13 +579,13 @@ public partial class L2GraphicsPage : L2Page
             return;
         }
         bool grew = Rom.Length > before.Length;
-        Main.NotifyRomModified($"Lufia II: new map sprite palette {p} ({(copy ? "a copy of the colours of" : "black, for")} sprite {id:X2})");
+        Main.NotifyRomModified($"Lufia II: new map sprite palette {p} ({(copy ? "a copy of the colours of" : "black, for")} sprite {L2Sprites.Name(id)})");
         Refresh(() => IndexOfSprite(id), keep: false);
-        Status = $"New palette {p} made ({(copy ? "a copy of the colours shown" : "all black")}) and given to sprite {id:X2}. Click a colour above to change it." +
+        Status = $"New palette {p} made ({(copy ? "a copy of the colours shown" : "all black")}) and given to sprite {L2Sprites.Name(id)}. Click a colour above to change it." +
                  (grew ? " The ROM grew to make room." : "") + " Edit, Undo takes it back.";
     }
 
-    /// <summary>Adds a map sprite (FB, FC, FD) like the one shown: a copy of it, or empty with its size and frames.</summary>
+    /// <summary>Adds a map sprite ("New n") like the one shown: a copy of it, or empty with its size and frames.</summary>
     [RelayCommand(CanExecute = nameof(CanAdd))]
     private void AddSprite(string? how)
     {
@@ -599,10 +601,10 @@ public partial class L2GraphicsPage : L2Page
             return;
         }
         bool grew = Rom.Length > before.Length;
-        Main.NotifyRomModified($"Lufia II: new map sprite {id:X2} ({(empty ? "empty, the size of" : "a copy of")} sprite {from:X2})");
+        Main.NotifyRomModified($"Lufia II: new map sprite {L2Sprites.Name(id)} ({(empty ? "empty, the size of" : "a copy of")} sprite {L2Sprites.Name(from)})");
         Refresh(() => IndexOfSprite(id), keep: false);
-        Status = $"Map sprite {id:X2} made ({(empty ? $"empty, with the size, frames and colours of {from:X2}" : $"a copy of {from:X2}")}); paint it below. " +
-                 $"A character shows it when a script makes it with sprite {id:X2} (Events tab: 68 or 7B create a character, 34 changes its sprite)." +
+        Status = $"Map sprite {L2Sprites.Name(id)} made ({(empty ? $"empty, with the size, frames and colours of {L2Sprites.Name(from)}" : $"a copy of {L2Sprites.Name(from)}")}); paint it below. " +
+                 "Give it to a character in the Maps tab: on that map it becomes FB, FC or FD (3 new sprites a map)." +
                  (grew ? " The ROM grew to make room." : "") + " Edit, Undo takes it back.";
     }
 
