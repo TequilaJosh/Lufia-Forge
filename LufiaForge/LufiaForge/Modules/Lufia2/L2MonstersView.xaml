@@ -18,14 +18,17 @@
         <common:PopOutHost Grid.Column="2" Title="Monster" Key="l2monsters.detail" ButtonMargin="0,2,22,0">
         <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,12,0,0">
             <StackPanel>
-                <TextBlock Text="Lufia II's 224 monsters. A change is written to the ROM at once (Edit, Undo takes it back)." Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="8,0,12,4"/>
+                <TextBlock Text="{Binding CountNote}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="8,0,12,4"/>
+                <TextBlock Text="{Binding RecordNote}" TextWrapping="Wrap" Margin="8,0,12,4" Foreground="#FFE0B060">
+                    <TextBlock.Style><Style TargetType="TextBlock" BasedOn="{StaticResource GdHint}"><Style.Triggers><Trigger Property="Text" Value=""><Setter Property="Visibility" Value="Collapsed"/></Trigger></Style.Triggers></Style></TextBlock.Style>
+                </TextBlock>
                 <WrapPanel Orientation="Horizontal" IsEnabled="{Binding IsEditable}">
             <Border Style="{StaticResource GdCard}">
                 <StackPanel>
                     <TextBlock Text="MONSTER" Style="{StaticResource GdSection}"/>
                     <UniformGrid Columns="2">
                         <TextBlock Text="Name" Style="{StaticResource GdFieldLabel}"/>
-                        <TextBox Style="{StaticResource GdText}" Width="130" HorizontalAlignment="Left" Text="{Binding Name, UpdateSourceTrigger=LostFocus}" MaxLength="13"/>
+                        <TextBox Style="{StaticResource GdText}" Width="130" HorizontalAlignment="Left" Text="{Binding Name, UpdateSourceTrigger=LostFocus}" MaxLength="{Binding NameMax}"/>
                         <TextBlock Text="Level" Style="{StaticResource GdFieldLabel}"/>
                         <TextBox Style="{StaticResource GdNumber}" Text="{Binding Level, UpdateSourceTrigger=LostFocus}"/>
                     </UniformGrid>

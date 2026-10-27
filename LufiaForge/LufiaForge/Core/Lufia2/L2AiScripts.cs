@@ -268,20 +268,29 @@ public static class L2AiScripts
         var steps = new List<Step>();
         var byOffset = new Dictionary<int, Step>();
         var jumps = new List<(Step S, int Arg, int To)>();
-        var covered = new List<(int Start, int End)>();
-        // one straight run of commands from file offset p (stops at an end, or where it reaches steps already read)
+        var covered = new List<(int Start, int Length)>();
+        // Offsets count from the base as the game adds them: a 16-bit sum in the base's bank (L2Rom.InBank), so a
+        // script can sit before its record or wrap round the bank (the fan hacks' records in bank $D0 do both).
+        int FileAt(int rel)
+        {
+            int f = L2Rom.InBank(baseAt, rel);
+            return f >= 0 && f < rom.Length ? f : throw new InvalidDataException($"Offset {rel & 0xFFFF:X4} from 0x{baseAt:X6} isn't in the ROM.");
+        }
+        // one straight run of commands from offset p (stops at an end, or where it reaches steps already read)
         // straight: read on to the furthest jump (the game's layout), else stop at each end and follow the jumps
         List<Step> Run(int p, bool first)
         {
             var run = new List<Step>();
-            int furthest = p, runStart = p;
+            int runStart = p, furthest = 0, done = 0;   // distances from runStart
             var runJumps = new List<(Step, int, int)>();
-            for (int guard = 0; guard < 2000 && p < rom.Length; guard++)
+            for (int guard = 0; guard < 2000; guard++)
             {
-                if (!first && byOffset.ContainsKey(p - baseAt)) break;
-                byte op = rom.ReadByte(p);
-                var d = Def(op) ?? throw new InvalidDataException($"Unknown command {op:X2} at 0x{p:X6}.");
-                var s = new Step { Op = op, Args = rom.ReadBytes(p + 1, d.Length - 1), Offset = p - baseAt };
+                if (!first && byOffset.ContainsKey(p)) break;
+                byte op = rom.ReadByte(FileAt(p));
+                var d = Def(op) ?? throw new InvalidDataException($"Unknown command {op:X2} at 0x{FileAt(p):X6}.");
+                var args = new byte[d.Length - 1];
+                for (int k = 0; k < args.Length; k++) args[k] = rom.ReadByte(FileAt(p + 1 + k));
+                var s = new Step { Op = op, Args = args, Offset = p };
                 int jumpN = d.Args.Count(a => a == Arg.Jump);
                 s.Targets = new Step?[jumpN];
                 s.OutsideTargets = Enumerable.Repeat(-1, jumpN).ToArray();
@@ -291,18 +300,20 @@ public static class L2AiScripts
                     if (d.Args[i] != Arg.Jump) continue;
                     int at = ArgAt(d, i), to = s.Args[at] | s.Args[at + 1] << 8;
                     runJumps.Add((s, j++, to));
-                    if (straight && baseAt + to > furthest && baseAt + to < p + 0x400) furthest = baseAt + to;
+                    int dist = (to - runStart) & 0xFFFF;
+                    if (straight && dist > furthest && dist < done + 0x400) furthest = dist;
                 }
                 run.Add(s);
-                p += d.Length;
-                if (d.EndsPath && p > furthest) break;
+                p = (p + d.Length) & 0xFFFF;
+                done += d.Length;
+                if (d.EndsPath && done > furthest) break;
             }
             // nothing is added unless the whole run reads as commands
             foreach (var s in run) byOffset[s.Offset] = s;
             jumps.AddRange(runJumps);
-            covered.Add((runStart, p));
+            covered.Add((runStart, done));
             // a run that ran into steps already read carries on there
-            if (!first && run.Count > 0 && run[^1].Def?.EndsPath != true && byOffset.TryGetValue(p - baseAt, out var next))
+            if (!first && run.Count > 0 && run[^1].Def?.EndsPath != true && byOffset.TryGetValue(p, out var next))
             {
                 var go = New(0x03);
                 go.Targets[0] = next;
@@ -311,7 +322,8 @@ public static class L2AiScripts
             }
             return run;
         }
-        try { steps.AddRange(Run(start, true)); }
+        int startAt = L2Rom.OffsetInBank(baseAt, start);
+        try { steps.AddRange(Run(startAt, true)); }
         catch (InvalidDataException) when (straight)
         {
             // (some fan hacks jump ahead over other data: follow the jumps instead of reading straight on)
@@ -319,9 +331,9 @@ public static class L2AiScripts
         }
         for (int k = 0; k < jumps.Count; k++)
         {
-            int to = jumps[k].To, abs = baseAt + to;
-            if (byOffset.ContainsKey(to) || covered.Any(c => abs >= c.Start && abs < c.End)) continue;
-            try { steps.AddRange(Run(abs, false)); } catch (InvalidDataException) { }
+            int to = jumps[k].To;
+            if (byOffset.ContainsKey(to) || covered.Any(c => ((to - c.Start) & 0xFFFF) < c.Length)) continue;
+            try { steps.AddRange(Run(to, false)); } catch (InvalidDataException) { }
         }
         foreach (var (s, j, to) in jumps)
             if (byOffset.TryGetValue(to, out var t)) s.Targets[j] = t; else s.OutsideTargets[j] = to;
@@ -511,16 +523,38 @@ public static class L2AiScripts
             case Kind.Spell:
                 var sp = L2Battle.ReadSpell(rom, index);
                 int w = rom.ReadUInt16Le(sp.Offset + 0x11);
-                return w == 0 ? -1 : sp.Offset + w;
-            case Kind.IpAttack: return RecordAt(rom, kind, index) + 1;
+                return w == 0 ? -1 : L2Rom.InBank(sp.Offset, w);
+            case Kind.IpAttack: return L2Rom.InBank(RecordAt(rom, kind, index), 1);
             case Kind.ItemMenu or Kind.ItemBattle or Kind.Weapon or Kind.Armor:
                 var it = L2Battle.ReadItem(rom, index);
-                return it.Values.TryGetValue(ItemBit(kind), out var v) && v != 0 ? it.Offset + v : -1;
+                return it.Values.TryGetValue(ItemBit(kind), out var v) && v != 0 ? L2Rom.InBank(it.Offset, v) : -1;
             default:
                 var c = L2Capsules.Read(rom, index);
                 int off = kind == Kind.CapsuleAi ? c.AiScript : c.DefenseScript;
-                return off == 0 ? -1 : c.At + off;
+                return off == 0 ? -1 : L2Rom.InBank(c.At, off);
         }
+    }
+
+    /// <summary>File offsets of every byte the game's own monster scripts (turn and when hit) are read from. The fan hacks
+    /// keep scripts in the unused end of a record's name field (and jump between records), so a name or field edit must
+    /// keep clear of these.</summary>
+    public static HashSet<int> MonsterScriptBytes(RomBuffer rom)
+    {
+        var used = new HashSet<int>();
+        for (int i = 0, n = L2Battle.MonsterCountIn(rom); i < n; i++)
+        {
+            var m = L2Battle.ReadMonster(rom, i);
+            foreach (int at in new[] { m.AttackScript, m.DefenseScript })
+            {
+                if (at < 0) continue;
+                List<Step> steps;
+                try { steps = Parse(rom, at, m.Offset); } catch (InvalidDataException) { continue; }
+                foreach (var s in steps)
+                    if (s.Offset >= 0)
+                        for (int k = 0; k < s.Length; k++) used.Add(L2Rom.InBank(m.Offset, s.Offset + k));
+            }
+        }
+        return used;
     }
 
     /// <summary>The script as it runs now: Lufia Forge's (from the table) or the game's; empty when there is none.</summary>
@@ -980,7 +1014,7 @@ public static class L2AiScripts
             var n = new NameLists
             {
                 Spells = L2Battle.Spells(rom).Select(s => s.Name).ToArray(),
-                Monsters = L2Battle.Monsters(rom).Select(m => m.Name).ToArray(),
+                Monsters = L2Battle.Monsters(rom).Select(m => m.Unused ? "(unused slot)" : m.Name).ToArray(),
                 Items = L2Battle.Items(rom).Select(i => i.Name).ToArray(),
                 CapsuleAttacks = L2Capsules.AttackList(rom),
                 AttackNames = MonsterAttackNames(rom),

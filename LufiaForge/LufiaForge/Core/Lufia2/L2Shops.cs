@@ -11,6 +11,8 @@ namespace LufiaForge.Core.Lufia2;
 public static class L2Shops
 {
     public const int Table = 0xBEE9F, Count = 0x100;
+    /// <summary>The US game's last shop id (its shops are 01-3E, a few of them empty).</summary>
+    public const int LastOriginal = 0x3E;
 
     public static readonly string[] SectionNames = { "", "Coins", "Items", "Weapons", "Armor", "Spells" };
 
@@ -35,11 +37,29 @@ public static class L2Shops
         public List<Section> Sections { get; init; } = new();
     }
 
+    /// <summary>How many entries the shop table has in this ROM. The game takes any id 00-FF (AND #$00FF at $82:E736), but
+    /// the shops' data starts right after the table: the US game's 0x3F entries are followed by zeros up to its first
+    /// shop; Spekkio and Kureji Lufia put their added shops (3F-41, 3C/3D/3F) in those zeros, so the table ends where the
+    /// first shop's data starts (0xB0 and 0xA6 entries there, the ids past the used ones still 0000).</summary>
+    public static int CountIn(RomBuffer rom)
+    {
+        int end = Count * 2;
+        for (int i = 0; i * 2 < end; i++)
+        {
+            int off = rom.ReadUInt16Le(Table + i * 2);
+            if (off != 0 && off < end) end = Math.Max(off, (i + 1) * 2);
+        }
+        return end / 2;
+    }
+
     public static Shop? Read(RomBuffer rom, int id)
     {
+        if (id < 0 || id >= CountIn(rom)) return null;
         int off = rom.ReadUInt16Le(Table + id * 2);
         if (off == 0) return null;
-        int at = Table + off, mask = rom.ReadUInt16Le(at + 1);
+        int at = L2Rom.InBank(Table, off);
+        if (at < 0) return null;
+        int mask = rom.ReadUInt16Le(at + 1);
         var shop = new Shop { Id = id, At = at, Mask = mask };
         int p = at + 3;
         for (int bit = 1; bit <= 5; bit++)
@@ -56,7 +76,7 @@ public static class L2Shops
         return shop;
     }
 
-    public static List<Shop> All(RomBuffer rom) => Enumerable.Range(0, Count).Select(i => Read(rom, i)).Where(s => s != null).Cast<Shop>().ToList();
+    public static List<Shop> All(RomBuffer rom) => Enumerable.Range(0, CountIn(rom)).Select(i => Read(rom, i)).Where(s => s != null).Cast<Shop>().ToList();
 
     /// <summary>Writes a section's entries back in place (as many as it has: lists don't grow or shrink).</summary>
     public static void WriteSection(RomBuffer rom, Section sec)
