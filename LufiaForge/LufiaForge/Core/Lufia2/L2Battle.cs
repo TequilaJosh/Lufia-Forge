@@ -39,7 +39,26 @@ public static class L2Battle
         public Dictionary<int, ushort> Values { get; init; } = new();
     }
 
-    public static int ItemOffset(RomBuffer rom, int i) => ItemTable + rom.ReadUInt16Le(ItemTable + i * 2);
+    public static int ItemOffset(RomBuffer rom, int i) => L2Rom.InBank(ItemTable, rom.ReadUInt16Le(ItemTable + i * 2));
+
+    /// <summary>How many entries a table of u16 offsets has, read the way the game lays them out: the records start right
+    /// after the table, so it ends where the first record starts; an entry that points back into the table (0000, or bytes
+    /// a hack keeps there) ends it too. <paramref name="target"/> gives entry i's record (file offset).</summary>
+    internal static int TableLength(RomBuffer rom, int table, int max, Func<int, int> target)
+    {
+        int first = target(0);
+        if (first <= table) return 0;
+        int n = Math.Min(max, (first - table) / 2);
+        for (int i = 0; i < n; i++)
+        {
+            int t = target(i);
+            if (t < table + n * 2 || t >= rom.Length) return i;
+        }
+        return n;
+    }
+
+    /// <summary>How many items the ROM has (its item table's length: 0x1D3 in the US game; ids are 9 bits).</summary>
+    public static int ItemCountIn(RomBuffer rom) => TableLength(rom, ItemTable, 0x200, i => ItemOffset(rom, i));
 
     public static Item ReadItem(RomBuffer rom, int i)
     {
@@ -61,7 +80,7 @@ public static class L2Battle
         };
     }
 
-    public static List<Item> Items(RomBuffer rom) => Enumerable.Range(0, ItemCount).Select(i => ReadItem(rom, i)).ToList();
+    public static List<Item> Items(RomBuffer rom) => Enumerable.Range(0, ItemCountIn(rom)).Select(i => ReadItem(rom, i)).ToList();
 
     public static void WriteItem(RomBuffer rom, Item it)
     {
@@ -87,6 +106,14 @@ public static class L2Battle
 
     /// <summary>How many spells the ROM has (40, more once Lufia Forge added some).</summary>
     public static int SpellCount(RomBuffer rom) => L2Magic.SpellCount(rom);
+
+    /// <summary>How many spells the spell table has, read from the table (the fan hacks made room for 64 entries but keep
+    /// other bytes in the 24 past the game's 40, so those end it).</summary>
+    internal static int SpellTableLength(RomBuffer rom)
+    {
+        int table = L2Rom.SnesToFile((int)rom.ReadUInt24Le(SpellTableRef + 1));
+        return TableLength(rom, table, 0xFF, i => SpellOffset(rom, i));
+    }
 
     /// <summary>A spell record (0x13 bytes): name 8, +08 flags (40 usable in the menu, 80 in battle), +09 (an icon or
     /// group, read by no code found), +0A who can learn it (hero bits), +0B who it targets (<see cref="L2Magic.Targets"/>),
@@ -141,6 +168,19 @@ public static class L2Battle
     public static int MonsterTableAt(RomBuffer rom) =>
         rom.ReadByte(MonsterTableRef) == 0xBF ? L2Rom.SnesToFile((int)rom.ReadUInt24Le(MonsterTableRef + 1)) : MonsterTable;
 
+    /// <summary>File offset of monster <paramref name="i"/>'s record: table + its u16, added in the bank as the game does
+    /// ($81:FCE2: LDA table,Y / ADC #table).</summary>
+    public static int MonsterAt(RomBuffer rom, int i)
+    {
+        int table = MonsterTableAt(rom);
+        return L2Rom.InBank(table, rom.ReadUInt16Le(table + i * 2));
+    }
+
+    /// <summary>How many monsters the ROM's table has. A monster id is a byte (the game takes AND #$00FF before reading the
+    /// table), so up to 256: the US game has 0xE0 (224); Spekkio and Kureji Lufia add monsters past that, Frue Lufia and
+    /// The Wrath of Foomy fill the table to 256 with entries that all point at one blank record.</summary>
+    public static int MonsterCountIn(RomBuffer rom) => TableLength(rom, MonsterTableAt(rom), 0x100, i => MonsterAt(rom, i));
+
     public sealed class Monster
     {
         public int Index { get; init; }
@@ -166,24 +206,50 @@ public static class L2Battle
         public int DropChance { get; set; }
         public int AttackScript { get; init; } = -1;
         public int DefenseScript { get; init; } = -1;
+        /// <summary>A lower id whose table entry points at the same record (an edit changes both), or -1.</summary>
+        public int SameAs { get; init; } = -1;
+        /// <summary>A slot the hack filled with a placeholder: its entry shares a record with other ids and that record has
+        /// no name the game could show (Frue Lufia's and Foomy's E0-FF, a few of Spekkio Lufia's).</summary>
+        public bool Unused { get; init; }
+    }
+
+    /// <summary>Whether a monster name reads as the game's text (letters, ended by 00 or padded with spaces).</summary>
+    private static bool IsName(RomBuffer rom, int o)
+    {
+        int n = 0;
+        for (; n < MonsterNameLength; n++)
+        {
+            byte b = rom.ReadByte(o + n);
+            if (b == 0) break;
+            if (b is < 0x20 or >= 0x7F) return false;
+        }
+        return n > 0 && rom.ReadByte(o) != 0x20;
     }
 
     public static Monster ReadMonster(RomBuffer rom, int i)
     {
         int table = MonsterTableAt(rom);
-        int o = table + rom.ReadUInt16Le(table + i * 2);
+        int o = MonsterAt(rom, i);
         int dropAt = -1, item = -1, chance = 0, atk = -1, def = -1;
         for (int p = o + 0x21, guard = 0; guard < 16; guard++)
         {
             byte tag = rom.ReadByte(p);
             if (tag == 0) break;
             if (tag == 3) { dropAt = p; byte ii = rom.ReadByte(p + 1), cc = rom.ReadByte(p + 2); item = ii | (cc & 1) << 8; chance = cc >> 1; }
-            else if (tag == 7) atk = o + rom.ReadUInt16Le(p + 1);
-            else if (tag == 8) def = o + rom.ReadUInt16Le(p + 1);
+            else if (tag == 7) atk = L2Rom.InBank(o, rom.ReadUInt16Le(p + 1));
+            else if (tag == 8) def = L2Rom.InBank(o, rom.ReadUInt16Le(p + 1));
             p += 3;
+        }
+        int entry = rom.ReadUInt16Le(table + i * 2), sameAs = -1, sharing = 0, count = MonsterCountIn(rom);
+        for (int k = 0; k < count; k++)
+        {
+            if (k == i || rom.ReadUInt16Le(table + k * 2) != entry) continue;
+            sharing++;
+            if (k < i && sameAs < 0) sameAs = k;
         }
         return new Monster
         {
+            SameAs = sameAs, Unused = sharing > 0 && !IsName(rom, o),
             Index = i, Offset = o, Name = L2Rom.Name(rom, o, MonsterNameLength), Level = rom.ReadByte(o + 0x0D),
             Sprite = rom.ReadByte(o + 0x0F), Palette = rom.ReadByte(o + 0x10),
             Hp = rom.ReadUInt16Le(o + 0x11), Mp = rom.ReadUInt16Le(o + 0x13), Atp = rom.ReadUInt16Le(o + 0x15), Dfp = rom.ReadUInt16Le(o + 0x17),
@@ -193,12 +259,48 @@ public static class L2Battle
         };
     }
 
-    public static List<Monster> Monsters(RomBuffer rom) => Enumerable.Range(0, MonsterCount).Select(i => ReadMonster(rom, i)).ToList();
+    public static List<Monster> Monsters(RomBuffer rom) => Enumerable.Range(0, MonsterCountIn(rom)).Select(i => ReadMonster(rom, i)).ToList();
+
+    /// <summary>How many letters monster <paramref name="m"/>'s name may have. The US game pads every name to 13 with
+    /// spaces; the fan hacks end names with 00 and keep script bytes in the rest of the field, so a name there may grow
+    /// only up to the first byte a script uses (<see cref="L2AiScripts.MonsterScriptBytes"/>).</summary>
+    public static int NameRoom(RomBuffer rom, Monster m, ISet<int>? scriptBytes = null)
+    {
+        int free = NameFree(rom, m, scriptBytes);
+        // a shorter name needs its 00 too: the script's own byte can be it when that is a 00 (an End)
+        return free == MonsterNameLength || rom.ReadByte(m.Offset + free) == 0 ? free : Math.Max(0, free - 1);
+    }
+
+    /// <summary>The name field's bytes before the first one a script uses.</summary>
+    private static int NameFree(RomBuffer rom, Monster m, ISet<int>? scriptBytes)
+    {
+        scriptBytes ??= L2AiScripts.MonsterScriptBytes(rom);
+        for (int k = 0; k < MonsterNameLength; k++)
+            if (scriptBytes.Contains(m.Offset + k)) return k;
+        return MonsterNameLength;
+    }
+
+    /// <summary>Writes a monster name the way the record has it: space padded (the US game) or ended by 00 (the fan
+    /// hacks), never past <see cref="NameRoom"/>; bytes after a 00 are left as they are.</summary>
+    private static void WriteMonsterName(RomBuffer rom, Monster m)
+    {
+        int o = m.Offset;
+        var old = rom.ReadBytes(o, MonsterNameLength);
+        if (L2Rom.Name(rom, o, MonsterNameLength) == m.Name) return;
+        int zero = Array.IndexOf(old, (byte)0);
+        if (zero < 0) { L2Rom.WriteName(rom, o, MonsterNameLength, m.Name); return; }
+        var used = L2AiScripts.MonsterScriptBytes(rom);
+        int room = NameRoom(rom, m, used), free = NameFree(rom, m, used);
+        string name = m.Name.Length > room ? m.Name[..room] : m.Name;
+        var bytes = new List<byte>(name.Select(c => c is >= ' ' and < (char)0x7F ? (byte)c : (byte)' '));
+        if (bytes.Count < free) bytes.Add(0);
+        rom.WriteBytes(o, bytes.ToArray());
+    }
 
     public static void WriteMonster(RomBuffer rom, Monster m)
     {
         int o = m.Offset;
-        L2Rom.WriteName(rom, o, MonsterNameLength, m.Name);
+        WriteMonsterName(rom, m);
         rom.WriteByte(o + 0x0D, m.Level); rom.WriteByte(o + 0x0F, m.Sprite); rom.WriteByte(o + 0x10, m.Palette);
         rom.WriteUInt16Le(o + 0x11, m.Hp); rom.WriteUInt16Le(o + 0x13, m.Mp); rom.WriteUInt16Le(o + 0x15, m.Atp); rom.WriteUInt16Le(o + 0x17, m.Dfp);
         rom.WriteByte(o + 0x19, m.Agl); rom.WriteByte(o + 0x1A, m.Int); rom.WriteByte(o + 0x1B, m.Gut); rom.WriteByte(o + 0x1C, m.Mgr);

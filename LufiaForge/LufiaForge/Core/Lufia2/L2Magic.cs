@@ -84,9 +84,26 @@ public static class L2Magic
 
     public static bool IsInstalled(RomBuffer rom) => BlockA(rom) >= 0 && BlockB(rom) >= 0;
 
-    public static int SpellCount(RomBuffer rom) => BlockA(rom) is var a && a >= 0 ? rom.ReadByte(a + 6) : L2Battle.SpellCountOriginal;
-    public static int IpCount(RomBuffer rom) => BlockB(rom) is var b && b >= 0 ? rom.ReadByte(b + 6) : L2Battle.IpCountOriginal;
-    public static int IpEffectCount(RomBuffer rom) => BlockA(rom) is var a && a >= 0 ? rom.ReadUInt16Le(a + 8) : EffCountOriginal;
+    /// <summary>How many spells: Lufia Forge's count once it moved them, else the length of the table the game reads
+    /// (40 in the US game and the fan hacks).</summary>
+    public static int SpellCount(RomBuffer rom) => BlockA(rom) is var a && a >= 0 ? rom.ReadByte(a + 6) : L2Battle.SpellTableLength(rom);
+    /// <summary>How many IP attacks: Lufia Forge's count once it moved them, else the length of the game's table (its
+    /// records start right after it: 168 in the US game and the fan hacks).</summary>
+    public static int IpCount(RomBuffer rom)
+    {
+        if (BlockB(rom) is var b && b >= 0) return rom.ReadByte(b + 6);
+        if (rom.ReadByte(IpTableReads[0]) != 0xBF) return L2Battle.IpCountOriginal;
+        int table = L2Rom.SnesToFile((int)rom.ReadUInt24Le(IpTableReads[0] + 1));
+        int n = L2Battle.TableLength(rom, table, MaxIp, i => L2Battle.IpOffset(rom, i));
+        return n > 0 ? n : L2Battle.IpCountOriginal;
+    }
+    public static int IpEffectCount(RomBuffer rom)
+    {
+        if (BlockA(rom) is var a && a >= 0) return rom.ReadUInt16Le(a + 8);
+        int table = L2Rom.SnesToFile((int)rom.ReadUInt24Le(EffTableRead + 1));
+        int n = L2Battle.TableLength(rom, table, MaxEffects, e => L2AiScripts.IpEffectBase(rom, e));
+        return n > 0 ? n : EffCountOriginal;
+    }
 
     /// <summary>What the move takes along, read the way the game reads it: each spell's record and its script, each IP
     /// effect script (from its base byte), each IP attack record. Scripts are read as steps and laid out again, so one
@@ -102,19 +119,19 @@ public static class L2Magic
     private static Plan MakePlan(RomBuffer rom)
     {
         var p = new Plan();
-        for (int i = 0; i < L2Battle.SpellCountOriginal; i++)
+        for (int i = 0, n = SpellCount(rom); i < n; i++)
         {
             int rec = L2Battle.SpellOffset(rom, i);
             var bytes = rom.ReadBytes(rec, 0x13);
             int w = rom.ReadUInt16Le(rec + 0x11);
             if (w == 0) { p.Spells.Add((rec, bytes, Array.Empty<byte>(), -1)); continue; }
-            var steps = L2AiScripts.Parse(rom, rec + w, rec);
+            var steps = L2AiScripts.Parse(rom, L2Rom.InBank(rec, w), rec);
             bytes[0x11] = 0x13; bytes[0x12] = 0;
-            p.Spells.Add((rec, bytes, L2AiScripts.BuildCopy(steps, 0x13), rec + w));
+            p.Spells.Add((rec, bytes, L2AiScripts.BuildCopy(steps, 0x13), L2Rom.InBank(rec, w)));
         }
         // the effects: the table's own length (its first offset), at least as many as the attacks use
         int table = L2Rom.SnesToFile((int)rom.ReadUInt24Le(EffTableRead + 1));
-        int count = Math.Max(rom.ReadUInt16Le(table) / 2, Enumerable.Range(0, L2Battle.IpCountOriginal).Max(i => L2Battle.ReadIp(rom, i).Effect) + 1);
+        int count = Math.Max(rom.ReadUInt16Le(table) / 2, Enumerable.Range(0, IpCount(rom)).Max(i => L2Battle.ReadIp(rom, i).Effect) + 1);
         if (count > MaxEffects) throw new InvalidOperationException("This ROM has more IP effects than Lufia Forge's block holds.");
         p.EffectOf = new int[count];
         var byBase = new Dictionary<int, int>();
@@ -130,7 +147,7 @@ public static class L2Magic
             }
             p.EffectOf[e] = k;
         }
-        for (int i = 0; i < L2Battle.IpCountOriginal; i++)
+        for (int i = 0, n = IpCount(rom); i < n; i++)
         {
             int o = L2Battle.IpOffset(rom, i);
             p.Ips.Add(rom.ReadBytes(o, 6 + rom.ReadUntil(o + 6, 0, 32).Length + 1));

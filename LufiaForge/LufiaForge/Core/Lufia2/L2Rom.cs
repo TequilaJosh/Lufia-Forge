@@ -24,6 +24,21 @@ public static class L2Rom
     public static int FileToSnes(int file) =>
         file >= UpperStart ? ((file - UpperStart) / 0x8000) << 16 | (file % 0x8000 | 0x8000) : (file / 0x8000 | 0x80) << 16 | (file % 0x8000 | 0x8000);
 
+    /// <summary>File offset of the byte <paramref name="offset"/> on from file offset <paramref name="file"/> the way the
+    /// game adds a record's u16 offsets: a 16-bit sum in the same bank ($0A42 + Y, INC $BB, the shop pointer...), so an
+    /// offset past the bank's end comes round to its start (the fan hacks' monster records in bank $D0 use offsets like
+    /// $FF79, which is 0x87 bytes back). Banks $C0-$FF show the ROM at $0000-$7FFF as well; in banks $80-$BF that is
+    /// RAM, so -1.</summary>
+    public static int InBank(int file, int offset)
+    {
+        int snes = FileToSnes(file), bank = snes >> 16, addr = (snes + offset) & 0xFFFF;
+        if (addr < 0x8000 && bank < 0xC0) return -1;
+        return SnesToFile(bank << 16 | addr);
+    }
+
+    /// <summary>The u16 the game adds to <paramref name="from"/> to reach <paramref name="to"/> (same bank).</summary>
+    public static int OffsetInBank(int from, int to) => (FileToSnes(to) - FileToSnes(from)) & 0xFFFF;
+
     /// <summary>File offset of packed file <paramref name="id"/>.</summary>
     public static int FileOffset(RomBuffer rom, int id) =>
         FileTable + rom.ReadByte(FileTable + id * 3) + (rom.ReadByte(FileTable + id * 3 + 1) << 8) + (rom.ReadByte(FileTable + id * 3 + 2) << 16);

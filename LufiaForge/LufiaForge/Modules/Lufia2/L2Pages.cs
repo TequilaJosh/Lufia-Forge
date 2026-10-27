@@ -230,6 +230,15 @@ public partial class L2MonstersPage : L2Page
     [ObservableProperty] private List<L2Option> _spriteOptions = new();
     [ObservableProperty] private List<L2Option> _paletteOptions = new();
     [ObservableProperty] private string _spriteNote = "";
+    /// <summary>How many monsters the ROM has (the US game's 224, or a hack's table up to 256).</summary>
+    [ObservableProperty] private string _countNote = "";
+    /// <summary>What to know about the picked record in a hack (a placeholder slot, a record shared by several ids, a
+    /// name field that also holds script bytes), or "".</summary>
+    [ObservableProperty] private string _recordNote = "";
+    [ObservableProperty] private int _nameMax = L2Battle.MonsterNameLength;
+
+    private static string Line(L2Battle.Monster m) =>
+        $"{m.Index:X2}  " + (m.Unused ? "(unused slot)" : m.Name + (m.SameAs >= 0 ? $"  (= {m.SameAs:X2})" : ""));
 
     protected override IEnumerable<string> ReadNames()
     {
@@ -243,7 +252,12 @@ public partial class L2MonstersPage : L2Page
             string names = who.Count == 0 ? (L2MonsterSprites.IsNew(n) ? "new" : "no monster") : string.Join(", ", who.Take(2)) + (who.Count > 2 ? ", ..." : "");
             return new L2Option(n, $"{n:X2} ({tx * 8} x {ty * 8}) {names}");
         }).ToList();
-        return ms.Select(m => $"{m.Index:X2}  {m.Name}");
+        int real = ms.Count(m => !m.Unused);
+        CountNote = (ms.Count == L2Battle.MonsterCount && real == ms.Count ? "Lufia II's 224 monsters." :
+                        $"This ROM's monster table has {ms.Count} entries (the US game 224): {real} monsters" +
+                        (real < ms.Count ? $", {ms.Count - real} unused slots the hack points at a placeholder." : ".")) +
+                    " A change is written to the ROM at once (Edit, Undo takes it back).";
+        return ms.Select(Line);
     }
 
     /// <summary>The palettes of sprite <paramref name="sprite"/> (and the note under the picture).</summary>
@@ -275,6 +289,14 @@ public partial class L2MonstersPage : L2Page
     {
         if (SpriteOptions.Count != L2MonsterSprites.Count(Rom!)) ReadNames().ToList();   // sprites added in Graphics
         _m = L2Battle.ReadMonster(Rom!, index);
+        NameMax = Math.Max(1, L2Battle.NameRoom(Rom!, _m));
+        var notes = new List<string>();
+        if (_m.Unused) notes.Add("An unused slot: the hack points this id at a placeholder record that other ids share, so an edit here changes them all.");
+        var sharing = L2Battle.Monsters(Rom!).Where(m => m.Index != index && m.Offset == _m.Offset).Select(m => m.Index.ToString("X2")).ToList();
+        if (!_m.Unused && sharing.Count > 0) notes.Add($"Ids {string.Join(", ", sharing)} use the same record: an edit changes them too.");
+        if (!_m.Unused && NameMax < L2Battle.MonsterNameLength)
+            notes.Add($"The name can have up to {NameMax} letter{(NameMax == 1 ? "" : "s")}: the rest of its field holds battle script bytes.");
+        RecordNote = string.Join(" ", notes);
         Name = _m.Name; Level = _m.Level; Hp = _m.Hp; Mp = _m.Mp; Atp = _m.Atp; Dfp = _m.Dfp; Agl = _m.Agl; Int = _m.Int; Gut = _m.Gut; Mgr = _m.Mgr;
         Exp = _m.Exp; Gold = _m.Gold; Sprite = _m.Sprite; ShowSprite(_m.Sprite); Palette = _m.Palette;
         HasDrop = _m.DropAt > 0; DropItem = Math.Max(0, _m.DropItem); DropChance = _m.DropChance;
@@ -283,7 +305,8 @@ public partial class L2MonstersPage : L2Page
         PictureImage = Picture(L2Graphics.MonsterSprite(Rom!, Sprite, Palette));
     }
 
-    protected override bool IsField(string p) => p is not (nameof(ScriptText) or nameof(AiText) or nameof(HasDrop) or nameof(ItemOptions) or nameof(SpriteOptions) or nameof(PaletteOptions) or nameof(SpriteNote));
+    protected override bool IsField(string p) => p is not (nameof(ScriptText) or nameof(AiText) or nameof(HasDrop) or nameof(ItemOptions)
+        or nameof(SpriteOptions) or nameof(PaletteOptions) or nameof(SpriteNote) or nameof(CountNote) or nameof(RecordNote) or nameof(NameMax));
 
     [RelayCommand] private void EditTurnScript() { if (_m != null) EditScript(L2AiScripts.Kind.MonsterAttack, _m.Index, _m.Name); }
     [RelayCommand] private void EditHitScript() { if (_m != null) EditScript(L2AiScripts.Kind.MonsterDefense, _m.Index, _m.Name); }
@@ -692,7 +715,7 @@ public partial class L2EncountersPage : ObservableObject
     public void SetRom(RomBuffer rom, MainViewModel main)
     {
         _rom = rom; _main = main;
-        _monsters = new[] { new L2Option(0xFF, "-") }.Concat(L2Battle.Monsters(rom).Select(m => new L2Option(m.Index, $"{m.Index:X2} {m.Name}"))).ToList();
+        _monsters = new[] { new L2Option(0xFF, "-") }.Concat(L2Battle.Monsters(rom).Select(m => new L2Option(m.Index, $"{m.Index:X2} " + (m.Unused ? "(unused slot)" : m.Name)))).ToList();
         RefreshGroups();
         MapNames.Clear();
         for (int m = 0; m < L2Maps.Count; m++)
@@ -788,7 +811,7 @@ public partial class L2ShopsPage : ObservableObject
             var maps = L2Shops.UsedOn(rom, s.Id);
             string where = maps.Count > 0 ? "  " + L2Maps.Name(rom, maps[0]) : "";
             string what = string.Join(", ", (s.IsComposite ? new[] { "second-hand" } : Array.Empty<string>()).Concat(s.Sections.Select(x => x.Name)));
-            Names.Add($"{s.Id:X2}  {what}{where}");
+            Names.Add($"{s.Id:X2}  {what}{where}" + (s.Id > L2Shops.LastOriginal ? "  (added)" : ""));
         }
         SelectedIndex = -1;
         SelectedIndex = _shops.Count > 0 ? 0 : -1;

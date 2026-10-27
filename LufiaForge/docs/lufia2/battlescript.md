@@ -25,6 +25,9 @@ those orphan bytes also decode cleanly.
   (`$B476`: `$0A5B` = FF, return). So only 00 and 4F end a script; 2A (flee) and 41 just set the action and go on
   (the data always follows them with 00). 03 (goto) and 43 (return) end a straight path.
 * Jumps: `$85:B551` = `$BB = $0A42 + u16` (offset from the owning record).
+  All these sums are 16-bit in the record's bank (`$BB` + 1 is `INC $BB` on 16 bits too), so an offset past the
+  bank's end comes round to its start: the fan hacks use offsets like `$FF79` (0x87 bytes back, into another record) and
+  jumps from a spell to `$95:FAC9` (their spare spell-table entries). Lufia Forge reads them so (L2Rom.InBank).
 * **42 / 43 are call / return into a shared script library**: 42 w saves `$BB/$BD` in `$0A48/$0A4A` and the base
   in `$0A45/$0A47`, then runs library script w: table **`$96:FADD` (file 0xB7ADD), u16 offsets from the table,
   0x29 scripts**, base = the script itself; 43 restores. One level only. The defence scripts' `42 11 00` is "call
