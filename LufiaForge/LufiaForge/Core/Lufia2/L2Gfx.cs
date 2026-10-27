@@ -9,6 +9,8 @@ namespace LufiaForge.Core.Lufia2;
 /// at $97:CD58 + 0x40 n (CGRAM rows 2 and 3). Several backgrounds share tiles, tilemaps or colours.</item>
 /// <item>Capsule monster sprites: packed files 0x194-0x1B6 (capsule * 5 + form), 4bpp, nine 16x16 blocks (3 x 3) of
 /// 4 tiles (top left, top right, bottom left, bottom right); colours at $97:D258 + 0x20 n.</item>
+/// <item>Monster battle sprites: packed file 0x1B6 + sprite (and Lufia Forge's new ones), their palettes inside the
+/// file (<see cref="L2MonsterSprites"/>).</item>
 /// <item>Hero battle sprites: 7 sheets of 4bpp tiles through the table at $8E:E5C2 (u24 each), copied in 0x200-byte
 /// pieces of two rows of 8 tiles ($81:BB75, $86:8F6F). Their colours aren't traced: shown with the map sprite
 /// colours.</item>
@@ -21,7 +23,7 @@ namespace LufiaForge.Core.Lufia2;
 /// </summary>
 public static class L2Gfx
 {
-    public enum Kind { BattleBackground, Capsule, Title, PackedSheet, RomSheet, Font8x16, MapSprite, Palette }
+    public enum Kind { BattleBackground, Capsule, Title, PackedSheet, RomSheet, Font8x16, MapSprite, Palette, MonsterSprite }
 
     /// <summary>A set of colours a picture can be shown with: <paramref name="Offset"/> = file offset of its first
     /// colour (BGR555), -1 = grey levels (graphics with no colours of their own).</summary>
@@ -71,6 +73,9 @@ public static class L2Gfx
         public int[]? ColourOffsets { get; init; }
         /// <summary>Palette sets: the name of each row.</summary>
         public string[]? RowNames { get; init; }
+        /// <summary>The colours are stored with the graphics (a monster sprite's palettes, inside its packed data):
+        /// <see cref="L2MonsterSprites.SetColour"/> changes them.</summary>
+        public bool FileColours { get; init; }
         public int Rows => Colours.Length / RowSize;
 
         public uint[] Argb()
@@ -125,6 +130,7 @@ public static class L2Gfx
                 Group = "Capsule monsters", Name = $"{L2Capsules.MonsterName(rom, n / 5)} {n % 5 + 1}: {caps[n].Name}", Kind = Kind.Capsule, Id = n,
                 Note = $"48 x 48, packed file {CapsuleFile + n:X3}, colours at $97:{0xD258 + n * 0x20:X4}. Colour 0 is see-through.",
             });
+        list.AddRange(MonsterSpriteAssets(rom));
         var spritePals = Rows("Map sprite colours", MapSpritePalette, 8, 0x20);
         for (int h = 0; h < 7; h++)
         {
@@ -185,6 +191,36 @@ public static class L2Gfx
             });
         }
         list.AddRange(PaletteSets(rom));
+        return list;
+    }
+
+    /// <summary>The monster battle sprites (1 up), named by the monsters that use them.</summary>
+    public static List<Asset> MonsterSpriteAssets(RomBuffer rom)
+    {
+        var list = new List<Asset>();
+        var users = L2Battle.Monsters(rom).GroupBy(m => (int)m.Sprite).ToDictionary(g => g.Key, g => g.ToList());
+        for (int n = 1; n <= L2MonsterSprites.Count(rom); n++)
+        {
+            int pals;
+            try { pals = L2MonsterSprites.PaletteCount(rom, n); } catch { continue; }
+            var (tx, ty, _) = L2MonsterSprites.Size(rom, n);
+            var who = users.TryGetValue(n, out var l) ? l : new List<L2Battle.Monster>();
+            var names = who.Select(m => m.Name).Distinct().ToList();
+            string label = names.Count == 0 ? (L2MonsterSprites.IsNew(n) ? "new" : "no monster") : string.Join(", ", names.Take(3)) + (names.Count > 3 ? ", ..." : "");
+            var choices = Enumerable.Range(0, Math.Max(1, pals)).Select(p =>
+            {
+                var on = who.Where(m => m.Palette == p).Select(m => m.Name).Distinct().ToList();
+                return new PaletteChoice($"Palette {p}" + (on.Count > 0 ? ": " + string.Join(", ", on.Take(3)) + (on.Count > 3 ? ", ..." : "") : ""), -1);
+            }).ToList();
+            var (sx, sy) = L2MonsterSprites.Squares(tx, ty);
+            list.Add(new Asset
+            {
+                Group = "Monster battle sprites", Name = $"{n:X2} {label}", Kind = Kind.MonsterSprite, Id = n, Palettes = choices,
+                Note = $"Sprite {n:X2} ({n}), {tx * 8} x {ty * 8}, {sx * sy} squares of 16 x 16, {pals} palette{(pals == 1 ? "" : "s")}, {L2MonsterSprites.Where(rom, n)}. " +
+                       (who.Count > 0 ? "Used by " + string.Join(", ", who.Select(m => $"{m.Index:X2} {m.Name} (palette {m.Palette})")) + ". " : "No monster uses it yet: pick it on the Monsters page. ") +
+                       "Colour 0 is see-through.",
+            });
+        }
         return list;
     }
 
@@ -626,6 +662,14 @@ public static class L2Gfx
                 return new Picture { Width = 48, Height = 48, Pixels = px, Colours = Colours(rom, CapsulePalettes + a.Id * 0x20, 16), RowSize = 16, Transparent0 = true, RomColours = true,
                                      ColourOffsets = Offsets(CapsulePalettes + a.Id * 0x20, 16) };
             }
+            case Kind.MonsterSprite:
+            {
+                var data = L2MonsterSprites.Read(rom, a.Id);
+                var (w, h, px) = L2MonsterSprites.Pixels(rom, a.Id, data);
+                int pal = palette < 0 || palette >= a.Palettes.Count ? a.DefaultPalette : palette;
+                var colours = L2MonsterSprites.Palette(data, pal).Select(Argb).ToArray();
+                return new Picture { Width = w, Height = h, Pixels = px, Colours = colours, RowSize = 16, Transparent0 = true, RomColours = true, FileColours = data[0] > 0 };
+            }
             case Kind.MapSprite:
             {
                 var m = MapSpriteOf(rom, a.Id);
@@ -767,6 +811,12 @@ public static class L2Gfx
                 rows = new HashSet<int> { 0 };
                 what = $"{n} tiles at {m.Tiles:X6}";
                 break;
+            }
+            case Kind.MonsterSprite:
+            {
+                int pal = palette < 0 || palette >= a.Palettes.Count ? a.DefaultPalette : palette;
+                int changed = L2MonsterSprites.WritePicture(rom, a.Id, pixels, pal, colours?.Select(c => (int)Bgr555(c)).ToArray());
+                return L2MonsterSprites.Where(rom, a.Id) + (colours == null ? "" : $"; {changed} colour{(changed == 1 ? "" : "s")} of palette {pal} changed");
             }
             case Kind.Palette:
             {

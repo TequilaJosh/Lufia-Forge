@@ -208,7 +208,7 @@ Roles marked (read) were checked by reading the code; (auto) = summary of the I/
 | $81:F446 | 4 | (guess) spell table lookup ($95:FA5B) |
 | $81:F45E | 3 | (guess) IP attack lookup ($84:8F10) |
 | $81:FB1A | 1 | (guess) monster record reader ($96:85C0) |
-| $81:FB8E | 12 | (guess) monster sprite size lookup ($97:CA64, 12 callers) |
+| $81:FB8E | 12 | (read) monster sprite size: A = sprite (1-based) -> tiles across / down ($97:CA64; graphics.md section 8) |
 | $81:FBC6 | 12 | (guess) monster table lookup helper ($96:85C0, 12 callers) |
 | $82:8000 | 14 | (read) 16x16 multiply, $1570 x $1572 -> $1574/$1576 (shift and add) |
 | $82:8028 | 20 | (read) inline jump-table dispatcher: "JSR $8028" is followed by a u16 handler table, A = index (only indirect JMP in the code) |

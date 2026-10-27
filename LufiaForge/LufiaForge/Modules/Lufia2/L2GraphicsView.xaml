@@ -19,7 +19,7 @@
         </Grid.ColumnDefinitions>
         <common:PopOutHost Grid.Column="0" Title="Picture list" Key="l2graphics.list" ButtonMargin="0,14,32,0">
         <ListBox Margin="12" Style="{StaticResource GdRecordList}" ItemsSource="{Binding ItemsView}" SelectedIndex="{Binding SelectedIndex}"
-                 DisplayMemberPath="Label">
+                 DisplayMemberPath="Label" SelectionChanged="List_SelectionChanged">
             <ListBox.GroupStyle>
                 <GroupStyle>
                     <GroupStyle.HeaderTemplate>
@@ -132,6 +132,33 @@
                                     ToolTip="Make a new, empty map sprite with this one's size, frames, colours and way of walking, ready to paint."/>
                         </StackPanel>
                         <TextBlock Text="{Binding SpriteInfo}" Style="{StaticResource GdHint}" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource GdCard}" VerticalAlignment="Top" IsEnabled="{Binding IsEditable}" Margin="0,0,0,8"
+                        Visibility="{Binding IsMonsterSprite, Converter={StaticResource Vis}}">
+                    <StackPanel Width="340">
+                        <TextBlock Text="MONSTER BATTLE SPRITE" Style="{StaticResource GdSection}"/>
+                        <TextBlock Text="New palette for this sprite" Style="{StaticResource GdFieldLabel}" Margin="0,2,0,4"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <Button Content="Empty (black)" Style="{StaticResource LufiaButton}" Command="{Binding AddMonsterPaletteCommand}" CommandParameter="empty" Width="150" Margin="0,0,8,0"
+                                    ToolTip="Add a palette of 16 black colours to this sprite; then click its colours above to set them."/>
+                            <Button Content="Copy of these colours" Style="{StaticResource LufiaButton}" Command="{Binding AddMonsterPaletteCommand}" CommandParameter="copy" Width="180"
+                                    ToolTip="Add a palette that starts as the colours shown, so a monster can show this sprite in other colours."/>
+                        </StackPanel>
+                        <TextBlock Text="New monster sprite" Style="{StaticResource GdFieldLabel}" Margin="0,0,0,4"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <Button Content="Copy of this sprite" Style="{StaticResource LufiaButton}" Command="{Binding AddMonsterSpriteCommand}" CommandParameter="copy" Width="150" Margin="0,0,8,0"
+                                    ToolTip="Make a new monster sprite that starts as a copy of this one (its size, palettes and tiles), stored in the added space, so painting it leaves this one alone."/>
+                            <Button Content="From a picture..." Style="{StaticResource LufiaButtonGold}" Command="{Binding AddMonsterSpriteCommand}" CommandParameter="png" Width="180"
+                                    ToolTip="Make a new monster sprite from a PNG: a multiple of 16 pixels across and down, at most 240 x 240 and 64 squares of 16 x 16. A palette PNG of up to 16 colours keeps its colours (colour 0 see-through); other pictures get up to 15 colours of their own."/>
+                        </StackPanel>
+                        <TextBlock Text="Give it to a monster (this sprite, the palette shown)" Style="{StaticResource GdFieldLabel}" Margin="0,0,0,4"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <ComboBox Style="{StaticResource GdCombo}" Width="170" ItemsSource="{Binding MonsterOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding GiveTo}" Margin="0,0,8,0"/>
+                            <Button Content="Give it" Style="{StaticResource LufiaButton}" Command="{Binding GiveToMonsterCommand}" Width="110"
+                                    ToolTip="Set the monster's Battle sprite and Palette fields to this sprite and the palette shown."/>
+                        </StackPanel>
+                        <TextBlock Text="{Binding MonsterInfo}" Style="{StaticResource GdHint}" TextWrapping="Wrap"/>
                     </StackPanel>
                 </Border>
             </WrapPanel>

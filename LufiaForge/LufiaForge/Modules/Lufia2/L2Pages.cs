@@ -226,26 +226,64 @@ public partial class L2MonstersPage : L2Page
     [ObservableProperty] private string _scriptText = "";
     [ObservableProperty] private string _aiText = "";
     [ObservableProperty] private BitmapSource? _pictureImage;
+    /// <summary>The battle sprites (1 up, the game's and Lufia Forge's new ones) and the palettes of the one picked.</summary>
+    [ObservableProperty] private List<L2Option> _spriteOptions = new();
+    [ObservableProperty] private List<L2Option> _paletteOptions = new();
+    [ObservableProperty] private string _spriteNote = "";
 
     protected override IEnumerable<string> ReadNames()
     {
         ItemOptions = L2Battle.Items(Rom!).Select(i => new L2Option(i.Index, $"{i.Index:X3} {i.Name}")).ToList();
         OnPropertyChanged(nameof(ItemOptions));
-        return L2Battle.Monsters(Rom!).Select(m => $"{m.Index:X2}  {m.Name}");
+        var ms = L2Battle.Monsters(Rom!);
+        SpriteOptions = Enumerable.Range(1, L2MonsterSprites.Count(Rom!)).Select(n =>
+        {
+            var (tx, ty, _) = L2MonsterSprites.Size(Rom!, n);
+            var who = ms.Where(m => m.Sprite == n).Select(m => m.Name).Distinct().ToList();
+            string names = who.Count == 0 ? (L2MonsterSprites.IsNew(n) ? "new" : "no monster") : string.Join(", ", who.Take(2)) + (who.Count > 2 ? ", ..." : "");
+            return new L2Option(n, $"{n:X2} ({tx * 8} x {ty * 8}) {names}");
+        }).ToList();
+        return ms.Select(m => $"{m.Index:X2}  {m.Name}");
+    }
+
+    /// <summary>The palettes of sprite <paramref name="sprite"/> (and the note under the picture).</summary>
+    private void ShowSprite(int sprite)
+    {
+        int pals = 0;
+        try { if (sprite >= 1 && sprite <= L2MonsterSprites.Count(Rom!)) pals = L2MonsterSprites.PaletteCount(Rom!, sprite); } catch { }
+        PaletteOptions = Enumerable.Range(0, Math.Max(1, pals)).Select(p => new L2Option(p, $"Palette {p}")).ToList();
+        SpriteNote = pals == 0 ? "No such sprite." :
+            $"Sprite {sprite:X2}: {L2MonsterSprites.Where(Rom!, sprite)}, {pals} palette{(pals == 1 ? "" : "s")}. Paint it, give it new palettes or make new sprites in Graphics (Monster battle sprites).";
+    }
+
+    partial void OnSpriteChanged(int value)
+    {
+        if (Rom == null) return;
+        bool was = Loading;
+        Loading = true;
+        try
+        {
+            ShowSprite(value);
+            if (Palette >= PaletteOptions.Count) Palette = 0;
+        }
+        finally { Loading = was; }
+        if (Loading) return;
+        PictureImage = Picture(L2Graphics.MonsterSprite(Rom, Sprite, Palette));
     }
 
     protected override void Load(int index)
     {
+        if (SpriteOptions.Count != L2MonsterSprites.Count(Rom!)) ReadNames().ToList();   // sprites added in Graphics
         _m = L2Battle.ReadMonster(Rom!, index);
         Name = _m.Name; Level = _m.Level; Hp = _m.Hp; Mp = _m.Mp; Atp = _m.Atp; Dfp = _m.Dfp; Agl = _m.Agl; Int = _m.Int; Gut = _m.Gut; Mgr = _m.Mgr;
-        Exp = _m.Exp; Gold = _m.Gold; Sprite = _m.Sprite; Palette = _m.Palette;
+        Exp = _m.Exp; Gold = _m.Gold; Sprite = _m.Sprite; ShowSprite(_m.Sprite); Palette = _m.Palette;
         HasDrop = _m.DropAt > 0; DropItem = Math.Max(0, _m.DropItem); DropChance = _m.DropChance;
         ScriptText = HasDrop ? "" : "It drops nothing (a drop can't be added yet: the record would grow).";
         AiText = ScriptsText(Rom!, L2AiScripts.Kind.MonsterAttack, L2AiScripts.Kind.MonsterDefense, index);
         PictureImage = Picture(L2Graphics.MonsterSprite(Rom!, Sprite, Palette));
     }
 
-    protected override bool IsField(string p) => p is not (nameof(ScriptText) or nameof(AiText) or nameof(HasDrop) or nameof(ItemOptions));
+    protected override bool IsField(string p) => p is not (nameof(ScriptText) or nameof(AiText) or nameof(HasDrop) or nameof(ItemOptions) or nameof(SpriteOptions) or nameof(PaletteOptions) or nameof(SpriteNote));
 
     [RelayCommand] private void EditTurnScript() { if (_m != null) EditScript(L2AiScripts.Kind.MonsterAttack, _m.Index, _m.Name); }
     [RelayCommand] private void EditHitScript() { if (_m != null) EditScript(L2AiScripts.Kind.MonsterDefense, _m.Index, _m.Name); }
@@ -255,7 +293,7 @@ public partial class L2MonstersPage : L2Page
         if (_m == null) return null;
         _m.Name = Name; _m.Level = (byte)Level; _m.Hp = (ushort)Hp; _m.Mp = (ushort)Mp; _m.Atp = (ushort)Atp; _m.Dfp = (ushort)Dfp;
         _m.Agl = (byte)Agl; _m.Int = (byte)Int; _m.Gut = (byte)Gut; _m.Mgr = (byte)Mgr; _m.Exp = (ushort)Exp; _m.Gold = (ushort)Gold;
-        _m.Sprite = (byte)Math.Clamp(Sprite, 1, L2Graphics.MonsterSpriteCount); _m.Palette = (byte)Palette;
+        _m.Sprite = (byte)Math.Clamp(Sprite, 1, L2MonsterSprites.Count(Rom!)); _m.Palette = (byte)Math.Clamp(Palette, 0, 255);
         if (HasDrop) { _m.DropItem = DropItem; _m.DropChance = DropChance; }
         L2Battle.WriteMonster(Rom!, _m);
         PictureImage = Picture(L2Graphics.MonsterSprite(Rom!, _m.Sprite, _m.Palette));

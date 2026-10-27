@@ -51,7 +51,7 @@ Confidence: **V** = loader code read and render looks right, **R** = render look
 | 0x192 | one 16-colour palette (0x20 bytes) | BGR555 | no loader found | R |
 | 0x193 | **world-map encounter-zone map**, 64x64 bytes (one per 4x4 world tiles); value = zone into `$97:C494` (10 bytes per zone) | data (not graphics) | `$86:CD2E` to `$7F:E000`, read at `$86:9D0B` | V |
 | 0x194-0x1B6 | **capsule monster battle sprites**, 35 = 7 monsters x 5 forms (index = `$154D`) | 4bpp, 0x480 = nine 16x16 blocks (each TL,TR,BL,BR = 0x80 bytes), 3x3 blocks = 48x48 | `$81:BC55` to `$7E:DF00` (`$82:CF9D` for the menu, to `$7E:4000`), blocks placed by `$81:BCCC` into the OBJ buffer `$7E:8000`; palette = 16 colours at `$97:D258 + 0x20 * index` | V (`renders\capsules_all.png`) |
-| 0x1B7-0x23C | monster battle sprites 1..0x86 | known (`L2Graphics.cs`) | `$85:EBA7` (0x1B7 + `$1303,X`) | known |
+| 0x1B7-0x23C | **monster battle sprites** 1..0x86 (file 0x1B6 + sprite) | byte 0 = palette count, then the palettes (0x20 each), then 4bpp 16x16 squares row by row (each TL, TR, BL, BR); size in tiles at `$97:CA64` (section 8) | `$85:EBA7` (0x1B7 + `$1303,X`) to `$7E:DF00` | V (checked in battle) |
 | 0x23D | tilemap 32x24 (0xC00) | tilemap | no loader found | R |
 | 0x23E | 0x60 bytes (3 4bpp tiles or 6 2bpp tiles) | ? | no loader found | G |
 | 0x23F | **battle message window** tilemap, 32x4 | tilemap | `$81:E792` (from `$85:95FE`) to `$7E:3000` | V |
@@ -293,3 +293,75 @@ New game through the opening to Elcid's shop (map 04), scratch ROMs built with t
   palettes), three of them given to new characters next to the start on map 03 (New 4, New 5, New 1: the map
   table made them FD, FC and FB). All three show in the game (Snes9x, BSNESv115+ on an 8 MB ROM; BSNES on a 4 MB
   one), and the Jeros' Story ROM (FB-FD made with version 1) plays its opening the same after the move.
+
+## 8. Monster battle sprites (2026-10-27)
+
+Read from the code and checked in the game (BizHawk, Snes9x core: screenshots and WRAM dumps during a battle). Lufia
+Forge: `Core/Lufia2/L2MonsterSprites.cs`, `L2Gfx.cs` (Graphics page group "Monster battle sprites"), the Monsters page.
+
+### 8.1 From a monster record to the picture
+
+* Monster record +0F = **sprite** (1-based), +10 = **palette** (0-based, one of the sprite's own palettes). `$81:FBC6`
+  reads both as a word (`LDA $9685CF,X` after the record offset).
+* Battle set-up `$85:DF44` keeps up to 3 kinds of monster per battle: `$1300,X` the monster, `$1303,X` sprite - 1,
+  `$1306,X` the palette; `$1315,X` / `$1318,X` the size in 16x16 squares, `$1312,X` the square count, `$131B,X` the
+  movement flags.
+* `$85:EB91` loads them: for each kind, file **0x1B7 + (sprite - 1)** (`ADC #$01B7` at `$85:EBB1`) is unpacked by
+  `JSL $808E9D` (at `$85:EBC1`) to **`$7E:DF00`**. `$85:EBE0` copies its squares into the battle sprite buffer
+  (`$81:BCCC`; a sprite already loaded for another kind is reused); `$85:EC4D` copies the palette the record names,
+  `$7E:DF01 + 0x20 * palette`, to `$7E:4820 + 0x20 * kind` (sprite palettes 1-3; capsule monsters use `$7E:4800`).
+* **Data** (unpacked): byte 0 = number of palettes, then the palettes (16 BGR555 colours each, colour 0 see-through),
+  then the tiles: **16x16 squares row by row**, 0x80 bytes each = the 8x8 tiles top left, top right, bottom left,
+  bottom right (4bpp). The game's 134 files are exactly `1 + 0x20 * palettes + 0x80 * squares` bytes.
+* **Size**: `$97:CA64 + (sprite - 1) * 2` (`$81:FB8E`): byte 0 bits 0-4 = 8x8 tiles across, byte 1 bits 0-4 = tiles
+  down (squares = (tiles + 1) / 2, every game sprite has an even size); the top 3 bits of both bytes (`$81:FBA2`,
+  6 bits) go to `$13DA` (bits 01/02/20 pick how the monster moves; the game's sprites use 0x30 or 0x10).
+* **Buffer**: `$81:BCCC` puts the squares one after the other (slot n at `$7E:6000 + (n / 8) * 0x400 + (n % 8) * 0x40`,
+  the lower tiles 0x200 further), from the slot after the kinds loaded before; it is sent to sprite tiles 0x100-0x1FF,
+  so **all the kinds in one battle share 64 squares** (the 128 x 128 bosses fill it alone). The OAM builder
+  `$81:BD4B` makes 16x16 objects in the same order (row by row, `$02` across, `$03` down), name table bit set.
+* Limits: a sprite's data must fit `$7E:DF00-$7E:FFFF` (0x2100 bytes: 64 squares and up to 7 palettes; the
+  biggest game sprite is 0x2021); sizes up to 31 tiles (5 bits); the sprite byte goes to 0xFF.
+
+### 8.2 What Lufia Forge adds
+
+* Every sprite is a picture on the Graphics page (Colours = the sprite's palettes, named by the monsters that use
+  them): paint, Export / Import PNG, colours changed one by one (written into the packed data, which is packed again
+  and moves to the added space when it grows).
+* **New palettes** go into the sprite's own data (the count byte + 1); a monster picks one with its palette field.
+  No hook is needed.
+* **New sprites** (0x87 up to 0xFF: 121 more), put in the first time one is made (`L2MonsterSprites.Install`):
+
+| At | Game's bytes | Becomes |
+|---|---|---|
+| `$81:FB98` (file 0xFB98) | `BF 64 CA 97` (LDA $97CA64,X) | LDA from Lufia Forge's size table |
+| `$81:FBAE` (file 0xFBAE) | `BF 64 CA 97` | the same table |
+| `$81:FBB9` (file 0xFBB9) | `BF 65 CA 97` | the table + 1 |
+| `$85:EBC1` (file 0x2EBC1) | `22 9D 8E 80` (JSL $808E9D) | `22` JSL to the load code |
+
+  The block (0x400 bytes in the added space): `"LF2MS"`, version 1, the number of new sprites; +0x10 the load code;
+  +0x80 the size table (a copy of the game's 0x200 bytes, so every number reads what it read before; new sprites'
+  entries written in); +0x280 a u24 pointer per new sprite to its packed data (the game's format, packed like the
+  files). The load code: for file number 0x23D + i (sprite 0x87 + i) with a pointer, it pushes P and DB as the
+  unpacker does, sets `[$5D],Y` to the pointer and jumps into `$80:8EBD` (the unpacker after its file table lookup),
+  which unpacks and returns to `$85:EBC5`; other numbers go to `$80:8E9D` as before.
+* A new sprite is a copy of another (size, movement, palettes, tiles), or made from a picture: a multiple of 16 pixels
+  across and down, at most 240 x 240 and 64 squares; a palette PNG of up to 16 colours keeps its colours, another
+  picture is brought down to 15 colours (median cut) with see-through pixels as colour 0; its movement flags are the
+  sprite shown's. "Give it" (Graphics) or the Monsters page's sprite and palette lists give it to a monster.
+* `CanInstall` refuses when another hack changed one of those places. The Frue, Spekkio, Kureji and Wrath of Foomy
+  hacks (v8.2) leave them as the US game: the hook goes in there too (block after their data at 0x30DAC2).
+
+### 8.3 Checked in the game
+
+The battle right after the name entry (`53 04 39` at 0x3C0EE), its monster CB given the sprite; at frame 1080 of the
+test the WRAM buffer `$7E:6000` and the colours `$7E:4820` were dumped and compared with Lufia Forge's decode:
+* a new sprite 0x87 from a full-colour 64 x 64 picture (15 colours): buffer and colours identical, shown right;
+* the game's sprite 01 (Goblin) painted (a band and a line) and colour 1 changed: identical, shown right;
+* a copy of the Cyclops (0C) as 0x87 with a third palette added (colours turned around), CB on palette 2: identical;
+* made only through the window (Graphics page): the Cyclops painted with a stripe and colour 2 of palette 1 changed,
+  a palette 2 added, a new sprite 0x87 from a 64 x 48 PNG given to CB with "Give it", the Monsters page's lists: the
+  new sprite and the painted Cyclops (CB on palette 1) show in the battle as in the app;
+* the Frue hack (v8.2) with a new 64 x 48 sprite on every monster: buffer identical, shown right. In that hack the
+  battle command menu draws over the sprite tiles of the second row of squares in the buffer (squares 8-15) while it
+  is open, and the game's own Cyclops shows the same, so it is the hack's menu, not the new sprite.

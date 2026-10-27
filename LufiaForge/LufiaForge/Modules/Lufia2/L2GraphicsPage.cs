@@ -68,7 +68,7 @@ public partial class L2GraphicsPage : L2Page
     private readonly List<byte[]> _undo = new(), _redo = new();
     private bool _refreshing;
     [ObservableProperty] private bool _canPaint;
-    [ObservableProperty] [NotifyCanExecuteChangedFor(nameof(AddPaletteCommand), nameof(AddSpriteCommand))] private bool _isPainted;
+    [ObservableProperty] [NotifyCanExecuteChangedFor(nameof(AddPaletteCommand), nameof(AddSpriteCommand), nameof(AddMonsterPaletteCommand), nameof(AddMonsterSpriteCommand), nameof(GiveToMonsterCommand))] private bool _isPainted;
     [ObservableProperty] private int _zoom = 4;
     [ObservableProperty] private bool _showGrid = true;
     [ObservableProperty] private bool _fillTool;
@@ -83,9 +83,14 @@ public partial class L2GraphicsPage : L2Page
     [ObservableProperty] private bool _isMapSprite;
     [ObservableProperty] private string _spriteInfo = "";
 
+    // monster battle sprites
+    [ObservableProperty] private bool _isMonsterSprite;
+    [ObservableProperty] private string _monsterInfo = "";
+
     protected override IEnumerable<string> ReadNames()
     {
         _assets = L2Gfx.Assets(Rom!);
+        MonsterOptions = L2Battle.Monsters(Rom!).Select(m => new L2Option(m.Index, $"{m.Index:X2} {m.Name}")).ToList();
         var items = _assets.Select(a => new L2GfxItem { Group = a.Group, Label = a.Name }).ToList();
         var view = CollectionViewSource.GetDefaultView(items);
         view.GroupDescriptions.Add(new PropertyGroupDescription(nameof(L2GfxItem.Group)));
@@ -103,8 +108,12 @@ public partial class L2GraphicsPage : L2Page
         HasPaletteChoice = PaletteOptions.Count > 1;
         PaletteChoice = _asset.Palettes.Count > 0 ? _asset.DefaultPalette : 0;
         IsMapSprite = _asset.Kind == L2Gfx.Kind.MapSprite;
+        IsMonsterSprite = _asset.Kind == L2Gfx.Kind.MonsterSprite;
+        HasPaletteChoice = PaletteOptions.Count > 1 || IsMonsterSprite;
         PaletteTip = IsMapSprite
             ? "The colours the game shows this sprite with: one of the 8 sprite colour rows, or a new palette. Changing it writes the ROM (Edit, Undo takes it back)."
+            : IsMonsterSprite
+            ? "The sprite's own palettes (a monster names one with its Palette field on the Monsters page). The picture is shown, saved and matched with this one; Import writes the picture's colours into it when asked to."
             : "The colours the picture is shown, saved and matched with. Import writes the picture's colours here when asked to.";
         CanPaint = _asset.Kind != L2Gfx.Kind.Palette;
         if (!_refreshing)
@@ -123,11 +132,12 @@ public partial class L2GraphicsPage : L2Page
         (CellWidth, CellHeight) = _asset.Kind switch
         {
             L2Gfx.Kind.MapSprite when Rom != null => (L2Gfx.MapSpriteOf(Rom, _asset.Id).FrameWidth * 8, L2Gfx.MapSpriteOf(Rom, _asset.Id).FrameHeight * 8),
-            L2Gfx.Kind.Capsule => (16, 16),
+            L2Gfx.Kind.Capsule or L2Gfx.Kind.MonsterSprite => (16, 16),
             L2Gfx.Kind.Font8x16 => (8, 16),
             _ => (_pic?.Width ?? 8, _pic?.Height ?? 8),
         };
         ShowSpriteInfo();
+        ShowMonsterInfo();
     }
 
     // nothing here is a record field: the picture is written by Import and the painter only
@@ -190,10 +200,13 @@ public partial class L2GraphicsPage : L2Page
         if (p.RowNames != null)
             return off < 0 ? "Not a colour of this set" : $"{p.RowNames[i / 16]}, colour {i % 16}: {Rom!.ReadUInt16Le(off) & 0x7FFF:X4} at {off:X6}";
         return $"Colour {i} (row {i / p.RowSize}, {i % p.RowSize}): {L2Gfx.Bgr555(p.Colours[i]):X4}" + (i % p.RowSize == 0 && (p.Transparent0 || p.Rows > 1) ? ", see-through" : "") +
-               (off >= 0 ? $" at {off:X6}" : "") + (CanPaint ? ". Click to paint with it." : "");
+               (off >= 0 ? $" at {off:X6}" : IsFileColour(i) ? $", palette {PaletteChoice} of the sprite" : "") + (CanPaint ? ". Click to paint with it." : "");
     }
 
     private int OffsetOf(int i) => _pic?.ColourOffsets is { } o && i >= 0 && i < o.Length ? o[i] : -1;
+
+    /// <summary>Colour <paramref name="i"/> is one of a monster sprite's palette, kept in its packed data.</summary>
+    private bool IsFileColour(int i) => _pic is { FileColours: true } && _asset?.Kind == L2Gfx.Kind.MonsterSprite && i >= 0 && i < 16;
 
     // ── the colour editor ───────────────────────────────────────────────────
 
@@ -213,9 +226,16 @@ public partial class L2GraphicsPage : L2Page
     private void ShowColour()
     {
         int off = OffsetOf(_colour);
-        HasColour = off >= 0 && Rom != null;
+        HasColour = (off >= 0 || IsFileColour(_colour)) && Rom != null;
         _syncing = true;
-        if (HasColour)
+        if (HasColour && off < 0)
+        {
+            int v = L2MonsterSprites.Palette(L2MonsterSprites.Read(Rom!, _asset!.Id), PaletteChoice)[_colour];
+            Red = v & 31; Green = v >> 5 & 31; Blue = v >> 10 & 31;
+            Hex = v.ToString("X4");
+            ColourInfo = $"Colour {_colour} of palette {PaletteChoice}, kept with the sprite's tiles ({L2MonsterSprites.Where(Rom!, _asset.Id)}).";
+        }
+        else if (HasColour)
         {
             int v = Rom!.ReadUInt16Le(off) & 0x7FFF;
             Red = v & 31; Green = v >> 5 & 31; Blue = v >> 10 & 31;
@@ -262,6 +282,18 @@ public partial class L2GraphicsPage : L2Page
     {
         if (Rom == null || Main == null || _asset == null) return;
         int off = OffsetOf(_colour);
+        if (off < 0 && IsFileColour(_colour))
+        {
+            var before = Rom.ToArray();
+            bool changed;
+            try { changed = L2MonsterSprites.SetColour(Rom, _asset.Id, PaletteChoice, _colour, EditedValue); }
+            catch (Exception ex) { if (!Rom.SameAs(before)) Rom.ReplaceAll(before); Status = "Not written: " + ex.Message; return; }
+            if (!changed) { Status = "Nothing changed: the colour is the same."; return; }
+            Main.NotifyRomModified($"Lufia II: colour {_colour} of palette {PaletteChoice} of monster sprite {_asset.Id:X2}");
+            Draw(keep: true);
+            Status = $"Colour {_colour} of palette {PaletteChoice} written. Monsters using this palette of the sprite change too. Edit, Undo takes it back.";
+            return;
+        }
         if (off < 0) { Status = "Pick a colour first."; return; }
         if (!L2Gfx.SetColour(Rom, off, EditedValue)) { Status = "Nothing changed: the colour is the same."; return; }
         Main.NotifyRomModified($"Lufia II: colour {EditedValue:X4} at {off:X6} ({_asset.Name})");
@@ -610,6 +642,136 @@ public partial class L2GraphicsPage : L2Page
 
     /// <summary>Picks the list item of map sprite <paramref name="id"/> (for tests).</summary>
     public void ShowSprite(int id) { int i = IndexOfSprite(id); if (i >= 0) SelectedIndex = i; }
+
+    // ── monster battle sprites: new palettes, new sprites, which monster shows one ──
+
+    /// <summary>The monsters, for "Give it to".</summary>
+    [ObservableProperty] private List<L2Option> _monsterOptions = new();
+    [ObservableProperty] private int _giveTo = -1;
+
+    private int IndexOfMonsterSprite(int id) => _assets.FindIndex(a => a.Kind == L2Gfx.Kind.MonsterSprite && a.Id == id);
+
+    /// <summary>Picks the list item of monster sprite <paramref name="id"/> (for tests).</summary>
+    public void ShowMonsterSprite(int id) { int i = IndexOfMonsterSprite(id); if (i >= 0) SelectedIndex = i; }
+
+    private void ShowMonsterInfo()
+    {
+        if (Rom == null || _asset?.Kind != L2Gfx.Kind.MonsterSprite) { MonsterInfo = ""; return; }
+        int id = _asset.Id, added = L2MonsterSprites.Count(Rom) - L2MonsterSprites.GameCount;
+        var (tx, ty, _) = L2MonsterSprites.Size(Rom, id);
+        var (sx, sy) = L2MonsterSprites.Squares(tx, ty);
+        bool can = L2MonsterSprites.CanInstall(Rom, out var why);
+        MonsterInfo = $"A monster shows sprite {id:X2} ({id}) when its Battle sprite field on the Monsters page holds {id}, with the palette its Palette field names. " +
+                      $"This one is {sx * sy} of the {L2MonsterSprites.MaxSquares} squares of 16 x 16 that all the kinds of monster in one battle share. " +
+                      $"New sprites: {added} made, up to {L2MonsterSprites.MaxNew} more (numbers {L2MonsterSprites.GameCount + 1} to {L2MonsterSprites.MaxNumber}: a monster keeps its sprite in one byte)." +
+                      (can ? "" : " " + why);
+        var user = L2MonsterSprites.Users(Rom, id).FirstOrDefault();
+        GiveTo = user?.Index ?? (GiveTo >= 0 ? GiveTo : 0);
+    }
+
+    /// <summary>Adds a palette to the monster sprite shown (black, or a copy of the colours shown) and shows it.</summary>
+    [RelayCommand(CanExecute = nameof(CanAdd))]
+    private void AddMonsterPalette(string? how)
+    {
+        if (Rom == null || Main == null || _asset?.Kind != L2Gfx.Kind.MonsterSprite || _pic == null) return;
+        bool copy = how == "copy";
+        int id = _asset.Id;
+        var colours = copy ? L2MonsterSprites.Palette(L2MonsterSprites.Read(Rom, id), PaletteChoice) : new int[16];
+        var before = Rom.ToArray();
+        int p;
+        try { p = L2MonsterSprites.AddPalette(Rom, id, colours); }
+        catch (Exception ex) { if (!Rom.SameAs(before)) Rom.ReplaceAll(before); Status = "Not added: " + ex.Message; return; }
+        bool grew = Rom.Length > before.Length;
+        Main.NotifyRomModified($"Lufia II: palette {p} of monster sprite {id:X2} ({(copy ? "a copy" : "black")})");
+        Refresh(() => IndexOfMonsterSprite(id), keep: false);
+        PaletteChoice = p;
+        Status = $"Palette {p} added to sprite {id:X2} ({(copy ? "a copy of the colours shown" : "all black")}). Click its colours above to change them; give it to a monster below or with the Palette field on the Monsters page." +
+                 (grew ? " The ROM grew to make room." : "") + " Edit, Undo takes it back.";
+    }
+
+    /// <summary>Adds a monster sprite: a copy of the one shown, or a picture file (the dialog).</summary>
+    [RelayCommand(CanExecute = nameof(CanAdd))]
+    private void AddMonsterSprite(string? how)
+    {
+        if (Rom == null || Main == null || _asset?.Kind != L2Gfx.Kind.MonsterSprite) return;
+        if (how == "png")
+        {
+            var dlg = new OpenFileDialog { Title = "A picture for the new monster sprite", Filter = "Pictures (*.png;*.bmp;*.gif)|*.png;*.bmp;*.gif|All files|*.*" };
+            if (dlg.ShowDialog() != true) return;
+            AddMonsterSpriteFrom(dlg.FileName);
+            return;
+        }
+        int from = _asset.Id;
+        AddMonster(() => L2MonsterSprites.AddCopy(Rom, from), $"a copy of sprite {from:X2}");
+    }
+
+    /// <summary>Adds a monster sprite from a picture file (the dialog's part split off so it can be tested): a palette
+    /// picture of up to 16 colours keeps its colour numbers and colours (colour 0 see-through); any other picture gets
+    /// up to 15 colours of its own (see-through pixels become colour 0). Its movement in battle is the shown sprite's.</summary>
+    public void AddMonsterSpriteFrom(string path)
+    {
+        if (Rom == null || _asset?.Kind != L2Gfx.Kind.MonsterSprite) return;
+        byte[] px;
+        int[] colours;
+        int w, h;
+        string how;
+        var ip = IndexedPng.TryLoad(path);
+        if (ip is { } png && png.Palette.Length <= 16 && png.Indices.All(i => i < 16))
+        {
+            (w, h, px) = (png.Width, png.Height, png.Indices);
+            colours = Enumerable.Range(0, 16).Select(c => c < png.Palette.Length ? (int)L2Gfx.Bgr555(png.Palette[c]) : 0).ToArray();
+            how = "colour numbers and colours kept";
+        }
+        else
+        {
+            BitmapSource src;
+            try { src = new BitmapImage(new Uri(path)); }
+            catch (Exception ex) { Status = "Can't read the picture: " + ex.Message; return; }
+            (w, h) = (src.PixelWidth, src.PixelHeight);
+            var bgra = new FormatConvertedBitmap(src, PixelFormats.Bgra32, null, 0);
+            var argb = new uint[w * h];
+            bgra.CopyPixels(argb, w * 4, 0);
+            (px, colours) = L2MonsterSprites.Reduce(argb);
+            how = "colours brought down to 15 and see-through";
+        }
+        if (L2MonsterSprites.SizeProblem(w, h) is { } why) { Status = "Not added: " + why; return; }
+        int moves = L2MonsterSprites.Size(Rom, _asset.Id).Moves;
+        AddMonster(() => L2MonsterSprites.AddPicture(Rom, w, h, px, colours, moves), $"{Path.GetFileName(path)}, {w} x {h}, {how}");
+    }
+
+    private void AddMonster(Func<int> add, string what)
+    {
+        if (Rom == null || Main == null) return;
+        var before = Rom.ToArray();
+        int id;
+        try { id = add(); }
+        catch (Exception ex) { if (!Rom.SameAs(before)) Rom.ReplaceAll(before); Status = "Not added: " + ex.Message; return; }
+        bool grew = Rom.Length > before.Length;
+        Main.NotifyRomModified($"Lufia II: new monster sprite {id:X2} ({what})");
+        Refresh(() => IndexOfMonsterSprite(id), keep: false);
+        Status = $"Monster sprite {id:X2} ({id}) made ({what}); paint it below, and give it to a monster below or with its Battle sprite field on the Monsters page." +
+                 (grew ? " The ROM grew to make room." : "") + " Edit, Undo takes it back.";
+    }
+
+    /// <summary>Gives the sprite shown, with the palette shown, to the monster picked in "Give it to".</summary>
+    [RelayCommand(CanExecute = nameof(CanAdd))]
+    private void GiveToMonster()
+    {
+        if (Rom == null || Main == null || _asset?.Kind != L2Gfx.Kind.MonsterSprite || GiveTo < 0) return;
+        var m = L2Battle.ReadMonster(Rom, GiveTo);
+        int id = _asset.Id, p = PaletteChoice;
+        if (m.Sprite == id && m.Palette == p) { Status = $"{m.Name} already shows sprite {id:X2} with palette {p}."; return; }
+        m.Sprite = (byte)id; m.Palette = (byte)p;
+        L2Battle.WriteMonster(Rom, m);
+        Main.NotifyRomModified($"Lufia II: monster {m.Index:X2} {m.Name} shows sprite {id:X2}, palette {p}");
+        int at = SelectedIndex;
+        Refresh(() => at, keep: true);
+        PaletteChoice = p;
+        Status = $"{m.Index:X2} {m.Name} now shows sprite {id:X2} with palette {p}. Edit, Undo takes it back.";
+    }
+
+    /// <summary>"Give it to" for tests.</summary>
+    public void GiveToMonsterNow(int monster) { GiveTo = monster; GiveToMonster(); }
 
     // ── PNG ──────────────────────────────────────────────────────────────────
 
