@@ -210,7 +210,8 @@ Read from the code and checked in the game (BizHawk, bsnes core). Lufia Forge: `
 * **Sprite numbers are one byte** (`$05D2,X` per actor). FF = no actor (`$83:A776`, `$83:A83B`, `$83:FC46`, ...),
   FE = an event object (`$83:F718` sets it with `$7FE1CE` = 0F, so row 7), FD skips the walking script on the world
   map (`$83:A933`). Nothing else compares a sprite number with FB-FD, so **FB, FC and FD are the only free numbers**:
-  at most 3 new sprites.
+  3 new sprites on one map. Lufia Forge lets each map say which of its new sprites those three show (7.3), so up to
+  128 can be made.
 * Who names a sprite: event commands 68 / 7B (create a character: id, sprite) and 34 (change a character's sprite);
   story characters (ids 10-4F) keep theirs in `$08DE + id - 10`, filled at a new game (`$83:ADDF`) from the list at
   `$87:8000` + u16 at `$87:8003` (4 bytes: id, sprite, map, spot; the first is Tia: `10 04 04 08`) and made into
@@ -234,20 +235,28 @@ Two hooks, put in the first time a new sprite or palette is made (`L2Sprites.Ins
 | `$83:A9F5` (file 0x1A9F5) | `BF 00 F0 CF` (LDA $CFF000,X) | `5C` JML to the lookup code; it does the rest of `$83:A9E5` and returns with its PLB / RTL |
 | `$83:A956` (file 0x1A956) | `BF B5 F6 CF` (LDA $CFF6B5,X) | `22` JSL to the walking code |
 
-The block (0x1400 bytes in the added space, never across a bank): `"LF2SP"`, version 1, the number of new sprites,
-the number of new palettes; +0x08 bit masks, +0x10 the row order 5 4 3 2 0 7 6 1, +0x20 the code, +0x200 a byte per
-sprite number (0 = the colours of its row, n = new palette n), +0x300 the entries of FB-FF (8 bytes: the game's 5,
-the walking script, 2 spare; FE and FF hold copies of sprite 00's), +0x400 new palettes 1-127 (16 colours each,
-colour 0 see-through).
+The block (0x1C20 bytes in the added space, never across a bank), version 2 (2026-10-27): `"LF2SP"`, 2, the number
+of new sprites, the number of new palettes; +0x08 bit masks, +0x10 the row order 5 4 3 2 0 7 6 1, +0x20 the code,
++0x300 a byte per game sprite (0 = the colours of its row, n = new palette n), +0x400 the map table (4 bytes a map,
+by `$05AC`: the new sprite + 1 that FB, FC and FD show there; 0 = new sprites 1, 2 and 3), +0x800 the entries of
+new sprites 1-128 and one more for FE and FF (8 bytes: the game's 5, the walking script, the new palette, 1 spare;
+unused ones hold copies of sprite 00's), +0xC20 new palettes 1-127 (16 colours each, colour 0 see-through).
+Version 1 (FB-FD only: palette bytes for every number at +0x200, entries at +0x300, palettes at +0x400) is still
+read, and the first change moves it into a new version 2 block (`L2Sprites.Install`; checked: the Jeros' Story ROM's
+three sprites and palettes read the same after the move).
 
-* **Lookup**: sprites FB-FD read their entry from the block (any bank), the others from `$CF:F000` as before.
+* **Lookup**: sprites FB-FD read their entry from the block (any bank) through the map's table: `resolve` takes the
+  map number (`$7E:05AC`), its table byte for that slot, and the entry it names; FE and FF read the spare entry. The
+  others read `$CF:F000` as before. Lufia Forge numbers new sprites "New 1" up (251 + n) and writes FB, FC or FD in
+  a map's scripts: the Maps tab picks a slot the map shows that sprite with, else one no script of the map uses
+  (`L2Sprites.ToGame`, `L2MapInfo.NewSpriteBytesUsed`), and says so when a map would need a fourth.
 * **New palettes**: after the row is stored, a sprite with a new palette has its colours 1-15 copied into a sprite row
   of `$0420` (and `$73` bit 7 set): a row that already shows exactly those colours; else the first row in the order
   5 4 3 2 0 7 6 1 that no other actor uses (an actor's row = `$7FE1CE,X`; FE objects count as row 7; the field monster
   rows come first because a character made later in a scene is most likely a person, the party's row 1 last); else
   the row its entry names. The row goes into `$7FE1CE,X`. No RAM of its own.
 * **Walking**: a new sprite's walking script is its entry's byte 5 (a copy keeps the original's: 0 for people).
-* Limits: 3 new sprites, 127 new palettes. A new palette borrows a row while its sprite is on the map: a character
+* Limits: 128 new sprites, 3 on one map; 127 new palettes. A new palette borrows a row while its sprite is on the map: a character
   made later in the same scene with a game sprite of that row shows the new colours (the row is chosen among the
   rows free when the sprite appears).
 
@@ -259,8 +268,9 @@ colour 0 see-through).
   added space when they grow) and is one Edit, Undo step. On a battle background or title layer each 8x8 square shows
   one row of colours, so a colour of another row is refused in a square that has colours of its own.
 * Map sprites: the Colours list sets the sprite's colours (one of the 8 rows, or a new palette); "New palette for this
-  sprite" makes a black one or a copy of the colours shown and gives it to the sprite; "New map sprite" makes FB, FC,
-  FD as a copy of the sprite shown or empty with its size, frames, colours and walking (tiles in the added space).
+  sprite" makes a black one or a copy of the colours shown and gives it to the sprite; "New map sprite" makes the
+  next "New n" as a copy of the sprite shown or empty with its size, frames, colours and walking (tiles in the added
+  space; on an 8 MB ROM in the upper 4 MB).
 * Not done: more battle background palettes. A background's record (`$97:FD40`) names a palette by number, but the
   caller of `$81:B974` computes `$97:CD58 + palette * 0x40` and the 20 used ones end where the capsule colours start
   (`$97:D258`), so more would need a hook there.
@@ -279,3 +289,7 @@ New game through the opening to Elcid's shop (map 04), scratch ROMs built with t
   a cross painted on each frame) shows in the game the same way.
 * After opening and closing the menu, and after a battle, the map's characters are set up again and the new palettes
   are back in their rows (`$0420` and `$7FE1CE` read in RAM).
+* Version 2 (2026-10-27): 5 new sprites (copies of 10, 20, 30, 40, 50; New 4 and New 5 on new red and green
+  palettes), three of them given to new characters next to the start on map 03 (New 4, New 5, New 1: the map
+  table made them FD, FC and FB). All three show in the game (Snes9x, BSNESv115+ on an 8 MB ROM; BSNES on a 4 MB
+  one), and the Jeros' Story ROM (FB-FD made with version 1) plays its opening the same after the move.

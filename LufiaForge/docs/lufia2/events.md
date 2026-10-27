@@ -310,6 +310,8 @@ jumps as "go to step N"; code another event shares is marked "shared with ...".
    the space added past 2.5 MB, the file table points at the copies, and the bank is cleared. A bank of map files is
    taken first, then any bank whose bytes all belong to packed files. The bank's last 16 bytes hold `"LF2V"` and the
    next free offset (u24). On the US ROM banks $A8-$BF hold nothing but packed files (18 banks were used when every map was moved).
+   On an 8 MB ROM (romsize.md) empty banks $01-$3F of the upper 4 MB are taken first (they see the same RAM, and the
+   header's bank, $87 + a byte added in 8 bits, wraps to them), so nothing moves.
 3. A moved block is `"LF2B"`, u16 room (from the PH), u16 size of the copied part, then the copy of the game's block
    (header, lists, key table, every script the lists reach: offsets don't change), then the **added part**, laid out
    again on every save: the six lists, then each script that lives there (a changed or new event, written whole with

@@ -7,11 +7,15 @@ namespace LufiaForge.Core.Lufia2;
 /// them. That half of the ROM is full, so room is made by moving the packed map files of one 32 KB bank ($A8-$BF
 /// hold nothing but packed files; banks of map files are taken first) to the added space (the file table points at
 /// the moved copies, as when a map or a song is edited) and handing the bank to the scripts. The bank's last 16 bytes hold "LF2V" and the next free offset (u24).
+/// <para>On an 8 MB ROM (<see cref="L2Rom.ExpandTo8"/>) banks $01-$3F of the upper 4 MB see that RAM too, and the map
+/// header's bank ($87 + a byte, added in 8 bits at $83:B5BB and $80:BEBA) reaches them, so empty banks there are
+/// taken first and nothing has to move.</para>
 /// </summary>
 public static class L2EventSpace
 {
     public const int Mark = 0x7FF0;
     private const int LowestBank = 0x28, HighestBank = 0x3F;   // file banks 0x28-0x3F = $A8-$BF
+    private const int UpperFirst = L2Rom.UpperStart + 0x8000, UpperEnd = L2Rom.UpperStart + 0x200000;   // banks $01-$3F
 
     /// <summary>Reserves <paramref name="length"/> bytes in one bank of the event space, making a new region when none
     /// has room. Returns the file offset.</summary>
@@ -45,15 +49,30 @@ public static class L2EventSpace
     }
 
     /// <summary>Whether a file offset lies in the event space.</summary>
-    public static bool Contains(RomBuffer rom, int at) => at < 0x200000 && IsRegion(rom, at / 0x8000 * 0x8000);
+    public static bool Contains(RomBuffer rom, int at) => (at < 0x200000 || at >= UpperFirst && at < UpperEnd) && IsRegion(rom, at / 0x8000 * 0x8000);
 
-    /// <summary>Banks already handed to the scripts (file offsets of their starts).</summary>
+    /// <summary>Banks already handed to the scripts (file offsets of their starts): those of the upper 4 MB first.</summary>
     public static List<int> Regions(RomBuffer rom)
     {
         var list = new List<int>();
+        if (L2Rom.IsExLoRom(rom))
+            for (int b = UpperFirst; b < UpperEnd; b += 0x8000)
+                if (IsRegion(rom, b)) list.Add(b);
         for (int b = HighestBank; b >= LowestBank; b--)
             if (IsRegion(rom, b * 0x8000)) list.Add(b * 0x8000);
         return list;
+    }
+
+    /// <summary>Banks of the upper 4 MB that can still become event space (all one value), 0 on a smaller ROM.</summary>
+    public static int UpperBanksLeft(RomBuffer rom) => !L2Rom.IsExLoRom(rom) ? 0 :
+        Enumerable.Range(0, (UpperEnd - UpperFirst) / 0x8000).Count(i => !IsRegion(rom, UpperFirst + i * 0x8000) && Empty(rom, UpperFirst + i * 0x8000));
+
+    private static bool Empty(RomBuffer rom, int bank)
+    {
+        byte v = rom.ReadByte(bank);
+        if (v is not (0x00 or 0xFF)) return false;
+        for (int i = 1; i < 0x8000; i++) if (rom.ReadByte(bank + i) != v) return false;
+        return true;
     }
 
     /// <summary>Bytes still free in the regions made so far.</summary>
@@ -70,6 +89,15 @@ public static class L2EventSpace
     /// still packed) and the bank becomes event space. Returns its file offset, or null when no bank qualifies.</summary>
     private static int? MakeRegion(RomBuffer rom)
     {
+        // an 8 MB ROM: an empty bank of the upper 4 MB
+        if (L2Rom.IsExLoRom(rom))
+            for (int b = UpperFirst; b < UpperEnd; b += 0x8000)
+                if (!IsRegion(rom, b) && Empty(rom, b))
+                {
+                    rom.WriteBytes(b, new byte[0x8000]);
+                    WriteMark(rom, b, b);
+                    return b;
+                }
         var files = new List<(int Id, int At, int Size)>();
         for (int id = 0; id < L2Rom.FileCount; id++)
         {

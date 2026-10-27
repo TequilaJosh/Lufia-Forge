@@ -220,11 +220,24 @@ public class RomBuffer
     {
         Put16(Lufia1Constants.SnesComplementOffset, 0xFFFF);
         Put16(Lufia1Constants.SnesChecksumOffset, 0x0000);
+        bool ex = IsExLoRomCopy();
+        if (ex) CopyFirstBank();
         ushort checksum = SnesChecksum(_data);
         Put16(Lufia1Constants.SnesChecksumOffset, checksum);
         Put16(Lufia1Constants.SnesComplementOffset, (ushort)(checksum ^ 0xFFFF));
+        if (ex) CopyFirstBank();
         _isDirty = true;
     }
+
+    /// <summary>An 8 MB "ExLoROM" (Lufia II made 8 MB by Lufia Forge): banks 00-7D read the upper 4 MB, so the console
+    /// starts in, and takes its interrupts through, a copy of the first 32 KB kept at 0x400000 (header included). The
+    /// copy is what tells such a ROM apart; it is renewed with the checksum, so it follows changes to the first bank.</summary>
+    public bool IsExLoRomCopy() =>
+        _data.Length == ExLoRomSize && _data.AsSpan(ExLoRomSize / 2 + 0x7FC0, 0x16).SequenceEqual(_data.AsSpan(0x7FC0, 0x16));
+
+    public const int ExLoRomSize = 0x800000;
+
+    private void CopyFirstBank() => Array.Copy(_data, 0, _data, ExLoRomSize / 2, 0x8000);
 
     /// <summary>
     /// The SNES header checksum: the sum of all bytes, where a size that isn't a power of two (e.g. 1.5 MB) counts

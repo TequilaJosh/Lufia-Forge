@@ -246,7 +246,7 @@ public sealed class L2MapEdit
                 rom.WriteBytes(_origInfoAt, Info);
             else
             {
-                int at = LufiaForge.Core.Lufia2.L2Rom.Allocate(rom, Info.Length + 1);
+                int at = L2Rom.Allocate(rom, Info.Length + 1, upper: true);
                 rom.WriteBytes(at, Info.Append((byte)0).ToArray());
                 int snes = L2Rom.FileToSnes(at);
                 rom.WriteBytes(L2MapInfo.Pointers + MapId * 3, new[] { (byte)snes, (byte)(snes >> 8), (byte)(snes >> 16) });
@@ -260,6 +260,12 @@ public sealed class L2MapEdit
             int init = L2EventBlocks.InitScript(rom, MapId);
             var script = L2EventScript.Read(rom, init, L2EventBlocks.InitBase(init));
             if (script.Problem != null) throw new InvalidOperationException("The map's start-up script can't be changed: " + script.Problem);
+            // new sprites are FB, FC or FD on a map: those the other scripts and the characters that stay use are kept
+            bool Changes(int id) => removedChars.Contains(id) || Sprites.TryGetValue(id, out int v) && (!_origSprites.TryGetValue(id, out int o0) || o0 != v);
+            var inUse = L2MapInfo.NewSpriteBytesUsed(rom, MapId, startUp: false);
+            foreach (var s in script.Steps)
+                if (!s.IsText && s.Op is 0x68 or 0x7B or 0x34 && s.Bytes.Length >= 3 && !Changes(s.Bytes[1])) inUse.Add(s.Bytes[2]);
+            byte Game(int sprite) { int b = L2Sprites.ToGame(rom, MapId, sprite, inUse); inUse.Add(b); return (byte)b; }
             foreach (var s in script.Steps.ToList())
             {
                 if (s.IsText || s.Op is not (0x68 or 0x7B) || s.Bytes.Length < 3) continue;
@@ -271,11 +277,11 @@ public sealed class L2MapEdit
                     foreach (var st in script.Steps) foreach (var j in st.Jumps) if (j.Step == s) j.Step = next;
                     script.Steps.Remove(s);
                 }
-                else if (Sprites.TryGetValue(id, out int spr) && (!_origSprites.TryGetValue(id, out int o) || o != spr) && s.Bytes[2] != spr)
-                    s.Bytes = new[] { s.Bytes[0], s.Bytes[1], (byte)spr };
+                else if (Sprites.TryGetValue(id, out int spr) && (!_origSprites.TryGetValue(id, out int o) || o != spr) && s.Op is 0x68 or 0x7B)
+                    s.Bytes = new[] { s.Bytes[0], s.Bytes[1], Game(spr) };
             }
             foreach (int id in addedChars.OrderByDescending(x => x))
-                script.Steps.Insert(0, new L2Step { Bytes = new byte[] { 0x68, (byte)id, (byte)Sprites.GetValueOrDefault(id, 0x0C) } });
+                script.Steps.Insert(0, new L2Step { Bytes = new byte[] { 0x68, (byte)id, Game(Sprites.GetValueOrDefault(id, 0x0C)) } });
             if (script.Steps.Count(s => s.Op is 0x68 or 0x7B) > 31) throw new InvalidOperationException("The map would have more characters than the game can show (31).");
             L2EventBlocks.SaveInit(rom, MapId, script);
             done.Add("characters");

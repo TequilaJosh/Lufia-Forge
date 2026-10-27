@@ -18,6 +18,7 @@ the items marked as checked were also tested in the running game (BizHawk). The 
 | [maps.md](maps.md) | The Maps tab: tools, inspector, block editor, pieces and presets, map settings, test start, the world map and battle zones, and how each change is written |
 | [graphics.md](graphics.md) | Every packed file classified; battle backgrounds, title, fonts, sprites; map sprites, painting, new sprites and palettes |
 | [settings.md](settings.md) | Game-wide values: random battle rate, walking speed, run button, sell price, level cap, gold cap, inns |
+| [romsize.md](romsize.md) | The 8 MB ROM (ExLoROM): what goes in the upper 4 MB (events, map sprites, map info), where it runs, what was checked |
 
 ## The ROM at a glance
 
@@ -35,7 +36,7 @@ the items marked as checked were also tested in the running game (BizHawk). The 
 
 The ROM is full: only about 0x14D bytes are unused FF runs, so data that grows goes into added space after
 0x280000 (event scripts can't: they must stay below 0x200000, so the event editor clears a bank of packed files in
-$A8-$BF for them, events.md section 8). Lufia Forge grows the ROM to 3 MB, then 4 MB, and uses the largest empty run there (the fan hacks Frue,
+$A8-$BF for them, events.md section 8). Lufia Forge grows the ROM to 3 MB, then 4 MB (8 MB on request, romsize.md), and uses the largest empty run there (the fan hacks Frue,
 Spekkio and Kureji Lufia v8.2 fill 0x280000-0x30DAC2 and 0x3FFC00-0x3FFDD5 and move the monster table to $D0:A000).
 
 ## Checked in the game
