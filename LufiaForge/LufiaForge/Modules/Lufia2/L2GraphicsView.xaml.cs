@@ -19,6 +19,14 @@ public partial class L2GraphicsView : UserControl
 
     private L2GraphicsPage? Vm => Canvas.DataContext as L2GraphicsPage;
 
+    /// <summary>Keeps the picked picture in sight (a new sprite or palette picks one far down the list).</summary>
+    private void List_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (sender is not System.Windows.Controls.ListBox lb || lb.SelectedItem == null) return;
+        // after the list has laid out its new items (a refresh replaces them all)
+        Dispatcher.BeginInvoke(() => { if (lb.SelectedItem != null) lb.ScrollIntoView(lb.SelectedItem); }, System.Windows.Threading.DispatcherPriority.Background);
+    }
+
     /// <summary>Ctrl+Z / Ctrl+Y take painting strokes back while there are some; else the keys go on to the app's Undo.</summary>
     private void Picture_KeyDown(object sender, KeyEventArgs e)
     {

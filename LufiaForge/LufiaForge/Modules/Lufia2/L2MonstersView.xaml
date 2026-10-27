@@ -28,11 +28,24 @@
                         <TextBox Style="{StaticResource GdText}" Width="130" HorizontalAlignment="Left" Text="{Binding Name, UpdateSourceTrigger=LostFocus}" MaxLength="13"/>
                         <TextBlock Text="Level" Style="{StaticResource GdFieldLabel}"/>
                         <TextBox Style="{StaticResource GdNumber}" Text="{Binding Level, UpdateSourceTrigger=LostFocus}"/>
-                        <TextBlock Text="Battle sprite (1-134)" Style="{StaticResource GdFieldLabel}"/>
-                        <TextBox Style="{StaticResource GdNumber}" Text="{Binding Sprite, UpdateSourceTrigger=LostFocus}"/>
-                        <TextBlock Text="Palette" Style="{StaticResource GdFieldLabel}"/>
-                        <TextBox Style="{StaticResource GdNumber}" Text="{Binding Palette, UpdateSourceTrigger=LostFocus}"/>
                     </UniformGrid>
+                    <TextBlock Text="BATTLE SPRITE" Style="{StaticResource GdSection}" Margin="0,10,0,4"/>
+                    <StackPanel Orientation="Horizontal">
+                        <StackPanel VerticalAlignment="Top" Margin="0,0,12,0">
+                            <TextBlock Text="Sprite" Style="{StaticResource GdFieldLabel}"/>
+                            <ComboBox Style="{StaticResource GdCombo}" Width="210" ItemsSource="{Binding SpriteOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding Sprite}"
+                                      ToolTip="The picture the monster shows in battle (the game's sprites 01-86 and new ones made in Graphics). Sprites that other monsters use are shared: painting one changes them all."/>
+                            <TextBlock Text="Palette" Style="{StaticResource GdFieldLabel}" Margin="0,6,0,0"/>
+                            <ComboBox Style="{StaticResource GdCombo}" Width="210" ItemsSource="{Binding PaletteOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding Palette}"
+                                      ToolTip="Which of the sprite's own palettes it is shown with (Graphics can add more)."/>
+                            <TextBlock Text="{Binding SpriteNote}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Width="210" Margin="0,6,0,0"/>
+                        </StackPanel>
+                        <Border Background="#202020" VerticalAlignment="Top" Padding="4" MinWidth="72" MinHeight="72">
+                            <Image Source="{Binding PictureImage}" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Image.LayoutTransform><ScaleTransform ScaleX="2" ScaleY="2"/></Image.LayoutTransform>
+                            </Image>
+                        </Border>
+                    </StackPanel>
                 </StackPanel>
             </Border>
             <Border Style="{StaticResource GdCard}">
@@ -71,14 +84,6 @@
                         <TextBlock Text="Drop chance (0-127)" Style="{StaticResource GdFieldLabel}"/>
                         <TextBox Style="{StaticResource GdNumber}" Text="{Binding DropChance, UpdateSourceTrigger=LostFocus}" IsEnabled="{Binding HasDrop}"/>
                     </UniformGrid>
-                </StackPanel>
-            </Border>
-            <Border Style="{StaticResource GdCard}">
-                <StackPanel>
-                    <TextBlock Text="BATTLE SPRITE" Style="{StaticResource GdSection}"/>
-                    <Image Source="{Binding PictureImage}" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor" HorizontalAlignment="Left">
-                        <Image.LayoutTransform><ScaleTransform ScaleX="2" ScaleY="2"/></Image.LayoutTransform>
-                    </Image>
                     <TextBlock Text="{Binding ScriptText}" Style="{StaticResource GdHint}" TextWrapping="Wrap" MaxWidth="300" Margin="0,8,0,0"/>
                 </StackPanel>
             </Border>
