@@ -19,7 +19,7 @@
         <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,12,0,0">
             <StackPanel>
                 <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="8,0,12,4"
-                           Text="The 7 capsule monsters in their 5 forms (feeding moves them up a form; the 5th comes from a certain fruit). A change is written to the ROM at once (Edit, Undo takes it back). Read from the game's code, not yet checked in the game."/>
+                           Text="The 7 capsule monsters in their 5 forms (feeding moves them up a form; the 5th comes from a certain fruit). A change is written to the ROM at once (Edit, Undo takes it back). Read from the game's code; feeding checked in the game."/>
                 <WrapPanel IsEnabled="{Binding IsEditable}">
                     <Border Style="{StaticResource GdCard}">
                         <StackPanel>
@@ -109,6 +109,126 @@
                                     </ItemsControl>
                                 </StackPanel>
                             </WrapPanel>
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource GdCard}">
+                        <StackPanel MaxWidth="560">
+                            <TextBlock Text="FEEDING (ALL CAPSULE MONSTERS)" Style="{StaticResource GdSection}"/>
+                            <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,8"
+                                       Text="Capsule > Feed fills a meter of 32 points; when it is full the monster moves up a form. Only its highest form, up to form 3, can be fed for points. An item counts by its price: its tier is the first price below it is at or under. A monster eats an item whose tier is at least its pickiness (the pickiness then becomes that tier) and refuses a cheaper one (the item is used up and the pickiness drops by one). Checked in the game."/>
+                            <TextBlock Text="{Binding FeedNote}" Style="{StaticResource GdHint}" Foreground="#E8A040" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                            <StackPanel IsEnabled="{Binding FeedEditable}">
+                                <TextBlock Text="Points an eaten item gives" Style="{StaticResource GdFieldLabel}" FontWeight="SemiBold"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,4,0,2">
+                                    <TextBlock Width="60"/>
+                                    <ItemsControl ItemsSource="{Binding GroupHeaders}">
+                                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate><TextBlock Text="{Binding}" Style="{StaticResource GdHint}" Width="84" TextWrapping="Wrap"/></DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <TextBlock Text="Pickiness it starts at" Style="{StaticResource GdHint}" Width="90" TextWrapping="Wrap"/>
+                                </StackPanel>
+                                <ItemsControl ItemsSource="{Binding FeedRows}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="{Binding Label}" Style="{StaticResource GdFieldLabel}" Width="60" VerticalAlignment="Center"/>
+                                                <ItemsControl ItemsSource="{Binding Cells}">
+                                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <TextBox Style="{StaticResource GdNumber}" Width="74" Margin="0,2,10,2" Text="{Binding Value, UpdateSourceTrigger=LostFocus}"
+                                                                     ToolTip="Points (0 to 32) for an item of these tiers eaten in this form"/>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                                <TextBox Style="{StaticResource GdNumber}" Width="74" Margin="0,2" DataContext="{Binding Start}" Text="{Binding Value, UpdateSourceTrigger=LostFocus}"
+                                                         ToolTip="Tier 0 to 15: the pickiness a monster gets on reaching this form (and after eating its own fruit)"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <UniformGrid Columns="2" Margin="0,10,0,0">
+                                    <TextBlock Text="The item it asks for gives" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center"/>
+                                    <ComboBox Style="{StaticResource GdCombo}" MinWidth="160" ItemsSource="{Binding BonusOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding WishBonus}"
+                                              ToolTip="The points of the item the monster asks for are multiplied by this; it then asks for another"/>
+                                </UniformGrid>
+                                <ItemsControl ItemsSource="{Binding FeedValues}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <UniformGrid Columns="2">
+                                                <TextBlock Text="{Binding Label}" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center"/>
+                                                <TextBox Style="{StaticResource GdNumber}" Text="{Binding Value, UpdateSourceTrigger=LostFocus}"/>
+                                            </UniformGrid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,2,0,4"
+                                           Text="One feeding never gives more than the most points (16 in the game, so an asked-for item worth 8 gives 16, not 24). The meter fills while the sparkles fall, and 16 is all the sparkles the game has room for, so it can only be lowered (1 to 16)."/>
+                                <UniformGrid Columns="2">
+                                    <TextBlock Text="The Magic fruit is" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center"/>
+                                    <ComboBox Style="{StaticResource GdCombo}" ItemsSource="{Binding ItemOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding MagicFruit}"
+                                              ToolTip="The item that gives every monster the Magic fruit's points"/>
+                                </UniformGrid>
+                                <TextBlock Text="Price tiers (gold)" Style="{StaticResource GdFieldLabel}" FontWeight="SemiBold" Margin="0,10,0,2"/>
+                                <ItemsControl ItemsSource="{Binding Thresholds}">
+                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="3"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="{Binding Label}" Style="{StaticResource GdFieldLabel}" Width="90" VerticalAlignment="Center"/>
+                                                <TextBox Style="{StaticResource GdNumber}" Width="70" Text="{Binding Value, UpdateSourceTrigger=LostFocus}"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0" Text="Tier 15 is anything above tier 14's price. Keep them rising."/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource GdCard}">
+                        <StackPanel MaxWidth="420" IsEnabled="{Binding FeedEditable}">
+                            <TextBlock Text="ITEMS THEY ASK FOR" Style="{StaticResource GdSection}"/>
+                            <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,6"
+                                       Text="The menu shows the item a monster wants, drawn at random from the list of its pickiness tier (all 7 monsters share these lists). Feeding it that item multiplies the points; then it picks again."/>
+                            <ComboBox Style="{StaticResource GdCombo}" ItemsSource="{Binding TierOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding WishTier}" MinWidth="300"/>
+                            <ItemsControl ItemsSource="{Binding WishItems}" Margin="0,4,0,0">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal" Margin="0,1">
+                                            <TextBlock Text="{Binding Label}" Style="{StaticResource GdFieldLabel}" Width="24" VerticalAlignment="Center"/>
+                                            <ComboBox Style="{StaticResource GdCombo}" Width="270" ItemsSource="{Binding Options}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding Value}"/>
+                                            <Button Content="Remove" Style="{StaticResource LufiaButton}" Padding="8,2" Margin="6,0,0,0"
+                                                    Command="{Binding DataContext.RemoveWishCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                <TextBlock Width="24"/>
+                                <ComboBox Style="{StaticResource GdCombo}" Width="270" ItemsSource="{Binding ItemOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding NewWishItem}"/>
+                                <Button Content="Add" Style="{StaticResource LufiaButtonGold}" Padding="8,2" Margin="6,0,0,0" Command="{Binding AddWishCommand}" ToolTip="Adds this item to the tier's list"/>
+                            </StackPanel>
+                            <TextBlock Text="{Binding WishNote}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource GdCard}">
+                        <StackPanel MaxWidth="420" IsEnabled="{Binding FeedEditable}">
+                            <TextBlock Text="{Binding FruitTitle}" Style="{StaticResource GdSection}"/>
+                            <UniformGrid Columns="2">
+                                <TextBlock Text="Its own fruit" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center"/>
+                                <ComboBox Style="{StaticResource GdCombo}" ItemsSource="{Binding ItemOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding OwnFruit}"/>
+                                <TextBlock Text="Fruit for its 5th form" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center"/>
+                                <ComboBox Style="{StaticResource GdCombo}" ItemsSource="{Binding ItemOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding Form5Fruit}"/>
+                                <TextBlock Text="Fed in form" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center"/>
+                                <ComboBox Style="{StaticResource GdCombo}" MinWidth="100" ItemsSource="{Binding FruitForms}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding FruitForm}"/>
+                            </UniformGrid>
+                            <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,6,0,0"
+                                       Text="Its own fruit gives the points set under Feeding and makes it as picky as when it reached its form. The 5th-form fruit, fed in that form, turns it into its 5th form; its own fruit turns it back to that form."/>
+                            <TextBlock Text="WHAT AN ITEM GIVES" Style="{StaticResource GdSection}" Margin="0,14,0,4"/>
+                            <ComboBox Style="{StaticResource GdCombo}" Width="300" ItemsSource="{Binding ItemOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding CheckItem}"/>
+                            <TextBlock Text="{Binding CheckText}" Style="{StaticResource GdFieldLabel}" TextWrapping="Wrap" Margin="0,6,0,0"/>
                         </StackPanel>
                     </Border>
                     <Border Style="{StaticResource GdCard}">
