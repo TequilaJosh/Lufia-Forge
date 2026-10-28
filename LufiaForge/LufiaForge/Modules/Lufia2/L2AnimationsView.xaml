@@ -1,0 +1,137 @@
+<UserControl x:Class="LufiaForge.Modules.Lufia2.L2AnimationsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:LufiaForge.Modules.Lufia2"
+             xmlns:common="clr-namespace:LufiaForge.Modules.Common">
+    <UserControl.Resources>
+        <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
+    </UserControl.Resources>
+    <Grid common:LayoutMemory.Key="l2anims.main">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="260" MinWidth="120"/>
+            <ColumnDefinition Width="6"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <common:PopOutHost Grid.Column="0" Title="Animation list" Key="l2anims.list" ButtonMargin="0,14,32,0">
+            <ListBox Margin="12" Style="{StaticResource GdFindList}" ItemsSource="{Binding Names}" SelectedIndex="{Binding SelectedIndex}"/>
+        </common:PopOutHost>
+        <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch"/>
+        <common:PopOutHost Grid.Column="2" Title="Animation" Key="l2anims.detail" ButtonMargin="0,2,22,0">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,12,0,0">
+            <StackPanel>
+                <TextBlock Text="{Binding Info}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="8,0,12,4"/>
+                <TextBlock Text="{Binding Status}" Style="{StaticResource GdHint}" Foreground="#E0C060" TextWrapping="Wrap" Margin="8,0,12,6"/>
+                <WrapPanel Orientation="Horizontal">
+                    <Border Style="{StaticResource GdCard}">
+                        <StackPanel>
+                            <TextBlock Text="AS THE GAME PLAYS IT" Style="{StaticResource GdSection}"/>
+                            <Border Background="Black" HorizontalAlignment="Left">
+                                <Image Source="{Binding Frame}" Width="512" Height="448" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                            </Border>
+                            <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                <Button Content="Play" Command="{Binding PlayCommand}" Style="{StaticResource LufiaButton}" Padding="12,3"/>
+                                <Button Content="Stop" Command="{Binding StopCommand}" Style="{StaticResource LufiaButton}" Padding="12,3" Margin="6,0,0,0"/>
+                                <CheckBox Content="Loop" IsChecked="{Binding Loop}" Style="{StaticResource GdCheck}" Margin="10,0,0,0" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                <TextBlock Text="Background" Style="{StaticResource GdFieldLabel}"/>
+                                <ComboBox ItemsSource="{Binding Backgrounds}" SelectedIndex="{Binding Background}" Width="190"/>
+                                <TextBlock Text="Monster" Style="{StaticResource GdFieldLabel}" Margin="10,0,0,0"/>
+                                <ComboBox ItemsSource="{Binding MonsterNames}" SelectedIndex="{Binding Monster}" Width="140"/>
+                            </StackPanel>
+                            <TextBlock Text="{Binding PlayInfo}" Style="{StaticResource GdHint}" TextWrapping="Wrap" MaxWidth="512" HorizontalAlignment="Left" Margin="0,4,0,0"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource GdCard}">
+                        <StackPanel MaxWidth="440">
+                            <TextBlock Text="NEW ANIMATION, GIVE IT TO A SPELL OR AN IP ATTACK" Style="{StaticResource GdSection}"/>
+                            <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap"
+                                       Text="Make a copy: a new animation number with its own scripts, graphics and colours, so changing it changes nothing else. Then paint it, change its colours and step lengths, and give it to a spell or an IP attack."/>
+                            <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                <TextBlock Text="Name" Style="{StaticResource GdFieldLabel}"/>
+                                <TextBox Style="{StaticResource GdText}" Width="140" Text="{Binding NewName, UpdateSourceTrigger=PropertyChanged}" MaxLength="16"/>
+                                <Button Content="Make a copy" Command="{Binding MakeCopyCommand}" Style="{StaticResource LufiaButton}" Padding="10,3" Margin="8,0,0,0"/>
+                                <Button Content="Rename" Command="{Binding RenameCommand}" Style="{StaticResource LufiaButton}" Padding="10,3" Margin="6,0,0,0" IsEnabled="{Binding IsNew}"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                <ComboBox ItemsSource="{Binding SpellNames}" SelectedIndex="{Binding SpellChoice}" Width="250"/>
+                                <Button Content="Give to this spell" Command="{Binding GiveToSpellCommand}" Style="{StaticResource LufiaButton}" Padding="10,3" Margin="6,0,0,0"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                <ComboBox ItemsSource="{Binding IpNames}" SelectedIndex="{Binding IpChoice}" Width="250"/>
+                                <Button Content="Give to this IP attack" Command="{Binding GiveToIpCommand}" Style="{StaticResource LufiaButton}" Padding="10,3" Margin="6,0,0,0"/>
+                            </StackPanel>
+                            <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,6,0,0"
+                                       Text="A monster casting a spell shows the same animation, aimed at the heroes. Items and weapons pick theirs on the Items page."/>
+                            <TextBlock Text="STEP LENGTHS" Style="{StaticResource GdSection}" Margin="0,12,0,0"/>
+                            <TextBlock Text="{Binding TimingInfo}" Style="{StaticResource GdHint}" TextWrapping="Wrap"/>
+                            <ItemsControl ItemsSource="{Binding Timings}" Margin="0,4,0,0">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal" Margin="0,1">
+                                            <TextBlock Text="{Binding Label}" Style="{StaticResource GdFieldLabel}" Width="220"/>
+                                            <TextBox Style="{StaticResource GdNumber}" Text="{Binding Frames, UpdateSourceTrigger=PropertyChanged}"/>
+                                            <TextBlock Text="frames" Style="{StaticResource GdHint}" VerticalAlignment="Center" Margin="4,0,0,0"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                <Button Content="Slower" Command="{Binding SlowerCommand}" Style="{StaticResource LufiaButton}" Padding="10,3"/>
+                                <Button Content="Faster" Command="{Binding FasterCommand}" Style="{StaticResource LufiaButton}" Padding="10,3" Margin="6,0,0,0"/>
+                                <Button Content="Write step lengths" Command="{Binding WriteTimingCommand}" Style="{StaticResource LufiaButton}" Padding="10,3" Margin="6,0,0,0"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </WrapPanel>
+                <Border Style="{StaticResource GdCard}" HorizontalAlignment="Left">
+                    <StackPanel>
+                        <TextBlock Text="GRAPHICS AND COLOURS" Style="{StaticResource GdSection}"/>
+                        <StackPanel Orientation="Horizontal">
+                            <ComboBox ItemsSource="{Binding GraphicsChoices}" SelectedIndex="{Binding GraphicsChoice}" Width="300"/>
+                            <ComboBox ItemsSource="{Binding PaletteChoices}" SelectedIndex="{Binding PaletteChoice}" Width="240" Margin="6,0,0,0"/>
+                            <Button Content="Export PNG..." Command="{Binding ExportSheetCommand}" Style="{StaticResource LufiaButton}" Padding="10,3" Margin="6,0,0,0"/>
+                            <Button Content="Import PNG..." Command="{Binding ImportSheetCommand}" Style="{StaticResource LufiaButton}" Padding="10,3" Margin="6,0,0,0"/>
+                        </StackPanel>
+                        <TextBlock Text="{Binding SheetInfo}" Style="{StaticResource GdHint}" TextWrapping="Wrap" MaxWidth="760" HorizontalAlignment="Left" Margin="0,4,0,4"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                            <ItemsControl ItemsSource="{Binding Swatches}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Width="22" Height="22" Margin="1" Background="{Binding Brush}" BorderThickness="2" Tag="{Binding Index}"
+                                                MouseLeftButtonDown="Swatch_Click" Cursor="Hand">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="BorderBrush" Value="#404040"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Selected}" Value="True"><Setter Property="BorderBrush" Value="White"/></DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBox Style="{StaticResource GdText}" Width="80" Text="{Binding ColourText, UpdateSourceTrigger=PropertyChanged}" Margin="8,0,0,0"
+                                     ToolTip="The picked colour: 4 hex digits (BGR555) or #RRGGBB"/>
+                            <Button Content="Set colour" Command="{Binding SetColourCommand}" Style="{StaticResource LufiaButton}" Padding="10,3" Margin="6,0,0,0"/>
+                        </StackPanel>
+                        <TextBlock Style="{StaticResource GdHint}" Text="Left button paints with the picked colour, right button picks the colour under it." Margin="0,0,0,4"/>
+                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="#202020" MaxHeight="820">
+                            <local:L2PixelCanvas x:Name="Canvas" Source="{Binding SheetImage}" Zoom="{Binding Zoom}" ShowGrid="False"
+                                                 CellWidth="8" CellHeight="8" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="8"/>
+                        </ScrollViewer>
+                    </StackPanel>
+                </Border>
+                <Expander Header="Steps (the animation's scripts)" Margin="8,4,12,12">
+                    <TextBox Style="{StaticResource GdText}" Text="{Binding Listing, Mode=OneWay}" IsReadOnly="True" FontFamily="Consolas" Height="300"
+                             VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" TextWrapping="NoWrap" VerticalContentAlignment="Top"/>
+                </Expander>
+            </StackPanel>
+        </ScrollViewer>
+        </common:PopOutHost>
+    </Grid>
+</UserControl>

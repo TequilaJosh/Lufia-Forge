@@ -434,7 +434,7 @@ public static class L2Magic
     /// animation (the game would crash on it).</summary>
     private const int AnimationTable = 0xA8000;
 
-    public static bool IsAnimation(RomBuffer rom, int n) => n is >= 0 and < 0xFF && rom.ReadUInt16Le(AnimationTable + n * 2) != 0;
+    public static bool IsAnimation(RomBuffer rom, int n) => n is >= 0 and < 0xFF && (rom.ReadUInt16Le(AnimationTable + n * 2) != 0 || L2SpellAnims.IsNew(rom, n));
 
     /// <summary>Animations the battle code starts itself.</summary>
     private static readonly Dictionary<int, string> BuiltIn = new()
@@ -462,7 +462,7 @@ public static class L2Magic
                 var distinct = who.Distinct().ToList();
                 list.Add((n, distinct[0] + (distinct.Count > 1 ? $", also {string.Join(", ", distinct.Skip(1).Take(2))}{(distinct.Count > 3 ? "..." : "")}" : "")));
             }
-            else list.Add((n, $"Unused animation {n:X2}"));
+            else list.Add((n, L2SpellAnims.IsNew(rom, n) ? $"{L2SpellAnims.Name(rom, n)} (new animation)" : $"Unused animation {n:X2}"));
         }
         return list;
     }
