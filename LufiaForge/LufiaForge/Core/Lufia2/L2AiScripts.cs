@@ -807,6 +807,19 @@ public static class L2AiScripts
         return block;
     }
 
+    /// <summary>The monster records moved to bank <paramref name="bank"/> (<see cref="L2NewMonsters"/>): the turn hook's
+    /// LDA #bank follows (the code is assembled again; its routines keep their places).</summary>
+    internal static void SetMonsterBank(RomBuffer rom, int bank)
+    {
+        int block = Block(rom);
+        if (block < 0) return;
+        rom.WriteByte(block + Magic.Length + 1, (byte)bank);
+        int code = L2Rom.FileToSnes(block + CodeAt), table = L2Rom.FileToSnes(block + TableAt);
+        var bytes = Assemble(code, table, bank);
+        if (Version(rom, block) < CurrentVersion) bytes = bytes.Take(HookEOffset).ToArray();   // (a version 1 block has only A-D)
+        rom.WriteBytes(block + CodeAt, bytes);
+    }
+
     /// <summary>A version 1 block (monster and capsule scripts only) gets the effect hooks: the code is assembled again
     /// (the first routines keep their places) and the runner and item loader jump to it.</summary>
     private static int Upgrade(RomBuffer rom, int block)

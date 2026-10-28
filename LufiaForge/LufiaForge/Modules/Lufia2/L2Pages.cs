@@ -236,6 +236,26 @@ public partial class L2MonstersPage : L2Page
     /// name field that also holds script bytes), or "".</summary>
     [ObservableProperty] private string _recordNote = "";
     [ObservableProperty] private int _nameMax = L2Battle.MonsterNameLength;
+    [ObservableProperty] private string _newMonsterNote = "";
+    [ObservableProperty] private bool _canAddMonster;
+
+    /// <summary>After a monster was added (the Encounters page lists it then).</summary>
+    public event Action? MonstersChanged;
+
+    /// <summary>A new monster: a copy of the one shown (<see cref="L2NewMonsters.Add"/>), named "New xx".</summary>
+    [RelayCommand]
+    private void AddMonster()
+    {
+        if (Rom == null || Main == null || _m == null) return;
+        try
+        {
+            int id = L2NewMonsters.Add(Rom, _m.Index);
+            Main.NotifyRomModified($"Lufia II: new monster {id:X2} (a copy of {_m.Name})");
+            RefreshList(id);
+            MonstersChanged?.Invoke();
+        }
+        catch (Exception e) { System.Windows.MessageBox.Show(e.Message, "New monster", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning); }
+    }
 
     private static string Line(L2Battle.Monster m) =>
         $"{m.Index:X2}  " + (m.Unused ? "(unused slot)" : m.Name + (m.SameAs >= 0 ? $"  (= {m.SameAs:X2})" : ""));
@@ -245,19 +265,35 @@ public partial class L2MonstersPage : L2Page
         ItemOptions = L2Battle.Items(Rom!).Select(i => new L2Option(i.Index, $"{i.Index:X3} {i.Name}")).ToList();
         OnPropertyChanged(nameof(ItemOptions));
         var ms = L2Battle.Monsters(Rom!);
-        SpriteOptions = Enumerable.Range(1, L2MonsterSprites.Count(Rom!)).Select(n =>
+        var sprites = Enumerable.Range(1, L2MonsterSprites.Count(Rom!)).Select(n =>
         {
             var (tx, ty, _) = L2MonsterSprites.Size(Rom!, n);
             var who = ms.Where(m => m.Sprite == n).Select(m => m.Name).Distinct().ToList();
             string names = who.Count == 0 ? (L2MonsterSprites.IsNew(n) ? "new" : "no monster") : string.Join(", ", who.Take(2)) + (who.Count > 2 ? ", ..." : "");
             return new L2Option(n, $"{n:X2} ({tx * 8} x {ty * 8}) {names}");
         }).ToList();
+        // (the same list stays, so the sprite list keeps its pick when a field of the monster is written)
+        if (!sprites.SequenceEqual(SpriteOptions))
+        {
+            SpriteOptions = sprites;
+            // the list shows the pick again (a new list leaves the box empty until the value is raised again)
+            bool was = Loading; Loading = true;
+            try { OnPropertyChanged(nameof(Sprite)); } finally { Loading = was; }
+        }
         int real = ms.Count(m => !m.Unused);
-        CountNote = (ms.Count == L2Battle.MonsterCount && real == ms.Count ? "Lufia II's 224 monsters." :
+        CountNote =(ms.Count == L2Battle.MonsterCount && real == ms.Count ? "Lufia II's 224 monsters." :
                         $"This ROM's monster table has {ms.Count} entries (the US game 224): {real} monsters" +
                         (real < ms.Count ? $", {ms.Count - real} unused slots the hack points at a placeholder." : ".")) +
                     " A change is written to the ROM at once (Edit, Undo takes it back).";
         return ms.Select(Line);
+    }
+
+    protected override void OnListRead()
+    {
+        NewMonsterNote = L2NewMonsters.CanAdd(Rom!, out var why)
+            ? $"a copy of the monster shown (record, sprite, drop and battle scripts) as monster {L2NewMonsters.NextId(Rom!):X2}; then change what you like and put it in a monster group or story battle (Encounters page). Room for about {Math.Max(0, L2NewMonsters.Room(Rom!) / 64)} more."
+            : why;
+        CanAddMonster = why.Length == 0;
     }
 
     /// <summary>The palettes of sprite <paramref name="sprite"/> (and the note under the picture).</summary>
@@ -698,6 +734,20 @@ public partial class L2Slot : ObservableObject
 }
 
 // (the Encounters page is in L2EncountersPage.cs)
+/// <summary>A story battle's slot: the monster and its place on the screen.</summary>
+public partial class L2StorySlot : ObservableObject
+{
+    public string Label { get; init; } = "";
+    public List<L2Option> Options { get; init; } = new();
+    [ObservableProperty] private int _monster;
+    [ObservableProperty] private int _x;
+    [ObservableProperty] private int _y;
+    public Action? Changed { get; set; }
+    partial void OnMonsterChanged(int value) => Changed?.Invoke();
+    partial void OnXChanged(int value) => Changed?.Invoke();
+    partial void OnYChanged(int value) => Changed?.Invoke();
+}
+
 
 
 // ------------------------------------------------------------------------------------------- shops
@@ -706,6 +756,7 @@ public partial class L2Slot : ObservableObject
 public sealed class L2ShopSection
 {
     public string Title { get; init; } = "";
+    public int Bit { get; init; }
     public List<L2Slot> Slots { get; init; } = new();
 }
 
@@ -713,6 +764,7 @@ public partial class L2ShopsPage : ObservableObject
 {
     private RomBuffer? _rom;
     private MainViewModel? _main;
+    private bool _loading;
     private List<L2Shops.Shop> _shops = new();
     private List<L2Option> _items = new(), _spells = new();
 
@@ -720,12 +772,23 @@ public partial class L2ShopsPage : ObservableObject
     [ObservableProperty] private int _selectedIndex = -1;
     [ObservableProperty] private List<L2ShopSection> _sections = new();
     [ObservableProperty] private string _info = "";
+    [ObservableProperty] private string _newShopNote = "";
+    [ObservableProperty] private bool _canAdd;
+    /// <summary>The lists the shop has (its menu): items, weapons, armor, spells, and whether it buys.</summary>
+    [ObservableProperty] private bool _hasItems, _hasWeapons, _hasArmor, _hasSpells, _buys;
+    [ObservableProperty] private bool _canChangeLists;
 
     public void SetRom(RomBuffer rom, MainViewModel main)
     {
         _rom = rom; _main = main;
         _items = L2Battle.Items(rom).Select(i => new L2Option(i.Index, $"{i.Index:X3} {i.Name}  ({i.Price} G)")).ToList();
         _spells = L2Battle.Spells(rom).Select(s => new L2Option(s.Index, $"{s.Index:X2} {s.Name}  ({s.Price} G)")).ToList();
+        ReadList(0);
+    }
+
+    private void ReadList(int select)
+    {
+        var rom = _rom!;
         _shops = L2Shops.All(rom);
         Names.Clear();
         foreach (var s in _shops)
@@ -733,10 +796,15 @@ public partial class L2ShopsPage : ObservableObject
             var maps = L2Shops.UsedOn(rom, s.Id);
             string where = maps.Count > 0 ? "  " + L2Maps.Name(rom, maps[0]) : "";
             string what = string.Join(", ", (s.IsComposite ? new[] { "second-hand" } : Array.Empty<string>()).Concat(s.Sections.Select(x => x.Name)));
-            Names.Add($"{s.Id:X2}  {what}{where}" + (s.Id > L2Shops.LastOriginal ? "  (added)" : ""));
+            Names.Add($"{s.Id:X2}  {what}{where}" + (s.Id > L2Shops.LastOriginal || L2Shops.IsAdded(rom, s) ? "  (added)" : ""));
         }
+        CanAdd = L2Shops.CanInstall(rom, out var why) && L2Shops.NextId(rom) > 0;
+        NewShopNote = CanAdd
+            ? $"a copy of the shop shown as shop {L2Shops.NextId(rom):X2}; then change its lists. An event opens it with \"Open a shop\" (18 {L2Shops.NextId(rom):X2}) on the Events page, for example in a character's talk event."
+            : why.Length > 0 ? why : "Every id of this ROM's shop table is used.";
+        CanChangeLists = L2Shops.CanInstall(rom, out _);
         SelectedIndex = -1;
-        SelectedIndex = _shops.Count > 0 ? 0 : -1;
+        SelectedIndex = Math.Clamp(select, 0, _shops.Count - 1);
     }
 
     partial void OnSelectedIndexChanged(int value)
@@ -745,18 +813,22 @@ public partial class L2ShopsPage : ObservableObject
         var shop = _shops[value];
         Sections = shop.Sections.Select(sec => new L2ShopSection
         {
-            Title = sec.Name.ToUpperInvariant(),
+            Title = sec.Name.ToUpperInvariant(), Bit = sec.Bit,
             Slots = sec.Entries.Select((e, i) => new L2Slot
             {
                 Label = $"{i + 1}.", Options = sec.IsSpells ? _spells : _items, Value = e,
                 Changed = () => SlotEdited(shop, sec),
             }).ToList(),
         }).ToList();
+        _loading = true;
+        HasItems = (shop.Mask & 0x04) != 0; HasWeapons = (shop.Mask & 0x08) != 0; HasArmor = (shop.Mask & 0x10) != 0;
+        HasSpells = (shop.Mask & 0x20) != 0; Buys = shop.Sells;
+        _loading = false;
         var maps = L2Shops.UsedOn(_rom, shop.Id);
         Info = (shop.IsComposite ? "Its first list is made by the game: every item with a count in a table in RAM ($7F:F080), probably items sold earlier. It has nothing to edit. " : "") +
-               (maps.Count > 0 ? $"Opened on map{(maps.Count > 1 ? "s" : "")} {string.Join(", ", maps.Select(m => $"{m:X2} {L2Maps.Name(_rom, m)}"))}. " : "") +
+               (maps.Count > 0 ? $"Opened on map{(maps.Count > 1 ? "s" : "")} {string.Join(", ", maps.Select(m => $"{m:X2} {L2Maps.Name(_rom, m)}"))}. " : $"No event opens it yet: add \"Open a shop\" (18 {shop.Id:X2}) to an event on the Events page. ") +
                (shop.Sells ? "It also buys (Sell). " : "") +
-               "Each slot can be any item (or spell); the lists keep their length.";
+               $"Each slot can be any item (or spell); + and - change how many a list has (up to {L2Shops.MaxEntries}).";
     }
 
     private void SlotEdited(L2Shops.Shop shop, L2Shops.Section sec)
@@ -765,8 +837,77 @@ public partial class L2ShopsPage : ObservableObject
         var ui = Sections.ElementAtOrDefault(shop.Sections.IndexOf(sec));
         if (ui == null) return;
         if (TableGuard.LockReason(_rom, "Shops") is { } locked) { System.Windows.MessageBox.Show(locked, "Shops"); return; }
+        if (ui.Slots.Any(s => !sec.IsSpells && s.Value == 0)) { System.Windows.MessageBox.Show("Item 000 ends a list, so a slot can't hold it: take the slot away with - instead.", "Shops"); return; }
         for (int i = 0; i < sec.Entries.Count; i++) sec.Entries[i] = ui.Slots[i].Value;
         L2Shops.WriteSection(_rom, sec);
         _main.NotifyRomModified($"Lufia II: shop {shop.Id:X2}");
+    }
+
+    /// <summary>Writes the shown shop anew with <paramref name="change"/> applied to its lists (any length; see
+    /// <see cref="L2Shops.Rewrite"/>).</summary>
+    private void Rewrite(Func<Dictionary<int, List<int>>, int, int> change, string what)
+    {
+        if (_rom == null || _main == null || SelectedIndex < 0 || SelectedIndex >= _shops.Count) return;
+        var shop = _shops[SelectedIndex];
+        var lists = Sections.ToDictionary(s => s.Bit, s => s.Slots.Select(x => x.Value).ToList());
+        try
+        {
+            int mask = change(lists, shop.Mask);
+            L2Shops.Rewrite(_rom, shop.Id, shop.Look, mask, lists.ToDictionary(k => k.Key, k => (IReadOnlyList<int>)k.Value));
+            _main.NotifyRomModified($"Lufia II: shop {shop.Id:X2} ({what})");
+        }
+        catch (Exception e) { System.Windows.MessageBox.Show(e.Message, "Shops", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning); }
+        ReadList(SelectedIndex);
+    }
+
+    private static int FirstOf(int bit) => bit == 5 ? 0 : 1;
+
+    [RelayCommand]
+    private void AddSlot(int bit) => Rewrite((l, m) =>
+    {
+        if (l[bit].Count >= L2Shops.MaxEntries) throw new InvalidOperationException($"A list can have up to {L2Shops.MaxEntries} entries here.");
+        l[bit].Add(l[bit].Count > 0 ? l[bit][^1] : FirstOf(bit)); return m;
+    }, "a slot added");
+
+    [RelayCommand]
+    private void RemoveSlot(int bit) => Rewrite((l, m) =>
+    {
+        if (l[bit].Count <= 1) throw new InvalidOperationException("A list keeps at least one entry: untick the list instead.");
+        l[bit].RemoveAt(l[bit].Count - 1); return m;
+    }, "a slot taken away");
+
+    partial void OnHasItemsChanged(bool value) => ListToggled(2, value);
+    partial void OnHasWeaponsChanged(bool value) => ListToggled(3, value);
+    partial void OnHasArmorChanged(bool value) => ListToggled(4, value);
+    partial void OnHasSpellsChanged(bool value) => ListToggled(5, value);
+    partial void OnBuysChanged(bool value) => ListToggled(7, value);
+
+    private void ListToggled(int bit, bool on)
+    {
+        if (_loading || _rom == null) return;
+        Rewrite((l, m) =>
+        {
+            if (bit < 7)
+            {
+                if (on && !l.ContainsKey(bit)) l[bit] = new List<int> { FirstOf(bit) };
+                if (!on) l.Remove(bit);
+            }
+            return on ? m | 1 << bit : m & ~(1 << bit);
+        }, on ? "a list added" : "a list taken away");
+    }
+
+    /// <summary>A new shop: a copy of the one shown with an id of its own (<see cref="L2Shops.Add"/>).</summary>
+    [RelayCommand]
+    private void AddShop()
+    {
+        if (_rom == null || _main == null || SelectedIndex < 0 || SelectedIndex >= _shops.Count) return;
+        try
+        {
+            int id = L2Shops.Add(_rom, _shops[SelectedIndex].Id);
+            _main.NotifyRomModified($"Lufia II: new shop {id:X2} (a copy of shop {_shops[SelectedIndex].Id:X2})");
+            _shops = L2Shops.All(_rom);
+            ReadList(_shops.FindIndex(s => s.Id == id));
+        }
+        catch (Exception e) { System.Windows.MessageBox.Show(e.Message, "New shop", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning); }
     }
 }

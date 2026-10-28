@@ -85,3 +85,5 @@ a count in the 4-bit table at $7F:F080, probably items sold earlier. The shop re
 - Five high-entropy blocks at bank ends in $8F-$A6 (about 0x1C00 bytes) have no reader yet.
 - Which spell-effect tilemap goes with which tile file.
 - What the capsule monsters' default names ($8E:D558) are used for: the naming screen starts empty.
+
+New monsters, story battles and new shops (where the game reads them and what Lufia Forge moves to make room): ../new-monsters-and-shops.md.

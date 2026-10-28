@@ -139,6 +139,7 @@
 
             <!-- the group -->
             <ScrollViewer Grid.Column="4" VerticalScrollBarVisibility="Auto" Margin="0,12,12,12">
+              <StackPanel>
                 <Border Style="{StaticResource GdCard}">
                     <StackPanel>
                         <TextBlock Text="{Binding GroupTitle}" Style="{StaticResource GdSection}"/>
@@ -180,6 +181,28 @@
                         </DockPanel>
                     </StackPanel>
                 </Border>
+        <Border Style="{StaticResource GdCard}" VerticalAlignment="Top" Margin="0,8,0,0">
+            <StackPanel>
+                <TextBlock Text="STORY BATTLES" Style="{StaticResource GdSection}"/>
+                <ComboBox Style="{StaticResource GdCombo}" Width="400" HorizontalAlignment="Left" ItemsSource="{Binding StoryNames}" SelectedIndex="{Binding SelectedStory}" Margin="0,0,0,6"/>
+                <TextBlock Text="{Binding StoryText}" Style="{StaticResource GdHint}" TextWrapping="Wrap" MaxWidth="460" HorizontalAlignment="Left" Margin="0,0,0,6"/>
+                <ItemsControl ItemsSource="{Binding StorySlots}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal" Margin="0,2">
+                                <TextBlock Text="{Binding Label}" Style="{StaticResource GdFieldLabel}" Width="80"/>
+                                <ComboBox Style="{StaticResource GdCombo}" Width="220" ItemsSource="{Binding Options}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding Monster}"/>
+                                <TextBlock Text="x" Style="{StaticResource GdFieldLabel}" Margin="10,0,4,0"/>
+                                <TextBox Style="{StaticResource GdNumber}" Width="44" Text="{Binding X, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Text="y" Style="{StaticResource GdFieldLabel}" Margin="8,0,4,0"/>
+                                <TextBox Style="{StaticResource GdNumber}" Width="44" Text="{Binding Y, UpdateSourceTrigger=LostFocus}"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </Border>
+              </StackPanel>
             </ScrollViewer>
         </Grid>
     </DockPanel>

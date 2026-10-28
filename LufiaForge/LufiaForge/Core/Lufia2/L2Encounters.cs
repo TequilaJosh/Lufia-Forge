@@ -95,4 +95,37 @@ public static class L2Encounters
         }
         return (zones, maps);
     }
+
+    // ── story battles ─────────────────────────────────────────────────────────
+
+    /// <summary>The story battles event command 53 xx starts (found 2026-10-27; table $97:C53D, file 0xBC53D, read by
+    /// $81:82C6): a u16 offset per battle from the table, the battles 0x1E bytes each: six monster ids (FF = none), their
+    /// places on the screen (x, y each), then the battle's settings (left as they are). Battles 00-26; some share a record
+    /// (00, 03, 06... point at the same one).</summary>
+    public const int StoryBattles = 0xBC53D, StoryBattleCount = 0x27, StorySlots = 6;
+
+    public static int StoryBattleAt(RomBuffer rom, int b) => StoryBattles + rom.ReadUInt16Le(StoryBattles + b * 2);
+
+    /// <summary>A story battle's six slots: monster (FF = none) and its place.</summary>
+    public static (int Monster, int X, int Y)[] StoryBattle(RomBuffer rom, int b)
+    {
+        int at = StoryBattleAt(rom, b);
+        return Enumerable.Range(0, StorySlots).Select(i => ((int)rom.ReadByte(at + i), (int)rom.ReadByte(at + 6 + i * 2), (int)rom.ReadByte(at + 7 + i * 2))).ToArray();
+    }
+
+    public static void WriteStoryBattle(RomBuffer rom, int b, IReadOnlyList<(int Monster, int X, int Y)> slots)
+    {
+        int at = StoryBattleAt(rom, b);
+        for (int i = 0; i < StorySlots; i++)
+        {
+            var (m, x, y) = i < slots.Count ? slots[i] : (0xFF, 0, 0);
+            rom.WriteByte(at + i, (byte)m);
+            rom.WriteByte(at + 6 + i * 2, (byte)x);
+            rom.WriteByte(at + 7 + i * 2, (byte)y);
+        }
+    }
+
+    /// <summary>Battles that use the same record as battle <paramref name="b"/> (a change there changes them too).</summary>
+    public static List<int> StorySharing(RomBuffer rom, int b) =>
+        Enumerable.Range(0, StoryBattleCount).Where(o => o != b && rom.ReadUInt16Le(StoryBattles + o * 2) == rom.ReadUInt16Le(StoryBattles + b * 2)).ToList();
 }

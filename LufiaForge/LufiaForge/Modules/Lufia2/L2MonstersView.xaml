@@ -19,6 +19,12 @@
         <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,12,0,0">
             <StackPanel>
                 <TextBlock Text="{Binding CountNote}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="8,0,12,4"/>
+                <StackPanel Orientation="Horizontal" Margin="8,0,12,6" IsEnabled="{Binding IsEditable}">
+                    <Button Content="Add a new monster" Command="{Binding AddMonsterCommand}" Style="{StaticResource LufiaButton}" Padding="10,3"
+                            IsEnabled="{Binding CanAddMonster}" VerticalAlignment="Top"
+                            ToolTip="A copy of this monster (its numbers, sprite, drop and battle scripts) with an id of its own; then change what you like"/>
+                    <TextBlock Text="{Binding NewMonsterNote}" Style="{StaticResource GdHint}" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="560" Margin="8,0,0,0"/>
+                </StackPanel>
                 <TextBlock Text="{Binding RecordNote}" TextWrapping="Wrap" Margin="8,0,12,4" Foreground="#FFE0B060">
                     <TextBlock.Style><Style TargetType="TextBlock" BasedOn="{StaticResource GdHint}"><Style.Triggers><Trigger Property="Text" Value=""><Setter Property="Visibility" Value="Collapsed"/></Trigger></Style.Triggers></Style></TextBlock.Style>
                 </TextBlock>

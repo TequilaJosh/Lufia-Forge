@@ -69,6 +69,11 @@ What Lufia Forge does with them:
 - Spells, IP attacks, IP effects and items: their counts come from the tables (L2Magic.SpellCount / IpCount /
   IpEffectCount, L2Battle.ItemCountIn). Adding spells or IP attacks (moving them, L2Magic) works on the hacks: every spell,
   IP attack, script and description reads the same afterwards.
+- New monsters (docs/new-monsters-and-shops.md): Frue and Foomy take them in their placeholder ids, the records in the
+  empty end of bank $D0 (about 25); Spekkio and Kureji fill bank $D0, so adding one is refused with the reason.
+- New shops and longer shop lists: the hacks' shop code is the US game's, so their shops move to a bank of Lufia Forge's
+  the same way (new ids from 3F in Frue and Foomy, 42 in Spekkio, 40 in Kureji). Checked in the game: Frue's new monster
+  E0 in a story battle, Spekkio's new shop 42.
 - Descriptions and maps already read the way the game does (the hacks keep both where the US game reads them).
 
 Measured with a console check (every count and entry against what the game's code reads, worked out on its own: monsters
