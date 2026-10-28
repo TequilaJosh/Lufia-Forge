@@ -304,21 +304,33 @@ public sealed class L2MapEdit
         }
         else
         {
-            var (closed, open, added) = L2ChestLooks.Translate(rom, from, this);
+            // worked out first, written only once nothing below refuses the chest (a refused chest leaves the ROM alone)
+            var prepared = L2ChestLooks.Prepare(rom, from, this);
+            var (closed, open, added) = (prepared.Closed, prepared.Open, prepared.Added);
             // the walls are this map's own: the chest's blocks keep the flags the chosen block has here
             var here = CellAt(x, y);
             closed = closed.Select((c, i) => (c.Block, here[i].Flags)).ToArray();
             open = open.Select((c, i) => (c.Block, here[i].Flags)).ToArray();
-            if (added > 0) note = $"{added} block{(added == 1 ? "" : "s")} of that chest added to block set {BlockSetIndex} (Edit > Undo takes them out). ";
+            if (L2ChestLooks.LastTiles is { } t)
+            {
+                string nums = string.Join(", ", t.Tiles.Select(n => n.ToString("X3")));
+                string rows = string.Join(" and ", t.Rows);
+                note = $"{t.Tiles.Length} chest tile{(t.Tiles.Length == 1 ? "" : "s")} added to tile set {t.TileSet} (tile{(t.Tiles.Length == 1 ? "" : "s")} {nums}, "
+                     + (t.CountAfter > t.CountBefore ? $"which grows from {t.CountBefore} to {t.CountAfter} tiles" : "which no block drew")
+                     + $"), drawn with colour row{(t.Rows.Length == 1 ? "" : "s")} {rows}, "
+                     + (t.Off <= L2ChestLooks.ColourTolerance ? "the closest to the chest's colours. " : $"the closest this map has, though the chest's colours look different here (off by {t.Off} of 765 per pixel). ");
+            }
+            if (added > 0) note += $"{added} block{(added == 1 ? "" : "s")} of that chest added to block set {BlockSetIndex} (Edit > Undo takes {(L2ChestLooks.LastTiles != null ? "them and the tiles" : "them")} out). ";
             // a look of this map that opens the same way is used again, else a new one with its pictures kept out of sight
             var same = Records(Looks).Select(r => r.Bytes).FirstOrDefault(l => l[1] == from.Layers && l[4] == 1 && l[5] == 1 && !IsSelfLook(l) &&
                 l[2] < Width && l[3] < Height && Enumerable.Range(0, Map.Layers.Length).All(i => !CopiesLayer(from.Layers, i) || CellAt(l[2], l[3])[i].Block == open[i].Block));
-            if (same != null) look = same[0];
+            if (same != null) { look = same[0]; prepared.Write(); }
             else
             {
                 var (sx, sy, seen) = L2ChestLooks.Stash(rom, this, x, y);
                 if (sx < 0) throw new InvalidOperationException("There is no room on this map to keep the open chest's picture (two blocks side by side).");
                 look = NewLookId();
+                prepared.Write();
                 PutPicture(sx, sy, from.Layers, open);
                 PutPicture(sx + 1, sy, from.Layers, closed);
                 Under.Remove((sx, sy)); Under.Remove((sx + 1, sy));
