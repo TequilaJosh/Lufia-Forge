@@ -30,6 +30,7 @@
     <EmbeddedResource Include="Fingerprints\*.bin" LogicalName="Fingerprints.%(Filename)%(Extension)" />
     <EmbeddedResource Include="Backgrounds\*.png" LogicalName="Backgrounds.%(Filename)%(Extension)" />
     <EmbeddedResource Include="Sprites\*.png" LogicalName="Sprites.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Fixes\*.bin" LogicalName="Fixes.%(Filename)%(Extension)" />
     <None Include="Patches\*.txt" Link="licenses\patches\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\native\spc\LICENSE-LGPL-2.1.txt" Link="licenses\lufia_spc-LGPL-2.1.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

@@ -75,3 +75,20 @@ is written), `Modules/Lufia2/L2MapWindows.cs` (pick a place, pieces and presets,
 * In the game (BizHawk): a new game on the edited Elcid; the new character walks there; an exit added in the editor
   leads to its map (Elcid's house) and another to the world map, where the big blocks painted and pasted in the editor
   show as sea next to Elcid; a resized map (Parcelyte's houses, 46 x 38) loads as the unchanged one does.
+
+## 4. Shrine maps CF and F1: fixed as in the European release
+
+In the US game maps CF and F1 (shrines) are garbage: their map files ask for blocks that block set 17 and tile set 11
+don't have. The European release (*Lufia*, 1996; its packed files are numbered one higher from 0x40) has the same two
+map files but a bigger block set 17 (0x30D blocks instead of 0x2CF) and tile set 11 (819 tiles instead of 802), and
+maps E7-EB, which share those sets, renumbered to them.
+
+When a project opens, Lufia Forge fixes this (`L2ShrineFix`, one Edit, Undo step) while both sets are still the US
+game's: it puts the European sets in (`Fixes/Lufia2_ShrineSets.bin`: the block set, and the tile set as tiles of the US
+tile set 11 by number plus the 17 it lacks) and gives E7-EB, block by block, the block of the new set that looks the
+same (pixels and priority; every block they use has one). None of these maps has a puzzle script or tile animation,
+and events only copy tiles within a map, so nothing else names their block numbers. The fan hacks already carry the
+European block set 17 and their own E7-EB, so they are left alone.
+
+Checked: after the fix CF and F1 draw exactly as in the European game and E7-EB exactly as before (every pixel); a new
+game started on CF shows the shrine in the game (BizHawk), where the US ROM shows scattered pieces.
