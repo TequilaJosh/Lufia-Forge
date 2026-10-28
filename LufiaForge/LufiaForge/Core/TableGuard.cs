@@ -48,7 +48,7 @@ public static class TableGuard
         new(GameKind.Lufia2, "packed files", new[] { "Maps", "Music", "Graphics" }, new[] { S(0xEA9, "bf 00 80 a7") }) { Old = (0x138000, 0x2A8 * 3) },
         new(GameKind.Lufia2, "shops", new[] { "Shops" }, new[] { S(0x16729, "a2 9f ee") }) { Old = (0xBEE9F, 0x100 * 2) },
         new(GameKind.Lufia2, "monster groups", new[] { "Encounters" }, new[] { S(0x837D, "bd ac b9") }) { Old = (0xBB9AC, 0xD8 * 2) },
-        new(GameKind.Lufia2, "world map battle zones", new[] { "Encounters" }, new[] { S(0x31D22, "bf 94 c4 97"), S(0x31D59, "bf 93 c4 97") }) { Old = (0xBC493, 17 * 10) },
+        new(GameKind.Lufia2, "world map battle zones", new[] { "Encounters" }, new[] { S(0x31D22, "bf 94 c4 97"), S(0x31D59, "bf 93 c4 97") }, L2Encounters.ZonesMoved) { Old = (0xBC493, 17 * 10) },
         new(GameKind.Lufia2, "map encounters", new[] { "Encounters" }, new[] { S(0x83B2, "b9 93 be") }) { Old = (0xBBE93, 0xF2 * 2) },
         new(GameKind.Lufia2, "shared battle scripts", new[] { "Monsters", "Capsule monsters" }, new[] { S(0x2BDA2, "bf dd fa 96") }) { Old = (0xB7ADD, 0x29 * 2) },
         new(GameKind.Lufia2, "monster attack names", new[] { "Monsters" }, new[] { S(0x2954D, "bc d7 f2") }) { Old = (0x2F2D7, 0x8A * 2) },

@@ -35,6 +35,8 @@ public partial class L2MapsPage
 
     partial void OnToolChanged(L2Tool value)
     {
+        if (value == L2Tool.AddChest) FillChestLooks();   // (this map's own chests as they are now)
+        OnPropertyChanged(nameof(ChestLookVisible));
         foreach (var n in new[] { nameof(IsSelectTool), nameof(IsPaintTool), nameof(IsPickTool), nameof(IsAreaTool), nameof(IsCollisionTool),
                                   nameof(IsAddExitTool), nameof(IsAddTriggerTool), nameof(IsAddCharacterTool), nameof(IsAddPointTool), nameof(IsAddChestTool), nameof(IsAddHiddenTool) })
             OnPropertyChanged(n);
@@ -55,7 +57,7 @@ public partial class L2MapsPage
         L2Tool.AddTrigger => "Add step-on area (T): drag a rectangle; walking onto it plays a new event (made when the map is written, then edit it in Events).",
         L2Tool.AddCharacter => "Add character (C): click where it stands, then pick its sprite and how it moves.",
         L2Tool.AddPoint => "Add preset point (A): click a block. Scenes put the party or characters on preset points (Go to another map, Put a character on a point).",
-        L2Tool.AddChest => "Add chest (K): click a block; it gets the picture of a chest of this map and its own opened flag, so it gives its item once. Pick the item in the inspector.",
+        L2Tool.AddChest => "Add chest (K): click a block; it gets the chest picture picked below (this map's own, or any chest of the game: its blocks come into this map's block set) and its own opened flag, so it gives its item (or gold) once. Pick what it holds in the inspector.",
         L2Tool.AddHidden => "Add hidden item (H): click a block; nothing shows there, and pressing A facing it finds the item, once. Pick the item in the inspector.",
         _ => "",
     };
@@ -556,18 +558,58 @@ public partial class L2MapsPage
 
     private void AddTreasure(int x, int y, bool hidden)
     {
-        if (_edit == null || _rom == null) return;
+        if (_edit == null || _rom == null || _main == null) return;
         if (TableGuard.LockReason(_rom, "Treasure") is { } locked) { Status = locked; return; }
+        var look = hidden ? null : SelectedChestLook?.Look;
         Record(hidden ? "adding a hidden item" : "adding a chest");
-        int spot;
-        try { spot = _edit.AddTreasure(_rom, x, y, hidden, 0x00); }
-        catch (Exception ex) { Status = ex.Message; UndoPaint(); _redo.Clear(); _worldRedo.Clear(); UpdateUndoState(); return; }
+        int spot; string note;
+        int blocks = L2Maps.BlockCount(_rom, _edit.MapId);
+        try { (spot, note) = _edit.AddTreasure(_rom, x, y, hidden, 0x00, look); }
+        catch (Exception ex) { UndoPaint(); _redo.Clear(); _worldRedo.Clear(); UpdateUndoState(); Status = "No chest added: " + ex.Message; return; }
+        if (!hidden && look != null && look.Map != _edit.MapId && note.Contains("added to block set"))
+        {
+            // the chest's blocks went into the block set (in the ROM, as the block editor's changes)
+            _main.NotifyRomModified($"Lufia II: chest blocks added to block set {_edit.BlockSetIndex}");
+            ReloadBlocks();
+        }
         ShowTreasure = true;
         Selection = new L2Selection(SelKind.Treasure, _edit.Records(L2MapEdit.Treasure).Count - 1);
         Tool = L2Tool.Select;
         Refresh();
-        Status = (hidden ? $"Hidden item {spot} added at ({x},{y}): pressing A facing that block finds it, once." : $"Chest {spot} added at ({x},{y}), with the picture of this map's chests; it opens once.")
-                 + " Pick what it holds in the inspector.";
+        Status = (hidden ? $"Hidden item {spot} added at ({x},{y}): pressing A facing that block finds it, once." :
+                     $"Chest {spot} added at ({x},{y}), with the picture of {(look == null || look.Map == _edit.MapId ? "this map's chests" : $"the chest of {look.Map:X2} {NameOf(look.Map)}")}; it opens once.")
+                 + (note.Length > 0 ? " " + note : "") + " Pick what it holds in the inspector.";
+    }
+
+    // ---------------------------------------------------------------- chest pictures
+
+    private List<L2ChestLooks.Look>? _gameLooks;
+    /// <summary>Whether the chest picture list shows (the + Chest tool on a town or dungeon map).</summary>
+    public bool ChestLookVisible => Tool == L2Tool.AddChest && _world == null && _edit != null;
+
+    /// <summary>The chest pictures + Chest can use: this map's own, then the game's other chests.</summary>
+    public System.Collections.ObjectModel.ObservableCollection<L2ChestLookChoice> ChestLookChoices { get; } = new();
+    [ObservableProperty] private L2ChestLookChoice? _selectedChestLook;
+
+    /// <summary>Fills the chest picture list for the map (the game's looks are read once per ROM).</summary>
+    private void FillChestLooks()
+    {
+        if (_rom == null || _edit == null || _edit.IsWorld) { ChestLookChoices.Clear(); SelectedChestLook = null; return; }
+        _gameLooks ??= L2ChestLooks.GameLooks(_rom);
+        ChestLookChoices.Clear();
+        int bs = _edit.BlockSetIndex, ts = _edit.TileSetIndex, ps = _edit.PaletteSetIndex;
+        // this map's own chests as the edit has them now, then the other maps'
+        var all = L2ChestLooks.LooksOf(_edit).Concat(_gameLooks.Where(l => l.Map != _edit.MapId));
+        foreach (var l in all.OrderBy(l => l.Map == _edit.MapId ? 0 : l.BlockSet == bs && l.TileSet == ts && l.PaletteSet == ps ? 1 : l.TileSet == ts ? 2 : 3).ThenBy(l => l.Map))
+        {
+            string where = l.Map == _edit.MapId ? "This map's chest" : $"{l.Map:X2} {NameOf(l.Map)}";
+            string fit = l.Map == _edit.MapId ? "" : l.BlockSet == bs && l.TileSet == ts && l.PaletteSet == ps ? " (same graphics)" : l.TileSet == ts ? " (same tiles)" : "";
+            var (w, h, px) = L2ChestLooks.Picture(_rom, l);
+            var img = BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgra32, null, px.Select(c => (int)(c == 0 ? 0xFF000000u : c)).ToArray(), w * 4);
+            img.Freeze();
+            ChestLookChoices.Add(new L2ChestLookChoice { Look = l, Label = where + fit, Image = img });
+        }
+        SelectedChestLook = ChestLookChoices.FirstOrDefault();
     }
 
     // ---------------------------------------------------------------- keys

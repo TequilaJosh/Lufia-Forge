@@ -149,6 +149,20 @@
                                 <TextBlock Text="Collision to paint" Style="{StaticResource LufiaLabel}" VerticalAlignment="Center" Margin="0,0,6,0"/>
                                 <ComboBox Style="{StaticResource GdCombo}" Width="190" ItemsSource="{Binding CollisionChoices}" SelectedIndex="{Binding CollisionKind}"/>
                             </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="12,0,0,0" Visibility="{Binding ChestLookVisible, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <TextBlock Text="Chest picture" Style="{StaticResource LufiaLabel}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <ComboBox Style="{StaticResource GdCombo}" Width="300" ItemsSource="{Binding ChestLookChoices}" SelectedItem="{Binding SelectedChestLook}"
+                                          ToolTip="The chest to copy, closed and open: this map's own, or any chest of the game. Its blocks are found in this map's block set or added to it; a chest whose tiles this map's graphics lack can't be used here.">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal">
+                                                <Image Source="{Binding Image}" Width="54" Height="24" Stretch="Uniform" RenderOptions.BitmapScalingMode="NearestNeighbor" Margin="0,0,6,0"/>
+                                                <TextBlock Text="{Binding Label}" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </StackPanel>
                         </StackPanel>
                         <TextBlock Text="{Binding ToolHint}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,5,0,0"/>
                     </StackPanel>
@@ -235,6 +249,11 @@
                         <TextBlock DockPanel.Dock="Top" Text="Battle zones" Style="{StaticResource LufiaCardTitle}"/>
                         <TextBlock DockPanel.Dock="Top" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,6"
                                    Text="Each colour on the map is a zone. Walking there, a battle comes every 25 steps or so (Settings changes how often); the zone decides which monster group it is: one of its groups, by the share shown. Click a zone to paint it on the map; Monsters... changes its groups and their monsters on the Encounters page."/>
+                        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
+                            <Button Content="+ New zone" Style="{StaticResource LufiaButtonGold}" Padding="8,2" Command="{Binding AddZoneCommand}"
+                                    ToolTip="Adds a battle zone to paint (the game has 17; Lufia Forge moves the zone table to make room for up to 256)"/>
+                            <TextBlock Text="{Binding AddZoneNote}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="8,0,0,0" VerticalAlignment="Center" MaxWidth="220"/>
+                        </StackPanel>
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                             <ItemsControl ItemsSource="{Binding ZoneRows}">
                                 <ItemsControl.ItemTemplate>
@@ -387,7 +406,14 @@
                             <StackPanel Visibility="{Binding IsTreasureSelected, Converter={StaticResource BoolToVisibilityConverter}}" Margin="0,8,0,0">
                                 <TextBlock Text="{Binding TreasureKind}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,4"/>
                                 <TextBlock Text="Holds" Style="{StaticResource GdFieldLabel}"/>
-                                <ComboBox Style="{StaticResource GdCombo}" ItemsSource="{Binding ItemChoices}" SelectedIndex="{Binding TreasureItem}" HorizontalAlignment="Stretch" Width="Auto"/>
+                                <ComboBox Style="{StaticResource GdCombo}" ItemsSource="{Binding ItemChoices}" SelectedIndex="{Binding TreasureItem}" HorizontalAlignment="Stretch" Width="Auto"
+                                          IsEnabled="{Binding TreasureIsGold, Converter={StaticResource InverseBoolConverter}}"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                    <CheckBox Content="Gold" IsChecked="{Binding TreasureIsGold}" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"
+                                              ToolTip="The treasure gives gold instead of an item: the game says &quot;Found 500 GOLD&quot; and adds it, once"/>
+                                    <TextBox Style="{StaticResource GdNumber}" Width="80" Margin="8,0,0,0" Text="{Binding TreasureGold}"
+                                             IsEnabled="{Binding TreasureIsGold}" ToolTip="How much gold (1 to 9,999,999)"/>
+                                </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
                                     <TextBlock Text="X" Style="{StaticResource GdFieldLabel}"/>
                                     <TextBox Style="{StaticResource GdNumber}" Width="44" Text="{Binding TreasureX}"/>

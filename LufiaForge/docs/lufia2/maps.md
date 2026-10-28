@@ -18,7 +18,7 @@ is written), `Modules/Lufia2/L2MapWindows.cs` (pick a place, pieces and presets,
 | + Step-on area (T) | Drag an area; its event (empty) is made when the map is written; Event... opens it in Events. |
 | + Character (C) | Click where it stands; pick its sprite (the picture shows it) and how it moves; Talk event... gives it something to say. |
 | + Point (A) | A preset point: scenes put the party (Go to another map) or characters (Put a character on a point) on it. |
-| + Chest (K) | Click a block: a chest with the picture of a chest of this map (both layers' block copied onto it), its own opened flag, and an item picked in the inspector. Pressing A facing it gives the item once. |
+| + Chest (K) | Click a block: a chest with the picture picked in "Chest picture" under the map (this map's own chest, or any chest of the game, closed and open; see below), its own opened flag, and an item or gold picked in the inspector. Pressing A facing it gives it once. |
 | + Hidden item (H) | Click a block: nothing shows there; pressing A facing it finds the item, once. The block can't be walked onto (as a chest), so put it on furniture, a wall or a dead end. |
 
 * **Show**: ground, upper layer, collision, characters, exits (labelled with the map they lead to), step-on areas,
@@ -37,8 +37,25 @@ is written), `Modules/Lufia2/L2MapWindows.cs` (pick a place, pieces and presets,
   by themselves when another map is picked or the project is saved, or with Apply; Revert drops them. The block editor
   writes straight into the ROM (Edit > Undo takes it back).
 * **Treasure**: Select a chest or hidden item (pink, labelled with what it holds; ? = hidden) to change its item, move it
-  or delete it. A chest's picture is part of the map: when you move one, paint it where it goes. Gold isn't possible: the
-  game's treasure records hold an item.
+  or delete it. Moving a chest (dragging it, or its X / Y) moves its picture: the closed chest goes where it goes and the
+  block it stood on gets the floor it had (when Lufia Forge put the chest there) or the block the 4 blocks around it have
+  most; it is one Undo step, and dragging over other blocks leaves them as they were. Taking a chest out gives its block
+  the floor back the same way.
+* **Gold**: tick Gold in the inspector (or pick Gold on the Treasure page) and type the amount, 1 to 9,999,999. The game
+  says "Found 1234 GOLD" and adds it to the party's gold, once, for chests and hidden items. Up to 32 different amounts in
+  the whole game (treasure with the same amount shares one).
+* **Chest picture** (the + Chest tool, under the map): this map's own chest comes first, then every chest of the game,
+  those with this map's graphics first ("same graphics", then "same tiles"), each shown closed and open. A chest of
+  another map is drawn with this map's block set: each of its blocks is a block of the set that draws the same, or a new
+  block added to the block set (straight into the ROM, as the block editor does; Edit > Undo takes it out) made of this
+  map's tiles in the palette row closest in colour. When the map's tile set has no tiles of that shape, or the block set
+  is full (1024 blocks), the chest is refused and the status says why (towns, for example, have no chest tiles). The
+  open and closed chest are also kept on two black blocks the camera never shows (as the game keeps its own, mostly in
+  a corner); the status says where. A map with no chest gets its first chest this way.
+* **Treasure page**: it edits the same treasure as the Maps tab. Showing it writes the Maps tab's changes first, and a
+  change there is written by spot over what the ROM holds then; back on Maps, the map's edit takes the Treasure page's
+  changes (for the treasure it didn't change itself, also in its Undo steps), and Apply writes only what the map's edit
+  changed. Neither page writes over the other's changes, in either order.
 * **World map and sea floor** (maps 00 and 01): shown at full size (one game pixel per screen pixel at 100%, sharp at any
   zoom). Paint, Pick and Area work on their big blocks (32 x 32 pixels).
 * **Entrances** (world map): the green boxes are the world map's exits, named after the map they lead to. + Exit, then
@@ -49,6 +66,8 @@ is written), `Modules/Lufia2/L2MapWindows.cs` (pick a place, pieces and presets,
 * **Battle zones** (world map): the toggle colours each zone and lists them on the right with each zone's groups, their
   share of the zone's battles and their monsters. Paint picks a zone, then click or drag on the map (2 x 2 big blocks per
   square; right-click picks the zone under the mouse; 00 = no battles). Monsters... opens the zone on the Encounters page.
+  + New zone adds a zone past the game's 17 (up to 256) and picks it to paint; give it groups with Monsters... (or + New
+  zone on the Encounters page, which adds one there). A zone that doesn't exist can't be painted.
 * **Encounters page**: World zones (where the zone is on a small world map, which towns it is near, its up to 5 groups
   with their chance and their monsters' pictures; add or take out groups), Dungeons (each field monster of a map and the
   group it fights) and All groups. The group on the right shows its monsters with their pictures, picked from a list with
@@ -82,12 +101,37 @@ is written), `Modules/Lufia2/L2MapWindows.cs` (pick a place, pieces and presets,
 * **Battle zones** ($86:9CF3): the zone under the party is `$7F:E000[(x / 4) + (y / 4) * 64]`; zone z is 5 pairs (group,
   weight) at $97:C493 + z * 10 (file 0xBC493), 17 zones. The game adds the weights (0 = no battles there) and picks a group
   by weight. How often battles come is the same everywhere (Settings).
+* **More zones** (`L2Encounters.AddZone`): the zone byte can be 0-255 and the offset is the SNES's 8 x 8 multiply
+  (zone * 10, up to 2550), read by three long loads: $86:9D22 and $86:9D3E (`LDA $97C494,X`) and $86:9D59
+  (`LDA $97C493,X`); nothing else reads the table, and the next table starts at $97:C53D. The first + New zone copies the
+  17 zones into the added space (room for 256: "LF2ZN", the count - 1, then the table 16 bytes on) and points those three
+  loads at it; later zones only raise the count. Another hack's changed loads stop it (the Encounters page is read-only
+  then too).
+* **Gold** (`L2Gold`): opening treasure ($8E:C153) puts the item in $7F:D4EF / $7F:D4F0 (bit 0 = item + 0x100) and calls
+  $8E:C1DE, which opens the chest ($83:F559), writes "Found " ($85:8000) and the item's name ($0B77, 12 letters) into the
+  message ($8E:B5FB), picks the sound, shows it and gives the item; with bit 7 of $7F:D4F0 set it gives nothing (the
+  caller still sets the opened flag). The JSL $8E:C1DE at $8E:C195 (towns and dungeons; the other caller, $8E:C0F5, is taken when bit 0 of $05B6 is set and reads its chests from a list in RAM, the Ancient Cave's by the look of it, and is left alone)
+  goes to Lufia Forge's block ("LF2GD"): items 0x1E0-0x1FF (past the game's 0x1D3) are gold, slot n = an amount (u24) and
+  its text ("1234 GOLD"). For those the block adds the amount to $0A8A / $0A8C (kept at 9,999,999), puts the text where
+  the name goes, sets bit 7, does the start of $8E:C1DE itself and goes on at $8E:C26E with the item sound. Other items go
+  to $8E:C1DE as before. The editors keep gold as 0x10000 + amount; a slot is found (or taken) when the list is written.
+  Refused when $8E:C195 isn't the game's JSL or the ROM has more than 0x1E0 items.
+* **Chest pictures** (`L2ChestLooks`): a look's layers byte copies layer n when a bit of 0x11 << n is set ($83:8B6A: both
+  bits = the whole cell but its 10 / 20 flags, the low bit = the block only, the high bit = the 04 / 08 walls only). A
+  block set file is "MC", the count (u16), 0x10 + count * 8 (u16), then 8 bytes per block from +0x10 and one attribute
+  byte per block after them; a block added for a chest goes at the end of both, with the source block's attribute. A
+  tile matches when its pixels have the same shape (colour numbers may differ) and a palette row of the map is within 60
+  (red + green + blue) per pixel on average. A chest from another map keeps this map's flags (walls) on its blocks. Its
+  look is a new +04 record (the source's layers byte; opened source = the kept open chest, closed source = the kept
+  closed one), unless a look of the map already opens to the same blocks. The kept pair: two blocks side by side that are
+  black on both layers and outside the camera (16 x 14 blocks, one more around, stopped at the map's edges) from every
+  block that isn't black; top-left first.
 * **Treasure** (`L2Chests`): the spot is the info block's list +26 (4 bytes: id, x, y, look); the look is a record of list
   +04 (10 bytes: id, layers, the opened picture's source x, y, w, h, the closed one's x, y, w, h, in blocks of the same
   map); the contents are the chest list at $91:B8B5 (a u16 per map, then 3 bytes per treasure: spot | 40 item + 0x100 | 80
   flag + 0x100, flag, item; FF ends). On loading a map the game marks every spot's block ($80:EE36); pressing A facing one
   ($83:BEB0 -> $8E:C05F) gives the item and sets the opened flag (a bit at $7E:093B, 512 of them; the game uses 0-0xAA)
-  when it is clear, and copies the opened picture onto the spot. A new chest takes the look of a chest of the map; a hidden
+  when it is clear, and copies the opened picture onto the spot. A new chest takes the picked look (see Chest pictures); a hidden
   item gets a look of its own that copies the spot onto itself (so nothing changes). New treasure gets the lowest flag no
   treasure of any map uses. The chest lists fill the table up to the next info block, so a list that grows goes to
   $92:8000 on (the table's offsets are 24-bit sums from $91:B8B5, so 0xC74B on reaches bank $92's ROM): that is map 00's
@@ -124,6 +168,26 @@ is written), `Modules/Lufia2/L2MapWindows.cs` (pick a place, pieces and presets,
   world map at (40,220); two steps right, the new entrance takes him into Parcelyte Castle 2F; with the battle rate at
   most, zone 0F there gives group 10 (Red Bats; `$7F:F8A4` = 10); on 2F the new chest gives a Hi-Potion and the hidden
   item a Miracle, each once (a second A gives nothing; flags AB and AC set), and the old chest still gives Holy wings.
+
+## 3c. Checked: gold, chest pictures, moving chests, more zones, Treasure and Maps together (2026-10-27)
+
+* In the real window (a project made from the clean US ROM; 31 checks, `UiGaps`): dragging 2F's chest moves its picture
+  (the closed chest's blocks go with it, the block it stood on gets the floor around it, the block it was dragged over
+  stays), one Undo step puts all back; the inspector's X moves it with its picture; Gold 777 in the inspector, Apply
+  writes it (the hook goes in); a second chest; a Maps change not written yet is written when the Treasure page shows,
+  the Treasure page gives a chest 999 gold, back on Maps the inspector shows it; a Treasure page change then a Maps move
+  and Apply keeps both; an edit read before a Treasure change keeps it on Apply; on 1F (no chests) the chest list puts
+  the towers' chests first, a cave chest adds one block to block set 11 and keeps its pictures at (34,0) / (35,0), 321
+  gold, Apply; on Elcid the cave chest is refused ("This map's tile set (2) doesn't have the tiles of that chest...");
+  + New zone adds zone 11 (18 zones) and picks it, painting it, a zone 30 refused, Apply writes it, Monsters... shows
+  zone 11 on Encounters (18 zones listed), group 10 added there, + New zone there adds zone 12, the game's zones
+  unchanged in the moved table; the Treasure page shows 1F's chest with 321 gold.
+* In the game (BizHawk): on 2F a chest with 1234 gold says "Found 1234 GOLD" and the party's gold goes 0 -> 1234; again:
+  nothing; a hidden item with 50 gold: "Found 50 GOLD", 1284; again: nothing (flags AB and AC set); the old chest still
+  gives Holy wings. On 1F (a map with no chest; ROM written by the window): the new chest with the cave chest's picture
+  says "Found 321 GOLD", its picture changes to the open chest and stays open, a second A gives nothing. A new zone 11
+  (past the game's 17, the table moved to $D1:8F5F) painted around (40,220) gives its battle: `$7F:F8A4` = 10, two
+  Red Bats.
 
 ## 4. Shrine maps CF and F1: fixed as in the European release
 

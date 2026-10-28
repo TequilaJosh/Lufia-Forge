@@ -47,21 +47,98 @@ public static class L2Encounters
     /// 0x193 (64 x 64 bytes, one per 2 x 2 big blocks, copied to $7F:E000); zone z is 5 (group, weight) pairs at
     /// $97:C493 + z * 10 (file 0xBC493). On each battle the game adds up the 5 weights (0 = no battles in the zone) and
     /// picks a group in proportion to its weight; the weights don't change how often battles come. 17 zones (0-16) fit
-    /// before the next table ($97:C53D); zone 0 has none.</summary>
-    public const int ZoneTable = 0xBC493, ZoneCount = 17, ZoneSlots = 5, ZoneFile = 0x193;
+    /// before the next table ($97:C53D); zone 0 has none.
+    ///
+    /// More zones: the zone byte is any value 0-255 and the check reads its pairs as $97:C493 + zone * 10 (the multiply
+    /// is the SNES's 8 x 8 unit, so up to 2550) with three long loads ($86:9D22 and $86:9D3E: +1, $86:9D59: +0). A zone
+    /// past 16 would read the next table, so Lufia Forge moves the table to the added space (room for all 256 zones;
+    /// "LF2ZN" and the zone count 16 bytes before it) and points those three loads at it. Nothing else reads it.</summary>
+    public const int ZoneTable = 0xBC493, ZoneCount = 17, ZoneSlots = 5, ZoneFile = 0x193, MaxZones = 256;
+    private static readonly int[] ZoneSites = { 0x31D22, 0x31D3E, 0x31D59 };
+    private static readonly int[] ZoneSiteOffsets = { 1, 1, 0 };
+    private const string ZoneMagic = "LF2ZN";
+
+    /// <summary>File offset of the zone table the game reads now (its own, or Lufia Forge's moved one).</summary>
+    public static int ZoneTableAt(RomBuffer rom)
+    {
+        int at = MovedZoneTable(rom);
+        return at >= 0 ? at : ZoneTable;
+    }
+
+    /// <summary>The moved table (file offset), or -1 when the game reads its own.</summary>
+    private static int MovedZoneTable(RomBuffer rom)
+    {
+        if (rom.Length <= 0x31D5D || rom.ReadByte(ZoneSites[2]) != 0xBF) return -1;
+        int snes = (int)rom.ReadUInt24Le(ZoneSites[2] + 1);
+        if (snes == 0x97C493) return -1;
+        int at = L2Rom.SnesToFile(snes);
+        return at >= 0x10 && at + MaxZones * 10 <= rom.Length && System.Text.Encoding.ASCII.GetString(rom.ReadBytes(at - 0x10, ZoneMagic.Length)) == ZoneMagic ? at : -1;
+    }
+
+    /// <summary>Whether Lufia Forge moved the zone table (so the battle check reads it elsewhere).</summary>
+    public static bool ZonesMoved(RomBuffer rom) => MovedZoneTable(rom) >= 0;
+
+    /// <summary>How many zones there are: the game's 17, or as many as were added.</summary>
+    public static int ZoneCountIn(RomBuffer rom)
+    {
+        int at = MovedZoneTable(rom);
+        return at < 0 ? ZoneCount : Math.Clamp(rom.ReadByte(at - 0x10 + ZoneMagic.Length) + 1, ZoneCount, MaxZones);
+    }
+
+    /// <summary>Why zones can't be added in this ROM, or null.</summary>
+    public static string? CantAddZones(RomBuffer rom)
+    {
+        if (ZonesMoved(rom)) return ZoneCountIn(rom) >= MaxZones ? $"There are {MaxZones} zones already (a zone is one byte on the zone map)." : null;
+        var orig = new[] { "BF 94 C4 97", "BF 94 C4 97", "BF 93 C4 97" };
+        for (int i = 0; i < 3; i++)
+            if (BitConverter.ToString(rom.ReadBytes(ZoneSites[i], 4)).Replace("-", " ") != orig[i])
+                return "This ROM's battle check isn't the US game's (another hack changed it), so the zone table can't be moved to make room.";
+        return null;
+    }
+
+    /// <summary>Adds a zone (no battles yet): the first time, the table moves to the added space. Returns its number.</summary>
+    public static int AddZone(RomBuffer rom)
+    {
+        if (CantAddZones(rom) is { } why) throw new InvalidOperationException(why);
+        int at = MovedZoneTable(rom);
+        if (at < 0)
+        {
+            int block = L2Rom.Allocate(rom, 0x10 + MaxZones * 10, upper: true);
+            at = block + 0x10;
+            rom.WriteBytes(block, new byte[0x10 + MaxZones * 10]);
+            rom.WriteBytes(block, System.Text.Encoding.ASCII.GetBytes(ZoneMagic));
+            rom.WriteBytes(at, rom.ReadBytes(ZoneTable, ZoneCount * 10));
+            rom.WriteByte(block + ZoneMagic.Length, ZoneCount - 1);
+            int snes = L2Rom.FileToSnes(at);
+            for (int i = 0; i < 3; i++)
+            {
+                int a = snes + ZoneSiteOffsets[i];
+                rom.WriteBytes(ZoneSites[i] + 1, new[] { (byte)a, (byte)(a >> 8), (byte)(a >> 16) });
+            }
+        }
+        int z = ZoneCountIn(rom);
+        rom.WriteBytes(at + z * 10, new byte[10]);
+        rom.WriteByte(at - 0x10 + ZoneMagic.Length, (byte)z);
+        return z;
+    }
 
     public sealed record ZoneSlot(int Group, int Weight);
 
-    public static ZoneSlot[] Zone(RomBuffer rom, int z) =>
-        Enumerable.Range(0, ZoneSlots).Select(i => new ZoneSlot(rom.ReadByte(ZoneTable + z * 10 + i * 2), rom.ReadByte(ZoneTable + z * 10 + i * 2 + 1))).ToArray();
+    public static ZoneSlot[] Zone(RomBuffer rom, int z)
+    {
+        int t = ZoneTableAt(rom);
+        return Enumerable.Range(0, ZoneSlots).Select(i => new ZoneSlot(rom.ReadByte(t + z * 10 + i * 2), rom.ReadByte(t + z * 10 + i * 2 + 1))).ToArray();
+    }
 
     public static void WriteZone(RomBuffer rom, int z, IReadOnlyList<ZoneSlot> slots)
     {
+        if (z >= ZoneCountIn(rom)) throw new InvalidOperationException($"Zone {z:X2} doesn't exist (add zones on the Encounters page).");
+        int t = ZoneTableAt(rom);
         for (int i = 0; i < ZoneSlots; i++)
         {
             var s = i < slots.Count ? slots[i] : new ZoneSlot(0, 0);
-            rom.WriteByte(ZoneTable + z * 10 + i * 2, (byte)(s.Weight == 0 ? 0 : s.Group));
-            rom.WriteByte(ZoneTable + z * 10 + i * 2 + 1, (byte)Math.Clamp(s.Weight, 0, 255));
+            rom.WriteByte(t + z * 10 + i * 2, (byte)(s.Weight == 0 ? 0 : s.Group));
+            rom.WriteByte(t + z * 10 + i * 2 + 1, (byte)Math.Clamp(s.Weight, 0, 255));
         }
     }
 
@@ -85,7 +162,7 @@ public static class L2Encounters
     public static (List<(int Zone, double Share)> Zones, List<int> Maps) UsersOf(RomBuffer rom, int g)
     {
         var zones = new List<(int, double)>();
-        for (int z = 1; z < ZoneCount; z++)
+        for (int z = 1; z < ZoneCountIn(rom); z++)
             foreach (var s in ZoneGroups(rom, z)) if (s.Group == g) zones.Add((z, s.Share));
         var maps = new List<int>();
         for (int m = 0; m < L2Maps.Count; m++)

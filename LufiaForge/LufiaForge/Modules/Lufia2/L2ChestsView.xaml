@@ -22,16 +22,21 @@
                 <Border Style="{StaticResource GdCard}" HorizontalAlignment="Left" IsEnabled="{Binding IsEditable}">
                     <StackPanel>
                         <TextBlock Text="TREASURE" Style="{StaticResource GdSection}"/>
-                        <ItemsControl ItemsSource="{Binding Slots}">
+                        <ItemsControl ItemsSource="{Binding Rows}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
                                     <StackPanel Orientation="Horizontal" Margin="0,2">
                                         <TextBlock Text="{Binding Label}" Style="{StaticResource GdFieldLabel}" Width="170"/>
                                         <ComboBox Style="{StaticResource GdCombo}" Width="230" ItemsSource="{Binding Options}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding Value}"/>
+                                        <StackPanel Orientation="Horizontal" Visibility="{Binding IsGold, Converter={StaticResource BoolToVisibilityConverter}}">
+                                            <TextBox Style="{StaticResource GdNumber}" Width="80" Margin="6,0,0,0" Text="{Binding GoldAmount}" ToolTip="How much gold (1 to 9,999,999); press Tab to write it"/>
+                                            <TextBlock Text="gold" Style="{StaticResource GdFieldLabel}" Margin="4,0,0,0"/>
+                                        </StackPanel>
                                     </StackPanel>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
+                        <TextBlock Text="{Binding GoldNote}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,6,0,0" MaxWidth="460" HorizontalAlignment="Left"/>
                     </StackPanel>
                 </Border>
             </StackPanel>

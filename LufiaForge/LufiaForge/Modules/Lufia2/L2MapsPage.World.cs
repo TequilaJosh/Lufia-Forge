@@ -155,13 +155,14 @@ public partial class L2MapsPage
         if (_world == null || !HasZones || !ShowZones) { ZoneImage = null; ZoneImageSize = 0; return; }   // (its size would keep the view as big as the world map)
         // 4 pixels per zone cell: a 1-pixel darker rim shows where cells of different zones meet
         const int S = 4;
+        int zoneCount = L2Encounters.ZoneCountIn(_rom!);
         var px = new int[64 * S * 64 * S];
         for (int zy = 0; zy < 64; zy++)
             for (int zx = 0; zx < 64; zx++)
             {
                 int z = _world.Zones[zy * 64 + zx];
                 if (z == 0) continue;
-                uint c = ZoneColour(z) | (z >= L2Encounters.ZoneCount ? 0x40000000u : 0);
+                uint c = ZoneColour(z) | (z >= zoneCount ? 0x40000000u : 0);
                 bool left = zx == 0 || _world.Zones[zy * 64 + zx - 1] != z, top = zy == 0 || _world.Zones[(zy - 1) * 64 + zx] != z;
                 for (int y = 0; y < S; y++)
                     for (int x = 0; x < S; x++)
@@ -178,13 +179,14 @@ public partial class L2MapsPage
     private void FillZoneRows()
     {
         ZoneRows.Clear();
+        OnPropertyChanged(nameof(AddZoneNote));
         if (_rom == null || _world == null || !HasZones || !ShowZones) return;
         var sizes = L2Encounters.ZoneSizes(_world.Zones);
         int.TryParse(ZoneBrushText.Trim(), System.Globalization.NumberStyles.HexNumber, null, out int brush);
         var monsters = L2Battle.Monsters(_rom);
         string Names(int g) => string.Join(", ", L2Encounters.Group(_rom, g).Where(m => m != 0xFF).GroupBy(m => m)
             .Select(x => (x.Key < monsters.Count ? monsters[x.Key].Name.Trim() : $"monster {x.Key:X2}") + (x.Count() > 1 ? $" x{x.Count()}" : "")));
-        for (int z = 0; z < L2Encounters.ZoneCount; z++)
+        for (int z = 0; z < L2Encounters.ZoneCountIn(_rom); z++)
         {
             var groups = L2Encounters.ZoneGroups(_rom, z);
             uint c = ZoneColour(z);
@@ -203,6 +205,26 @@ public partial class L2MapsPage
 
     [RelayCommand]
     private void OpenZone(int zone) => OpenZoneRequested?.Invoke(zone);
+
+    /// <summary>Why no zone can be added (shown under the list), or "".</summary>
+    public string AddZoneNote => _rom == null ? "" : L2Encounters.CantAddZones(_rom) ?? $"{L2Encounters.ZoneCountIn(_rom)} zones; + New zone adds one (up to {L2Encounters.MaxZones}).";
+
+    /// <summary>Adds a battle zone (the game has 17; the table moves to the added space the first time) and picks it to paint.</summary>
+    [RelayCommand]
+    private void AddZone()
+    {
+        if (_rom == null || _main == null) return;
+        if (TableGuard.LockReason(_rom, "Encounters") is { } locked) { Status = locked; return; }
+        try
+        {
+            int z = L2Encounters.AddZone(_rom);
+            _main.NotifyRomModified($"Lufia II: battle zone {z:X2} added");
+            ZoneBrushText = z.ToString("X2");
+            FillZoneRows(); OnPropertyChanged(nameof(AddZoneNote));
+            Status = $"Zone {z:X2} added (no battles yet): paint it on the map, and Monsters... gives it its groups.";
+        }
+        catch (Exception ex) { Status = "No zone added: " + ex.Message; }
+    }
 
     private void DrawWorldPicker()
     {
@@ -357,6 +379,7 @@ public partial class L2MapsPage
     private void PaintZone(int cx, int cy)
     {
         if (!int.TryParse(ZoneBrushText.Trim(), System.Globalization.NumberStyles.HexNumber, null, out int z) || z is < 0 or > 255) { Status = "Pick the zone to paint in the list (or type it, hex; 00 = no battles)."; return; }
+        if (z >= L2Encounters.ZoneCountIn(_rom!)) { Status = $"Zone {z:X2} doesn't exist yet: + New zone adds zones (there are {L2Encounters.ZoneCountIn(_rom!)})."; return; }
         if (_world!.Zones[cy / 2 * 64 + cx / 2] == z) return;
         _world.Zones[cy / 2 * 64 + cx / 2] = (byte)z;
         DrawZones(); WorldUndoState();
