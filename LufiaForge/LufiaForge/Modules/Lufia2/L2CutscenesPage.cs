@@ -26,8 +26,33 @@ public partial class L2BeatVm : ObservableObject
     [ObservableProperty] private string _sentence = "";
     [ObservableProperty] private string _detail = "";
     [ObservableProperty] private string _icon = "";
+    /// <summary>Playback: where a check or jump went (or that playback doesn't reach the step).</summary>
+    [ObservableProperty] private string _flow = "";
+    /// <summary>A walk the game stops (a wall, another character in the way).</summary>
+    [ObservableProperty] private string _warning = "";
+    /// <summary>Playback reaches the step (with the story flags set at the start).</summary>
+    [ObservableProperty] private bool _reached = true;
     public bool HasDetail => Detail.Length > 0;
+    public bool HasFlow => Flow.Length > 0;
+    public bool HasWarning => Warning.Length > 0;
+    public double Dim => Reached ? 1 : 0.45;
     partial void OnDetailChanged(string value) => OnPropertyChanged(nameof(HasDetail));
+    partial void OnFlowChanged(string value) => OnPropertyChanged(nameof(HasFlow));
+    partial void OnWarningChanged(string value) => OnPropertyChanged(nameof(HasWarning));
+    partial void OnReachedChanged(bool value) => OnPropertyChanged(nameof(Dim));
+}
+
+/// <summary>A story flag (or counter) the cutscene checks, set for playback.</summary>
+public partial class L2StartFlagVm : ObservableObject
+{
+    public int Number { get; init; }
+    public bool IsCounter { get; init; }
+    public string Label { get; init; } = "";
+    [ObservableProperty] private bool _isOn;
+    [ObservableProperty] private int _value;
+    public Action? Changed { get; set; }
+    partial void OnIsOnChanged(bool value) => Changed?.Invoke();
+    partial void OnValueChanged(int value) => Changed?.Invoke();
 }
 
 /// <summary>A character drawn on the stage.</summary>
@@ -51,11 +76,21 @@ public sealed class L2StageActor
 public partial class L2CutscenesPage : L2Page
 {
     private int _map = -1;
+    /// <summary>The talk choice "a new character on the clicked tile".</summary>
+    private const int NewTalkCharacter = -3;
     private L2EventScript? _script;
     private L2CutsceneItem? _loaded;
     private List<L2StageState> _states = new();
+    /// <summary>Playback: the steps as the game runs them (jumps and checks followed), and where each step is first run.</summary>
+    private List<L2Cutscene.RunStep> _run = new();
+    private readonly Dictionary<int, int> _firstVisit = new();
+    private L2StageState? _start;
+    /// <summary>The story flags on and the counters at the start of playback (kept while the page is open).</summary>
+    private readonly HashSet<int> _flagsOn = new();
+    private readonly Dictionary<int, int> _countersAtStart = new();
     private readonly List<L2EventScript.Snapshot> _undo = new();
     private readonly Dictionary<int, BitmapSource?> _spritePics = new();
+    private readonly Dictionary<(int, int, int), BitmapSource?> _facingPics = new();
     private string[] _maps = Array.Empty<string>();
     private string[] _songs = Array.Empty<string>();
     private Dictionary<int, string> _names = new();
@@ -87,6 +122,19 @@ public partial class L2CutscenesPage : L2Page
     [ObservableProperty] private double _zoom = 2;
     [ObservableProperty] private int _pickedX = -1, _pickedY = -1;
     [ObservableProperty] private bool _isPlaying;
+    /// <summary>A walk the game stops at this step: a red box on the tile it hits, and why.</summary>
+    [ObservableProperty] private bool _hasWarning;
+    [ObservableProperty] private double _warnLeft, _warnTop;
+    [ObservableProperty] private string _warningText = "";
+    /// <summary>The story flags on and counters at this step.</summary>
+    [ObservableProperty] private string _flagsNow = "";
+    /// <summary>The story flags and counters the cutscene checks, to set for playback.</summary>
+    public ObservableCollection<L2StartFlagVm> StartFlags { get; } = new();
+    [ObservableProperty] private bool _hasStartFlags;
+    public List<L2Option> AnswerChoices { get; } = Enumerable.Range(0, 4).Select(i => new L2Option(i, $"answer {i + 1}")).ToList();
+    [ObservableProperty] private L2Option? _playAnswer;
+    [ObservableProperty] private bool _hasQuestion;
+    [ObservableProperty] private string _flowNote = "";
     /// <summary>Raised when the stage should scroll to show the camera.</summary>
     public event Action<double, double>? ScrollRequested;
 
@@ -113,6 +161,8 @@ public partial class L2CutscenesPage : L2Page
     [ObservableProperty] private string _beatNumber = "";
     [ObservableProperty] private string _beatText = "";
     [ObservableProperty] private string _textNote = "";
+    [ObservableProperty] private string _beatWarning = "";
+    [ObservableProperty] private string _beatFlow = "";
     [ObservableProperty] private bool _beatFlash, _beatAtOnce;
     private bool _showing;
 
@@ -143,7 +193,10 @@ public partial class L2CutscenesPage : L2Page
     {
         _timer.Tick += (_, _) => PlayTick();
         NewStart = StartChoices[0];
+        _playAnswer = AnswerChoices[0];
     }
+
+    partial void OnPlayAnswerChanged(L2Option? value) { if (_script != null) { Stop(); RefreshBeats(); } }
 
     protected override string PageName => "Events";
     protected override bool IsField(string p) => false;
@@ -159,6 +212,7 @@ public partial class L2CutscenesPage : L2Page
         MapChoices.Clear();
         for (int m = 0; m < _maps.Length; m++) MapChoices.Add(new L2Option(m, $"{m:X2} {_maps[m]}"));
         _spritePics.Clear();
+        _facingPics.Clear();
         SpriteChoices.Clear();
         for (int s = 0; s < L2Sprites.Count(rom); s++) SpriteChoices.Add(new L2SpriteChoice(s, $"Sprite {L2Sprites.Name(s)}", SpritePicture(s)));
         CastSprite = SpriteChoices.FirstOrDefault(c => c.Sprite == 0x0C) ?? SpriteChoices.FirstOrDefault();
@@ -210,12 +264,13 @@ public partial class L2CutscenesPage : L2Page
         }
         SpeakerChoices.Add(new L2Option(-1, "Narration (no speaker)"));
         SpeakerChoices.Add(new L2Option(-2, "The person talked to"));
+        TalkChoices.Insert(0, new L2Option(NewTalkCharacter, "A new character on the clicked tile (sprite: the one under Cutscene characters)"));
         NewCharacter = TalkChoices.FirstOrDefault();
     }
 
     private static string Short(string n) => n.Replace(" (the leader)", "").Replace(" (when in the party)", "");
 
-    private string Name(int id) => _names.TryGetValue(id, out var n) ? Short(n) : L2EventCommands.DefaultWho(id);
+    private string Name(int id) => _names.TryGetValue(id, out var n) ? Short(n) : id < 0 ? "nobody" : L2EventCommands.DefaultWho(id);
 
     private void FillCutscenes(L2EventBlocks.Entry? select)
     {
@@ -290,6 +345,39 @@ public partial class L2CutscenesPage : L2Page
         IsDirty = false; CanEdit = false;
         SelectedBeat = null;
         _states = new();
+        _run = new(); _firstVisit.Clear(); _start = null;
+        StartFlags.Clear(); HasStartFlags = false; HasQuestion = false; FlowNote = "";
+    }
+
+    /// <summary>The story flags and counters the cutscene checks, ticked as they are set for playback.</summary>
+    private void FillStartFlags()
+    {
+        StartFlags.Clear();
+        if (_script == null) { HasStartFlags = false; return; }
+        var (flags, counters) = L2Cutscene.Checked(_script.Steps);
+        int once = L2Cutscene.OnceFlag(_script);
+        foreach (int f in flags)
+            StartFlags.Add(new L2StartFlagVm
+            {
+                Number = f, IsOn = _flagsOn.Contains(f),
+                Label = $"Story flag {f:X2} is on" + (f == once ? " (the cutscene has played)" : ""),
+                Changed = StartChanged,
+            });
+        foreach (int c in counters)
+            StartFlags.Add(new L2StartFlagVm { Number = c, IsCounter = true, Value = _countersAtStart.TryGetValue(c, out int v) ? v : 0, Label = $"Counter {c:X2} is", Changed = StartChanged });
+        HasStartFlags = StartFlags.Count > 0;
+        HasQuestion = _script.Steps.Any(s => s.IsText && s.Op == 0x10);
+    }
+
+    private void StartChanged()
+    {
+        foreach (var f in StartFlags)
+        {
+            if (f.IsCounter) { if (f.Value != 0) _countersAtStart[f.Number] = Math.Clamp(f.Value, 0, 255); else _countersAtStart.Remove(f.Number); }
+            else if (f.IsOn) _flagsOn.Add(f.Number); else _flagsOn.Remove(f.Number);
+        }
+        Stop();
+        RefreshBeats();
     }
 
     private void LoadScript(L2CutsceneItem? item, int keepBeat = -1)
@@ -310,6 +398,7 @@ public partial class L2CutscenesPage : L2Page
             _ => "Plays each time the leader steps onto the area" + (once >= 0 ? $", once (story flag {once:X2})." : " (no story flag: every time)."),
         };
         if (_script.Problem != null) CutsceneInfo += " It can't be changed here: " + _script.Problem;
+        FillStartFlags();
         RefreshBeats();
         SelectedBeat = keepBeat >= 0 && keepBeat < Beats.Count ? Beats[keepBeat] : Beats.FirstOrDefault();
     }
@@ -340,7 +429,64 @@ public partial class L2CutscenesPage : L2Page
         if (Rom == null) return;
         var (x, y) = LeaderStart();
         var start = L2Cutscene.Initial(Rom, _map, x, y);
-        _states = L2Cutscene.Simulate(Rom, _map, start, _script?.Steps ?? new List<L2Step>(), Name);
+        start.Flags.UnionWith(_flagsOn);
+        foreach (var kv in _countersAtStart) start.Counters[kv.Key] = kv.Value;
+        _start = start;
+        var steps = _script?.Steps ?? new List<L2Step>();
+        _states = L2Cutscene.Simulate(Rom, _map, start, steps, Name);
+        _run = L2Cutscene.Run(Rom, _map, start, steps, Name, PlayAnswer?.Value ?? 0);
+        _firstVisit.Clear();
+        for (int k = 0; k < _run.Count; k++) _firstVisit.TryAdd(_run[k].Step, k);
+    }
+
+    /// <summary>The stage after script step <paramref name="i"/>: as playback first reaches it, or (a step playback
+    /// doesn't reach with these flags) read top to bottom.</summary>
+    private L2StageState? After(int i) =>
+        _firstVisit.TryGetValue(i, out int k) ? _run[k].After : i + 1 < _states.Count && i >= 0 ? _states[i + 1] : null;
+
+    /// <summary>The stage just before script step <paramref name="i"/>.</summary>
+    private L2StageState? Before(int i) =>
+        _firstVisit.TryGetValue(i, out int k) ? (k > 0 ? _run[k - 1].After : _start) : i >= 0 && i < _states.Count ? _states[i] : null;
+
+    /// <summary>The timeline number of the step holding script step <paramref name="i"/>.</summary>
+    private string BeatNumberOf(int i)
+    {
+        if (_script == null || i < 0 || i >= _script.Steps.Count) return "";
+        var st = _script.Steps[i];
+        var vm = Beats.FirstOrDefault(b => b.Beat.Steps.Contains(st));
+        return vm == null ? "" : vm.Number.TrimEnd('.');
+    }
+
+    private string BranchText(L2StageState s) =>
+        s.BranchWhy + (s.Jumped
+            ? s.BranchTo >= 0 ? $": goes to step {BeatNumberOf(s.BranchTo)}" : ": goes to a step outside this event (playback stops)"
+            : s.BranchTo >= 0 ? $": goes on to step {BeatNumberOf(s.BranchTo)}" : ": the event ends");
+
+    /// <summary>Marks each step with what playback does there: a check's branch, steps it doesn't reach, walks the game stops.</summary>
+    private void Annotate()
+    {
+        if (_script == null) return;
+        foreach (var vm in Beats)
+        {
+            var idx = vm.Beat.Steps.Select(s => _script.Steps.IndexOf(s)).Where(i => i >= 0).ToList();
+            bool reached = idx.Any(i => _firstVisit.ContainsKey(i));
+            vm.Reached = reached || _run.Count == 0;
+            vm.Warning = idx.Select(After).FirstOrDefault(s => s?.Warning != null)?.Warning ?? "";
+            var flows = new List<string>();
+            foreach (int i in idx.Where(i => _script.Steps[i].Jumps.Count > 0 || _script.Steps[i].Op is 0x14 && !_script.Steps[i].IsText))
+            {
+                if (!_firstVisit.TryGetValue(i, out int k)) continue;
+                var s = _run[k].After;
+                if (s.BranchWhy != null)
+                {
+                    int times = _run.Count(r => r.Step == i);
+                    flows.Add("Playback: " + BranchText(s) + (times > 1 ? $" (the first of {times} times)" : ""));
+                }
+            }
+            vm.Flow = !reached && _run.Count > 0 ? "Playback doesn't reach this step with these story flags." : string.Join(" ", flows);
+        }
+        FlowNote = _run.Count == 0 ? "" :
+            $"Playback runs {Beats.Count(b => b.Reached)} of the {Beats.Count} steps" + (_run.Count >= 3000 ? " (it goes round a loop: it stops after 3000 commands)." : ".");
     }
 
     private void RefreshBeats()
@@ -352,6 +498,7 @@ public partial class L2CutscenesPage : L2Page
         for (int i = 0; i < beats.Count; i++) Beats.Add(new L2BeatVm { Beat = beats[i], Number = $"{i + 1}." });
         foreach (var vm in Beats) Describe(vm);
         Simulate();
+        Annotate();
         if (keep != null)
         {
             var same = Beats.FirstOrDefault(b => b.Beat.Steps.Count > 0 && keep.Steps.Count > 0 && b.Beat.Steps[0] == keep.Steps[0]);
@@ -415,34 +562,56 @@ public partial class L2CutscenesPage : L2Page
         if (!IsPlaying) ShowStage();
     }
 
-    /// <summary>The stage after the picked step (before the first one when nothing is picked).</summary>
-    private int StateIndex()
+    /// <summary>The stage after the picked step (before the first one when nothing is picked), the stage before it, and
+    /// a walk in it that the game stops.</summary>
+    private (L2StageState? After, L2StageState? Before, L2StageState? Warned) Picked()
     {
-        if (_script == null || _states.Count == 0) return 0;
         var b = SelectedBeat?.Beat;
-        if (b == null || b.Steps.Count == 0) return 0;
-        int i = _script.Steps.IndexOf(b.Steps[^1]);
-        return Math.Clamp(i + 1, 0, _states.Count - 1);
+        if (_script == null || b == null || b.Steps.Count == 0) return (_start ?? (Rom != null && _map >= 0 ? StartOnly() : null), null, null);
+        var idx = b.Steps.Select(s => _script.Steps.IndexOf(s)).Where(i => i >= 0).ToList();
+        if (idx.Count == 0) return (_start, null, null);
+        return (After(idx[^1]), Before(idx[0]), idx.Select(After).FirstOrDefault(s => s?.Warning != null));
     }
 
-    private void ShowStage() => ShowState(_states.Count > 0 ? _states[StateIndex()] : Rom != null && _map >= 0 ? StartOnly() : null, StateIndex() > 0 ? _states[StateIndex() - 1] : null);
+    private void ShowStage()
+    {
+        var (after, before, warned) = Picked();
+        ShowState(after, before);
+        ShowWarning(warned ?? after);
+    }
 
     private L2StageState StartOnly() { var (x, y) = LeaderStart(); return L2Cutscene.Initial(Rom!, _map, x, y); }
 
-    private void ShowState(L2StageState? s, L2StageState? before)
+    private void ShowWarning(L2StageState? s)
+    {
+        HasWarning = s?.Warning != null;
+        WarningText = s?.Warning ?? "";
+        if (s?.Warning != null) { WarnLeft = s.WarnX * 16; WarnTop = s.WarnY * 16; }
+    }
+
+    /// <summary>Draws a stage. <paramref name="t"/> below 1 draws the characters that moved since <paramref name="before"/>
+    /// part of the way there, in a walking frame (<paramref name="phase"/>).</summary>
+    private void ShowState(L2StageState? s, L2StageState? before, double t = 1, int phase = 0)
     {
         Actors.Clear();
-        if (s == null || Rom == null) { HasSpeech = false; ShowCamera = false; Caption = ""; return; }
+        if (s == null || Rom == null) { HasSpeech = false; ShowCamera = false; Caption = ""; FlagsNow = ""; return; }
         foreach (var a in s.Actors.Values.Where(a => a.Placed).OrderBy(a => a.Y))
         {
             if (!a.Visible && a.Id != 0 && !_cast.Contains(a.Id)) continue;
-            var pic = SpritePicture(a.Sprite >= 0 ? a.Sprite : a.Id < 7 ? a.Id : 0x0C);
+            int sprite = a.Sprite >= 0 ? a.Sprite : a.Id < 7 ? a.Id : 0x0C;
+            var o = before != null && before.Actors.TryGetValue(a.Id, out var oo) ? oo : null;
+            double x = a.X, y = a.Y;
+            bool walking = t < 1 && o != null && o.Placed && o.Visible && a.Visible && (o.X != a.X || o.Y != a.Y) && Math.Abs(o.X - a.X) + Math.Abs(o.Y - a.Y) <= 6;
+            if (walking) { x = o!.X + (a.X - o.X) * t; y = o.Y + (a.Y - o.Y) * t; }
+            var pic = SpritePicture(sprite, a.Dir, walking ? phase : 0);
             double w = pic?.PixelWidth ?? 16, h = pic?.PixelHeight ?? 32;
-            bool moved = before != null && before.Actors.TryGetValue(a.Id, out var o) && (o.X != a.X || o.Y != a.Y || o.Visible != a.Visible || o.Dir != a.Dir);
+            bool moved = o != null && (o.X != a.X || o.Y != a.Y || o.Visible != a.Visible || o.Dir != a.Dir);
             Actors.Add(new L2StageActor
             {
-                Left = a.X * 16 + 8 - w / 2, Top = a.Y * 16 + 16 - h, Picture = pic, Label = a.Id == 0 || _cast.Contains(a.Id) || moved ? Short(Name(a.Id)).Replace("cutscene character", "cutscene") : "",
-                Opacity = a.Visible ? 1 : 0.3, Moved = moved, Facing = new[] { "^", "v", "<", ">" }[a.Dir & 3],
+                Left = x * 16 + 8 - w / 2, Top = y * 16 + 16 - h, Picture = pic, Label = a.Id == 0 || _cast.Contains(a.Id) || moved ? Short(Name(a.Id)).Replace("cutscene character", "cutscene") : "",
+                Opacity = a.Visible ? 1 : 0.3, Moved = moved && t >= 1,
+                // sprites with a picture for each facing show it; others get a small arrow
+                Facing = L2Cutscene.HasFacings(Rom, sprite) ? "" : new[] { "^", "v", "<", ">" }[a.Dir & 3],
             });
         }
         CameraLeft = s.CameraX * 16 + 8 - 128; CameraTop = s.CameraY * 16 + 8 - 112;
@@ -452,16 +621,40 @@ public partial class L2CutscenesPage : L2Page
         Speech = s.Text ?? "";
         Darkness = s.Dark ? 0.6 : 0;
         Caption = s.Caption.Length > 0 ? s.Caption : "";
+        FlagsNow = (s.Flags.Count > 0 ? "Story flags on: " + string.Join(" ", s.Flags.OrderBy(f => f).Select(f => f.ToString("X2"))) : "No story flag on")
+                   + (s.Counters.Count > 0 ? "; " + string.Join(", ", s.Counters.OrderBy(c => c.Key).Select(c => $"counter {c.Key:X2} = {c.Value}")) : "")
+                   + " (at this step, in playback)";
         ScrollRequested?.Invoke(s.CameraX * 16 + 8, s.CameraY * 16 + 8);
     }
 
-    internal BitmapSource? SpritePicture(int sprite)
+    public BitmapSource? SpritePicture(int sprite)
     {
         if (Rom == null || sprite < 0) return null;
         if (_spritePics.TryGetValue(sprite, out var p)) return p;
         BitmapSource? bmp = null;
         try { bmp = Picture(L2Graphics.MapSprite(Rom, sprite)); } catch (Exception) { }
         return _spritePics[sprite] = bmp;
+    }
+
+    /// <summary>A sprite facing a way (0 up, 1 down, 2 left, 3 right), in a walking frame (phase 1) or standing.</summary>
+    public BitmapSource? SpritePicture(int sprite, int dir, int phase)
+    {
+        if (Rom == null || sprite < 0) return null;
+        var (frame, flip) = L2Cutscene.FacingFrame(Rom, sprite, dir, phase);
+        if (frame == 0 && !flip) return SpritePicture(sprite);
+        if (_facingPics.TryGetValue((sprite, frame, flip ? 1 : 0), out var p)) return p;
+        BitmapSource? bmp = null;
+        try
+        {
+            if (L2Graphics.MapSprite(Rom, sprite, frame) is var (w, h, px))
+            {
+                if (flip)
+                    for (int y = 0; y < h; y++) Array.Reverse(px, y * w, w);
+                bmp = Picture((w, h, px));
+            }
+        }
+        catch (Exception) { }
+        return _facingPics[(sprite, frame, flip ? 1 : 0)] = bmp;
     }
 
     /// <summary>A click on the stage (in map pixels): sets the picked step's place, or the tile for a new area.</summary>
@@ -472,7 +665,7 @@ public partial class L2CutscenesPage : L2Page
         NewX1 = NewX2 = x; NewY1 = NewY2 = y;
         var b = SelectedBeat?.Beat;
         if (b == null || !CanEdit || IsPlaying) { Status = $"Tile ({x}, {y})."; return; }
-        var before = b.Steps.Count > 0 ? _states.ElementAtOrDefault(_script!.Steps.IndexOf(b.Steps[0])) : _states.FirstOrDefault();
+        var before = b.Steps.Count > 0 ? Before(_script!.Steps.IndexOf(b.Steps[0])) : _start;
         switch (b.Kind)
         {
             case L2BeatKind.Appear or L2BeatKind.Camera:
@@ -508,6 +701,7 @@ public partial class L2CutscenesPage : L2Page
         {
             var b = SelectedBeat?.Beat;
             HasBeat = b != null;
+            BeatWarning = SelectedBeat?.Warning ?? ""; BeatFlow = SelectedBeat?.Flow ?? "";
             ShowWho = ShowWho2 = ShowDir = ShowCount = ShowXY = ShowText = ShowSpeaker = ShowAction = ShowSong = ShowNumber = ShowFlash = ShowAtOnce = ShowGoTo = IsOther = false;
             if (b == null) { BeatTitle = ""; BeatHelp = "Pick a step of the timeline, or add one."; return; }
             BeatWho = WhoChoices.FirstOrDefault(o => o.Value == b.Who) ?? (b.Who >= 0 ? AddWho(b.Who) : null);
@@ -525,7 +719,7 @@ public partial class L2CutscenesPage : L2Page
             {
                 case L2BeatKind.Appear: BeatTitle = "A character appears"; ShowWho = ShowXY = ShowFlash = true; BeatHelp = "Shows the character on a tile (click the map to pick it). Characters made for cutscenes stay hidden until they appear."; break;
                 case L2BeatKind.Leave: BeatTitle = "A character leaves"; ShowWho = ShowFlash = true; BeatHelp = "Hides the character (\"in a flash\": it vanishes in a flash of light)."; break;
-                case L2BeatKind.Walk: BeatTitle = "Walk"; ShowWho = ShowWho2 = ShowDir = ShowCount = true; BeatHelp = "Walks tile by tile in one direction; the cutscene waits until it gets there. Click a tile in the same row or column to walk there. A second character can walk along at the same time. Walls and other characters stop a walk: keep the way clear."; break;
+                case L2BeatKind.Walk: BeatTitle = "Walk"; ShowWho = ShowWho2 = ShowDir = ShowCount = true; BeatHelp = "Walks tile by tile in one direction; the cutscene waits until it gets there. Click a tile in the same row or column to walk there. A second character can walk along at the same time. Walls and other characters stop a walk in the game: a warning on the step and a red box on the map show where."; break;
                 case L2BeatKind.Face: BeatTitle = "Face"; ShowWho = ShowDir = true; BeatHelp = "Turns the character (click a tile to face toward it)."; break;
                 case L2BeatKind.Act: BeatTitle = "Act"; ShowWho = ShowAction = true; BeatHelp = "The character does something; the cutscene waits until it is done."; break;
                 case L2BeatKind.Say:
@@ -546,7 +740,7 @@ public partial class L2CutscenesPage : L2Page
                     BeatHelp = "Story flags remember what happened: other events check them (the Events page lists who uses each)."; break;
                 case L2BeatKind.GoTo: BeatTitle = "Go to another map"; ShowGoTo = true; BeatHelp = "The party goes to a map, arrives on a preset point, and that map's scene with this number plays (it must exist: make it there as \"When another cutscene sends the party here\"). Ends this cutscene."; break;
                 case L2BeatKind.End: BeatTitle = "End"; BeatHelp = "The cutscene ends; the camera comes back to the leader and the player can move."; break;
-                default: BeatTitle = "Other step"; IsOther = true; BeatHelp = "A step this page doesn't edit (a check, a jump, a command of its own). It stays as it is; change it on the Events page."; break;
+                default: BeatTitle = "Other step"; IsOther = true; BeatHelp = "A step this page doesn't edit (a check, a jump, a command of its own). It stays as it is; change it on the Events page. Playback follows checks and jumps with the story flags ticked under the stage."; break;
             }
         }
         finally { _showing = false; }
@@ -600,8 +794,12 @@ public partial class L2CutscenesPage : L2Page
     private void Edit(Action<L2Beat> change)
     {
         if (_showing || _script == null || SelectedBeat?.Beat is not { } b || b.Kind == L2BeatKind.Other || !CanEdit) return;
-        Remember();
+        // a field set to what it was (lists filled again, a choice cleared) changes nothing: the cutscene stays saved
+        string Sig() => string.Join("|", b.Build().Select(s => Convert.ToHexString(s.Bytes) + (s.IsText ? ":" + s.Text : "")));
+        string was = Sig();
         change(b);
+        if (Sig() == was) return;
+        Remember();
         L2Cutscene.Replace(_script, b);
         Changed();
     }
@@ -610,6 +808,7 @@ public partial class L2CutscenesPage : L2Page
     {
         IsDirty = true;
         Stop();
+        FillStartFlags();
         RefreshBeats();
     }
 
@@ -630,6 +829,7 @@ public partial class L2CutscenesPage : L2Page
         _undo.RemoveAt(_undo.Count - 1);
         CanUndo = _undo.Count > 0;
         IsDirty = true;
+        FillStartFlags();
         RefreshBeats();
         if (keep >= 0 && keep < Beats.Count) SelectedBeat = Beats[keep];
     }
@@ -646,7 +846,7 @@ public partial class L2CutscenesPage : L2Page
         else if (sel.Kind == L2BeatKind.End || sel.Steps[^1].EndsFlow) at = _script.Steps.IndexOf(sel.Steps[0]);
         else at = _script.Steps.IndexOf(sel.Steps[^1]) + 1;
         // who and where from what the stage shows at that point
-        var state = _states.ElementAtOrDefault(at) ?? _states.LastOrDefault();
+        var state = (at > 0 ? After(at - 1) : _start) ?? _states.LastOrDefault();
         int who = sel != null && sel.Kind is L2BeatKind.Appear or L2BeatKind.Walk or L2BeatKind.Face or L2BeatKind.Act or L2BeatKind.Leave ? sel.Who
             : _cast.Count > 0 ? _cast.Min() : 0;
         var beat = L2Beat.New(kind, who);
@@ -767,30 +967,84 @@ public partial class L2CutscenesPage : L2Page
     [RelayCommand]
     private void Play()
     {
-        if (_script == null || _states.Count < 2) { Status = "Pick a cutscene with steps first."; return; }
+        if (_script == null || _run.Count == 0 || _start == null) { Status = "Pick a cutscene with steps first."; return; }
         if (IsPlaying) { Stop(); return; }
         IsPlaying = true;
-        _playAt = 0;
-        ShowState(_states[0], null);
+        _playAt = -1;
+        _anim = null;
+        ShowState(_start, null);
+        ShowWarning(null);
         _timer.Interval = TimeSpan.FromMilliseconds(300);
         _timer.Start();
-        Status = "Playing (roughly as the game does). Click Play again to stop.";
+        Status = "Playing (roughly as the game does, following checks and jumps with the story flags set below the stage). Click Play again to stop.";
+    }
+
+    /// <summary>A round of walking being drawn: from, to, how many pictures, which one.</summary>
+    private (L2StageState From, L2StageState To, int Count, int At)? _anim;
+
+    private bool IsStepCommand(int runIndex, bool waits)
+    {
+        if (_script == null || runIndex < 0 || runIndex >= _run.Count) return false;
+        var st = _script.Steps[_run[runIndex].Step];
+        if (st.IsText) return false;
+        return waits ? st.Op == 0x89 : st.Op == 0xA3 && st.Bytes.Length >= 3 && _run[runIndex].After.MovedId >= 0;
     }
 
     private void PlayTick()
     {
         _timer.Stop();
-        if (!IsPlaying || _script == null) return;
+        if (!IsPlaying || _script == null || _start == null) return;
+        // a round of walking: the characters move a little each picture, in their walking frames
+        if (_anim is { } an)
+        {
+            int k = an.At + 1;
+            if (k < an.Count)
+            {
+                _anim = (an.From, an.To, an.Count, k);
+                ShowState(an.To, an.From, (double)k / an.Count, k / 2 % 2 == 0 ? 1 : 0);
+                _timer.Interval = TimeSpan.FromMilliseconds(4000.0 / 60);
+                _timer.Start();
+                return;
+            }
+            _anim = null;
+            ShowState(an.To, an.From);
+            _timer.Interval = TimeSpan.FromMilliseconds(30);
+            _timer.Start();
+            return;
+        }
         _playAt++;
-        if (_playAt >= _states.Count) { Stop(); Status = "The end."; return; }
-        var s = _states[_playAt];
-        ShowState(s, _states[_playAt - 1]);
-        var step = _script.Steps.ElementAtOrDefault(_playAt - 1);
+        if (_playAt >= _run.Count) { Stop(); Status = "The end." + (_run.Count >= 3000 ? " (Playback went round a loop and stopped.)" : ""); return; }
+        var before = _playAt > 0 ? _run[_playAt - 1].After : _start;
+        // the steps that start walking (A3) and the waits for them (89) are one round: everyone walks at once
+        int end = _playAt;
+        if (IsStepCommand(_playAt, false))
+        {
+            while (IsStepCommand(end + 1, false)) end++;
+            while (IsStepCommand(end + 1, true)) end++;
+        }
+        var s = _run[end].After;
+        var step = _script.Steps.ElementAtOrDefault(_run[end].Step);
         if (step != null)
         {
             var bvm = Beats.FirstOrDefault(b => b.Beat.Steps.Contains(step));
             if (bvm != null && bvm != SelectedBeat) { _showing = true; SelectedBeat = bvm; _showing = false; ShowBeat(); }
         }
+        string? warn = null;
+        for (int k = _playAt; k <= end; k++) if (_run[k].After.Warning != null) { warn = _run[k].After.Warning; ShowWarning(_run[k].After); }
+        if (warn == null) ShowWarning(null);
+        else Status = warn;
+        if (end > _playAt || IsStepCommand(_playAt, false))
+        {
+            int frames = Math.Max(8, Enumerable.Range(_playAt, end - _playAt + 1).Max(k => _run[k].After.Frames));
+            _playAt = end;
+            _anim = (before, s, Math.Max(2, frames / 4), 0);
+            ShowState(s, before, 0, 1);
+            _timer.Interval = TimeSpan.FromMilliseconds(4000.0 / 60);
+            _timer.Start();
+            return;
+        }
+        ShowState(s, before);
+        if (s.BranchWhy != null) Status = "Playback: " + BranchText(s);
         // a frame is 1/60 s; text stays a little longer to be read
         double ms = s.Text != null ? 1600 + s.Text.Length * 40 : Math.Max(30, s.Frames * 1000.0 / 60);
         _timer.Interval = TimeSpan.FromMilliseconds(Math.Min(ms, 5000));
@@ -802,6 +1056,7 @@ public partial class L2CutscenesPage : L2Page
     {
         if (!IsPlaying) return;
         _timer.Stop();
+        _anim = null;
         IsPlaying = false;
         ShowStage();
     }
@@ -822,22 +1077,37 @@ public partial class L2CutscenesPage : L2Page
         int kind = NewStart?.Value ?? 0;
         int flag = -1;
         if (kind == 0 && NewFlag.Trim().Length > 0 && !int.TryParse(NewFlag.Trim(), System.Globalization.NumberStyles.HexNumber, null, out flag)) { Status = "Write the story flag in hex (00-EF), or leave it empty."; return; }
+        int character = NewCharacter?.Value ?? -1;
+        string madeCharacter = "";
+        if (kind == 2 && character == NewTalkCharacter)
+        {
+            // a character of its own to talk to, standing on the clicked tile from the start
+            if (PickedX < 0 || PickedY < 0) { Status = "Click the map where the new character stands first."; return; }
+            if (CastSprite == null) { Status = "Pick its sprite under Cutscene characters."; return; }
+            try { character = L2Cutscene.AddCast(Rom, _map, CastSprite.Sprite, -1, PickedX, PickedY, hidden: false); }
+            catch (Exception ex) { Status = "Not made: " + ex.Message; return; }
+            madeCharacter = $" Character {character - 0x4F} ({CastSprite.Label}) stands on ({PickedX}, {PickedY}).";
+        }
         try
         {
             var made = L2Cutscene.Create(Rom, _map, new L2Cutscene.NewOptions
             {
                 Start = kind switch { 0 => L2Cutscene.StartKind.MapLoads, 1 => L2Cutscene.StartKind.StepOn, 2 => L2Cutscene.StartKind.Talk, _ => L2Cutscene.StartKind.Arrive },
                 Once = NewOnce, Flag = flag, FlagMustBeOn = NewFlagOn, Point = NewPoint?.Value ?? -1,
-                X1 = NewX1, Y1 = NewY1, X2 = NewX2, Y2 = NewY2, Character = NewCharacter?.Value ?? -1,
+                X1 = NewX1, Y1 = NewY1, X2 = NewX2, Y2 = NewY2, Character = character,
             });
             Main.NotifyRomModified("Lufia II: " + made.What);
             ReadMap();
             IsDirty = false;
             FillCutscenes(new L2EventBlocks.Entry(made.Head, made.Id, 0));
             if (made.Head == L2EventBlocks.SceneList && NewPoint != null) TestPoint = PointChoices.FirstOrDefault(p => p.Value == NewPoint.Value) ?? TestPoint;
-            Status = made.What + " Add its steps on the right (the first line is a placeholder), then Save.";
+            Status = made.What + madeCharacter + " Add its steps on the right (the first line is a placeholder), then Save.";
         }
-        catch (Exception ex) { Status = "Not made: " + ex.Message; }
+        catch (Exception ex)
+        {
+            if (madeCharacter.Length > 0) { Main.NotifyRomModified($"Lufia II: character {character - 0x4F} on map {_map:X2}"); ReadMap(); }
+            Status = "Not made: " + ex.Message + madeCharacter;
+        }
     }
 
     /// <summary>A character only cutscenes use: made with the map (hidden), shown by "appears".</summary>
