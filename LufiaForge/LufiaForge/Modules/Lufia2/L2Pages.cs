@@ -252,15 +252,59 @@ public partial class L2MonstersPage : L2Page
     private void AddMonster()
     {
         if (Rom == null || Main == null || _m == null) return;
+        int from = _m.Index;
+        string fromName = _m.Name;
+        // a hack whose monster bank is full: the monsters move to a bank of their own first (the same step)
+        L2NewMonsters.RoomResult? room = null;
+        if (L2NewMonsters.NeedsRoom(Rom))
+        {
+            var mouse = System.Windows.Input.Mouse.OverrideCursor;
+            System.Windows.Input.Mouse.OverrideCursor = System.Windows.Input.Cursors.Wait;
+            try { room = L2NewMonsters.PrepareRoom(Rom); }
+            finally { System.Windows.Input.Mouse.OverrideCursor = mouse; }
+            if (room.Bytes == null)
+            {
+                System.Windows.MessageBox.Show(room.Preview(), "New monster", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+                return;
+            }
+            if (!ConfirmRoom(room, $"Then the copy of {fromName} goes there. Make room and add it? One step: Edit, Undo takes both back.")) return;
+        }
+        AddNew(room);
+    }
+
+    /// <summary>Adds a copy of the monster shown, after putting a prepared (checked) <paramref name="room"/> in when there
+    /// is one, as one Undo step.</summary>
+    public void AddNew(L2NewMonsters.RoomResult? room)
+    {
+        if (Rom == null || Main == null || _m == null) return;
+        int from = _m.Index;
+        string fromName = _m.Name;
+        var before = room != null ? Rom.ToArray() : null;
         try
         {
-            int id = L2NewMonsters.Add(Rom, _m.Index);
-            Main.NotifyRomModified($"Lufia II: new monster {id:X2} (a copy of {_m.Name})");
+            if (room != null) L2NewMonsters.ApplyRoom(Rom, room);
+            int id = L2NewMonsters.Add(Rom, from);
+            Main.NotifyRomModified(room != null
+                ? $"Lufia II: monsters moved to bank ${room.ToBank:X2} and new monster {id:X2} (a copy of {fromName})"
+                : $"Lufia II: new monster {id:X2} (a copy of {fromName})");
+            if (room != null) Main.ReloadModules();   // the tidy may have moved spells too: every page reads again
             RefreshList(id);
             MonstersChanged?.Invoke();
+            if (room != null) Main.StatusMessage = $"Monsters moved to bank ${room.ToBank:X2} (bank ${room.FromBank:X2} was full), new monster {id:X2} added (Edit, Undo takes both back).";
         }
-        catch (Exception e) { System.Windows.MessageBox.Show(e.Message, "New monster", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning); }
+        catch (Exception e)
+        {
+            if (before != null) Rom.ReplaceAll(before);   // nothing half done
+            System.Windows.MessageBox.Show(e.Message, "New monster", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+        }
     }
+
+    /// <summary>Shows what making room in a hack does (see <see cref="L2NewMonsters.PrepareRoom"/>) and asks.</summary>
+    internal static bool ConfirmRoom(L2NewMonsters.RoomResult room, string question) =>
+        System.Windows.MessageBox.Show($"This ROM's monster bank (${room.FromBank:X2}, set up by the hack it started from) " +
+            $"{(room.RoomBefore < 0x40 ? "is full" : $"has {room.RoomBefore} bytes left")}, so the monsters move to a bank of their own.\n\n" +
+            room.Preview() + "\n\n" + question, "Lufia II: room for new monsters",
+            System.Windows.MessageBoxButton.OKCancel, System.Windows.MessageBoxImage.Question) == System.Windows.MessageBoxResult.OK;
 
     private static string Line(L2Battle.Monster m) =>
         $"{m.Index:X2}  " + (m.Unused ? "(unused slot)" : m.Name + (m.SameAs >= 0 ? $"  (= {m.SameAs:X2})" : ""));
@@ -295,10 +339,16 @@ public partial class L2MonstersPage : L2Page
 
     protected override void OnListRead()
     {
-        NewMonsterNote = L2NewMonsters.CanAdd(Rom!, out var why)
-            ? $"a copy of the monster shown (record, sprite, drop and battle scripts) as monster {L2NewMonsters.NextId(Rom!):X2}; then change what you like and put it in a monster group or story battle (Encounters page). Room for about {Math.Max(0, L2NewMonsters.Room(Rom!) / 64)} more."
-            : why;
-        CanAddMonster = why.Length == 0;
+        bool can = L2NewMonsters.CanAdd(Rom!, out var why), needsRoom = !can && L2NewMonsters.NeedsRoom(Rom!);
+        string room = L2NewMonsters.IsHackMoved(Rom!)
+            ? $"{L2NewMonsters.Room(Rom!)} bytes free in bank ${L2NewMonsters.Bank(Rom!):X2} (a copy takes its record, about 45 bytes, and its battle scripts)."
+            : $"Room for about {Math.Max(0, L2NewMonsters.Room(Rom!) / 64)} more.";
+        NewMonsterNote = can
+            ? $"a copy of the monster shown (record, sprite, drop and battle scripts) as monster {L2NewMonsters.NextId(Rom!):X2}; then change what you like and put it in a monster group or story battle (Encounters page). {room}"
+            : needsRoom
+                ? $"a copy of the monster shown as monster {L2NewMonsters.NextId(Rom!):X2}. This ROM's monster bank (${L2NewMonsters.Bank(Rom!):X2}, set up by the hack) is full, so the first one moves the monsters to a bank of their own (several KB free; the hack's data is tidied first). You see what moves before anything changes."
+                : why;
+        CanAddMonster = can || needsRoom;
     }
 
     /// <summary>The palettes of sprite <paramref name="sprite"/> (and the note under the picture).</summary>
@@ -393,7 +443,9 @@ public partial class L2MonstersPage : L2Page
     }
 
     protected override bool IsField(string p) => p is not (nameof(ScriptText) or nameof(AiText) or nameof(HasDrop) or nameof(ItemOptions)
-        or nameof(SpriteOptions) or nameof(PaletteOptions) or nameof(SpriteNote) or nameof(MovesNote) or nameof(RoomNote) or nameof(RoomWarn) or nameof(CountNote) or nameof(RecordNote) or nameof(NameMax));
+        or nameof(SpriteOptions) or nameof(PaletteOptions) or nameof(SpriteNote) or nameof(MovesNote) or nameof(RoomNote) or nameof(RoomWarn) or nameof(CountNote) or nameof(RecordNote) or nameof(NameMax)
+        // (the new-monster note is set when the list is read again, after an Undo too, while the old record is still shown)
+        or nameof(NewMonsterNote) or nameof(CanAddMonster));
 
     [RelayCommand] private void EditTurnScript() { if (_m != null) EditScript(L2AiScripts.Kind.MonsterAttack, _m.Index, _m.Name); }
     [RelayCommand] private void EditHitScript() { if (_m != null) EditScript(L2AiScripts.Kind.MonsterDefense, _m.Index, _m.Name); }

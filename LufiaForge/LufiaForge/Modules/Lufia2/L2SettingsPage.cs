@@ -27,6 +27,7 @@ public partial class L2SettingsPage : ObservableObject
         _rom = rom; _main = main;
         Reload();
         CheckTidy();
+        CheckRoom();
     }
 
     // ---------------------------------------------------------------- tidy the hack's data
@@ -81,6 +82,52 @@ public partial class L2SettingsPage : ObservableObject
         _main.NotifyRomModified("Lufia II: hack's data tidied");
         _main.ReloadModules();   // every page reads the moved scripts and spells again (this one too)
         Status = "Tidied: " + string.Join(" ", r.Gains.Take(1).DefaultIfEmpty("the scripts sit on their own now."));
+    }
+
+    // ---------------------------------------------------------------- room for new monsters (a hack's full bank $D0)
+
+    [ObservableProperty] private string _roomText = "";
+
+    /// <summary>What moving a hack's monsters to a bank of their own would give, for the card (cheap: nothing is built).</summary>
+    private void CheckRoom()
+    {
+        if (_rom == null) return;
+        bool can = L2NewMonsters.CanMakeRoom(_rom, out var why);
+        RoomText = !can ? why
+            : $"The hack keeps its monsters in bank ${L2NewMonsters.Bank(_rom):X2}, {(L2NewMonsters.FreeRun(_rom).Length < 0x40 ? "which is full" : $"with {L2NewMonsters.FreeRun(_rom).Length} bytes free for new ones")}. " +
+              "Moving them to a bank of their own gives several KB for new monsters.";
+        MakeRoomCommand.NotifyCanExecuteChanged();
+    }
+
+    private bool CanRoom() => _rom != null && L2NewMonsters.CanMakeRoom(_rom, out _);
+
+    [RelayCommand(CanExecute = nameof(CanRoom))]
+    private void MakeRoom()
+    {
+        if (_rom == null || _main == null) return;
+        var mouse = System.Windows.Input.Mouse.OverrideCursor;
+        System.Windows.Input.Mouse.OverrideCursor = System.Windows.Input.Cursors.Wait;
+        L2NewMonsters.RoomResult r;
+        try { r = L2NewMonsters.PrepareRoom(_rom); }
+        finally { System.Windows.Input.Mouse.OverrideCursor = mouse; }
+        if (r.Bytes == null)
+        {
+            System.Windows.MessageBox.Show(r.Preview(), "Lufia II: room for new monsters", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
+            CheckRoom();
+            return;
+        }
+        if (!L2MonstersPage.ConfirmRoom(r, "Make room now? Edit, Undo takes it back.")) return;
+        ApplyRoom(r);
+    }
+
+    /// <summary>Puts a prepared (and checked) move of the monsters in the ROM as one Undo step.</summary>
+    public void ApplyRoom(L2NewMonsters.RoomResult r)
+    {
+        if (_rom == null || _main == null || r.Bytes == null) return;
+        L2NewMonsters.ApplyRoom(_rom, r);
+        _main.NotifyRomModified($"Lufia II: monsters moved to bank ${r.ToBank:X2} (room for new monsters)" + (r.Tidied ? ", hack's data tidied" : ""));
+        _main.ReloadModules();
+        Status = $"The monsters have a bank of their own now (${r.ToBank:X2}): {r.RoomAfter} bytes for new monsters (Monsters page, \"Add a new monster\").";
     }
 
     private void Reload()
