@@ -8,7 +8,8 @@ using Color = System.Windows.Media.Color;
 namespace LufiaForge.Modules.Lufia2;
 
 /// <summary>Capsule monsters: each of the 35 forms (name, type, attacks, level-1 stats, growth curves, AI), the
-/// monsters' default names, and the growth curves themselves (shared, so a change there affects every form using it).</summary>
+/// monsters' default names, the growth curves themselves (shared, so a change there affects every form using it), and
+/// feeding (L2CapsulesPage.Feed.cs).</summary>
 public partial class L2CapsulesPage : L2Page
 {
     private L2Capsules.Record? _r;
@@ -63,6 +64,7 @@ public partial class L2CapsulesPage : L2Page
         AiText = ScriptsText(rom, L2AiScripts.Kind.CapsuleAi, L2AiScripts.Kind.CapsuleDefense, index);
         ShowCurve();
         Refresh();
+        LoadFeed();
     }
 
     /// <summary>A curve in words: its gain per level in the first, middle and last bands, and how many forms use it.</summary>

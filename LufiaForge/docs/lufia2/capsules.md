@@ -1,7 +1,8 @@
 # Lufia II (US) capsule monsters: static analysis
 
 ROM: scratchpad\l2\lufia2.sfc (US, LoROM, no header). Everything below is from static reading of ROM data and
-65816 code (no emulator, nothing checked in the running game). "Guess" marks inferences.
+65816 code; the feeding part of section 6 was checked in the game (2026-10-27), the rest was not. "Guess" marks
+inferences.
 Helper: `l2research\tools\capsules.py table|attacks|scripts|levels` regenerates the tables below.
 
 ## 0. Summary
@@ -421,14 +422,69 @@ Tables in bank $8E (file = 0x70000 + addr - 0x8000):
 | `$8E:E4CB` | 0x764CB | EXP multipliers (section 1) |
 | `$95:FF16` | 0xAFF16 | per price tier: u16 list offset, u16 count; a random craved item is drawn from it (`$82:C554`) |
 
-Feeding (`$82:C683`..; item id in `$0A06`, item value in `$0B89` (assumed price)):
-* Own fruit: pickiness reset (`$82:C53A`), meter +1 (message 09). Magic fruit (0x35): meter +8 (message 0A).
-* Other items, value >= 200: accepted if tier >= pickiness `$11A6[n]` (pickiness := tier); gain
-  `E48A[(form-1)*4 + tier/4]`, x3 if it is the craved item `$11AD[n]` (message 0B). Cheaper items lower pickiness
-  by 1 and may toggle the craving flag (`$82:C784`).
-* Meter `$11C2[n]` += 1 per gain point (max 0x20, `$82:CBAF`); at 0x20 `$82:C78E` evolves: form + 1,
-  `$11BB[n]` + 1, meter reset, new sprite/palette, redraw (`$82:C818`).
+### Feeding (checked in the game, 2026-10-27)
+
+Capsule > Feed does not give EXP (the level only comes from battles). It fills the "GROW" meter `$11C2[n]`, 32
+points; when it is full the monster moves up a form. Lufia Forge: `Core/Lufia2/L2CapsuleFeed.cs`, edited on the
+Capsule monsters page (cards Feeding, Items they ask for, <name>'s fruits, What an item gives).
+
+Code: `$82:C683` feed item (item id in `$0A06`; `$81:F1C5` loads the item record to `$0B84`, so `$0B89` is the
+record's +5, the **price**; items with use bit 0x20 "can't be dropped" can't be fed, `$82:C68E`).
+* Own fruit `E4A8[n]`: pickiness reset to `E485[highest form]` (`$82:C53A`), +1 point (operand file 0x14BDF,
+  message 09). Magic fruit (item id at file 0x1464A, 0x35): +8 points (operand 0x14BEB, message 0A).
+* Any other item: price < 200 (operand of `CMP #$00C8`, file 0x146D9) or tier < pickiness `$11A6[n]`: refused.
+  The item is still used up; the pickiness drops by 1 unless `E48A[(form-1)*4 + newpick/4]` is 0 (then it stays),
+  and when it drops a new wish is drawn. Otherwise eaten: tier = first index i of the 15 thresholds `E466` with
+  threshold >= price (15 when above them all); points = `E48A[(form-1)*4 + tier/4]` (form = highest form, 1-3);
+  pickiness := tier.
+* The wish (`$82:C577`, when the feed screen opens and after each feeding): if bit n of `$11A5` is clear, set it and
+  draw `$11AD[n]` = random item of the list of tier `$11A6[n]` (`$82:C554`: `LDA $95FF16,X` offset, `LDA $95FF18,X`
+  count, `JSL $80:8299` random 0..count-1 (count 0 gives 0, so the first item of the next list), `LDA $95FF16,X`
+  item; the three long addresses are at file 0x1455B, 0x14560, 0x14573). Eating the wished item multiplies the
+  points by 3 (`ASL / CLC / ADC $154F` at `$82:CC24`, file 0x14C24; message 0B "Thank you!!"), and every eaten
+  item clears bit n, so a new wish is drawn.
+* The points go into the meter during the sparkle animation (`$82:CB10`): 4 x points + 4 steps, at most 0x20
+  (`CMP #$20` / `LDA #$20`, file 0x14B1E / 0x14B22); +1 point every second step, so **one feeding gives at most 16
+  points** (a wished tier-12 item in form 1, 8 x 3, gives 16). Each step puts a sparkle in one of 32 sprite slots
+  (`$1388,X` etc., X = 0x10..0x2F); with 0x40 steps the game crashed (writes past the slots), so 16 can only be
+  lowered.
+* At 32 points `$82:C78E` evolves: form + 1, `$11BB[n]` + 1, meter 0, pickiness := `E485[new form]`, new sprite and
+  palette (`$82:C818`).
 * Normal feeding only when current form == highest form, highest < 4, not in form 5 (`$82:CC3C`).
+
+The game's wish lists (by tier; hand-picked, not matched to the tier's prices; tier 15 is empty and reads past the
+table, Lufia Forge points an empty list at the nearest list with items when it writes them):
+
+| Tier | Prices | Items |
+|---|---|---|
+| 0 | 200-499 | Long knife |
+| 1 | 500-599 | Flying blow, Thunder ax, Toga, Chain armor, Stone plate, Long robe, Iron plate, Metal mail |
+| 2 | 600-699 | (empty: asks for Magic scale) |
+| 3 | 700-999 | Magic scale, Holy robe, Ghostclothes, Royal dress, Full mail |
+| 4 | 1000-1999 | Buster sword |
+| 5, 6 | 2000-3999 | (empty: Deadly sword) |
+| 7 | 4000-4999 | Deadly sword |
+| 8 | 5000-5999 | War rapier |
+| 9 | 6000-7999 | Secret fruit, Knife, Insect crush, Kukri, Bronze sword, Long sword, Beserk blade, Multi sword, Rockbreaker, Lucky blade, Super sword, Old sword, Sizzle sword, Blaze sword, Egg sword, Staff |
+| 10 | 8000-11999 | Gladius, Block shield, Cloth helmet |
+| 11 | 12000-19999 | Deadly sword, Fire dagger, Mega ax, Crystal wand |
+| 12 | 20000-24999 | 33 items: Flame fruit, Magic fruit, Frypan, Battle knife, Short sword, Light knife, Cold rapier, Estok, Silvo rapier, Crazy blade, Red saber, Lucky blade, Sky sword, Snow sword, Fry sword, Bronze ax, Flying ax, Mace, Trident, Figgoru, Coat, Light armor, Thick cloth, Bright armor, Bright cloth, Pearl brace, Gold gloves, Gold shield, Plati gloves, Rune gloves, Zirco shield, Water gaunt, Cap |
+| 13 | 25000-28999 | (empty: Green tea) |
+| 14 | 29000-31999 | Green tea, Escape, Jet helm |
+| 15 | 32000- | (empty) |
+
+The table is 0xD8 bytes (room for 76 items). Longer lists go to the added space: "LFWL", u16 room, then the table
+(with room for 64 more items), the three long addresses pointing there.
+
+Checked in BizHawk (agent test kit `scratchpad\agent_capsule`: a new game on map 03 where Jelze joins with event
+`81 00`, Dagger x5 and Frock x5 in the new-game items; RAM `$11C2` meter, `$11A6` pickiness, `$11AD` wish):
+* Clean game: Jelze asks for Long knife; Dagger (400 G) and Frock (400 G) give 1 point each.
+* Tier 0 list = Dagger, form 1 tiers 0-3 = 3 points, wish bonus x2 (made on the page): it asks for Dagger, Dagger
+  gives 6 ("Thank you!!"), Frock 3. Same with the lists moved to the added space.
+* Long knife (800 G, wished) gives 3, pickiness 3, the wish becomes Magic scale (tier 3); then Dagger is refused,
+  used up, pickiness 2.
+* Form 1 tiers 0-3 = 16, x1: two Daggers give 16 + 16, Jelze becomes Foomy M (form 2), pickiness 4, asks for Buster
+  sword. With points 32 and the sparkle limit raised to 32 the game crashed (black screen, then reset).
 * Form 5 (`$82:CC58`): fruit E49A[n] while form == E4B6[n] sets bit 08 of `$11BB[n]`, form := 5; in form 5, own
   fruit E4A8[n] clears bit 08 and form := E4B6[n].
 * Learning (`$82:CD1F`, RTL, battle side): 1/8 chance, random slot 0-2; if record[0x12+slot] != 0 and not yet
@@ -495,7 +551,7 @@ Level up: `$82:CD83` (RTL; stat gains in `$0A38..$0A3E`).
 * Firebird's AI has `06 80 00 00 44 00` (back to 0x44) where Red Dragon has `... 6C 00` (physical attack):
   possible original data bug.
 * Record byte 0x0C and words 0x23 / 0x29 are always 0.
-* `$0B89` assumed to be the fed item's price; not traced to its writer.
+* `$0B89` is the fed item's price (record +5, loaded by `$81:F1C5`; checked in the game).
 * `JSL $85:95C6` assumed to show the attack name; animation byte semantics unverified.
 * `$0A7F == 7`; the text at `$8E:C85E` that prints form/type is not decoded (form letters S/M/L/H/? not seen).
-* None of this was checked in the running game.
+* Only feeding (section 6) was checked in the running game.
