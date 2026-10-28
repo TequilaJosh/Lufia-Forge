@@ -154,6 +154,11 @@ public sealed class BizHawkHost : IDisposable
     {
         // If already embedded, do nothing
         if (IsRunning) return;
+        if (CoreWarning(emuHawkPath, romPath) is { } warn)
+        {
+            StatusChanged?.Invoke(warn);
+            System.Windows.MessageBox.Show(warn, "BizHawk", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+        }
 
         // First, check if BizHawk is already running
         if (TryFindRunningBizHawk())
@@ -236,6 +241,24 @@ public sealed class BizHawkHost : IDisposable
         ReparentWindow();
         Attached?.Invoke();
         StatusChanged?.Invoke("BizHawk embedded successfully.");
+    }
+
+    /// <summary>An 8 MB Lufia II ROM (ExLoROM) can't run in BizHawk's older "BSNES" core (it maps only 4 MB and the
+    /// game stops at the Natsume logo); BSNESv115+ and Snes9x run it. The warning when BizHawk's config picks that core,
+    /// or null. The config is only read.</summary>
+    public static string? CoreWarning(string emuHawkPath, string? romPath)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(romPath) || !System.IO.File.Exists(romPath) || new System.IO.FileInfo(romPath).Length != Core.RomBuffer.ExLoRomSize) return null;
+            string cfg = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(emuHawkPath) ?? "", "config.ini");
+            if (!System.IO.File.Exists(cfg)) return null;
+            var m = System.Text.RegularExpressions.Regex.Match(System.IO.File.ReadAllText(cfg), @"""SNES""\s*:\s*""([^""]*)""");
+            if (!m.Success || m.Groups[1].Value != "BSNES") return null;
+            return "This ROM is 8 MB, and BizHawk is set to its older BSNES core, which can't run an 8 MB ROM (the game stops at the Natsume logo). " +
+                   "In BizHawk pick Config > Preferred Cores > SNES > BSNESv115+ (or Snes9x), then open the ROM again.";
+        }
+        catch (Exception) { return null; }
     }
 
     /// <summary>
