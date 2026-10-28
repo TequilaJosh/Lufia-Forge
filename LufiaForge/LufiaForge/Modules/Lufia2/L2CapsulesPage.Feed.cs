@@ -42,6 +42,18 @@ public partial class L2CapsulesPage
     public ObservableCollection<L2Slot> WishItems { get; } = new();
     [ObservableProperty] private int _newWishItem = 1;
     [ObservableProperty] private string _wishNote = "";
+    // whose lists are shown: -1 the game's (all capsules share them), else a monster with its own lists
+    // (L2CapsuleWishes), for all its forms (0) or one form (1-3)
+    private List<int>[]? _own;
+    [ObservableProperty] private List<L2Option> _wishOwnerOptions = new();
+    [ObservableProperty] private int _wishOwner = -1;
+    [ObservableProperty] private List<L2Option> _wishFormOptions = new();
+    [ObservableProperty] private int _wishForm;
+    [ObservableProperty] private bool _wishOwnShown;
+    [ObservableProperty] private bool _wishOwnHas;
+    [ObservableProperty] private string _wishOwnNote = "";
+    private bool _wishOwnOk;
+    private string _wishOwnWhy = "";
     // what an item gives
     [ObservableProperty] private int _checkItem = 1;
     [ObservableProperty] private string _checkText = "";
@@ -93,40 +105,111 @@ public partial class L2CapsulesPage
                 Form5Fruit = L2CapsuleFeed.Form5FruitOf(rom, m);
                 FruitForm = L2CapsuleFeed.FruitFormOf(rom, m);
             }
-            TierOptions = Enumerable.Range(0, L2CapsuleFeed.Tiers).Select(TierLabel).ToList();
-            ShowWishList();
+            _wishOwnOk = L2CapsuleWishes.CanInstall(rom, out _wishOwnWhy);
+            var sets = L2CapsuleWishes.ReadAll(rom);
+            WishOwnerOptions = new[] { new L2Option(-1, "All capsules (the game's lists)") }
+                .Concat(Enumerable.Range(0, L2Capsules.Monsters).Select(k =>
+                {
+                    int n = sets.Keys.Count(s => s.M == k);
+                    return new L2Option(k, L2Capsules.MonsterName(rom, k) + (n == 0 ? "  (the game's lists)" : n == 1 ? "  (own lists)" : $"  (own lists, {n} sets)"));
+                })).ToList();
+            ShowWishOwner();
             ShowCheck();
             // lists picked from were made again: show the picks in them again
-            foreach (var p in new[] { nameof(WishTier), nameof(WishBonus), nameof(MagicFruit), nameof(OwnFruit), nameof(Form5Fruit), nameof(FruitForm), nameof(NewWishItem), nameof(CheckItem) })
+            foreach (var p in new[] { nameof(WishOwner), nameof(WishForm), nameof(WishTier), nameof(WishBonus), nameof(MagicFruit), nameof(OwnFruit), nameof(Form5Fruit), nameof(FruitForm), nameof(NewWishItem), nameof(CheckItem) })
                 OnPropertyChanged(p);
         }
         finally { _feedLoading = false; }
     }
 
+    /// <summary>The lists shown: the game's, or the picked capsule's own (16 empty lists when it has none).</summary>
+    private List<int>[] Shown => WishOwner < 0 ? _lists : _own ??= Enumerable.Range(0, L2CapsuleFeed.Tiers).Select(_ => new List<int>()).ToArray();
+
     private L2Option TierLabel(int t)
     {
         var (lo, hi) = L2CapsuleFeed.TierPrices(Rom!, t);
-        int n = _lists[t].Count;
-        return new L2Option(t, $"Tier {t}  ({lo}-{hi} G):  " + (n == 0 ? "empty" : $"{n} item{(n == 1 ? "" : "s")}"));
+        int n = Shown[t].Count;
+        string what = n > 0 ? $"{n} item{(n == 1 ? "" : "s")}" : WishOwner < 0 ? "empty" : "the game's list";
+        return new L2Option(t, $"Tier {t}  ({lo}-{hi} G):  " + what);
+    }
+
+    /// <summary>Shows the picked owner's lists (the game's, or a capsule's own for all its forms or one form).</summary>
+    private void ShowWishOwner()
+    {
+        var rom = Rom!;
+        int m = WishOwner;
+        WishOwnShown = m >= 0;
+        if (m >= 0)
+        {
+            var forms = new List<L2Option> { new(0, "All its forms") };
+            for (int f = 1; f <= L2CapsuleWishes.FeedForms; f++)
+                forms.Add(new L2Option(f, $"Form {f}: {L2Capsules.Read(rom, m * L2Capsules.Forms + f - 1).Name}" + (L2CapsuleWishes.Read(rom, m, f) != null ? "  (own lists)" : "")));
+            if (!forms.SequenceEqual(WishFormOptions)) WishFormOptions = forms;
+            if (WishForm < 0 || WishForm > L2CapsuleWishes.FeedForms) WishForm = 0;
+            _own = L2CapsuleWishes.Read(rom, m, WishForm);
+            WishOwnHas = _own != null;
+            string name = L2Capsules.MonsterName(rom, m), whose = WishForm == 0 ? name : $"{name} in form {WishForm}";
+            bool hasAll = WishForm > 0 && L2CapsuleWishes.Read(rom, m, 0) != null;
+            string emptyUses = hasAll ? $"{name}'s list for all its forms (then the game's)" : "the game's list";
+            WishOwnNote = !_wishOwnOk ? _wishOwnWhy :
+                _own == null
+                    ? $"{whose} has no lists of its own, so it asks for items of {(hasAll ? $"{name}'s lists for all its forms (the game's where a tier is empty)" : "the game's lists")}. " +
+                      "Add an item to a tier (or copy the game's lists) to give it its own; a tier left empty uses " + emptyUses + "."
+                    : $"{whose} asks for items of these lists; a tier left empty uses {emptyUses}." +
+                      (WishForm == 0 ? " A form with its own lists uses those first." : "");
+        }
+        else _own = null;
+        TierOptions = Enumerable.Range(0, L2CapsuleFeed.Tiers).Select(TierLabel).ToList();
+        ShowWishList();
+        OnPropertyChanged(nameof(WishTier));
+        OnPropertyChanged(nameof(WishForm));
     }
 
     private void ShowWishList()
     {
         int t = Math.Clamp(WishTier, 0, L2CapsuleFeed.Tiers - 1);
+        var shown = Shown;
         WishItems.Clear();
-        for (int i = 0; i < _lists[t].Count; i++)
-            WishItems.Add(new L2Slot { Label = $"{i + 1}", Options = ItemOptions, Value = _lists[t][i], Changed = WishEdited });
+        for (int i = 0; i < shown[t].Count; i++)
+            WishItems.Add(new L2Slot { Label = $"{i + 1}", Options = ItemOptions, Value = shown[t][i], Changed = WishEdited });
+        if (WishOwner >= 0)
+        {
+            // an empty tier of a form's lists uses the monster's lists for all its forms, then the game's
+            var all = WishForm > 0 ? L2CapsuleWishes.Read(Rom!, WishOwner, 0) : null;
+            bool fromAll = all != null && all[t].Count > 0;
+            var fallback = fromAll ? all![t] : _lists[t];
+            string from = fromAll ? $"{L2Capsules.MonsterName(Rom!, WishOwner)}'s list for all its forms" : "the game's list";
+            WishNote = shown[t].Count > 0 ? "" :
+                $"Empty: at this tier it asks for an item of {from}: " + (fallback.Count == 0 ? "(empty)" : string.Join(", ", fallback.Take(6).Select(ItemName)) + (fallback.Count > 6 ? ", ..." : "")) + ".";
+            return;
+        }
         int used = _lists.Sum(l => l.Count);
         string empty = _lists[t].Count > 0 ? "" : "Empty: a monster at this tier asks for the first item of the next list that has items. ";
         WishNote = empty + $"All lists hold {used} item{(used == 1 ? "" : "s")}; " +
                    (used <= L2CapsuleFeed.OriginalCapacity ? $"up to {L2CapsuleFeed.OriginalCapacity} fit where the game keeps them, more go to the added space." : "more than the game's room, so they are kept in the added space.");
     }
 
+    private string ItemName(int i) => i >= 0 && i < _items.Count ? _items[i].Name : $"item {i:X3}";
+
     partial void OnWishTierChanged(int value)
     {
         if (Rom == null || _lists.Length == 0) return;
         bool l = _feedLoading; _feedLoading = true;
         try { ShowWishList(); } finally { _feedLoading = l; }
+    }
+
+    partial void OnWishOwnerChanged(int value)
+    {
+        if (Rom == null || _lists.Length == 0 || _feedLoading) return;
+        _feedLoading = true;
+        try { WishForm = 0; ShowWishOwner(); } finally { _feedLoading = false; }
+    }
+
+    partial void OnWishFormChanged(int value)
+    {
+        if (Rom == null || _lists.Length == 0 || _feedLoading) return;
+        _feedLoading = true;
+        try { ShowWishOwner(); } finally { _feedLoading = false; }
     }
 
     partial void OnCheckItemChanged(int value) { if (Rom != null && _items.Count > 0) ShowCheck(); }
@@ -145,7 +228,7 @@ public partial class L2CapsulesPage
         {
             string who = L2Capsules.MonsterName(rom, k);
             if (it.Index == L2CapsuleFeed.OwnFruitOf(rom, k)) lines.Add($"{who}'s own fruit: {L2CapsuleFeed.OwnFruitPoints(rom)} point(s) and its pickiness starts again; in its 5th form it turns {who} back to form {L2CapsuleFeed.FruitFormOf(rom, k)}.");
-            if (it.Index == L2CapsuleFeed.Form5FruitOf(rom, k)) lines.Add($"Turns {who} into its 5th form when fed in form {L2CapsuleFeed.FruitFormOf(rom, k)}.");
+            if (it.Index == L2CapsuleFeed.Form5FruitOf(rom, k)) lines.Add($"Turns {who} into its 5th form when fed in form {L2CapsuleFeed.FruitFormOf(rom, k)}, if it can't be fed for points there (form 4, or a form below its highest).");
         }
         if (lines.Count > 0 && (it.Index == L2CapsuleFeed.MagicFruit(rom) || it.Index == L2CapsuleFeed.OwnFruitOf(rom, m)))
         {
@@ -165,17 +248,28 @@ public partial class L2CapsulesPage
             }
         }
         var asked = Enumerable.Range(0, L2CapsuleFeed.Tiers).Where(t => _lists[t].Contains(it.Index)).ToList();
-        lines.Add(asked.Count == 0 ? "No monster asks for it." : $"Asked for at tier{(asked.Count == 1 ? "" : "s")} {string.Join(", ", asked)}.");
+        lines.Add(asked.Count == 0 ? "The game's lists don't have it." : $"In the game's lists at tier{(asked.Count == 1 ? "" : "s")} {string.Join(", ", asked)}.");
+        foreach (var ((om, of), set) in L2CapsuleWishes.ReadAll(rom).OrderBy(k => k.Key))
+        {
+            var own = Enumerable.Range(0, L2CapsuleFeed.Tiers).Where(t => set[t].Contains(it.Index)).ToList();
+            if (own.Count > 0)
+                lines.Add($"In {L2Capsules.MonsterName(rom, om)}'s own lists{(of == 0 ? "" : $" for form {of}")} at tier{(own.Count == 1 ? "" : "s")} {string.Join(", ", own)}.");
+        }
         CheckText = string.Join("\n", lines);
     }
 
     private void Notify(string what)
     {
         Main!.NotifyRomModified("Lufia II: capsule feeding, " + what);
-        var keep = (WishTier, CheckItem);
+        var keep = (WishTier, CheckItem, WishOwner, WishForm);
         LoadFeed();
         _feedLoading = true;
-        try { WishTier = keep.WishTier; CheckItem = keep.CheckItem; ShowWishList(); ShowCheck(); } finally { _feedLoading = false; }
+        try
+        {
+            WishOwner = keep.WishOwner; WishForm = keep.WishForm; WishTier = keep.WishTier; CheckItem = keep.CheckItem;
+            ShowWishOwner(); ShowCheck();
+        }
+        finally { _feedLoading = false; }
     }
 
     private bool CanEditFeed => !_feedLoading && !Loading && Rom != null && Main != null && FeedEditable;
@@ -225,38 +319,74 @@ public partial class L2CapsulesPage
         Notify($"{L2Capsules.MonsterName(Rom!, m)}'s fruits");
     }
 
+    /// <summary>Whose lists the shown ones are, for the Undo list.</summary>
+    private string WishWhose => WishOwner < 0 ? "" : $"{L2Capsules.MonsterName(Rom!, WishOwner)}'s{(WishForm == 0 ? "" : $" form {WishForm}")} own ";
+
+    private bool CanEditWishes => CanEditFeed && (WishOwner < 0 || _wishOwnOk);
+
     private void WriteWishLists(string what)
     {
-        try { L2CapsuleFeed.WriteLists(Rom!, _lists); }
-        catch (Exception e) { WishNote = "Not written: " + e.Message; _lists = L2CapsuleFeed.ReadLists(Rom!); return; }
+        try
+        {
+            if (WishOwner < 0) L2CapsuleFeed.WriteLists(Rom!, _lists);
+            else L2CapsuleWishes.Write(Rom!, WishOwner, WishForm, Shown);
+        }
+        catch (Exception e)
+        {
+            WishNote = "Not written: " + e.Message;
+            _lists = L2CapsuleFeed.ReadLists(Rom!);
+            _own = WishOwner < 0 ? null : L2CapsuleWishes.Read(Rom!, WishOwner, WishForm);
+            return;
+        }
         Notify(what);
     }
 
     private void WishEdited()
     {
-        if (!CanEditFeed) return;
+        if (!CanEditWishes) return;
         int t = WishTier;
-        _lists[t] = WishItems.Select(s => s.Value).ToList();
-        WriteWishLists($"tier {t} wish list");
+        Shown[t] = WishItems.Select(s => s.Value).ToList();
+        WriteWishLists($"{WishWhose}tier {t} wish list");
     }
 
     [RelayCommand]
     private void AddWish()
     {
-        if (!CanEditFeed) return;
+        if (!CanEditWishes) return;
         int t = WishTier;
-        if (_lists[t].Count >= 255) { WishNote = "A list holds up to 255 items."; return; }
-        _lists[t].Add(NewWishItem);
-        WriteWishLists($"tier {t} wish list");
+        if (Shown[t].Count >= 255) { WishNote = "A list holds up to 255 items."; return; }
+        Shown[t].Add(NewWishItem);
+        WriteWishLists($"{WishWhose}tier {t} wish list");
     }
 
     [RelayCommand]
     private void RemoveWish(L2Slot? slot)
     {
-        if (!CanEditFeed || slot == null) return;
+        if (!CanEditWishes || slot == null) return;
         int i = WishItems.IndexOf(slot), t = WishTier;
         if (i < 0) return;
-        _lists[t].RemoveAt(i);
-        WriteWishLists($"tier {t} wish list");
+        Shown[t].RemoveAt(i);
+        WriteWishLists($"{WishWhose}tier {t} wish list");
+    }
+
+    /// <summary>Starts the picked capsule's own lists as a copy of the game's 16 lists.</summary>
+    [RelayCommand]
+    private void CopyGameWishes()
+    {
+        if (!CanEditWishes || WishOwner < 0) return;
+        _own = _lists.Select(l => l.ToList()).ToArray();
+        WriteWishLists($"{WishWhose}wish lists copied from the game's");
+    }
+
+    /// <summary>The picked capsule (form) asks for items of the game's lists again.</summary>
+    [RelayCommand]
+    private void UseGameWishes()
+    {
+        if (!CanEditWishes || WishOwner < 0 || _own == null) return;
+        string whose = WishWhose;
+        _own = null;
+        try { L2CapsuleWishes.Write(Rom!, WishOwner, WishForm, null); }
+        catch (Exception e) { WishNote = "Not written: " + e.Message; return; }
+        Notify($"{whose}wish lists removed (the game's lists again)");
     }
 }

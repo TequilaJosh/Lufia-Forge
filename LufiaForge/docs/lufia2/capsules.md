@@ -420,7 +420,7 @@ Tables in bank $8E (file = 0x70000 + addr - 0x8000):
 | `$8E:E4B6` | 0x764B6 | u16 per monster, form needed for the form-5 fruit (and returned to by the own fruit): 4 2 4 3 2 4 3 |
 | `$8E:E4C4` | 0x764C4 | level when the capsule joins: 8 21 26 42 36 32 15 (`$82:E7C8`) |
 | `$8E:E4CB` | 0x764CB | EXP multipliers (section 1) |
-| `$95:FF16` | 0xAFF16 | per price tier: u16 list offset, u16 count; a random craved item is drawn from it (`$82:C554`) |
+| `$95:FF16` | 0xAFF16 | per price tier: u16 list offset, u16 count; a random craved item is drawn from it (`$82:C554`; each capsule can have its own, see below) |
 
 ### Feeding (checked in the game, 2026-10-27)
 
@@ -486,10 +486,55 @@ Checked in BizHawk (agent test kit `scratchpad\agent_capsule`: a new game on map
 * Form 1 tiers 0-3 = 16, x1: two Daggers give 16 + 16, Jelze becomes Foomy M (form 2), pickiness 4, asks for Buster
   sword. With points 32 and the sparkle limit raised to 32 the game crashed (black screen, then reset).
 * Form 5 (`$82:CC58`): fruit E49A[n] while form == E4B6[n] sets bit 08 of `$11BB[n]`, form := 5; in form 5, own
-  fruit E4A8[n] clears bit 08 and form := E4B6[n].
+  fruit E4A8[n] clears bit 08 and form := E4B6[n]. `$82:CC58` only runs when `$82:CC3C` says the monster can't be
+  fed for points (highest form 4, a form below the highest picked in the capsule menu, or in form 5); where it can be
+  fed, the 5th-form fruit is eaten as an ordinary item (seen in the game: with the fruit set to Dagger and the form to
+  1, Jelze in form 1 ate it for 1 point).
 * Learning (`$82:CD1F`, RTL, battle side): 1/8 chance, random slot 0-2; if record[0x12+slot] != 0 and not yet
   learned, set the bit in `$11CA[n]` and show the name (`$82:C4B3`).
 * Form choice: the capsule menu (`$82:C1B5..C243`) lets the player pick any form up to the highest reached.
+
+More settings checked in BizHawk (2026-10-27, test kit `scratchpad\agent_gaps_cap`, same new game with Jelze):
+* Own fruit and Magic fruit: Jelze's own fruit set to Dagger with 5 points, the Magic fruit set to Frock with 12
+  points: Dagger gives 5 (meter 5, pickiness stays 0), then Frock 12 (meter 17). Fruits leave the wish as it is.
+* Price threshold: tiers 0-3 set to 250 / 300 / 350 / 390, so Dagger and Frock (400 G) are tier 4: each gives the
+  points of tiers 4-7 in form 1 (2), pickiness 4, the wish is drawn from tier 4 (Buster sword).
+* 5th-form fruit: own fruit Dagger with 16 points, forms 1-3 tiers 0-3 = 16 and starting pickiness 0, the 5th-form
+  fruit Frock in form 4: D D (form 2), D D (form 3), F F (form 4, "I'm not hungry" for points), then Frock: Gold Fox
+  (form 5, `$11BB` = 0C), then Dagger (own fruit): Foomy H again (form 4, `$11BB` = 04).
+
+### Each capsule's own wish lists (Lufia Forge hook)
+
+In the game all 7 monsters draw the asked-for item from the 16 shared lists. The draw is the routine at `$82:C554`
+(A = tier; only caller `$82:C593`, the wish of the active capsule `$11A3` in its form `$11A4`):
+
+```
+C554 AND #$00FF / ASL / ASL / TAX     <- hook: JSL block+8 / NOP / NOP (file 0x14554)
+C55A LDA $95FF16,X / PHA / LDA $95FF18,X / JSL $808299 / AND #$00FF / ASL / STA $54 / PLA / CLC / ADC $54 / TAX
+C572 LDA $95FF16,X
+C576 RTS
+```
+
+Lufia Forge (`Core/Lufia2/L2CapsuleWishes.cs`) replaces the first 6 bytes with a JSL into a block in the added space:
+"LFCW", version, u16 room; code at +8; at +0xC0 a directory of 7 monsters x 8 u16 (entry 0 = all its forms, 1-5 = that
+form, 0 = none; addresses in the block's bank); then the sets, each laid out like the game's table (16 x u16 offset from
+the set, u16 count, then the item ids). The code tries the set of the monster's form, then its all-forms set; the first
+whose list for the tier has items gives a random item of it (`JSL $80:8299` as the game does) and the code returns to
+the RTS at `$82:C576` (it changes the JSL's return address to `$82:C575`). With neither it does the 6 bytes it replaced
+and returns to `$82:C558`, so the game draws from the shared lists. It uses DP `$54` as the game does. The game's other
+bytes stay, so the shared lists are edited as before; the hook goes in only when a capsule first gets its own lists, and
+is refused when the 6 bytes or the RTS aren't the US game's.
+
+Capsule monsters page, Items they ask for: "All capsules (the game's lists)" or a capsule, then "All its forms" or form
+1-3 (forms 4 and 5 are never fed for points, so never ask). A tier left empty uses the all-forms list, then the game's.
+Copy the game's lists starts a set as a copy; Use the game's lists removes it.
+
+Checked in BizHawk (2026-10-27): Jelze all forms tier 0 = Frock, Jelze form 2 tier 4 = Dagger, Flash all forms tier 0 =
+Dagger (the game's lists unchanged: tier 0 Long knife, tier 4 Buster sword), made in the Lufia Forge window:
+* Jelze joins: it asks for Frock; two Daggers (16 points each) take it to form 2, pickiness 4, and it asks for Dagger
+  (its form 2 list).
+* Same ROM, Flash joins instead: it asks for Dagger; in form 2 (no list of its own for tier 4) it asks for Buster
+  sword (the game's list).
 
 Graphics: battle sprite = packed file **0x194 + record index** (`$82:CFA7`: `ADC #$0194`, `JSL $80:8E9D`),
 files 0x194-0x1B6 (monster sprites follow at 0x1B6 + 1-based id). Palette: 32 bytes at **`$97:D258` + 0x20 *
@@ -528,6 +573,7 @@ Level up: `$82:CD83` (RTL; stat gains in `$0A38..$0A3E`).
 | `$82:C261` | (RTL) copy record script pointers into the block |
 | `$82:C2AE` | new-game init |
 | `$82:C4B3` | name id of attack slot A (base or learned) |
+| `$82:C554` | draw a wished item of tier A from `$95:FF16` (Lufia Forge hook for own lists) |
 | `$82:C647` | fruit check (CLC with A=0 own fruit, A=1 Magic fruit) |
 | `$82:C683`.. | feed item |
 | `$82:C78E` | evolve |

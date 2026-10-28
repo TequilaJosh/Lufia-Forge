@@ -191,8 +191,21 @@
                         <StackPanel MaxWidth="420" IsEnabled="{Binding FeedEditable}">
                             <TextBlock Text="ITEMS THEY ASK FOR" Style="{StaticResource GdSection}"/>
                             <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,6"
-                                       Text="The menu shows the item a monster wants, drawn at random from the list of its pickiness tier (all 7 monsters share these lists). Feeding it that item multiplies the points; then it picks again."/>
-                            <ComboBox Style="{StaticResource GdCombo}" ItemsSource="{Binding TierOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding WishTier}" MinWidth="300"/>
+                                       Text="The menu shows the item a monster wants, drawn at random from the list of its pickiness tier. In the game all 7 monsters share these lists; a monster (or one of its forms) can have its own. Feeding it that item multiplies the points; then it picks again."/>
+                            <ComboBox Style="{StaticResource GdCombo}" ItemsSource="{Binding WishOwnerOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding WishOwner}" MinWidth="300"
+                                      ToolTip="Whose lists to show and edit"/>
+                            <StackPanel Visibility="{Binding WishOwnShown, Converter={StaticResource BoolToVisibilityConverter}}" Margin="0,4,0,0">
+                                <ComboBox Style="{StaticResource GdCombo}" ItemsSource="{Binding WishFormOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding WishForm}" MinWidth="300"
+                                          ToolTip="Lists for all of its forms, or for one form (only forms 1-3 can be fed)"/>
+                                <TextBlock Text="{Binding WishOwnNote}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                    <Button Content="Copy the game's lists" Style="{StaticResource LufiaButton}" Padding="8,2" Command="{Binding CopyGameWishesCommand}"
+                                            ToolTip="Starts these lists as a copy of the game's 16 lists"/>
+                                    <Button Content="Use the game's lists" Style="{StaticResource LufiaButton}" Padding="8,2" Margin="6,0,0,0" Command="{Binding UseGameWishesCommand}"
+                                            IsEnabled="{Binding WishOwnHas}" ToolTip="Removes these own lists: it asks for items of the game's lists again"/>
+                                </StackPanel>
+                            </StackPanel>
+                            <ComboBox Style="{StaticResource GdCombo}" Margin="0,4,0,0" ItemsSource="{Binding TierOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding WishTier}" MinWidth="300"/>
                             <ItemsControl ItemsSource="{Binding WishItems}" Margin="0,4,0,0">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
@@ -225,7 +238,7 @@
                                 <ComboBox Style="{StaticResource GdCombo}" MinWidth="100" ItemsSource="{Binding FruitForms}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding FruitForm}"/>
                             </UniformGrid>
                             <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,6,0,0"
-                                       Text="Its own fruit gives the points set under Feeding and makes it as picky as when it reached its form. The 5th-form fruit, fed in that form, turns it into its 5th form; its own fruit turns it back to that form."/>
+                                       Text="Its own fruit gives the points set under Feeding and makes it as picky as when it reached its form. The 5th-form fruit, fed in that form, turns it into its 5th form; its own fruit turns it back to that form. The 5th-form fruit only works when the monster can't be fed for points: at form 4, or in a form below its highest picked in the capsule menu (a form it can still be fed in just eats it as an item)."/>
                             <TextBlock Text="WHAT AN ITEM GIVES" Style="{StaticResource GdSection}" Margin="0,14,0,4"/>
                             <ComboBox Style="{StaticResource GdCombo}" Width="300" ItemsSource="{Binding ItemOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding CheckItem}"/>
                             <TextBlock Text="{Binding CheckText}" Style="{StaticResource GdFieldLabel}" TextWrapping="Wrap" Margin="0,6,0,0"/>
