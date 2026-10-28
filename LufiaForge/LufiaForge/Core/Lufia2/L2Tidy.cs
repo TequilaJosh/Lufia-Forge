@@ -115,7 +115,7 @@ public static class L2Tidy
 
     /// <summary>The steps the runner can reach from the first one (in their order): a script read straight on to its
     /// furthest jump can hold bytes no path runs (another script's tail, data), which a copy leaves out.</summary>
-    private static List<L2AiScripts.Step> Reachable(List<L2AiScripts.Step> steps)
+    internal static List<L2AiScripts.Step> Reachable(List<L2AiScripts.Step> steps)
     {
         if (steps.Count == 0) return steps;
         var index = new Dictionary<L2AiScripts.Step, int>(ReferenceEqualityComparer.Instance);
@@ -254,7 +254,7 @@ public static class L2Tidy
     /// starts. It is laid out in pieces that end where a path ends (00, 4F, 43, a "go to"), so nothing runs from one
     /// piece into the next; a piece without jumps reads the same from any record, so one already written (by this or
     /// another script) is used again instead of written twice.</summary>
-    private static int LayOut(RomBuffer w, List<L2AiScripts.Step> steps, int recAt, ref int at, int areaEnd, Dictionary<string, int> pieces)
+    internal static int LayOut(RomBuffer w, List<L2AiScripts.Step> steps, int recAt, ref int at, int areaEnd, Dictionary<string, int> pieces)
     {
         var blocks = new List<(int From, int To)>();
         for (int i = 1, b0 = 0; i <= steps.Count; i++)
@@ -421,7 +421,7 @@ public static class L2Tidy
         return at < 0 ? null : (L2AiScripts.RecordAt(rom, kind, index), at);
     }
 
-    private sealed class Mismatch(string what) : Exception(what);
+    internal sealed class Mismatch(string what) : Exception(what);
 
     private static void Same<T>(T a, T b, string what)
     {
@@ -437,8 +437,11 @@ public static class L2Tidy
     }
 
     /// <summary>Proves the tidied ROM reads like the old one (throws <see cref="Mismatch"/> with what differs).</summary>
-    private static void Prove(RomBuffer old, RomBuffer w, Result res)
+    /// <param name="moved">The records moved to another bank (<see cref="L2NewMonsters.MoveHackBank"/>): the new file
+    /// offset of an old record's byte; every byte of a record (offsets too) must then read the same there.</param>
+    internal static void Prove(RomBuffer old, RomBuffer w, Result res, Func<int, int>? moved = null)
     {
+        int At(int p) => moved == null || p < 0 ? p : moved(p);
         // monsters
         int mn = L2Battle.MonsterCountIn(old), mScripts = 0, mSteps = 0;
         Same(mn, L2Battle.MonsterCountIn(w), "the number of monsters");
@@ -447,17 +450,17 @@ public static class L2Tidy
         {
             var a = L2Battle.ReadMonster(old, i); var b = L2Battle.ReadMonster(w, i);
             string m = $"monster {i:X2} ({a.Name})";
-            Same(a.Offset, b.Offset, m + ": where its record is");
+            Same(At(a.Offset), b.Offset, m + ": where its record is");
             Same((a.Name, a.Level, a.Sprite, a.Palette, a.Hp, a.Mp, a.Atp, a.Dfp), (b.Name, b.Level, b.Sprite, b.Palette, b.Hp, b.Mp, b.Atp, b.Dfp), m + ": its name or stats");
-            Same((a.Agl, a.Int, a.Gut, a.Mgr, a.Exp, a.Gold, a.DropAt, a.DropItem, a.DropChance, a.SameAs, a.Unused),
+            Same((a.Agl, a.Int, a.Gut, a.Mgr, a.Exp, a.Gold, At(a.DropAt), a.DropItem, a.DropChance, a.SameAs, a.Unused),
                  (b.Agl, b.Int, b.Gut, b.Mgr, b.Exp, b.Gold, b.DropAt, b.DropItem, b.DropChance, b.SameAs, b.Unused), m + ": its stats or drop");
             var r = oldRecs[a.Offset];
             Same(Convert.ToHexString(old.ReadBytes(r.At, Math.Min(r.NameLength + 1, L2Battle.MonsterNameLength))),
-                 Convert.ToHexString(w.ReadBytes(r.At, Math.Min(r.NameLength + 1, L2Battle.MonsterNameLength))), m + ": its name");
+                 Convert.ToHexString(w.ReadBytes(At(r.At), Math.Min(r.NameLength + 1, L2Battle.MonsterNameLength))), m + ": its name");
             for (int p = r.At + L2Battle.MonsterNameLength; p < r.End; p++)
             {
-                bool operand = p >= r.At + 0x21 && (p - r.At - 0x21) % 3 != 0 && old.ReadByte(p - (p - r.At - 0x21) % 3) is 7 or 8;
-                if (!operand) Same(old.ReadByte(p), w.ReadByte(p), m + ": its record");
+                bool operand = moved == null && p >= r.At + 0x21 && (p - r.At - 0x21) % 3 != 0 && old.ReadByte(p - (p - r.At - 0x21) % 3) is 7 or 8;
+                if (!operand) Same(old.ReadByte(p), w.ReadByte(At(p)), m + ": its record");
             }
             foreach (var k in new[] { L2AiScripts.Kind.MonsterAttack, L2AiScripts.Kind.MonsterDefense })
             {
