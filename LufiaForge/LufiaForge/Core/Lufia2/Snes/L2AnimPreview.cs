@@ -13,7 +13,9 @@ public static class L2AnimPreview
     /// <summary>Where the monster stands (its feet, centre) in the battle the seed comes from.</summary>
     public const int MonsterX = 144, MonsterFeetY = 104;
 
-    public sealed record Options(int Background = 0, int MonsterSprite = -1, int MonsterPalette = 0, int MaxFrames = 900);
+    /// <summary><paramref name="Hero"/>: the character attacking (0 Maxim ... 6 Lexis), whose script a weapon swing's
+    /// table (op 0F) picks; the seed's attacker is Maxim in party slot 0.</summary>
+    public sealed record Options(int Background = 0, int MonsterSprite = -1, int MonsterPalette = 0, int MaxFrames = 900, int Hero = 0);
 
     /// <summary>Plays animation <paramref name="id"/>: the frames (256 x 224, 0xAARRGGBB) and why it stopped early, if it did.</summary>
     public static (List<uint[]> Frames, string? Problem) Play(RomBuffer rom, int id, Options? o = null)
@@ -40,6 +42,8 @@ public static class L2AnimPreview
             Array.Copy(blob, 0x2000, m.Wram, 0x2800, 0x700);
             Array.Copy(blob, 0x2700, m.Wram, 0x4F00, 0x100);
         }
+        // the attacker's character ($153D + party slot, read by op 0F)
+        if (o.Hero is > 0 and < L2SpellAnims.CharacterTable) m.Wram[0x153D] = (byte)o.Hero;
         p.BattleScreen();
         // the battle background on BG1: map at VRAM word 0, tiles from tile $100 of the characters at word $2000
         if (o.Background >= 0 && o.Background < L2Gfx.BgCount)
