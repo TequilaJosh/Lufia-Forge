@@ -16,11 +16,7 @@ public partial class ItemEditorViewModel
     public static HashSet<int> ReferencedItems(RomBuffer rom)
     {
         var set = new HashSet<int>();
-        for (int s = 0; s < GameDataOffsets.ShopCount; s++)
-        {
-            int p = rom.ReadUInt16Le(GameDataOffsets.ShopPointerTable + s * 2) + 1;
-            for (int k = 0; k < 64 && p < rom.Length && rom.ReadByte(p) != 0; k++, p++) set.Add(rom.ReadByte(p));
-        }
+        foreach (int s in ShopTable.Ids(rom)) set.UnionWith(ShopTable.Read(rom, s).Items);
         for (int m = 0, n = MonsterTable.Count(rom); m < n; m++) set.Add(rom.ReadByte(MonsterTable.RecordOffset(rom, m) + 32));
         foreach (var map in MapCatalog.Scan(rom))
         {

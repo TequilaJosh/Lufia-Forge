@@ -39,6 +39,8 @@ public partial class Lufia2ViewModel : ObservableObject
         Maps.OpenEventRequested += (map, head, id) => { Events.ShowEvent(map, head, id); ShowPage?.Invoke("Events"); };
         // the Maps tab's battle zone list: "Monsters..." shows the zone on the Encounters page
         Maps.OpenZoneRequested += zone => { Encounters.ShowZone(zone); ShowPage?.Invoke("Encounters"); };
+        // a monster added on the Monsters page: the Encounters page offers it
+        Monsters.MonstersChanged += () => Encounters.RefreshMonsters();
     }
 
     public void SetRom(RomBuffer rom, MainViewModel main)

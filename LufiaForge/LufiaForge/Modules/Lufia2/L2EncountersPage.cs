@@ -133,6 +133,18 @@ public partial class L2EncountersPage : ObservableObject
         }
         SelectedGroup = -1; SelectedGroup = 0;
         SelectedZone = -1; SelectedZone = 1;
+        InitStory();
+    }
+
+    /// <summary>After monsters were added or renamed on the Monsters page: the lists offer them (the picks are kept).</summary>
+    public void RefreshMonsters()
+    {
+        if (_rom == null || _main == null) return;
+        int g = SelectedGroup, z = SelectedZone, st = SelectedStory;
+        SetRom(_rom, _main);
+        SelectedGroup = -1; SelectedGroup = g;
+        SelectedZone = -1; SelectedZone = z;
+        SelectedStory = -1; SelectedStory = st;
     }
 
     private static BitmapSource Bitmap(int w, int h, uint[] px)
