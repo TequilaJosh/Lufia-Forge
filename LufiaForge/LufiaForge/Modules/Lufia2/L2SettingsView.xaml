@@ -45,6 +45,14 @@
                         <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,6,0,0" Text="8 MB adds 4 MB for new cutscenes and events (about 2 MB), map sprites and map characters' lists (about 2 MB). The game itself doesn't move. It plays in Snes9x, bsnes and BizHawk's BSNESv115+ core; BizHawk's older BSNES core can't run an 8 MB ROM."/>
                     </StackPanel>
                 </Border>
+                <Border Style="{StaticResource GdCard}">
+                    <StackPanel Width="330">
+                        <TextBlock Text="HACK DATA" Style="{StaticResource GdSection}"/>
+                        <TextBlock Text="{Binding TidyText}" Style="{StaticResource GdHint}" TextWrapping="Wrap"/>
+                        <Button Content="Tidy the hack's data..." Command="{Binding TidyCommand}" Padding="18,4" Margin="0,8,0,0" HorizontalAlignment="Left"/>
+                        <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,6,0,0" Text="Some hacks (Spekkio, Kureji Lufia) keep monster battle scripts in the unused end of other monsters' names, and spell scripts in the spell table's spare entries. Tidying moves them to space of their own and points the game there, after checking on a copy that every monster, script, item, spell, IP attack, description and shop reads the same. One step: Edit, Undo takes it back."/>
+                    </StackPanel>
+                </Border>
             </WrapPanel>
         </StackPanel>
     </ScrollViewer>

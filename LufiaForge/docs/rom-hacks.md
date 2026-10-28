@@ -61,7 +61,7 @@ L2Rom.InBank).
 What Lufia Forge does with them:
 - Monsters: the list has every entry of the table (L2Battle.MonsterCountIn); placeholder slots show as "(unused slot)", ids
   that share a record as "(= XX)", and the page says when an edit changes several ids. A name may grow only up to the first
-  byte a battle script uses (L2Battle.NameRoom), and keeps the hack's 00 ending; stats, drops and scripts are read and
+  byte a battle script uses (L2Battle.NameRoom; 13 letters once the data is tidied, below), and keeps the hack's 00 ending; stats, drops and scripts are read and
   written in place. Battle scripts are read in the record's bank, following every jump (also back before the record, into
   other records and into the spell table's spare space).
 - Shops: the table's real length (L2Shops.CountIn), so the added shops show and edit and nothing past the table is read
@@ -94,9 +94,75 @@ Spekkio's falls to one hit and gives Maxim 500 EXP. Spekkio's added shop 41 and 
 first item changed to Hi-Potion. In the window, a Spekkio project lists 256 monsters (the 21 placeholders as unused
 slots) and 62 shops, and an edit of monster E0 on the page reaches the ROM.
 
-Not done: a "tidy the hack's data" action. The hacks' scripts sit inside other records (name fields, the spell table's
-spare entries) and are shared between monsters, so packing them elsewhere would mean changing the game's own offsets in
-many records; it isn't needed to read or edit them, so it was left out.
+### Tidy the hack's data (Lufia II > Settings > HACK DATA)
+
+The hacks' scripts sit inside other records: monster scripts in the unused end of other monsters' name fields (and a
+few inside a record's own bytes), spell scripts running on into the spell table's spare entries. Lufia Forge reads and
+edits them there, but a name can't grow over a script and the data is hard to take apart. "Tidy the hack's data..."
+moves them to space of their own (Core/Lufia2/L2Tidy.cs):
+
+- Monster scripts: a script's u16 offset is added to its record in the record's bank, so a moved script has to stay in
+  bank $D0, and that bank is full but for one empty run: the zeros between the monster attack names (the hacks moved
+  them to $D0:8000) and the monster table at $D0:A000 ($D0:8E35-$D0:9FFF, 4,555 bytes, in Spekkio; $D0:8EC6-, 4,410
+  bytes, in Kureji). The run has to be at least 4 KB, the rule Lufia Forge's added space follows; 16 bytes are left at
+  each end. The monster table and the records stay where they are (the hacks' own code reads them at $D0:A000), so
+  only the scripts move. Every script whose bytes (as Lufia Forge reads it) touch a name
+  field or a record is laid out again for its own record: only the steps a path reaches, in pieces that end where a
+  path ends, a piece without jumps written once for every script that ends with it (it reads the same from any
+  record). The record's tag 07 / 08 offset is rewritten (it wraps round the bank, as the hacks' own offsets do). Name
+  bytes no script uses any more are set to 00.
+- Spell scripts: the spells move to Lufia Forge's spell block with each script right after its spell, the same move
+  as adding a spell (L2Magic.Install: the IP attacks, IP effects and descriptions move too). The old spell table is
+  no longer read.
+
+Nothing is written before the tidied ROM, built in memory, is proven to read the same:
+- every monster: name, stats, drop, the record's bytes (but the rewritten offsets), and both scripts, the old and the
+  new walked side by side from their bytes on every path (L2Tidy.SameRun: each pair of steps has the same command and
+  arguments and goes on to pairs that do too, a "go to" counted as the step it leads to). A test that changed one
+  byte of a moved script at random, 180 times, was caught every time;
+- every capsule monster form, item, spell (with its animation), IP attack and IP effect with its scripts, every
+  description (by the number the game asks for), every shop and the monster attack names;
+- every byte that changed is a moved script's new place, a rewritten offset, a cleared name byte, or (spells) one of
+  the code places the spell move changes, the descriptions' old space, or Lufia Forge's added space.
+
+Anything else refuses with what would differ. A script that can't be read, or jumps into the middle of a step, stays
+where it is (the page says so). It is one Undo step; the card on the Settings page says what tidying would do before
+anything changes, and the confirmation shows the whole preview.
+
+| | Frue | Spekkio | Kureji | Foomy | US game |
+|---|---|---|---|---|---|
+| Monster scripts moved | 1 (Egg Dragon's when-hit script ran into its own record) | 30 of 23 records | 21 of 20 records | 1 (as Frue) | nothing to tidy |
+| Bytes written in that run | 69 | 4,446 of 4,512 free | 4,169 of 4,368 free | 69 | |
+| Name bytes cleared | 0 | 321 | 435 | 0 | |
+| Monster names that can have 13 letters again | 0 | 60 (were 3 to 9) | 79 (were 3 to 8) | 0 | |
+| Spell scripts | Strong, Stronger, Champion, Rally, Valor | same | same | same | |
+| Scripts checked step by step | 393 monster (3,658 steps), 70 capsule, 204 item, 40 spell, 141 IP effect | 414 monster (4,919 steps) and the rest | 415 monster (5,290 steps) and the rest | 393 monster and the rest | |
+
+A second tidy of a tidied ROM finds nothing to do. The console check above reads all four tidied ROMs with 0 problems,
+and no page is locked by it.
+
+Checked in the window: a Spekkio project shows the card ("30 monster scripts (4446 bytes) sit in name fields... Tidying
+lets 60 monster names have 13 letters again"); tidying gives the same bytes as a tidy made outside the window, is one
+Undo step (Undo gives back the hack's bytes exactly, Redo tidies again), the button is off afterwards, and on the
+Monsters page Amon (EA), whose name could have 4 letters, takes "Amon of Doom!". The same with a Kureji project (79
+names; Amon E3 takes "Amon of Doom!").
+
+Checked in the game (BizHawk, the opening changed to start a script battle, Maxim's HP kept full so the monsters get
+many turns, the same buttons in both runs, the hack against the tidied hack): the battle script runner is called the
+same number of times on the same frames with the same records (the spells' records sit in Lufia Forge's spell block
+after tidying, so a spell's base differs, as expected), and every screenshot (every 10 frames, 511 a battle) is
+identical:
+
+| | battle | monster turns compared |
+|---|---|---|
+| Spekkio | 16 Egg Dragon (its 1,885-byte script moved), 1F Gades, 20 Amon, 25 Amon | 19, 18, 15, 17 |
+| Spekkio | three Web Spiders, three Red Jellies, three No Cores (battle 16 changed to them, ATP and INT 1 in both ROMs) | 27, 9, 5 |
+| Kureji | 22 Amon, 23 Erim, 24 Daos, 25 Egg Dragon (the battle ends after their first action) | 1 each |
+| Kureji | three Lizard Men, three Money Spiders, three Snow Cockas | 17, 30, 23 |
+
+With Amon renamed "Amon of Doom!" on the tidied ROM (Spekkio EA, Kureji E3) the battle runs the same and the name shows
+in full in the target box.
+
 
 ## Free space
 

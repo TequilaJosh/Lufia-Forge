@@ -192,6 +192,10 @@ public static class L2Descriptions
         return null;
     }
 
+    /// <summary>The bytes of the game's code <see cref="Move"/> changes (file offset, length).</summary>
+    internal static IEnumerable<(int At, int Length)> CodeSites() =>
+        new[] { (MapSite, MapOriginal.Length) }.Concat(ReadSites.Select(s => (s + 1, 3)));
+
     /// <summary>Whether the descriptions can be moved (the reading code is still the game's).</summary>
     public static bool CanMove(RomBuffer rom)
     {

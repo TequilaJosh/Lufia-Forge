@@ -604,6 +604,9 @@ public static class L2AiScripts
 
     public static bool IsInstalled(RomBuffer rom) => Block(rom) >= 0;
 
+    /// <summary>The script block's bytes (file offset, length), or null when it isn't in the ROM.</summary>
+    internal static (int At, int Length)? BlockRange(RomBuffer rom) => Block(rom) is var b && b >= 0 ? (b, BlockSize) : null;
+
     private static int Version(RomBuffer rom, int block) => rom.ReadByte(block + Magic.Length);
 
     /// <summary>Whether the hooks can go in (the four places still have the game's code).</summary>
