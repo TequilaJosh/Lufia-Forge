@@ -102,14 +102,51 @@
             <TextBlock DockPanel.Dock="Top" Text="{Binding CutsceneInfo}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="8,0,8,6"/>
             <WrapPanel DockPanel.Dock="Top" Margin="8,0,8,6">
                 <Button Content="&#9654; Play / &#9632; Stop" Style="{StaticResource LufiaButtonGold}" Padding="10,3" Margin="0,0,6,4" Command="{Binding PlayCommand}"
-                        ToolTip="Plays the cutscene on the stage, roughly as the game does (jumps and checks aren't followed)"/>
+                        ToolTip="Plays the cutscene on the stage, roughly as the game does: checks and jumps are followed with the story flags set below"/>
                 <Button Content="&#9664;" Style="{StaticResource LufiaButton}" Padding="8,3" Margin="0,0,4,4" Command="{Binding PrevBeatCommand}" ToolTip="The step before"/>
                 <Button Content="&#9654;" Style="{StaticResource LufiaButton}" Padding="8,3" Margin="0,0,10,4" Command="{Binding NextBeatCommand}" ToolTip="The next step"/>
                 <TextBlock Text="Zoom" Style="{StaticResource GdHint}" VerticalAlignment="Center" Margin="0,0,4,4"/>
                 <Slider Minimum="0.5" Maximum="4" Value="{Binding Zoom}" Width="110" VerticalAlignment="Center" Margin="0,0,10,4" TickFrequency="0.5" IsSnapToTickEnabled="True"/>
                 <TextBlock Text="{Binding Caption}" Foreground="{StaticResource GoldLightBrush}" VerticalAlignment="Center" Margin="0,0,0,4"/>
             </WrapPanel>
+            <!-- what playback starts with: the story flags and counters the cutscene checks -->
+            <Border DockPanel.Dock="Top" Margin="8,0,8,6" Padding="8,4" BorderBrush="#40E8C547" BorderThickness="1" CornerRadius="3"
+                    Visibility="{Binding HasStartFlags, Converter={StaticResource BoolToVisibilityConverter}}">
+                <StackPanel>
+                    <TextBlock Text="PLAYBACK STARTS WITH (what the cutscene checks)" Style="{StaticResource GdSection}" Margin="0,0,0,2"/>
+                    <ItemsControl ItemsSource="{Binding StartFlags}">
+                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,14,2">
+                                    <CheckBox Content="{Binding Label}" IsChecked="{Binding IsOn}" VerticalAlignment="Center">
+                                        <CheckBox.Style>
+                                            <Style TargetType="CheckBox" BasedOn="{StaticResource GdCheck}">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsCounter}" Value="True"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </CheckBox.Style>
+                                    </CheckBox>
+                                    <StackPanel Orientation="Horizontal" Visibility="{Binding IsCounter, Converter={StaticResource BoolToVisibilityConverter}}">
+                                        <TextBlock Text="{Binding Label}" Style="{StaticResource GdHint}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                        <TextBox Style="{StaticResource GdNumber}" Text="{Binding Value}" Width="44"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <StackPanel Orientation="Horizontal" Visibility="{Binding HasQuestion, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <TextBlock Text="Questions take" Style="{StaticResource GdHint}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                        <ComboBox Style="{StaticResource GdCombo}" ItemsSource="{Binding AnswerChoices}" SelectedItem="{Binding PlayAnswer}" DisplayMemberPath="Label" Width="100"/>
+                    </StackPanel>
+                    <TextBlock Text="{Binding FlowNote}" Style="{StaticResource GdHint}" TextWrapping="Wrap"/>
+                </StackPanel>
+            </Border>
             <TextBlock DockPanel.Dock="Bottom" Text="{Binding Status}" Style="{StaticResource GdHint}" Foreground="{StaticResource GoldLightBrush}" TextWrapping="Wrap" Margin="8,6,8,0"/>
+            <TextBlock DockPanel.Dock="Bottom" Text="{Binding FlagsNow}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="8,4,8,0"/>
+            <TextBlock DockPanel.Dock="Bottom" Text="{Binding WarningText}" Foreground="#FFFF6060" TextWrapping="Wrap" Margin="8,4,8,0"
+                       Visibility="{Binding HasWarning, Converter={StaticResource BoolToVisibilityConverter}}"/>
             <!-- the text box of the step, as in the game -->
             <Border DockPanel.Dock="Bottom" Margin="8,6,8,0" Padding="10,6" CornerRadius="4" Background="#E01A2470" BorderBrush="White" BorderThickness="2"
                     Visibility="{Binding HasSpeech, Converter={StaticResource BoolToVisibilityConverter}}">
@@ -160,6 +197,12 @@
                                 <SolidColorBrush Color="Black" Opacity="{Binding Darkness}"/>
                             </Rectangle.Fill>
                         </Rectangle>
+                        <!-- the tile a walk hits (a wall, another character) -->
+                        <Grid Width="16" Height="16" Canvas.Left="{Binding WarnLeft}" Canvas.Top="{Binding WarnTop}"
+                              Visibility="{Binding HasWarning, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <Rectangle Stroke="#FFFF3030" StrokeThickness="2" Fill="#50FF3030"/>
+                            <TextBlock Text="!" Foreground="White" FontWeight="Bold" FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Grid>
                     </Canvas>
                 </Grid>
             </ScrollViewer>
@@ -216,7 +259,7 @@
                          HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
-                            <Grid Margin="0,2">
+                            <Grid Margin="0,2" Opacity="{Binding Dim}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="30"/>
                                     <ColumnDefinition Width="20"/>
@@ -228,6 +271,10 @@
                                     <TextBlock Text="{Binding Sentence}" Foreground="{StaticResource TextPrimaryBrush}" TextWrapping="Wrap"/>
                                     <TextBlock Text="{Binding Detail}" Foreground="{StaticResource GoldLightBrush}" FontStyle="Italic" TextWrapping="Wrap"
                                                Visibility="{Binding HasDetail, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                    <TextBlock Text="{Binding Flow}" Foreground="#FF8CC8FF" TextWrapping="Wrap" FontSize="11"
+                                               Visibility="{Binding HasFlow, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                    <TextBlock Text="{Binding Warning}" Foreground="#FFFF6060" TextWrapping="Wrap" FontSize="11"
+                                               Visibility="{Binding HasWarning, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                 </StackPanel>
                             </Grid>
                         </DataTemplate>
@@ -242,6 +289,24 @@
                     <StackPanel IsEnabled="{Binding CanEdit}">
                         <TextBlock Text="{Binding BeatTitle}" Style="{StaticResource GdSection}"/>
                         <TextBlock Text="{Binding BeatHelp}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                        <TextBlock Text="{Binding BeatWarning}" Foreground="#FFFF6060" TextWrapping="Wrap" Margin="0,0,0,6">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding BeatWarning}" Value=""><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        <TextBlock Text="{Binding BeatFlow}" Foreground="#FF8CC8FF" TextWrapping="Wrap" Margin="0,0,0,6">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding BeatFlow}" Value=""><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
                         <StackPanel Visibility="{Binding ShowWho, Converter={StaticResource BoolToVisibilityConverter}}">
                             <TextBlock Text="Who" Style="{StaticResource GdFieldLabel}"/>
                             <ComboBox Style="{StaticResource GdCombo}" ItemsSource="{Binding WhoChoices}" SelectedItem="{Binding BeatWho}" DisplayMemberPath="Label" HorizontalAlignment="Stretch" Width="Auto"/>

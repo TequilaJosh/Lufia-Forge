@@ -17,23 +17,61 @@ Code: `Core/Lufia2/L2Cutscene.cs` (steps, the stage, new cutscenes, cutscene cha
    screen shows.
 2. **Pick a cutscene** of the map (its scenes, talking to its characters, its step-on areas), or make one with
    **New cutscene** (section 3). The steps show on the right, as a timeline.
-3. **Click a step** to see the stage after it: who stands where (a gold frame marks who moved in that step, a small
-   arrow where they face), the camera's box, the screen dark after a fade, and the text box of a line.
+3. **Click a step** to see the stage after it: who stands where (a gold frame marks who moved in that step), each
+   character drawn facing the way it faces (section 5), the camera's box, the screen dark after a fade, the text box
+   of a line, and the story flags on at that point.
 4. **Add a step** with the buttons above the timeline; it goes below the picked step. Change it in the box under the
    timeline. Many steps take a place from a click on the map:
    * *Appears* and *Camera*: the clicked tile.
    * *Walks*: click a tile in the same row or column as the character: the direction and the number of tiles follow.
    * *Faces*: click a tile in the direction it should face.
-5. **Play** runs the cutscene on the stage, roughly at the game's speed (lines stay up long enough to read). The arrows
-   step one step back or on. Up / down move a step, Delete takes it out, Undo takes back the last change.
+5. **Play** runs the cutscene on the stage, roughly at the game's speed (lines stay up long enough to read): it goes
+   the way the game would (section 1.1), and walks are drawn tile by tile in the sprites' walking frames (characters
+   walking together move at once). The arrows step one step back or on. Up / down move a step, Delete takes it out,
+   Undo takes back the last change.
 6. **Save** writes the cutscene into the ROM (Edit > Undo takes it back). Revert drops what isn't saved.
 7. **Test in the game**: a new game starts on this map with the party on the point picked. A scene plays at once;
    for a step-on area walk onto it, for a talk cutscene talk to the character. Export the ROM and start a new game.
    **Normal start** puts the game's own opening back (do this before sharing the game).
 
 Steps the page doesn't edit (checks, jumps and the other commands of events.md) show as they are with "(change it on
-the Events page)"; they stay where they are and can be moved or deleted. Playback doesn't follow jumps: it reads the
-steps top to bottom.
+the Events page)"; they stay where they are and can be moved or deleted.
+
+### 1.1 Checks and jumps in playback
+
+Playback runs the steps the way the game does, from the first one, and follows checks and jumps:
+
+* **Playback starts with** (above the stage) lists the story flags and counters the cutscene checks, with "the
+  cutscene has played" on its plays-once flag. Tick the flags that are on as the cutscene starts (they are kept while
+  the page is open, for every cutscene that checks them) and type the counters. Steps turn flags on and off (`1A`,
+  `1B`) and set counters (`1D`, `1E`, `1F`) as playback goes, and later checks see that.
+* A check or jump step says in blue where playback went and why ("story flag EF is off: goes on to step 2", "story flag
+  17 is on: goes to step 9"). Steps playback doesn't reach are greyed out and say so; clicking one shows the stage as
+  if the steps were read top to bottom.
+* What is followed: `15` / `6A` (if a flag is on / off), `1C` (go to), `14` (checks of story flags and counters, joined
+  with or / and; checks of items, HP, MP, spells, levels, facing and beaten monsters can't be known on the stage and
+  count as "not so"), `12` (a counter picks the next of several steps, and goes up by one), and questions (`10`: the
+  answer picked in "Questions take", answer 1 at first). Playback stops at the end of the event, at a jump out of it,
+  and after 3000 commands (a loop).
+* Under the stage: the story flags on and the counters at the picked step.
+
+### 1.2 Walks that the game stops
+
+A step of a walk (`A3 who 00-03`) is checked against what the stage knows at that point, and a step the game refuses
+stops the character there on the stage (later steps start from where it stopped). The step gets a red warning in the
+timeline and in the box under it, and the stage marks the tile it hits with a red box ("Character 14 can't walk up
+from (33, 28): a wall is in the way, so the game stops the walk there"). What stops a step:
+
+* the map's collision (the upper layer's block flags, as the Maps page's Collision tool paints them): a block that can't
+  be walked on (80), a wall on the top edge (04: no step up out of the block or down into it) or on the left edge (08:
+  no step left out of it or right into it), and the edge of the map;
+* another character standing on the tile (shown at that step), unless it steps away in the same round (two characters
+  walking together in a line);
+* the character's walk area: a character standing on the map from the start (a character start, map info +10) can't
+  step out of its walk area (bytes 3-6). Cutscene characters (hidden as the map is shown) are left out of this check:
+  they walked out of a one-tile area in the game. The page gives new characters the whole map as their area.
+
+The stage doesn't know where wandering characters have gone, or where the party members behind the leader stand.
 
 ## 2. The steps and the commands they are made of
 
@@ -41,8 +79,8 @@ steps top to bottom.
 |---|---|---|
 | A character appears (on a tile, in a flash) | `2D who` (show), `2F who x y` (put), then `A3 who 86` + `89 who` for the flash | Shown first, then put: see section 5. Without a tile only `2D`. |
 | A character leaves (in a flash) | `2E who` / `99 who` | |
-| Walks n tiles (with a second character) | n times `A3 a d` (`A3 b d`) `89 a` (`89 b`), d = 00 up, 01 down, 02 left, 03 right | Each tile waits for the step to end. Walls and other characters stop a walk: keep the way clear. The game's "walk through anything" actions (94-97) face the wrong way (Jeros' Story), so they aren't used. |
-| Faces | `7A who frame` (frame 04 up, 00 down, 02 left, 06 right) | `31` (turn) showed characters facing down in the game, `7A` works. |
+| Walks n tiles (with a second character) | n times `A3 a d` (`A3 b d`) `89 a` (`89 b`), d = 00 up, 01 down, 02 left, 03 right | Each tile waits for the step to end. Walls, other characters and the walk area stop a walk: the page warns (section 1.2). The game's "walk through anything" actions (94-97) face the wrong way (Jeros' Story), so they aren't used. |
+| Faces | `7A who frame` (frame 04 up, 00 down, 02 left, 06 right) | `31` (turn) showed characters facing down in the game, `7A` works. The stage draws the sprite's own picture for the facing (section 5). |
 | Acts | `A3 who action` + `89 who` | A list of actions that end (hop in surprise, collapse, hold up an item, step back, hop a tile, gestures, vanish / appear in a flash...). Actions that keep going (tremble, shake) would never end the wait, so they aren't offered. |
 | Says | a text step: `61-67` (a hero), `13 who` (a character), `9E 05` (narration), `08` (the person talked to), then the text, `01` | As in the Events page: Enter = new line, `[Name]`, `[Pause 20]`. |
 | Camera to a tile | `C4 x y` + `41 00 FF` (scroll and wait), or `3A x y` at once | The camera stays there until "camera back". |
@@ -66,7 +104,7 @@ step, so jumps keep working when a step is changed (jumps to a changed step go t
 |---|---|
 | **When the party enters the map** (a story flag can decide) | A scene of the map (event list +4, a free number from 20 up) that shows the leader and fades in, and at the top of the map's "on entering" event (+2 id 01): `15 played -> rest` (skip once played), optionally `6A flag -> rest` / `15 flag -> rest` (only while the story flag is on / off), `1A played`, `16 map scene point`. The map is loaded again with the scene: the party stands on the point picked. |
 | **When the party steps onto an area** | A trigger area (map info +0C) and its event (+8), as the Events page's "Stepping onto an area". The area's first tile comes from a click on the map. |
-| **When the party talks to a character** | A talk event (+6) for one of the map's characters (one that has no talk event yet). |
+| **When the party talks to a character** | A talk event (+6) for one of the map's characters (one that has no talk event yet), or for **a new character on the clicked tile** (the first choice; its sprite is the one picked under Cutscene characters): `68 id sprite` in the start-up script and a character start of its own (standing still, the whole map as its walk area), not hidden, so it stands there from the start. The stage puts the leader below the character. |
 | **When another cutscene sends the party here** | A scene of the map (+4) that shows the leader and fades in: "Go to another map" with its number starts it, and so does a new game (Test in the game). |
 
 "Plays only once" (for areas and talking) checks a story flag no event and no game code uses first ("if it is on, go to
@@ -78,7 +116,7 @@ loaded again). A new cutscene has one line ("...") to start from.
 **Add the character** (with a sprite from the list) makes a character only cutscenes use:
 
 * `68 id sprite` at the top of the map's start-up script, with a character start of its own (map info +10: on the
-  clicked tile, standing still). For a cutscene that plays once (an area or talking, with its story flag) the create is
+  clicked tile, standing still, the whole map as its walk area). For a cutscene that plays once (an area or talking, with its story flag) the create is
   skipped once the flag is on (`15 flag -> past it`), so after the cutscene has played the character is gone the next
   time the map loads.
 * `2E id` (hide) at the top of the map's "when shown" event (+2 id 00), so it stays hidden until an "Appears" step.
@@ -96,6 +134,15 @@ the others only while in the party).
   leave the slot they found in `$A7`, and `$A7` is also the counter `68` makes characters with: the story characters
   the game adds after the start-up script then took the slots of two characters already made (they were gone). The
   cutscene characters are hidden in the "when shown" event instead.
+* **A character's walk area holds its steps.** A character made by `68` with a character start whose walk area was its
+  own tile (x, y to x + 1, y + 1, as the page used to write it), standing on the map from the start, did the "hop in
+  surprise" action and turned (`7A`) in a talk cutscene, but its steps (`A3 who 00-03`) did nothing (the cutscene went
+  on at once); with the whole map as its area it walked. Hiding and showing it, or putting it on its tile (`2F`),
+  before the steps didn't help. Cutscene characters hidden as the map is shown walked out of a one-tile area (the
+  first test on Elcid). The game's own talk events move the person talked to with paths (`33`), not `A3`.
+* **Sprite frames.** Map sprites with six frames (sprite flag 10) hold two each for facing down (0, 1), left (2, 3) and
+  up (4, 5); right is left mirrored. The second of each pair is a walking step. Sprites with two frames (flag 08) only
+  step in place; others have one picture. The stage draws these; sprites without facings get a small arrow.
 * A character made by `68` with no character start of its own worked in the Shrine of Daos (Jeros' Story); the page
   gives each one a start anyway.
 * `16` in the map's "on entering" event loads the map again and runs the scene (checked: the party stood on the point,
@@ -111,10 +158,18 @@ the others only while in the party).
   in a flash; story flag EF was on.
 * The same steps as a scene started by a new game, and as "when the party enters the map" (through the test start's
   own scene, then `16` to the cutscene): both played, flags set.
+* Elcid, through the page (off-screen): "When the party talks to a character", a new character (sprite 0C) on (31, 33),
+  plays once. Steps: a line, hop in surprise, walk 2 tiles right, face up, a line, face right, walk 8 tiles up (the
+  page warned that a wall stops it at (33, 28)). In the game (a new game on point 4) the player walked to (31, 32),
+  faced down and pressed A: the lines showed, the character hopped, walked right, turned, and walked up until the
+  shop's wall stopped it on (33, 28), where the page said; the cutscene ended and the player could move. Story flag EF
+  was on; talking to the character again (from (33, 29)) showed nothing, and the player walked away.
+* Before the walk area fix the same character didn't walk at all (section 5).
 
 ## 7. Not done yet
 
-* Paths (`33`) aren't shown moving on the stage, and playback doesn't follow jumps or checks.
+* Paths (`33`) aren't shown moving on the stage.
 * Story characters (10-4F) other than those a map creates aren't placed on the stage until a step puts them.
-* Sprites are drawn facing the screen (frame 0) with an arrow for the facing.
-* The page doesn't check that a walk's way is clear in the game.
+* Walk checks don't know where wandering characters have moved or where the party members behind the leader stand, and
+  the "walk through anything" and hop actions aren't checked.
+* Checks of items, HP, MP, spells, levels and beaten monsters count as "not so" in playback.

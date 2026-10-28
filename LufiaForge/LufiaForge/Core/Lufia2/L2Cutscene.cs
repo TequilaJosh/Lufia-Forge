@@ -146,12 +146,86 @@ public sealed class L2StageState
     public int Frames { get; set; }
     /// <summary>The actor that moved in this step (-1: none) and where it came from.</summary>
     public int MovedId { get; set; } = -1;
+    /// <summary>The story flags that are on (the ones set at the start, then turned on and off by the steps).</summary>
+    public HashSet<int> Flags { get; } = new();
+    /// <summary>Event counters (variables) that aren't 0.</summary>
+    public Dictionary<int, int> Counters { get; } = new();
+    /// <summary>A walk in this step that the game stops (a wall, another character), and the tile it hits; null: none.</summary>
+    public string? Warning { get; set; }
+    public int WarnX { get; set; } = -1;
+    public int WarnY { get; set; } = -1;
+    /// <summary>A check or a jump, as playback followed it: why it went where it went (null: not a check or jump).</summary>
+    public string? BranchWhy { get; set; }
+    /// <summary>The step index it went to (-1: the event ended, -2: a step outside the event).</summary>
+    public int BranchTo { get; set; } = -1;
+    /// <summary>It jumped (false: went on to the next step).</summary>
+    public bool Jumped { get; set; }
 
     public L2StageState Copy()
     {
         var s = new L2StageState { CameraX = CameraX, CameraY = CameraY, CameraOnLeader = CameraOnLeader, Dark = Dark, Shaking = Shaking, Song = Song };
         foreach (var kv in Actors) s.Actors[kv.Key] = kv.Value.Copy();
+        s.Flags.UnionWith(Flags);
+        foreach (var kv in Counters) s.Counters[kv.Key] = kv.Value;
         return s;
+    }
+}
+
+/// <summary>What the stage knows of the map: its size, collision (the upper layer's cell flags) and preset points.</summary>
+public sealed class L2StageMap
+{
+    public int Width { get; private init; }
+    public int Height { get; private init; }
+    private byte[] _flags = Array.Empty<byte>();
+    public Dictionary<int, (int X, int Y)> Points { get; private init; } = new();
+    /// <summary>The walk area of each character with a character start (map info +10: x1, y1 to x2, y2, the right and
+    /// bottom edges left out): a step out of it is refused in the game.</summary>
+    public Dictionary<int, (int X1, int Y1, int X2, int Y2)> Areas { get; private init; } = new();
+
+    public static L2StageMap Read(RomBuffer rom, int map)
+    {
+        var points = new Dictionary<int, (int, int)>();
+        try { foreach (var p in L2StoryClear.PresetPoints(rom, map)) points.TryAdd(p.Id, (p.X, p.Y)); } catch (Exception) { }
+        var areas = new Dictionary<int, (int, int, int, int)>();
+        try
+        {
+            // characters hidden as the map is shown (cutscene characters) walked out of a one-tile area in the game:
+            // only those standing on the map from the start are kept in
+            var hidden = L2Cutscene.HiddenWhenShown(rom, map);
+            foreach (var (_, b) in L2MapInfo.Records(rom, map, L2MapInfo.Characters, 8))
+                if (!hidden.Contains(0x4F + b[0])) areas.TryAdd(0x4F + b[0], (b[3], b[4], b[5], b[6]));
+        }
+        catch (Exception) { }
+        if (map < 2) return new L2StageMap { Points = points, Areas = areas };   // the world maps: no cell flags
+        try
+        {
+            var m = L2Maps.Read(rom, map);
+            var l = m.Layers.Length > 1 ? m.Layers[1] : m.Layers[0];
+            return new L2StageMap { Width = l.Width, Height = l.Height, _flags = l.Flags, Points = points, Areas = areas };
+        }
+        catch (Exception) { return new L2StageMap { Points = points, Areas = areas }; }
+    }
+
+    /// <summary>Whether a character with a character start may step onto (x, y): inside its walk area (or it has none).</summary>
+    public bool InArea(int id, int x, int y) =>
+        !Areas.TryGetValue(id, out var a) || x >= a.X1 && x < a.X2 && y >= a.Y1 && y < a.Y2;
+
+    private static readonly int[] Dx = { 0, 0, -1, 1 }, Dy = { -1, 1, 0, 0 };
+
+    /// <summary>What stops a step from (x, y) one tile in direction <paramref name="dir"/> (0 up, 1 down, 2 left, 3 right):
+    /// the edge of the map, a block that can't be walked on (flag 80), a wall on the top (04) or left (08) edge of a
+    /// block; null when the way is clear (or the map has no collision here).</summary>
+    public string? Wall(int x, int y, int dir)
+    {
+        if (Width == 0 || _flags.Length < Width * Height) return null;
+        int nx = x + Dx[dir & 3], ny = y + Dy[dir & 3];
+        if (nx < 0 || ny < 0 || nx >= Width || ny >= Height) return "the edge of the map";
+        if (x < 0 || y < 0 || x >= Width || y >= Height) return null;
+        byte from = _flags[y * Width + x], to = _flags[ny * Width + nx];
+        if ((to & 0x80) != 0) return "a wall";
+        if ((dir & 3) == 0 && (from & 0x04) != 0 || (dir & 3) == 1 && (to & 0x04) != 0 || (dir & 3) == 2 && (from & 0x08) != 0 || (dir & 3) == 3 && (to & 0x08) != 0)
+            return "a wall";
+        return null;
     }
 }
 
@@ -363,96 +437,288 @@ public static class L2Cutscene
 
     private static readonly int[] Dx = { 0, 0, -1, 1 }, Dy = { -1, 1, 0, 0 };
 
-    /// <summary>The stage after each step of the script, read top to bottom (jumps aren't followed). Element 0 is the
-    /// stage before the first step; element i + 1 after step i.</summary>
+    /// <summary>The stage after each step of the script, read top to bottom (jumps aren't followed: <see cref="Run"/>
+    /// follows them). Element 0 is the stage before the first step; element i + 1 after step i.</summary>
     public static List<L2StageState> Simulate(RomBuffer rom, int map, L2StageState start, IReadOnlyList<L2Step> steps, Func<int, string> name)
     {
-        var points = L2StoryClear.PresetPoints(rom, map).ToDictionary(p => p.Id, p => (p.X, p.Y));
+        var m = L2StageMap.Read(rom, map);
         var list = new List<L2StageState> { start.Copy() };
         var cur = start.Copy();
-        foreach (var st in steps)
+        for (int i = 0; i < steps.Count; i++)
         {
-            var s = cur.Copy();
-            s.Speaker = null; s.Text = null; s.MovedId = -1;
-            s.Frames = 6;
-            L2StageState.Actor A(int id)
-            {
-                if (!s.Actors.TryGetValue(id, out var a)) s.Actors[id] = a = new L2StageState.Actor { Id = id, Sprite = id < 7 ? id : -1 };
-                return a;
-            }
-            var b = st.Bytes;
-            int op = st.Op;
-            if (st.IsText)
-            {
-                int who = SpeakerActor(b);
-                s.Speaker = op switch { 0x9E => "", 0x08 => "the one talked to", 0x10 => "question", _ => name(who) };
-                s.Text = st.Text;
-                s.Caption = s.Speaker.Length > 0 ? $"{s.Speaker} speaks" : "Narration";
-                s.Frames = 60 + st.Text.Length * 2;
-            }
-            else switch (op)
-            {
-                case 0x2F when b.Length >= 4: { var a = A(b[1]); a.X = b[2]; a.Y = b[3]; s.Caption = $"{name(b[1])} is put on ({b[2]}, {b[3]})"; break; }
-                case 0x30 when b.Length >= 3 && points.TryGetValue(b[2], out var p): { var a = A(b[1]); a.X = p.X; a.Y = p.Y; s.Caption = $"{name(b[1])} is put on point {b[2]}"; break; }
-                case 0x98 when b.Length >= 3: { var a = A(b[1]); if (points.TryGetValue(b[2], out var p2)) { a.X = p2.X; a.Y = p2.Y; } a.Visible = true; s.Caption = $"{name(b[1])} appears"; s.Frames = 30; break; }
-                case 0x2D when b.Length >= 2: A(b[1]).Visible = true; s.Caption = $"{name(b[1])} appears"; break;
-                case 0x2E or 0x99 or 0x9D when b.Length >= 2: A(b[1]).Visible = false; s.Caption = $"{name(b[1])} leaves"; s.Frames = op == 0x2E ? 6 : 30; break;
-                case 0x31 when b.Length >= 3 && b[2] is >= 1 and <= 4: A(b[1]).Dir = new[] { 0, 0, 1, 2, 3 }[b[2]]; s.Caption = $"{name(b[1])} turns"; break;
-                case 0x7A when b.Length >= 3 && b[2] < 8: A(b[1]).Dir = new[] { 1, 2, 0, 3 }[b[2] / 2]; s.Caption = $"{name(b[1])} turns"; break;
-                case 0xA3 when b.Length >= 3:
-                {
-                    var a = A(b[1]);
-                    int act = b[2], d = act & 3;
-                    int move = act switch
-                    {
-                        <= 0x03 or (>= 0x94 and <= 0x97) or (>= 0x74 and <= 0x77) or (>= 0x54 and <= 0x5B) or (>= 0x88 and <= 0x8B) or (>= 0x68 and <= 0x6B) => 1,
-                        >= 0x81 and <= 0x84 => 1,
-                        >= 0x3C and <= 0x3F => 2,
-                        >= 0x50 and <= 0x53 => 6,
-                        _ => 0,
-                    };
-                    if (act is >= 0x81 and <= 0x84) d = act - 0x81;
-                    if (move > 0 && a.Placed) { a.X += Dx[d] * move; a.Y += Dy[d] * move; s.MovedId = a.Id; }
-                    if (act is <= 0x07 or (>= 0x18 and <= 0x1B) or (>= 0x94 and <= 0x97)) a.Dir = d;
-                    if (act is >= 0x81 and <= 0x84) a.Dir = d ^ 1;
-                    if (act is 0x85 or 0x61 or 0x5F or 0x5D or 0x63) a.Visible = false;
-                    if (act is 0x86 or 0x62 or 0x60) a.Visible = true;
-                    s.Caption = move > 0 ? $"{name(b[1])} walks {L2Beat.DirNames[d]}" : $"{name(b[1])}: {L2EventCommands.Actions.FirstOrDefault(x => x.Item1 == act).Item2 ?? $"action {act:X2}"}";
-                    s.Frames = move > 0 ? 16 * move : 24;
-                    break;
-                }
-                case 0x89: s.Frames = 0; s.Caption = ""; break;
-                case 0x3A when b.Length >= 3: s.CameraX = b[1]; s.CameraY = b[2]; s.CameraOnLeader = false; s.Caption = "The camera jumps"; break;
-                case 0xC4 when b.Length >= 3: s.CameraX = b[1]; s.CameraY = b[2]; s.CameraOnLeader = false; s.Caption = "The camera scrolls"; s.Frames = 40; break;
-                case 0x3B when b.Length >= 2 && points.TryGetValue(b[1], out var p3): s.CameraX = p3.X; s.CameraY = p3.Y; s.CameraOnLeader = false; break;
-                case 0x41 when b.Length >= 3:
-                {
-                    int form = L2EventCommands.CameraForm(b);
-                    if (form == 0) { s.CameraOnLeader = true; s.Caption = "The camera goes back to the leader"; s.Frames = 30; }
-                    else if (form == 1) { int d = (b[1] >> 4) - 1; if (d is >= 0 and <= 3) { s.CameraX += Dx[d] * b[2]; s.CameraY += Dy[d] * b[2]; s.CameraOnLeader = false; s.Frames = 30; } }
-                    else if (form == 3 && b.Length >= 4) { s.CameraX = b[2] + 1 + 8; s.CameraY = b[3] + 7; s.CameraOnLeader = false; }
-                    else if (form == 2 && points.TryGetValue(b[2], out var p4)) { s.CameraX = p4.X; s.CameraY = p4.Y; s.CameraOnLeader = false; }
-                    break;
-                }
-                case 0x75: s.CameraOnLeader = true; break;
-                case 0x58: s.Dark = true; s.Caption = "Fade to black"; s.Frames = 30; break;
-                case 0x59 or 0xA4: s.Dark = false; s.Caption = "Fade in"; s.Frames = 30; break;
-                case 0x3E: s.Dark = true; break;
-                case 0x3F: s.Dark = false; break;
-                case 0x6F or 0x4B when b.Length >= 2: s.Song = b[1]; s.Caption = "Music"; break;
-                case 0x72: s.Song = -1; break;
-                case 0x5A: s.Shaking = true; s.Caption = "The screen shakes"; break;
-                case 0x8A or 0x56: s.Shaking = false; break;
-                case 0x37 when b.Length >= 2: s.Frames = b[1]; s.Caption = "Wait"; break;
-                case 0x38 when b.Length >= 2: s.Frames = b[1] * 60; s.Caption = "Wait"; break;
-                case 0x16: s.Caption = "Go to another map"; s.Dark = true; break;
-                case 0x00 or 0x42: s.Caption = "End"; s.Dark = false; s.CameraOnLeader = true; break;
-            }
-            if (s.CameraOnLeader && s.Actors.TryGetValue(0, out var lead) && lead.Placed) { s.CameraX = lead.X; s.CameraY = lead.Y; }
-            list.Add(s);
-            cur = s;
+            cur = Apply(cur, steps, i, m, name);
+            list.Add(cur);
         }
         return list;
+    }
+
+    /// <summary>One step of the script as playback runs it: the step index and the stage after it (with
+    /// <see cref="L2StageState.BranchWhy"/> for checks and jumps).</summary>
+    public sealed record RunStep(int Step, L2StageState After);
+
+    /// <summary>
+    /// Plays the script the way the game would: from the first step, following jumps and checks with the story flags and
+    /// counters of <paramref name="start"/> (and those the steps set on the way). Questions take answer
+    /// <paramref name="answer"/> (0-based). Stops at the end of the event, a step that leaves it, or after
+    /// <paramref name="limit"/> steps (a loop).
+    /// </summary>
+    public static List<RunStep> Run(RomBuffer rom, int map, L2StageState start, IReadOnlyList<L2Step> steps, Func<int, string> name, int answer = 0, int limit = 3000)
+    {
+        var m = L2StageMap.Read(rom, map);
+        var run = new List<RunStep>();
+        var cur = start.Copy();
+        int i = 0;
+        while (i >= 0 && i < steps.Count && run.Count < limit)
+        {
+            cur = Apply(cur, steps, i, m, name);
+            int next = Next(steps, i, cur, answer);
+            run.Add(new RunStep(i, cur));
+            i = next;
+        }
+        return run;
+    }
+
+    /// <summary>Where the event goes after step <paramref name="i"/> (the stage after it given: flags and counters);
+    /// sets the state's branch fields for a check or a jump. -1: it ends.</summary>
+    private static int Next(IReadOnlyList<L2Step> steps, int i, L2StageState s, int answer)
+    {
+        var st = steps[i];
+        var b = st.Bytes;
+        int Target(int k)
+        {
+            if (k >= st.Jumps.Count || st.Jumps[k].Step is not { } t) return -2;
+            for (int q = 0; q < steps.Count; q++) if (ReferenceEquals(steps[q], t)) return q;
+            return -2;
+        }
+        int Go(int k, string why) { s.BranchWhy = why; s.BranchTo = Target(k); s.Jumped = true; return s.BranchTo; }
+        int On(string why) { s.BranchWhy = why; s.BranchTo = i + 1 < steps.Count ? i + 1 : -1; s.Jumped = false; return s.BranchTo; }
+        bool Flag(int f) => s.Flags.Contains(f);
+        int Counter(int c) => s.Counters.TryGetValue(c, out int v) ? v : 0;
+        switch (st.Op)
+        {
+            case 0x10 when st.IsText && b.Length > 1 && b[1] > 0:
+            {
+                int k = Math.Clamp(answer, 0, b[1] - 1);
+                return Go(k, $"answer {k + 1} is picked");
+            }
+            case 0x1C when !st.IsText: return Go(0, "always");
+            case 0x15 when !st.IsText && b.Length >= 2:
+                return Flag(b[1]) ? Go(0, $"story flag {b[1]:X2} is on") : On($"story flag {b[1]:X2} is off");
+            case 0x6A when !st.IsText && b.Length >= 2:
+                return !Flag(b[1]) ? Go(0, $"story flag {b[1]:X2} is off") : On($"story flag {b[1]:X2} is on");
+            case 0x12 when !st.IsText && b.Length >= 3 && b[2] > 0:
+            {
+                int c = Counter(b[1]), k = Math.Min(c, b[2] - 1);
+                s.Counters[b[1]] = Math.Min(255, c + 1);
+                return Go(k, $"counter {b[1]:X2} is {c}: choice {k + 1}");
+            }
+            case 0x14 when !st.IsText:
+            {
+                bool result = false;
+                int jump = 0;
+                var why = new List<string>();
+                foreach (var c in L2Conditions.Parse(b))
+                {
+                    int at = c.At;
+                    int join = c.Code & 0xC0;
+                    bool v;
+                    switch (c.Kind)
+                    {
+                        case L2Conditions.KFlag when at + 1 < b.Length:
+                            v = Flag(b[at + 1]) == ((c.Code & 1) == 0);
+                            why.Add($"story flag {b[at + 1]:X2} is {(Flag(b[at + 1]) ? "on" : "off")}");
+                            break;
+                        case L2Conditions.KCounter when at + 2 < b.Length:
+                        {
+                            int val = Counter(b[at + 1]), w = b[at + 2];
+                            v = (c.Code & 7) switch { 0 => val == w, 1 => val != w, 2 => val >= w, 3 => val <= w, 4 => val > w, _ => val < w };
+                            why.Add($"counter {b[at + 1]:X2} is {val}");
+                            break;
+                        }
+                        case L2Conditions.KIfTrue:
+                            if (result) return Go(jump, string.Join(", ", why) + ": so");
+                            jump++;
+                            continue;
+                        case L2Conditions.KIfFalse:
+                            if (!result) return Go(jump, string.Join(", ", why) + ": not so");
+                            jump++;
+                            continue;
+                        default:
+                            // items, HP, spells, levels...: the stage doesn't know them
+                            v = false; join = 0;
+                            why.Add("a check of the party (taken as not so)");
+                            break;
+                    }
+                    result = join switch { 0x40 => result || v, 0x80 => result && v, _ => v };
+                }
+                return On((why.Count > 0 ? string.Join(", ", why) : "the check") + ": goes on");
+            }
+        }
+        if (st.EndsFlow) return -1;
+        return i + 1;
+    }
+
+    /// <summary>The stage after step <paramref name="i"/> of <paramref name="steps"/>, from <paramref name="cur"/>.</summary>
+    private static L2StageState Apply(L2StageState cur, IReadOnlyList<L2Step> steps, int i, L2StageMap m, Func<int, string> name)
+    {
+        var st = steps[i];
+        var points = m.Points;
+        var s = cur.Copy();
+        s.Speaker = null; s.Text = null; s.MovedId = -1;
+        s.Frames = 6;
+        L2StageState.Actor A(int id)
+        {
+            if (!s.Actors.TryGetValue(id, out var a)) s.Actors[id] = a = new L2StageState.Actor { Id = id, Sprite = id < 7 ? id : -1 };
+            return a;
+        }
+        var b = st.Bytes;
+        int op = st.Op;
+        if (st.IsText)
+        {
+            int who = SpeakerActor(b);
+            s.Speaker = op switch { 0x9E => "", 0x08 => "the one talked to", 0x10 => "question", _ => name(who) };
+            s.Text = st.Text;
+            s.Caption = s.Speaker.Length > 0 ? $"{s.Speaker} speaks" : "Narration";
+            s.Frames = 60 + st.Text.Length * 2;
+        }
+        else switch (op)
+        {
+            case 0x2F when b.Length >= 4: { var a = A(b[1]); a.X = b[2]; a.Y = b[3]; s.Caption = $"{name(b[1])} is put on ({b[2]}, {b[3]})"; break; }
+            case 0x30 when b.Length >= 3 && points.TryGetValue(b[2], out var p): { var a = A(b[1]); a.X = p.X; a.Y = p.Y; s.Caption = $"{name(b[1])} is put on point {b[2]}"; break; }
+            case 0x98 when b.Length >= 3: { var a = A(b[1]); if (points.TryGetValue(b[2], out var p2)) { a.X = p2.X; a.Y = p2.Y; } a.Visible = true; s.Caption = $"{name(b[1])} appears"; s.Frames = 30; break; }
+            case 0x2D when b.Length >= 2: A(b[1]).Visible = true; s.Caption = $"{name(b[1])} appears"; break;
+            case 0x2E or 0x99 or 0x9D when b.Length >= 2: A(b[1]).Visible = false; s.Caption = $"{name(b[1])} leaves"; s.Frames = op == 0x2E ? 6 : 30; break;
+            case 0x31 when b.Length >= 3 && b[2] is >= 1 and <= 4: A(b[1]).Dir = new[] { 0, 0, 1, 2, 3 }[b[2]]; s.Caption = $"{name(b[1])} turns"; break;
+            case 0x7A when b.Length >= 3 && b[2] < 8: A(b[1]).Dir = new[] { 1, 2, 0, 3 }[b[2] / 2]; s.Caption = $"{name(b[1])} turns"; break;
+            case 0xA3 when b.Length >= 3:
+            {
+                var a = A(b[1]);
+                int act = b[2], d = act & 3;
+                int move = act switch
+                {
+                    <= 0x03 or (>= 0x94 and <= 0x97) or (>= 0x74 and <= 0x77) or (>= 0x54 and <= 0x5B) or (>= 0x88 and <= 0x8B) or (>= 0x68 and <= 0x6B) => 1,
+                    >= 0x81 and <= 0x84 => 1,
+                    >= 0x3C and <= 0x3F => 2,
+                    >= 0x50 and <= 0x53 => 6,
+                    _ => 0,
+                };
+                if (act is >= 0x81 and <= 0x84) d = act - 0x81;
+                if (act is <= 0x07 or (>= 0x18 and <= 0x1B) or (>= 0x94 and <= 0x97)) a.Dir = d;
+                if (act is >= 0x81 and <= 0x84) a.Dir = d ^ 1;
+                // a plain step (A3 00-03) stops at walls and other characters, as in the game
+                if (move > 0 && a.Placed && act <= 0x03 && a.Visible)
+                {
+                    string? hit = m.Wall(a.X, a.Y, d);
+                    int nx = a.X + Dx[d], ny = a.Y + Dy[d];
+                    if (hit == null && !m.InArea(a.Id, nx, ny) && m.Areas.TryGetValue(a.Id, out var ar))
+                        hit = $"the edge of its walk area ({ar.X1}, {ar.Y1})-({ar.X2 - 1}, {ar.Y2 - 1}) (its character start on the Maps page)";
+                    if (hit == null)
+                    {
+                        var other = s.Actors.Values.FirstOrDefault(o => o.Id != a.Id && o.Visible && o.X == nx && o.Y == ny && !MovesAway(steps, i, o.Id, d));
+                        if (other != null) hit = name(other.Id);
+                    }
+                    if (hit != null)
+                    {
+                        s.Warning = $"{Cap(name(b[1]))} can't walk {L2Beat.DirNames[d]} from ({a.X}, {a.Y}): {hit} is in the way, so the game stops the walk there.";
+                        s.WarnX = nx; s.WarnY = ny;
+                        move = 0;
+                    }
+                }
+                if (move > 0 && a.Placed) { a.X += Dx[d] * move; a.Y += Dy[d] * move; s.MovedId = a.Id; }
+                if (act is 0x85 or 0x61 or 0x5F or 0x5D or 0x63) a.Visible = false;
+                if (act is 0x86 or 0x62 or 0x60) a.Visible = true;
+                s.Caption = s.Warning != null ? $"{name(b[1])} is stopped" : move > 0 ? $"{name(b[1])} walks {L2Beat.DirNames[d]}" : $"{name(b[1])}: {L2EventCommands.Actions.FirstOrDefault(x => x.Item1 == act).Item2 ?? $"action {act:X2}"}";
+                s.Frames = move > 0 ? 16 * move : 24;
+                break;
+            }
+            case 0x89: s.Frames = 0; s.Caption = ""; break;
+            case 0x3A when b.Length >= 3: s.CameraX = b[1]; s.CameraY = b[2]; s.CameraOnLeader = false; s.Caption = "The camera jumps"; break;
+            case 0xC4 when b.Length >= 3: s.CameraX = b[1]; s.CameraY = b[2]; s.CameraOnLeader = false; s.Caption = "The camera scrolls"; s.Frames = 40; break;
+            case 0x3B when b.Length >= 2 && points.TryGetValue(b[1], out var p3): s.CameraX = p3.X; s.CameraY = p3.Y; s.CameraOnLeader = false; break;
+            case 0x41 when b.Length >= 3:
+            {
+                int form = L2EventCommands.CameraForm(b);
+                if (form == 0) { s.CameraOnLeader = true; s.Caption = "The camera goes back to the leader"; s.Frames = 30; }
+                else if (form == 1) { int d = (b[1] >> 4) - 1; if (d is >= 0 and <= 3) { s.CameraX += Dx[d] * b[2]; s.CameraY += Dy[d] * b[2]; s.CameraOnLeader = false; s.Frames = 30; } }
+                else if (form == 3 && b.Length >= 4) { s.CameraX = b[2] + 1 + 8; s.CameraY = b[3] + 7; s.CameraOnLeader = false; }
+                else if (form == 2 && points.TryGetValue(b[2], out var p4)) { s.CameraX = p4.X; s.CameraY = p4.Y; s.CameraOnLeader = false; }
+                break;
+            }
+            case 0x75: s.CameraOnLeader = true; break;
+            case 0x58: s.Dark = true; s.Caption = "Fade to black"; s.Frames = 30; break;
+            case 0x59 or 0xA4: s.Dark = false; s.Caption = "Fade in"; s.Frames = 30; break;
+            case 0x3E: s.Dark = true; break;
+            case 0x3F: s.Dark = false; break;
+            case 0x6F or 0x4B when b.Length >= 2: s.Song = b[1]; s.Caption = "Music"; break;
+            case 0x72: s.Song = -1; break;
+            case 0x5A: s.Shaking = true; s.Caption = "The screen shakes"; break;
+            case 0x8A or 0x56: s.Shaking = false; break;
+            case 0x37 when b.Length >= 2: s.Frames = b[1]; s.Caption = "Wait"; break;
+            case 0x38 when b.Length >= 2: s.Frames = b[1] * 60; s.Caption = "Wait"; break;
+            case 0x1A when b.Length >= 2: s.Flags.Add(b[1]); s.Caption = $"Story flag {b[1]:X2} on"; break;
+            case 0x1B when b.Length >= 2: s.Flags.Remove(b[1]); s.Caption = $"Story flag {b[1]:X2} off"; break;
+            case 0x1D when b.Length >= 3: s.Counters[b[1]] = b[2]; s.Caption = $"Counter {b[1]:X2} = {b[2]}"; break;
+            case 0x1E when b.Length >= 3: s.Counters[b[1]] = Math.Min(255, (s.Counters.TryGetValue(b[1], out int c1) ? c1 : 0) + b[2]); s.Caption = $"Counter {b[1]:X2} + {b[2]}"; break;
+            case 0x1F when b.Length >= 3: s.Counters[b[1]] = Math.Max(0, (s.Counters.TryGetValue(b[1], out int c2) ? c2 : 0) - b[2]); s.Caption = $"Counter {b[1]:X2} - {b[2]}"; break;
+            case 0x16: s.Caption = "Go to another map"; s.Dark = true; break;
+            case 0x00 or 0x42: s.Caption = "End"; s.Dark = false; s.CameraOnLeader = true; break;
+        }
+        if (s.CameraOnLeader && s.Actors.TryGetValue(0, out var lead) && lead.Placed) { s.CameraX = lead.X; s.CameraY = lead.Y; }
+        return s;
+    }
+
+    private static string Cap(string s) => s.Length > 0 ? char.ToUpperInvariant(s[0]) + s[1..] : s;
+
+    /// <summary>Whether actor <paramref name="id"/> steps in direction <paramref name="dir"/> in the same round as step
+    /// <paramref name="i"/> (the A3 commands next to it, before the waits): walking together in a line, the one in front
+    /// moves out of the way.</summary>
+    private static bool MovesAway(IReadOnlyList<L2Step> steps, int i, int id, int dir)
+    {
+        bool Step(L2Step x) => !x.IsText && x.Op == 0xA3 && x.Bytes.Length >= 3 && x.Bytes[2] <= 0x03;
+        for (int k = i + 1; k < steps.Count && Step(steps[k]); k++) if (steps[k].Bytes[1] == id && steps[k].Bytes[2] == dir) return true;
+        for (int k = i - 1; k >= 0 && Step(steps[k]); k--) if (steps[k].Bytes[1] == id && steps[k].Bytes[2] == dir) return true;
+        return false;
+    }
+
+    /// <summary>The story flags and counters the script checks (15, 6A, 14 and 12), for the stage's starting state.</summary>
+    public static (SortedSet<int> Flags, SortedSet<int> Counters) Checked(IEnumerable<L2Step> steps)
+    {
+        var flags = new SortedSet<int>();
+        var counters = new SortedSet<int>();
+        foreach (var st in steps.Where(x => !x.IsText))
+        {
+            var b = st.Bytes;
+            if (st.Op is 0x15 or 0x6A && b.Length >= 2) flags.Add(b[1]);
+            if (st.Op == 0x12 && b.Length >= 2) counters.Add(b[1]);
+            if (st.Op == 0x14)
+                foreach (var c in L2Conditions.Parse(b))
+                {
+                    if (c.Kind == L2Conditions.KFlag && c.At + 1 < b.Length) flags.Add(b[c.At + 1]);
+                    if (c.Kind == L2Conditions.KCounter && c.At + 1 < b.Length) counters.Add(b[c.At + 1]);
+                }
+        }
+        return (flags, counters);
+    }
+
+    /// <summary>The frame of a map sprite for a facing (0 up, 1 down, 2 left, 3 right) and walking phase (0 or 1):
+    /// sprites with six frames have two each for down (0, 1), left (2, 3) and up (4, 5); right is left mirrored (as
+    /// "Face" 7A's frames 00 down, 02 left, 04 up, 06 right). Sprites with two frames only step in place, others have
+    /// one picture.</summary>
+    public static (int Frame, bool Flip) FacingFrame(RomBuffer rom, int sprite, int dir, int phase)
+    {
+        int flags = 0;
+        try { if (sprite >= 0 && sprite < L2Sprites.Count(rom)) flags = rom.ReadByte(L2Sprites.EntryAt(rom, sprite)); } catch (Exception) { }
+        phase &= 1;
+        if ((flags & 0x10) != 0) return ((dir & 3) switch { 0 => 4, 1 => 0, _ => 2 } + phase, (dir & 3) == 3);
+        if ((flags & 0x08) != 0) return (phase, false);
+        return (0, false);
+    }
+
+    /// <summary>Whether the sprite has pictures for each facing.</summary>
+    public static bool HasFacings(RomBuffer rom, int sprite)
+    {
+        try { return sprite >= 0 && sprite < L2Sprites.Count(rom) && (rom.ReadByte(L2Sprites.EntryAt(rom, sprite)) & 0x10) != 0; }
+        catch (Exception) { return false; }
     }
 
     // ------------------------------------------------------------------ making cutscenes
@@ -617,9 +883,10 @@ public static class L2Cutscene
     /// <summary>
     /// A character that appears only in cutscenes: "Add a map character" at the top of the start-up script (skipped once
     /// <paramref name="flag"/> is on, when it is given), hidden right after the map's characters are made. Cutscene steps
-    /// put it on a tile and show it. Returns its actor id.
+    /// put it on a tile and show it. Not <paramref name="hidden"/>: a character that stands on its tile from the start
+    /// (one to talk to). Returns its actor id.
     /// </summary>
-    public static int AddCast(RomBuffer rom, int map, int sprite, int flag, int x = 0, int y = 0)
+    public static int AddCast(RomBuffer rom, int map, int sprite, int flag, int x = 0, int y = 0, bool hidden = true)
     {
         var used = L2EventBlocks.CharacterIds(rom, map);
         int id = 0x50;
@@ -631,8 +898,11 @@ public static class L2Cutscene
         if (script.Steps.Count(s => s.Op is 0x68 or 0x7B) >= 31) throw new InvalidOperationException("The map has as many characters as the game can show.");
         int spriteByte = L2Sprites.ToGame(rom, map, sprite, L2MapInfo.NewSpriteBytesUsed(rom, map, true));
         // a character start of its own (the game finds a character's actor slot through it; without one the game's
-        // own characters can take the slot): where it waits, unseen, standing still
-        if (!L2MapInfo.AddRecord(rom, map, L2MapInfo.Characters, 8, new[] { (byte)(id - 0x4F), (byte)x, (byte)y, (byte)x, (byte)y, (byte)(x + 1), (byte)(y + 1), (byte)0x04 }))
+        // own characters can take the slot): where it waits, standing still. Its walk area is the whole map: a step
+        // (A3 00-03) out of the area is refused (checked in the game: a character with a one-tile area didn't walk).
+        int w = 255, h = 255;
+        try { var m = L2Maps.Read(rom, map); w = Math.Min(255, m.Layers.Max(l => l.Width)); h = Math.Min(255, m.Layers.Max(l => l.Height)); } catch (Exception) { }
+        if (!L2MapInfo.AddRecord(rom, map, L2MapInfo.Characters, 8, new[] { (byte)(id - 0x4F), (byte)x, (byte)y, (byte)0, (byte)0, (byte)w, (byte)h, (byte)0x04 }))
             throw new InvalidOperationException("The map's info block would be too big.");
         var first = script.Steps[0];
         var create = new L2Step { Bytes = new byte[] { 0x68, (byte)id, (byte)spriteByte } };
@@ -644,6 +914,7 @@ public static class L2Cutscene
             script.Steps.Insert(0, guard);
         }
         L2EventBlocks.SaveInit(rom, map, script);
+        if (!hidden) return id;   // a character to talk to: it stands there from the start
         // hidden when the map is shown (event +2 id 00). Not in the start-up script: every command there that finds a
         // character ($80:BF6F / BF92) leaves its slot in $A7, the counter 68 makes characters with, and the story
         // characters the game adds after the script would then take the slots of characters already made.
@@ -657,7 +928,7 @@ public static class L2Cutscene
     }
 
     /// <summary>The characters the map's "when shown" event (+2 id 00) hides: cutscene characters.</summary>
-    private static HashSet<int> HiddenWhenShown(RomBuffer rom, int map)
+    internal static HashSet<int> HiddenWhenShown(RomBuffer rom, int map)
     {
         var ids = new HashSet<int>();
         try
