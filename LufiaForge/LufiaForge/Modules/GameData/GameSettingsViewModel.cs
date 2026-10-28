@@ -3,7 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 
 namespace LufiaForge.Modules.GameData;
 
-/// <summary>Global tweaks: movement speeds, swamp damage, level cap and the ROM's internal title.</summary>
+/// <summary>Global tweaks: movement speeds, the menu button, swamp damage, level cap and the ROM's internal title.</summary>
 public partial class GameSettingsViewModel : GameDataEditorBase
 {
     /// <summary>(The editor footer shows a ROM offset; this editor has none of its own.)</summary>
@@ -29,6 +29,11 @@ public partial class GameSettingsViewModel : GameDataEditorBase
     [ObservableProperty] private bool _canHoldLPatch;
     [ObservableProperty] private int _ratePreset = -1;
     /// <summary>Party members retarget when their target group is gone (<see cref="LufiaForge.Core.Battle.RetargetPatch"/>).</summary>
+    /// <summary>The button that opens the menu (<see cref="LufiaForge.Core.MenuButtonPatch"/>), an index into its list.</summary>
+    [ObservableProperty] private int _menuButton;
+    [ObservableProperty] private bool _canMenuButton;
+    [ObservableProperty] private string _menuButtonText = "";
+    public string[] MenuButtonLabels { get; } = LufiaForge.Core.MenuButtonPatch.Buttons.Select(b => b.Name).ToArray();
     [ObservableProperty] private bool _retargetFix;
     [ObservableProperty] private bool _canRetargetFix;
 
@@ -55,6 +60,13 @@ public partial class GameSettingsViewModel : GameDataEditorBase
         _syncingPreset = false;
     }
     partial void OnSafeStepsChanged(int value) => UpdateEncounterText();
+    partial void OnMenuButtonChanged(int value) => UpdateMenuText();
+    partial void OnHoldLPatchChanged(bool value) => UpdateMenuText();
+
+    private void UpdateMenuText() => MenuButtonText = !CanMenuButton
+        ? "The menu button check ($01:823E) was changed by another patch, so it can't be set here."
+        : MenuButton == 5 && HoldLPatch ? "L also avoids random battles while held (the patch under Random battles): both will happen."
+        : "Opens the menu while walking. Thanks to FrankCG92 for the remap.";
 
     private void UpdateEncounterText()
     {
@@ -83,6 +95,10 @@ public partial class GameSettingsViewModel : GameDataEditorBase
         SafeSteps         = rom.ReadByte(LufiaForge.Core.Battle.Encounters.SafeStepsOffset(rom));
         HoldLPatch        = LufiaForge.Core.Battle.EncounterPatch.IsApplied(rom);
         CanHoldLPatch     = HoldLPatch || LufiaForge.Core.Battle.EncounterPatch.IsOriginal(rom);
+        int menu = LufiaForge.Core.MenuButtonPatch.Current(rom);
+        CanMenuButton     = menu >= 0;
+        MenuButton        = Math.Max(0, menu);
+        UpdateMenuText();
         RetargetFix       = LufiaForge.Core.Battle.RetargetPatch.IsApplied(rom);
         CanRetargetFix    = RetargetFix || LufiaForge.Core.Battle.RetargetPatch.IsOriginal(rom);
         InternalTitle     = rom.ReadAscii(GameDataOffsets.InternalTitle, GameDataOffsets.InternalTitleLen).TrimEnd();
@@ -112,6 +128,7 @@ public partial class GameSettingsViewModel : GameDataEditorBase
             if (!patchWanted && patched) LufiaForge.Core.Battle.EncounterPatch.Remove(rom);
             if (fixWanted && !fixed_) LufiaForge.Core.Battle.RetargetPatch.Apply(rom);
             if (!fixWanted && fixed_) LufiaForge.Core.Battle.RetargetPatch.Remove(rom);
+            if (LufiaForge.Core.MenuButtonPatch.Current(rom) >= 0) LufiaForge.Core.MenuButtonPatch.Set(rom, MenuButton);
             rom.WriteByte(GameDataOffsets.WalkSpeed, (byte)(FastWalk ? 0x20 : 0x10));
             rom.WriteBytes(GameDataOffsets.WalkSpeedPatch,
                 FastWalk ? GameDataOffsets.WalkPatchFast : GameDataOffsets.WalkPatchNormal);

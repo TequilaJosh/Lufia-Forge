@@ -28,6 +28,14 @@
                         </StackPanel>
                         <CheckBox Content="Fast sailing (ship)" Style="{StaticResource GdCheck}" IsChecked="{Binding FastShip}"/>
                         <CheckBox Content="Fast flying (airship)" Style="{StaticResource GdCheck}" IsChecked="{Binding FastAirship}"/>
+                        <TextBlock Text="CONTROLS" Style="{StaticResource GdSection}" Margin="0,12,0,0"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,2">
+                            <TextBlock Text="Menu button" Style="{StaticResource GdFieldLabel}" Width="110"/>
+                            <ComboBox Style="{StaticResource GdCombo}" Width="180" ItemsSource="{Binding MenuButtonLabels}" SelectedIndex="{Binding MenuButton}"
+                                      IsEnabled="{Binding CanMenuButton}"
+                                      ToolTip="The button that opens the menu on the field (the game uses B). FrankCG92's menu button remap."/>
+                        </StackPanel>
+                        <TextBlock Text="{Binding MenuButtonText}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,2,0,0"/>
                     </StackPanel>
                 </Border>
 
