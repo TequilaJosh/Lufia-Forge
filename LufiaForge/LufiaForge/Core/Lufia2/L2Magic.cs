@@ -275,6 +275,25 @@ public static class L2Magic
         foreach (int s in IpLongSites) rom.WriteByte(s + 3, (byte)(bSnes >> 16));
     }
 
+    /// <summary>The bytes of the game's code <see cref="Install"/> changes (file offset, length), with the description
+    /// code <see cref="L2Descriptions.Move"/> changes: what a check of the move may find changed outside the added space
+    /// and $97:8000-$97:B0A0 (<see cref="L2Tidy"/>).</summary>
+    internal static IEnumerable<(int At, int Length)> CodeSites()
+    {
+        yield return (SpellTableRead + 1, 3);
+        yield return (SpellTableAdc + 1, 2);
+        yield return (SpellLoader, SpellLoaderOrig.Length);
+        foreach (int s in SpellBankSites) yield return (s + 1, 1);
+        foreach (int s in AnimSites) yield return (s, AnimOrig.Length);
+        yield return (EffTableRead + 1, 3);
+        yield return (EffTableAdc + 1, 2);
+        yield return (EffBankSite + 1, 1);
+        foreach (int s in IpTableReads) yield return (s + 1, 3);
+        foreach (int s in IpBankSites) yield return (s + 1, 1);
+        foreach (int s in IpLongSites) yield return (s + 3, 1);
+        foreach (var s in L2Descriptions.CodeSites()) yield return s;
+    }
+
     private static int HeapTake(RomBuffer rom, int block, int nextAt, int size, int length, string what)
     {
         int next = rom.ReadUInt16Le(block + nextAt);

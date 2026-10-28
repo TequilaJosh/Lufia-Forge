@@ -26,6 +26,61 @@ public partial class L2SettingsPage : ObservableObject
     {
         _rom = rom; _main = main;
         Reload();
+        CheckTidy();
+    }
+
+    // ---------------------------------------------------------------- tidy the hack's data
+
+    [ObservableProperty] private string _tidyText = "";
+    private L2Tidy.Result? _tidy;
+
+    /// <summary>Works out (on a copy) what tidying would do, for the card.</summary>
+    private void CheckTidy()
+    {
+        if (_rom == null) return;
+        _tidy = L2Tidy.Prepare(_rom);
+        TidyText = _tidy.Refused != null ? _tidy.Refused
+            : _tidy.Tidied == null ? "Nothing to tidy: every battle script sits on its own, outside names and other records."
+            : string.Join(" ", new[]
+            {
+                _tidy.MonsterScripts > 0 ? $"Monster scripts in name fields or inside records: {_tidy.MonsterScripts} ({_tidy.MonsterBytes} bytes)." : "",
+                _tidy.SpellScripts > 0 ? $"Spell scripts running into the spell table's spare entries: {_tidy.SpellScripts}." : "",
+                _tidy.NamesFreed > 0 ? $"Tidying lets {_tidy.NamesFreed} monster names have 13 letters again." : "",
+            }.Where(s => s.Length > 0));
+        TidyCommand.NotifyCanExecuteChanged();
+    }
+
+    private bool CanTidy() => _tidy?.Tidied != null;
+
+    [RelayCommand(CanExecute = nameof(CanTidy))]
+    private void Tidy()
+    {
+        if (_rom == null || _main == null) return;
+        var mouse = System.Windows.Input.Mouse.OverrideCursor;
+        System.Windows.Input.Mouse.OverrideCursor = System.Windows.Input.Cursors.Wait;
+        L2Tidy.Result r;
+        try { r = L2Tidy.Prepare(_rom); }
+        finally { System.Windows.Input.Mouse.OverrideCursor = mouse; }
+        if (r.Tidied == null)
+        {
+            System.Windows.MessageBox.Show(r.Preview(), "Lufia II: tidy the hack's data", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
+            CheckTidy();
+            return;
+        }
+        var ok = System.Windows.MessageBox.Show(r.Preview() + "\n\nTidy it now? Edit, Undo takes it back.", "Lufia II: tidy the hack's data",
+            System.Windows.MessageBoxButton.OKCancel, System.Windows.MessageBoxImage.Question);
+        if (ok != System.Windows.MessageBoxResult.OK) return;
+        ApplyTidy(r);
+    }
+
+    /// <summary>Puts a prepared (and checked) tidy in the ROM as one Undo step.</summary>
+    public void ApplyTidy(L2Tidy.Result r)
+    {
+        if (_rom == null || _main == null || r.Tidied == null) return;
+        L2Tidy.Apply(_rom, r);
+        _main.NotifyRomModified("Lufia II: hack's data tidied");
+        _main.ReloadModules();   // every page reads the moved scripts and spells again (this one too)
+        Status = "Tidied: " + string.Join(" ", r.Gains.Take(1).DefaultIfEmpty("the scripts sit on their own now."));
     }
 
     private void Reload()
