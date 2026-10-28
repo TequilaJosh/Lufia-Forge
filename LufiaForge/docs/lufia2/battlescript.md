@@ -232,6 +232,8 @@ call) so one monster can change them.
 
 ## 7. New spells, spell animations, IP attack names and new IP attacks (2026-10-25)
 
+How animations themselves work, play in Lufia Forge and are made new: [spell-animations.md](spell-animations.md).
+
 Found by reading the code, checked in battles and a shop in BizHawk (bsnes core). Lufia Forge: Core/Lufia2/L2Magic.cs,
 L2Descriptions.cs, L2Battle.cs; the Spells, IP attacks and Items pages.
 

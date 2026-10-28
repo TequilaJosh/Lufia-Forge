@@ -59,6 +59,9 @@
             <TabItem Header="IP attacks" Style="{StaticResource LufiaSideTab}">
                 <local:L2IpView DataContext="{Binding IpAttacks}"/>
             </TabItem>
+            <TabItem Header="Animations" Style="{StaticResource LufiaSideTab}">
+                <local:L2AnimationsView DataContext="{Binding Animations}"/>
+            </TabItem>
             <TabItem Header="Shops" Style="{StaticResource LufiaSideTab}">
                 <local:L2ShopsView DataContext="{Binding Shops}"/>
             </TabItem>

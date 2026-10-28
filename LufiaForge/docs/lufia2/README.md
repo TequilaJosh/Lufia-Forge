@@ -13,6 +13,7 @@ the items marked as checked were also tested in the running game (BizHawk). The 
 | [cutscenes.md](cutscenes.md) | The Cutscenes page: a map as a stage, cutscenes from steps in plain words, how each step is written, how a cutscene starts, cutscene characters, playback and testing, what was checked in the game |
 | [scripts3.md](scripts3.md) | The dungeon puzzle interpreter: 191 opcodes, the per-map puzzle blocks |
 | [battlescript.md](battlescript.md) | The battle script interpreter (monster AI, item, spell and capsule effects); new spells, spell animations, IP attack names and new IP attacks (section 7) |
+| [spell-animations.md](spell-animations.md) | Battle animations: the animation engine and its script format, graphics and colours, playing them inside Lufia Forge, new animations and their hooks |
 | [characters.md](characters.md) | Heroes: starting stats, growth, the EXP curve, new-game records, RAM layout |
 | [capsules.md](capsules.md) | Capsule monsters: records, names, growth, attacks, evolution |
 | [music.md](music.md) | The sound driver, song format, samples, sound effects |
