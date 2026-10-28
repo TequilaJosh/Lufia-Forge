@@ -48,10 +48,15 @@ is written), `Modules/Lufia2/L2MapWindows.cs` (pick a place, pieces and presets,
   those with this map's graphics first ("same graphics", then "same tiles"), each shown closed and open. A chest of
   another map is drawn with this map's block set: each of its blocks is a block of the set that draws the same, or a new
   block added to the block set (straight into the ROM, as the block editor does; Edit > Undo takes it out) made of this
-  map's tiles in the palette row closest in colour. When the map's tile set has no tiles of that shape, or the block set
-  is full (1024 blocks), the chest is refused and the status says why (towns, for example, have no chest tiles). The
-  open and closed chest are also kept on two black blocks the camera never shows (as the game keeps its own, mostly in
-  a corner); the status says where. A map with no chest gets its first chest this way.
+  map's tiles in the palette row closest in colour. When the map's tile set has no tiles of that shape (towns have no
+  chest tiles), the chest's own tiles are copied into the tile set, in the colour row of this map closest to the
+  chest's colours, on tiles nothing draws; the status says how many, which tiles, which colour row and whether the
+  colours are close ("8 chest tiles added to tile set 2 (tiles 363, ..., which grows from 867 to 875 tiles), drawn with
+  colour row 4, the closest to the chest's colours"). The tiles and blocks are one Edit > Undo step. The chest is
+  refused, saying why, when the block set is full (1024 blocks) or the tile set has no free tile left (1024 tiles). The
+  open and closed chest are also kept on two blocks the camera never shows (as the game keeps its own, mostly in a
+  corner): black ones first, else (towns are drawn edge to edge) blocks out of the screen wherever the party can walk;
+  the status says where. A map with no chest gets its first chest this way, towns too.
 * **Treasure page**: it edits the same treasure as the Maps tab. Showing it writes the Maps tab's changes first, and a
   change there is written by spot over what the ROM holds then; back on Maps, the map's edit takes the Treasure page's
   changes (for the treasure it didn't change itself, also in its Undo steps), and Apply writes only what the map's edit
@@ -125,7 +130,31 @@ is written), `Modules/Lufia2/L2MapWindows.cs` (pick a place, pieces and presets,
   look is a new +04 record (the source's layers byte; opened source = the kept open chest, closed source = the kept
   closed one), unless a look of the map already opens to the same blocks. The kept pair: two blocks side by side that are
   black on both layers and outside the camera (16 x 14 blocks, one more around, stopped at the map's edges) from every
-  block that isn't black; top-left first.
+  block that isn't black; top-left first. When there is none, any two blocks outside the camera from every block the
+  party can walk on: filled from the preset points and the blocks beside the treasure (no wall between), crossing a
+  cell's edge unless a wall is there (cell flag 04 = wall above, 08 = wall on the left, either layer), never onto an
+  obstacle (80), and stopping at exits (x1, y1 to x2, y2, the end not included: the party leaves there, and towns are
+  walled only where the party walks, so the road out leads on into the forest). Characters and exits are no starting
+  points (some characters wait out of reach for scenes; Elcid's south exit covers the trees beside the road). Else the
+  pair seen least, with a warning in the status. Nothing is written when the chest is refused (the tiles and blocks are
+  worked out first and written only after the kept pair is found).
+* **Chest tiles** (`L2ChestLooks.Translate` / `FreeTiles`): a tile set (file 0x14B + set) is plain 4bpp tiles; the loader
+  ($80:F03B) unpacks it to $7E:4000 and copies all of it to VRAM $4000, where block words' 10-bit tile numbers point
+  (1024 tiles at most; the tile animation's frames start at $7E:C000). Measured in BizHawk on Elcid: VRAM past the 867
+  tiles of set 2 stays empty in the field, during a message and after the menu (the menu draws over $4000 and the map's
+  tile set is loaded again, whole, when it closes). A map's tile animation (its $CF:F9FE byte 0 high nibble: file 0x15F +
+  n) copies 0x1E0 bytes of a frame to VRAM $4010 ($83:AF54), so tiles 1-15 are drawn over on those maps. Free tiles:
+  not 0-15, and used by no block of any block set the game pairs with that tile set (the maps' $CF:F72E / $CF:F81E,
+  and the Ancient Cave's 0B / 09 / 04 pairs), those inside the set first, then past its end (the set grows; tile set 2
+  has only one unused tile, 00F, which the water animation draws over). A tile of the chest the set doesn't have is
+  recoloured: per colour row of the chest, the map's colour row (2-7) whose nearest colours are closest over the
+  chest's pixels (red + green + blue), leaving out the colours the map's colour animation changes; a tile the same as
+  one already in the set is used again. Colour animation: $CF:FBA6 + map (1-based, 0 = none) picks a $CF:FC98 pointer
+  to a record in bank $A1: "PS", count (& 7F), then count u16 offsets from the record to entries of a CGRAM colour
+  number, then (duration, BGR555) pairs up to 00 (record 1, Elcid's: colours 97-101, the water's, as measured). The
+  tile set is written back packed (`L2Rom.WriteFile`: where it was when it fits, else in the added space with the file
+  table pointing there), then the block set; the window makes it one Edit > Undo step. Matching tiles of the set
+  (as before) also skip tiles 1-15 on maps with a tile animation and colour rows with animated colours.
 * **Treasure** (`L2Chests`): the spot is the info block's list +26 (4 bytes: id, x, y, look); the look is a record of list
   +04 (10 bytes: id, layers, the opened picture's source x, y, w, h, the closed one's x, y, w, h, in blocks of the same
   map); the contents are the chest list at $91:B8B5 (a u16 per map, then 3 bytes per treasure: spot | 40 item + 0x100 | 80
@@ -188,6 +217,26 @@ is written), `Modules/Lufia2/L2MapWindows.cs` (pick a place, pieces and presets,
   says "Found 321 GOLD", its picture changes to the open chest and stays open, a second A gives nothing. A new zone 11
   (past the game's 17, the table moved to $D1:8F5F) painted around (40,220) gives its battle: `$7F:F8A4` = 10, two
   Red Bats.
+
+## 3d. Checked: chests in towns, tiles added to the tile set (2026-10-28)
+
+* Core (the clean US ROM): on Elcid each of the game's 126 chest pictures of other graphics fits (4 to 14 tiles added
+  to tile set 2, colour rows 4, 2 to 7, about 26 to 52 of 765 off per pixel). A chest next to the first preset point of
+  every map with one (86 added, 50 of them with tiles added; 8 refused: block set 12 full, or no room for the kept
+  pictures on 02, 38, D6, E6), and after each every map with the same tile set or block set was drawn pixel for pixel
+  as before. On Elcid the cave chest of 06 adds tiles 363-36A (867 -> 875; the set still fits where it was) and 3 blocks,
+  keeps its pictures at (44,0) / (45,0); after Apply only those two blocks and the chest's look different. Tanbel
+  Southeast Tower 1F (3c) still adds 1 block and keeps its pictures at (34,0) / (35,0).
+* In the real window (a project made from the clean US ROM; 14 checks, `UiTown`): a chest refused on map 38 changes
+  nothing (ROM, Edit history, map); + Chest on Elcid with the cave chest says "8 chest tiles added to tile set 2 ...
+  colour row 4"; Edit > Undo is one step ("chest tiles added to tile set 2 and blocks to block set 2") and puts the ROM
+  back byte for byte; Redo, then the chest again finds its tiles and blocks (none added again); Apply; the 13 maps of
+  tile set 2 / block set 2 drawn as before; a second chest adds nothing. (Elcid is no longer refused as in 3c.)
+* In the game (BizHawk, the ROM written by that window): a new game on Elcid, the chest beside Maxim shows closed,
+  "Found Hi-Potion", then open; a second A gives nothing; it stays open after the menu (the tile set loaded again) and
+  the Hi-Potion is in the items. VRAM at the start, during the message and after the menu holds all 875 tiles of the new
+  set (only tiles 1-15 differ: the water animation). From the walkable block nearest the kept pictures (35,8) they
+  are off screen.
 
 ## 4. Shrine maps CF and F1: fixed as in the European release
 
