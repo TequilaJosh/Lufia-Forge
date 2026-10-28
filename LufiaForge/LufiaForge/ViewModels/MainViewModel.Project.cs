@@ -194,7 +194,7 @@ public partial class MainViewModel
         {
             var (project, rom) = LufiaProject.Open(path);
             Use(project, rom);
-            StatusMessage = $"Project \"{project.Name}\" opened (saved {project.Saved:yyyy-MM-dd HH:mm}).";
+            StatusMessage = $"Project \"{project.Name}\" opened (saved {project.Saved:yyyy-MM-dd HH:mm})." + _openNote;
             StatusDetail = project.Path;
         }
         catch (Exception ex)
@@ -221,16 +221,20 @@ public partial class MainViewModel
 
     /// <summary>Mistakes in the game Lufia Forge puts right as a ROM is opened (each one Edit, Undo step): Lufia II's
     /// shrine maps CF and F1, drawn wrong in the US game (<see cref="Core.Lufia2.L2ShrineFix"/>).</summary>
+    private string _openNote = "";
+
     private void FixKnownBugs(RomBuffer rom)
     {
+        _openNote = "";
         if (!Core.Lufia2.L2ShrineFix.Needed(rom)) return;
         try
         {
             Core.Lufia2.L2ShrineFix.Apply(rom);
             NotifyRomModified("Lufia II: shrine maps CF and F1 fixed as in the European release (block set 17 and tile set 11; maps E7-EB keep their look)");
             OnPropertyChanged(nameof(RomBuffer));   // the pages read the fixed ROM
+            _openNote = " Shrine maps CF and F1, garbled in the US game, were fixed as in the European release (Edit, Undo takes it back).";
         }
-        catch (Exception ex) { StatusMessage = "Lufia II's shrine maps CF and F1 couldn't be fixed: " + ex.Message; }
+        catch (Exception ex) { _openNote = " Lufia II's shrine maps CF and F1 couldn't be fixed: " + ex.Message; }
     }
 
     /// <summary>The ROM file next to the project (what Export ROM and BizHawk use): "&lt;project&gt;.sfc".</summary>
