@@ -31,6 +31,9 @@
             <TabItem Header="Events" Style="{StaticResource LufiaSideTab}">
                 <local:L2EventsView DataContext="{Binding Events}"/>
             </TabItem>
+            <TabItem Header="Cutscenes" Style="{StaticResource LufiaSideTab}">
+                <local:L2CutscenesView DataContext="{Binding Cutscenes}"/>
+            </TabItem>
             <TabItem Header="Treasure" Style="{StaticResource LufiaSideTab}">
                 <local:L2ChestsView DataContext="{Binding Chests}"/>
             </TabItem>
