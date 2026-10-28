@@ -568,8 +568,11 @@ public partial class L2MapsPage
         catch (Exception ex) { UndoPaint(); _redo.Clear(); _worldRedo.Clear(); UpdateUndoState(); Status = "No chest added: " + ex.Message; return; }
         if (!hidden && look != null && look.Map != _edit.MapId && note.Contains("added to block set"))
         {
-            // the chest's blocks went into the block set (in the ROM, as the block editor's changes)
-            _main.NotifyRomModified($"Lufia II: chest blocks added to block set {_edit.BlockSetIndex}");
+            // the chest's blocks went into the block set, and its tiles into the tile set when it had none of their shape
+            // (in the ROM, as the block editor's changes; one Edit > Undo step takes both out)
+            _main.NotifyRomModified(L2ChestLooks.LastTiles is { } t
+                ? $"Lufia II: chest tiles added to tile set {t.TileSet} and blocks to block set {_edit.BlockSetIndex}"
+                : $"Lufia II: chest blocks added to block set {_edit.BlockSetIndex}");
             ReloadBlocks();
         }
         ShowTreasure = true;
