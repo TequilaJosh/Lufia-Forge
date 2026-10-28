@@ -9,7 +9,7 @@ using LufiaForge.Core.Lufia2;
 
 namespace LufiaForge.Modules.Lufia2;
 
-public enum L2Tool { Select, Paint, Pick, Area, Collision, AddExit, AddTrigger, AddCharacter, AddPoint }
+public enum L2Tool { Select, Paint, Pick, Area, Collision, AddExit, AddTrigger, AddCharacter, AddPoint, AddChest, AddHidden }
 
 /// <summary>What can be picked on the map: its list in the info block and the record's index there.</summary>
 public enum SelKind { Exit, Door, Trigger, Character, Point, Treasure }
@@ -30,11 +30,13 @@ public partial class L2MapsPage
     public bool IsAddTriggerTool { get => Tool == L2Tool.AddTrigger; set { if (value) Tool = L2Tool.AddTrigger; } }
     public bool IsAddCharacterTool { get => Tool == L2Tool.AddCharacter; set { if (value) Tool = L2Tool.AddCharacter; } }
     public bool IsAddPointTool { get => Tool == L2Tool.AddPoint; set { if (value) Tool = L2Tool.AddPoint; } }
+    public bool IsAddChestTool { get => Tool == L2Tool.AddChest; set { if (value) Tool = L2Tool.AddChest; } }
+    public bool IsAddHiddenTool { get => Tool == L2Tool.AddHidden; set { if (value) Tool = L2Tool.AddHidden; } }
 
     partial void OnToolChanged(L2Tool value)
     {
         foreach (var n in new[] { nameof(IsSelectTool), nameof(IsPaintTool), nameof(IsPickTool), nameof(IsAreaTool), nameof(IsCollisionTool),
-                                  nameof(IsAddExitTool), nameof(IsAddTriggerTool), nameof(IsAddCharacterTool), nameof(IsAddPointTool) })
+                                  nameof(IsAddExitTool), nameof(IsAddTriggerTool), nameof(IsAddCharacterTool), nameof(IsAddPointTool), nameof(IsAddChestTool), nameof(IsAddHiddenTool) })
             OnPropertyChanged(n);
         if (value != L2Tool.Area) AreaRect = null;
         StopStamp();
@@ -53,17 +55,22 @@ public partial class L2MapsPage
         L2Tool.AddTrigger => "Add step-on area (T): drag a rectangle; walking onto it plays a new event (made when the map is written, then edit it in Events).",
         L2Tool.AddCharacter => "Add character (C): click where it stands, then pick its sprite and how it moves.",
         L2Tool.AddPoint => "Add preset point (A): click a block. Scenes put the party or characters on preset points (Go to another map, Put a character on a point).",
+        L2Tool.AddChest => "Add chest (K): click a block; it gets the picture of a chest of this map and its own opened flag, so it gives its item once. Pick the item in the inspector.",
+        L2Tool.AddHidden => "Add hidden item (H): click a block; nothing shows there, and pressing A facing it finds the item, once. Pick the item in the inspector.",
         _ => "",
     };
 
     private string WorldHint => Stamping ? "Click to place the copied big blocks; right-click or Esc stops."
-        : ShowZones ? "Battle zones: click or drag paints the zone typed beside the button (2 x 2 big blocks each); right-click or Ctrl + click picks one. Turn Battle zones off to paint blocks."
+        : ShowZones && HasZones ? "Battle zones: pick a zone in the list on the right (or right-click the map), then click or drag to paint it (2 x 2 big blocks each). Turn Battle zones off to paint blocks or add entrances."
         : Tool switch
         {
             L2Tool.Paint => "Paint (B): paints big blocks (32 x 32 pixels in the game); right-click or Ctrl + click picks one from the map.",
             L2Tool.Pick => "Pick (I): click the map to take its big block as the brush.",
             L2Tool.Area => "Area (M): drag a rectangle, then Copy, Cut, Fill; Paste places it (an island, a forest, a coast).",
-            _ => "On the world map: Paint, Pick and Area work on its big blocks; Battle zones paints where battles happen.",
+            L2Tool.Select => "Select (S): click an entrance (green, named after where it leads) to edit it; drag to move it; double-click goes into that map.",
+            L2Tool.AddExit => "Add entrance (E): drag over the blocks the party walks onto (a town's picture), then pick the map and the place inside it the party arrives at.",
+            L2Tool.AddPoint => "Add preset point (A): a place on the world map that scenes can put the party on.",
+            _ => "On the world map: Paint, Pick and Area work on its big blocks; Select and + Exit edit the entrances to towns and dungeons; Battle zones paints where battles happen.",
         };
 
     [ObservableProperty] private bool _editUpper;
@@ -87,7 +94,17 @@ public partial class L2MapsPage
     /// <summary>A press on the map at pixel (<paramref name="px"/>, <paramref name="py"/>) of the unzoomed map.</summary>
     public void MouseDown(double px, double py, bool right, bool ctrl, bool doubleClick)
     {
-        if (_world != null) { if (IsEditableMap) WorldDown(px, py, right, ctrl); return; }
+        if (_world != null)
+        {
+            if (!IsEditableMap) return;
+            if (WorldBlockTool) { WorldDown(px, py, right, ctrl); return; }
+            if (Tool is not (L2Tool.Select or L2Tool.AddExit or L2Tool.AddPoint))
+            {
+                Status = _world.Map == 0 ? "On the world map: Select, + Exit (entrances to towns and dungeons) and + Point work, and Paint, Pick, Area and Battle zones; treasure, characters and step-on areas go on town and dungeon maps."
+                                         : "The sea floor: Paint, Pick and Area work on its big blocks.";
+                return;
+            }
+        }
         if (_edit == null || !IsEditableMap) return;
         int cx = (int)Math.Floor(px / 16), cy = (int)Math.Floor(py / 16);
         if (cx < 0 || cy < 0 || cx >= _edit.Width || cy >= _edit.Height) return;
@@ -128,6 +145,10 @@ public partial class L2MapsPage
             case L2Tool.AddPoint:
                 AddPoint(cx, cy);
                 break;
+            case L2Tool.AddChest:
+            case L2Tool.AddHidden:
+                AddTreasure(cx, cy, Tool == L2Tool.AddHidden);
+                break;
             case L2Tool.Select:
                 SelectAt(cx, cy, doubleClick);
                 break;
@@ -138,11 +159,11 @@ public partial class L2MapsPage
 
     public void MouseMove(double px, double py)
     {
-        if (_world != null) { WorldMove(px, py); return; }
+        if (_world != null) { WorldMove(px, py); if (!_dragging) return; }
         if (_edit == null) return;
         int cx = (int)Math.Floor(px / 16), cy = (int)Math.Floor(py / 16);
         bool inside = cx >= 0 && cy >= 0 && cx < _edit.Width && cy < _edit.Height;
-        UpdateHover(cx, cy, inside);
+        if (_world == null) UpdateHover(cx, cy, inside);
         if (!inside || !_dragging) return;
         if (cx == _lastX && cy == _lastY) return;
         _lastX = cx; _lastY = cy;
@@ -161,7 +182,7 @@ public partial class L2MapsPage
 
     public void MouseUp()
     {
-        if (_world != null) { WorldUp(); return; }
+        if (_world != null) { WorldUp(); if (!_dragging) return; }
         if (!_dragging) return;
         _dragging = false;
         switch (Tool)
@@ -294,11 +315,14 @@ public partial class L2MapsPage
         {
             _areaRect = value;
             AreaVisible = value != null;
-            if (value is { } r) { AreaX = r.X1 * 16; AreaY = r.Y1 * 16; AreaW = (r.X2 - r.X1) * 16; AreaH = (r.Y2 - r.Y1) * 16; }
+            int u = AreaUnit;
+            if (value is { } r) { AreaX = r.X1 * u; AreaY = r.Y1 * u; AreaW = (r.X2 - r.X1) * u; AreaH = (r.Y2 - r.Y1) * u; }
             OnPropertyChanged();
         }
     }
     private (int X1, int Y1, int X2, int Y2)? _areaRect;
+    /// <summary>Pixels per unit of the area: big blocks for the world map's Area tool, else 16-pixel blocks.</summary>
+    private int AreaUnit => _world != null && Tool == L2Tool.Area ? Cell : 16;
     [ObservableProperty] private double _areaX, _areaY, _areaW, _areaH;
     [ObservableProperty] private bool _areaVisible;
 
@@ -468,14 +492,17 @@ public partial class L2MapsPage
         var exits = _edit.Records(L2MapEdit.Exits);
         int id = exits.Select(e => (int)e.Bytes[0]).DefaultIfEmpty(-1).Max() + 1;
         // the arrival style most exits of the map use (F3: the usual)
-        byte style = exits.GroupBy(e => e.Bytes[5]).OrderByDescending(g => g.Count()).Select(g => g.Key).DefaultIfEmpty((byte)0xF3).First();
-        Record("adding an exit");
+        byte style = exits.GroupBy(e => e.Bytes[5]).OrderByDescending(g => g.Count()).Select(g => g.Key).DefaultIfEmpty(_edit.IsWorld ? (byte)0x40 : (byte)0xF3).First();
+        if (id > 0xFE) { Status = "The map has no free exit number."; return; }
+        Record(_edit.IsWorld ? "adding an entrance" : "adding an exit");
         try { _edit.AddRecord(L2MapEdit.Exits, new byte[] { (byte)id, (byte)x1, (byte)y1, (byte)x2, (byte)y2, style, (byte)x1, (byte)y1, (byte)_edit.MapId }); }
         catch (Exception ex) { Status = ex.Message; UndoPaint(); return; }
         Selection = new L2Selection(SelKind.Exit, _edit.Records(L2MapEdit.Exits).Count - 1);
         Tool = L2Tool.Select;
         Refresh();
-        Status = $"Exit {id} added: it leads back here for now. Pick the map and place it leads to.";
+        Status = _edit.IsWorld
+            ? $"Entrance {id} added. Now click \"Pick on map...\" in the inspector: pick the town or dungeon and click where the party arrives in it."
+            : $"Exit {id} added: it leads back here for now. Click \"Pick on map...\" in the inspector to pick the map and place it leads to.";
     }
 
     private void AddTrigger(int x1, int y1, int x2, int y2)
@@ -527,6 +554,22 @@ public partial class L2MapsPage
         Status = $"Preset point {id} added at ({x},{y}).";
     }
 
+    private void AddTreasure(int x, int y, bool hidden)
+    {
+        if (_edit == null || _rom == null) return;
+        if (TableGuard.LockReason(_rom, "Treasure") is { } locked) { Status = locked; return; }
+        Record(hidden ? "adding a hidden item" : "adding a chest");
+        int spot;
+        try { spot = _edit.AddTreasure(_rom, x, y, hidden, 0x00); }
+        catch (Exception ex) { Status = ex.Message; UndoPaint(); _redo.Clear(); _worldRedo.Clear(); UpdateUndoState(); return; }
+        ShowTreasure = true;
+        Selection = new L2Selection(SelKind.Treasure, _edit.Records(L2MapEdit.Treasure).Count - 1);
+        Tool = L2Tool.Select;
+        Refresh();
+        Status = (hidden ? $"Hidden item {spot} added at ({x},{y}): pressing A facing that block finds it, once." : $"Chest {spot} added at ({x},{y}), with the picture of this map's chests; it opens once.")
+                 + " Pick what it holds in the inspector.";
+    }
+
     // ---------------------------------------------------------------- keys
 
     /// <summary>A key on the map (tool letters, Del, Esc, Ctrl+C / X / V). True when used.</summary>
@@ -553,6 +596,8 @@ public partial class L2MapsPage
             case System.Windows.Input.Key.T: Tool = L2Tool.AddTrigger; return true;
             case System.Windows.Input.Key.C: Tool = L2Tool.AddCharacter; return true;
             case System.Windows.Input.Key.A: Tool = L2Tool.AddPoint; return true;
+            case System.Windows.Input.Key.K: Tool = L2Tool.AddChest; return true;
+            case System.Windows.Input.Key.H: Tool = L2Tool.AddHidden; return true;
             case System.Windows.Input.Key.Escape: Escape(); return true;
             case System.Windows.Input.Key.Delete:
                 if (Tool == L2Tool.Area && AreaRect != null) DeleteArea(); else DeleteSelected();

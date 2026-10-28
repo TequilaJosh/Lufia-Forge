@@ -71,20 +71,27 @@ public sealed class L2PickPlaceWindow : Window
     private readonly Image _image = new() { Stretch = Stretch.None, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top, Cursor = System.Windows.Input.Cursors.Cross };
     private readonly Rectangle _mark = new() { Width = 16, Height = 16, Stroke = Brushes.White, StrokeThickness = 2, IsHitTestVisible = false };
     private readonly TextBlock _where = L2Ui.Label("");
+    private readonly Canvas _labels = new() { IsHitTestVisible = false };
+    private readonly Func<int, string> _name;
+    /// <summary>Pixels per 16-pixel block in the picture (the world map is drawn at half size here).</summary>
+    private int Unit => Map == 0 ? 8 : 16;
 
     public L2PickPlaceWindow(RomBuffer rom, int map, int x, int y, Func<int, string> name)
     {
-        _rom = rom; Map = map; X = x; Y = y;
+        _rom = rom; Map = map; X = x; Y = y; _name = name;
         Title = "Where the exit leads - Lufia Forge"; Width = 980; Height = 760; WindowStartupLocation = WindowStartupLocation.CenterOwner; Background = L2Ui.B("MidPurpleBrush"); ShowInTaskbar = false;
         var maps = new ComboBox { Style = L2Ui.S("LufiaComboBox"), Width = 320, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 0, 0, 6) };
-        for (int m = 2; m < L2Maps.Count; m++) maps.Items.Add($"{m:X2}  {name(m)}");
-        maps.SelectedIndex = Math.Max(0, map - 2);
-        maps.SelectionChanged += (_, _) => { Map = maps.SelectedIndex + 2; Draw(); };
+        // the world map first, then the towns and dungeons (the sea floor is reached by events only)
+        var ids = new List<int> { 0 };
+        ids.AddRange(Enumerable.Range(2, L2Maps.Count - 2));
+        foreach (int m in ids) maps.Items.Add(m == 0 ? "00  World map" : $"{m:X2}  {name(m)}");
+        maps.SelectedIndex = Math.Max(0, ids.IndexOf(map));
+        maps.SelectionChanged += (_, _) => { Map = ids[Math.Max(0, maps.SelectedIndex)]; Draw(); _mark.BringIntoView(); };
         var canvas = new Canvas { IsHitTestVisible = false };
         canvas.Children.Add(_mark);
         var grid = new Grid { HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
-        grid.Children.Add(_image); grid.Children.Add(canvas);
-        _image.MouseLeftButtonDown += (_, e) => { var p = e.GetPosition(_image); X = (int)p.X / 16; Y = (int)p.Y / 16; Mark(); if (e.ClickCount == 2) { DialogResult = true; } };
+        grid.Children.Add(_image); grid.Children.Add(_labels); grid.Children.Add(canvas);
+        _image.MouseLeftButtonDown += (_, e) => { var p = e.GetPosition(_image); X = (int)p.X / Unit; Y = (int)p.Y / Unit; Mark(); if (e.ClickCount == 2) { DialogResult = true; } };
         var scroll = new ScrollViewer { Content = grid, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Background = Brushes.Black };
         LufiaForge.Modules.Common.ScrollPan.SetMiddleDrag(scroll, true);
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 8, 0, 0) };
@@ -92,7 +99,7 @@ public sealed class L2PickPlaceWindow : Window
         buttons.Children.Add(L2Ui.Button("Cancel", false, (_, _) => DialogResult = false));
         var dock = new DockPanel { Margin = new Thickness(12) };
         var top = new StackPanel();
-        top.Children.Add(L2Ui.Label("Pick the map, then click the block where the party arrives (double-click to use it at once)."));
+        top.Children.Add(L2Ui.Label("Pick the map, then click the block where the party arrives (double-click to use it at once). On the world map the towns' entrances are labelled."));
         top.Children.Add(maps); top.Children.Add(_where);
         DockPanel.SetDock(top, Dock.Top); DockPanel.SetDock(buttons, Dock.Bottom);
         dock.Children.Add(top); dock.Children.Add(buttons); dock.Children.Add(scroll);
@@ -102,14 +109,35 @@ public sealed class L2PickPlaceWindow : Window
 
     private void Draw()
     {
-        try { var (w, h, px) = L2Maps.Render(_rom, Map); _image.Source = L2Ui.Bitmap(w, h, px); } catch { _image.Source = null; }
+        _labels.Children.Clear();
+        try
+        {
+            if (Map == 0)
+            {
+                var (ww, wh, wpx) = L2WorldMap.Render(_rom, 2);
+                _image.Source = L2Ui.Bitmap(ww, wh, wpx);
+                // where each entrance leads, so towns can be found
+                foreach (var e in L2MapInfo.Read(_rom, 0).Where(e => e.Kind == "Exit" && e.DestMap >= 2))
+                {
+                    var t = new TextBlock { Text = _name(e.DestMap), Foreground = Brushes.White, FontSize = 9, Background = new SolidColorBrush(Color.FromArgb(0xA0, 0, 0, 0)), Padding = new Thickness(2, 0, 2, 0) };
+                    Canvas.SetLeft(t, e.X1 * 8); Canvas.SetTop(t, e.Y1 * 8 - 12);
+                    _labels.Children.Add(t);
+                    var r = new Rectangle { Width = Math.Max(1, e.X2 - e.X1) * 8, Height = Math.Max(1, e.Y2 - e.Y1) * 8, Stroke = Brushes.LimeGreen, StrokeThickness = 1 };
+                    Canvas.SetLeft(r, e.X1 * 8); Canvas.SetTop(r, e.Y1 * 8);
+                    _labels.Children.Add(r);
+                }
+            }
+            else { var (w, h, px) = L2Maps.Render(_rom, Map); _image.Source = L2Ui.Bitmap(w, h, px); }
+        }
+        catch { _image.Source = null; }
         Mark();
     }
 
     private void Mark()
     {
-        Canvas.SetLeft(_mark, X * 16); Canvas.SetTop(_mark, Y * 16);
-        _where.Text = $"Arrives at block ({X},{Y}).";
+        _mark.Width = _mark.Height = Unit;
+        Canvas.SetLeft(_mark, X * Unit); Canvas.SetTop(_mark, Y * Unit);
+        _where.Text = Map == 0 ? $"Arrives on the world map at block ({X},{Y}) (16-pixel blocks)." : $"Arrives at block ({X},{Y}).";
     }
 }
 
