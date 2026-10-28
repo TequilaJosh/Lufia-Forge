@@ -38,7 +38,26 @@ The fan hacks keep their monsters in bank $D0 already:
 | | new monsters |
 |---|---|
 | Frue, Wrath of Foomy | yes: they take the placeholder ids (E0 on), records in the empty end of bank $D0 ($D0:F7C1-$FFFF, about 25) |
-| Spekkio, Kureji | no: their bank $D0 is full; the page says so and the button is off |
+| Spekkio, Kureji | their bank $D0 is full: the first new monster moves the monsters to a bank of their own (below) |
+
+Making room in a hack (Lufia II > Settings > HACK DATA > "Make room for new monsters...", or "Add a new monster" when
+bank $D0 is full, as one Undo step with the monster; details and checks in docs/rom-hacks.md): the hack's data is
+tidied first, then everything the records and their scripts use is copied from $D0 to a bank of Lufia Forge's at the
+same addresses ($E4), the table goes to $E4:8010, every other byte of $E4 is 00, and the hack's code reads $E4 (the
+places above plus the hack's own battle loader at $81:FE00). Bank $D0 keeps the monster attack names, which the hack
+reads there. New monsters go to the smallest free run of $E4 that fits, each record with its scripts laid out again
+right after it.
+
+| | room before | room after | new monster ids |
+|---|---|---|---|
+| Frue, Wrath of Foomy | 2,111 bytes | 13,615 / 13,606 bytes | 31 (E0-FE) |
+| Spekkio | 2 bytes | 8,240 bytes | 20 (E5-E7, EB, EC, F0-FE) |
+| Kureji | 1 byte | 7,602 bytes | 23 (E8-FE) |
+
+The ids run out first: copies of monsters 00, 01, 02... until no id was left used 1,341 bytes in Spekkio, 1,647 in
+Kureji and 2,356 in Frue and Foomy. Checked in the game: new monsters (copies of Web Spider in Spekkio, Lizard Man in
+Kureji) fight in story battle 16 the same way as the monster they copy, with their own name in the target box, and an
+HP 1 copy (Lizard Man in Kureji, Goblin in Spekkio) falls to one hit and gives its 500 EXP.
 
 Checked in the game (BizHawk, the opening changed to start story battle 04 right after name entry, 0x3C0EE = `53 04 39`):
 - US game: a copy of the Goblin as E0, "FORGE TEST", sprite 0C palette 1 (Mega Cyclops), HP 30, EXP 321, gold 77:

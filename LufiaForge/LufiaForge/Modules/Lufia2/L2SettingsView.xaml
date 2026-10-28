@@ -51,6 +51,9 @@
                         <TextBlock Text="{Binding TidyText}" Style="{StaticResource GdHint}" TextWrapping="Wrap"/>
                         <Button Content="Tidy the hack's data..." Command="{Binding TidyCommand}" Padding="18,4" Margin="0,8,0,0" HorizontalAlignment="Left"/>
                         <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,6,0,0" Text="Some hacks (Spekkio, Kureji Lufia) keep monster battle scripts in the unused end of other monsters' names, and spell scripts in the spell table's spare entries. Tidying moves them to space of their own and points the game there, after checking on a copy that every monster, script, item, spell, IP attack, description and shop reads the same. One step: Edit, Undo takes it back."/>
+                        <TextBlock Text="{Binding RoomText}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,14,0,0"/>
+                        <Button Content="Make room for new monsters..." Command="{Binding MakeRoomCommand}" Padding="18,4" Margin="0,8,0,0" HorizontalAlignment="Left"/>
+                        <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,6,0,0" Text="The fan hacks keep their monsters in bank $D0, which Spekkio and Kureji Lufia fill. This copies the monsters (table, records, battle scripts) to a bank of their own at the same addresses and points the game there, tidying the hack's data first when it isn't yet; bank $D0 keeps the monster attack names. Everything is checked on a copy first. Adding a monster on the Monsters page does this by itself when the bank is full. One step: Edit, Undo takes it back."/>
                     </StackPanel>
                 </Border>
             </WrapPanel>

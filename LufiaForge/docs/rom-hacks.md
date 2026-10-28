@@ -70,7 +70,8 @@ What Lufia Forge does with them:
   IpEffectCount, L2Battle.ItemCountIn). Adding spells or IP attacks (moving them, L2Magic) works on the hacks: every spell,
   IP attack, script and description reads the same afterwards.
 - New monsters (docs/new-monsters-and-shops.md): Frue and Foomy take them in their placeholder ids, the records in the
-  empty end of bank $D0 (about 25); Spekkio and Kureji fill bank $D0, so adding one is refused with the reason.
+  empty end of bank $D0 (about 25); Spekkio and Kureji fill bank $D0, so the first new monster moves the monsters to a
+  bank of their own ("Make room for new monsters", below).
 - New shops and longer shop lists: the hacks' shop code is the US game's, so their shops move to a bank of Lufia Forge's
   the same way (new ids from 3F in Frue and Foomy, 42 in Spekkio, 40 in Kureji). Checked in the game: Frue's new monster
   E0 in a story battle, Spekkio's new shop 42.
@@ -162,6 +163,76 @@ identical:
 
 With Amon renamed "Amon of Doom!" on the tidied ROM (Spekkio EA, Kureji E3) the battle runs the same and the name shows
 in full in the target box.
+
+### Make room for new monsters (Lufia II > Settings > HACK DATA, or the first "Add a new monster")
+
+Spekkio and Kureji fill bank $D0 (Frue and Foomy have 2 KB left at its end), so new monsters need another bank. Read
+from the hacks' code (Core/Lufia2/L2NewMonsters.cs, `HackLayout`, every place checked byte for byte before anything
+changes): the Expansion patch reads bank $D0 in the same places as the US game reads bank $96 (twelve `LDA $D0:A000+k,X`
+in $81:FB1A-$81:FC0A, the record lookup $81:FCE2, the turn script's bank `LDA #$D0` at $81:B1E3) and in its own copy of
+the battle loader at $81:FE00 (the game's $81:FC0B is `JML $81:FE00`; the copy reads the monster id at $7E:09F2, as
+$D0:09F2 is ROM, and keeps the record's bank at combatant +$47 for the "when hit" script; the hack's $81:F4D5 is `JML
+$81:FD04`, which sets bank $96 itself). Bank $D0 also holds the monster attack names ($D0:8000-, read by the hack's
+code at $85:F2D7 with bank $D0), so they stay and the monsters move:
+
+- the hack's data is tidied first when it isn't yet (the same as "Tidy the hack's data", with its own checks), so the
+  tidied scripts move along and a later tidy finds nothing to do;
+- everything a record or a battle script uses (the records to their 00, every step of both scripts) is copied to a
+  bank of Lufia Forge's added space at the same addresses ($E4 in all four hacks), so every script offset (the wrapped
+  ones too) and every edited script (looked up by record address) stays right;
+- the table goes to $E4:8010 (after a 16-byte header "LF2MN" that names the bank it came from): records are read with
+  `LDA table+k,X`, so they have to sit after the table; ids past the hack's are 0000;
+- every other byte of the new bank is 00 (the attack names' copy, the old table, script bytes no path uses any more);
+- the places above read the new bank (49 bytes of code, and Lufia Forge's script hook when it is in). Bank $D0 keeps
+  the attack names and its old copy, which nothing reads any more.
+
+New monsters then go to the new bank's free runs (00 bytes no record or script uses, after the table), the smallest one
+that fits: the record, then its turn and "when hit" scripts laid out again right after it (only the steps a path
+reaches, a script both tags use written once), both checked to run step by step as the original's before anything is
+written. Monster FF is never used (it ends monster group and story battle lists).
+
+Nothing is written before the new ROM, built in memory, is proven to read the same as before the move: every monster
+at its new place (name, stats, drop, the record's bytes, both scripts walked side by side on every path), every capsule
+form, item, spell, IP attack and effect, description and shop; and every byte that changed is in the new bank, one of
+the code places, Lufia Forge's script hook or the added space's mark. One Undo step (with the first new monster, when
+"Add a new monster" does it; the confirmation shows the whole preview first).
+
+| | Frue | Spekkio | Kureji | Foomy |
+|---|---|---|---|---|
+| Tidied first | yes (1 script, 5 spells) | yes (30 scripts, 5 spells) | yes (21 scripts, 5 spells) | yes (1 script, 5 spells) |
+| Room for new monsters | 2,111 bytes in $D0 -> 13,615 in $E4 | 2 -> 8,240 | 1 -> 7,602 | 2,111 -> 13,606 |
+| Bytes of $E4 cleared to 00 (not used by any monster) | 2,192 | 5,914 | 6,391 | 2,271 |
+| Ids free for new monsters | 31 (E0-FE) | 20 (E5-E7, EB, EC, F0-FE) | 23 (E8-FE) | 31 |
+| Copies made (monsters 00, 01, 02... in turn) until the ids ran out | 31, 2,356 bytes | 20, 1,341 bytes | 23, 1,647 bytes | 31, 2,356 bytes |
+
+So the ids, not the bytes, are the limit: a copy of a monster takes its record (about 45 bytes) and its scripts
+(a few dozen bytes for most, 1,885 for Spekkio's Egg Dragon).
+
+Checked with a console check on the four tidied hacks: every monster reads the same after the move (Spekkio 256
+monsters, 414 scripts, 4,914 steps; Kureji 232, 415, 5,290), the bytes changed outside $E4 are exactly the code places
+and the added space's mark, tidying again finds nothing, "Make room" again refuses (done), no page is locked; every
+copy reads like its monster (stats, both scripts step by step) and the old monsters stay the same. On the US game
+nothing changes: "Add a new monster" writes the same bytes as before (also on Frue as it is).
+
+Checked in the game (BizHawk, the opening changed to start story battle 16, its monsters three of one with ATP and
+INT 1, the same buttons in every run; Spekkio Web Spider 44, Kureji Lizard Man BC):
+- the tidied hack against the moved one: the same runner calls on the same frames (the records' bank $E4 instead of
+  $D0, same addresses), every screenshot identical (511 of 511, both hacks);
+- the moved hack with its old copy in bank $D0 overwritten with FF (every byte the move copied): the same, 511 of 511
+  identical, so nothing reads the old copy;
+- three new monsters (copies, "FORGE NEW", Spekkio E5 at $E4:E180, Kureji E8 at $E4:DEE2): the same turns on the same
+  frames from the new records; only the name in the target box differs (481 of 511 screenshots identical, the 30 others
+  show "FORGE NEW");
+- one new monster "FORGE TEST" with HP 1 and EXP 500 (Kureji a copy of Lizard Man; Spekkio a copy of Goblin with
+  level 1, AGL 1 and DFP 0, as Maxim missed the Web Spider every time there): shown by its name, it falls to Maxim's
+  hit and the fight gives "Gets 500 EXP." (and its gold).
+
+Checked in the window (a Spekkio and a Kureji project made from the untouched hack): the Monsters page offers "Add a
+new monster" although $D0 is full; adding a copy of Web Spider (Kureji: Lizard Man) makes room and adds E5 (E8) as one
+Undo step (the same bytes as made outside the window), Undo gives back the hack's bytes, Redo the same ROM; a second
+copy is added without asking, and Undo takes only that one back; the Settings card then says the monsters have their
+bank. (The Monsters page no longer writes the monster it showed when its list is read again after an Undo: before, the
+new-monster note's change wrote that record back to where it had been.)
 
 
 ## Free space
