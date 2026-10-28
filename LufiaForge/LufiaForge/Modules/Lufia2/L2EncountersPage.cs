@@ -207,7 +207,7 @@ public partial class L2EncountersPage : ObservableObject
         _groupOptions = Enumerable.Range(0, L2Encounters.GroupCount).Select(g => new L2Option(g, GroupLabel(g))).ToList();
         ZoneNames.Clear();
         var sizes = ZoneSizes();
-        for (int z = 0; z < L2Encounters.ZoneCount; z++)
+        for (int z = 0; z < L2Encounters.ZoneCountIn(_rom); z++)
         {
             var groups = L2Encounters.ZoneGroups(_rom, z);
             ZoneNames.Add($"Zone {z:X2}  " + (groups.Count == 0 ? "no battles" : $"{groups.Count} group{(groups.Count > 1 ? "s" : "")}") + (sizes[z] == 0 ? ", not on the map" : ""));
@@ -222,6 +222,7 @@ public partial class L2EncountersPage : ObservableObject
     /// <summary>Shows zone <paramref name="z"/> (from the Maps tab's "Monsters..." button).</summary>
     public void ShowZone(int z)
     {
+        RefreshLists();   // (zones may have been added on the Maps tab)
         ListTab = 0;
         SelectedZone = -1; SelectedZone = z;
     }
@@ -316,6 +317,22 @@ public partial class L2EncountersPage : ObservableObject
         int z = SelectedZone;
         Status = $"Zone {z:X2} written.";
         System.Windows.Application.Current?.Dispatcher.BeginInvoke(() => { RefreshLists(); ShowZoneDetails(z); });
+    }
+
+    /// <summary>Adds a world map battle zone (the game has 17; the zone table moves to the added space the first time).</summary>
+    [RelayCommand]
+    private void AddZone()
+    {
+        if (_rom == null || _main == null || Locked()) return;
+        try
+        {
+            int z = L2Encounters.AddZone(_rom);
+            _main.NotifyRomModified($"Lufia II: battle zone {z:X2} added");
+            RefreshLists();
+            ListTab = 0; SelectedZone = -1; SelectedZone = z;
+            Status = $"Zone {z:X2} added: give it groups here (Add group), then paint it on the world map (Maps > World map > Battle zones).";
+        }
+        catch (Exception ex) { Status = "No zone added: " + ex.Message; }
     }
 
     [RelayCommand]

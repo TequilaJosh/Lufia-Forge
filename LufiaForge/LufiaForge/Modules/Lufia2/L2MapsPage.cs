@@ -33,6 +33,14 @@ public sealed class L2MapItem
     public override string ToString() => Label;
 }
 
+/// <summary>A chest picture + Chest can use (closed and open, as drawn on its map).</summary>
+public sealed class L2ChestLookChoice
+{
+    public L2ChestLooks.Look Look { get; init; } = null!;
+    public string Label { get; init; } = "";
+    public BitmapSource? Image { get; init; }
+}
+
 /// <summary>A block button (recent brushes, blocks that go with the brush).</summary>
 public sealed class L2BlockChoice
 {
@@ -110,6 +118,7 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
         main.Register(this);
         _names = Enumerable.Range(0, L2Maps.Count).Select(id => RomName(rom, id)).ToList();
         _itemNames = null;
+        _gameLooks = null;
         _stats.Clear();
         _edit = null; _history.Clear(); _redo.Clear();
         FillList();
@@ -174,6 +183,8 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
         OnPropertyChanged(nameof(MapNameHint));
         LoadSettings();
         ReloadBlocks();
+        FillChestLooks();
+        OnPropertyChanged(nameof(ChestLookVisible));
         Refresh();
         UpdateUndoState();
         if (_rom != null && _world != null) Status = value == 0
@@ -243,6 +254,17 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
         Selection = null; AreaRect = null; StopStamp();
         LoadSettings(); ReloadBlocks(); Refresh(); UpdateUndoState();
         Status = "Back to the map as the project has it.";
+    }
+
+    /// <summary>The tab is shown again: treasure the Treasure tab changed meanwhile comes into this map's edit (for the
+    /// treasure not changed here, also in the Undo steps), so the inspector shows it and Apply keeps it.</summary>
+    public void Shown()
+    {
+        if (_rom == null || _edit == null || _world != null) return;
+        if (_edit.RebaseChests(_rom) is not var (old, now)) return;
+        for (int i = 0; i < _history.Count; i++) _history[i] = (_history[i].State with { Chests = L2MapEdit.Merge(old, _history[i].State.Chests, now) }, _history[i].What);
+        for (int i = 0; i < _redo.Count; i++) _redo[i] = (_redo[i].State with { Chests = L2MapEdit.Merge(old, _redo[i].State.Chests, now) }, _redo[i].What);
+        DrawOverlays(); UpdateInspector(); UpdateUndoState();
     }
 
     // ---------------------------------------------------------------- undo
@@ -458,6 +480,7 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
     private List<string>? _itemNames;
     private string ItemName(int item)
     {
+        if (L2Gold.IsGold(item)) return $"{L2Gold.AmountOf(item)} gold";
         _itemNames ??= _rom == null ? new() : L2Battle.Items(_rom).OrderBy(i => i.Index).Select(i => i.Name.Trim()).ToList();
         return item >= 0 && item < _itemNames.Count ? _itemNames[item] : $"item {item:X3}";
     }

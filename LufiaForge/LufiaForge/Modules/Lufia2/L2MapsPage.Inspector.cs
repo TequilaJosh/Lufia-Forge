@@ -98,7 +98,11 @@ public partial class L2MapsPage
     private void DragSelection(int cx, int cy)
     {
         if (_edit == null || Selection == null || _dragOriginal == null) return;
-        if (!_dragMoved) { Record(_dragResize ? "resizing " + Describe(Selection.Kind, Selection.Index) : "moving " + Describe(Selection.Kind, Selection.Index)); _dragMoved = true; }
+        if (!_dragMoved)
+        {
+            Record(_dragResize ? "resizing " + Describe(Selection.Kind, Selection.Index) : "moving " + Describe(Selection.Kind, Selection.Index)); _dragMoved = true;
+            _dragStart = _history.Count > 0 ? _history[^1].State : null; _dragUnder = new(_edit.Under);
+        }
         int dx = cx - _dragStartX, dy = cy - _dragStartY;
         var b = (byte[])_dragOriginal.Clone();
         int W = _edit.Width, H = _edit.Height;
@@ -134,9 +138,38 @@ public partial class L2MapsPage
                 break;
         }
         _edit.SetRecord(ListOf(Selection.Kind), Selection.Index, b);
-        if (Selection.Kind == SelKind.Treasure) _edit.SyncHiddenLooks();
+        if (Selection.Kind == SelKind.Treasure)
+        {
+            _edit.SyncHiddenLooks();
+            // the chest's picture goes with it (worked out again from the start of the drag, so dragging back gives the floor back)
+            if (_edit.PictureLayers(_dragOriginal) != 0 && _dragStart != null && _dragUnder != null)
+            {
+                _edit.RestoreLayers(_dragStart, _dragUnder);
+                _edit.MoveChestPicture(_dragOriginal, _dragOriginal[1], _dragOriginal[2], b[1], b[2]);
+                DrawMap();
+            }
+        }
         if (Selection.Kind == SelKind.Character) DrawMap();
         DrawOverlays(); UpdateInspector(); UpdateUndoState();
+    }
+
+    private L2MapEdit.State? _dragStart;
+    private Dictionary<(int X, int Y), (int Block, byte Flags)[]>? _dragUnder;
+
+    /// <summary>The inspector moves the picked treasure (and its chest picture): one Undo step.</summary>
+    private void MoveTreasureTo(int x, int y)
+    {
+        if (_filingInspector || _edit == null || Selection is not { Kind: SelKind.Treasure } s) return;
+        var b = _edit.Records(L2MapEdit.Treasure)[s.Index].Bytes;
+        int nx = X(x), ny = Y(y);
+        if (b[1] == nx && b[2] == ny) return;
+        if (_edit.Records(L2MapEdit.Treasure).Any(r => r.Bytes[1] == nx && r.Bytes[2] == ny)) { Status = "There is treasure on that block already."; UpdateInspector(); return; }
+        Record("moving " + Describe(s.Kind, s.Index));
+        var n = (byte[])b.Clone(); n[1] = (byte)nx; n[2] = (byte)ny;
+        _edit.SetRecord(L2MapEdit.Treasure, s.Index, n);
+        _edit.SyncHiddenLooks();
+        _edit.MoveChestPicture(b, b[1], b[2], nx, ny);
+        Refresh();
     }
 
     [RelayCommand]
@@ -152,7 +185,7 @@ public partial class L2MapsPage
             _edit.RemoveTreasure(s.Index);
             Selection = null;
             Refresh();
-            Status = $"Took out {what}." + (hidden ? "" : " Its picture is still painted on the map: paint the floor over it.");
+            Status = $"Took out {what}." + (hidden ? "" : " Its block got the floor back.");
             return;
         }
         if (s.Kind == SelKind.Character)
@@ -199,6 +232,8 @@ public partial class L2MapsPage
     // treasure
     [ObservableProperty] private int _treasureX, _treasureY;
     [ObservableProperty] private int _treasureItem = -1;
+    [ObservableProperty] private bool _treasureIsGold;
+    [ObservableProperty] private int _treasureGold = 100;
     [ObservableProperty] private string _treasureNote = "";
     [ObservableProperty] private string _treasureKind = "";
     public ObservableCollection<string> ItemChoices { get; } = new();
@@ -272,11 +307,14 @@ public partial class L2MapsPage
                     SelectionTitle = hidden ? $"Hidden item {b[0]}" : $"Chest {b[0]}";
                     var chest = _edit.ChestOf(b[0] & 0x1F);
                     TreasureX = b[1]; TreasureY = b[2];
-                    TreasureItem = chest?.Item ?? -1;
+                    TreasureIsGold = chest != null && L2Gold.IsGold(chest.Item);
+                    TreasureGold = TreasureIsGold ? L2Gold.AmountOf(chest!.Item) : 100;
+                    TreasureItem = chest == null || TreasureIsGold ? -1 : chest.Item;
                     TreasureKind = hidden ? "Hidden: nothing shows; pressing A facing this block finds the item." : "A chest: pressing A facing it opens it and gives the item.";
                     SelectionDetails = chest == null ? "No treasure record uses this spot, so it gives nothing."
                         : $"Found once: opened flag {chest.Flag:X3} remembers it (each treasure has its own){(chest.Special ? "; left out of the game's count of opened chests" : "")}.";
-                    TreasureNote = hidden ? "Drag it to move it." : "Drag it to move it; its picture is part of the map, so paint the chest where you move it (copy one with the Area tool) and the floor where it was.";
+                    TreasureNote = (hidden ? "Drag it to move it." : "Drag it to move it: the chest's picture moves with it, and the block it stood on gets the floor it had (or the floor around it).")
+                        + (L2Gold.CantInstall(_rom) is { } noGold ? " " + noGold : "");
                     break;
                 }
                 case SelKind.Door:
@@ -366,19 +404,25 @@ public partial class L2MapsPage
 
     partial void OnPointXChanged(int value) => EditRecord("moving the point", b => b[1] = X(value));
     partial void OnPointYChanged(int value) => EditRecord("moving the point", b => b[2] = Y(value));
-    partial void OnTreasureXChanged(int value) => EditRecord("moving the treasure", b => b[1] = X(value));
-    partial void OnTreasureYChanged(int value) => EditRecord("moving the treasure", b => b[2] = Y(value));
+    partial void OnTreasureXChanged(int value) => MoveTreasureTo(value, TreasureY);
+    partial void OnTreasureYChanged(int value) => MoveTreasureTo(TreasureX, value);
 
-    partial void OnTreasureItemChanged(int value)
+    partial void OnTreasureItemChanged(int value) { if (value >= 0) SetChestItem(value); }
+    partial void OnTreasureIsGoldChanged(bool value) => SetChestItem(value ? L2Gold.Item(Math.Max(1, TreasureGold)) : 0);
+    partial void OnTreasureGoldChanged(int value) { if (TreasureIsGold) SetChestItem(L2Gold.Item(Math.Max(1, value))); }
+
+    /// <summary>What the picked treasure holds (an item, or gold as <see cref="L2Gold.EditorBase"/> + amount).</summary>
+    private void SetChestItem(int item)
     {
-        if (_filingInspector || _rom == null || _edit == null || Selection is not { Kind: SelKind.Treasure } s || value < 0) return;
+        if (_filingInspector || _rom == null || _edit == null || Selection is not { Kind: SelKind.Treasure } s) return;
+        if (L2Gold.IsGold(item) && L2Gold.CantInstall(_rom) is { } why) { Status = why; UpdateInspector(); return; }
         int spot = _edit.Records(L2MapEdit.Treasure)[s.Index].Bytes[0] & 0x1F;
         var chest = _edit.ChestOf(spot);
-        if (chest == null || chest.Item == value) return;
+        if (chest == null || chest.Item == item) return;
         Record("changing what the treasure holds");
-        _edit.SetTreasureItem(spot, value);
-        DrawOverlays(); UpdateUndoState();
-        Status = $"It now holds {ItemName(value)}.";
+        _edit.SetTreasureItem(spot, item);
+        UpdateInspector(); DrawOverlays(); UpdateUndoState();
+        Status = $"It now holds {ItemName(item)}.";
     }
 
     // ---------------------------------------------------------------- going places

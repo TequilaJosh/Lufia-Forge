@@ -45,6 +45,8 @@ public partial class Lufia2ViewModel : ObservableObject
         // a monster sprite added, painted, given a palette or a movement, or given to a monster on the Graphics page:
         // the Monsters page lists it and shows the monster again, the Encounters page draws the new pictures
         Graphics.MonsterSpritesChanged += () => { Monsters.RefreshSprites(); Encounters.RefreshMonsters(); };
+        // the Treasure tab and the Maps tab edit the same treasure: the map's edits are written before Treasure reads it
+        Chests.BeforeRead = () => Maps.WritePendingEdits();
     }
 
     public void SetRom(RomBuffer rom, MainViewModel main)

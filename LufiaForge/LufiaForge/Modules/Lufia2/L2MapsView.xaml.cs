@@ -20,6 +20,8 @@ public partial class L2MapsView : UserControl, LufiaForge.Modules.Common.ILocalU
             if (e.Key == Key.Z && !shift) e.Handled = Vm.UndoPaint();
             else if (e.Key == Key.Y || e.Key == Key.Z && shift) e.Handled = Vm.RedoPaint();
         };
+        // shown again: treasure the Treasure tab changed meanwhile is read again
+        IsVisibleChanged += (_, e) => { if (e.NewValue is true) Vm?.Shown(); };
         DataContextChanged += (_, e) =>
         {
             if (e.OldValue is L2MapsPage old) old.JumpRequested -= Jump;

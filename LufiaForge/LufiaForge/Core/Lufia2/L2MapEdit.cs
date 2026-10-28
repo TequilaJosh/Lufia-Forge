@@ -44,7 +44,7 @@ public sealed class L2MapEdit
 
     /// <summary>The treasure of the map (the chest list at $91:B8B5, <see cref="L2Chests"/>), as edited.</summary>
     public List<L2Chests.Rec> Chests { get; private set; }
-    private readonly List<L2Chests.Rec> _origChests;
+    private List<L2Chests.Rec> _origChests;
 
     /// <summary>Whether this is the world map or the sea floor: only the info block (exits, points) is edited here; their
     /// blocks are the Maps tab's world map editor.</summary>
@@ -56,7 +56,7 @@ public sealed class L2MapEdit
         // the world maps' blocks are big blocks in their own files: a 256 x 256 grid of 16-pixel blocks stands for them
         Map = map < 2 ? new L2Maps.Map { Id = map, Name = "", Layers = new[] { new L2Maps.Layer { Width = 256, Height = 256, Blocks = new int[65536], Flags = new byte[65536] } } }
                       : L2Maps.Read(rom, map);
-        Chests = map < 2 ? new() : L2Chests.Records(rom, map);
+        Chests = map < 2 ? new() : EditorRecords(rom, map);
         _origChests = new List<L2Chests.Rec>(Chests);
         _origInfoAt = L2MapInfo.Block(rom, map);
         _origInfo = _origInfoAt >= 0 && _origInfoAt + 2 <= rom.Length ? rom.ReadBytes(_origInfoAt, rom.ReadUInt16Le(_origInfoAt)) : Array.Empty<byte>();
@@ -185,10 +185,91 @@ public sealed class L2MapEdit
     /// <summary>The chest record of a treasure spot id, or null.</summary>
     public L2Chests.Rec? ChestOf(int spot) => Chests.FirstOrDefault(c => c.Spot == spot);
 
-    /// <summary>Adds treasure at block (x, y): a chest (the look and picture of a chest already on the map, both layers'
-    /// block and walls copied onto the spot) or a hidden one (a look that copies the spot onto itself, so nothing shows).
-    /// It gets the next free spot id and an opened flag no treasure of the game uses. Returns its spot id.</summary>
-    public int AddTreasure(RomBuffer rom, int x, int y, bool hidden, int item)
+    /// <summary>Which layers a look copies (bit 0 ground, bit 1 upper): layer n is copied when any of bits 0x11 &lt;&lt; n is
+    /// set ($83:8B6A: both = the whole cell, the low one = the block, the high one = its 04 / 08 walls).</summary>
+    public static bool CopiesLayer(int layersByte, int layer) => (layersByte & (0x11 << layer)) != 0;
+
+    /// <summary>What lay under the chest pictures this edit put down or moved (place -> each layer's block and flags), so
+    /// a chest moved or taken out gives its block back.</summary>
+    public Dictionary<(int X, int Y), (int Block, byte Flags)[]> Under { get; private set; } = new();
+
+    public (int Block, byte Flags)[] CellAt(int x, int y) =>
+        Map.Layers.Select(L => (L.Blocks[y * L.Width + x], L.Flags[y * L.Width + x])).ToArray();
+
+    private void SetCell(int x, int y, int layer, (int Block, byte Flags) c)
+    {
+        var L = Map.Layers[layer];
+        L.Blocks[y * L.Width + x] = c.Block; L.Flags[y * L.Width + x] = c.Flags;
+    }
+
+    /// <summary>The floor for a block a chest leaves on layer <paramref name="layer"/>: what the 4 blocks around it have
+    /// most (leaving out other treasure spots), or nothing (block 0) on the upper layer when that is what they have.</summary>
+    private (int Block, byte Flags) FloorAround(int x, int y, int layer)
+    {
+        var spots = Records(Treasure).Select(r => ((int)r.Bytes[1], (int)r.Bytes[2])).ToHashSet();
+        var L = Map.Layers[layer];
+        var near = new List<(int B, byte F)>();
+        foreach (var (dx, dy) in new[] { (-1, 0), (1, 0), (0, -1), (0, 1) })
+        {
+            int nx = x + dx, ny = y + dy;
+            if (nx < 0 || ny < 0 || nx >= L.Width || ny >= L.Height || spots.Contains((nx, ny))) continue;
+            near.Add((L.Blocks[ny * L.Width + nx], L.Flags[ny * L.Width + nx]));
+        }
+        if (near.Count == 0) return (L.Blocks[y * L.Width + x], L.Flags[y * L.Width + x]);
+        // the block they have most; its walls (04 above, 08 left) belong to the neighbour's own place, so they are left off
+        var (b, f) = near.GroupBy(c => c.B).OrderByDescending(g => g.Count()).First().First();
+        return (b, (byte)(f & ~0x0C));
+    }
+
+    /// <summary>Paints a chest picture (each layer the look copies) at (x, y), remembering what was there.</summary>
+    private void PutPicture(int x, int y, int layersByte, (int Block, byte Flags)[] pic)
+    {
+        Under[(x, y)] = CellAt(x, y);
+        for (int l = 0; l < Map.Layers.Length && l < pic.Length; l++)
+            if (CopiesLayer(layersByte, l)) SetCell(x, y, l, pic[l]);
+    }
+
+    /// <summary>Takes a chest picture off (x, y): the block gets what lay there before, else the floor around it.</summary>
+    private void TakePicture(int x, int y, int layersByte)
+    {
+        Under.Remove((x, y), out var was);
+        for (int l = 0; l < Map.Layers.Length; l++)
+            if (CopiesLayer(layersByte, l)) SetCell(x, y, l, was != null && l < was.Length ? was[l] : FloorAround(x, y, l));
+    }
+
+    /// <summary>The layers a treasure spot's chest picture is on (0 for a hidden one).</summary>
+    public int PictureLayers(byte[] spot) => LookOf(spot) is { } l ? IsSelfLook(l) ? 0 : l[1] : 0;
+
+    /// <summary>The layers of the map as in an earlier state (same size), for moving a picture again during a drag.</summary>
+    public void RestoreLayers(State s, Dictionary<(int X, int Y), (int Block, byte Flags)[]> under)
+    {
+        if (s.W != Width || s.H != Height) return;
+        for (int l = 0; l < Map.Layers.Length && l < s.Blocks.Length; l++)
+        {
+            Array.Copy(s.Blocks[l], Map.Layers[l].Blocks, s.Blocks[l].Length);
+            Array.Copy(s.Flags[l], Map.Layers[l].Flags, s.Flags[l].Length);
+        }
+        Under = new(under);
+    }
+
+    /// <summary>Moves a chest's picture with it, from (ox, oy) to (nx, ny): the closed chest goes where it goes, and the
+    /// block it stood on gets the floor it had (or the floor around it). Hidden treasure has no picture.</summary>
+    public void MoveChestPicture(byte[] spot, int ox, int oy, int nx, int ny)
+    {
+        int layers = PictureLayers(spot);
+        if (layers == 0 || ox == nx && oy == ny || nx >= Width || ny >= Height) return;
+        var pic = CellAt(ox, oy);
+        TakePicture(ox, oy, layers);
+        PutPicture(nx, ny, layers, pic);
+    }
+
+    /// <summary>Adds treasure at block (x, y): a chest or a hidden one (a look that copies the spot onto itself, so nothing
+    /// shows). A chest takes the look of <paramref name="from"/> (a chest of any map, <see cref="L2ChestLooks"/>: its
+    /// blocks are found in this map's block set or added to it, and when this map has no look that opens that way, the
+    /// open and closed pictures are kept on two blocks where the camera doesn't go) or, with none given, of a chest of
+    /// this map. It gets the next free spot id and an opened flag no treasure of the game uses. Returns its spot id and
+    /// a note (blocks added, where the pictures are kept).</summary>
+    public (int Spot, string Note) AddTreasure(RomBuffer rom, int x, int y, bool hidden, int item, L2ChestLooks.Look? from = null)
     {
         if (IsWorld) throw new InvalidOperationException("The world maps can't have treasure.");
         if (x < 0 || y < 0 || x >= Width || y >= Height) throw new InvalidOperationException("That block is outside the map.");
@@ -200,40 +281,70 @@ public sealed class L2MapEdit
         int flag = L2Chests.FreeFlag(rom, Chests.Select(c => c.Flag), MapId);
         if (flag < 0) throw new InvalidOperationException("All 512 opened flags are used by treasure already.");
         int look;
-        if (hidden)
+        string note = "";
+        int NewLookId()
         {
             var ids = Records(Looks).Select(r => (int)r.Bytes[0]).ToHashSet();
-            look = Enumerable.Range(0, 0xFF).FirstOrDefault(i => !ids.Contains(i), -1);
-            if (look < 0) throw new InvalidOperationException("The map has no free look number.");
+            int id = Enumerable.Range(0, 0xFF).FirstOrDefault(i => !ids.Contains(i), -1);
+            return id >= 0 ? id : throw new InvalidOperationException("The map has no free look number.");
+        }
+        byte[]? own = from != null && from.Map == MapId ? spots.Select(r => r.Bytes).FirstOrDefault(b => b[0] == from.Spot && b[3] == from.LookId) : null;
+        if (hidden)
+        {
+            look = NewLookId();
             AddRecord(Looks, new byte[] { (byte)look, 0x03, (byte)x, (byte)y, 1, 1, (byte)x, (byte)y, 1, 1 });
+        }
+        else if (from == null || own != null)
+        {
+            // a chest of the map (its spot has a chest record and a look that isn't hidden) gives the look and the picture
+            var model = own ?? spots.Select(r => r.Bytes).FirstOrDefault(b => ChestOf(b[0] & 0x1F) != null && LookOf(b) is { } l && !IsSelfLook(l));
+            if (model == null) throw new InvalidOperationException("This map has no chest of its own: pick the chest picture of another map's chest (Chest picture, under the map).");
+            look = model[3];
+            PutPicture(x, y, PictureLayers(model), CellAt(model[1], model[2]));
         }
         else
         {
-            // a chest of the map (its spot has a chest record and a look that isn't hidden) gives the look and the picture
-            var model = spots.Select(r => r.Bytes).FirstOrDefault(b => ChestOf(b[0] & 0x1F) != null && LookOf(b) is { } l && !IsSelfLook(l));
-            if (model == null) throw new InvalidOperationException("This map has no chest to copy the look of a chest from: add a hidden treasure, or paint a chest and its open picture first.");
-            look = model[3];
-            foreach (var L in Map.Layers)
+            var (closed, open, added) = L2ChestLooks.Translate(rom, from, this);
+            // the walls are this map's own: the chest's blocks keep the flags the chosen block has here
+            var here = CellAt(x, y);
+            closed = closed.Select((c, i) => (c.Block, here[i].Flags)).ToArray();
+            open = open.Select((c, i) => (c.Block, here[i].Flags)).ToArray();
+            if (added > 0) note = $"{added} block{(added == 1 ? "" : "s")} of that chest added to block set {BlockSetIndex} (Edit > Undo takes them out). ";
+            // a look of this map that opens the same way is used again, else a new one with its pictures kept out of sight
+            var same = Records(Looks).Select(r => r.Bytes).FirstOrDefault(l => l[1] == from.Layers && l[4] == 1 && l[5] == 1 && !IsSelfLook(l) &&
+                l[2] < Width && l[3] < Height && Enumerable.Range(0, Map.Layers.Length).All(i => !CopiesLayer(from.Layers, i) || CellAt(l[2], l[3])[i].Block == open[i].Block));
+            if (same != null) look = same[0];
+            else
             {
-                int from = model[2] * L.Width + model[1], to = y * L.Width + x;
-                if (from < L.Blocks.Length && to < L.Blocks.Length) { L.Blocks[to] = L.Blocks[from]; L.Flags[to] = L.Flags[from]; }
+                var (sx, sy, seen) = L2ChestLooks.Stash(rom, this, x, y);
+                if (sx < 0) throw new InvalidOperationException("There is no room on this map to keep the open chest's picture (two blocks side by side).");
+                look = NewLookId();
+                PutPicture(sx, sy, from.Layers, open);
+                PutPicture(sx + 1, sy, from.Layers, closed);
+                Under.Remove((sx, sy)); Under.Remove((sx + 1, sy));
+                AddRecord(Looks, new byte[] { (byte)look, (byte)from.Layers, (byte)sx, (byte)sy, 1, 1, (byte)(sx + 1), (byte)sy, 1, 1 });
+                note += $"The open and closed chest are kept at ({sx},{sy}) and ({sx + 1},{sy}): opening copies the open one onto the chest"
+                        + (seen ? "; the party may see them there, so if they show, move them somewhere out of sight. " : ", out of the camera's reach. ");
             }
+            PutPicture(x, y, from.Layers, closed);
         }
         AddRecord(Treasure, new byte[] { (byte)spot, (byte)x, (byte)y, (byte)look });
         Chests.Add(new L2Chests.Rec(spot, flag, item, false));
-        return spot;
+        return (spot, note.Trim());
     }
 
     /// <summary>Takes treasure spot record <paramref name="index"/> out with its chest record (and its hidden look, when
-    /// nothing else uses it). A chest's picture stays painted on the map.</summary>
+    /// nothing else uses it). A chest's picture goes too: the block gets what lay under it, or the floor around it.</summary>
     public void RemoveTreasure(int index)
     {
         var spots = Records(Treasure);
         if (index < 0 || index >= spots.Count) return;
         var b = spots[index].Bytes;
         var look = LookOf(b);
+        int layers = PictureLayers(b);
         RemoveRecord(Treasure, index);
         Chests.RemoveAll(c => c.Spot == (b[0] & 0x1F));
+        if (layers != 0 && b[1] < Width && b[2] < Height) TakePicture(b[1], b[2], layers);
         if (IsSelfLook(look) && !Records(Treasure).Any(r => r.Bytes[3] == b[3]))
         {
             int li = Records(Looks).FindIndex(r => r.Bytes[0] == b[3]);
@@ -254,6 +365,41 @@ public sealed class L2MapEdit
             l[2] = l[6] = b[1]; l[3] = l[7] = b[2];
             SetRecord(Looks, li, l);
         }
+    }
+
+    /// <summary>A map's treasure records as the editors keep them (gold as <see cref="L2Gold.EditorBase"/> + amount).</summary>
+    public static List<L2Chests.Rec> EditorRecords(RomBuffer rom, int map) =>
+        L2Chests.Records(rom, map).Select(r => r with { Item = L2Gold.ToEditor(rom, r.Item) }).ToList();
+
+    /// <summary>Three-way merge of a map's treasure records by spot: <paramref name="mine"/> (this edit) against
+    /// <paramref name="base"/> (what it started from) and <paramref name="theirs"/> (the ROM now). A record this edit
+    /// didn't change takes the ROM's version; records the ROM gained (not in the base) stay.</summary>
+    public static List<L2Chests.Rec> Merge(IReadOnlyList<L2Chests.Rec> @base, IReadOnlyList<L2Chests.Rec> mine, IReadOnlyList<L2Chests.Rec> theirs)
+    {
+        var outp = new List<L2Chests.Rec>();
+        foreach (var m in mine)
+        {
+            var b = @base.FirstOrDefault(x => x.Spot == m.Spot);
+            var t = theirs.FirstOrDefault(x => x.Spot == m.Spot);
+            outp.Add(b != null && b == m && t != null ? t : m);
+        }
+        foreach (var t in theirs)
+            if (!@base.Any(x => x.Spot == t.Spot) && !outp.Any(x => x.Spot == t.Spot)) outp.Add(t);
+        return outp;
+    }
+
+    /// <summary>The treasure changed in the ROM since this edit read it (the Treasure tab): this edit takes those changes
+    /// for the records it didn't change itself, and the ROM's records become its base. Returns (old base, new base), or
+    /// null when nothing changed.</summary>
+    public (List<L2Chests.Rec> Old, List<L2Chests.Rec> New)? RebaseChests(RomBuffer rom)
+    {
+        if (IsWorld) return null;
+        var now = EditorRecords(rom, MapId);
+        if (now.SequenceEqual(_origChests)) return null;
+        var old = _origChests;
+        Chests = Merge(old, Chests, now);
+        _origChests = now;
+        return (old, now);
     }
 
     /// <summary>Changes what a treasure spot holds.</summary>
@@ -409,7 +555,10 @@ public sealed class L2MapEdit
         if (ChestsChanged)
         {
             if (TableGuard.LockReason(rom, "Treasure") is { } locked) throw new InvalidOperationException(locked);
-            L2Chests.WriteList(rom, MapId, Chests);
+            // what the Treasure tab (or anything else) changed in the ROM since this edit was read stays: only the
+            // records changed here are written over it
+            var merged = Merge(_origChests, Chests, EditorRecords(rom, MapId));
+            L2Chests.WriteList(rom, MapId, L2Gold.ToRom(rom, MapId, merged));
             done.Add("treasure");
         }
 

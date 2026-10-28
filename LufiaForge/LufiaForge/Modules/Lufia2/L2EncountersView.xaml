@@ -51,7 +51,11 @@
                            Text="Random battles happen on the world map: its zones pick the monster group. In towns and dungeons the monsters walk on the map, each with its group. A group lists up to 8 kinds of monster that can come in its battles."/>
                 <TabControl Style="{StaticResource LufiaTabControl}" SelectedIndex="{Binding ListTab}">
                     <TabItem Header="World zones" Style="{StaticResource LufiaTabItem}">
-                        <ListBox Style="{StaticResource GdFindList}" ItemsSource="{Binding ZoneNames}" SelectedIndex="{Binding SelectedZone}"/>
+                        <DockPanel>
+                            <Button DockPanel.Dock="Bottom" Content="+ New zone" Style="{StaticResource LufiaButtonGold}" Padding="8,3" Margin="0,6,0,0" HorizontalAlignment="Left"
+                                    Command="{Binding AddZoneCommand}" ToolTip="Adds a battle zone (the game has 17; Lufia Forge moves the zone table to the added space to make room for up to 256)"/>
+                            <ListBox Style="{StaticResource GdFindList}" ItemsSource="{Binding ZoneNames}" SelectedIndex="{Binding SelectedZone}"/>
+                        </DockPanel>
                     </TabItem>
                     <TabItem Header="Dungeons" Style="{StaticResource LufiaTabItem}">
                         <ListBox Style="{StaticResource GdFindList}" ItemsSource="{Binding MapNames}" SelectedIndex="{Binding SelectedMapRow}"/>
