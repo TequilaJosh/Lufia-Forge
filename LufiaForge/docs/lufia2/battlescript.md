@@ -259,7 +259,7 @@ the game has one).
 
 **Battle animations.** `$1262` is played by `$81:895E` from the table `$95:8000` (u16 pointers, 0 = none: the game would
 crash on it). Valid: 00-36, 40-46, 60-72, 80-9B, DC-E9, F0, F1; FF = no animation. 00-11 are the weapon swings (00 sword,
-0E a punch with no weapon, ...), 12-39 the spells. Items give theirs as word 0x2000 = animation + 1 (`$81:AA3D` for
+0E a punch with no weapon, ...; each plays the attacking hero's own script, spell-animations.md 2a), 12-39 the spells. Items give theirs as word 0x2000 = animation + 1 (`$81:AA3D` for
 items used in battle, `$81:A8B7` for weapons); monsters attack with E0, capsule monsters with F0.
 
 **IP attacks.** The table `$84:8F10` (u16 pointers into bank $84) is read by `$81:F45E` (A = the attack counted from 1,

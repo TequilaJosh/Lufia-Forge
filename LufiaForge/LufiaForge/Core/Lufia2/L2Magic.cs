@@ -470,7 +470,8 @@ public static class L2Magic
         foreach (var s in L2Battle.Spells(rom)) Add(SpellAnimation(rom, s.Index), $"{s.Name.Trim()} (spell)");
         foreach (var ip in L2Battle.IpAttacks(rom)) Add(ip.Animation, $"{ip.Name} (IP attack)");
         foreach (var it in L2Battle.Items(rom))
-            if (it.Values.TryGetValue(0x2000, out var w) && w > 0) Add(w - 1, $"{it.Name.Trim()} ({(it.EquipType == 1 ? "weapon" : "item")})");
+            if ((it.Values.TryGetValue(0x2000, out var w) ? w : L2AiScripts.ItemAddedWords(rom, it.Index).GetValueOrDefault(0x2000)) is var a and > 0)
+                Add(a - 1, $"{it.Name.Trim()} ({(it.EquipType == 1 ? "weapon" : "item")})");
         foreach (var kv in BuiltIn) Add(kv.Key, kv.Value);
         var list = new List<(int, string)>();
         for (int n = 0; n < 0xFF; n++)

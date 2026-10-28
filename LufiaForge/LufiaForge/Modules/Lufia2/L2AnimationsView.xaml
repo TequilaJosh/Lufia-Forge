@@ -38,15 +38,18 @@
                                 <ComboBox ItemsSource="{Binding Backgrounds}" SelectedIndex="{Binding Background}" Width="190"/>
                                 <TextBlock Text="Monster" Style="{StaticResource GdFieldLabel}" Margin="10,0,0,0"/>
                                 <ComboBox ItemsSource="{Binding MonsterNames}" SelectedIndex="{Binding Monster}" Width="140"/>
+                                <TextBlock Text="Hero" Style="{StaticResource GdFieldLabel}" Margin="10,0,0,0"/>
+                                <ComboBox ItemsSource="{Binding Heroes}" SelectedIndex="{Binding Hero}" Width="80"
+                                          ToolTip="Who attacks: a weapon swing (00-11) plays the script of the hero swinging it"/>
                             </StackPanel>
                             <TextBlock Text="{Binding PlayInfo}" Style="{StaticResource GdHint}" TextWrapping="Wrap" MaxWidth="512" HorizontalAlignment="Left" Margin="0,4,0,0"/>
                         </StackPanel>
                     </Border>
                     <Border Style="{StaticResource GdCard}">
                         <StackPanel MaxWidth="440">
-                            <TextBlock Text="NEW ANIMATION, GIVE IT TO A SPELL OR AN IP ATTACK" Style="{StaticResource GdSection}"/>
+                            <TextBlock Text="NEW ANIMATION, GIVE IT TO A SPELL, IP ATTACK OR WEAPON" Style="{StaticResource GdSection}"/>
                             <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap"
-                                       Text="Make a copy: a new animation number with its own scripts, graphics and colours, so changing it changes nothing else. Then paint it, change its colours and step lengths, and give it to a spell or an IP attack."/>
+                                       Text="Make a copy: a new animation number with its own scripts, graphics and colours, so changing it changes nothing else. Then paint it, change its colours and step lengths, and give it to a spell, an IP attack or a weapon. A weapon swing (00-11) has a script for each hero: a copy keeps all seven."/>
                             <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
                                 <TextBlock Text="Name" Style="{StaticResource GdFieldLabel}"/>
                                 <TextBox Style="{StaticResource GdText}" Width="140" Text="{Binding NewName, UpdateSourceTrigger=PropertyChanged}" MaxLength="16"/>
@@ -61,8 +64,12 @@
                                 <ComboBox ItemsSource="{Binding IpNames}" SelectedIndex="{Binding IpChoice}" Width="250"/>
                                 <Button Content="Give to this IP attack" Command="{Binding GiveToIpCommand}" Style="{StaticResource LufiaButton}" Padding="10,3" Margin="6,0,0,0"/>
                             </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                <ComboBox ItemsSource="{Binding ItemNames}" SelectedIndex="{Binding ItemChoice}" Width="250"/>
+                                <Button Content="Give to this weapon or item" Command="{Binding GiveToItemCommand}" Style="{StaticResource LufiaButton}" Padding="10,3" Margin="6,0,0,0"/>
+                            </StackPanel>
                             <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,6,0,0"
-                                       Text="A monster casting a spell shows the same animation, aimed at the heroes. Items and weapons pick theirs on the Items page."/>
+                                       Text="A monster casting a spell shows the same animation, aimed at the heroes. A weapon swing works only for a hero: played for a monster or a capsule monster it stops the game. The Items page picks an item's animation too."/>
                             <TextBlock Text="STEP LENGTHS" Style="{StaticResource GdSection}" Margin="0,12,0,0"/>
                             <TextBlock Text="{Binding TimingInfo}" Style="{StaticResource GdHint}" TextWrapping="Wrap"/>
                             <ItemsControl ItemsSource="{Binding Timings}" Margin="0,4,0,0">

@@ -23,7 +23,7 @@ public static class L2SpellAnims
 
     // argument bytes of each opcode ('-' = not an opcode: BRK or a dead loop in the game)
     private const string Lengths =
-        "0012204-425122201111----0000----" +  // 00
+        "0012204-4251222E1111----0000----" +  // 00
         "5210---43---500-22-22-----------" +  // 20
         "----------------6220202--1006611" +  // 40
         "211102110201----101-------------" +  // 60
@@ -32,8 +32,15 @@ public static class L2SpellAnims
         "331-------------2232222233100222" +  // C0
         "000000000230110000--------------";   // E0
 
+    /// <summary>Op 0F's table: one script address per character, picked by the attacker's character number
+    /// ($81:94CA: track +$25 = the attacker's party slot, $153D + slot = its character: Maxim 0, Selan 1, Guy 2, Artea 3,
+    /// Tia 4, Dekar 5, Lexis 6; a monster or capsule monster there stops the game at a BRK).</summary>
+    public const int CharacterTable = 7;
+    public static readonly string[] Characters = { "Maxim", "Selan", "Guy", "Artea", "Tia", "Dekar", "Lexis" };
+
     public static int ArgCount(int op) => Lengths[op] == '-' ? -1 : Convert.ToInt32(Lengths[op].ToString(), 16);
-    /// <summary>Opcodes whose first word is the address of another script (goto, call, if, start a track or object).</summary>
+    /// <summary>Opcodes whose first word is the address of another script (goto, call, if, start a track or object); 0F's
+    /// arguments are all script addresses (<see cref="Targets"/>).</summary>
     public static bool HasScriptPointer(int op) => op is 0x03 or 0x04 or 0x06 or 0x08 or 0x09 or 0x0A or 0x0C or 0x0D or 0x0E or 0x56 or 0x8E or 0x96
         or (>= 0xD0 and <= 0xD9) or 0xE9 or 0xEA;
     private static bool Ends(int op) => op is 0x00 or 0x03 or 0x05 or 0x0F;
@@ -41,6 +48,13 @@ public static class L2SpellAnims
     public sealed record Step(int Address, int Op, byte[] Args, int File)
     {
         public int Word(int i) => Args[i] | Args[i + 1] << 8;
+    }
+
+    /// <summary>The script addresses a step names: the first word of a goto, call, if or start, every word of 0F's table.</summary>
+    public static IEnumerable<int> Targets(Step st)
+    {
+        if (st.Op == 0x0F) { for (int i = 0; i < CharacterTable; i++) yield return st.Word(i * 2); }
+        else if (HasScriptPointer(st.Op)) yield return st.Word(0);
     }
 
     public sealed class Script
@@ -124,13 +138,16 @@ public static class L2SpellAnims
                 if (len < 0) { s.Problem = $"Opcode {op:X2} at ${bank:X2}:{p:X4} isn't one the game can run."; break; }
                 var st = new Step(p, op, rom.ReadBytes(file + 1, len), file);
                 seen[p] = st;
-                if (HasScriptPointer(op)) work.Push(st.Word(0));
-                if (op == 0x0F) s.Problem ??= "It picks a script by the weapon (a jump table), so it can't be copied.";
+                foreach (int t in Targets(st)) work.Push(t);
                 if (Ends(op)) break;
                 p = (p + 1 + len) & 0xFFFF;
             }
         }
         s.Steps = seen.Values.OrderBy(x => x.Address).ToList();
+        // a script that jumps into the middle of another step would read the same bytes two ways: not copied
+        for (int i = 1; i < s.Steps.Count; i++)
+            if (s.Steps[i - 1].Address + 1 + s.Steps[i - 1].Args.Length > s.Steps[i].Address)
+            { s.Problem ??= $"Two steps share bytes at ${bank:X2}:{s.Steps[i].Address:X4}, so it can't be copied."; break; }
         return s;
     }
 
@@ -147,6 +164,7 @@ public static class L2SpellAnims
         0x03 => $"go to {st.Word(0):X4}",
         0x04 => $"call {st.Word(0):X4}",
         0x05 => "return",
+        0x0F => "go to the attacker's character's script: " + string.Join(", ", Enumerable.Range(0, CharacterTable).Select(i => $"{Characters[i]} {st.Word(i * 2):X4}")),
         0x06 => $"if value {st.Args[3]:X2} at +{st.Args[2]:X2}: go to {st.Word(0):X4}",
         0x08 or 0x09 or 0x0C or 0x0D or 0x0E => $"start a track at {st.Word(0):X4}",
         0x0A or 0x8E or 0x96 or (>= 0xD0 and <= 0xD9) => $"start an object at {st.Word(0):X4}",
@@ -404,7 +422,7 @@ public static class L2SpellAnims
         foreach (var s in L2Battle.Spells(rom)) used.Add(L2Magic.SpellAnimation(rom, s.Index));
         foreach (var ip in L2Battle.IpAttacks(rom)) used.Add(ip.Animation);
         foreach (var it in L2Battle.Items(rom))
-            if (it.Values.TryGetValue(0x2000, out var w) && w > 0) used.Add(w - 1);
+            if ((it.Values.TryGetValue(0x2000, out var w) ? w : L2AiScripts.ItemAddedWords(rom, it.Index).GetValueOrDefault(0x2000)) is var a and > 0) used.Add(a - 1);
         for (int n = 0x37; n < 0xFF; n++)
         {
             if (n is >= 0xE0 and <= 0xF1) continue;
@@ -453,7 +471,9 @@ public static class L2SpellAnims
         foreach (var st in s.Steps)
         {
             var args = (byte[])st.Args.Clone();
-            if (HasScriptPointer(st.Op)) { int w = map[st.Word(0)]; args[0] = (byte)w; args[1] = (byte)(w >> 8); }
+            if (st.Op == 0x0F)
+                for (int i = 0; i < CharacterTable * 2; i += 2) { int w = map[st.Word(i)]; args[i] = (byte)w; args[i + 1] = (byte)(w >> 8); }
+            else if (HasScriptPointer(st.Op)) { int w = map[st.Word(0)]; args[0] = (byte)w; args[1] = (byte)(w >> 8); }
             void Swap(int off, Dictionary<int, int> m) { int w = args[off] | args[off + 1] << 8; if (m.TryGetValue(w, out int nw)) { args[off] = (byte)nw; args[off + 1] = (byte)(nw >> 8); } }
             if (st.Op == 0x20) { Swap(1, gfxMap); Swap(3, gfxMap); }
             if (st.Op == 0x27) Swap(0, gfxMap);

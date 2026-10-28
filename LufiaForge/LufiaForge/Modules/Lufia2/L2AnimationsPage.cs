@@ -40,6 +40,8 @@ public partial class L2AnimationsPage : ObservableObject
     [ObservableProperty] private List<string> _monsterNames = new();
     private List<(int Sprite, int Palette)> _monsters = new();
     [ObservableProperty] private int _monster;
+    public List<string> Heroes { get; } = L2SpellAnims.Characters.ToList();
+    [ObservableProperty] private int _hero;
     [ObservableProperty] private WriteableBitmap? _frame;
     [ObservableProperty] private string _playInfo = "";
     [ObservableProperty] private bool _loop = true;
@@ -75,6 +77,9 @@ public partial class L2AnimationsPage : ObservableObject
     [ObservableProperty] private int _spellChoice = -1;
     [ObservableProperty] private List<string> _ipNames = new();
     [ObservableProperty] private int _ipChoice = -1;
+    [ObservableProperty] private List<string> _itemNames = new();
+    [ObservableProperty] private int _itemChoice = -1;
+    private List<int> _itemIds = new();
 
     public L2AnimationsPage()
     {
@@ -100,6 +105,14 @@ public partial class L2AnimationsPage : ObservableObject
         foreach (var (v, name) in L2Magic.Animations(_rom)) { _ids.Add(v); Names.Add($"{v:X2}  {name}"); }
         SpellNames = L2Battle.Spells(_rom).Select(s => $"{s.Index:X2}  {s.Name.Trim()}  (now {L2Magic.SpellAnimation(_rom, s.Index):X2})").ToList();
         IpNames = L2Battle.IpAttacks(_rom).Select(a => $"{a.Index + 1:X2}  {a.Name}  (now {a.Animation:X2})").ToList();
+        // weapons first (they swing with theirs), then the other items
+        var items = L2Battle.Items(_rom).Where(it => it.Name.Trim().Length > 0).OrderBy(it => it.EquipType == 1 ? 0 : 1).ThenBy(it => it.Index).ToList();
+        _itemIds = items.Select(it => it.Index).ToList();
+        ItemNames = items.Select(it =>
+        {
+            int a = ItemAnimation(it);
+            return $"{it.Index:X3}  {it.Name.Trim()}{(it.EquipType == 1 ? " (weapon)" : "")}  (now {(a < 0 ? "default" : a.ToString("X2"))})";
+        }).ToList();
         int i = _ids.IndexOf(keep);
         SelectedIndex = -1;
         SelectedIndex = i >= 0 ? i : 0;
@@ -149,11 +162,11 @@ public partial class L2AnimationsPage : ObservableObject
     {
         if (_rom == null || Id < 0) return;
         _timer.Stop();
-        int token = ++_playToken, id = Id, bg = Background;
+        int token = ++_playToken, id = Id, bg = Background, hero = Math.Max(0, Hero);
         var (sprite, pal) = Monster >= 0 && Monster < _monsters.Count ? _monsters[Monster] : (-1, 0);
         var copy = new RomBuffer(_rom.ToArray(), "preview");
         PlayInfo = "Playing the game's code...";
-        Task.Run(() => L2AnimPreview.Play(copy, id, new L2AnimPreview.Options(bg, sprite, pal))).ContinueWith(t =>
+        Task.Run(() => L2AnimPreview.Play(copy, id, new L2AnimPreview.Options(bg, sprite, pal, Hero: hero))).ContinueWith(t =>
         {
             if (token != _playToken) return;
             if (t.Exception != null) { PlayInfo = "Couldn't play it: " + t.Exception.InnerException?.Message; return; }
@@ -180,6 +193,7 @@ public partial class L2AnimationsPage : ObservableObject
 
     partial void OnBackgroundChanged(int value) { if (_rom != null) Play(); }
     partial void OnMonsterChanged(int value) { if (_rom != null && Id >= 0) Play(); }
+    partial void OnHeroChanged(int value) { if (_rom != null && Id >= 0) Play(); }
 
     // ── graphics and colours ───────────────────────────────────────────────────
 
@@ -368,7 +382,7 @@ public partial class L2AnimationsPage : ObservableObject
             int n = L2SpellAnims.Copy(_rom, Id, string.IsNullOrWhiteSpace(NewName) || IsNew ? $"Copy of {Id:X2}" : NewName);
             _main.NotifyRomModified($"Lufia II: new animation {n:X2} (a copy of {Id:X2})");
             RefreshList(n);
-            Status = $"Animation {n:X2} made: a copy of the one before with its own graphics, colours and steps. Give it to a spell or an IP attack below.";
+            Status = $"Animation {n:X2} made: a copy of the one before with its own graphics, colours and steps. Give it to a spell, an IP attack or a weapon below.";
         }
         catch (Exception e) { Status = "Not made: " + e.Message; }
     }
@@ -410,6 +424,31 @@ public partial class L2AnimationsPage : ObservableObject
         _main.NotifyRomModified($"Lufia II: IP attack {a.Name} shows animation {Id:X2}");
         Status = $"{a.Name} shows animation {Id:X2} now.";
         int keep = IpChoice; RefreshList(Id); IpChoice = keep;
+    }
+
+    /// <summary>The animation an item gives (its word 0x2000 = animation + 1, from its record or added by Lufia Forge), -1 = the default.</summary>
+    private int ItemAnimation(L2Battle.Item it)
+    {
+        int w = it.Values.TryGetValue(0x2000, out var v) ? v : L2AiScripts.ItemAddedWords(_rom!, it.Index).GetValueOrDefault(0x2000);
+        return w > 0 ? w - 1 : -1;
+    }
+
+    /// <summary>Gives the item this animation: the record's word 0x2000 when it has one, else a word Lufia Forge adds.
+    /// A weapon swings with it ($81:A8B7), an item used in battle shows it ($81:AA3D).</summary>
+    [RelayCommand]
+    private void GiveToItem()
+    {
+        if (_rom == null || _main == null || ItemChoice < 0 || ItemChoice >= _itemIds.Count || Id < 0) return;
+        var it = L2Battle.ReadItem(_rom, _itemIds[ItemChoice]);
+        try
+        {
+            if (it.Values.ContainsKey(0x2000)) { it.Values[0x2000] = (ushort)(Id + 1); L2Battle.WriteItem(_rom, it); }
+            else L2AiScripts.SetItemAddedWord(_rom, it.Index, 0x2000, Id + 1);
+            _main.NotifyRomModified($"Lufia II: {it.Name.Trim()} shows animation {Id:X2}");
+            Status = $"{it.Name.Trim()} shows animation {Id:X2} now" + (it.EquipType == 1 ? " when it hits." : " when it's used in battle.");
+            int keep = ItemChoice; RefreshList(Id); ItemChoice = keep;
+        }
+        catch (Exception e) { Status = e.Message; }
     }
 }
 
