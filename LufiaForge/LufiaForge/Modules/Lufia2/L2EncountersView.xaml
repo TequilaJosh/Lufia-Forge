@@ -147,6 +147,18 @@
                         <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,8"
                                    Text="The kinds of monster this group's battles take. A battle starts with the monster in place 1 or 2 (picked at random) and adds monsters of up to 2 more kinds from the list; how many come depends on how many heroes the party has (1 or 2 for Maxim alone, up to about 7 for a full party). Pick another monster in a list to change one."/>
                         <TextBlock Text="{Binding GroupNote}" Style="{StaticResource GdHint}" Foreground="{StaticResource GoldLightBrush}" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                        <TextBlock Text="{Binding GroupRoom}" TextWrapping="Wrap" Margin="0,0,0,8"
+                                   ToolTip="A battle takes the monster in place 1 or 2 and up to 2 more kinds from the other places (while their widths fit the screen). Their sprites share 64 squares of 16 x 16; a sprite two kinds share counts once.">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock" BasedOn="{StaticResource GdHint}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding GroupRoomWarn}" Value="True">
+                                            <Setter Property="Foreground" Value="{StaticResource WarningBrush}"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
                         <ItemsControl ItemsSource="{Binding GroupMonsters}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
@@ -186,6 +198,17 @@
                 <TextBlock Text="STORY BATTLES" Style="{StaticResource GdSection}"/>
                 <ComboBox Style="{StaticResource GdCombo}" Width="400" HorizontalAlignment="Left" ItemsSource="{Binding StoryNames}" SelectedIndex="{Binding SelectedStory}" Margin="0,0,0,6"/>
                 <TextBlock Text="{Binding StoryText}" Style="{StaticResource GdHint}" TextWrapping="Wrap" MaxWidth="460" HorizontalAlignment="Left" Margin="0,0,0,6"/>
+                <TextBlock Text="{Binding StoryRoom}" TextWrapping="Wrap" MaxWidth="460" HorizontalAlignment="Left" Margin="0,0,0,6">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock" BasedOn="{StaticResource GdHint}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding StoryRoomWarn}" Value="True">
+                                    <Setter Property="Foreground" Value="{StaticResource WarningBrush}"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
                 <ItemsControl ItemsSource="{Binding StorySlots}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>

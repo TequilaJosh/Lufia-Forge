@@ -315,7 +315,8 @@ Forge: `Core/Lufia2/L2MonsterSprites.cs`, `L2Gfx.cs` (Graphics page group "Monst
   bottom right (4bpp). The game's 134 files are exactly `1 + 0x20 * palettes + 0x80 * squares` bytes.
 * **Size**: `$97:CA64 + (sprite - 1) * 2` (`$81:FB8E`): byte 0 bits 0-4 = 8x8 tiles across, byte 1 bits 0-4 = tiles
   down (squares = (tiles + 1) / 2, every game sprite has an even size); the top 3 bits of both bytes (`$81:FBA2`,
-  6 bits) go to `$13DA` (bits 01/02/20 pick how the monster moves; the game's sprites use 0x30 or 0x10).
+  6 bits: byte 0's are bits 0-2, byte 1's bits 3-5) are the **movement flags** (8.3), copied to `$131B,X` per kind
+  and `$13DA` per monster.
 * **Buffer**: `$81:BCCC` puts the squares one after the other (slot n at `$7E:6000 + (n / 8) * 0x400 + (n % 8) * 0x40`,
   the lower tiles 0x200 further), from the slot after the kinds loaded before; it is sent to sprite tiles 0x100-0x1FF,
   so **all the kinds in one battle share 64 squares** (the 128 x 128 bosses fill it alone). The OAM builder
@@ -349,10 +350,65 @@ Forge: `Core/Lufia2/L2MonsterSprites.cs`, `L2Gfx.cs` (Graphics page group "Monst
   across and down, at most 240 x 240 and 64 squares; a palette PNG of up to 16 colours keeps its colours, another
   picture is brought down to 15 colours (median cut) with see-through pixels as colour 0; its movement flags are the
   sprite shown's. "Give it" (Graphics) or the Monsters page's sprite and palette lists give it to a monster.
+* **Movement** (8.3): the Graphics page's Monster battle sprite card has a box for each of the 6 flags (Floats,
+  Shakes, Twitches and the three that do nothing), written into the size table the game reads (the game's own at
+  `$97:CA64`, or Lufia Forge's copy once new sprites are in), one Undo step per box. The Monsters page says how the
+  picked monster's sprite moves.
+* **Room in a battle** (8.4): the Encounters page shows, for the group shown, the most squares one of its battles can
+  need and with which monsters, in orange past 64 (the group list marks such a group with "(! n squares)"); for a
+  story battle the squares its kinds need, and a warning past 64 or past 3 kinds. The Monsters page shows, when a
+  sprite is picked, the squares it takes and which groups and story battles with this monster would go past 64 with it.
+* Changes made on the Graphics page (a new sprite, a new palette, painting, a colour, the movement, "Give it") are
+  shown at once on the Monsters page (the sprite list and the monster shown are read again) and the Encounters page
+  (pictures and squares); a monster's sprite, palette or name changed on the Monsters page updates the Encounters
+  page and the Graphics page's "Give it to" list.
 * `CanInstall` refuses when another hack changed one of those places. The Frue, Spekkio, Kureji and Wrath of Foomy
   hacks (v8.2) leave them as the US game: the hook goes in there too (block after their data at 0x30DAC2).
 
-### 8.3 Checked in the game
+### 8.3 Movement flags (read from the code 2026-10-27, checked in the game)
+
+The 6 bits (byte 0's top 3 = bits 0-2, byte 1's top 3 = bits 3-5) reach a monster this way: `$85:DF44` (battle
+set-up) `JSL $81FBA2` -> `$131B,X` per kind; `$85:DEDC` copies it to `$13DA + 0x0F * n` for each monster on screen;
+`$85:8905` (called from `$81:C758`) sets it again for every monster: a status byte (+0F of its battler record) with
+08 gives 02, with 20 gives 01, else the sprite's flags. Every frame while `$129A` bit 7 is set, `$85:894A` moves each
+monster with `$13DB` bit 7 set by its x offset `$13E3` and y offset `$13E5` (16-bit, added to the place `$13DF` /
+`$13E1` when the objects are built at `$85:8CC5`):
+
+| Bit | Name in Lufia Forge | What `$85:894A` does |
+|---|---|---|
+| 01 | Floats | counter `$152A,X` from 0x3F down; y offset = word `(counter >> 3)` of `$85:9E37` = 0, -1, -2, -1, 0, 1, 2, 1: up and down by 2 pixels, 8 frames a step, 64 frames a wave. Checked first: wins over the others. |
+| 02 | Shakes | every 2 frames the x offset is turned over (`EOR #$FFFF`): 0, -1, 0, -1: a 1-pixel tremble. Wins over 20. |
+| 20 | Twitches | every 12 frames the x and y offsets are each set to 0 or -1 at random (`$85:8F4A`, the random bits at `$1230`): a restless 1-pixel twitch. |
+| 04, 08, 10 | no effect | nothing reads them (`$13DA` is read only at `$85:895E`, `$131B` only at `$85:DF15`). |
+
+The game's 134 sprites use 0x30 (107: Twitches) or 0x10 (27: still). Checked in BizHawk (BSNES), the battle after the
+name entry (Goblin CB, sprite 01) with the flags set to 30 (the game's), 10, 11, 12: logged `$13DA`, `$13E3`, `$13E5`
+every frame from frame 1100 and screenshots every 4 frames (every frame for 12): with 10 the offsets stay 0,0 and the
+Goblin stands still; 11 runs the y offset -2 -1 0 1 2 1 0 -1 (8 frames each) and the Goblin bobs up and down by up to
+2 pixels on screen; 12 flips the x offset 0 / -1 every 2 frames and the Goblin moves 1 pixel left and back every 2
+frames on screen; 30 gives 0,0 / -1,0 / 0,-1 / -1,-1 changing every 12 frames.
+
+### 8.4 How many squares one battle needs (read from the code 2026-10-27)
+
+* **A monster group's battle** (`$81:839F`): the group's 8 bytes go to `$22-$29`. Place 1 empty and place 2 filled is
+  a fixed battle (`$81:84CF`, the other bytes copied as they are; not counted by Lufia Forge). Both filled: places 1
+  and 2 are swapped at random. Then places 2-8 are shuffled (36 random swaps of neighbours among `$23-$29`), and the
+  first 3 filled places become the **kinds** (`$13`, `$15`, `$17`): the place 1 or 2 monster and any 2 of the others.
+  Monsters are then dealt to the kinds (`$81:84FC`): each adds its width in 8x8 tiles + 1 to `$11` and is only taken
+  while the sum stays under 25 (0x19), so a kind too wide to stand beside the others never comes with them. Lufia
+  Forge counts, for each possible first kind and each 2 others (and every part of that set that fits the width), the
+  squares of the different sprites, and shows the most.
+* **A story battle**: every different monster of its six is a kind. `$85:DF44` keeps 3 (`$1300-$1302`); a 4th runs
+  into a `BRK` at `$85:DF73`. Checked: story battle 04 with monsters 01, 02, 03, 04 goes back to the title screen
+  instead of the battle.
+* **The buffer**: `$85:EB91` loads each kind's sprite one after the other into `$7E:6000` (64 squares, sent to sprite
+  tiles 0x100-0x1FF); a sprite another kind already loaded is not loaded again (`$85:EBE0` checks the sprites loaded
+  so far), so two kinds with one sprite count once. Past 64 squares the copy runs on past the buffer and the objects
+  ask for tile numbers past 0x1FF, so the pictures come out wrong (read from the code, not tried in the game).
+* In the US game only group D7 (Blue Core, Goblin, Gades, ... : 68 squares with Blue Core and Gades) goes past 64; no
+  zone or map uses it. The story battles with a 128 x 128 boss use exactly 64.
+
+### 8.5 Checked in the game
 
 The battle right after the name entry (`53 04 39` at 0x3C0EE), its monster CB given the sprite; at frame 1080 of the
 test the WRAM buffer `$7E:6000` and the colours `$7E:4820` were dumped and compared with Lufia Forge's decode:
@@ -364,4 +420,11 @@ test the WRAM buffer `$7E:6000` and the colours `$7E:4820` were dumped and compa
   new sprite and the painted Cyclops (CB on palette 1) show in the battle as in the app;
 * the Frue hack (v8.2) with a new 64 x 48 sprite on every monster: buffer identical, shown right. In that hack the
   battle command menu draws over the sprite tiles of the second row of squares in the buffer (squares 8-15) while it
-  is open, and the game's own Cyclops shows the same, so it is the hack's menu, not the new sprite.
+  is open, and the game's own Cyclops shows the same, so it is the hack's menu, not the new sprite;
+* the movement flags (8.3) and a story battle with 4 kinds (8.4), as written there;
+* in the window (17 checks): the Monsters page shows the Goblin's movement and that its battles fit; on the Graphics
+  page the 6 boxes are ticked as in the ROM, Floats on and Twitches off write 11 and the Monsters page (still on
+  CB, not picked again) says it floats; Undo takes it back; a copy of the Cyclops made as sprite 0x87 is in the
+  Monsters page's list at once, and "Give it" to CB shows CB with it there; the Beetle given the 128 x 128 sprite 81
+  warns for groups 0A and 1C (68 squares), the Encounters page marks group 0A in its list and in orange, group 00
+  fits; story battle 04 given 4 different monsters warns about the 4th kind.

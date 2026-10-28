@@ -292,6 +292,7 @@ public partial class L2GraphicsPage : L2Page
             Main.NotifyRomModified($"Lufia II: colour {_colour} of palette {PaletteChoice} of monster sprite {_asset.Id:X2}");
             Draw(keep: true);
             Status = $"Colour {_colour} of palette {PaletteChoice} written. Monsters using this palette of the sprite change too. Edit, Undo takes it back.";
+            MonsterSpritesEdited();
             return;
         }
         if (off < 0) { Status = "Pick a colour first."; return; }
@@ -503,6 +504,7 @@ public partial class L2GraphicsPage : L2Page
         Status = $"Painting written: {what}." + (grew ? " The ROM grew to make room." : "") +
                  (_asset.Kind == L2Gfx.Kind.BattleBackground && _asset.Note.Contains("Shares") ? " Backgrounds that share its layout or tiles changed with it." : "") +
                  SharingNote() + " Edit, Undo takes it back.";
+        if (_asset.Kind == L2Gfx.Kind.MonsterSprite) MonsterSpritesEdited();
     }
 
     /// <summary>Writes the painting now (for tests).</summary>
@@ -648,6 +650,54 @@ public partial class L2GraphicsPage : L2Page
     /// <summary>The monsters, for "Give it to".</summary>
     [ObservableProperty] private List<L2Option> _monsterOptions = new();
     [ObservableProperty] private int _giveTo = -1;
+    /// <summary>The shown sprite's movement flags in battle (<see cref="L2MonsterSprites.MoveFlags"/>).</summary>
+    [ObservableProperty] private List<L2Flag> _moveFlags = new();
+    [ObservableProperty] private string _moveNote = "";
+    private bool _movesLoading;
+
+    /// <summary>A monster sprite was added, painted, recoloured, given a palette or a movement, or given to a monster
+    /// (the Monsters and Encounters pages show it again).</summary>
+    public event Action? MonsterSpritesChanged;
+
+    private void MonsterSpritesEdited() => MonsterSpritesChanged?.Invoke();
+
+    private void ShowMoves()
+    {
+        if (Rom == null || _asset?.Kind != L2Gfx.Kind.MonsterSprite) { MoveFlags = new(); MoveNote = ""; return; }
+        int moves = L2MonsterSprites.Size(Rom, _asset.Id).Moves;
+        _movesLoading = true;
+        MoveFlags = L2MonsterSprites.MoveFlags.Select(f => new L2Flag { Label = f.Name, Bit = f.Bit, IsChecked = (moves & f.Bit) != 0, Changed = MovesEdited }).ToList();
+        _movesLoading = false;
+        MoveNote = MoveNoteFor(moves);
+    }
+
+    private static string MoveNoteFor(int moves) =>
+        $"In battle it {L2MonsterSprites.MovesText(moves)}. " +
+        string.Join(" ", L2MonsterSprites.MoveFlags.Where(f => f.Bit is L2MonsterSprites.MoveFloat or L2MonsterSprites.MoveShake or L2MonsterSprites.MoveTwitch).Select(f => $"{f.Name}: {f.What}")) +
+        " None of the three: it stands still. Every monster with this sprite moves the same way; a status can take over (the game makes some statuses shake or float).";
+
+    private void MovesEdited()
+    {
+        if (_movesLoading || Rom == null || Main == null || _asset?.Kind != L2Gfx.Kind.MonsterSprite) return;
+        int id = _asset.Id, moves = MoveFlags.Where(f => f.IsChecked).Sum(f => f.Bit);
+        if (!L2MonsterSprites.SetMoves(Rom, id, moves)) return;
+        Main.NotifyRomModified($"Lufia II: monster sprite {id:X2} {L2MonsterSprites.MovesText(moves)} in battle");
+        MoveNote = MoveNoteFor(moves);
+        Status = $"Sprite {id:X2} now {L2MonsterSprites.MovesText(moves)} in battle (movement flags {moves:X2}). Edit, Undo takes it back.";
+        MonsterSpritesEdited();
+    }
+
+    /// <summary>After monsters were added or renamed on the Monsters page: "Give it to" lists them.</summary>
+    public void RefreshMonsterOptions()
+    {
+        if (Rom == null) return;
+        int keep = GiveTo;
+        MonsterOptions = L2Battle.Monsters(Rom).Select(m => new L2Option(m.Index, $"{m.Index:X2} {m.Name}")).ToList();
+        GiveTo = keep;
+    }
+
+    /// <summary>Sets the shown sprite's movement flags (for tests).</summary>
+    public void SetMovesNow(int moves) { foreach (var f in MoveFlags) f.IsChecked = (moves & f.Bit) != 0; }
 
     private int IndexOfMonsterSprite(int id) => _assets.FindIndex(a => a.Kind == L2Gfx.Kind.MonsterSprite && a.Id == id);
 
@@ -667,6 +717,7 @@ public partial class L2GraphicsPage : L2Page
                       (can ? "" : " " + why);
         var user = L2MonsterSprites.Users(Rom, id).FirstOrDefault();
         GiveTo = user?.Index ?? (GiveTo >= 0 ? GiveTo : 0);
+        ShowMoves();
     }
 
     /// <summary>Adds a palette to the monster sprite shown (black, or a copy of the colours shown) and shows it.</summary>
@@ -687,6 +738,7 @@ public partial class L2GraphicsPage : L2Page
         PaletteChoice = p;
         Status = $"Palette {p} added to sprite {id:X2} ({(copy ? "a copy of the colours shown" : "all black")}). Click its colours above to change them; give it to a monster below or with the Palette field on the Monsters page." +
                  (grew ? " The ROM grew to make room." : "") + " Edit, Undo takes it back.";
+        MonsterSpritesEdited();
     }
 
     /// <summary>Adds a monster sprite: a copy of the one shown, or a picture file (the dialog).</summary>
@@ -751,6 +803,7 @@ public partial class L2GraphicsPage : L2Page
         Refresh(() => IndexOfMonsterSprite(id), keep: false);
         Status = $"Monster sprite {id:X2} ({id}) made ({what}); paint it below, and give it to a monster below or with its Battle sprite field on the Monsters page." +
                  (grew ? " The ROM grew to make room." : "") + " Edit, Undo takes it back.";
+        MonsterSpritesEdited();
     }
 
     /// <summary>Gives the sprite shown, with the palette shown, to the monster picked in "Give it to".</summary>
@@ -768,6 +821,7 @@ public partial class L2GraphicsPage : L2Page
         Refresh(() => at, keep: true);
         PaletteChoice = p;
         Status = $"{m.Index:X2} {m.Name} now shows sprite {id:X2} with palette {p}. Edit, Undo takes it back.";
+        MonsterSpritesEdited();
     }
 
     /// <summary>"Give it to" for tests.</summary>
@@ -859,5 +913,6 @@ public partial class L2GraphicsPage : L2Page
         Status = $"Imported ({how}): {what}." + (grew ? " The ROM grew to 3 MB to make room." : "") +
                  (_asset.Kind == L2Gfx.Kind.BattleBackground && _asset.Note.Contains("Shares") ? " Backgrounds that share its layout or colours changed with it." : "") +
                  " Edit, Undo takes it back.";
+        if (_asset.Kind == L2Gfx.Kind.MonsterSprite) MonsterSpritesEdited();
     }
 }

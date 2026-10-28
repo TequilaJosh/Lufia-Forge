@@ -80,6 +80,42 @@ public static class L2MonsterSprites
         return (a & 31, d & 31, a >> 5 | (d & 0xE0) >> 2);
     }
 
+    /// <summary>The movement flags (6 bits: the top 3 bits of the size table's two bytes, read by $81:FBA2 into $13DA
+    /// for each monster in battle). $85:894A moves the monsters every frame: 01 floats (up and down by 2 pixels, a
+    /// 64-frame wave from $85:9E37 into the y offset $13E5), else 02 shakes (the x offset $13E3 flips between 0 and -1
+    /// every 2 frames), else 20 twitches (every 12 frames the x and y offsets are each 0 or -1 at random). 04, 08 and 10
+    /// are read by nothing (the game sets 10 on every sprite). A status can take over: $85:8905 gives a monster whose
+    /// status byte (+0F) has 08 the shake and 20 the float instead.</summary>
+    public const int MoveFloat = 0x01, MoveShake = 0x02, MoveTwitch = 0x20;
+
+    /// <summary>The 6 movement flags: bit, name, what it does in battle.</summary>
+    public static readonly (int Bit, string Name, string What)[] MoveFlags =
+    {
+        (MoveFloat, "Floats", "Bobs up and down by 2 pixels in a slow wave (64 frames). Wins over Shakes and Twitches."),
+        (MoveShake, "Shakes", "Moves 1 pixel left and back every 2 frames, a fast tremble. Wins over Twitches."),
+        (0x04, "Bit 04 (no effect)", "Nothing in the game reads it."),
+        (0x08, "Bit 08 (no effect)", "Nothing in the game reads it."),
+        (0x10, "Bit 10 (no effect)", "Nothing in the game reads it; the game sets it on every sprite."),
+        (MoveTwitch, "Twitches", "Every 12 frames it jumps to a random spot 0 or 1 pixel left and up of its place, a restless twitch (most of the game's monsters)."),
+    };
+
+    /// <summary>The movement in words.</summary>
+    public static string MovesText(int moves) =>
+        (moves & MoveFloat) != 0 ? "floats (bobs up and down)" : (moves & MoveShake) != 0 ? "shakes" : (moves & MoveTwitch) != 0 ? "twitches" : "stands still";
+
+    /// <summary>Sets sprite <paramref name="sprite"/>'s movement flags (in the size table the game reads). True when
+    /// they changed.</summary>
+    public static bool SetMoves(RomBuffer rom, int sprite, int moves)
+    {
+        if (sprite < 1 || sprite > Count(rom)) throw new ArgumentOutOfRangeException(nameof(sprite));
+        int at = SizeTable(rom) + (sprite - 1 & 0xFF) * 2;
+        byte a = rom.ReadByte(at), d = rom.ReadByte(at + 1);
+        byte na = (byte)(a & 31 | (moves & 7) << 5), nd = (byte)(d & 31 | (moves >> 3 & 7) << 5);
+        if (na == a && nd == d) return false;
+        rom.WriteByte(at, na); rom.WriteByte(at + 1, nd);
+        return true;
+    }
+
     /// <summary>16x16 squares across and down (the game rounds a size in tiles up).</summary>
     public static (int Across, int Down) Squares(int tilesAcross, int tilesDown) => ((tilesAcross + 1) / 2, (tilesDown + 1) / 2);
 

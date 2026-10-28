@@ -41,7 +41,10 @@ public partial class Lufia2ViewModel : ObservableObject
         // the Maps tab's battle zone list: "Monsters..." shows the zone on the Encounters page
         Maps.OpenZoneRequested += zone => { Encounters.ShowZone(zone); ShowPage?.Invoke("Encounters"); };
         // a monster added on the Monsters page: the Encounters page offers it
-        Monsters.MonstersChanged += () => Encounters.RefreshMonsters();
+        Monsters.MonstersChanged += () => { Encounters.RefreshMonsters(); Graphics.RefreshMonsterOptions(); };
+        // a monster sprite added, painted, given a palette or a movement, or given to a monster on the Graphics page:
+        // the Monsters page lists it and shows the monster again, the Encounters page draws the new pictures
+        Graphics.MonsterSpritesChanged += () => { Monsters.RefreshSprites(); Encounters.RefreshMonsters(); };
     }
 
     public void SetRom(RomBuffer rom, MainViewModel main)

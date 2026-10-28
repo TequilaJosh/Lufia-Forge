@@ -14,6 +14,22 @@ public partial class L2EncountersPage
     [ObservableProperty] private int _selectedStory = -1;
     [ObservableProperty] private List<L2StorySlot> _storySlots = new();
     [ObservableProperty] private string _storyText = "";
+    /// <summary>The squares of the battle sprite buffer the battle's kinds need, and whether it is too much.</summary>
+    [ObservableProperty] private string _storyRoom = "";
+    [ObservableProperty] private bool _storyRoomWarn;
+
+    private void ShowStoryRoom(int b)
+    {
+        var n = L2BattleRoom.Story(_rom!, b, Sizes);
+        StoryRoomWarn = n.TooBig || n.TooManyKinds;
+        StoryRoom = n.Monsters.Count == 0 ? "" :
+            n.TooManyKinds
+                ? $"Too many kinds: {n.Kinds} different monsters. The game keeps {L2BattleRoom.MaxKinds} kinds per battle and drops back to its title screen on a 4th. Use at most {L2BattleRoom.MaxKinds} different monsters." +
+                  (n.TooBig ? $" Their sprites would also need {n.Squares} of the {L2BattleRoom.Squares} squares." : "")
+                : n.TooBig
+                ? $"Too big: its kinds need {L2BattleRoom.Describe(n, _monsterList)}. All the kinds of monster in one battle share {L2BattleRoom.Squares} squares of 16 x 16 for their sprites; past that their pictures come out wrong."
+                : $"Sprite room: its {n.Kinds} kind{(n.Kinds == 1 ? " of monster needs" : "s of monster need")} {n.Squares} of the {L2BattleRoom.Squares} squares of 16 x 16 (at most {L2BattleRoom.MaxKinds} kinds in a battle).";
+    }
 
     private void InitStory()
     {
@@ -26,9 +42,13 @@ public partial class L2EncountersPage
         SelectedStory = -1; SelectedStory = 4;
     }
 
-    private string StoryLabel(int b) =>
-        $"{b:X2}  " + string.Join(", ", L2Encounters.StoryBattle(_rom!, b).Where(s => s.Monster != 0xFF)
-            .Select(s => _storyMonsters.FirstOrDefault(o => o.Value == s.Monster)?.Label[3..] ?? s.Monster.ToString("X2")));
+    private string StoryLabel(int b)
+    {
+        var n = L2BattleRoom.Story(_rom!, b, Sizes);
+        return $"{b:X2}  " + string.Join(", ", L2Encounters.StoryBattle(_rom!, b).Where(s => s.Monster != 0xFF)
+            .Select(s => _storyMonsters.FirstOrDefault(o => o.Value == s.Monster)?.Label[3..] ?? s.Monster.ToString("X2"))) +
+               (n.TooManyKinds ? $"  (! {n.Kinds} kinds)" : n.TooBig ? $"  (! {n.Squares} squares)" : "");
+    }
 
     partial void OnSelectedStoryChanged(int value)
     {
@@ -40,6 +60,7 @@ public partial class L2EncountersPage
         var shared = L2Encounters.StorySharing(_rom, value);
         StoryText = $"Event command 53 {value:X2} (\"Start a story battle\" on the Events page) starts it. Each monster has its place on the screen (x, y; the game's go from about 30 to 200 across and 0 to 72 down)." +
                     (shared.Count > 0 ? $" Battles {string.Join(", ", shared.Select(b => b.ToString("X2")))} use the same record: a change here changes them too." : "");
+        ShowStoryRoom(value);
     }
 
     private void StoryEdited()
@@ -52,5 +73,6 @@ public partial class L2EncountersPage
         foreach (int b in L2Encounters.StorySharing(_rom, keep).Append(keep)) StoryNames[b] = StoryLabel(b);
         SelectedStory = keep;
         _storyLoading = false;
+        ShowStoryRoom(keep);
     }
 }
