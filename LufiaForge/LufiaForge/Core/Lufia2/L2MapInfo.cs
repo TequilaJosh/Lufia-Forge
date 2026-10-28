@@ -120,7 +120,7 @@ public static class L2MapInfo
         foreach (var (off, kind, sz) in Lists)
         {
             int p = b + rom.ReadUInt16Le(b + off);
-            for (int guard = 0; guard < 64 && p > b && p < b + size && rom.ReadByte(p) != 0xFF; guard++, p += sz)
+            for (int guard = 0; guard < 255 && p > b && p < b + size && rom.ReadByte(p) != 0xFF; guard++, p += sz)
             {
                 var r = rom.ReadBytes(p, sz);
                 int at = p;

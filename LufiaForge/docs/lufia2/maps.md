@@ -14,10 +14,12 @@ is written), `Modules/Lufia2/L2MapWindows.cs` (pick a place, pieces and presets,
 | Pick (I) | Takes the block under the mouse as the brush. |
 | Area (M) | Drag a rectangle: Copy (Ctrl+C), Cut (Ctrl+X), Paste (Ctrl+V, then click to place; Esc stops), Fill, Delete (Del), Save as preset. Copies take both layers and their walls; they paste on any map with the same graphics. |
 | Collision (L) | Paints "can't walk", doorway, wall on the top or left edge, upper level or room border; right-click clears a block. |
-| + Exit (E) | Drag where the party leaves; then pick the map and block it leads to (Pick on map...). |
+| + Exit (E) | Drag where the party leaves; then pick the map and block it leads to (Pick on map...). On the world map this adds an entrance to a town or dungeon (see below). |
 | + Step-on area (T) | Drag an area; its event (empty) is made when the map is written; Event... opens it in Events. |
 | + Character (C) | Click where it stands; pick its sprite (the picture shows it) and how it moves; Talk event... gives it something to say. |
 | + Point (A) | A preset point: scenes put the party (Go to another map) or characters (Put a character on a point) on it. |
+| + Chest (K) | Click a block: a chest with the picture of a chest of this map (both layers' block copied onto it), its own opened flag, and an item picked in the inspector. Pressing A facing it gives the item once. |
+| + Hidden item (H) | Click a block: nothing shows there; pressing A facing it finds the item, once. The block can't be walked onto (as a chest), so put it on furniture, a wall or a dead end. |
 
 * **Show**: ground, upper layer, collision, characters, exits (labelled with the map they lead to), step-on areas,
   treasure, doors, preset points, and the camera (the 16 x 14 blocks the screen shows with the party on the block under
@@ -32,11 +34,27 @@ is written), `Modules/Lufia2/L2MapWindows.cs` (pick a place, pieces and presets,
   game's opening back).
 * **Names**: "Rename this map" keeps your name in the project.
 * **Undo**: every change is one step (Ctrl+Z / Ctrl+Y, up to 300). The edits are kept in the tab ("Edited") and written
-  by themselves when another map is picked or the project is saved, or with Apply; Revert drops them. Treasure contents
-  and the block editor write straight into the ROM (Edit > Undo takes them back).
-* **World map and sea floor** (maps 00 and 01): Paint, Pick and Area work on their big blocks (32 x 32 pixels in the
-  game, shown at half size). On the world map, Battle zones shows and paints the random-battle zones (the zone typed
-  beside it; right-click picks one; 00 = no battles).
+  by themselves when another map is picked or the project is saved, or with Apply; Revert drops them. The block editor
+  writes straight into the ROM (Edit > Undo takes it back).
+* **Treasure**: Select a chest or hidden item (pink, labelled with what it holds; ? = hidden) to change its item, move it
+  or delete it. A chest's picture is part of the map: when you move one, paint it where it goes. Gold isn't possible: the
+  game's treasure records hold an item.
+* **World map and sea floor** (maps 00 and 01): shown at full size (one game pixel per screen pixel at 100%, sharp at any
+  zoom). Paint, Pick and Area work on their big blocks (32 x 32 pixels).
+* **Entrances** (world map): the green boxes are the world map's exits, named after the map they lead to. + Exit, then
+  click (or drag over) the blocks the party walks onto, then Pick on map... in the inspector: pick the town or dungeon and
+  click where the party arrives. Select moves them, Del takes one out, double-click goes into its map. Leaving a town
+  works the other way: a town exit that leads to map 00 picks its world map spot in Pick on map... (the world map is in
+  its list, with the towns labelled); such an exit gets the world map arrival style F0 by itself.
+* **Battle zones** (world map): the toggle colours each zone and lists them on the right with each zone's groups, their
+  share of the zone's battles and their monsters. Paint picks a zone, then click or drag on the map (2 x 2 big blocks per
+  square; right-click picks the zone under the mouse; 00 = no battles). Monsters... opens the zone on the Encounters page.
+* **Encounters page**: World zones (where the zone is on a small world map, which towns it is near, its up to 5 groups
+  with their chance and their monsters' pictures; add or take out groups), Dungeons (each field monster of a map and the
+  group it fights) and All groups. The group on the right shows its monsters with their pictures, picked from a list with
+  pictures; Remove and Add change them. How a group is read: a battle starts with the monster in place 1 or 2 (picked at
+  random) and adds monsters of up to 2 more kinds from the list; how many come depends on the party's size. A group with
+  place 1 empty and place 2 filled is a fixed battle (the other places are layout data): only place 2 can change.
 * Lufia II keeps its 242 maps in fixed tables, so maps can't be added or deleted (yet): resize one, paint it, place
   pieces of others on it.
 
@@ -58,6 +76,22 @@ is written), `Modules/Lufia2/L2MapWindows.cs` (pick a place, pieces and presets,
   left, top right, bottom right: tile 10 bits, colour row 3 bits, priority, flip across, flip up-down).
 * **World map**: file 0x28C (sea floor 0x28F), a 0x40-byte head then 128 x 128 u16 big-block numbers; the zones are file
   0x193 (64 x 64 bytes, one per 2 x 2 big blocks).
+* **Entrances**: map 00's info block, list +06 (9 bytes as a town's exits; places in 16-pixel blocks, 256 x 256), the
+  same code as a town's exits. Arrival style 40 is what most entrances use. Its preset points (+0E) are where scenes put
+  the party; a new game can't start on the world map (the party would stand in the sea), so the test start refuses it.
+* **Battle zones** ($86:9CF3): the zone under the party is `$7F:E000[(x / 4) + (y / 4) * 64]`; zone z is 5 pairs (group,
+  weight) at $97:C493 + z * 10 (file 0xBC493), 17 zones. The game adds the weights (0 = no battles there) and picks a group
+  by weight. How often battles come is the same everywhere (Settings).
+* **Treasure** (`L2Chests`): the spot is the info block's list +26 (4 bytes: id, x, y, look); the look is a record of list
+  +04 (10 bytes: id, layers, the opened picture's source x, y, w, h, the closed one's x, y, w, h, in blocks of the same
+  map); the contents are the chest list at $91:B8B5 (a u16 per map, then 3 bytes per treasure: spot | 40 item + 0x100 | 80
+  flag + 0x100, flag, item; FF ends). On loading a map the game marks every spot's block ($80:EE36); pressing A facing one
+  ($83:BEB0 -> $8E:C05F) gives the item and sets the opened flag (a bit at $7E:093B, 512 of them; the game uses 0-0xAA)
+  when it is clear, and copies the opened picture onto the spot. A new chest takes the look of a chest of the map; a hidden
+  item gets a look of its own that copies the spot onto itself (so nothing changes). New treasure gets the lowest flag no
+  treasure of any map uses. The chest lists fill the table up to the next info block, so a list that grows goes to
+  $92:8000 on (the table's offsets are 24-bit sums from $91:B8B5, so 0xC74B on reaches bank $92's ROM): that is map 00's
+  info block, which is moved to the added space the first time (any bank works for an info block).
 * **Test start**: the new-game code at $83:ACCD (map, scene, preset point); the start map gets a scene of its own (F0 up:
   show Maxim, fade in).
 
@@ -75,6 +109,21 @@ is written), `Modules/Lufia2/L2MapWindows.cs` (pick a place, pieces and presets,
 * In the game (BizHawk): a new game on the edited Elcid; the new character walks there; an exit added in the editor
   leads to its map (Elcid's house) and another to the world map, where the big blocks painted and pasted in the editor
   show as sea next to Elcid; a resized map (Parcelyte's houses, 46 x 38) loads as the unchanged one does.
+
+## 3b. Checked: world map, entrances, zones, treasure (2026-10-27)
+
+* In the real window (a project made from the clean US ROM; 30 checks): the world map is 4096 x 4096 pixels and every
+  pixel checked is the game's; Pick and Paint hit the right big block; Undo; + Exit on the world map adds an entrance,
+  labelled with its map after pointing it at 2F (20,48), moved by dragging, written by Apply; Battle zones lists the 17
+  zones with their monsters, Paint and painting a square of zone 0F; Monsters... opens zone 0F on Encounters, its groups
+  cut to group 10 alone, group 10's monsters changed, taken out and added (pictures shown); an Elcid exit pointed at the
+  world map (40,220) gets style F0; + Chest and + Hidden item on 2F, their items, Undo / Redo, Apply (each its own new
+  flag); the world map's entrances still all read after its info block moved for the treasure list; a town drawn after
+  the world map.
+* In the game (BizHawk), on ROMs written by that window: walking out of Elcid through the new exit puts Maxim on the
+  world map at (40,220); two steps right, the new entrance takes him into Parcelyte Castle 2F; with the battle rate at
+  most, zone 0F there gives group 10 (Red Bats; `$7F:F8A4` = 10); on 2F the new chest gives a Hi-Potion and the hidden
+  item a Miracle, each once (a second A gives nothing; flags AB and AC set), and the old chest still gives Holy wings.
 
 ## 4. Shrine maps CF and F1: fixed as in the European release
 

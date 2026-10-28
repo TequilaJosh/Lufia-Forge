@@ -33,7 +33,7 @@ public partial class L2ChestsPage : L2Page
         }).ToList();
         int total = _maps.Sum(m => L2Chests.Read(Rom!, m).Count);
         Info = $"{_chests.Count} chests on this map ({total} in the game). Places are in 16x16 blocks, as on the Maps page. " +
-               "Each chest has its own opened flag, so the item can be anything. * = left out of the game's opened-chests list (probably not a plain chest). Read from the game's code; not yet checked by opening one in the game.";
+               "Each treasure has its own opened flag, so it is found once and the item can be anything. * = left out of the game's count of opened chests. To add chests or hidden items, use + Chest and + Hidden item on the Maps page.";
     }
 
     protected override bool IsField(string p) => false;

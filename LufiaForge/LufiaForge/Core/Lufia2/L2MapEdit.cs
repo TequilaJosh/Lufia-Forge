@@ -31,25 +31,37 @@ public sealed class L2MapEdit
 
     // ---------------------------------------------------------------- lists of the info block (offsets in it)
 
-    public const int Doors = 0x02, Exits = 0x06, Passages = 0x0A, Triggers = 0x0C, Points = 0x0E, Characters = 0x10,
+    public const int Doors = 0x02, Looks = 0x04, Exits = 0x06, Passages = 0x0A, Triggers = 0x0C, Points = 0x0E, Characters = 0x10,
                      Paths = 0x12, Areas = 0x14, Treasure = 0x26;
     public static int RecordSize(int list) => list switch
     {
-        Doors => 15, Exits => 9, Passages => 5, Triggers => 5, Points => 3, Characters => 8, Paths => 6, Areas => 5, Treasure => 4,
+        Doors => 15, Looks => 10, Exits => 9, Passages => 5, Triggers => 5, Points => 3, Characters => 8, Paths => 6, Areas => 5, Treasure => 4,
         0x1A or 0x1C or 0x1E or 0x20 or 0x28 or 0x2A => 3, _ => 0,
     };
 
     /// <summary>Biggest map the game has (so a resized map stays within what the game's buffers already hold).</summary>
     public const int MaxWidth = 96, MaxHeight = 88, MaxCells = 7744;
 
+    /// <summary>The treasure of the map (the chest list at $91:B8B5, <see cref="L2Chests"/>), as edited.</summary>
+    public List<L2Chests.Rec> Chests { get; private set; }
+    private readonly List<L2Chests.Rec> _origChests;
+
+    /// <summary>Whether this is the world map or the sea floor: only the info block (exits, points) is edited here; their
+    /// blocks are the Maps tab's world map editor.</summary>
+    public bool IsWorld => MapId < 2;
+
     public L2MapEdit(RomBuffer rom, int map)
     {
         MapId = map;
-        Map = L2Maps.Read(rom, map);
+        // the world maps' blocks are big blocks in their own files: a 256 x 256 grid of 16-pixel blocks stands for them
+        Map = map < 2 ? new L2Maps.Map { Id = map, Name = "", Layers = new[] { new L2Maps.Layer { Width = 256, Height = 256, Blocks = new int[65536], Flags = new byte[65536] } } }
+                      : L2Maps.Read(rom, map);
+        Chests = map < 2 ? new() : L2Chests.Records(rom, map);
+        _origChests = new List<L2Chests.Rec>(Chests);
         _origInfoAt = L2MapInfo.Block(rom, map);
         _origInfo = _origInfoAt >= 0 && _origInfoAt + 2 <= rom.Length ? rom.ReadBytes(_origInfoAt, rom.ReadUInt16Le(_origInfoAt)) : Array.Empty<byte>();
         Info = (byte[])_origInfo.Clone();
-        _origSprites = L2MapInfo.CharacterSprites(rom, map);
+        _origSprites = map < 2 ? new() : L2MapInfo.CharacterSprites(rom, map);
         Sprites = new Dictionary<int, int>(_origSprites);
         _origCharacters = Records(Characters).Select(r => 0x4F + r.Bytes[0]).ToHashSet();
         _origTriggers = Records(Triggers).Select(r => (int)r.Bytes[0]).ToHashSet();
@@ -159,6 +171,98 @@ public sealed class L2MapEdit
     /// <summary>A preset point id one higher than the highest.</summary>
     public int NextPointId() => Records(Points).Select(r => (int)r.Bytes[0]).DefaultIfEmpty(-1).Max() + 1;
 
+    // ---------------------------------------------------------------- treasure
+
+    /// <summary>The look (list +04 record) treasure spot record <paramref name="b"/> names, or null.</summary>
+    public byte[]? LookOf(byte[] b) => Records(Looks).Select(r => r.Bytes).FirstOrDefault(r => r[0] == b[3]);
+
+    /// <summary>A look that copies a single block onto itself: opening shows nothing (a hidden treasure).</summary>
+    public static bool IsSelfLook(byte[]? look) => look != null && look[2] == look[6] && look[3] == look[7] && look[4] == 1 && look[5] == 1 && look[8] == 1 && look[9] == 1;
+
+    /// <summary>Whether treasure spot record <paramref name="b"/> is hidden (no chest picture).</summary>
+    public bool IsHidden(byte[] b) => IsSelfLook(LookOf(b));
+
+    /// <summary>The chest record of a treasure spot id, or null.</summary>
+    public L2Chests.Rec? ChestOf(int spot) => Chests.FirstOrDefault(c => c.Spot == spot);
+
+    /// <summary>Adds treasure at block (x, y): a chest (the look and picture of a chest already on the map, both layers'
+    /// block and walls copied onto the spot) or a hidden one (a look that copies the spot onto itself, so nothing shows).
+    /// It gets the next free spot id and an opened flag no treasure of the game uses. Returns its spot id.</summary>
+    public int AddTreasure(RomBuffer rom, int x, int y, bool hidden, int item)
+    {
+        if (IsWorld) throw new InvalidOperationException("The world maps can't have treasure.");
+        if (x < 0 || y < 0 || x >= Width || y >= Height) throw new InvalidOperationException("That block is outside the map.");
+        var spots = Records(Treasure);
+        if (spots.Any(r => r.Bytes[1] == x && r.Bytes[2] == y)) throw new InvalidOperationException("There is treasure on that block already.");
+        var usedIds = spots.Select(r => r.Bytes[0] & 0x1F).Concat(Chests.Select(c => c.Spot)).ToHashSet();
+        int spot = Enumerable.Range(0, 32).FirstOrDefault(i => !usedIds.Contains(i), -1);
+        if (spot < 0) throw new InvalidOperationException("The map has 32 treasures already (the most the game's records can number).");
+        int flag = L2Chests.FreeFlag(rom, Chests.Select(c => c.Flag), MapId);
+        if (flag < 0) throw new InvalidOperationException("All 512 opened flags are used by treasure already.");
+        int look;
+        if (hidden)
+        {
+            var ids = Records(Looks).Select(r => (int)r.Bytes[0]).ToHashSet();
+            look = Enumerable.Range(0, 0xFF).FirstOrDefault(i => !ids.Contains(i), -1);
+            if (look < 0) throw new InvalidOperationException("The map has no free look number.");
+            AddRecord(Looks, new byte[] { (byte)look, 0x03, (byte)x, (byte)y, 1, 1, (byte)x, (byte)y, 1, 1 });
+        }
+        else
+        {
+            // a chest of the map (its spot has a chest record and a look that isn't hidden) gives the look and the picture
+            var model = spots.Select(r => r.Bytes).FirstOrDefault(b => ChestOf(b[0] & 0x1F) != null && LookOf(b) is { } l && !IsSelfLook(l));
+            if (model == null) throw new InvalidOperationException("This map has no chest to copy the look of a chest from: add a hidden treasure, or paint a chest and its open picture first.");
+            look = model[3];
+            foreach (var L in Map.Layers)
+            {
+                int from = model[2] * L.Width + model[1], to = y * L.Width + x;
+                if (from < L.Blocks.Length && to < L.Blocks.Length) { L.Blocks[to] = L.Blocks[from]; L.Flags[to] = L.Flags[from]; }
+            }
+        }
+        AddRecord(Treasure, new byte[] { (byte)spot, (byte)x, (byte)y, (byte)look });
+        Chests.Add(new L2Chests.Rec(spot, flag, item, false));
+        return spot;
+    }
+
+    /// <summary>Takes treasure spot record <paramref name="index"/> out with its chest record (and its hidden look, when
+    /// nothing else uses it). A chest's picture stays painted on the map.</summary>
+    public void RemoveTreasure(int index)
+    {
+        var spots = Records(Treasure);
+        if (index < 0 || index >= spots.Count) return;
+        var b = spots[index].Bytes;
+        var look = LookOf(b);
+        RemoveRecord(Treasure, index);
+        Chests.RemoveAll(c => c.Spot == (b[0] & 0x1F));
+        if (IsSelfLook(look) && !Records(Treasure).Any(r => r.Bytes[3] == b[3]))
+        {
+            int li = Records(Looks).FindIndex(r => r.Bytes[0] == b[3]);
+            if (li >= 0) RemoveRecord(Looks, li);
+        }
+    }
+
+    /// <summary>Keeps every hidden treasure's look on its spot (after the spot moved).</summary>
+    public void SyncHiddenLooks()
+    {
+        var looks = Records(Looks);
+        foreach (var (_, b) in Records(Treasure))
+        {
+            int li = looks.FindIndex(r => r.Bytes[0] == b[3]);
+            if (li < 0 || !IsSelfLook(looks[li].Bytes) || Records(Treasure).Count(r => r.Bytes[3] == b[3]) != 1) continue;
+            var l = looks[li].Bytes;
+            if (l[2] == b[1] && l[3] == b[2]) continue;
+            l[2] = l[6] = b[1]; l[3] = l[7] = b[2];
+            SetRecord(Looks, li, l);
+        }
+    }
+
+    /// <summary>Changes what a treasure spot holds.</summary>
+    public void SetTreasureItem(int spot, int item)
+    {
+        int i = Chests.FindIndex(c => c.Spot == spot);
+        if (i >= 0) Chests[i] = Chests[i] with { Item = item };
+    }
+
     // ---------------------------------------------------------------- the whole map
 
     /// <summary>Gives the map a new size: both layers, kept from the top left, new cells get <paramref name="fill"/>
@@ -194,10 +298,10 @@ public sealed class L2MapEdit
     // ---------------------------------------------------------------- undo
 
     /// <summary>Everything the editor can change, for one undo step.</summary>
-    public sealed record State(int W, int H, int[][] Blocks, byte[][] Flags, byte[] Info, Dictionary<int, int> Sprites, int BlockSet, int TileSet, int PaletteSet);
+    public sealed record State(int W, int H, int[][] Blocks, byte[][] Flags, byte[] Info, Dictionary<int, int> Sprites, int BlockSet, int TileSet, int PaletteSet, List<L2Chests.Rec> Chests);
 
     public State Save() => new(Width, Height, Map.Layers.Select(l => (int[])l.Blocks.Clone()).ToArray(), Map.Layers.Select(l => (byte[])l.Flags.Clone()).ToArray(),
-                               (byte[])Info.Clone(), new Dictionary<int, int>(Sprites), BlockSetIndex, TileSetIndex, PaletteSetIndex);
+                               (byte[])Info.Clone(), new Dictionary<int, int>(Sprites), BlockSetIndex, TileSetIndex, PaletteSetIndex, new List<L2Chests.Rec>(Chests));
 
     public void Restore(State s)
     {
@@ -206,11 +310,12 @@ public sealed class L2MapEdit
         Info = (byte[])s.Info.Clone();
         Sprites = new Dictionary<int, int>(s.Sprites);
         BlockSetIndex = s.BlockSet; TileSetIndex = s.TileSet; PaletteSetIndex = s.PaletteSet;
+        Chests = new List<L2Chests.Rec>(s.Chests);
     }
 
     public static bool Same(State a, State b) =>
         a.W == b.W && a.H == b.H && a.BlockSet == b.BlockSet && a.TileSet == b.TileSet && a.PaletteSet == b.PaletteSet &&
-        a.Info.AsSpan().SequenceEqual(b.Info) && a.Sprites.Count == b.Sprites.Count && a.Sprites.All(kv => b.Sprites.TryGetValue(kv.Key, out var v) && v == kv.Value) &&
+        a.Info.AsSpan().SequenceEqual(b.Info) && a.Chests.SequenceEqual(b.Chests) && a.Sprites.Count == b.Sprites.Count && a.Sprites.All(kv => b.Sprites.TryGetValue(kv.Key, out var v) && v == kv.Value) &&
         a.Blocks.Zip(b.Blocks).All(p => p.First.AsSpan().SequenceEqual(p.Second)) && a.Flags.Zip(b.Flags).All(p => p.First.AsSpan().SequenceEqual(p.Second));
 
     // ---------------------------------------------------------------- what changed
@@ -220,7 +325,8 @@ public sealed class L2MapEdit
     public bool InfoChanged => !Info.AsSpan().SequenceEqual(_origInfo);
     public bool SpritesChanged => Sprites.Count != _origSprites.Count || Sprites.Any(kv => !_origSprites.TryGetValue(kv.Key, out var v) || v != kv.Value);
     public bool SetsChanged => BlockSetIndex != _origBlockSet || TileSetIndex != _origTileSet || PaletteSetIndex != _origPaletteSet;
-    public bool HasChanges => LayersChanged || InfoChanged || SpritesChanged || SetsChanged;
+    public bool ChestsChanged => !Chests.SequenceEqual(_origChests);
+    public bool HasChanges => LayersChanged || InfoChanged || SpritesChanged || SetsChanged || ChestsChanged;
 
     // ---------------------------------------------------------------- writing
 
@@ -242,7 +348,8 @@ public sealed class L2MapEdit
         if (InfoChanged)
         {
             bool shared = Enumerable.Range(0, L2Maps.Count).Count(m => L2MapInfo.Block(rom, m) == _origInfoAt) > 1;
-            if (Info.Length == _origInfo.Length && !shared && _origInfoAt >= 0)
+            // (the block may have moved since this edit was read: the world map's goes when treasure lists need its room)
+            if (Info.Length == _origInfo.Length && !shared && _origInfoAt >= 0 && L2MapInfo.Block(rom, MapId) == _origInfoAt)
                 rom.WriteBytes(_origInfoAt, Info);
             else
             {
@@ -255,7 +362,7 @@ public sealed class L2MapEdit
         }
 
         // characters: the start-up script's creates
-        if (addedChars.Count > 0 || removedChars.Count > 0 || SpritesChanged)
+        if (!IsWorld && (addedChars.Count > 0 || removedChars.Count > 0 || SpritesChanged))
         {
             int init = L2EventBlocks.InitScript(rom, MapId);
             var script = L2EventScript.Read(rom, init, L2EventBlocks.InitBase(init));
@@ -298,11 +405,19 @@ public sealed class L2MapEdit
                     L2EventBlocks.Add(rom, MapId, L2EventBlocks.TriggerList, id, L2EventScript.New(L2Events.Block(rom, MapId)));
         }
 
+        // treasure
+        if (ChestsChanged)
+        {
+            if (TableGuard.LockReason(rom, "Treasure") is { } locked) throw new InvalidOperationException(locked);
+            L2Chests.WriteList(rom, MapId, Chests);
+            done.Add("treasure");
+        }
+
         // the layers
-        if (LayersChanged) { L2Maps.Write(rom, Map); done.Add("blocks"); }
+        if (LayersChanged && !IsWorld) { L2Maps.Write(rom, Map); done.Add("blocks"); }
 
         // graphics
-        if (SetsChanged)
+        if (SetsChanged && !IsWorld)
         {
             rom.WriteByte(L2Maps.BlockSetList + MapId, (byte)BlockSetIndex);
             rom.WriteByte(L2Maps.TileSetList + MapId, (byte)TileSetIndex);
@@ -323,6 +438,7 @@ public sealed class L2MapEdit
     public static string SetTestStart(RomBuffer rom, int map, int point)
     {
         if (!L2StoryClear.CanStart(rom)) throw new InvalidOperationException("This ROM's new-game code isn't the US game's, so the start can't be moved.");
+        if (map < 2) throw new InvalidOperationException("A new game can't start on the world map (the party would stand in the sea): start in a town next to an exit to the world map.");
         if (!L2StoryClear.PresetPoints(rom, map).Any(p => p.Id == point)) throw new InvalidOperationException($"Map {map:X2} has no preset point {point}.");
         int block = L2Events.Block(rom, map);
         if (block < 0) throw new InvalidOperationException("This map has no event block for the start scene.");

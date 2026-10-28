@@ -55,12 +55,12 @@ public partial class L2MapsPage
         var b = recs[i].Bytes;
         return k switch
         {
-            SelKind.Exit => $"exit {b[0]} to {(b[8] == 0 ? "the world map" : $"{b[8]:X2} {NameOf(b[8])}")} ({b[6]},{b[7]})",
+            SelKind.Exit => $"{(_edit.IsWorld ? "entrance" : "exit")} {b[0]} to {(b[8] == 0 ? "the world map" : $"{b[8]:X2} {NameOf(b[8])}")} ({b[6]},{b[7]})",
             SelKind.Door => $"door {b[0]}",
             SelKind.Trigger => $"step-on area {b[0]}",
             SelKind.Character => $"character {b[0]} (sprite {(_edit.Sprites.TryGetValue(0x4F + b[0], out int sp) ? L2Sprites.Name(sp) : "none")})",
             SelKind.Point => $"preset point {b[0]}",
-            _ => $"treasure spot {b[0]}",
+            _ => $"{(_edit.IsHidden(b) ? "hidden item" : "chest")} {b[0]} ({(_edit.ChestOf(b[0] & 0x1F) is { } c ? ItemName(c.Item) : "empty")})",
         };
     }
 
@@ -134,6 +134,7 @@ public partial class L2MapsPage
                 break;
         }
         _edit.SetRecord(ListOf(Selection.Kind), Selection.Index, b);
+        if (Selection.Kind == SelKind.Treasure) _edit.SyncHiddenLooks();
         if (Selection.Kind == SelKind.Character) DrawMap();
         DrawOverlays(); UpdateInspector(); UpdateUndoState();
     }
@@ -143,9 +144,17 @@ public partial class L2MapsPage
     {
         if (_edit == null || Selection is not { } s) return;
         if (s.Kind == SelKind.Door) { Status = "Doors are part of the map's puzzles and keys; they are shown, not taken out."; return; }
-        if (s.Kind == SelKind.Treasure) { Status = "Treasure spots go with the chests of the Treasure tab: move them, or change what they hold."; return; }
         string what = Describe(s.Kind, s.Index);
         Record("taking out " + what);
+        if (s.Kind == SelKind.Treasure)
+        {
+            bool hidden = _edit.IsHidden(_edit.Records(L2MapEdit.Treasure)[s.Index].Bytes);
+            _edit.RemoveTreasure(s.Index);
+            Selection = null;
+            Refresh();
+            Status = $"Took out {what}." + (hidden ? "" : " Its picture is still painted on the map: paint the floor over it.");
+            return;
+        }
         if (s.Kind == SelKind.Character)
         {
             int id = 0x4F + _edit.Records(L2MapEdit.Characters)[s.Index].Bytes[0];
@@ -191,6 +200,7 @@ public partial class L2MapsPage
     [ObservableProperty] private int _treasureX, _treasureY;
     [ObservableProperty] private int _treasureItem = -1;
     [ObservableProperty] private string _treasureNote = "";
+    [ObservableProperty] private string _treasureKind = "";
     public ObservableCollection<string> ItemChoices { get; } = new();
 
     private void FillChoices()
@@ -225,8 +235,10 @@ public partial class L2MapsPage
             switch (s.Kind)
             {
                 case SelKind.Exit:
-                    SelectionTitle = $"Exit {b[0]}";
-                    SelectionDetails = b[8] == 0 ? $"Leads to the world map at ({b[6]},{b[7]})." : $"Leads to map {b[8]:X2} {NameOf(b[8])} at block ({b[6]},{b[7]}).";
+                    SelectionTitle = _edit.IsWorld ? $"Entrance {b[0]}" : $"Exit {b[0]}";
+                    SelectionDetails = (_edit.IsWorld ? "Walking onto it from the world map takes the party into a map. " : "")
+                        + (b[8] == 0 ? $"Leads to the world map at block ({b[6]},{b[7]})." : b[8] == _edit.MapId && _edit.IsWorld ? "It doesn't lead anywhere yet: click Pick on map... and choose the map and the place the party arrives at."
+                        : $"Leads to map {b[8]:X2} {NameOf(b[8])} at block ({b[6]},{b[7]}).");
                     ExitX = b[1]; ExitY = b[2]; ExitW = Math.Max(1, b[3] - b[1]); ExitH = Math.Max(1, b[4] - b[2]);
                     DestMapIndex = b[8] < DestinationChoices.Count ? b[8] : -1; DestX = b[6]; DestY = b[7];
                     ExitStyle = b[5].ToString("X2");
@@ -256,12 +268,15 @@ public partial class L2MapsPage
                     break;
                 case SelKind.Treasure:
                 {
-                    SelectionTitle = $"Treasure spot {b[0]}";
-                    var chest = L2Chests.Read(_rom, _edit.MapId).FirstOrDefault(c => c.Spot == b[0]);
+                    bool hidden = _edit.IsHidden(b);
+                    SelectionTitle = hidden ? $"Hidden item {b[0]}" : $"Chest {b[0]}";
+                    var chest = _edit.ChestOf(b[0] & 0x1F);
                     TreasureX = b[1]; TreasureY = b[2];
                     TreasureItem = chest?.Item ?? -1;
-                    SelectionDetails = chest == null ? "No chest of the Treasure list uses this spot." : $"A chest (opened flag {chest.Flag:X3}){(chest.Special ? ", a special one" : "")}.";
-                    TreasureNote = "What it holds goes straight into the ROM (Edit > Undo takes it back). Its picture is part of the map: paint it where you move it.";
+                    TreasureKind = hidden ? "Hidden: nothing shows; pressing A facing this block finds the item." : "A chest: pressing A facing it opens it and gives the item.";
+                    SelectionDetails = chest == null ? "No treasure record uses this spot, so it gives nothing."
+                        : $"Found once: opened flag {chest.Flag:X3} remembers it (each treasure has its own){(chest.Special ? "; left out of the game's count of opened chests" : "")}.";
+                    TreasureNote = hidden ? "Drag it to move it." : "Drag it to move it; its picture is part of the map, so paint the chest where you move it (copy one with the Area tool) and the floor where it was.";
                     break;
                 }
                 case SelKind.Door:
@@ -305,6 +320,7 @@ public partial class L2MapsPage
         if (n.AsSpan().SequenceEqual(b)) return;
         Record(what);
         _edit.SetRecord(ListOf(s.Kind), s.Index, n);
+        if (s.Kind == SelKind.Treasure) _edit.SyncHiddenLooks();
         if (s.Kind == SelKind.Character) DrawMap();
         DrawOverlays(); UpdateInspector(); UpdateUndoState();
     }
@@ -316,7 +332,7 @@ public partial class L2MapsPage
     partial void OnExitYChanged(int value) => EditRecord("moving the exit", b => { int h = b[4] - b[2]; b[2] = Y(value); b[4] = (byte)(b[2] + h); });
     partial void OnExitWChanged(int value) => EditRecord("resizing the exit", b => b[3] = (byte)Math.Clamp(b[1] + Math.Max(1, value), 1, _edit!.Width));
     partial void OnExitHChanged(int value) => EditRecord("resizing the exit", b => b[4] = (byte)Math.Clamp(b[2] + Math.Max(1, value), 1, _edit!.Height));
-    partial void OnDestMapIndexChanged(int value) { if (value >= 0) EditRecord("changing where the exit leads", b => b[8] = (byte)value); }
+    partial void OnDestMapIndexChanged(int value) { if (value >= 0) EditRecord("changing where the exit leads", b => { b[8] = (byte)value; if (value == 0 && b[5] != 0xF0) b[5] = 0xF0; }); }
     partial void OnDestXChanged(int value) => EditRecord("changing where the exit leads", b => b[6] = (byte)Math.Clamp(value, 0, 255));
     partial void OnDestYChanged(int value) => EditRecord("changing where the exit leads", b => b[7] = (byte)Math.Clamp(value, 0, 255));
     partial void OnExitStyleChanged(string value)
@@ -350,19 +366,19 @@ public partial class L2MapsPage
 
     partial void OnPointXChanged(int value) => EditRecord("moving the point", b => b[1] = X(value));
     partial void OnPointYChanged(int value) => EditRecord("moving the point", b => b[2] = Y(value));
-    partial void OnTreasureXChanged(int value) => EditRecord("moving the treasure spot", b => b[1] = X(value));
-    partial void OnTreasureYChanged(int value) => EditRecord("moving the treasure spot", b => b[2] = Y(value));
+    partial void OnTreasureXChanged(int value) => EditRecord("moving the treasure", b => b[1] = X(value));
+    partial void OnTreasureYChanged(int value) => EditRecord("moving the treasure", b => b[2] = Y(value));
 
     partial void OnTreasureItemChanged(int value)
     {
-        if (_filingInspector || _rom == null || _main == null || _edit == null || Selection is not { Kind: SelKind.Treasure } s || value < 0) return;
-        int spot = _edit.Records(L2MapEdit.Treasure)[s.Index].Bytes[0];
-        var chest = L2Chests.Read(_rom, _edit.MapId).FirstOrDefault(c => c.Spot == spot);
+        if (_filingInspector || _rom == null || _edit == null || Selection is not { Kind: SelKind.Treasure } s || value < 0) return;
+        int spot = _edit.Records(L2MapEdit.Treasure)[s.Index].Bytes[0] & 0x1F;
+        var chest = _edit.ChestOf(spot);
         if (chest == null || chest.Item == value) return;
-        chest.Item = value;
-        L2Chests.WriteItem(_rom, chest);
-        _main.NotifyRomModified($"Lufia II: treasure on map {_edit.MapId:X2}");
-        Status = $"The chest now holds {ItemChoices.ElementAtOrDefault(value)?[5..] ?? value.ToString("X3")}.";
+        Record("changing what the treasure holds");
+        _edit.SetTreasureItem(spot, value);
+        DrawOverlays(); UpdateUndoState();
+        Status = $"It now holds {ItemName(value)}.";
     }
 
     // ---------------------------------------------------------------- going places
@@ -374,7 +390,7 @@ public partial class L2MapsPage
         var b = _edit.Records(L2MapEdit.Exits)[s.Index].Bytes;
         int map = b[8], x = b[6], y = b[7];
         SelectedIndex = map;
-        if (map >= 2 && _edit != null)
+        if (_edit != null)
         {
             AreaRect = null;
             JumpRequested?.Invoke(x * 16, y * 16);
@@ -391,10 +407,13 @@ public partial class L2MapsPage
     {
         if (_rom == null || _edit == null || Selection is not { Kind: SelKind.Exit } s) return;
         var b = _edit.Records(L2MapEdit.Exits)[s.Index].Bytes;
-        var w = new L2PickPlaceWindow(_rom, b[8] >= 2 ? b[8] : _edit.MapId, b[6], b[7], NameOf) { Owner = System.Windows.Application.Current.MainWindow };
+        // an exit that still leads back to its own map: offer the world map from a town, a town from the world map
+        int start = b[8] != _edit.MapId || !_edit.IsWorld ? b[8] : 3;
+        if (start == 1) start = 0;
+        var w = new L2PickPlaceWindow(_rom, start, b[6], b[7], NameOf) { Owner = System.Windows.Application.Current.MainWindow };
         if (w.ShowDialog() != true) return;
-        EditRecord("changing where the exit leads", n => { n[8] = (byte)w.Map; n[6] = (byte)w.X; n[7] = (byte)w.Y; });
-        Status = $"Exit {b[0]} now leads to {w.Map:X2} {NameOf(w.Map)} at ({w.X},{w.Y}).";
+        EditRecord("changing where the exit leads", n => { n[8] = (byte)w.Map; n[6] = (byte)w.X; n[7] = (byte)w.Y; if (w.Map == 0 && n[5] != 0xF0) n[5] = 0xF0; });
+        Status = $"{(_edit.IsWorld ? "Entrance" : "Exit")} {b[0]} now leads to {(w.Map == 0 ? "the world map" : $"{w.Map:X2} {NameOf(w.Map)}")} at ({w.X},{w.Y}).";
     }
 
     /// <summary>Writes the map and opens the picked character's talk event in Events (making a short one when it has none).</summary>

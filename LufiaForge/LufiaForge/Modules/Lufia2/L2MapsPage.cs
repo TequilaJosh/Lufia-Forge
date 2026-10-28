@@ -94,7 +94,7 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
     public void Fit(double w, double h)
     {
         if (_edit == null && _world == null || w <= 0 || h <= 0) return;
-        double z = _world != null ? Math.Min(w, h) / (L2WorldMap.Size * 16.0) : Math.Min(w / (_edit!.Width * 16.0), h / (_edit.Height * 16.0));
+        double z = _world != null ? Math.Min(w, h) / (double)WorldPixels : Math.Min(w / (_edit!.Width * 16.0), h / (_edit.Height * 16.0));
         Zoom = Math.Clamp(Math.Floor(z * 20) / 20, 0.1, 4);
     }
     public void WheelZoom(int delta) { if (delta > 0) ZoomIn(); else ZoomOut(); }
@@ -109,6 +109,7 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
         _rom = rom; _main = main;
         main.Register(this);
         _names = Enumerable.Range(0, L2Maps.Count).Select(id => RomName(rom, id)).ToList();
+        _itemNames = null;
         _stats.Clear();
         _edit = null; _history.Clear(); _redo.Clear();
         FillList();
@@ -161,12 +162,13 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
         _edit = null; _history.Clear(); _redo.Clear();
         Selection = null; AreaRect = null; StopStamp();
         if (SelectedMap?.Id != value) { _filling = true; SelectedMap = Maps.FirstOrDefault(m => m.Id == value); _filling = false; }
-        if (_rom != null && value >= 2)
+        if (_rom != null && value >= 0)
         {
             try { _edit = new L2MapEdit(_rom, value); }
             catch (Exception ex) { _edit = null; Status = "Couldn't read the map: " + ex.Message; }
         }
         LoadWorld(value);
+        OnPropertyChanged(nameof(ToolHint));
         IsEditableMap = (_edit != null || _world != null) && TableGuard.LockReason(_rom!, "Maps") == null;
         MapNameText = value >= 0 ? (LufiaForge.Core.Maps.MapNames.ProjectNames?.GetValueOrDefault(value) ?? "") : "";
         OnPropertyChanged(nameof(MapNameHint));
@@ -174,7 +176,9 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
         ReloadBlocks();
         Refresh();
         UpdateUndoState();
-        if (_rom != null && _world != null) Status = (value == 0 ? "The world map" : "The sea floor") + ": paint, pick and copy its big blocks" + (value == 0 ? "; Battle zones paints where which battles happen." : ".");
+        if (_rom != null && _world != null) Status = value == 0
+            ? "The world map: paint, pick and copy its big blocks; + Exit adds an entrance to a town or dungeon (Select moves them); Battle zones paints where which battles happen."
+            : "The sea floor: paint, pick and copy its big blocks.";
         else if (_rom != null && TableGuard.LockReason(_rom, "Maps") is { } locked) Status = locked;
         else if (_edit != null) Status = $"{NameOf(value)}. Pick a tool above; Ctrl+Z takes back each change.";
     }
@@ -198,7 +202,7 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
     public string? WritePendingEdits()
     {
         if (_rom == null || _main == null) return null;
-        if (_world != null) return _world.Changed ? TableGuard.LockReason(_rom, "Maps") ?? WriteWorld() : null;
+        if (_world != null) return _world.Changed || _edit?.HasChanges == true ? TableGuard.LockReason(_rom, "Maps") ?? WriteWorld() : null;
         if (_edit == null || !_edit.HasChanges) return null;
         if (TableGuard.LockReason(_rom, "Maps") is { } locked) return locked;
         try
@@ -231,7 +235,7 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
     private void RevertMap()
     {
         int id = SelectedIndex;
-        if (_world != null) { LoadWorld(id); Refresh(); WorldUndoState(); Status = "Back to the map as the project has it."; return; }
+        if (_world != null) { LoadWorld(id); _edit = _rom != null ? new L2MapEdit(_rom, id) : null; Selection = null; Refresh(); WorldUndoState(); Status = "Back to the map as the project has it."; return; }
         if (_edit == null) return;
         _edit = null;
         _history.Clear(); _redo.Clear();
@@ -249,6 +253,7 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
     /// <summary>Remembers the map as it is, before a change described by <paramref name="what"/>.</summary>
     private void Record(string what)
     {
+        if (_world != null) { WorldRecord(what); return; }
         if (_edit == null) return;
         _history.Add((_edit.Save(), what));
         if (_history.Count > 300) _history.RemoveAt(0);
@@ -259,6 +264,7 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
     /// <summary>Drops the last remembered step when nothing changed after all (a click that didn't move anything).</summary>
     private void DropIfSame()
     {
+        if (_world != null) { WorldDropIfSame(); return; }
         if (_edit == null || _history.Count == 0) return;
         if (L2MapEdit.Same(_history[^1].State, _edit.Save())) { _history.RemoveAt(_history.Count - 1); UpdateUndoState(); }
     }
@@ -333,7 +339,7 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
     private void DrawMap()
     {
         if (_world != null) { DrawWorld(); return; }
-        ZoneImage = null;
+        ZoneImage = null; ZoneImageSize = 0;
         if (_rom == null || _edit == null) { MapImage = null; MapSummary = ""; return; }
         try
         {
@@ -378,7 +384,7 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
     private static readonly Brush ExitBrush = Freeze(Color.FromRgb(0x40, 0xFF, 0x40)), DoorBrush = Freeze(Color.FromRgb(0xFF, 0xE0, 0x40)),
         TreasureBrush = Freeze(Color.FromRgb(0xFF, 0x60, 0xFF)), CharBrush = Freeze(Color.FromRgb(0x40, 0xC0, 0xFF)),
         TriggerBrush = Freeze(Color.FromRgb(0xFF, 0x90, 0x40)), PointBrush = Freeze(Color.FromRgb(0x40, 0xFF, 0xFF)),
-        WalkBrush = Freeze(Color.FromArgb(0x90, 0x40, 0xC0, 0xFF)), SelectedBrush = Freeze(Colors.White);
+        WalkBrush = Freeze(Color.FromArgb(0x90, 0x40, 0xC0, 0xFF)), SelectedBrush = Freeze(Colors.White), HiddenBrush = Freeze(Color.FromRgb(0xFF, 0xB0, 0xFF));
     private static Brush Freeze(Color c) { var b = new SolidColorBrush(c); b.Freeze(); return b; }
 
     private void DrawOverlays()
@@ -396,7 +402,7 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
             for (int i = 0; i < exits.Count; i++)
             {
                 var b = exits[i].Bytes;
-                Box(b[1], b[2], b[3], b[4], ExitBrush, $"E{b[0]}→{b[8]:X2}", Sel(SelKind.Exit, i));
+                Box(b[1], b[2], b[3], b[4], ExitBrush, ExitLabel(b), Sel(SelKind.Exit, i));
             }
         }
         if (ShowDoors)
@@ -412,7 +418,7 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
         if (ShowTreasure)
         {
             var t = _edit.Records(L2MapEdit.Treasure);
-            for (int i = 0; i < t.Count; i++) { var b = t[i].Bytes; Box(b[1], b[2], b[1] + 1, b[2] + 1, TreasureBrush, $"${b[0]}", Sel(SelKind.Treasure, i)); }
+            for (int i = 0; i < t.Count; i++) { var b = t[i].Bytes; Box(b[1], b[2], b[1] + 1, b[2] + 1, _edit.IsHidden(b) ? HiddenBrush : TreasureBrush, TreasureLabel(b), Sel(SelKind.Treasure, i)); }
         }
         if (ShowPoints)
         {
@@ -430,6 +436,30 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
                 Box(b[1], b[2], b[1] + 1, b[2] + 1, CharBrush, $"C{b[0]}", s);
             }
         }
+    }
+
+    /// <summary>An exit's label: the map it leads to (by name on the world map, where there are many).</summary>
+    private string ExitLabel(byte[] b)
+    {
+        if (b[8] == 0) return _world != null ? $"E{b[0]}: pick where" : $"E{b[0]}→World map";
+        if (_world != null) { string n = NameOf(b[8]); return n.Length > 16 ? n[..16] : n; }
+        return $"E{b[0]}→{b[8]:X2} {Short(NameOf(b[8]))}";
+    }
+
+    private static string Short(string n) => n.Length > 12 ? n[..12] : n;
+
+    private string TreasureLabel(byte[] b)
+    {
+        var c = _edit?.ChestOf(b[0] & 0x1F);
+        string item = c == null ? "empty" : ItemName(c.Item);
+        return (_edit!.IsHidden(b) ? "?" : "$") + Short(item);
+    }
+
+    private List<string>? _itemNames;
+    private string ItemName(int item)
+    {
+        _itemNames ??= _rom == null ? new() : L2Battle.Items(_rom).OrderBy(i => i.Index).Select(i => i.Name.Trim()).ToList();
+        return item >= 0 && item < _itemNames.Count ? _itemNames[item] : $"item {item:X3}";
     }
 
     // ---------------------------------------------------------------- map list: names

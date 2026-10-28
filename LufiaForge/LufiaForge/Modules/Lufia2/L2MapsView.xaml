@@ -37,15 +37,24 @@
                     <RadioButton GroupName="L2MapTool" Style="{StaticResource LufiaToolRadio}" IsChecked="{Binding IsAreaTool}" Content="▭  Area"
                                  ToolTip="Area (M): drag a rectangle of blocks to copy, cut, fill or delete"/>
                     <RadioButton GroupName="L2MapTool" Style="{StaticResource LufiaToolRadio}" IsChecked="{Binding IsCollisionTool}" Content="▦  Collision"
-                                 ToolTip="Collision (L): paint where the party can't walk, doorways and walls; right-click clears"/>
+                                 ToolTip="Collision (L): paint where the party can't walk, doorways and walls; right-click clears"
+                                 Visibility="{Binding IsWorldMap, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
                     <RadioButton GroupName="L2MapTool" Style="{StaticResource LufiaToolRadio}" IsChecked="{Binding IsAddExitTool}" Content="＋ Exit"
-                                 ToolTip="Add exit (E): drag a rectangle where the party should leave"/>
+                                 ToolTip="Add exit (E): drag a rectangle where the party should leave, then Pick on map... in the inspector. On the world map: an entrance to a town or dungeon."/>
                     <RadioButton GroupName="L2MapTool" Style="{StaticResource LufiaToolRadio}" IsChecked="{Binding IsAddTriggerTool}" Content="＋ Step-on area"
-                                 ToolTip="Add step-on area (T): drag a rectangle; walking onto it plays a new event"/>
+                                 ToolTip="Add step-on area (T): drag a rectangle; walking onto it plays a new event"
+                                 Visibility="{Binding IsWorldMap, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
                     <RadioButton GroupName="L2MapTool" Style="{StaticResource LufiaToolRadio}" IsChecked="{Binding IsAddCharacterTool}" Content="＋ Character"
-                                 ToolTip="Add character (C): click where it stands"/>
+                                 ToolTip="Add character (C): click where it stands"
+                                 Visibility="{Binding IsWorldMap, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
                     <RadioButton GroupName="L2MapTool" Style="{StaticResource LufiaToolRadio}" IsChecked="{Binding IsAddPointTool}" Content="＋ Point"
                                  ToolTip="Add preset point (A): a place scenes put the party or characters on"/>
+                    <RadioButton GroupName="L2MapTool" Style="{StaticResource LufiaToolRadio}" IsChecked="{Binding IsAddChestTool}" Content="＋ Chest"
+                                 ToolTip="Add chest (K): click a block; it looks like this map's chests and gives its item once"
+                                 Visibility="{Binding IsWorldMap, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+                    <RadioButton GroupName="L2MapTool" Style="{StaticResource LufiaToolRadio}" IsChecked="{Binding IsAddHiddenTool}" Content="＋ Hidden item"
+                                 ToolTip="Add hidden item (H): click a block; nothing shows, pressing A facing it finds the item once"
+                                 Visibility="{Binding IsWorldMap, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
 
                     <StackPanel Orientation="Horizontal" Margin="14,0,0,0" Visibility="{Binding IsAreaTool, Converter={StaticResource BoolToVisibilityConverter}}">
                         <Rectangle Width="1" Fill="{StaticResource BorderPurpleBrush}" Margin="0,2,12,2"/>
@@ -122,11 +131,11 @@
                                 <ToggleButton Style="{StaticResource LufiaChip}" IsChecked="{Binding ShowDoors}" Content="● Doors" ToolTip="Doors (yellow)"/>
                                 <ToggleButton Style="{StaticResource LufiaChip}" IsChecked="{Binding ShowPoints}" Content="● Points" ToolTip="Preset points (cyan): where scenes put the party and characters"/>
                                 <StackPanel Orientation="Horizontal" Visibility="{Binding IsWorldMap, Converter={StaticResource BoolToVisibilityConverter}}">
-                                    <ToggleButton Style="{StaticResource LufiaChip}" IsChecked="{Binding ShowZones}" Content="● Battle zones"
-                                                  ToolTip="The world map's random-battle zones (2 x 2 big blocks each). While on, clicking paints the zone typed here; right-click or Ctrl + click picks a zone. 00 = no battles."/>
+                                    <ToggleButton Style="{StaticResource LufiaChip}" IsChecked="{Binding ShowZones}" Content="⚔ Battle zones (paint)"
+                                                  ToolTip="Shows the world map's random-battle zones in colour, with the list of zones and their monsters on the right. While on, clicking paints the picked zone; right-click or Ctrl + click picks a zone from the map. 00 = no battles."/>
                                     <TextBlock Text="zone" Style="{StaticResource LufiaLabel}" VerticalAlignment="Center" Margin="4,0,4,0"/>
                                     <TextBox Style="{StaticResource GdNumber}" Width="34" Text="{Binding ZoneBrushText, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,6,0"
-                                             ToolTip="Zone to paint (hex): which group of battles happens there (see Encounters)"/>
+                                             ToolTip="The zone being painted (hex); pick one in the list on the right"/>
                                 </StackPanel>
                                 <ToggleButton Style="{StaticResource LufiaChip}" IsChecked="{Binding ShowCamera}" Content="▣ Camera"
                                               ToolTip="Shows what the game screen sees (16 x 14 blocks) with the party on the block under the mouse; the camera stops at the map's edges"/>
@@ -218,6 +227,50 @@
                     <RowDefinition Height="*" MinHeight="160"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
+
+                <!-- Battle zones (world map, while painting zones) -->
+                <Border Grid.Row="0" Grid.RowSpan="2" Style="{StaticResource LufiaCard}" Margin="0,0,0,8" Panel.ZIndex="1"
+                        Visibility="{Binding ZonePanelVisible, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Text="Battle zones" Style="{StaticResource LufiaCardTitle}"/>
+                        <TextBlock DockPanel.Dock="Top" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,6"
+                                   Text="Each colour on the map is a zone. Walking there, a battle comes every 25 steps or so (Settings changes how often); the zone decides which monster group it is: one of its groups, by the share shown. Click a zone to paint it on the map; Monsters... changes its groups and their monsters on the Encounters page."/>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding ZoneRows}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border BorderBrush="{StaticResource BorderPurpleBrush}" BorderThickness="0,0,0,1" Padding="0,4">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsBrush}" Value="True">
+                                                            <Setter Property="Background" Value="#40FFD060"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <DockPanel>
+                                                <Rectangle DockPanel.Dock="Left" Width="18" Height="18" Fill="{Binding Swatch}" Stroke="White" StrokeThickness="1" VerticalAlignment="Top" Margin="2,2,8,0"/>
+                                                <StackPanel DockPanel.Dock="Right" VerticalAlignment="Top">
+                                                    <Button Content="Paint" Style="{StaticResource LufiaButtonGold}" Padding="8,2" Margin="0,0,0,2"
+                                                            Command="{Binding DataContext.PickZoneCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding Zone}"
+                                                            ToolTip="Paint this zone on the map"/>
+                                                    <Button Content="Monsters..." Style="{StaticResource LufiaButton}" Padding="8,2"
+                                                            Command="{Binding DataContext.OpenZoneCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding Zone}"
+                                                            ToolTip="Change this zone's groups and their monsters (Encounters page)"/>
+                                                </StackPanel>
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding Title}" Style="{StaticResource LufiaLabel}" Foreground="{StaticResource TextPrimaryBrush}" FontWeight="SemiBold"/>
+                                                    <TextBlock Text="{Binding Groups}" Style="{StaticResource GdHint}" TextWrapping="Wrap"/>
+                                                </StackPanel>
+                                            </DockPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </DockPanel>
+                </Border>
 
                 <!-- Selection -->
                 <Border Grid.Row="0" Style="{StaticResource LufiaCard}" Margin="0,0,0,8">
@@ -332,6 +385,7 @@
 
                             <!-- treasure -->
                             <StackPanel Visibility="{Binding IsTreasureSelected, Converter={StaticResource BoolToVisibilityConverter}}" Margin="0,8,0,0">
+                                <TextBlock Text="{Binding TreasureKind}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,4"/>
                                 <TextBlock Text="Holds" Style="{StaticResource GdFieldLabel}"/>
                                 <ComboBox Style="{StaticResource GdCombo}" ItemsSource="{Binding ItemChoices}" SelectedIndex="{Binding TreasureItem}" HorizontalAlignment="Stretch" Width="Auto"/>
                                 <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
@@ -341,6 +395,8 @@
                                     <TextBox Style="{StaticResource GdNumber}" Width="44" Text="{Binding TreasureY}"/>
                                 </StackPanel>
                                 <TextBlock Text="{Binding TreasureNote}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                <Button Content="✕ Delete" Style="{StaticResource LufiaButton}" Command="{Binding DeleteSelectedCommand}" HorizontalAlignment="Left" Margin="0,6,0,0"
+                                        ToolTip="Take this treasure out (Del)"/>
                             </StackPanel>
                         </StackPanel>
                     </ScrollViewer>

@@ -45,27 +45,45 @@ public static class L2WorldMap
         return pal;
     }
 
-    /// <summary>A big block drawn at half size (16 x 16 pixels).</summary>
-    public static uint[] BigBlockHalf(RomBuffer rom, Parts parts, byte[] tiles, uint[] pal, int big)
+    /// <summary>A big block at full size (32 x 32 pixels, as the game shows it).</summary>
+    public static uint[] BigBlock(RomBuffer rom, Parts parts, byte[] tiles, uint[] pal, int big)
     {
-        var px = new uint[256];
+        var px = new uint[32 * 32];
         for (int q = 0; q < 4; q++)
         {
             int small = rom.ReadUInt16Le(parts.BigBlocks + big * 8 + q * 2);
             for (int t = 0; t < 4; t++)
             {
                 int tile = rom.ReadByte(parts.SmallBlocks + small * 5 + t);
-                int tx = (q & 1) * 8 + (t >= 2 ? 4 : 0), ty = (q >> 1) * 8 + (t & 1) * 4;
-                for (int y = 0; y < 4; y++)
-                    for (int x = 0; x < 4; x++)
+                int tx = (q & 1) * 16 + (t >= 2 ? 8 : 0), ty = (q >> 1) * 16 + (t & 1) * 8;
+                for (int y = 0; y < 8; y++)
+                    for (int x = 0; x < 8; x++)
                     {
-                        int at = tile * 64 + y * 2 * 8 + x * 2;
+                        int at = tile * 64 + y * 8 + x;
                         if (at >= tiles.Length) continue;
                         byte b = tiles[at];
-                        px[(ty + y) * 16 + tx + x] = pal[((b >> 4) & 7) * 16 + (b & 15)];
+                        px[(ty + y) * 32 + tx + x] = pal[((b >> 4) & 7) * 16 + (b & 15)];
                     }
             }
         }
+        return px;
+    }
+
+    /// <summary>A big block at half size (16 x 16 pixels, each the average of 2 x 2 of the full picture), for lists.</summary>
+    public static uint[] BigBlockHalf(RomBuffer rom, Parts parts, byte[] tiles, uint[] pal, int big) => Half(BigBlock(rom, parts, tiles, pal, big));
+
+    /// <summary>A 32 x 32 picture at 16 x 16, averaging each 2 x 2.</summary>
+    public static uint[] Half(uint[] full)
+    {
+        var px = new uint[256];
+        for (int y = 0; y < 16; y++)
+            for (int x = 0; x < 16; x++)
+            {
+                uint r = 0, g = 0, b = 0;
+                foreach (var c in new[] { full[y * 64 + x * 2], full[y * 64 + x * 2 + 1], full[y * 64 + 32 + x * 2], full[y * 64 + 33 + x * 2] })
+                { r += c >> 16 & 0xFF; g += c >> 8 & 0xFF; b += c & 0xFF; }
+                px[y * 16 + x] = 0xFF000000u | r / 4 << 16 | g / 4 << 8 | b / 4;
+            }
         return px;
     }
 

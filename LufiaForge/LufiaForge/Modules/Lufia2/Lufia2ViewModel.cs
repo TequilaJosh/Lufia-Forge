@@ -37,6 +37,8 @@ public partial class Lufia2ViewModel : ObservableObject
     {
         // the Maps tab's "Talk event..." / "Event...": the event in the Events tab
         Maps.OpenEventRequested += (map, head, id) => { Events.ShowEvent(map, head, id); ShowPage?.Invoke("Events"); };
+        // the Maps tab's battle zone list: "Monsters..." shows the zone on the Encounters page
+        Maps.OpenZoneRequested += zone => { Encounters.ShowZone(zone); ShowPage?.Invoke("Encounters"); };
     }
 
     public void SetRom(RomBuffer rom, MainViewModel main)
