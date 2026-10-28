@@ -48,6 +48,18 @@
                             <ComboBox Style="{StaticResource GdCombo}" Width="210" ItemsSource="{Binding PaletteOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding Palette}"
                                       ToolTip="Which of the sprite's own palettes it is shown with (Graphics can add more)."/>
                             <TextBlock Text="{Binding SpriteNote}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Width="210" Margin="0,6,0,0"/>
+                            <TextBlock Text="{Binding MovesNote}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Width="210" Margin="0,6,0,0"/>
+                            <TextBlock Text="{Binding RoomNote}" TextWrapping="Wrap" Width="210" Margin="0,6,0,0">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock" BasedOn="{StaticResource GdHint}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding RoomWarn}" Value="True">
+                                                <Setter Property="Foreground" Value="{StaticResource WarningBrush}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
                         </StackPanel>
                         <Border Background="#202020" VerticalAlignment="Top" Padding="4" MinWidth="72" MinHeight="72">
                             <Image Source="{Binding PictureImage}" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor" HorizontalAlignment="Center" VerticalAlignment="Center">

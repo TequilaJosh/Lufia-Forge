@@ -230,6 +230,10 @@ public partial class L2MonstersPage : L2Page
     [ObservableProperty] private List<L2Option> _spriteOptions = new();
     [ObservableProperty] private List<L2Option> _paletteOptions = new();
     [ObservableProperty] private string _spriteNote = "";
+    /// <summary>How the sprite moves in battle, and whether its battles still fit the battle sprite buffer.</summary>
+    [ObservableProperty] private string _movesNote = "";
+    [ObservableProperty] private string _roomNote = "";
+    [ObservableProperty] private bool _roomWarn;
     /// <summary>How many monsters the ROM has (the US game's 224, or a hack's table up to 256).</summary>
     [ObservableProperty] private string _countNote = "";
     /// <summary>What to know about the picked record in a hack (a placeholder slot, a record shared by several ids, a
@@ -239,7 +243,8 @@ public partial class L2MonstersPage : L2Page
     [ObservableProperty] private string _newMonsterNote = "";
     [ObservableProperty] private bool _canAddMonster;
 
-    /// <summary>After a monster was added (the Encounters page lists it then).</summary>
+    /// <summary>After a monster was added, or one's name, sprite or palette changed (the Encounters page lists and draws
+    /// it then).</summary>
     public event Action? MonstersChanged;
 
     /// <summary>A new monster: a copy of the one shown (<see cref="L2NewMonsters.Add"/>), named "New xx".</summary>
@@ -304,6 +309,52 @@ public partial class L2MonstersPage : L2Page
         PaletteOptions = Enumerable.Range(0, Math.Max(1, pals)).Select(p => new L2Option(p, $"Palette {p}")).ToList();
         SpriteNote = pals == 0 ? "No such sprite." :
             $"Sprite {sprite:X2}: {L2MonsterSprites.Where(Rom!, sprite)}, {pals} palette{(pals == 1 ? "" : "s")}. Paint it, give it new palettes or make new sprites in Graphics (Monster battle sprites).";
+        MovesNote = pals == 0 ? "" : $"In battle it {L2MonsterSprites.MovesText(L2MonsterSprites.Size(Rom!, sprite).Moves)} (set for the sprite in Graphics, Monster battle sprites).";
+        ShowRoom(sprite);
+    }
+
+    /// <summary>Which of the monster's groups and story battles would need more than the 64 squares of the battle
+    /// sprite buffer with sprite <paramref name="sprite"/> (<see cref="L2BattleRoom"/>).</summary>
+    private void ShowRoom(int sprite)
+    {
+        RoomNote = ""; RoomWarn = false;
+        if (_m == null || Rom == null || sprite < 1 || sprite > L2MonsterSprites.Count(Rom)) return;
+        try
+        {
+            var over = L2BattleRoom.Overflows(Rom, _m.Index, sprite);
+            var ms = L2Battle.Monsters(Rom);
+            int most = L2BattleRoom.MostWith(Rom, _m.Index, sprite);
+            var (tx, ty, _) = L2MonsterSprites.Size(Rom, sprite);
+            var (sx, sy) = L2MonsterSprites.Squares(tx, ty);
+            string own = $"The sprite takes {sx * sy} of the {L2BattleRoom.Squares} squares of 16 x 16 that the kinds of monster in one battle share.";
+            if (over.Count > 0)
+            {
+                RoomWarn = true;
+                RoomNote = own + " Too big for " + string.Join("; ", over.Take(6).Select(o => o.What + " (" + L2BattleRoom.Describe(o.Need, ms) + ")")) +
+                           (over.Count > 6 ? $" and {over.Count - 6} more" : "") + ". Pick a smaller sprite, or change those battles on the Encounters page.";
+            }
+            else RoomNote = own + (most == 0 ? " No monster group or story battle has this monster yet." : $" Its battles need at most {most} squares: they fit.");
+        }
+        catch (Exception e) { RoomNote = e.Message; }
+    }
+
+    /// <summary>After a monster sprite was added, painted or given to a monster in Graphics: the sprite list and the
+    /// monster shown are read again.</summary>
+    public void RefreshSprites()
+    {
+        if (Rom == null) return;
+        int i = SelectedIndex;
+        Loading = true;
+        try
+        {
+            var names = ReadNames().ToList();
+            if (i >= 0 && i < Names.Count)
+            {
+                Load(i);
+                if (i < names.Count && names[i] != Names[i]) Names[i] = names[i];
+            }
+        }
+        finally { Loading = false; }
     }
 
     partial void OnSpriteChanged(int value)
@@ -342,7 +393,7 @@ public partial class L2MonstersPage : L2Page
     }
 
     protected override bool IsField(string p) => p is not (nameof(ScriptText) or nameof(AiText) or nameof(HasDrop) or nameof(ItemOptions)
-        or nameof(SpriteOptions) or nameof(PaletteOptions) or nameof(SpriteNote) or nameof(CountNote) or nameof(RecordNote) or nameof(NameMax));
+        or nameof(SpriteOptions) or nameof(PaletteOptions) or nameof(SpriteNote) or nameof(MovesNote) or nameof(RoomNote) or nameof(RoomWarn) or nameof(CountNote) or nameof(RecordNote) or nameof(NameMax));
 
     [RelayCommand] private void EditTurnScript() { if (_m != null) EditScript(L2AiScripts.Kind.MonsterAttack, _m.Index, _m.Name); }
     [RelayCommand] private void EditHitScript() { if (_m != null) EditScript(L2AiScripts.Kind.MonsterDefense, _m.Index, _m.Name); }
@@ -352,9 +403,14 @@ public partial class L2MonstersPage : L2Page
         if (_m == null) return null;
         _m.Name = Name; _m.Level = (byte)Level; _m.Hp = (ushort)Hp; _m.Mp = (ushort)Mp; _m.Atp = (ushort)Atp; _m.Dfp = (ushort)Dfp;
         _m.Agl = (byte)Agl; _m.Int = (byte)Int; _m.Gut = (byte)Gut; _m.Mgr = (byte)Mgr; _m.Exp = (ushort)Exp; _m.Gold = (ushort)Gold;
+        byte oldSprite = _m.Sprite, oldPalette = _m.Palette;
+        string oldName = _m.Name;
         _m.Sprite = (byte)Math.Clamp(Sprite, 1, L2MonsterSprites.Count(Rom!)); _m.Palette = (byte)Math.Clamp(Palette, 0, 255);
         if (HasDrop) { _m.DropItem = DropItem; _m.DropChance = DropChance; }
         L2Battle.WriteMonster(Rom!, _m);
+        // the Encounters page shows the monster's picture and its battles' sprite room: read again (after this write)
+        if (oldSprite != _m.Sprite || oldPalette != _m.Palette || oldName != _m.Name)
+            System.Windows.Application.Current?.Dispatcher.BeginInvoke(() => MonstersChanged?.Invoke());
         PictureImage = Picture(L2Graphics.MonsterSprite(Rom!, _m.Sprite, _m.Palette));
         return _m.Name;
     }

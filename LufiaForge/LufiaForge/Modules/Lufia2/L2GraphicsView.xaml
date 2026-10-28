@@ -152,6 +152,16 @@
                             <Button Content="From a picture..." Style="{StaticResource LufiaButtonGold}" Command="{Binding AddMonsterSpriteCommand}" CommandParameter="png" Width="180"
                                     ToolTip="Make a new monster sprite from a PNG: a multiple of 16 pixels across and down, at most 240 x 240 and 64 squares of 16 x 16. A palette PNG of up to 16 colours keeps its colours (colour 0 see-through); other pictures get up to 15 colours of their own."/>
                         </StackPanel>
+                        <TextBlock Text="Movement in battle (every monster with this sprite)" Style="{StaticResource GdFieldLabel}" Margin="0,0,0,2"/>
+                        <ItemsControl ItemsSource="{Binding MoveFlags}" Margin="0,0,0,4">
+                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="2"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <CheckBox Content="{Binding Label}" IsChecked="{Binding IsChecked}" Style="{StaticResource GdCheck}" Margin="0,1"/>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Text="{Binding MoveNote}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,8"/>
                         <TextBlock Text="Give it to a monster (this sprite, the palette shown)" Style="{StaticResource GdFieldLabel}" Margin="0,0,0,4"/>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                             <ComboBox Style="{StaticResource GdCombo}" Width="170" ItemsSource="{Binding MonsterOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding GiveTo}" Margin="0,0,8,0"/>

@@ -103,6 +103,9 @@ public partial class L2EncountersPage : ObservableObject
     [ObservableProperty] private string _groupTitle = "";
     [ObservableProperty] private string _groupUsers = "";
     [ObservableProperty] private string _groupNote = "";
+    /// <summary>The squares of the battle sprite buffer the group's battles need (<see cref="L2BattleRoom"/>).</summary>
+    [ObservableProperty] private string _groupRoom = "";
+    [ObservableProperty] private bool _groupRoomWarn;
     [ObservableProperty] private ObservableCollection<L2GroupMonster> _groupMonsters = new();
     [ObservableProperty] private L2MonsterChoice? _addChoice;
     [ObservableProperty] private string _status = "";
@@ -120,7 +123,9 @@ public partial class L2EncountersPage : ObservableObject
         MonsterChoices = _monsterList.Select(m => new L2MonsterChoice(m.Index, $"{m.Index:X2}  {(m.Unused ? "(unused slot)" : m.Name.Trim())}  (level {m.Level})",
             () => Picture(rom, m))).ToList();
         OnPropertyChanged(nameof(MonsterChoices));
-        try { var (w, h, px) = L2WorldMap.Render(rom, 8); _worldSmall = Bitmap(w, h, px); } catch { _worldSmall = null; }
+        _sizes = null;
+        if (!_keepWorld)
+            try { var (w, h, px) = L2WorldMap.Render(rom, 8); _worldSmall = Bitmap(w, h, px); } catch { _worldSmall = null; }
         RefreshLists();
         _mapIds.Clear(); MapNames.Clear();
         for (int m = 0; m < L2Maps.Count; m++)
@@ -136,12 +141,16 @@ public partial class L2EncountersPage : ObservableObject
         InitStory();
     }
 
-    /// <summary>After monsters were added or renamed on the Monsters page: the lists offer them (the picks are kept).</summary>
+    private bool _keepWorld;
+
+    /// <summary>After monsters were added or renamed on the Monsters page, or their sprites changed (Monsters or
+    /// Graphics page): the lists offer them, with their pictures and sprite room (the picks are kept).</summary>
     public void RefreshMonsters()
     {
         if (_rom == null || _main == null) return;
         int g = SelectedGroup, z = SelectedZone, st = SelectedStory;
-        SetRom(_rom, _main);
+        _keepWorld = _worldSmall != null;
+        try { SetRom(_rom, _main); } finally { _keepWorld = false; }
         SelectedGroup = -1; SelectedGroup = g;
         SelectedZone = -1; SelectedZone = z;
         SelectedStory = -1; SelectedStory = st;
@@ -162,10 +171,27 @@ public partial class L2EncountersPage : ObservableObject
 
     private string MonsterName(int id) => id < _monsterList.Count ? _monsterList[id].Name.Trim() : $"monster {id:X2}";
 
+    private L2BattleRoom.Sizes? _sizes;
+    private L2BattleRoom.Sizes Sizes => _sizes ??= new L2BattleRoom.Sizes(_rom!);
+
     private string GroupLabel(int g)
     {
-        var ms = L2Encounters.Group(_rom!, g).Where(m => m != 0xFF).ToList();
-        return $"{g:X2}  " + (ms.Count == 0 ? "(empty)" : string.Join(", ", ms.GroupBy(m => m).Select(x => MonsterName(x.Key) + (x.Count() > 1 ? $" x{x.Count()}" : ""))));
+        var all = L2Encounters.Group(_rom!, g);
+        var ms = all.Where(m => m != 0xFF).ToList();
+        var need = ms.Count == 0 ? null : L2BattleRoom.Group(all, Sizes);
+        return $"{g:X2}  " + (ms.Count == 0 ? "(empty)" : string.Join(", ", ms.GroupBy(m => m).Select(x => MonsterName(x.Key) + (x.Count() > 1 ? $" x{x.Count()}" : "")))) +
+               (need is { TooBig: true, Fixed: false } ? $"  (! {need.Squares} squares)" : "");
+    }
+
+    /// <summary>The squares of the battle sprite buffer a group's battles need, in words.</summary>
+    private void ShowGroupRoom(int[] ms)
+    {
+        var n = L2BattleRoom.Group(ms, Sizes);
+        GroupRoomWarn = n.TooBig && !n.Fixed;
+        GroupRoom = n.Fixed ? "" : n.Monsters.Count == 0 ? "" :
+            GroupRoomWarn
+                ? $"Too big: a battle of this group can need {L2BattleRoom.Describe(n, _monsterList)}. All the kinds of monster in one battle share {L2BattleRoom.Squares} squares of 16 x 16 for their sprites; past that their pictures come out wrong. Use smaller sprites or fewer big kinds together."
+                : $"Sprite room: a battle of this group needs at most {n.Squares} of the {L2BattleRoom.Squares} squares of 16 x 16 the kinds of monster share (with {string.Join(", ", n.Monsters.Distinct().Select(MonsterName))}).";
     }
 
     private List<L2MonsterChoice> GroupPictures(int g) =>
@@ -364,6 +390,7 @@ public partial class L2EncountersPage : ObservableObject
         if (zones.Count > 0) parts.Add("world map " + string.Join(", ", zones.Select(z => $"zone {z.Zone:X2} ({z.Share * 100:0}% of its battles)")));
         if (maps.Count > 0) parts.Add("the monsters of " + string.Join(", ", maps.Take(10).Select(m => { string n = L2Maps.Name(_rom!, m); return $"{m:X2} {(n.Length > 0 && !n.Contains('~') ? n : "")}".Trim(); })) + (maps.Count > 10 ? $" and {maps.Count - 10} more maps" : ""));
         GroupUsers = parts.Count == 0 ? "No zone or map uses this group (scripted battles may)." : "Fought in " + string.Join("; ", parts) + ".";
+        ShowGroupRoom(ms);
         GroupNote = L2Encounters.IsFixed(ms)
             ? "A fixed battle: with place 1 empty the game takes the monster in place 2 and reads the other places as its own layout data, not monsters. Change only place 2 here."
             : "";
