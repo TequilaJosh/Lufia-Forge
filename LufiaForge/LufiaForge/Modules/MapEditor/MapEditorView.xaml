@@ -191,7 +191,7 @@
                                     <DataTemplate>
                                         <Grid>
                                             <Rectangle Width="{Binding W}" Height="{Binding H}" Stroke="{Binding Stroke}"
-                                                       StrokeThickness="{Binding Thickness}"
+                                                       StrokeThickness="{Binding Thickness}" HorizontalAlignment="Left" VerticalAlignment="Top"
                                                        Visibility="{Binding IsBox, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                             <Line X1="0" Y1="0" X2="{Binding LineDx}" Y2="{Binding LineDy}" Stroke="{Binding Stroke}"
                                                   StrokeThickness="{Binding Thickness}" StrokeDashArray="2 2" StrokeEndLineCap="Triangle" Opacity="0.7"
