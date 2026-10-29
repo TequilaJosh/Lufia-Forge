@@ -196,7 +196,8 @@
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
                                         <Grid>
-                                            <Rectangle Width="{Binding W}" Height="{Binding H}" Stroke="{Binding Stroke}" StrokeThickness="{Binding Thickness}"/>
+                                            <Rectangle Width="{Binding W}" Height="{Binding H}" Stroke="{Binding Stroke}" StrokeThickness="{Binding Thickness}"
+                                                       HorizontalAlignment="Left" VerticalAlignment="Top"/>
                                             <TextBlock Text="{Binding Label}" Foreground="White" FontSize="8" FontWeight="Bold" Margin="1,0,0,0" Background="#90000000"
                                                        HorizontalAlignment="Left" VerticalAlignment="Top"/>
                                         </Grid>
