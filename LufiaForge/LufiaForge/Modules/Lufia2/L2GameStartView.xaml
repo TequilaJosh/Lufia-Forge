@@ -1,0 +1,52 @@
+<UserControl x:Class="LufiaForge.Modules.Lufia2.L2GameStartView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
+    </UserControl.Resources>
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="12">
+        <StackPanel MaxWidth="760" HorizontalAlignment="Left">
+            <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,8"
+                       Text="Where a new game starts: pick a map, the cutscene that plays and where the party stands, then Set the start. Written to the ROM at once (Edit, Undo takes it back). The party, gold and items a new game starts with are on the Characters page."/>
+            <Border Style="{StaticResource GdCard}">
+                <StackPanel>
+                    <TextBlock Text="NOW" Style="{StaticResource GdSection}"/>
+                    <TextBlock Text="{Binding Current}" Style="{StaticResource LufiaLabel}" TextWrapping="Wrap"/>
+                </StackPanel>
+            </Border>
+            <Border Style="{StaticResource GdCard}">
+                <StackPanel>
+                    <TextBlock Text="START THE GAME HERE" Style="{StaticResource GdSection}"/>
+                    <TextBlock Text="Map" Style="{StaticResource GdFieldLabel}"/>
+                    <ComboBox Style="{StaticResource GdCombo}" ItemsSource="{Binding MapChoices}" SelectedItem="{Binding SelectedMap}" DisplayMemberPath="Label" IsTextSearchEnabled="True"/>
+                    <TextBlock Text="Cutscene that plays" Style="{StaticResource GdFieldLabel}" Margin="0,8,0,0"/>
+                    <ComboBox Style="{StaticResource GdCombo}" ItemsSource="{Binding CutsceneChoices}" SelectedItem="{Binding SelectedCutscene}" DisplayMemberPath="Label"/>
+                    <TextBlock Text="The party stands on" Style="{StaticResource GdFieldLabel}" Margin="0,8,0,0"/>
+                    <ComboBox Style="{StaticResource GdCombo}" ItemsSource="{Binding PointChoices}" SelectedItem="{Binding SelectedPoint}" DisplayMemberPath="Label" HorizontalAlignment="Left" MinWidth="200"/>
+                    <TextBlock Text="{Binding PointNote}" Style="{StaticResource GdHint}" TextWrapping="Wrap"/>
+                    <StackPanel Visibility="{Binding HasFlags, Converter={StaticResource BoolToVisibilityConverter}}" Margin="0,8,0,0">
+                        <TextBlock Text="Story flags the cutscene checks" Style="{StaticResource GdFieldLabel}"/>
+                        <ItemsControl ItemsSource="{Binding Flags}">
+                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <CheckBox Content="{Binding Label}" IsChecked="{Binding IsChecked}" Style="{StaticResource GdCheck}" Margin="0,0,14,2"/>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Text="{Binding FlagsNote}" Style="{StaticResource GdHint}" TextWrapping="Wrap"/>
+                    </StackPanel>
+                    <TextBlock Text="More story flags on (hex, for the story so far; empty: none)" Style="{StaticResource GdFieldLabel}" Margin="0,8,0,0"/>
+                    <TextBox Style="{StaticResource GdText}" Text="{Binding OtherFlags, UpdateSourceTrigger=PropertyChanged}" FontFamily="Consolas"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                        <Button Content="Set the start" Style="{StaticResource LufiaButtonGold}" Padding="14,4" Command="{Binding SetStartCommand}"
+                                ToolTip="A new game starts here: the cutscene plays at once (a talk cutscene when you talk)"/>
+                        <Button Content="The game's opening" Style="{StaticResource LufiaButton}" Padding="10,4" Margin="8,0,0,0" Command="{Binding NormalStartCommand}"
+                                ToolTip="A new game starts with the game's own opening again"/>
+                    </StackPanel>
+                    <TextBlock Text="{Binding Status}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

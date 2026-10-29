@@ -36,6 +36,13 @@ Code: `Core/Lufia2/L2Cutscene.cs` (steps, the stage, new cutscenes, cutscene cha
    ROM and start a new game. Keep it as a hack's own start, or press **Normal start** for the game's opening again.
    The party, gold and items the new game starts with are on the Characters page.
 
+The **Game start** page (World group) sets the same start in one place: a map (one with preset points), the
+cutscene that plays (a scene, a stepping-on area or a talk, or none), the point the party stands on (one on a
+stepping-on area is picked for it) and the story flags. The flags the cutscene checks are listed and ticked the way
+that plays it furthest (each combination is played back, the fewest flags on among the best); more flags for the story
+so far go in a box. **Now** says where a new game starts, which flags are on and which cutscene plays. **The game's
+opening** puts the game's own start back.
+
 How the start is made (map 02 scene 01 point 06 is the game's own, at `$83:ACCD`):
 
 * The ticked flags (`1A ff`) and counters (`1D cc nn`) are set by a scene of its own (F0 up), which then sends the
