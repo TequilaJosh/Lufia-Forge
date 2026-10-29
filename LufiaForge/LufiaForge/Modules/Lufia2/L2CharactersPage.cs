@@ -210,6 +210,7 @@ public partial class L2CharactersPage : L2Page
         _start.PartySize = ids.Count;
         for (int i = 0; i < _start.Inventory.Count; i++) _start.Inventory[i] = (Inventory[i].Value, InventoryCounts[i].Value);
         L2Characters.WriteStart(Rom, _start);
+        L2StartParty.Keep(Rom);
         Main.NotifyRomModified("Lufia II: the new game's party, gold and items");
     }
 }

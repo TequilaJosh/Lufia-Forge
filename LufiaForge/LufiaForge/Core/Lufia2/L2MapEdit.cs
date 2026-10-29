@@ -595,30 +595,99 @@ public sealed class L2MapEdit
         (rom.ReadByte(L2StoryClear.NewGameMapAt), rom.ReadByte(L2StoryClear.NewGameSceneAt), rom.ReadByte(L2StoryClear.NewGamePresetAt));
 
     /// <summary>A new game starts on <paramref name="map"/> at preset point <paramref name="point"/>: a scene of its own
-    /// is added there (show Maxim, fade in). For test ROMs.</summary>
-    public static string SetTestStart(RomBuffer rom, int map, int point)
+    /// is added there (show Maxim, fade in). With <paramref name="play"/> (an event of the map: a stepping-on cutscene)
+    /// the scene goes on with a copy of that event's steps, so it plays as the game starts (a copy: a jump from one event
+    /// into another can't be laid out again, the block's scripts move). For test ROMs, or a hack's own start.</summary>
+    public static string SetTestStart(RomBuffer rom, int map, int point, IReadOnlyCollection<int>? flags = null, IReadOnlyDictionary<int, int>? counters = null,
+        (int Head, int Id)? play = null)
     {
         if (!L2StoryClear.CanStart(rom)) throw new InvalidOperationException("This ROM's new-game code isn't the US game's, so the start can't be moved.");
         if (map < 2) throw new InvalidOperationException("A new game can't start on the world map (the party would stand in the sea): start in a town next to an exit to the world map.");
         if (!L2StoryClear.PresetPoints(rom, map).Any(p => p.Id == point)) throw new InvalidOperationException($"Map {map:X2} has no preset point {point}.");
         int block = L2Events.Block(rom, map);
         if (block < 0) throw new InvalidOperationException("This map has no event block for the start scene.");
-        var scenes = L2EventBlocks.ReadLists(rom, block).Where(e => e.Head == L2EventBlocks.SceneList).Select(e => e.Id).ToHashSet();
-        int id = 0xF0;
-        while (scenes.Contains(id) && id < 0xFE) id++;
-        if (scenes.Contains(id))
-            throw new InvalidOperationException("The map has no free scene number.");
-        // a scene written before (F0 up, ending "2D 00 59 18 76 00") is used again
-        var s = L2EventScript.New(block);
-        foreach (var b in new[] { new byte[] { 0x2D, 0x00 }, new byte[] { 0x59, 0x18 }, new byte[] { 0x76 } })
-            s.Steps.Insert(s.Steps.Count - 1, new L2Step { Bytes = b });
-        var mine = L2EventBlocks.ReadLists(rom, block).FirstOrDefault(e => e.Head == L2EventBlocks.SceneList && e.Id >= 0xF0 &&
-            rom.ReadBytes(block + e.Offset, 6).SequenceEqual(new byte[] { 0x2D, 0x00, 0x59, 0x18, 0x76, 0x00 }));
-        if (mine != null) id = mine.Id; else L2EventBlocks.Add(rom, map, L2EventBlocks.SceneList, id, s);
+        L2EventScript Scene(int blk)
+        {
+            L2EventScript s;
+            if (play != null)
+            {
+                var t = L2EventBlocks.ReadLists(rom, blk).FirstOrDefault(e => e.Head == play.Value.Head && e.Id == play.Value.Id)
+                        ?? throw new InvalidOperationException("The cutscene to play is no longer in the map's lists.");
+                s = L2EventScript.Read(rom, blk + t.Offset, blk);
+                if (s.Problem != null) throw new InvalidOperationException("The cutscene can't be copied into the start: " + s.Problem);
+            }
+            else s = L2EventScript.New(blk);
+            s.Steps.InsertRange(0, new[] { new byte[] { 0x2D, 0x00 }, new byte[] { 0x59, 0x18 }, new byte[] { 0x76 } }.Select(b => new L2Step { Bytes = b }));
+            return s;
+        }
+        // a scene written before (F0 up, starting "2D 00 59 18 76") is used again
+        bool IsMine(int blk, L2EventBlocks.Entry e) => e.Head == L2EventBlocks.SceneList && e.Id >= 0xF0 &&
+            rom.ReadBytes(blk + e.Offset, 5).SequenceEqual(new byte[] { 0x2D, 0x00, 0x59, 0x18, 0x76 });
+        var mine = L2EventBlocks.ReadLists(rom, block).FirstOrDefault(e => IsMine(block, e));
+        int id;
+        if (mine != null) { id = mine.Id; L2EventBlocks.Save(rom, map, mine, Scene(block)); }
+        else
+        {
+            var scenes = L2EventBlocks.ReadLists(rom, block).Where(e => e.Head == L2EventBlocks.SceneList).Select(e => e.Id).ToHashSet();
+            id = 0xF0;
+            while (scenes.Contains(id) && id < 0xFE) id++;
+            if (scenes.Contains(id)) throw new InvalidOperationException("The map has no free scene number.");
+            L2EventBlocks.Add(rom, map, L2EventBlocks.SceneList, id, Scene(block));
+        }
+        if ((flags?.Count ?? 0) + (counters?.Count ?? 0) > 0)
+            return StartWithFlags(rom, map, id, point, flags, counters);
         rom.WriteByte(L2StoryClear.NewGameMapAt, (byte)map);
         rom.WriteByte(L2StoryClear.NewGameSceneAt, (byte)id);
         rom.WriteByte(L2StoryClear.NewGamePresetAt, (byte)point);
         return $"A new game now starts on map {map:X2} at point {point} (scene {id:X2}).";
+    }
+
+    /// <summary>A new game starts with story flags on and counters set: a scene of its own (F0 up: "1A ff"s, "1D cc nn"s,
+    /// then "16 map scene point") sets them and sends the party to <paramref name="scene"/> of the map, so the map loads
+    /// again with them set (its characters, its "on entering" event and the cutscene's checks all see them). A scene
+    /// written before in that shape is used again.</summary>
+    public static string StartWithFlags(RomBuffer rom, int map, int scene, int point, IReadOnlyCollection<int>? flags, IReadOnlyDictionary<int, int>? counters)
+    {
+        int block = L2Events.Block(rom, map);
+        if (block < 0) throw new InvalidOperationException("This map has no event block for the start scene.");
+        var s = L2EventScript.New(block);
+        var add = new List<L2Step>();
+        foreach (int f in (flags ?? Array.Empty<int>()).Distinct().OrderBy(f => f)) add.Add(new L2Step { Bytes = new byte[] { 0x1A, (byte)f } });
+        foreach (var kv in (counters ?? new Dictionary<int, int>()).OrderBy(kv => kv.Key)) add.Add(new L2Step { Bytes = new byte[] { 0x1D, (byte)kv.Key, (byte)kv.Value } });
+        add.Add(new L2Step { Bytes = new byte[] { 0x16, (byte)map, (byte)scene, (byte)point } });
+        s.Steps.InsertRange(0, add);
+        var lists = L2EventBlocks.ReadLists(rom, block);
+        var mine = lists.FirstOrDefault(e => e.Head == L2EventBlocks.SceneList && e.Id >= 0xF0 && IsFlagSetter(rom, block + e.Offset));
+        int id;
+        if (mine != null) { id = mine.Id; L2EventBlocks.Save(rom, map, mine, s); }
+        else
+        {
+            var used = lists.Where(e => e.Head == L2EventBlocks.SceneList).Select(e => e.Id).ToHashSet();
+            id = 0xF0;
+            while (used.Contains(id) && id < 0xFE) id++;
+            if (used.Contains(id)) throw new InvalidOperationException("The map has no free scene number.");
+            L2EventBlocks.Add(rom, map, L2EventBlocks.SceneList, id, s);
+        }
+        rom.WriteByte(L2StoryClear.NewGameMapAt, (byte)map);
+        rom.WriteByte(L2StoryClear.NewGameSceneAt, (byte)id);
+        rom.WriteByte(L2StoryClear.NewGamePresetAt, (byte)point);
+        var what = new List<string>();
+        if (flags?.Count > 0) what.Add("story flag" + (flags.Count > 1 ? "s " : " ") + string.Join(" ", flags.OrderBy(f => f).Select(f => f.ToString("X2"))) + " on");
+        if (counters?.Count > 0) what.Add(string.Join(", ", counters.OrderBy(kv => kv.Key).Select(kv => $"counter {kv.Key:X2} = {kv.Value}")));
+        return $"A new game now starts on map {map:X2} at point {point} with {string.Join(" and ", what)}.";
+    }
+
+    /// <summary>A scene made by <see cref="StartWithFlags"/>: only flag and counter sets, then "go to a map".</summary>
+    private static bool IsFlagSetter(RomBuffer rom, int p)
+    {
+        for (int n = 0; n < 300 && p + 4 < rom.Length; n++)
+        {
+            int op = rom.ReadByte(p);
+            if (op == 0x1A) p += 2;
+            else if (op == 0x1D) p += 3;
+            else return op == 0x16;   // (laid out again, the end after it goes: "go to" never falls through)
+        }
+        return false;
     }
 
     /// <summary>The game's own start: map 02, scene 01, preset point 06 (the opening).</summary>

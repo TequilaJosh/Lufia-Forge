@@ -952,13 +952,19 @@ public static class L2Cutscene
     }
 
     /// <summary>A new game starts with this cutscene: a scene runs on arrival (the party at <paramref name="point"/>);
-    /// any other event gets the test start (the party on <paramref name="point"/>, then step on the area or talk).</summary>
-    public static string SetTest(RomBuffer rom, int map, int head, int id, int point)
+    /// a stepping-on cutscene plays right after the test start (the party on <paramref name="point"/>); a talking one
+    /// waits for the talk.
+    /// The story <paramref name="flags"/> and <paramref name="counters"/> are set as the new game starts (the game's own
+    /// cutscenes check the story so far and skip themselves without them).</summary>
+    public static string SetTest(RomBuffer rom, int map, int head, int id, int point, IReadOnlyCollection<int>? flags = null, IReadOnlyDictionary<int, int>? counters = null)
     {
         if (!L2StoryClear.CanStart(rom)) throw new InvalidOperationException("This ROM's new-game code isn't the US game's, so the start can't be moved.");
         if (!L2StoryClear.PresetPoints(rom, map).Any(p => p.Id == point)) throw new InvalidOperationException($"Map {map:X2} has no preset point {point}: add one on the Maps page.");
+        L2StartParty.Keep(rom);   // the whole starting party on the map, for the cutscene's walks
         if (head == L2EventBlocks.SceneList && Starter(rom, map, id) is { } st)
-            return L2MapEdit.SetTestStart(rom, map, point) + $" On entering the map the cutscene starts (with the party on point {st.Point}).";
+            return L2MapEdit.SetTestStart(rom, map, point, flags, counters) + $" On entering the map the cutscene starts (with the party on point {st.Point}).";
+        if (head == L2EventBlocks.SceneList && (flags?.Count ?? 0) + (counters?.Count ?? 0) > 0)
+            return L2MapEdit.StartWithFlags(rom, map, id, point, flags, counters) + $" Then the cutscene (scene {id:X2}) plays.";
         if (head == L2EventBlocks.SceneList)
         {
             rom.WriteByte(L2StoryClear.NewGameMapAt, (byte)map);
@@ -966,6 +972,8 @@ public static class L2Cutscene
             rom.WriteByte(L2StoryClear.NewGamePresetAt, (byte)point);
             return $"A new game now starts with this cutscene (map {map:X2}, scene {id:X2}, the party on point {point}).";
         }
-        return L2MapEdit.SetTestStart(rom, map, point) + (head == L2EventBlocks.TriggerList ? " Walk onto the area to start the cutscene." : head == L2EventBlocks.TalkList ? " Talk to the character to start the cutscene." : "");
+        if (head == L2EventBlocks.TriggerList)
+            return L2MapEdit.SetTestStart(rom, map, point, flags, counters, (head, id)) + " The cutscene plays as the game starts (pick a point on its area: its walks start from there).";
+        return L2MapEdit.SetTestStart(rom, map, point, flags, counters) + (head == L2EventBlocks.TalkList ? " Talk to the character to start the cutscene." : "");
     }
 }

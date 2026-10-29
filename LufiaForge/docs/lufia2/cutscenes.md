@@ -30,9 +30,30 @@ Code: `Core/Lufia2/L2Cutscene.cs` (steps, the stage, new cutscenes, cutscene cha
    walking together move at once). The arrows step one step back or on. Up / down move a step, Delete takes it out,
    Undo takes back the last change.
 6. **Save** writes the cutscene into the ROM (Edit > Undo takes it back). Revert drops what isn't saved.
-7. **Test in the game**: a new game starts on this map with the party on the point picked. A scene plays at once;
-   for a step-on area walk onto it, for a talk cutscene talk to the character. Export the ROM and start a new game.
-   **Normal start** puts the game's own opening back (do this before sharing the game).
+7. **Test in the game** (or start the game here): a new game starts on this map with the party on the point picked
+   and the story flags ticked under **Playback starts with** turned on. A scene or a step-on area cutscene plays at
+   once (put the party on the area: its walks start from there); for a talk cutscene talk to the character. Export the
+   ROM and start a new game. Keep it as a hack's own start, or press **Normal start** for the game's opening again.
+   The party, gold and items the new game starts with are on the Characters page.
+
+How the start is made (map 02 scene 01 point 06 is the game's own, at `$83:ACCD`):
+
+* The ticked flags (`1A ff`) and counters (`1D cc nn`) are set by a scene of its own (F0 up), which then sends the
+  party to the map again (`16 map scene point`), so the map loads with them: its characters, its "on entering" event
+  and the cutscene's checks all see them. Without them the game's own cutscenes check the story so far and skip
+  themselves (Karlloon North Shrine B1's trigger, the shrine where Dekar stays behind, starts "if flag 7E is off or
+  flag 41 is on, go to the end").
+* The scene that shows the leader and fades in (F0 up, `2D 00 59 18 76`) goes on with a copy of a step-on cutscene's
+  steps, so it plays as the game starts. A copy, not a jump: the block's scripts move when it is laid out again.
+  Pressing the button again writes both scenes over.
+* A starting party of more than one hero: the game fills the battle party (`$0A7A`) from the new-game records but sets
+  the walking list (`$0926`, the party's map characters) to Maxim alone at `$83:AE56`; only "joins" (`2B`) fills it.
+  Without the others on the map a cutscene step that walks one of them waits forever. Lufia Forge puts a JSL at
+  `$83:ACE7` (new game only, after that reset) that copies `$0A7B..7E` to `$0926..0929`, whenever the starting party
+  has more than one hero (`L2StartParty`).
+
+Checked in the game with a project that starts with Maxim, Selan, Guy and Dekar: the shrine cutscene plays from a new
+game through to Karlloon, with Dekar gone from the party.
 
 Steps the page doesn't edit (checks, jumps and the other commands of events.md) show as they are with "(change it on
 the Events page)"; they stay where they are and can be moved or deleted.
