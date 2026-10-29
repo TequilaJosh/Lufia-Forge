@@ -254,6 +254,36 @@ public partial class MainViewModel
         }
     }
 
+    /// <summary>The BizHawk window <see cref="PlayInBizHawk"/> opened last (closed before a new one opens).</summary>
+    private static System.Diagnostics.Process? _played;
+
+    /// <summary>Writes the project's ROM as it is now and opens it in BizHawk, in a window of its own (the one opened
+    /// here before is closed first). Returns what happened, for a page's status line.</summary>
+    public string PlayInBizHawk()
+    {
+        string? rom = WritePlayRom();
+        if (rom == null) return "The ROM couldn't be written for BizHawk.";
+        string exe = Modules.MemoryMonitor.MemoryMonitorViewModel.FindBundledBizHawk();
+        if (!File.Exists(exe)) return $"BizHawk wasn't found (looked for {exe}); the ROM is at {rom}.";
+        try
+        {
+            if (_played is { HasExited: false } old)
+            {
+                old.CloseMainWindow();
+                if (!old.WaitForExit(3000)) old.Kill();
+            }
+        }
+        catch (Exception) { }
+        try
+        {
+            _played = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe, $"\"{rom}\"")
+            { WorkingDirectory = Path.GetDirectoryName(exe)!, UseShellExecute = false });
+        }
+        catch (Exception ex) { return "BizHawk couldn't be opened: " + ex.Message; }
+        string? warn = Modules.MemoryMonitor.BizHawkHost.CoreWarning(exe, rom);
+        return "BizHawk is opening the ROM: start a new game." + (warn != null ? " " + warn : "");
+    }
+
     /// <summary>Writes the project's ROM as it is now next to the project (for BizHawk) and returns its path.</summary>
     public string? WritePlayRom()
     {

@@ -492,7 +492,7 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
     /// Looks for a sibling "BizHawk" folder relative to the repo/solution root.
     /// Falls back to a hardcoded path if not found.
     /// </summary>
-    private static string FindBundledBizHawk()
+    internal static string FindBundledBizHawk()
     {
         try
         {
