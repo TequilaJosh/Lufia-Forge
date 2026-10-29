@@ -602,7 +602,7 @@ public sealed class L2MapEdit
     /// the scene goes on with a copy of that event's steps, so it plays as the game starts (a copy: a jump from one event
     /// into another can't be laid out again, the block's scripts move). For test ROMs, or a hack's own start.</summary>
     public static string SetTestStart(RomBuffer rom, int map, int point, IReadOnlyCollection<int>? flags = null, IReadOnlyDictionary<int, int>? counters = null,
-        (int Head, int Id)? play = null)
+        (int Head, int Id)? play = null, IReadOnlyList<(int Id, int Map, int Spot)>? place = null)
     {
         if (!L2StoryClear.CanStart(rom)) throw new InvalidOperationException("This ROM's new-game code isn't the US game's, so the start can't be moved.");
         if (map < 2) throw new InvalidOperationException("A new game can't start on the world map (the party would stand in the sea): start in a town next to an exit to the world map.");
@@ -637,8 +637,8 @@ public sealed class L2MapEdit
             if (scenes.Contains(id)) throw new InvalidOperationException("The map has no free scene number.");
             L2EventBlocks.Add(rom, map, L2EventBlocks.SceneList, id, Scene(block));
         }
-        if ((flags?.Count ?? 0) + (counters?.Count ?? 0) > 0)
-            return StartWithFlags(rom, map, id, point, flags, counters);
+        if ((flags?.Count ?? 0) + (counters?.Count ?? 0) + (place?.Count ?? 0) > 0)
+            return StartWithFlags(rom, map, id, point, flags, counters, place);
         rom.WriteByte(L2StoryClear.NewGameMapAt, (byte)map);
         rom.WriteByte(L2StoryClear.NewGameSceneAt, (byte)id);
         rom.WriteByte(L2StoryClear.NewGamePresetAt, (byte)point);
@@ -649,7 +649,8 @@ public sealed class L2MapEdit
     /// then "16 map scene point") sets them and sends the party to <paramref name="scene"/> of the map, so the map loads
     /// again with them set (its characters, its "on entering" event and the cutscene's checks all see them). A scene
     /// written before in that shape is used again.</summary>
-    public static string StartWithFlags(RomBuffer rom, int map, int scene, int point, IReadOnlyCollection<int>? flags, IReadOnlyDictionary<int, int>? counters)
+    public static string StartWithFlags(RomBuffer rom, int map, int scene, int point, IReadOnlyCollection<int>? flags, IReadOnlyDictionary<int, int>? counters,
+        IReadOnlyList<(int Id, int Map, int Spot)>? place = null)
     {
         int block = L2Events.Block(rom, map);
         if (block < 0) throw new InvalidOperationException("This map has no event block for the start scene.");
@@ -657,6 +658,8 @@ public sealed class L2MapEdit
         var add = new List<L2Step>();
         foreach (int f in (flags ?? Array.Empty<int>()).Distinct().OrderBy(f => f)) add.Add(new L2Step { Bytes = new byte[] { 0x1A, (byte)f } });
         foreach (var kv in (counters ?? new Dictionary<int, int>()).OrderBy(kv => kv.Key)) add.Add(new L2Step { Bytes = new byte[] { 0x1D, (byte)kv.Key, (byte)kv.Value } });
+        // persistent characters the cutscene uses, sent to their place on this map (35 id map spot), as an event would
+        foreach (var (pid, pm, spot) in place ?? Array.Empty<(int, int, int)>()) add.Add(new L2Step { Bytes = new byte[] { 0x35, (byte)pid, (byte)pm, (byte)spot } });
         add.Add(new L2Step { Bytes = new byte[] { 0x16, (byte)map, (byte)scene, (byte)point } });
         s.Steps.InsertRange(0, add);
         var lists = L2EventBlocks.ReadLists(rom, block);
@@ -677,10 +680,12 @@ public sealed class L2MapEdit
         var what = new List<string>();
         if (flags?.Count > 0) what.Add("story flag" + (flags.Count > 1 ? "s " : " ") + string.Join(" ", flags.OrderBy(f => f).Select(f => f.ToString("X2"))) + " on");
         if (counters?.Count > 0) what.Add(string.Join(", ", counters.OrderBy(kv => kv.Key).Select(kv => $"counter {kv.Key:X2} = {kv.Value}")));
+        if (place?.Count > 0) what.Add("persistent character" + (place.Count > 1 ? "s " : " ") + string.Join(" ", place.Select(p => p.Id.ToString("X2"))) + " here");
         return $"A new game now starts on map {map:X2} at point {point} with {string.Join(" and ", what)}.";
     }
 
-    /// <summary>A scene made by <see cref="StartWithFlags"/>: only flag and counter sets, then "go to a map".</summary>
+    /// <summary>A scene made by <see cref="StartWithFlags"/>: only flag and counter sets and persistent characters sent,
+    /// then "go to a map".</summary>
     private static bool IsFlagSetter(RomBuffer rom, int p)
     {
         for (int n = 0; n < 300 && p + 4 < rom.Length; n++)
@@ -688,6 +693,7 @@ public sealed class L2MapEdit
             int op = rom.ReadByte(p);
             if (op == 0x1A) p += 2;
             else if (op == 0x1D) p += 3;
+            else if (op == 0x35) p += 4;
             else return op == 0x16;   // (laid out again, the end after it goes: "go to" never falls through)
         }
         return false;
