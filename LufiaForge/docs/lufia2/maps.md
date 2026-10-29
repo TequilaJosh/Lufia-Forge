@@ -24,6 +24,11 @@ is written), `Modules/Lufia2/L2MapWindows.cs` (pick a place, pieces and presets,
 * **Show**: ground, upper layer, collision, characters, exits (labelled with the map they lead to), step-on areas,
   treasure, doors, preset points, and the camera (the 16 x 14 blocks the screen shows with the party on the block under
   the mouse; it stops at the map's edges).
+* **Story**: a map's characters change with the story. Its start-up script makes some only while story flags are on or
+  off (Elcid: characters 1-7 while flag 0B is off, Tia (character 10, sprite 04) and character 11 while it is on). The
+  list offers each story point the script tells apart; picked, the map shows only the characters the game makes then,
+  with the sprite they have then, and clicks skip the others. The inspector says when the game makes a character, or
+  that the start-up script never makes it (an event does, or the game never shows it).
 * **Zoom**: the buttons, Fit, or Ctrl + mouse wheel; the middle mouse button drags the map. The status bar says what is
   under the mouse (both layers' blocks, walls, what stands there).
 * **Blocks**: the order (block set order, the blocks the game's maps with these graphics use most, or only this map's),
@@ -92,8 +97,11 @@ is written), `Modules/Lufia2/L2MapWindows.cs` (pick a place, pieces and presets,
   is last); a record taken out moves the later ones up. Written over the old bytes when the block kept its size and no
   other map shares it, else into the added space with the map's pointer ($CF:FCBC) moved. Lists the editor doesn't
   change (doors, paths with their programs, areas, puzzle spots) keep their bytes and offsets.
-* **Characters**: a new one is `68 id sprite` at the top of the start-up script; a sprite change rewrites every 68 / 7B
-  of that id; one taken out loses its 68 / 7B (jumps to it go to the next step) and its talk event (+6).
+* **Characters**: their sprites are read from the start-up script's own steps (`L2MapInfo.Stages`: each `68` / `7B` with
+  the flag checks that jump over it). Before 2026-10-29 the editor scanned 1 KB of bytes from the script's start, past
+  its end into the next maps' scripts, so 155 characters on 73 maps that no create makes were drawn with another map's
+  sprite (Dankirk North Cave B5's character 1 as a soldier, Dragon Mountain's character 2 as a monster). A new one is
+  `68 id sprite` at the top of the start-up script; a sprite change rewrites every 68 / 7B of that id; one taken out loses its 68 / 7B (jumps to it go to the next step) and its talk event (+6).
 * **Step-on areas**: a new one gets an empty event in the +8 list; one taken out loses it.
 * **Graphics**: the map's bytes in the block set, tile set and palette set lists ($CF:F72E, $CF:F81E, $CF:FA08).
 * **Block editor**: the block set file (0x130 + set): 8 bytes per block from +0x10, four SNES words (top left, bottom

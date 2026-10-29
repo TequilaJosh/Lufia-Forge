@@ -24,22 +24,80 @@ public static class L2MapInfo
     };
 
     /// <summary>The sprite each character of the map is made with: the map's start-up script (the map header's second
-    /// u24, from $87:8000) creates them with 68 / 7B id sprite (id 0x50 + n = character start n + 1). The first one
-    /// per character is kept (later ones are other story stages). Sprites FB-FD are given as the new sprites they show
-    /// on this map (<see cref="L2Sprites.ToEditor"/>).</summary>
+    /// u24, from $87:8000) creates them with 68 / 7B id sprite (id 0x50 + n = character start n + 1). Only the script's
+    /// own steps are read (before, the bytes after its end were scanned too, so the next maps' scripts gave characters
+    /// the game never makes a sprite of theirs). The first create per character is kept; <see cref="Stages"/> has the
+    /// others and the story flags they depend on. Sprites FB-FD are given as the new sprites they show on this map
+    /// (<see cref="L2Sprites.ToEditor"/>).</summary>
     public static Dictionary<int, int> CharacterSprites(RomBuffer rom, int map)
     {
         var sprites = new Dictionary<int, int>();
-        int count = L2Sprites.Count(rom);
-        int e = L2Events.HeaderTable + 0x10 + map * 8;
-        int off = rom.ReadByte(e + 3) | rom.ReadByte(e + 4) << 8 | rom.ReadByte(e + 5) << 16;
-        int at = L2Rom.SnesToFile(0x878000 + off);
-        for (int p = at; p < at + 0x400 && p + 2 < rom.Length; p++)
-        {
-            byte op = rom.ReadByte(p), id = rom.ReadByte(p + 1), sprite = rom.ReadByte(p + 2);
-            if (op is 0x68 or 0x7B && id is >= 0x50 and < 0x80 && L2Sprites.ToEditor(rom, map, sprite) is var s && s < count) { sprites.TryAdd(id, s); p += 2; }
-        }
+        foreach (var c in Stages(rom, map)) sprites.TryAdd(c.Id, c.Sprite);
         return sprites;
+    }
+
+    /// <summary>A create in a map's start-up script: the character, its sprite (Lufia Forge's number) and the story
+    /// checks that lead to it ("if ... else skip" around it), in words, or "" when it is always made.</summary>
+    public sealed record Create(int Id, int Sprite, string When, IReadOnlyList<(int Flag, bool On)> Flags);
+
+    /// <summary>Every character create of the map's start-up script in order, with the flag checks it sits under:
+    /// a check (15 / 6A / 14 with flags only) that jumps forward over it. A character made in more than one place (a
+    /// story stage each, like Tia in Elcid, later a woman in her place) is listed for each.</summary>
+    public static List<Create> Stages(RomBuffer rom, int map)
+    {
+        var list = new List<Create>();
+        int count = L2Sprites.Count(rom);
+        L2EventScript s;
+        try { int init = L2EventBlocks.InitScript(rom, map); s = L2EventScript.Read(rom, init, L2EventBlocks.InitBase(init)); }
+        catch (Exception) { return list; }
+        var at = new Dictionary<L2Step, int>();
+        for (int i = 0; i < s.Steps.Count; i++) at[s.Steps[i]] = i;
+        // the checks still open at each step: (until step index, flags that must hold)
+        var open = new List<(int Until, List<(int Flag, bool On)> Need)>();
+        for (int i = 0; i < s.Steps.Count; i++)
+        {
+            open.RemoveAll(o => o.Until <= i);
+            var st = s.Steps[i];
+            if (st.IsText) continue;
+            var b = st.Bytes;
+            int target = st.Jumps.Count == 1 && st.Jumps[0].Step != null && at.TryGetValue(st.Jumps[0].Step!, out int t) ? t : -1;
+            if (target > i)
+            {
+                // the step jumps past [i + 1, target) when the condition holds: the steps there need it not to
+                if (st.Op is 0x15 or 0x6A && b.Length >= 2) open.Add((target, new() { (b[1], st.Op == 0x6A) }));
+                else if (st.Op == 0x14 && Conditions(b) is { } need) open.Add((target, need));
+            }
+            if (st.Op is 0x68 or 0x7B && b.Length >= 3 && b[1] is >= 0x50 and < 0x80 && L2Sprites.ToEditor(rom, map, b[2]) is var spr && spr < count)
+            {
+                var flags = open.SelectMany(o => o.Need).ToList();
+                list.Add(new Create(b[1], spr, string.Join(" and ", flags.Select(f => $"story flag {f.Flag:X2} {(f.On ? "on" : "off")}")), flags));
+            }
+        }
+        return list;
+    }
+
+    /// <summary>"14" with only flag tests, as what the steps it jumps over need: "if A and B, else jump" skips them
+    /// unless A and B hold; "if A or B, then jump" skips them unless neither holds. Other mixes (variables, "and" with
+    /// "then", "or" with "else") aren't read: null.</summary>
+    private static List<(int Flag, bool On)>? Conditions(byte[] b)
+    {
+        var tests = new List<(int Flag, bool On)>();
+        int joins = 0;   // 0x80 and, 0x40 or
+        for (int i = 1; i + 1 < b.Length && b[i] != 0xFF;)
+        {
+            int c = b[i];
+            if ((c & 0xC0) == 0xC0) return null;
+            switch (c & 0x30)
+            {
+                case 0x00:
+                    if ((c & 0xC0) != 0) { if (joins != 0 && joins != (c & 0xC0)) return null; joins = c & 0xC0; }
+                    tests.Add((b[i + 1], (c & 1) == 0)); i += 2; break;
+                case 0x30: return tests.Count > 0 && joins != 0x40 ? tests : null;                               // else jump
+                case 0x20: return tests.Count > 0 && joins != 0x80 ? tests.Select(t => (t.Flag, !t.On)).ToList() : null;   // then jump
+                default: return null;
+            }
+        }
+        return null;
     }
 
     /// <summary>The bytes FB, FC and FD (a map's new sprites) that the map's scripts make or change characters with

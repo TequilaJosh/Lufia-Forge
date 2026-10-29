@@ -177,6 +177,7 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
             catch (Exception ex) { _edit = null; Status = "Couldn't read the map: " + ex.Message; }
         }
         LoadWorld(value);
+        FillStory();
         OnPropertyChanged(nameof(ToolHint));
         IsEditableMap = (_edit != null || _world != null) && TableGuard.LockReason(_rom!, "Maps") == null;
         MapNameText = value >= 0 ? (LufiaForge.Core.Maps.MapNames.ProjectNames?.GetValueOrDefault(value) ?? "") : "";
@@ -192,6 +193,65 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
             : "The sea floor: paint, pick and copy its big blocks.";
         else if (_rom != null && TableGuard.LockReason(_rom, "Maps") is { } locked) Status = locked;
         else if (_edit != null) Status = $"{NameOf(value)}. Pick a tool above; Ctrl+Z takes back each change.";
+    }
+
+    // ---------------------------------------------------------------- the story so far
+
+    /// <summary>The story points the map's start-up script tells apart (its creates' flag checks): the first choice
+    /// shows each character's first look, the others the characters the game makes while those flags are so.</summary>
+    public ObservableCollection<L2Option> StoryChoices { get; } = new();
+    [ObservableProperty] private L2Option? _storyChoice;
+    [ObservableProperty] private bool _hasStory;
+    private List<L2MapInfo.Create> _stages = new();
+    private readonly List<List<(int Flag, bool On)>> _storyNeeds = new();
+
+    private void FillStory()
+    {
+        _filling = true;
+        try
+        {
+            StoryChoices.Clear(); _storyNeeds.Clear();
+            _stages = _rom != null && _edit != null && _world == null ? L2MapInfo.Stages(_rom, _edit.MapId) : new();
+            StoryChoices.Add(new L2Option(0, "Any point (each character's first look)"));
+            foreach (var g in _stages.Where(c => c.Flags.Count > 0).GroupBy(c => c.When))
+            {
+                _storyNeeds.Add(g.First().Flags.ToList());
+                StoryChoices.Add(new L2Option(_storyNeeds.Count, "While " + g.Key));
+            }
+            HasStory = StoryChoices.Count > 1;
+            StoryChoice = StoryChoices[0];
+        }
+        finally { _filling = false; }
+    }
+
+    partial void OnStoryChoiceChanged(L2Option? value) { if (!_filling) { Refresh(); if (Selection != null) UpdateInspector(); } }
+
+    /// <summary>The sprite a character shows at the story point picked (null: the game doesn't make it then). A
+    /// character no create of the start-up script makes (one added here) shows as it is.</summary>
+    private int? StorySprite(int id)
+    {
+        if (_edit == null) return null;
+        var creates = _stages.Where(c => c.Id == id).ToList();
+        bool edited = _edit.SpritesEdited(id);
+        if (StoryChoice is not { Value: > 0 } k || creates.Count == 0 || edited)
+            return _edit.Sprites.TryGetValue(id, out int s) ? s : null;
+        var need = _storyNeeds[k.Value - 1];
+        var c = creates.FirstOrDefault(c => !c.Flags.Any(f => need.Any(n => n.Flag == f.Flag && n.On != f.On)));
+        return c?.Sprite;
+    }
+
+    /// <summary>The character is on the map at the story point picked (always, with the first choice).</summary>
+    private bool AtStoryPoint(int id) => StoryChoice is not { Value: > 0 } || !_stages.Any(c => c.Id == id) || StorySprite(id) != null;
+
+    /// <summary>When the game makes a character, for the inspector.</summary>
+    private string StoryNote(int id)
+    {
+        var creates = _stages.Where(c => c.Id == id).ToList();
+        if (creates.Count == 0) return _edit?.Sprites.ContainsKey(id) == true ? "" : " The map's start-up script doesn't make it: an event does, or the game never shows it.";
+        string note = creates.All(c => c.When == "") ? "" : " The game makes it " + string.Join("; ", creates.Select(c => $"with sprite {L2Sprites.Name(c.Sprite)} " + (c.When == "" ? "always" : "while " + c.When))) + ".";
+        if (StoryChoice is { Value: > 0 } && StorySprite(id) == null) note += " Not on the map at the story point picked.";
+        if (creates.Select(c => c.Sprite).Distinct().Count() > 1) note += " A new sprite is written to each of its creates.";
+        return note;
     }
 
     /// <summary>The block pictures of the map's block set (as drawn now), and the picker.</summary>
@@ -389,7 +449,7 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
             if (ShowCharacters)
                 foreach (var (_, b) in _edit.Records(L2MapEdit.Characters))
                 {
-                    if (!_edit.Sprites.TryGetValue(0x4F + b[0], out int spr) || L2Graphics.MapSprite(_rom, spr) is not var (sw, sh, spx)) continue;
+                    if (StorySprite(0x4F + b[0]) is not int spr || L2Graphics.MapSprite(_rom, spr) is not var (sw, sh, spx)) continue;
                     int x0 = b[1] * 16 + 8 - sw / 2, y0 = b[2] * 16 + 16 - sh;
                     for (int y = 0; y < sh; y++)
                         for (int x = 0; x < sw; x++)
@@ -454,6 +514,7 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
             {
                 var b = c[i].Bytes;
                 bool s = Sel(SelKind.Character, i);
+                if (!s && !AtStoryPoint(0x4F + b[0])) continue;   // not on the map at the story point picked
                 if (s) Box(b[3], b[4], b[5], b[6], WalkBrush, "", false);
                 Box(b[1], b[2], b[1] + 1, b[2] + 1, CharBrush, $"C{b[0]}", s);
             }

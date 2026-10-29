@@ -41,7 +41,7 @@ public partial class L2MapsPage
             for (int i = 0; i < recs.Count; i++)
             {
                 var (x1, y1, x2, y2) = AreaOf(k, recs[i].Bytes);
-                if (x >= x1 && x < x2 && y >= y1 && y < y2) hits.Add((k, i));
+                if (x >= x1 && x < x2 && y >= y1 && y < y2 && (k != SelKind.Character || AtStoryPoint(0x4F + recs[i].Bytes[0]))) hits.Add((k, i));
             }
         }
         return hits;
@@ -288,7 +288,7 @@ public partial class L2MapsPage
                 {
                     int id = 0x4F + b[0];
                     SelectionTitle = $"Character {b[0]} (actor {id:X2})";
-                    SelectionDetails = "Drag it to move it (its walk area moves too).";
+                    SelectionDetails = "Drag it to move it (its walk area moves too)." + StoryNote(id);
                     CharX = b[1]; CharY = b[2]; WalkX1 = b[3]; WalkY1 = b[4]; WalkX2 = Math.Max(b[3], b[5] - 1); WalkY2 = Math.Max(b[4], b[6] - 1);
                     CharSprite = _edit.Sprites.GetValueOrDefault(id, -1);
                     CharMove = _moveValues.IndexOf(b[7]);

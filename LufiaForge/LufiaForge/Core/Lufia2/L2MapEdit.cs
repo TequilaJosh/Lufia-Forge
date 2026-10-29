@@ -481,6 +481,9 @@ public sealed class L2MapEdit
     public bool LayersChanged => Width != _origWidth || Height != _origHeight ||
         Map.Layers.Select((l, i) => !l.Blocks.AsSpan().SequenceEqual(_origBlocks[i]) || !l.Flags.AsSpan().SequenceEqual(_origFlags[i])).Any(x => x);
     public bool InfoChanged => !Info.AsSpan().SequenceEqual(_origInfo);
+    /// <summary>The character's sprite was changed here (not written yet).</summary>
+    public bool SpritesEdited(int id) => Sprites.TryGetValue(id, out int v) && (!_origSprites.TryGetValue(id, out int o) || o != v);
+
     public bool SpritesChanged => Sprites.Count != _origSprites.Count || Sprites.Any(kv => !_origSprites.TryGetValue(kv.Key, out var v) || v != kv.Value);
     public bool SetsChanged => BlockSetIndex != _origBlockSet || TileSetIndex != _origTileSet || PaletteSetIndex != _origPaletteSet;
     public bool ChestsChanged => !Chests.SequenceEqual(_origChests);
