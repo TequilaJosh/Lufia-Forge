@@ -1,6 +1,6 @@
 # Lufia II (US) capsule monsters: static analysis
 
-ROM: scratchpad\l2\lufia2.sfc (US, LoROM, no header). Everything below is from static reading of ROM data and
+ROM: lufia2.sfc (US, LoROM, no header). Everything below is from static reading of ROM data and
 65816 code; the feeding part of section 6 was checked in the game (2026-10-27), the rest was not. "Guess" marks
 inferences.
 Helper: `l2research\tools\capsules.py table|attacks|scripts|levels` regenerates the tables below.
@@ -476,7 +476,7 @@ table, Lufia Forge points an empty list at the nearest list with items when it w
 The table is 0xD8 bytes (room for 76 items). Longer lists go to the added space: "LFWL", u16 room, then the table
 (with room for 64 more items), the three long addresses pointing there.
 
-Checked in BizHawk (agent test kit `scratchpad\agent_capsule`: a new game on map 03 where Jelze joins with event
+Checked in BizHawk (a new game on map 03 where Jelze joins with event
 `81 00`, Dagger x5 and Frock x5 in the new-game items; RAM `$11C2` meter, `$11A6` pickiness, `$11AD` wish):
 * Clean game: Jelze asks for Long knife; Dagger (400 G) and Frock (400 G) give 1 point each.
 * Tier 0 list = Dagger, form 1 tiers 0-3 = 3 points, wish bonus x2 (made on the page): it asks for Dagger, Dagger
@@ -494,7 +494,7 @@ Checked in BizHawk (agent test kit `scratchpad\agent_capsule`: a new game on map
   learned, set the bit in `$11CA[n]` and show the name (`$82:C4B3`).
 * Form choice: the capsule menu (`$82:C1B5..C243`) lets the player pick any form up to the highest reached.
 
-More settings checked in BizHawk (2026-10-27, test kit `scratchpad\agent_gaps_cap`, same new game with Jelze):
+More settings checked in BizHawk (2026-10-27, same new game with Jelze):
 * Own fruit and Magic fruit: Jelze's own fruit set to Dagger with 5 points, the Magic fruit set to Frock with 12
   points: Dagger gives 5 (meter 5, pickiness stays 0), then Frock 12 (meter 17). Fruits leave the wish as it is.
 * Price threshold: tiers 0-3 set to 250 / 300 / 350 / 390, so Dagger and Frock (400 G) are tier 4: each gives the

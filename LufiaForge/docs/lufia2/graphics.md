@@ -1,6 +1,6 @@
 # Lufia II (US) graphics: packed files and uncompressed graphics
 
-Static analysis only (no emulator). ROM `scratchpad\l2\lufia2.sfc`. Scripts in `scratchpad\l2research\`:
+Static analysis only (no emulator). ROM `lufia2.sfc`. Scripts in `l2research\`:
 `g.py` (unpacker, tile/tilemap/palette renderers), `montage.py`, `r_bbg.py`, `r_caps.py`, `r_title.py`,
 `r_84.py`, `r_font.py`, `unc.py`. All files are unpacked to `l2research\files\NNN.bin`; renders in `l2research\renders\`.
 
