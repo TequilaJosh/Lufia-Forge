@@ -12,6 +12,11 @@ public partial class Lufia2View : UserControl
             if (e.OldValue is Lufia2ViewModel old) old.ShowPage -= Show;
             if (e.NewValue is Lufia2ViewModel vm) vm.ShowPage += Show;
         };
+        // the Game start page shows the start as it is now (Test in the game on the Cutscenes page changes it)
+        Pages.SelectionChanged += (_, e) =>
+        {
+            if (e.OriginalSource == Pages && Pages.SelectedItem is TabItem { Header: "Game start" } && DataContext is Lufia2ViewModel vm) vm.GameStart.Refresh();
+        };
     }
 
     /// <summary>Picks the page with this header.</summary>

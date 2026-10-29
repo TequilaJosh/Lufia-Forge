@@ -28,6 +28,7 @@ public partial class Lufia2ViewModel : ObservableObject
     public L2ExitsPage Exits { get; } = new();
     public L2CreditsPage Credits { get; } = new();
     public L2SettingsPage Settings { get; } = new();
+    public L2GameStartPage GameStart { get; } = new();
     public L2MusicPage Music { get; } = new();
     public L2GraphicsPage Graphics { get; } = new();
 
@@ -52,7 +53,7 @@ public partial class Lufia2ViewModel : ObservableObject
     public void SetRom(RomBuffer rom, MainViewModel main)
     {
         Overview = $"{GameDetect.Name(rom.Game)}, {rom.Length / 1024} KB, title \"{rom.ReadAscii(GameDetect.HeaderTitle, GameDetect.TitleLength).TrimEnd()}\".\n\n" +
-                   "Maps: every map drawn and edited as in Lufia 1's map editor: blocks on either layer (brushes, copy and paste, pieces of other maps, presets), collision, exits, step-on areas, characters, preset points and treasure, the block editor, graphics and size, a test start, and the world map with its battle zones. Text: the lines of the maps' scenes. Events: every event in plain words, edited step by step, and new events (talking to a character, stepping on an area, after another event). Cutscenes: a map as a stage with its characters, cutscenes made from steps in plain words (appear, walk, face, act, speak, camera, fades, music, flags, go to another map), played back, and tested from a new game. " +
+                   "Maps: every map drawn and edited as in Lufia 1's map editor: blocks on either layer (brushes, copy and paste, pieces of other maps, presets), collision, exits, step-on areas, characters, preset points and treasure, the block editor, graphics and size, a test start, and the world map with its battle zones. Text: the lines of the maps' scenes. Events: every event in plain words, edited step by step, and new events (talking to a character, stepping on an area, after another event). Cutscenes: a map as a stage with its characters, cutscenes made from steps in plain words (appear, walk, face, act, speak, camera, fades, music, flags, go to another map), played back, and tested from a new game. Game start: the map, cutscene, point and story flags a new game starts with. " +
                    "Graphics: every picture, painted pixel by pixel or through PNG, new palettes, new map sprites and new monster battle sprites. Battles: monsters, items, spells and IP attacks, with their effects edited step by step (weapons, armor, spells, IP attacks, monster and capsule AI), new spells and new IP attacks, battle animations played as the game plays them, painted, recoloured and copied into new ones. " +
                    "Heroes: starting stats, magic and equipment, and growth on a chart you can drag. Capsule monsters: all 35 forms with their growth curves. Also shops, treasure, exits, encounters, music, credits and game settings. Edit > Start from a Clean Slate takes the story out. " +
                    "Every change goes straight into the ROM; Edit > Undo takes it back and Save Project keeps it.\n\n" +
@@ -63,7 +64,7 @@ public partial class Lufia2ViewModel : ObservableObject
         string movedList = string.Join(", ", moved.Select(r => r.Table.Name));
         LockBanner = moved.Count == 0 ? "" : $"Another hack changed where this game keeps its {movedList}. The pages that edit them are read-only here, so nothing that hack put in the game's old places gets written over.";
         if (moved.Count > 0) Overview += $" It changed where the game keeps its {movedList}: the pages that edit them stay read-only.";
-        try { Monsters.SetRom(rom, main); Items.SetRom(rom, main); Spells.SetRom(rom, main); IpAttacks.SetRom(rom, main); Animations.SetRom(rom, main); Maps.SetRom(rom, main); Text.SetRom(rom, main); Encounters.SetRom(rom, main); Shops.SetRom(rom, main); Characters.SetRom(rom, main); Capsules.SetRom(rom, main); Events.SetRom(rom, main); Cutscenes.SetRom(rom, main); Chests.SetRom(rom, main); Exits.SetRom(rom, main); Credits.SetRom(rom, main); Settings.SetRom(rom, main); Music.SetRom(rom, main); Graphics.SetRom(rom, main); }
+        try { Monsters.SetRom(rom, main); Items.SetRom(rom, main); Spells.SetRom(rom, main); IpAttacks.SetRom(rom, main); Animations.SetRom(rom, main); Maps.SetRom(rom, main); Text.SetRom(rom, main); Encounters.SetRom(rom, main); Shops.SetRom(rom, main); Characters.SetRom(rom, main); Capsules.SetRom(rom, main); Events.SetRom(rom, main); Cutscenes.SetRom(rom, main); Chests.SetRom(rom, main); Exits.SetRom(rom, main); Credits.SetRom(rom, main); Settings.SetRom(rom, main); GameStart.SetRom(rom, main); Music.SetRom(rom, main); Graphics.SetRom(rom, main); }
         catch (Exception ex) { Overview += $"\n\nCouldn't read part of the ROM: {ex.Message}"; }
     }
 }
