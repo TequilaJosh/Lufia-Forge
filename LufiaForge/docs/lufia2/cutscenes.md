@@ -30,7 +30,7 @@ Code: `Core/Lufia2/L2Cutscene.cs` (steps, the stage, new cutscenes, cutscene cha
    walking together move at once). The arrows step one step back or on. Up / down move a step, Delete takes it out,
    Undo takes back the last change.
 6. **Save** writes the cutscene into the ROM (Edit > Undo takes it back). Revert drops what isn't saved.
-7. **Test in the game** (or start the game here): a new game starts on this map with the party on the point picked
+7. **Test in the game** (or start the game here): the ROM is written and opened in BizHawk (the bundled one; the window it opened before is closed first). A new game starts on this map with the party on the point picked
    and the story flags ticked under **Playback starts with** turned on. A scene or a step-on area cutscene plays at
    once (put the party on the area: its walks start from there); for a talk cutscene talk to the character. Export the
    ROM and start a new game. Keep it as a hack's own start, or press **Normal start** for the game's opening again.

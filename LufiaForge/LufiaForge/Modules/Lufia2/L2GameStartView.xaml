@@ -43,6 +43,8 @@
                                 ToolTip="A new game starts here: the cutscene plays at once (a talk cutscene when you talk)"/>
                         <Button Content="The game's opening" Style="{StaticResource LufiaButton}" Padding="10,4" Margin="8,0,0,0" Command="{Binding NormalStartCommand}"
                                 ToolTip="A new game starts with the game's own opening again"/>
+                        <Button Content="Play in BizHawk" Style="{StaticResource LufiaButton}" Padding="10,4" Margin="8,0,0,0" Command="{Binding PlayCommand}"
+                                ToolTip="Writes the ROM as it is now and opens it in BizHawk: start a new game"/>
                     </StackPanel>
                     <TextBlock Text="{Binding Status}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,6,0,0"/>
                 </StackPanel>

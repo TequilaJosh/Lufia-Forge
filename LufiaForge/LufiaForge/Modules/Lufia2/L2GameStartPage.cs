@@ -121,11 +121,19 @@ public partial class L2GameStartPage : ObservableObject
         try
         {
             Status = L2GameStart.Set(_rom, SelectedMap.Value, SelectedCutscene.Choice, SelectedPoint.Value, flags.OrderBy(f => f).ToList()) +
-                     " Export the ROM (File > Export ROM) and start a new game.";
+                     " Play in BizHawk to try it.";
             _main.NotifyRomModified($"Lufia II: a new game starts on map {SelectedMap.Value:X2}");
         }
         catch (Exception ex) { Status = "Not set: " + ex.Message; }
         ShowCurrent();
+    }
+
+    /// <summary>Opens the project's ROM in BizHawk, as it is now.</summary>
+    [RelayCommand]
+    private void Play()
+    {
+        if (_main == null) return;
+        Status = _main.PlayInBizHawk();
     }
 
     [RelayCommand]
