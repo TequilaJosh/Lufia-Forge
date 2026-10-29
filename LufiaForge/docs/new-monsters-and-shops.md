@@ -10,6 +10,16 @@ turn and "when hit" battle scripts. It gets the next id (E0 in the US game, up t
 groups and story battles) and is named "New xx". Then change it like any monster, give it a sprite on the Graphics page,
 and put it in a monster group or a story battle on the Encounters page.
 
+New story battles (boss parties, Lufia II): "+ New story battle" on the Encounters page copies the battle shown into a
+new number with a record of its own; event command 53 xx starts it. The game has 39 (00-26) in a table at $97:C53D
+(u16 offsets from the table, 26-byte records: six monsters, six places, a skipped byte, two words and three bytes of
+settings), read only by the nine `LDA $97C53D,X` in $81:82C6-8343; the battle number is a byte ($7FF8A4), so up to
+256. The first new one moves the table and records to a block of Lufia Forge's ("LF2SB", the count - 1, the bytes used,
+then room for 256 offsets, then the records once each, battles that shared a record still sharing it) and points the
+nine reads there. Checked: all 39 battles read the same after the move; in the game (the opening's `33 02` at 0x3C0EE
+changed to `53 xx`) battle 04 is the same Goblin fight before and after the move, and a new battle 27 with monster 10
+fights a Wind Genie.
+
 Where the game reads monsters (found 2026-10-27): the table at $96:85C0 (u16 offsets from the table, the records right
 behind it) is read in these places only:
 - twelve `LDA $96:85C0+k,X` in $81:FB1A-$81:FC0A (drops, gold, EXP, sprite and palette);

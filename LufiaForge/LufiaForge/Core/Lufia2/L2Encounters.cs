@@ -176,12 +176,88 @@ public static class L2Encounters
     // ── story battles ─────────────────────────────────────────────────────────
 
     /// <summary>The story battles event command 53 xx starts (found 2026-10-27; table $97:C53D, file 0xBC53D, read by
-    /// $81:82C6): a u16 offset per battle from the table, the battles 0x1E bytes each: six monster ids (FF = none), their
-    /// places on the screen (x, y each), then the battle's settings (left as they are). Battles 00-26; some share a record
-    /// (00, 03, 06... point at the same one).</summary>
-    public const int StoryBattles = 0xBC53D, StoryBattleCount = 0x27, StorySlots = 6;
+    /// $81:82C6): a u16 offset per battle from the table, the battles 26 bytes each: six monster ids (FF = none), their
+    /// places on the screen (x, y each), then the battle's settings (a skipped byte, two words, three bytes; left as they
+    /// are). Battles 00-26; some share a record (00, 03, 06... point at the same one).
+    /// <para>New battles (<see cref="AddStoryBattle"/>): the battle number is a byte ($7FF8A4), so up to 256. The table
+    /// and its records are moved once to a block of Lufia Forge's ("LF2SB", count, then the table with room for 256
+    /// offsets, then the records at their new offsets) and the nine reads of $97:C53D in $81:82C6-8343 are pointed there;
+    /// battles sharing a record still share it.</para></summary>
+    public const int StoryBattles = 0xBC53D, GameStoryBattleCount = 0x27, StorySlots = 6, StoryRecordSize = 26;
 
-    public static int StoryBattleAt(RomBuffer rom, int b) => StoryBattles + rom.ReadUInt16Le(StoryBattles + b * 2);
+    /// <summary>The operands of the nine "LDA $97C53D,X" of the story battle loader.</summary>
+    private static readonly int[] StorySites = { 0x82C7, 0x82D3, 0x8303, 0x830B, 0x8320, 0x8329, 0x8334, 0x833C, 0x8344 };
+    private const string StoryMagic = "LF2SB";
+    private const int StoryBlockSize = 0x2000, StoryHeader = 8, StoryMax = 256;
+
+    /// <summary>File offset of the story battle table: the game's, or the moved one.</summary>
+    public static int StoryTable(RomBuffer rom)
+    {
+        int snes = (int)rom.ReadUInt24Le(StorySites[0]);
+        if (snes == 0x97C53D) return StoryBattles;
+        int at = L2Rom.SnesToFile(snes);
+        return at - StoryHeader >= 0 && System.Text.Encoding.ASCII.GetString(rom.ReadBytes(at - StoryHeader, StoryMagic.Length)) == StoryMagic ? at : StoryBattles;
+    }
+
+    /// <summary>How many story battles there are (39 in the game).</summary>
+    public static int StoryBattleCount(RomBuffer rom)
+    {
+        int t = StoryTable(rom);
+        return t == StoryBattles ? GameStoryBattleCount : rom.ReadByte(t - StoryHeader + 5) + 1;
+    }
+
+    public static int StoryBattleAt(RomBuffer rom, int b) { int t = StoryTable(rom); return t + rom.ReadUInt16Le(t + b * 2); }
+
+    /// <summary>Why no story battle can be added, or null.</summary>
+    public static string? CantAddStoryBattle(RomBuffer rom)
+    {
+        if (StoryTable(rom) != StoryBattles) return StoryBattleCount(rom) >= StoryMax ? "There are 256 story battles, the most the game can number." : null;
+        return StorySites.All(a => rom.ReadUInt24Le(a) == 0x97C53D) ? null : "This ROM's story battle code isn't the US game's.";
+    }
+
+    /// <summary>Adds a story battle: a copy of battle <paramref name="from"/> (its monsters, places and settings) with a
+    /// record of its own. Returns its number (53 xx starts it).</summary>
+    public static int AddStoryBattle(RomBuffer rom, int from)
+    {
+        if (CantAddStoryBattle(rom) is { } why) throw new InvalidOperationException(why);
+        int count = StoryBattleCount(rom);
+        int t = StoryTable(rom);
+        if (t == StoryBattles)
+        {
+            // move: the table with room for 256, then each record once (sharing kept), at new offsets
+            int b = L2Rom.Allocate(rom, StoryBlockSize);
+            rom.WriteBytes(b, new byte[StoryBlockSize]);
+            rom.WriteBytes(b, System.Text.Encoding.ASCII.GetBytes(StoryMagic));
+            int nt = b + StoryHeader, next = StoryMax * 2;
+            var placed = new Dictionary<int, int>();
+            for (int i = 0; i < count; i++)
+            {
+                int old = rom.ReadUInt16Le(StoryBattles + i * 2);
+                if (!placed.TryGetValue(old, out int off))
+                {
+                    off = next; next += StoryRecordSize; placed[old] = off;
+                    rom.WriteBytes(nt + off, rom.ReadBytes(StoryBattles + old, StoryRecordSize));
+                }
+                rom.WriteBytes(nt + i * 2, new[] { (byte)off, (byte)(off >> 8) });
+            }
+            WriteStoryUsed(rom, nt, count, next);
+            int snes = L2Rom.FileToSnes(nt);
+            foreach (int a in StorySites) rom.WriteBytes(a, new[] { (byte)snes, (byte)(snes >> 8), (byte)(snes >> 16) });
+            t = nt;
+        }
+        int used = rom.ReadUInt16Le(t - StoryHeader + 6);
+        if (t + used + StoryRecordSize > t - StoryHeader + StoryBlockSize) throw new InvalidOperationException("The story battle block is full.");
+        rom.WriteBytes(t + used, rom.ReadBytes(StoryBattleAt(rom, from), StoryRecordSize));
+        rom.WriteBytes(t + count * 2, new[] { (byte)used, (byte)(used >> 8) });
+        WriteStoryUsed(rom, t, count + 1, used + StoryRecordSize);
+        return count;
+    }
+
+    private static void WriteStoryUsed(RomBuffer rom, int table, int count, int used)
+    {
+        rom.WriteByte(table - StoryHeader + 5, (byte)(count - 1));
+        rom.WriteBytes(table - StoryHeader + 6, new[] { (byte)used, (byte)(used >> 8) });
+    }
 
     /// <summary>A story battle's six slots: monster (FF = none) and its place.</summary>
     public static (int Monster, int X, int Y)[] StoryBattle(RomBuffer rom, int b)
@@ -204,5 +280,5 @@ public static class L2Encounters
 
     /// <summary>Battles that use the same record as battle <paramref name="b"/> (a change there changes them too).</summary>
     public static List<int> StorySharing(RomBuffer rom, int b) =>
-        Enumerable.Range(0, StoryBattleCount).Where(o => o != b && rom.ReadUInt16Le(StoryBattles + o * 2) == rom.ReadUInt16Le(StoryBattles + b * 2)).ToList();
+        Enumerable.Range(0, StoryBattleCount(rom)).Where(o => o != b && StoryBattleAt(rom, o) == StoryBattleAt(rom, b)).ToList();
 }

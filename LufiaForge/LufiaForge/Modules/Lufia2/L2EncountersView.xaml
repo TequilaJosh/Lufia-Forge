@@ -200,7 +200,11 @@
         <Border Style="{StaticResource GdCard}" VerticalAlignment="Top" Margin="0,8,0,0">
             <StackPanel>
                 <TextBlock Text="STORY BATTLES" Style="{StaticResource GdSection}"/>
-                <ComboBox Style="{StaticResource GdCombo}" Width="400" HorizontalAlignment="Left" ItemsSource="{Binding StoryNames}" SelectedIndex="{Binding SelectedStory}" Margin="0,0,0,6"/>
+                <ComboBox Style="{StaticResource GdCombo}" Width="Auto" HorizontalAlignment="Stretch" ItemsSource="{Binding StoryNames}" SelectedIndex="{Binding SelectedStory}" Margin="0,0,0,6"/>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                    <Button Content="+ New story battle" Style="{StaticResource LufiaButtonGold}" Padding="10,3" Command="{Binding AddStoryCommand}"
+                            ToolTip="A new story battle (a boss party): a copy of the one shown, with a record of its own, then change its monsters. Start it with &quot;Start a story battle&quot; (53 xx) in an event. Up to 256."/>
+                </StackPanel>
                 <TextBlock Text="{Binding StoryText}" Style="{StaticResource GdHint}" TextWrapping="Wrap" MaxWidth="460" HorizontalAlignment="Left" Margin="0,0,0,6"/>
                 <TextBlock Text="{Binding StoryRoom}" TextWrapping="Wrap" MaxWidth="460" HorizontalAlignment="Left" Margin="0,0,0,6">
                     <TextBlock.Style>
