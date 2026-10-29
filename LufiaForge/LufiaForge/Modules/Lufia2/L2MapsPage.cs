@@ -204,6 +204,8 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
     [ObservableProperty] private bool _hasStory;
     private List<L2MapInfo.Create> _stages = new();
     private readonly List<List<(int Flag, bool On)>> _storyNeeds = new();
+    /// <summary>Persistent characters (10-4F) that stand on this map at some point, on a character start of it.</summary>
+    private List<L2Persistent.Place> _persistent = new();
 
     private void FillStory()
     {
@@ -212,6 +214,7 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
         {
             StoryChoices.Clear(); _storyNeeds.Clear();
             _stages = _rom != null && _edit != null && _world == null ? L2MapInfo.Stages(_rom, _edit.MapId) : new();
+            _persistent = _rom != null && _edit != null && _world == null ? L2Persistent.On(L2Persistent.All(_rom), _edit.MapId) : new();
             StoryChoices.Add(new L2Option(0, "Any point (each character's first look)"));
             foreach (var g in _stages.Where(c => c.Flags.Count > 0).GroupBy(c => c.When))
             {
@@ -233,6 +236,8 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
         if (_edit == null) return null;
         var creates = _stages.Where(c => c.Id == id).ToList();
         bool edited = _edit.SpritesEdited(id);
+        if (creates.Count == 0 && !_edit.Sprites.ContainsKey(id) && _persistent.FirstOrDefault(p => p.Spot == id - 0x4F) is { } pc)
+            return pc.Sprite;   // a persistent character's start
         if (StoryChoice is not { Value: > 0 } k || creates.Count == 0 || edited)
             return _edit.Sprites.TryGetValue(id, out int s) ? s : null;
         var need = _storyNeeds[k.Value - 1];
@@ -247,6 +252,11 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
     private string StoryNote(int id)
     {
         var creates = _stages.Where(c => c.Id == id).ToList();
+        var here = _persistent.Where(p => p.Spot == id - 0x4F).ToList();
+        if (creates.Count == 0 && here.Count > 0 && _edit?.Sprites.ContainsKey(id) != true)
+            return " " + string.Join(" ", here.Select(p => $"Persistent character {p.Id:X2} (sprite {L2Sprites.Name(p.Sprite)}) stands here " +
+                (p.From < 0 ? "from the start of a new game" : $"once an event on map {p.From:X2} {NameOf(p.From)} sends it here") + ".")) +
+                " Persistent characters (10-4F) aren't made by the map: the game keeps where each one is and puts it on this character start.";
         if (creates.Count == 0) return _edit?.Sprites.ContainsKey(id) == true ? "" : " The map's start-up script doesn't make it: an event does, or the game never shows it.";
         string note = creates.All(c => c.When == "") ? "" : " The game makes it " + string.Join("; ", creates.Select(c => $"with sprite {L2Sprites.Name(c.Sprite)} " + (c.When == "" ? "always" : "while " + c.When))) + ".";
         if (StoryChoice is { Value: > 0 } && StorySprite(id) == null) note += " Not on the map at the story point picked.";

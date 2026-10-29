@@ -29,6 +29,15 @@ is written), `Modules/Lufia2/L2MapWindows.cs` (pick a place, pieces and presets,
   list offers each story point the script tells apart; picked, the map shows only the characters the game makes then,
   with the sprite they have then, and clicks skip the others. The inspector says when the game makes a character, or
   that the start-up script never makes it (an event does, or the game never shows it).
+* **Persistent characters** (actors 10-4F: Tia 10 in Elcid, the elder of Chaed 2D, the prince 27 in Dankirk North
+  Cave B5, ...) are drawn on every map they stand on at some point, on the character start whose number they use, at
+  every story point. No map script makes them: the game keeps each one's map ($085E + n), spot ($089E + n) and sprite
+  ($08DE + n), filled on a new game from a table in bank $87 (the word at $87:8003 points at it from $87:8000; 64 records
+  of state (FF = none), sprite, map, spot; $83:ADDF), and event command 35 id map spot sends one elsewhere ($80:B2B1).
+  Lufia Forge reads the table and every 35 of every map (`L2Persistent`, about 50 ms): 150 places, 149 on a character
+  start of their map. The inspector says which persistent character stands on a start, and whether a new game puts it
+  there or which map's event sends it (the elder: Tower of Truth 6F sends him to Dragon Mountain C7's start 2, C7's
+  scene sends him home to Chaed). The Cutscenes stage shows them too.
 * **Zoom**: the buttons, Fit, or Ctrl + mouse wheel; the middle mouse button drags the map. The status bar says what is
   under the mouse (both layers' blocks, walls, what stands there).
 * **Blocks**: the order (block set order, the blocks the game's maps with these graphics use most, or only this map's),

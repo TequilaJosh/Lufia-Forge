@@ -402,7 +402,7 @@ public static class L2Cutscene
 
     /// <summary>The map's characters as the map is loaded: character starts (with the sprite their create gives),
     /// characters the start-up script makes without a start (not placed), and those it hides (cutscene characters).</summary>
-    public static L2StageState Initial(RomBuffer rom, int map, int leaderX, int leaderY)
+    public static L2StageState Initial(RomBuffer rom, int map, int leaderX, int leaderY, IEnumerable<L2Persistent.Place>? persistent = null)
     {
         var s = new L2StageState();
         var sprites = Creates(rom, map);
@@ -414,6 +414,14 @@ public static class L2Cutscene
         }
         foreach (var (id, spr) in sprites) if (!s.Actors.ContainsKey(id)) s.Actors[id] = new L2StageState.Actor { Id = id, Visible = false, Sprite = spr };
         foreach (int id in HiddenWhenShown(rom, map)) if (s.Actors.TryGetValue(id, out var a)) a.Visible = false;
+        // persistent characters (10-4F) that stand on this map, on their character start (the first place listed)
+        if (persistent != null)
+        {
+            var starts = L2MapInfo.Records(rom, map, L2MapInfo.Characters, 8).Select(r => r.Bytes).ToList();
+            foreach (var p in persistent.Where(p => p.Map == map))
+                if (!s.Actors.ContainsKey(p.Id) && starts.FirstOrDefault(b => b[0] == p.Spot) is { } b)
+                    s.Actors[p.Id] = new L2StageState.Actor { Id = p.Id, X = b[1], Y = b[2], Visible = true, Sprite = p.Sprite };
+        }
         s.Actors[0] = new L2StageState.Actor { Id = 0, X = leaderX, Y = leaderY, Visible = true, Sprite = 0 };
         s.CameraX = leaderX; s.CameraY = leaderY;
         return s;
