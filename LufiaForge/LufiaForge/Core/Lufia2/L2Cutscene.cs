@@ -960,19 +960,23 @@ public static class L2Cutscene
     }
 
     /// <summary>A new game starts with this cutscene: a scene runs on arrival (the party at <paramref name="point"/>);
-    /// a stepping-on cutscene plays right after the test start (the party on <paramref name="point"/>); a talking one
-    /// waits for the talk.
-    /// The story <paramref name="flags"/> and <paramref name="counters"/> are set as the new game starts (the game's own
-    /// cutscenes check the story so far and skip themselves without them).</summary>
+    /// a stepping-on cutscene, or a talk one that doesn't speak as "the one talked to", plays right after the test start
+    /// (the party on <paramref name="point"/>); others wait for the talk. The story <paramref name="flags"/> and
+    /// <paramref name="counters"/> are set as the new game starts (the game's own cutscenes check the story so far and
+    /// skip themselves without them), and so is what the cutscene's characters need (<see cref="Needs"/>).</summary>
     public static string SetTest(RomBuffer rom, int map, int head, int id, int point, IReadOnlyCollection<int>? flags = null, IReadOnlyDictionary<int, int>? counters = null)
     {
         if (!L2StoryClear.CanStart(rom)) throw new InvalidOperationException("This ROM's new-game code isn't the US game's, so the start can't be moved.");
         if (!L2StoryClear.PresetPoints(rom, map).Any(p => p.Id == point)) throw new InvalidOperationException($"Map {map:X2} has no preset point {point}: add one on the Maps page.");
         L2StartParty.Keep(rom);   // the whole starting party on the map, for the cutscene's walks
+        var (need, place) = Needs(rom, map, head, id);
+        var all = (flags ?? Array.Empty<int>()).Union(need).OrderBy(f => f).ToList();
+        string extra = (need.Count == 0 ? "" : $" Story flag{(need.Count > 1 ? "s" : "")} {string.Join(" ", need.Select(f => f.ToString("X2")))} {(need.Count > 1 ? "are" : "is")} on too: the map makes the cutscene's characters only then.") +
+                       (place.Count == 0 ? "" : $" Persistent character{(place.Count > 1 ? "s" : "")} {string.Join(" ", place.Select(p => p.Id.ToString("X2")))} {(place.Count > 1 ? "are" : "is")} sent here first, as the story does.");
         if (head == L2EventBlocks.SceneList && Starter(rom, map, id) is { } st)
-            return L2MapEdit.SetTestStart(rom, map, point, flags, counters) + $" On entering the map the cutscene starts (with the party on point {st.Point}).";
-        if (head == L2EventBlocks.SceneList && (flags?.Count ?? 0) + (counters?.Count ?? 0) > 0)
-            return L2MapEdit.StartWithFlags(rom, map, id, point, flags, counters) + $" Then the cutscene (scene {id:X2}) plays.";
+            return L2MapEdit.SetTestStart(rom, map, point, all, counters, null, place) + $" On entering the map the cutscene starts (with the party on point {st.Point})." + extra;
+        if (head == L2EventBlocks.SceneList && all.Count + (counters?.Count ?? 0) + place.Count > 0)
+            return L2MapEdit.StartWithFlags(rom, map, id, point, all, counters, place) + $" Then the cutscene (scene {id:X2}) plays." + extra;
         if (head == L2EventBlocks.SceneList)
         {
             rom.WriteByte(L2StoryClear.NewGameMapAt, (byte)map);
@@ -980,8 +984,77 @@ public static class L2Cutscene
             rom.WriteByte(L2StoryClear.NewGamePresetAt, (byte)point);
             return $"A new game now starts with this cutscene (map {map:X2}, scene {id:X2}, the party on point {point}).";
         }
-        if (head == L2EventBlocks.TriggerList)
-            return L2MapEdit.SetTestStart(rom, map, point, flags, counters, (head, id)) + " The cutscene plays as the game starts (pick a point on its area: its walks start from there).";
-        return L2MapEdit.SetTestStart(rom, map, point, flags, counters) + (head == L2EventBlocks.TalkList ? " Talk to the character to start the cutscene." : "");
+        if (head == L2EventBlocks.TriggerList || head == L2EventBlocks.TalkList && !SpeaksAsTalkedTo(rom, map, head, id))
+            return L2MapEdit.SetTestStart(rom, map, point, all, counters, (head, id), place) + " The cutscene plays as the game starts" +
+                   (head == L2EventBlocks.TriggerList ? " (pick a point on its area: its walks start from there)." : ".") + extra;
+        return L2MapEdit.SetTestStart(rom, map, point, all, counters, null, place) +
+               (head == L2EventBlocks.TalkList ? " Talk to the character to start the cutscene (it speaks as the one talked to, so it needs the talk)." : "") + extra;
+    }
+
+    /// <summary>Commands whose first operand is an actor (33, "walks path", has it second).</summary>
+    private static readonly HashSet<int> ActorFirst = new() { 0x13, 0x2D, 0x2E, 0x2F, 0x30, 0x31, 0x34, 0x6C, 0x7A, 0x89, 0x98, 0x99, 0x9D, 0xA3 };
+
+    /// <summary>The actors a cutscene's steps name (the one talked to included).</summary>
+    public static HashSet<int> ActorsUsed(L2EventScript s, int head, int id)
+    {
+        var ids = new HashSet<int>();
+        if (head == L2EventBlocks.TalkList) ids.Add(id);
+        foreach (var st in s.Steps)
+        {
+            var b = st.Bytes;
+            if (ActorFirst.Contains(st.Op) && b.Length >= 2) ids.Add(b[1]);
+            else if (st.Op == 0x33 && b.Length >= 3) ids.Add(b[2]);
+        }
+        return ids;
+    }
+
+    /// <summary>What a test start needs for the cutscene's characters to be there: the story flags under which the map's
+    /// start-up script makes them (only those that must be on: a new game has every flag off), and the persistent
+    /// characters (10-4F) it uses that stand on this map at some point but don't start a new game here, with their
+    /// place (sent there with 35 id map spot, as the story's own event does).</summary>
+    public static (List<int> Flags, List<(int Id, int Map, int Spot)> Place) Needs(RomBuffer rom, int map, int head, int id)
+    {
+        var flags = new List<int>();
+        var place = new List<(int, int, int)>();
+        int block = L2Events.Block(rom, map);
+        var e = block < 0 ? null : L2EventBlocks.ReadLists(rom, block).FirstOrDefault(x => x.Head == head && x.Id == id);
+        if (e == null) return (flags, place);
+        var s = L2EventScript.Read(rom, block + e.Offset, block);
+        if (s.Problem != null) return (flags, place);
+        var used = ActorsUsed(s, head, id);
+        var stages = L2MapInfo.Stages(rom, map);
+        foreach (int a in used.Where(a => a >= 0x50))
+        {
+            var creates = stages.Where(c => c.Id == a).ToList();
+            if (creates.Count == 0 || creates.Any(c => c.Flags.Count == 0)) continue;   // always made, or never by the map
+            foreach (var (f, on) in creates[0].Flags) if (on && !flags.Contains(f)) flags.Add(f);
+        }
+        // a persistent character the cutscene expects to stand here already: the one talked to, or one whose first step
+        // isn't one that brings it in (put on a point or tile, appear, walk in: the game brings those itself; checked in
+        // the game: Karlloon North Shrine B1's Iris (30 first) and Idura (33 first) come in without being sent)
+        var first = new Dictionary<int, int>();
+        foreach (var st in s.Steps)
+        {
+            var b = st.Bytes;
+            int who = ActorFirst.Contains(st.Op) && b.Length >= 2 ? b[1] : st.Op == 0x33 && b.Length >= 3 ? b[2] : -1;
+            if (who >= 0) first.TryAdd(who, st.Op);
+        }
+        var start = L2Persistent.Start(rom);
+        var here = L2Persistent.On(L2Persistent.All(rom), map);
+        foreach (int a in used.Where(a => a is >= L2Persistent.First and < L2Persistent.First + L2Persistent.Count))
+        {
+            bool expected = head == L2EventBlocks.TalkList && a == id || first.TryGetValue(a, out int op) && op is not (0x30 or 0x2F or 0x98 or 0x2D or 0x33);
+            if (expected && !start.Any(x => x.Id == a && x.Map == map) && here.FirstOrDefault(p => p.Id == a) is { } p)
+                place.Add((a, map, p.Spot));
+        }
+        return (flags, place);
+    }
+
+    /// <summary>A talk cutscene that speaks as "the one talked to" (08): it needs the talk.</summary>
+    private static bool SpeaksAsTalkedTo(RomBuffer rom, int map, int head, int id)
+    {
+        int block = L2Events.Block(rom, map);
+        var e = L2EventBlocks.ReadLists(rom, block).FirstOrDefault(x => x.Head == head && x.Id == id);
+        return e == null || L2EventScript.Read(rom, block + e.Offset, block).Steps.Any(st => st.Op == 0x08);
     }
 }

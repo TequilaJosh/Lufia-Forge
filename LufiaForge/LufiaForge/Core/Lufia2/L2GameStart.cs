@@ -148,6 +148,7 @@ public static class L2GameStart
             int op = rom.ReadByte(p);
             if (op == 0x1A) { flags.Add(rom.ReadByte(p + 1)); p += 2; }
             else if (op == 0x1D) p += 3;
+            else if (op == 0x35) p += 4;
             else return op == 0x16 ? (flags, rom.ReadByte(p + 2)) : null;
         }
         return null;

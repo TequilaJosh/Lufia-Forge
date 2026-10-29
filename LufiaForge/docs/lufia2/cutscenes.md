@@ -45,6 +45,15 @@ opening** puts the game's own start back.
 
 How the start is made (map 02 scene 01 point 06 is the game's own, at `$83:ACCD`):
 
+* What the cutscene's characters need is set too (`L2Cutscene.Needs`): the story flags under which the map's start-up
+  script makes a character the cutscene names (Dragon Mountain C7 makes the dragon, actor 50, only while flag 59 is on
+  and 5A off), and persistent characters (10-4F) the cutscene expects to stand there already, sent to their place on
+  the map with `35 id map spot` (the elder of Chaed, 2D, whom the Tower of Truth's event sends to C7's start 2). One
+  the cutscene brings in itself (its first step puts it on a point or tile, makes it appear or walks it in) isn't sent:
+  the game brings it (Karlloon North Shrine B1's Iris and Idura). A talk cutscene that doesn't speak as "the one talked
+  to" (08) plays at once, like a stepping-on one. Checked in the game: C7's talk with the elder plays from a new game
+  through to the Fire Dragon battle; the shrine scene plays as before.
+
 * The ticked flags (`1A ff`) and counters (`1D cc nn`) are set by a scene of its own (F0 up), which then sends the
   party to the map again (`16 map scene point`), so the map loads with them: its characters, its "on entering" event
   and the cutscene's checks all see them. Without them the game's own cutscenes check the story so far and skip
