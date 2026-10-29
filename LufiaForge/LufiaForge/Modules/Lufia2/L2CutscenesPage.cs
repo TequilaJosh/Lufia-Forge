@@ -96,6 +96,8 @@ public partial class L2CutscenesPage : L2Page
     private Dictionary<int, string> _names = new();
     private HashSet<int> _cast = new();
     private List<(int Id, int X, int Y)> _points = new();
+    /// <summary>The persistent characters (10-4F) that stand on the map at some point.</summary>
+    private List<L2Persistent.Place> _persistent = new();
     private readonly DispatcherTimer _timer = new();
     private int _playAt = -1;
 
@@ -249,6 +251,7 @@ public partial class L2CutscenesPage : L2Page
         foreach (var (id, spr) in L2Cutscene.Creates(rom, _map))
             _names[id] = (_cast.Contains(id) ? "cutscene character " : "character ") + $"{id - 0x4F} (sprite {L2Sprites.Name(spr)})";
         _points = L2StoryClear.PresetPoints(rom, _map);
+        _persistent = L2Persistent.On(L2Persistent.All(rom), _map);
         PointChoices.Clear();
         foreach (var p in _points) PointChoices.Add(new L2Option(p.Id, $"point {p.Id} ({p.X}, {p.Y})"));
         NewPoint = PointChoices.FirstOrDefault();
@@ -428,7 +431,7 @@ public partial class L2CutscenesPage : L2Page
     {
         if (Rom == null) return;
         var (x, y) = LeaderStart();
-        var start = L2Cutscene.Initial(Rom, _map, x, y);
+        var start = L2Cutscene.Initial(Rom, _map, x, y, _persistent);
         start.Flags.UnionWith(_flagsOn);
         foreach (var kv in _countersAtStart) start.Counters[kv.Key] = kv.Value;
         _start = start;
@@ -580,7 +583,7 @@ public partial class L2CutscenesPage : L2Page
         ShowWarning(warned ?? after);
     }
 
-    private L2StageState StartOnly() { var (x, y) = LeaderStart(); return L2Cutscene.Initial(Rom!, _map, x, y); }
+    private L2StageState StartOnly() { var (x, y) = LeaderStart(); return L2Cutscene.Initial(Rom!, _map, x, y, _persistent); }
 
     private void ShowWarning(L2StageState? s)
     {
@@ -1155,8 +1158,9 @@ public partial class L2CutscenesPage : L2Page
             // the story flags and counters ticked for playback are set in the game too
             var flags = StartFlags.Where(f => !f.IsCounter && f.IsOn).Select(f => f.Number).ToList();
             var counters = StartFlags.Where(f => f.IsCounter && f.Value != 0).ToDictionary(f => f.Number, f => Math.Clamp(f.Value, 0, 255));
-            Status = L2Cutscene.SetTest(Rom, _map, _loaded.Entry.Head, _loaded.Entry.Id, TestPoint.Value, flags, counters) + " Export the ROM (File > Export ROM) and start a new game.";
+            string set = L2Cutscene.SetTest(Rom, _map, _loaded.Entry.Head, _loaded.Entry.Id, TestPoint.Value, flags, counters);
             Main.NotifyRomModified($"Lufia II: new game starts with a cutscene on map {_map:X2}");
+            Status = set + " " + Main.PlayInBizHawk();
         }
         catch (Exception ex) { Status = "Not set: " + ex.Message; }
         TestNote = NewGameNote();
