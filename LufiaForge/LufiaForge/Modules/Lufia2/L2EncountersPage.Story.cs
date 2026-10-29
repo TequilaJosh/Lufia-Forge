@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using LufiaForge.Core.Lufia2;
 
 namespace LufiaForge.Modules.Lufia2;
@@ -37,7 +38,7 @@ public partial class L2EncountersPage
             .Select(m => new L2Option(m.Index, $"{m.Index:X2} " + (m.Unused ? "(unused slot)" : m.Name.Trim())))).ToList();
         _storyLoading = true;
         StoryNames.Clear();
-        for (int b = 0; b < L2Encounters.StoryBattleCount; b++) StoryNames.Add(StoryLabel(b));
+        for (int b = 0; b < L2Encounters.StoryBattleCount(_rom!); b++) StoryNames.Add(StoryLabel(b));
         _storyLoading = false;
         SelectedStory = -1; SelectedStory = 4;
     }
@@ -61,6 +62,28 @@ public partial class L2EncountersPage
         StoryText = $"Event command 53 {value:X2} (\"Start a story battle\" on the Events page) starts it. Each monster has its place on the screen (x, y; the game's go from about 30 to 200 across and 0 to 72 down)." +
                     (shared.Count > 0 ? $" Battles {string.Join(", ", shared.Select(b => b.ToString("X2")))} use the same record: a change here changes them too." : "");
         ShowStoryRoom(value);
+    }
+
+    /// <summary>A new story battle: a copy of the one shown (its settings stay valid), then picked.</summary>
+    [RelayCommand]
+    private void AddStory()
+    {
+        if (_rom == null || _main == null) return;
+        if (L2Encounters.CantAddStoryBattle(_rom) is { } why) { StoryText = "Not added: " + why; return; }
+        try
+        {
+            bool moved = L2Encounters.StoryTable(_rom) != L2Encounters.StoryBattles;
+            int from = Math.Max(0, SelectedStory);
+            int b = L2Encounters.AddStoryBattle(_rom, from);
+            _main.NotifyRomModified($"Lufia II: new story battle {b:X2}");
+            _storyLoading = true;
+            StoryNames.Add(StoryLabel(b));
+            _storyLoading = false;
+            SelectedStory = b;
+            StoryText = $"New story battle {b:X2}, a copy of battle {from:X2}: change its monsters below. An event starts it with \"Start a story battle\" (53 {b:X2}) on the Events or Cutscenes page." +
+                        (moved ? "" : " The story battles moved to space of their own to make room (up to 256).");
+        }
+        catch (Exception ex) { StoryText = "Not added: " + ex.Message; }
     }
 
     private void StoryEdited()

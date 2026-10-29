@@ -115,7 +115,7 @@ public static class L2BattleRoom
             if (n.TooBig && n.Monsters.Contains(monster)) r.Add(($"group {g:X2}", n));
         }
         var seen = new HashSet<int>();
-        for (int b = 0; b < L2Encounters.StoryBattleCount; b++)
+        for (int b = 0; b < L2Encounters.StoryBattleCount(rom); b++)
         {
             if (!seen.Add(L2Encounters.StoryBattleAt(rom, b))) continue;   // battles sharing a record: the first
             var n = Story(rom, b, sizes);
@@ -135,7 +135,7 @@ public static class L2BattleRoom
             var e = L2Encounters.Group(rom, g);
             if (e.Contains(monster)) most = Math.Max(most, Group(e, sizes).Squares);
         }
-        for (int b = 0; b < L2Encounters.StoryBattleCount; b++)
+        for (int b = 0; b < L2Encounters.StoryBattleCount(rom); b++)
         {
             var n = Story(rom, b, sizes);
             if (n.Monsters.Contains(monster)) most = Math.Max(most, n.Squares);
