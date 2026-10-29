@@ -1,6 +1,6 @@
 -- Visits maps by redirecting the "Continue" map load, and captures per-map data.
 -- Usage: set MAPS (list of map numbers) in mapcapture_list.lua; outputs go to capture/.
-local DIR  = "C:/Users/Admin/AppData/Local/Temp/claude/D--Lufia-Forge/de85b578-325b-4922-8bd7-d0ea2372d399/scratchpad/trace/"
+local DIR  = "trace/"
 local OUT  = DIR .. "capture_all/"
 local MAPS = dofile(DIR .. "mapcapture_list.lua")
 local WAIT = 240

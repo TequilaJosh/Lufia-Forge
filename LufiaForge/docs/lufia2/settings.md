@@ -1,6 +1,6 @@
 # Lufia II (US) "Game settings" values (static analysis)
 
-ROM `scratchpad\l2\lufia2.sfc`, LoROM: file = (bank & 0x7F) * 0x8000 + (addr - 0x8000).
+ROM `lufia2.sfc`, LoROM: file = (bank & 0x7F) * 0x8000 + (addr - 0x8000).
 All bytes below were read from the ROM. Confidence: H = code read end to end, M = code read but the meaning of a
 RAM flag or the game effect is inferred, G = guess.
 Helper scripts: `l2research\set_peek.py` (hex dump), `l2research\enc_rate.py` (encounter-rate table).

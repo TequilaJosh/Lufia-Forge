@@ -43,9 +43,6 @@ desktop.ini
 *.ips
 !LufiaForge/LufiaForge/Patches/*.ips
 
-# Claude Code
-.claude/
-
 # Personal BizHawk files: saves, savestates (contain the ROM image), trace logs and summaries
 BizHawk/SNES/SaveRAM/
 BizHawk/SNES/State/

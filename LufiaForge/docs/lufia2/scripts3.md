@@ -1,6 +1,6 @@
 # Lufia II (US) third script interpreter ($80:CC35): dungeon puzzle scripts
 
-Static analysis only (no emulator). ROM: scratchpad\l2\lufia2.sfc. Tools (all under l2research\s3\):
+Static analysis only (no emulator). ROM: lufia2.sfc. Tools (all under l2research\s3\):
 `dump.py` (every handler, flow-followed, -> `all.txt`), `count.py` (counts script bytes each handler consumes,
 following subroutines), `loopchk.py` (finds loops that read script bytes), `parse3.py` (parser built from the table
 below + per-map crawler), `names3.py` (short opcode names), `dumpall.py` -> `all_scripts.txt` (every script listed).
