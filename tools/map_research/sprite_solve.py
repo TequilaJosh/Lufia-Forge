@@ -1,6 +1,6 @@
 import os, json
 from lz import decompress,res_ptr,ROM
-CAP="C:/Users/Admin/AppData/Local/Temp/claude/D--Lufia-Forge/de85b578-325b-4922-8bd7-d0ea2372d399/scratchpad/trace/capture_all/"
+CAP=os.path.join(os.path.dirname(os.path.abspath(__file__)), "trace", "capture_all") + "/"
 def w16(b,o): return b[o]|b[o+1]<<8
 BASE=0x38000; BLK=0x180
 # index ROM sprite tiles: tile bytes -> rom offset (only bank 07 area)
