@@ -130,6 +130,11 @@
                                 <ToggleButton Style="{StaticResource LufiaChip}" IsChecked="{Binding ShowTreasure}" Content="● Treasure" ToolTip="Treasure spots (pink)"/>
                                 <ToggleButton Style="{StaticResource LufiaChip}" IsChecked="{Binding ShowDoors}" Content="● Doors" ToolTip="Doors (yellow)"/>
                                 <ToggleButton Style="{StaticResource LufiaChip}" IsChecked="{Binding ShowPoints}" Content="● Points" ToolTip="Preset points (cyan): where scenes put the party and characters"/>
+                                <StackPanel Orientation="Horizontal" Visibility="{Binding HasStory, Converter={StaticResource BoolToVisibilityConverter}}" Margin="6,0,0,0">
+                                    <TextBlock Text="Story" Style="{StaticResource LufiaLabel}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <ComboBox ItemsSource="{Binding StoryChoices}" SelectedItem="{Binding StoryChoice}" DisplayMemberPath="Label" MinWidth="180"
+                                              ToolTip="The map's characters change with the story: its start-up script makes some only while story flags are on or off (Tia in Elcid, later someone else in her place). Pick a point in the story to see who the game makes then."/>
+                                </StackPanel>
                                 <StackPanel Orientation="Horizontal" Visibility="{Binding IsWorldMap, Converter={StaticResource BoolToVisibilityConverter}}">
                                     <ToggleButton Style="{StaticResource LufiaChip}" IsChecked="{Binding ShowZones}" Content="⚔ Battle zones (paint)"
                                                   ToolTip="Shows the world map's random-battle zones in colour, with the list of zones and their monsters on the right. While on, clicking paints the picked zone; right-click or Ctrl + click picks a zone from the map. 00 = no battles."/>
