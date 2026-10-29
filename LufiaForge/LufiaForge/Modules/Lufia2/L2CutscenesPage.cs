@@ -1152,7 +1152,10 @@ public partial class L2CutscenesPage : L2Page
         if (TestPoint == null) { Status = "The map has no preset point for the party to start on: add one on the Maps page."; return; }
         try
         {
-            Status = L2Cutscene.SetTest(Rom, _map, _loaded.Entry.Head, _loaded.Entry.Id, TestPoint.Value) + " Export the ROM (File > Export ROM) and start a new game. Set the normal start again before you share the game.";
+            // the story flags and counters ticked for playback are set in the game too
+            var flags = StartFlags.Where(f => !f.IsCounter && f.IsOn).Select(f => f.Number).ToList();
+            var counters = StartFlags.Where(f => f.IsCounter && f.Value != 0).ToDictionary(f => f.Number, f => Math.Clamp(f.Value, 0, 255));
+            Status = L2Cutscene.SetTest(Rom, _map, _loaded.Entry.Head, _loaded.Entry.Id, TestPoint.Value, flags, counters) + " Export the ROM (File > Export ROM) and start a new game.";
             Main.NotifyRomModified($"Lufia II: new game starts with a cutscene on map {_map:X2}");
         }
         catch (Exception ex) { Status = "Not set: " + ex.Message; }
