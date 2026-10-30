@@ -146,6 +146,18 @@ public static class L2EventBlocks
         return Relayout(rom, map, lists.Select((e, k) => (e, k == i ? script : null)).ToList());
     }
 
+    /// <summary>Writes several changed events of one map at once, in the block's added part (moving the block into the
+    /// event space first). Events that share one script are given the same script object.</summary>
+    public static string SaveAll(RomBuffer rom, int map, IReadOnlyDictionary<Entry, L2EventScript> scripts)
+    {
+        int block = L2Events.Block(rom, map);
+        if (block < 0) throw new InvalidOperationException("This map has no event block.");
+        var lists = ReadLists(rom, block);
+        foreach (var e in scripts.Keys)
+            if (!lists.Contains(e)) throw new InvalidOperationException("The event is no longer in the map's lists.");
+        return Relayout(rom, map, lists.Select(e => (e, scripts.TryGetValue(e, out var s) ? s : null)).ToList());
+    }
+
     /// <summary>Adds an event to a list (talk: id = the character, trigger: id = the trigger area).</summary>
     public static string Add(RomBuffer rom, int map, int head, int id, L2EventScript script)
     {

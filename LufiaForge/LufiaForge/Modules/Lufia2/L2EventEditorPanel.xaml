@@ -94,7 +94,15 @@
                                 <DockPanel>
                                     <ComboBox DockPanel.Dock="Right" Style="{StaticResource GdCombo}" Width="190" ItemsSource="{Binding EndingChoices}" SelectedItem="{Binding Ending}" DisplayMemberPath="Label"
                                               Visibility="{Binding CanChangeEnding, Converter={StaticResource BoolToVisibilityConverter}}" ToolTip="What happens after the text"/>
-                                    <TextBlock Text="{Binding SizeText}" Style="{StaticResource GdHint}" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{Binding SizeText}" VerticalAlignment="Center" TextWrapping="Wrap">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock" BasedOn="{StaticResource GdHint}">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding SizeWarns}" Value="True"><Setter Property="Foreground" Value="#FFFFB060"/></DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
                                 </DockPanel>
                             </StackPanel>
 

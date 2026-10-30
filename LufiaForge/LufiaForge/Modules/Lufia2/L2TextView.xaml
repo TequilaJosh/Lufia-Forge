@@ -30,9 +30,11 @@
                     <TextBlock Text="{Binding Speaker}" Style="{StaticResource GdFieldLabel}" Margin="0,0,0,6"/>
                     <TextBox Style="{StaticResource GdText}" Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" TextWrapping="Wrap"
                              MinHeight="110" FontFamily="Consolas" VerticalContentAlignment="Top"/>
-                    <TextBlock Text="{Binding Room}" Style="{StaticResource GdHint}" Margin="0,6,0,0"/>
+                    <TextBlock Text="{Binding WidthWarning}" Foreground="#FFFFB060" FontSize="11" TextWrapping="Wrap" Margin="0,6,0,0"
+                               Visibility="{Binding HasWidthWarning, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                    <TextBlock Text="{Binding Room}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,6,0,0"/>
                     <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,8"
-                               Text="A line break is a new line in the box (each box has 3 lines). [NAME] is the hero's name, [WAIT] waits for a button, [END] ends the scene, [PAUSE xx] waits a moment. The text is written in place, so it can't grow past its room."/>
+                               Text="Type as much as you like. A line break is a new line in the box (a box shows 4 lines of 28 letters; a warning shows above when the text is wider or longer, and it is still written as typed). [NAME] is the hero's name, [WAIT] waits for a button, [END] ends the scene, [PAUSE xx] waits a moment. Text that no longer fits its place is written with the map's events in added space (the event editor does the same)."/>
                     <Button Content="Apply" Style="{StaticResource LufiaButtonGold}" Command="{Binding ApplyCommand}" HorizontalAlignment="Left" Width="120"/>
                 </StackPanel>
             </Border>

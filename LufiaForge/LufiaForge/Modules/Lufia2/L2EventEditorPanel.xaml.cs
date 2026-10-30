@@ -63,7 +63,7 @@ public partial class L2EventEditorPanel : UserControl
     public bool ShowCloseButton { set => CloseButton.Visibility = value ? Visibility.Visible : Visibility.Collapsed; }
 
     private const string DefaultHelp =
-        "Dialogue: Enter = new line in the box (the game shows 3 lines, about 28 letters across). [Name] = the hero's name, [Pause 20] = wait 20 frames. " +
+        "Dialogue: Enter = new line in the box (a box shows 4 lines of 28 letters; a wider or longer text gets a warning under it and is still written as typed). [Name] = the hero's name, [Pause 20] = wait 20 frames. " +
         "Commands: pick values from the lists, jump targets by step, ＋ inserts below, ✕ deletes, drag the grip to reorder. On the stage, click a character, then a tile: it walks, " +
         "appears or turns there. Story flags are shared by the whole game, so change them with care. Edits are written when you leave the event (or press Save).";
 
