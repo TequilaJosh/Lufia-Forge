@@ -158,6 +158,10 @@ public partial class L2EventsPage : L2Page
 
     protected override IEnumerable<string> ReadNames()
     {
+        // a new ROM (another project, or Edit > Undo / Redo): unsaved steps belong to the old one; dropped without
+        // asking (saving them now would write them into this ROM)
+        IsDirty = false;
+        ClearScript();
         _flagUses = null;
         Flags.Clear();
         _items = L2Battle.Items(Rom!).Select(i => i.Name.Trim()).ToArray();
@@ -218,7 +222,10 @@ public partial class L2EventsPage : L2Page
         }
         foreach (var (title, ops) in L2Puzzles.MapScripts(rom, _map)) Events.Add(new L2EventItem { Title = title, PuzzleOps = ops, Preview = "A puzzle script (switches, doors, spots): its own commands." });
         Summary = $"{count} events{(block < 0 ? " (this map has no event block)" : "")}. Pick one to see its steps; \"New event\" adds one.";
+        // (callers have asked about unsaved steps already)
+        _skipConfirm = true;
         SelectedEvent = init ? Events[0] : select != null ? Events.FirstOrDefault(x => x.Entry == select) ?? Events.FirstOrDefault(x => x.Entry?.Head == select.Head && x.Entry?.Id == select.Id) : null;
+        _skipConfirm = false;
         if (SelectedEvent == null) ClearScript();
     }
 
@@ -288,9 +295,15 @@ public partial class L2EventsPage : L2Page
         if (r == System.Windows.MessageBoxResult.Cancel) return false;
         if (r == System.Windows.MessageBoxResult.Yes && SaveNow()) return true;
         if (r == System.Windows.MessageBoxResult.Yes && canCancel) return false;
+        if (r == System.Windows.MessageBoxResult.Yes)
+            System.Windows.MessageBox.Show($"\"{_event.Title}\" couldn't be saved, so its changes are dropped. {Status}", "Lufia II events");
         IsDirty = false;
         return true;
     }
+
+    /// <summary>Before something that opens another event (the New event window): saves or drops unsaved steps; false =
+    /// stay.</summary>
+    public bool AskBeforeLeaving() => ConfirmLeave();
 
     private static void Dispatch(Action a) => System.Windows.Application.Current?.Dispatcher.BeginInvoke(a);
 
@@ -702,6 +715,10 @@ public partial class L2EventsPage : L2Page
         Remember();
         int i = _script.Steps.IndexOf(s);
         _script.Steps.RemoveAt(i);
+        // the last step taken out while a jump leads to it: an End takes its place (back to the step before would run
+        // that step again)
+        bool jumped = _script.Steps.Any(st => st.Jumps.Any(j => j.Step == s));
+        if (i == _script.Steps.Count && jumped) _script.Steps.Add(new L2Step { Bytes = new byte[] { 0x00 } });
         var instead = i < _script.Steps.Count ? _script.Steps[i] : _script.Steps[i - 1];
         foreach (var st in _script.Steps) foreach (var j in st.Jumps) if (j.Step == s) j.Step = instead;
         Changed(true);
@@ -779,8 +796,9 @@ public partial class L2EventsPage : L2Page
         if (Rom == null || Main == null || _script == null || _event == null || !CanEditScript) return false;
         if (!IsDirty) { Status = "Nothing changed."; return true; }
         // every text must be text the game can show
+        // (texts not changed are written as they are: the game's own can hold codes typed text can't)
         for (int i = 0; i < _script.Steps.Count; i++)
-            if (_script.Steps[i].IsText && L2EventText.Check(_script.Steps[i].Text) is { } p) { Status = $"Not saved: step {i + 1}: {p}"; return false; }
+            if (_script.Steps[i].TextChanged && L2EventText.Check(_script.Steps[i].Text) is { } p) { Status = $"Not saved: step {i + 1}: {p}"; return false; }
         // the last step must end the event, or the game runs on into whatever follows
         var last = _script.Steps[^1];
         if (!last.EndsFlow) { _script.Steps.Add(new L2Step { Bytes = new byte[] { 0x00 } }); }
@@ -822,6 +840,7 @@ public partial class L2EventsPage : L2Page
     public void ShowEvent(int map, int head, int id)
     {
         if (Rom == null) return;
+        if (!ConfirmLeave()) return;
         if (SelectedIndex != map) SelectedIndex = map; else { ReadMapNames(map); FillEvents(null); }
         var item = Events.FirstOrDefault(e => e.Entry?.Head == head && e.Entry?.Id == id);
         if (item != null) SelectedEvent = item;
@@ -857,6 +876,7 @@ public partial class L2EventsPage : L2Page
     /// place where it ends goes on with them instead.</summary>
     public void ContinueEvent(L2EventItem item, IEnumerable<L2Step> added)
     {
+        if (item != _event && !ConfirmLeave()) return;
         _skipConfirm = true;
         SelectedEvent = item;
         _skipConfirm = false;
@@ -878,7 +898,10 @@ public partial class L2EventsPage : L2Page
         _script.Steps.AddRange(steps);
         Changed(true);
         SelectedStep = Steps.FirstOrDefault(v => v.Step == first);
-        Status = "New steps added at the end; every place where the event ended now goes on with them. Save to keep them.";
+        // ends nothing can follow: a shop, the church, a capsule monster, BC, or leaving the map
+        int stuck = _script.Steps.Count(s => !s.IsText && s.Op is 0x18 or 0x19 or 0x81 or 0xBC or 0x16 or 0x5E or 0x83 or 0xB8);
+        Status = "New steps added at the end; every place where the event ended now goes on with them. Save to keep them." +
+                 (stuck > 0 ? $" {stuck} place{(stuck == 1 ? "" : "s")} where it opens a shop, the church, a capsule monster or goes to another map still end{(stuck == 1 ? "s" : "")} it: the new steps can't follow those." : "");
     }
 
     // ------------------------------------------------------------------ puzzle bytes

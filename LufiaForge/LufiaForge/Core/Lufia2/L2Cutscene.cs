@@ -75,7 +75,8 @@ public sealed class L2Beat
             case L2BeatKind.Face: C(0x7A, Who, FaceFrame[Dir & 3]); break;
             case L2BeatKind.Act: C(0xA3, Who, Value); C(0x89, Who); break;
             case L2BeatKind.Say:
-                l.Add(new L2Step { Bytes = (byte[])Opener.Clone(), IsText = true, Text = Text, End = 0x01, OriginalEnd = 0xFF, OriginalText = "\u0001" });
+                // a line rebuilt (another speaker) keeps how it ends: 00 ends the event, 0B asks, 01 goes on
+                l.Add(new L2Step { Bytes = (byte[])Opener.Clone(), IsText = true, Text = Text, End = Steps.FirstOrDefault(x => x.IsText)?.End ?? 0x01, OriginalEnd = 0xFF, OriginalText = "\u0001" });
                 break;
             case L2BeatKind.Camera:
                 if (AtOnce) C(0x3A, X, Y); else { C(0xC4, X, Y); C(0x41, 0x00, 0xFF); }
@@ -394,6 +395,12 @@ public static class L2Cutscene
         if (beat.Steps.Count == 0) return;
         int last = script.Steps.IndexOf(beat.Steps[^1]);
         var next = script.Steps.Skip(last + 1).FirstOrDefault(s => !beat.Steps.Contains(s));
+        // the last step taken out while a jump leads to it (the End a "played once" check jumps to): a new End there
+        if (next == null && script.Steps.Any(s => s.Jumps.Any(j => j.Step != null && beat.Steps.Contains(j.Step))))
+        {
+            next = new L2Step { Bytes = new byte[] { 0x00 } };
+            script.Steps.Insert(last + 1, next);
+        }
         foreach (var o in beat.Steps) script.Steps.Remove(o);
         foreach (var s in script.Steps) foreach (var j in s.Jumps) if (j.Step != null && beat.Steps.Contains(j.Step)) j.Step = next;
     }
@@ -814,6 +821,10 @@ public static class L2Cutscene
                     if (o.Point < 0) throw new InvalidOperationException("Pick the point where the party stands.");
                     flag = FreeFlag(rom, o.Flag >= 0 ? new[] { o.Flag } : null);
                     if (flag < 0) throw new InvalidOperationException("No story flag is free.");
+                    // the "on entering" event must take the starter before the scene is written
+                    if (L2EventBlocks.ReadLists(rom, block).FirstOrDefault(e => e.Head == L2EventBlocks.GameList && e.Id == 1) is { } enter &&
+                        L2EventScript.Read(rom, block + enter.Offset, block).Problem is { } why)
+                        throw new InvalidOperationException("The map's \"on entering\" event can't be changed: " + why);
                     L2EventBlocks.Add(rom, map, L2EventBlocks.SceneList, scene, s);
                     how = " " + AddStarter(rom, map, scene, o.Point, flag, o.Flag, o.FlagMustBeOn);
                 }
@@ -904,6 +915,12 @@ public static class L2Cutscene
         var script = L2EventScript.Read(rom, init, L2EventBlocks.InitBase(init));
         if (script.Problem != null) throw new InvalidOperationException("The map's start-up script can't be changed: " + script.Problem);
         if (script.Steps.Count(s => s.Op is 0x68 or 0x7B) >= 31) throw new InvalidOperationException("The map has as many characters as the game can show.");
+        // what a hidden one needs is checked before anything is written (a half-made character would stay in the ROM)
+        int block0 = L2Events.Block(rom, map);
+        if (hidden && block0 < 0) throw new InvalidOperationException("This map has no event block to hide the character in.");
+        if (hidden && L2EventBlocks.ReadLists(rom, block0).FirstOrDefault(e => e.Head == L2EventBlocks.GameList && e.Id == 0) is { } shown0 &&
+            L2EventScript.Read(rom, block0 + shown0.Offset, block0).Problem is { } why0)
+            throw new InvalidOperationException("The map's \"when shown\" event can't be changed: " + why0);
         int spriteByte = L2Sprites.ToGame(rom, map, sprite, L2MapInfo.NewSpriteBytesUsed(rom, map, true));
         // a character start of its own (the game finds a character's actor slot through it; without one the game's
         // own characters can take the slot): where it waits, standing still. Its walk area is the whole map: a step
@@ -971,10 +988,30 @@ public static class L2Cutscene
         L2StartParty.Keep(rom);   // the whole starting party on the map, for the cutscene's walks
         var (need, place) = Needs(rom, map, head, id);
         var all = (flags ?? Array.Empty<int>()).Union(need).OrderBy(f => f).ToList();
-        string extra = (need.Count == 0 ? "" : $" Story flag{(need.Count > 1 ? "s" : "")} {string.Join(" ", need.Select(f => f.ToString("X2")))} {(need.Count > 1 ? "are" : "is")} on too: the map makes the cutscene's characters only then.") +
+        // a flag ticked on that keeps the map from making one of the cutscene's characters (made only while it is off)
+        string clash = "";
+        try
+        {
+            int blk = L2Events.Block(rom, map);
+            var ev = blk < 0 ? null : L2EventBlocks.ReadLists(rom, blk).FirstOrDefault(x => x.Head == head && x.Id == id);
+            if (ev != null)
+            {
+                var used = ActorsUsed(L2EventScript.Read(rom, blk + ev.Offset, blk), head, id);
+                var off = L2MapInfo.Stages(rom, map).Where(c => used.Contains(c.Id) && c.Flags.Any(f => !f.On && all.Contains(f.Flag)) && !L2MapInfo.Stages(rom, map).Any(o => o.Id == c.Id && !o.Flags.Any(f => !f.On && all.Contains(f.Flag))))
+                    .Select(c => c.Id).Distinct().ToList();
+                if (off.Count > 0) clash = $" Careful: with the flags ticked the map doesn't make character{(off.Count > 1 ? "s" : "")} {string.Join(", ", off.Select(x => (x - 0x4F).ToString()))}, which the cutscene uses.";
+            }
+        }
+        catch (Exception) { }
+        string extra = clash + (need.Count == 0 ? "" : $" Story flag{(need.Count > 1 ? "s" : "")} {string.Join(" ", need.Select(f => f.ToString("X2")))} {(need.Count > 1 ? "are" : "is")} on too: the map makes the cutscene's characters only then.") +
                        (place.Count == 0 ? "" : $" Persistent character{(place.Count > 1 ? "s" : "")} {string.Join(" ", place.Select(p => p.Id.ToString("X2")))} {(place.Count > 1 ? "are" : "is")} sent here first, as the story does.");
         if (head == L2EventBlocks.SceneList && Starter(rom, map, id) is { } st)
+        {
+            // the "on entering" check: its flag on when it must be, the played flag and a must-be-off flag off
+            all.Remove(st.Played);
+            if (st.Flag >= 0) { if (st.MustBeOn) { if (!all.Contains(st.Flag)) all.Add(st.Flag); } else all.Remove(st.Flag); }
             return L2MapEdit.SetTestStart(rom, map, point, all, counters, null, place) + $" On entering the map the cutscene starts (with the party on point {st.Point})." + extra;
+        }
         if (head == L2EventBlocks.SceneList && all.Count + (counters?.Count ?? 0) + place.Count > 0)
             return L2MapEdit.StartWithFlags(rom, map, id, point, all, counters, place) + $" Then the cutscene (scene {id:X2}) plays." + extra;
         if (head == L2EventBlocks.SceneList)
@@ -1029,25 +1066,43 @@ public static class L2Cutscene
             if (creates.Count == 0 || creates.Any(c => c.Flags.Count == 0)) continue;   // always made, or never by the map
             foreach (var (f, on) in creates[0].Flags) if (on && !flags.Contains(f)) flags.Add(f);
         }
-        // a persistent character the cutscene expects to stand here already: the one talked to, or one whose first step
-        // isn't one that brings it in (put on a point or tile, appear, walk in: the game brings those itself; checked in
-        // the game: Karlloon North Shrine B1's Iris (30 first) and Idura (33 first) come in without being sent)
-        var first = new Dictionary<int, int>();
+        // every persistent character the cutscene uses stands where the story puts it on this map: the game draws one
+        // only on the map it was sent to, and a step that puts it on a point, shows it or walks it does nothing
+        // otherwise (checked in the game: Parcelyte 2C scene 01's Tia, put on a point, and 2D scene 01's Selan, walked,
+        // never showed up unsent). One the cutscene sends here itself (35) before using it is left to the cutscene.
+        var sentByCutscene = new HashSet<int>();
+        var usedFirst = new HashSet<int>();
         foreach (var st in s.Steps)
         {
             var b = st.Bytes;
+            if (st.Op == 0x35 && b.Length >= 4 && b[2] == map && !usedFirst.Contains(b[1])) sentByCutscene.Add(b[1]);
             int who = ActorFirst.Contains(st.Op) && b.Length >= 2 ? b[1] : st.Op == 0x33 && b.Length >= 3 ? b[2] : -1;
-            if (who >= 0) first.TryAdd(who, st.Op);
+            if (who >= 0) usedFirst.Add(who);
         }
         var start = L2Persistent.Start(rom);
         var here = L2Persistent.On(L2Persistent.All(rom), map);
-        foreach (int a in used.Where(a => a is >= L2Persistent.First and < L2Persistent.First + L2Persistent.Count))
+        foreach (int a in used.Where(a => a is >= L2Persistent.First and < L2Persistent.First + L2Persistent.Count).OrderBy(a => a))
         {
-            bool expected = head == L2EventBlocks.TalkList && a == id || first.TryGetValue(a, out int op) && op is not (0x30 or 0x2F or 0x98 or 0x2D or 0x33);
-            if (expected && !start.Any(x => x.Id == a && x.Map == map) && here.FirstOrDefault(p => p.Id == a) is { } p)
-                place.Add((a, map, p.Spot));
+            if (sentByCutscene.Contains(a) || start.Any(x => x.Id == a && x.Map == map) || !start.Any(x => x.Id == a)) continue;
+            // the story never brings it here: character start 1, where the cutscene's own steps move it from
+            if (here.FirstOrDefault(p => p.Id == a) is { } p) place.Add((a, map, p.Spot));
+            else if (stages.Count > 0) place.Add((a, map, 1));
         }
         return (flags, place);
+    }
+
+    /// <summary>What Test in the game sets up for the cutscene's characters (<see cref="Needs"/>), in a line; empty when
+    /// it needs nothing.</summary>
+    public static string DescribeNeeds(RomBuffer rom, int map, int head, int id)
+    {
+        List<int> need; List<(int Id, int Map, int Spot)> place;
+        try { (need, place) = Needs(rom, map, head, id); } catch (Exception) { return ""; }
+        var parts = new List<string>();
+        if (need.Count > 0)
+            parts.Add($"turns on story flag{(need.Count > 1 ? "s" : "")} {string.Join(" ", need.Select(f => f.ToString("X2")))} (the map makes the cutscene's characters only then)");
+        if (place.Count > 0)
+            parts.Add($"sends story character{(place.Count > 1 ? "s" : "")} {string.Join(", ", place.Select(p => $"{p.Id:X2} (character start {p.Spot})"))} here (the game draws one only on the map the story sent it to)");
+        return parts.Count == 0 ? "" : "The test start also " + string.Join(" and ", parts) + ".";
     }
 
     /// <summary>A talk cutscene that speaks as "the one talked to" (08): it needs the talk.</summary>

@@ -68,7 +68,9 @@ public static class L2EventText
             if (Pause(t) is int f) { if (f is < 0 or > 250) return $"[{t}]: pauses are 0 to 250 frames."; continue; }
             if (t.StartsWith("Voice ") && int.TryParse(t[6..], out int v)) { if (v is < 0 or > 0x7F) return $"[{t}]: voices are 0 to 127."; continue; }
             if (t.StartsWith("Glyph ") && t.Length == 8 && IsHex(t[6..])) continue;
-            if (t.Length == 2 && IsHex(t) && Convert.ToInt32(t, 16) is 0x03 or >= 0x0C and <= 0x0F) continue;
+            // codes shown as [XX] that are written back as they are (08 opens the game's questions: inns, shops...);
+            // not the end codes 00-02 and 0B
+            if (t.Length == 2 && IsHex(t) && Convert.ToInt32(t, 16) is 0x03 or 0x08 or >= 0x0C and <= 0x1F or 0x7F) continue;
             return $"[{t}] isn't a known code. Use [Name], [Pause 20], [Voice 3] or [Glyph 41].";
         }
         foreach (char c in text)

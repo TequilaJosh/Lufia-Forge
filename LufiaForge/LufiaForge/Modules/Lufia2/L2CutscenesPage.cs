@@ -76,6 +76,16 @@ public sealed class L2StageActor
 public partial class L2CutscenesPage : L2Page
 {
     private int _map = -1;
+    /// <summary>The map to show again after the ROM was read again.</summary>
+    private int _restoreMap = -1;
+
+    /// <summary>A map switch cancelled (unsaved changes kept): the list shows the map that stays.</summary>
+    private void RestoreSelection()
+    {
+        int m = _map;
+        System.Windows.Application.Current?.Dispatcher.BeginInvoke(() => { if (SelectedIndex != m) { _keepMap = true; SelectedIndex = m; _keepMap = false; } });
+    }
+    private bool _keepMap;
     /// <summary>The talk choice "a new character on the clicked tile".</summary>
     private const int NewTalkCharacter = -3;
     private L2EventScript? _script;
@@ -133,6 +143,8 @@ public partial class L2CutscenesPage : L2Page
     /// <summary>The story flags and counters the cutscene checks, to set for playback.</summary>
     public ObservableCollection<L2StartFlagVm> StartFlags { get; } = new();
     [ObservableProperty] private bool _hasStartFlags;
+    /// <summary>What Test in the game sets up for the picked cutscene's characters.</summary>
+    [ObservableProperty] private string _testNeeds = "";
     public List<L2Option> AnswerChoices { get; } = Enumerable.Range(0, 4).Select(i => new L2Option(i, $"answer {i + 1}")).ToList();
     [ObservableProperty] private L2Option? _playAnswer;
     [ObservableProperty] private bool _hasQuestion;
@@ -207,6 +219,10 @@ public partial class L2CutscenesPage : L2Page
     protected override IEnumerable<string> ReadNames()
     {
         var rom = Rom!;
+        // a new ROM (another project, or Edit > Undo / Redo): unsaved steps belong to the old one, so they are dropped
+        // without asking (saving them here would write them into this ROM), and the map shown stays
+        ClearScript();
+        _restoreMap = _map;
         _maps = Enumerable.Range(0, L2Maps.Count).Select(m => { string n = L2Maps.Name(rom, m); return n.Length > 0 && !n.Contains('~') ? n : m switch { 0 => "World map", 1 => "Sea floor", _ => "Map " + m.ToString("X2") }; }).ToArray();
         _songs = Enumerable.Range(0, L2Script.SongCount).Select(i => L2Script.SongName(rom, i)).ToArray();
         SongChoices.Clear();
@@ -225,7 +241,15 @@ public partial class L2CutscenesPage : L2Page
 
     protected override void Load(int index)
     {
-        if (!ConfirmLeave()) return;
+        if (_keepMap) return;   // the list put back on the map shown
+        if (_restoreMap > 0 && index == 0)
+        {
+            int m = _restoreMap;
+            _restoreMap = -1;
+            System.Windows.Application.Current?.Dispatcher.BeginInvoke(() => SelectedIndex = m);
+        }
+        _restoreMap = -1;
+        if (!ConfirmLeave()) { RestoreSelection(); return; }
         Stop();
         _map = index;
         var rom = Rom!;
@@ -326,6 +350,13 @@ public partial class L2CutscenesPage : L2Page
             System.Windows.Application.Current?.Dispatcher.BeginInvoke(() => { _skipConfirm = true; SelectedCutscene = back; _skipConfirm = false; });
             return;
         }
+        // saving the one left read the list again (its offsets can move): pick the new one from the new list
+        if (value != null && !Cutscenes.Contains(value))
+        {
+            var again = Cutscenes.FirstOrDefault(c => c.Entry.Head == value.Entry.Head && c.Entry.Id == value.Entry.Id);
+            System.Windows.Application.Current?.Dispatcher.BeginInvoke(() => SelectedCutscene = again);
+            return;
+        }
         LoadScript(value);
     }
 
@@ -401,6 +432,7 @@ public partial class L2CutscenesPage : L2Page
             _ => "Plays each time the leader steps onto the area" + (once >= 0 ? $", once (story flag {once:X2})." : " (no story flag: every time)."),
         };
         if (_script.Problem != null) CutsceneInfo += " It can't be changed here: " + _script.Problem;
+        TestNeeds = L2Cutscene.DescribeNeeds(Rom, _map, item.Entry.Head, item.Entry.Id);
         FillStartFlags();
         RefreshBeats();
         SelectedBeat = keepBeat >= 0 && keepBeat < Beats.Count ? Beats[keepBeat] : Beats.FirstOrDefault();
@@ -708,10 +740,11 @@ public partial class L2CutscenesPage : L2Page
             ShowWho = ShowWho2 = ShowDir = ShowCount = ShowXY = ShowText = ShowSpeaker = ShowAction = ShowSong = ShowNumber = ShowFlash = ShowAtOnce = ShowGoTo = IsOther = false;
             if (b == null) { BeatTitle = ""; BeatHelp = "Pick a step of the timeline, or add one."; return; }
             BeatWho = WhoChoices.FirstOrDefault(o => o.Value == b.Who) ?? (b.Who >= 0 ? AddWho(b.Who) : null);
-            BeatWho2 = Who2Choices.FirstOrDefault(o => o.Value == b.Who2) ?? Who2Choices.FirstOrDefault();
+            BeatWho2 = Who2Choices.FirstOrDefault(o => o.Value == b.Who2) ?? (b.Who2 >= 0 ? AddWho2(b.Who2) : Who2Choices.FirstOrDefault());
             BeatDir = DirChoices[b.Dir & 3];
             BeatCount = b.Count; BeatX = b.X; BeatY = b.Y; BeatFlash = b.Flash; BeatAtOnce = b.AtOnce;
-            BeatText = b.Text;
+            // (the box holds CR LF: written again only when the text differs, else the caret jumps while typing)
+            if (BeatText.Replace("\r", "") != b.Text) BeatText = b.Text;
             BeatAction = ActionChoices.FirstOrDefault(o => o.Value == b.Value);
             BeatSong = SongChoices.FirstOrDefault(o => o.Value == b.Value);
             BeatMap = MapChoices.FirstOrDefault(o => o.Value == b.Value);
@@ -756,6 +789,14 @@ public partial class L2CutscenesPage : L2Page
         return o;
     }
 
+    /// <summary>A second walker the list doesn't hold (a persistent character, 10-4F).</summary>
+    private L2Option AddWho2(int id)
+    {
+        var o = new L2Option(id, Name(id));
+        Who2Choices.Add(o);
+        return o;
+    }
+
     private void UpdateTextNote()
     {
         string? p = L2EventText.Check(BeatText.Replace("\r", ""));
@@ -764,8 +805,9 @@ public partial class L2CutscenesPage : L2Page
     }
 
     partial void OnBeatWhoChanged(L2Option? value) => Edit(b => { if (value != null) b.Who = value.Value; });
-    partial void OnBeatWho2Changed(L2Option? value) => Edit(b => b.Who2 = value?.Value ?? -1);
-    partial void OnBeatDirChanged(L2Option? value) => Edit(b => b.Dir = value?.Value ?? 1);
+    // (null: the lists were filled again; "(nobody)" is an option of its own, -1)
+    partial void OnBeatWho2Changed(L2Option? value) => Edit(b => { if (value != null) b.Who2 = value.Value; });
+    partial void OnBeatDirChanged(L2Option? value) => Edit(b => { if (value != null) b.Dir = value.Value; });
     partial void OnBeatCountChanged(int value) => Edit(b => b.Count = Math.Clamp(value, 1, 30));
     partial void OnBeatXChanged(int value) => Edit(b => b.X = value);
     partial void OnBeatYChanged(int value) => Edit(b => b.Y = value);
