@@ -41,7 +41,15 @@ the game's own scripts use it, **guess** = not confirmed.
   0, 1, 2, 3, 5, 4, 6; hero 4 is Tia, 5 Dekar: data, Tia speaks with 66 in Alunze Castle, Dekar with 65).
 * In the editor the text is plain text: Enter = new line, `[Name]` = the hero's name, `[Pause 20]` = 20 frames,
   `[Voice 3]`, `[Glyph 41]`. Words of the dictionary and repeats are written out; changed text is packed with the
-  dictionary again. The box shows 3 lines; about 28 letters fit across the screen.
+  dictionary again. A box shows **4 lines of 28 letters** (28 measured by Artemis; checked in BizHawk 2026-10-30: a
+  36-letter line spills into the lines under it and garbles them, and the 5th and 6th lines of a 6-line text came out
+  as copies of the 1st and 2nd). Wider or longer text gets a soft warning on its card and on the Text page; it is still
+  written as typed. More than 4 lines needs another text step.
+* **The Text page writes any length.** A line that fits its place is written there; a longer one is written the way
+  the event editor writes: every event of the map that shows the line gets the new text and is laid out again in the
+  map's added part, the block moving to the event space the first time (`L2Events.WriteText`,
+  `L2EventBlocks.SaveAll`). Checked in BizHawk: the new game's first line made six lines long plays in Tia's shop and
+  the scene goes on as before; every other line of every map reads back unchanged.
 
 ## 3. Jumps
 

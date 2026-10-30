@@ -97,6 +97,118 @@ public static class L2Events
         return false;
     }
 
+    /// <summary>Letters a line of the text box holds (measured in the game by Artemis, 2026-10-30; checked in BizHawk:
+    /// a 36-letter line runs into the lines under it and garbles them).</summary>
+    public const int BoxWidth = 28;
+
+    /// <summary>Lines one text box shows (checked in BizHawk, 2026-10-30: the 5th line of a 6-line text came out as a
+    /// copy of the first, the 6th as a copy of the second). More lines need another text step.</summary>
+    public const int BoxLines = 4;
+
+    /// <summary>The widest line of a text as the box shows it, written as the Text page or the event editor shows it
+    /// ([NAME] / [Name] counted as "Maxim"; pauses, voices and other codes take no room, a glyph one letter).</summary>
+    public static int LongestLine(string text)
+    {
+        int best = 0;
+        foreach (var raw in text.Replace("\r", "").Split('\n'))
+        {
+            string s = System.Text.RegularExpressions.Regex.Replace(raw, @"\[(NAME|Name)\]", "Maxim");
+            s = System.Text.RegularExpressions.Regex.Replace(s, @"\[(GLYPH|Glyph) [0-9A-Fa-f]{2}\]", "#");
+            s = System.Text.RegularExpressions.Regex.Replace(s, @"\[[^\]]*\]", "");
+            best = Math.Max(best, s.Length);
+        }
+        return best;
+    }
+
+    /// <summary>Lines the text takes in its box (a trailing line break doesn't start one).</summary>
+    public static int LineCount(string text)
+    {
+        var lines = text.Replace("\r", "").Split('\n');
+        int n = lines.Length;
+        if (n > 1 && lines[^1].Length == 0) n--;
+        return n;
+    }
+
+    /// <summary>A soft warning when a line of the text is wider than the box or the text has more lines than the box
+    /// shows, or "". Nothing is changed: the text is written as typed.</summary>
+    public static string WidthWarning(string text)
+    {
+        var parts = new List<string>();
+        int n = LongestLine(text), lines = LineCount(text);
+        if (n > BoxWidth) parts.Add($"A line has {n} letters; the box shows {BoxWidth} and a longer line spills into the lines under it. Break the line with Enter.");
+        if (lines > BoxLines) parts.Add($"The text has {lines} lines; a box shows {BoxLines} and the lines after that come out garbled. Put the rest in another text (in the event editor, + under the step, Text).");
+        return string.Join(" ", parts);
+    }
+
+    /// <summary>Text as the Text page shows it ([NAME], [PAUSE xx], [GLYPH xx], ending [WAIT] / [END] / [CHOICE]) as an
+    /// event step's text and end code (<see cref="L2EventText"/>: [Name], [Pause 20], [Voice 3], [Glyph 41]).</summary>
+    public static (string Text, byte End)? ToStepText(string text)
+    {
+        text = text.Replace("\r", "");
+        byte end;
+        if (text.EndsWith("[WAIT]")) { end = 0x01; text = text[..^6]; }
+        else if (text.EndsWith("[END]")) { end = 0x00; text = text[..^5]; }
+        else if (text.EndsWith("[CHOICE]")) { end = 0x0B; text = text[..^8]; }
+        else return null;
+        text = text.Replace("[NAME]", "[Name]");
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"\[GLYPH ([0-9A-Fa-f]{2})\]", m => $"[Glyph {m.Groups[1].Value.ToUpperInvariant()}]");
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"\[PAUSE ([0-9A-Fa-f]{2})\]", m =>
+        {
+            int v = Convert.ToInt32(m.Groups[1].Value, 16);
+            return v == 0x80 ? "" : v > 0x80 ? $"[Pause {(v & 0x7F) * 10}]" : $"[Voice {v}]";
+        });
+        return (text, end);
+    }
+
+    /// <summary>Replaces a line's text, as long as it needs: in place when it fits, else every event of the map that
+    /// shows the line is written again with the new text in the map's added event space (the block moves to the event
+    /// space the first time, as the event editor does). Returns what was done; throws with the reason when it can't.</summary>
+    public static string WriteText(RomBuffer rom, Line line, string text)
+    {
+        if (WriteLine(rom, line, text)) return "Written in place.";
+        text = text.Replace("\r", "");
+        var step = ToStepText(text) ?? throw new InvalidOperationException("The text has to end with [WAIT], [END] or [CHOICE].");
+        if (L2EventText.Check(step.Text) is { } why) throw new InvalidOperationException(why);
+        bool Change(L2EventScript s)
+        {
+            bool hit = false;
+            foreach (var st in s.Steps.Where(x => x.IsText && x.At >= 0 && x.At + x.Bytes.Length == line.Offset))
+            {
+                st.Text = step.Text; st.End = step.End; hit = true;
+            }
+            return hit;
+        }
+        // the start-up script
+        int init = L2EventBlocks.InitScript(rom, line.Map);
+        var initScript = L2EventScript.Read(rom, init, L2EventBlocks.InitBase(init));
+        bool inInit = initScript.Problem == null && Change(initScript);
+        string done = inInit ? L2EventBlocks.SaveInit(rom, line.Map, initScript) : "";
+        // the events of the block that run it (events sharing a script share one copy)
+        int block = Block(rom, line.Map);
+        var changed = new Dictionary<L2EventBlocks.Entry, L2EventScript>();
+        if (block >= 0)
+        {
+            var byOffset = new Dictionary<int, L2EventScript?>();
+            foreach (var e in L2EventBlocks.ReadLists(rom, block).Where(e => e.IsScript))
+            {
+                if (!byOffset.TryGetValue(e.Offset, out var s))
+                {
+                    s = L2EventScript.Read(rom, block + e.Offset, block);
+                    byOffset[e.Offset] = s = s.Steps.Any(x => x.IsText && x.At + x.Bytes.Length == line.Offset) ? s : null;
+                    if (s != null)
+                    {
+                        if (s.Problem != null) throw new InvalidOperationException($"An event showing this line can't be laid out again: {s.Problem}");
+                        Change(s);
+                    }
+                }
+                if (s != null) changed[e] = s;
+            }
+            if (changed.Count > 0) done = L2EventBlocks.SaveAll(rom, line.Map, changed);
+        }
+        if (!inInit && changed.Count == 0) throw new InvalidOperationException("No event of the map shows this line, so it can only be written in place: shorten it.");
+        return done;
+    }
+
     /// <summary>Replaces a line's text in place: the new text must not be longer once encoded; a shorter one is
     /// filled up with 04 00 (a pause of no time) and a space. Returns false when it doesn't fit.</summary>
     public static bool WriteLine(RomBuffer rom, Line line, string text)

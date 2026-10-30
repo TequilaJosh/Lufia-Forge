@@ -797,14 +797,20 @@ public partial class L2TextPage : ObservableObject
         var l = _lines[value];
         Speaker = $"{l.Speaker}, at {l.Offset:X6}";
         Text = l.Text;
-        Room = $"{l.Length} bytes in the ROM.";
+        OnTextChanged(Text);
     }
+
+    [ObservableProperty] private string _widthWarning = "";
+    public bool HasWidthWarning => WidthWarning.Length > 0;
+    partial void OnWidthWarningChanged(string value) => OnPropertyChanged(nameof(HasWidthWarning));
 
     partial void OnTextChanged(string value)
     {
-        if (_rom == null || SelectedLine < 0 || SelectedLine >= _lines.Count) return;
+        if (_rom == null || SelectedLine < 0 || SelectedLine >= _lines.Count) { WidthWarning = ""; return; }
         int n = L2Text.Encode(_rom, value).Length, room = _lines[SelectedLine].Length;
-        Room = n <= room ? $"{n} of {room} bytes." : $"{n} of {room} bytes: {n - room} too many (shorten it; words from the game's dictionary take 1 or 2 bytes).";
+        Room = n <= room ? $"{n} of {room} bytes: written in place."
+            : $"{n} bytes, {n - room} more than its place holds: Apply writes the map's events again in added space, so the line can be as long as you like.";
+        WidthWarning = L2Events.WidthWarning(value.Replace("[WAIT]", "").Replace("[END]", "").Replace("[CHOICE]", ""));
     }
 
     [CommunityToolkit.Mvvm.Input.RelayCommand]
@@ -812,19 +818,20 @@ public partial class L2TextPage : ObservableObject
     {
         if (_rom == null || _main == null || SelectedLine < 0) return;
         var l = _lines[SelectedLine];
-        if (!Text.EndsWith("[WAIT]") && !Text.EndsWith("[END]")) { Status = "The text has to end with [WAIT] or [END] like the original."; return; }
-        if (!L2Events.WriteLine(_rom, l, Text))
-        {
-            Status = L2Events.HasBackReference(_rom, l)
-                ? "It doesn't fit: shorten it first. (This line reuses words from an earlier line in a short form; written out they take more room.)"
-                : "It doesn't fit: shorten it first.";
-            return;
-        }
+        if (!Text.EndsWith("[WAIT]") && !Text.EndsWith("[END]") && !Text.EndsWith("[CHOICE]")) { Status = "The text has to end with [WAIT], [END] or [CHOICE] like the original."; return; }
+        string done;
+        try { done = L2Events.WriteText(_rom, l, Text); }
+        catch (Exception ex) { Status = "Not written: " + ex.Message; return; }
+        L2FlagUses.Invalidate();
         _main.NotifyRomModified($"Lufia II: text on map {l.Map:X2}");
+        // a line written elsewhere sorts to a new place in the list: pick it again by its text
         int keep = SelectedLine;
+        string written = Text.Replace("\r", "");
         OnSelectedMapChanged(SelectedMap);
-        SelectedLine = keep;
-        Status = "Written. (Edit > Undo takes it back.)";
+        int again = _lines.FindIndex(x => x.Text == written && x.Speaker == l.Speaker);
+        if (again < 0) again = _lines.FindIndex(x => x.Text == written);
+        SelectedLine = again >= 0 ? again : keep;
+        Status = (done.StartsWith("Written") ? done : "Written. " + done) + " (Edit > Undo takes it back.)";
     }
 }
 

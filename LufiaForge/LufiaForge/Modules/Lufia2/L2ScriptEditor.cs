@@ -115,6 +115,9 @@ public partial class L2LineVm : ObservableObject
     [ObservableProperty] private bool _canChangeEnding;
     [ObservableProperty] private bool _speakerEditable;
     [ObservableProperty] private string _sizeText = "";
+    /// <summary>The text is wider or longer than the box (a soft warning: it is still written as typed).</summary>
+    public bool SizeWarns => SizeText.Contains("Warning:");
+    partial void OnSizeTextChanged(string value) => OnPropertyChanged(nameof(SizeWarns));
 
     // command
     [ObservableProperty] private string _commandName = "";
@@ -717,9 +720,10 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         if (_rom == null) return "";
         string? problem = L2EventText.Check(s.Text);
         int size = L2EventScript.SizeOf(_rom, s, s.At >= 0);
-        int longest = s.Text.Length == 0 ? 0 : s.Text.Split('\n').Max(l => l.Length);
+        int longest = L2Events.LongestLine(s.Text);
         string room = s.At >= 0 && size > s.OriginalLength ? $" (it had {s.OriginalLength}: longer text moves the map's events to the event space when saved)" : "";
-        return problem ?? $"{size} bytes{room}. Longest line: {longest} letters" + (longest > 28 ? " (the screen fits about 28; break the line with Enter)." : ".");
+        string warn = L2Events.WidthWarning(s.Text);
+        return problem ?? $"{size} bytes{room}. Longest line: {longest} letters, {L2Events.LineCount(s.Text)} lines." + (warn.Length > 0 ? " Warning: " + warn : "");
     }
 
     private string EntryName(L2EventBlocks.Entry e) => e.Head switch
