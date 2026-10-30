@@ -12,29 +12,51 @@ Code: `Core/Lufia2/L2Cutscene.cs` (steps, the stage, new cutscenes, cutscene cha
 
 ## 1. Using the page
 
-1. **Pick a map** in the list on the left. The map is drawn in the middle with its characters (the ones its start-up
-   script makes, on their character starts) and the leader where a cutscene would start. The dashed box is what the
-   screen shows.
-2. **Pick a cutscene** of the map (its scenes, talking to its characters, its step-on areas), or make one with
-   **New cutscene** (section 3). The steps show on the right, as a timeline.
-3. **Click a step** to see the stage after it: who stands where (a gold frame marks who moved in that step), each
-   character drawn facing the way it faces (section 5), the camera's box, the screen dark after a fade, the text box
-   of a line, and the story flags on at that point.
-4. **Add a step** with the buttons above the timeline; it goes below the picked step. Change it in the box under the
-   timeline. Many steps take a place from a click on the map:
-   * *Appears* and *Camera*: the clicked tile.
-   * *Walks*: click a tile in the same row or column as the character: the direction and the number of tiles follow.
-   * *Faces*: click a tile in the direction it should face.
-5. **Play** runs the cutscene on the stage, roughly at the game's speed (lines stay up long enough to read): it goes
-   the way the game would (section 1.1), and walks are drawn tile by tile in the sprites' walking frames (characters
-   walking together move at once). The arrows step one step back or on. Up / down move a step, Delete takes it out,
-   Undo takes back the last change.
-6. **Save** writes the cutscene into the ROM (Edit > Undo takes it back). Revert drops what isn't saved.
-7. **Test in the game** (or start the game here): the ROM is written and opened in BizHawk (the bundled one; the window it opened before is closed first). A new game starts on this map with the party on the point picked
-   and the story flags ticked under **Playback starts with** turned on. A scene or a step-on area cutscene plays at
-   once (put the party on the area: its walks start from there); for a talk cutscene talk to the character. Export the
-   ROM and start a new game. Keep it as a hack's own start, or press **Normal start** for the game's opening again.
-   The party, gold and items the new game starts with are on the Characters page.
+The page is laid out like Lufia 1's Cutscenes tab, and the Events page and the Maps page use the same editor
+(`Modules/Lufia2/L2ScriptEditor.cs`, `L2EventEditorPanel.xaml`):
+
+1. **Pick a cutscene** in the list on the left: every event of every map (242 maps, one list), with the map, what
+   starts it (a scene, talking to a character, stepping onto an area), how many stage commands and text boxes it has,
+   the story flags it sets, and its first line. Search by any of those, filter by map, or tick **Only bigger scenes**
+   (6 or more stage commands). **New cutscene** makes one on any map (section 3); **Delete** takes one off its map
+   (it says what changes first; a scene the map's own "on entering" event starts can't be taken off).
+2. **The steps** are cards on the left of the editor, edited in place: a line of text with its speaker and what
+   happens after it, a command with its fields (who, a tile, a point, a story flag, a song...), and under it what the
+   step does in plain words, where the event waits, which steps jump to it, and what playback did there. ＋ on a card
+   inserts a step below it (text first, then every command by category), ✕ deletes it, the grip drags it elsewhere
+   (or ▲ ▼), **Insert at start** puts one at the top. **Show bytes** shows each step's bytes; **Bytes** shows the
+   whole script as it will be written.
+3. **The stage** on the right is the map with its characters (the ones its start-up script makes, on their character
+   starts, and the story characters that stand there) and the leader where the cutscene starts. Click a step to see
+   the stage after it: who stands where (a gold frame marks who moved in that step), each character drawn facing the
+   way it faces (section 5), the camera's box, the screen dark after a fade, the text box of a line, and the story
+   flags on at that point.
+4. **Click the stage to add steps.** Click a character to pick it (a red frame), then a tile: it walks there (sideways
+   first, then up or down; one step and one wait a tile), appears there, or turns to face it; or right-click any tile
+   for the menu: every character's walk / appear / turn / leave, the camera jumping or scrolling there, and the
+   party's start. The step goes below the picked one. A step that holds a tile (put on a tile, camera to a tile)
+   moves to the tile clicked. **Party start** sets where the leader stands when the cutscene begins (on the stage
+   only). **Cutscene character** adds a new character for the map's cutscenes (section 4) on the tile clicked last.
+5. **The timeline** under the stage (⏱ Timeline, always on here) places the steps in time: a track per character, the
+   camera, the dialogue, the screen, music and sound, story flags, timing. Click a block to pick its step; the red
+   playhead follows playback.
+6. **Play** runs the cutscene on the stage from the picked step, roughly at the game's speed (lines stay up long
+   enough to read): it goes the way the game would (section 1.1), and walks are drawn tile by tile in the sprites'
+   walking frames (characters walking together move at once). Undo and Redo (Ctrl+Z, Ctrl+Y) take back each change.
+7. **Writing**: the edits are written into the ROM by themselves when you leave the cutscene, save the project, press
+   Apply, or close the pop-up editor (as Lufia 1's editor does); **Save** writes them now, **Revert** drops them.
+   Edit > Undo takes a write back.
+8. **Test in the game** (under the stage): the ROM is written and opened in BizHawk (the bundled one; the window it
+   opened before is closed first). A new game starts on this map with the party on the point picked and the story
+   flags ticked under **Playback starts with** turned on. A scene or a step-on area cutscene plays at once (put the
+   party on the area: its walks start from there); for a talk cutscene talk to the character (one that doesn't speak
+   as "the one talked to" plays at once). Keep it as a hack's own start, or press **Normal start** for the game's
+   opening again. The party, gold and items the new game starts with are on the Characters page.
+
+The **Events** page is the same editor with a map's events in a list (the start-up script, scenes, talks, areas, the
+game's own events and the puzzle scripts), and the **Maps** page opens it in a window of its own: characters with a
+talk event carry a speech mark on the map, step-on areas with an event a ▶; double-click one (or **Talk event...** /
+**Event...** in the inspector) to edit what it does, with the stage and the timeline there too.
 
 The **Game start** page (World group) sets the same start in one place: a map (one with preset points), the
 cutscene that plays (a scene, a stepping-on area or a talk, or none), the point the party stands on (one on a

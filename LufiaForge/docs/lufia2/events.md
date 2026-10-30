@@ -299,8 +299,12 @@ back, 4F a action, 0F end.
 ## 8. How Lufia Forge saves events
 
 The Events tab shows a map's events (the start-up script, scenes, talking to each character, the trigger areas, the
-+2 events) as steps in plain words. Every step reachable from the event's start is shown, in ROM order, with its
-jumps as "go to step N"; code another event shares is marked "shared with ...".
++2 events) as steps in plain words, in the same editor the Cutscenes page uses and the Maps page pops up (cutscenes.md
+section 1): each step is a card edited in place (text with its speaker, a command with its fields), the map is a stage
+that shows where everyone stands after the picked step and takes walks, appearances and turns from clicks, and a
+timeline places the steps in time. Every step reachable from the event's start is shown, in ROM order, with its
+jumps as "go to step N"; code another event shares is marked "shared with ...". The edits are written when the event
+is left (or with Save).
 
 1. **Same size: written over the old bytes.** When every step keeps its place and size (text may get shorter: it is
    filled up with `04 80` pauses of nothing and a space) and nothing another event shares changes, only the changed
