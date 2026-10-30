@@ -10,7 +10,7 @@ the items marked as checked were also tested in the running game (BizHawk). The 
 | [rommap.md](rommap.md) | Whole-ROM classification: code, tables, packed files, text; code entry points and jump tables (first pass, see the corrections below) |
 | [banks_8F_A6.md](banks_8F_A6.md) | The data banks $8F-$A6 range by range |
 | [events.md](events.md) | The event script interpreter: all 205 commands in plain words, text codes, jumps, flags and variables, the event blocks and map info lists, and how the event editor saves and adds events |
-| [cutscenes.md](cutscenes.md) | The Cutscenes page: a map as a stage, cutscenes from steps in plain words, how each step is written, how a cutscene starts, cutscene characters, playback and testing, what was checked in the game |
+| [cutscenes.md](cutscenes.md) | The event editor shared by the Cutscenes, Events and Maps pages: every cutscene of every map in one list, the steps as cards edited in place, the map as a stage that takes walks and appearances from clicks, the timeline, playback, how a cutscene starts, cutscene characters, testing in the game, what was checked in the game |
 | [scripts3.md](scripts3.md) | The dungeon puzzle interpreter: 191 opcodes, the per-map puzzle blocks |
 | [battlescript.md](battlescript.md) | The battle script interpreter (monster AI, item, spell and capsule effects); new spells, spell animations, IP attack names and new IP attacks (section 7) |
 | [spell-animations.md](spell-animations.md) | Battle animations: the animation engine and its script format, graphics and colours, playing them inside Lufia Forge, new animations and their hooks |

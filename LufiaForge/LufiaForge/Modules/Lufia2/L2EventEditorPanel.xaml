@@ -1,0 +1,383 @@
+<UserControl x:Class="LufiaForge.Modules.Lufia2.L2EventEditorPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:LufiaForge.Modules.Lufia2"
+             xmlns:common="clr-namespace:LufiaForge.Modules.Common"
+             Background="{DynamicResource MidPurpleBrush}" Focusable="True">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- a field of a command, in place on its card -->
+            <DataTemplate x:Key="L2FieldTemplate">
+                <StackPanel Orientation="Horizontal" Margin="0,0,10,2" ToolTip="{Binding Hint}">
+                    <TextBlock Text="{Binding Label}" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                    <TextBox Text="{Binding Value, UpdateSourceTrigger=LostFocus}" Style="{StaticResource GdNumber}" Width="48" FontFamily="Consolas"
+                             Visibility="{Binding IsNumber, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                    <ComboBox Style="{StaticResource GdCombo}" MinWidth="150" MaxWidth="320" ItemsSource="{Binding Choices}" SelectedItem="{Binding Selected}" DisplayMemberPath="Label"
+                              MaxDropDownHeight="420" IsTextSearchEnabled="True" TextSearch.TextPath="Label"
+                              Visibility="{Binding IsChoice, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <ComboBox.ItemsPanel><ItemsPanelTemplate><VirtualizingStackPanel/></ItemsPanelTemplate></ComboBox.ItemsPanel>
+                    </ComboBox>
+                    <Image Source="{Binding Picture}" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor" Margin="4,0,0,0" VerticalAlignment="Center">
+                        <Image.LayoutTransform><ScaleTransform ScaleX="1.5" ScaleY="1.5"/></Image.LayoutTransform>
+                        <Image.Style>
+                            <Style TargetType="Image">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Picture}" Value="{x:Null}"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Image.Style>
+                    </Image>
+                    <Button Content="→" ToolTip="Go where this jump leads" Style="{StaticResource LufiaButton}" Padding="6,0" Margin="3,0,0,0"
+                            Click="Follow_Click" Visibility="{Binding IsJump, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                    <Button Content="⚑" ToolTip="Where else is this story flag used?" Style="{StaticResource LufiaButton}" Padding="5,0" Margin="3,0,0,0"
+                            Click="FlagUses_Click" Visibility="{Binding IsFlag, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                    <TextBlock Text="{Binding Error}" Foreground="{StaticResource ErrorBrush}" FontSize="11" VerticalAlignment="Center" Margin="4,0,0,0"/>
+                </StackPanel>
+            </DataTemplate>
+
+            <!-- one step: a card edited in place -->
+            <DataTemplate x:Key="L2LineTemplate">
+                <Border BorderThickness="0,0,0,1" Padding="0,5" PreviewMouseLeftButtonDown="Line_MouseDown" Opacity="{Binding Dim}"
+                        AllowDrop="True" DragOver="Line_DragOver" DragLeave="Line_DragLeave" Drop="Line_Drop">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="BorderBrush" Value="{StaticResource BorderPurpleBrush}"/>
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsHighlighted}" Value="True">
+                                    <Setter Property="Background" Value="#33FFD700"/>
+                                    <Setter Property="BorderBrush" Value="{StaticResource GoldBrush}"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="44"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <!-- where a dragged step will land -->
+                        <Rectangle Grid.ColumnSpan="3" Height="3" Fill="{StaticResource GoldBrush}" VerticalAlignment="Top" Margin="0,-6,0,0"
+                                   Visibility="{Binding DropAbove, Converter={StaticResource BoolToVisibilityConverter}}" IsHitTestVisible="False"/>
+                        <Rectangle Grid.ColumnSpan="3" Height="3" Fill="{StaticResource GoldBrush}" VerticalAlignment="Bottom" Margin="0,0,0,-6"
+                                   Visibility="{Binding DropBelow, Converter={StaticResource BoolToVisibilityConverter}}" IsHitTestVisible="False"/>
+                        <StackPanel VerticalAlignment="Top" Margin="0,4,0,0">
+                            <TextBlock Text="{Binding LineText}" FontFamily="Consolas" FontSize="12" Foreground="{StaticResource TextDisabledBrush}" ToolTip="{Binding OffsetText}"/>
+                            <TextBlock Text="⠿" FontSize="18" Foreground="{StaticResource TextSecondaryBrush}" Cursor="SizeNS" Margin="0,2,0,0"
+                                       ToolTip="Drag to move this step" PreviewMouseLeftButtonDown="Grip_MouseDown" MouseMove="Grip_MouseMove"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                <Button Content="▲" Style="{StaticResource LufiaButton}" Padding="3,0" FontSize="9" Click="MoveUp_Click" ToolTip="Move up"/>
+                                <Button Content="▼" Style="{StaticResource LufiaButton}" Padding="3,0" FontSize="9" Margin="2,0,0,0" Click="MoveDown_Click" ToolTip="Move down"/>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1">
+                            <!-- dialogue -->
+                            <StackPanel Visibility="{Binding IsText, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <WrapPanel>
+                                    <ComboBox Style="{StaticResource GdCombo}" Width="200" ItemsSource="{Binding SpeakerChoices}" SelectedItem="{Binding Speaker}" DisplayMemberPath="Label"
+                                              Margin="0,0,10,2" Visibility="{Binding SpeakerEditable, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                    <TextBlock Text="{Binding CommandName}" Foreground="{StaticResource GoldLightBrush}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,10,2"
+                                               Visibility="{Binding SpeakerEditable, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+                                    <ItemsControl ItemsSource="{Binding Fields}" ItemTemplate="{StaticResource L2FieldTemplate}">
+                                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                    </ItemsControl>
+                                </WrapPanel>
+                                <TextBox Text="{Binding Text, UpdateSourceTrigger=PropertyChanged, Delay=250}" Style="{StaticResource GdText}"
+                                         AcceptsReturn="True" TextWrapping="Wrap" FontFamily="Consolas" FontSize="13"
+                                         MinHeight="56" Margin="0,4,0,2" HorizontalAlignment="Stretch" Width="Auto"/>
+                                <DockPanel>
+                                    <ComboBox DockPanel.Dock="Right" Style="{StaticResource GdCombo}" Width="190" ItemsSource="{Binding EndingChoices}" SelectedItem="{Binding Ending}" DisplayMemberPath="Label"
+                                              Visibility="{Binding CanChangeEnding, Converter={StaticResource BoolToVisibilityConverter}}" ToolTip="What happens after the text"/>
+                                    <TextBlock Text="{Binding SizeText}" Style="{StaticResource GdHint}" VerticalAlignment="Center"/>
+                                </DockPanel>
+                            </StackPanel>
+
+                            <!-- command -->
+                            <StackPanel Visibility="{Binding IsCommand, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <WrapPanel>
+                                    <TextBlock Text="{Binding CommandName}" Foreground="{StaticResource GoldLightBrush}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,12,2"
+                                               ToolTip="{Binding SureText}"/>
+                                    <ItemsControl ItemsSource="{Binding Fields}" ItemTemplate="{StaticResource L2FieldTemplate}">
+                                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                    </ItemsControl>
+                                </WrapPanel>
+                                <TextBlock Text="{Binding Description}" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                <TextBlock Text="{Binding WaitsText}" Style="{StaticResource GdHint}" Margin="0,1,0,0"
+                                           Visibility="{Binding HasWaits, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                <Button Content="{Binding OpenSceneText}" Style="{StaticResource LufiaButtonGold}" HorizontalAlignment="Left" Margin="0,4,0,0" Click="OpenScene_Click"
+                                        ToolTip="Open the scene the party arrives in (the editor shows it in place of this one)"
+                                        Visibility="{Binding CanOpenScene, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                            </StackPanel>
+
+                            <!-- a puzzle command -->
+                            <TextBlock Text="{Binding Description}" Foreground="{StaticResource TextPrimaryBrush}" TextWrapping="Wrap"
+                                       Visibility="{Binding IsPuzzle, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+                            <TextBlock Text="{Binding BytesText}" Style="{StaticResource GdHint}" FontFamily="Consolas" Margin="0,2,0,0"
+                                       Visibility="{Binding ShowBytes, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                            <TextBlock Text="{Binding Note}" Style="{StaticResource GdHint}" Margin="0,1,0,0" TextWrapping="Wrap"
+                                       Visibility="{Binding HasNote, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                            <TextBlock Text="{Binding Flow}" Foreground="#FF8CC8FF" FontSize="11" TextWrapping="Wrap"
+                                       Visibility="{Binding HasFlow, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                            <TextBlock Text="{Binding Warning}" Foreground="#FFFF6060" FontSize="11" TextWrapping="Wrap"
+                                       Visibility="{Binding HasWarning, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                            <TextBlock Text="{Binding ErrorText}" Foreground="{StaticResource ErrorBrush}" TextWrapping="Wrap"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Top" Margin="8,0,0,0"
+                                    Visibility="{Binding IsPuzzle, Converter={StaticResource InverseBoolToVisibilityConverter}}">
+                            <Button Content="＋" ToolTip="Insert a step below" Style="{StaticResource LufiaButton}" Click="Insert_Click" Margin="0,0,4,0" Padding="8,2"/>
+                            <Button Content="✕" ToolTip="Delete this step (jumps to it go to the next one)" Style="{StaticResource LufiaButton}" Click="Delete_Click" Padding="8,2"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </DataTemplate>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <Grid Margin="14" Background="{DynamicResource MidPurpleBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition x:Name="TimelineSplitRow" Height="0"/>
+            <RowDefinition x:Name="TimelineRow" Height="0"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- header -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,10">
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Content="＋ Insert at start…" Style="{StaticResource LufiaButton}" Click="InsertAtStart_Click" IsEnabled="{Binding CanEdit}"/>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="0,0,12,0" VerticalAlignment="Center">
+                    <CheckBox x:Name="ShowBytesBox" Content="Show bytes" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"
+                              Margin="0,0,14,0" IsChecked="{Binding ShowBytes}" ToolTip="Show each step's bytes (hex) on its card"/>
+                    <RadioButton x:Name="ViewLines" Content="☰ Steps" IsChecked="True" GroupName="L2EventView" Foreground="{StaticResource TextPrimaryBrush}"
+                                 Margin="0,0,10,0" Click="ViewMode_Click" ToolTip="Edit step by step"/>
+                    <RadioButton x:Name="ViewBytes" Content="⬚ Bytes" GroupName="L2EventView" Foreground="{StaticResource TextPrimaryBrush}"
+                                 Margin="0,0,10,0" Click="ViewMode_Click" ToolTip="The bytes of every step as they will be written, with what each does"/>
+                </StackPanel>
+                <ToggleButton x:Name="TimelineToggle" DockPanel.Dock="Right" Content="⏱ Timeline" Margin="0,0,8,0" Padding="10,2"
+                              Click="TimelineToggle_Click" ToolTip="Show the steps on a timeline: tracks per character, camera, dialogue, screen, sound"/>
+                <ToggleButton x:Name="StageToggle" DockPanel.Dock="Right" Content="🎬 Stage" Margin="0,0,8,0" Padding="10,2"
+                              Click="StageToggle_Click" ToolTip="Show the stage: the map with the characters and the camera at the picked step"/>
+                <Button x:Name="BackButton" DockPanel.Dock="Left" Content="◀ Back" Style="{StaticResource LufiaButton}" Click="Back_Click" Margin="0,0,10,0" Visibility="Collapsed"/>
+                <TextBlock Text="{Binding Title}" Style="{StaticResource GdSection}" FontSize="15" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+            </DockPanel>
+            <TextBlock Text="{Binding Info}" Style="{StaticResource GdHint}" TextWrapping="Wrap"/>
+            <TextBlock x:Name="HelpText" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+        </StackPanel>
+
+        <Grid x:Name="BodyGrid" Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="LinesColumn" Width="*" MinWidth="200"/>
+                <ColumnDefinition x:Name="SplitterColumn" Width="0"/>
+                <ColumnDefinition x:Name="StageColumn" Width="0"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- the steps -->
+            <common:PopOutHost Grid.Column="0" Title="Steps" ButtonMargin="0,4,26,0">
+                <Grid>
+                    <Border x:Name="LinesCard" Style="{StaticResource GdCard}" Margin="0" Padding="6">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Top" Text="Pick an event on the left, or double-click a character or a step-on area on the Maps page." Style="{StaticResource GdHint}" Margin="4"
+                                       Visibility="{Binding HasScript, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+                            <!-- puzzle scripts: the picked command's bytes -->
+                            <DockPanel DockPanel.Dock="Bottom" Margin="4,6,4,0" Visibility="{Binding IsPuzzle, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <Button DockPanel.Dock="Right" Content="Write" Style="{StaticResource LufiaButton}" Padding="12,2" Margin="6,0,0,0" Command="{Binding ApplyPuzzleBytesCommand}"/>
+                                <TextBlock DockPanel.Dock="Left" Text="Bytes" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <TextBox Style="{StaticResource GdText}" FontFamily="Consolas" Text="{Binding PuzzleBytes, UpdateSourceTrigger=PropertyChanged}" Width="Auto"/>
+                            </DockPanel>
+                            <ScrollViewer x:Name="LinesScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                <ItemsControl x:Name="LinesList" ItemsSource="{Binding Lines}" ItemTemplate="{StaticResource L2LineTemplate}" IsEnabled="{Binding CanEdit}"/>
+                            </ScrollViewer>
+                        </DockPanel>
+                    </Border>
+                    <Border x:Name="BytesCard" Style="{StaticResource GdCard}" Margin="0" Padding="6" Visibility="Collapsed">
+                        <TextBox Style="{StaticResource GdText}" Text="{Binding BytesDump, Mode=OneWay}" IsReadOnly="True" FontFamily="Consolas" FontSize="12"
+                                 TextWrapping="NoWrap" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" VerticalContentAlignment="Top" Width="Auto"/>
+                    </Border>
+                </Grid>
+            </common:PopOutHost>
+            <GridSplitter x:Name="StageSplitter" Grid.Column="1" Width="6" HorizontalAlignment="Stretch"/>
+
+            <!-- the stage -->
+            <common:PopOutHost Grid.Column="2" Title="Stage" ButtonMargin="0,2,4,0">
+                <Grid x:Name="StageRoot" Visibility="Collapsed">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*" MinHeight="60"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <WrapPanel Grid.Row="0" Margin="0,0,0,6">
+                        <Button Content="▶ Play" Style="{StaticResource LufiaButtonGold}" Command="{Binding PlayCommand}" Margin="0,0,6,4"
+                                ToolTip="Play the event from the picked step, roughly as the game does: checks and jumps are followed with the story flags ticked under the stage"/>
+                        <Button Content="■ Stop" Style="{StaticResource LufiaButton}" Command="{Binding StopCommand}" Margin="0,0,12,4"/>
+                        <Button x:Name="PickStartButton" Content="📍 Party start…" Style="{StaticResource LufiaButton}" Click="PickStart_Click" Margin="0,0,10,4"
+                                ToolTip="Click a tile on the stage where the party stands when the event begins"/>
+                        <TextBlock Text="Zoom" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,4,4"/>
+                        <Slider Minimum="0.5" Maximum="6" Value="{Binding Zoom}" Width="90" VerticalAlignment="Center" Margin="0,0,10,4" TickFrequency="0.5" IsSnapToTickEnabled="True"
+                                ToolTip="Or Ctrl + mouse wheel on the stage; hold the middle mouse button to drag the map"/>
+                        <CheckBox Content="Camera" IsChecked="{Binding ShowCamera}" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" Margin="0,0,10,4"
+                                  ToolTip="The dashed box: what the screen shows (256 x 224)"/>
+                        <Button Content="＋ Cutscene character…" Style="{StaticResource LufiaButton}" Click="AddCast_Click" Margin="0,0,10,4"
+                                ToolTip="A new character for this map's cutscenes: made with the map, hidden until a step makes it appear"/>
+                        <TextBlock Text="{Binding Caption}" Foreground="{StaticResource GoldLightBrush}" VerticalAlignment="Center" Margin="0,0,0,4"/>
+                    </WrapPanel>
+
+                    <Border Grid.Row="1" Style="{StaticResource GdCard}" Margin="0" Padding="0" ClipToBounds="True">
+                        <ScrollViewer common:ScrollPan.MiddleDrag="True" x:Name="StageScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="#FF120A1E"
+                                      PreviewMouseWheel="Stage_PreviewMouseWheel">
+                            <Grid x:Name="Stage" HorizontalAlignment="Left" VerticalAlignment="Top" Cursor="Cross" Background="Transparent"
+                                  MouseLeftButtonDown="Stage_MouseDown" MouseRightButtonDown="Stage_RightDown" MouseMove="Stage_MouseMove">
+                                <Grid.LayoutTransform>
+                                    <ScaleTransform ScaleX="{Binding Zoom}" ScaleY="{Binding Zoom}"/>
+                                </Grid.LayoutTransform>
+                                <Image Source="{Binding MapImage}" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                                <ItemsControl ItemsSource="{Binding Actors}" IsHitTestVisible="False">
+                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><Canvas/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemContainerStyle>
+                                        <Style TargetType="ContentPresenter">
+                                            <Setter Property="Canvas.Left" Value="{Binding Left}"/>
+                                            <Setter Property="Canvas.Top" Value="{Binding Top}"/>
+                                        </Style>
+                                    </ItemsControl.ItemContainerStyle>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Opacity="{Binding Opacity}">
+                                                <Border BorderBrush="#FFE8C547" BorderThickness="1" Margin="-1">
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding Moved}" Value="True"><Setter Property="Visibility" Value="Visible"/></DataTrigger>
+                                                                <DataTrigger Binding="{Binding Picked}" Value="True">
+                                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                                    <Setter Property="BorderBrush" Value="#FFFF5050"/>
+                                                                    <Setter Property="BorderThickness" Value="2"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Border.Style>
+                                                </Border>
+                                                <Image Source="{Binding Picture}" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                                                <TextBlock Text="{Binding Facing}" Foreground="#FFE8C547" FontSize="7" FontWeight="Bold" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-2,-5,0"/>
+                                                <TextBlock Text="{Binding Label}" Foreground="White" Background="#A0000000" FontSize="5" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="-20,0,-20,-7"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <Canvas IsHitTestVisible="False">
+                                    <!-- what the screen shows (256 x 224) -->
+                                    <Rectangle Width="256" Height="224" Canvas.Left="{Binding CameraLeft}" Canvas.Top="{Binding CameraTop}" Stroke="#FFE8C547" StrokeThickness="1.5" StrokeDashArray="4 2"
+                                               Visibility="{Binding ShowCamera, Converter={StaticResource BoolToVisibilityConverter}}">
+                                        <Rectangle.Fill><SolidColorBrush Color="Black" Opacity="{Binding Darkness}"/></Rectangle.Fill>
+                                    </Rectangle>
+                                    <!-- the tile a walk hits (a wall, another character) -->
+                                    <Grid Width="16" Height="16" Canvas.Left="{Binding WarnLeft}" Canvas.Top="{Binding WarnTop}"
+                                          Visibility="{Binding HasWarning, Converter={StaticResource BoolToVisibilityConverter}}">
+                                        <Rectangle Stroke="#FFFF3030" StrokeThickness="2" Fill="#50FF3030"/>
+                                        <TextBlock Text="!" Foreground="White" FontWeight="Bold" FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Grid>
+                                </Canvas>
+                            </Grid>
+                        </ScrollViewer>
+                    </Border>
+                    <!-- the text box of the step, as in the game -->
+                    <Border Grid.Row="1" VerticalAlignment="Bottom" Margin="20,0,20,16" Padding="10,6" Background="#E0101860" BorderBrush="#FFE8E8F8" BorderThickness="2" CornerRadius="3"
+                            IsHitTestVisible="False" Visibility="{Binding HasSpeech, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <StackPanel>
+                            <TextBlock Text="{Binding Speaker}" Foreground="{StaticResource GoldLightBrush}" FontWeight="SemiBold" FontSize="12"/>
+                            <TextBlock Text="{Binding Speech}" Foreground="White" FontFamily="Consolas" FontSize="14" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- what playback starts with: the story flags and counters the event checks -->
+                    <Border Grid.Row="2" Margin="0,6,0,0" Padding="8,4" BorderBrush="#40E8C547" BorderThickness="1" CornerRadius="3"
+                            Visibility="{Binding HasStartFlags, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <StackPanel>
+                            <TextBlock Text="PLAYBACK STARTS WITH (what the event checks)" Style="{StaticResource GdSection}" Margin="0,0,0,2"/>
+                            <ItemsControl ItemsSource="{Binding StartFlags}">
+                                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,14,2">
+                                            <CheckBox Content="{Binding Label}" IsChecked="{Binding IsOn}" VerticalAlignment="Center">
+                                                <CheckBox.Style>
+                                                    <Style TargetType="CheckBox" BasedOn="{StaticResource GdCheck}">
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsCounter}" Value="True"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </CheckBox.Style>
+                                            </CheckBox>
+                                            <StackPanel Orientation="Horizontal" Visibility="{Binding IsCounter, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                <TextBlock Text="{Binding Label}" Style="{StaticResource GdHint}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                                <TextBox Style="{StaticResource GdNumber}" Text="{Binding Value}" Width="44"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <WrapPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,12,0" Visibility="{Binding HasQuestion, Converter={StaticResource BoolToVisibilityConverter}}">
+                                    <TextBlock Text="Questions take" Style="{StaticResource GdHint}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                    <ComboBox Style="{StaticResource GdCombo}" ItemsSource="{Binding AnswerChoices}" SelectedItem="{Binding PlayAnswer}" DisplayMemberPath="Label" Width="100"/>
+                                </StackPanel>
+                                <TextBlock Text="{Binding FlowNote}" Style="{StaticResource GdHint}" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                            </WrapPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <StackPanel Grid.Row="3" Margin="0,4,0,0">
+                        <TextBlock Text="{Binding WarningText}" Foreground="#FFFF6060" TextWrapping="Wrap" Visibility="{Binding HasWarning, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                        <TextBlock Text="{Binding FlagsNow}" Style="{StaticResource GdHint}" TextWrapping="Wrap"/>
+                        <TextBlock Text="{Binding StageInfo}" Style="{StaticResource GdHint}" Foreground="{StaticResource GoldLightBrush}" TextWrapping="Wrap"/>
+                    </StackPanel>
+
+                    <!-- test in the game -->
+                    <Expander Grid.Row="4" x:Name="TestExpander" Header="Test in the game (or start the game here)" Foreground="{StaticResource GoldBrush}" Margin="0,6,0,0">
+                        <StackPanel Margin="0,4,0,0">
+                            <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Text="Writes the ROM and opens it in BizHawk: a new game starts on this map with the party on the point picked and the story flags ticked above turned on. A scene or a step-on event plays at once; a talk event when you talk (or at once, when it doesn't speak as the one talked to). Keep it as your game's start, or press Normal start for the opening again."/>
+                            <DockPanel Margin="0,4,0,0">
+                                <Button DockPanel.Dock="Right" Content="Normal start" Style="{StaticResource LufiaButton}" Padding="8,3" Margin="6,0,0,0" Command="{Binding NormalStartCommand}"
+                                        ToolTip="A new game starts as in the game again"/>
+                                <Button DockPanel.Dock="Right" Content="▶ Test in the game" Style="{StaticResource LufiaButtonGold}" Padding="8,3" Margin="6,0,0,0" Command="{Binding TestInGameCommand}"/>
+                                <ComboBox Style="{StaticResource GdCombo}" ItemsSource="{Binding PointChoices}" SelectedItem="{Binding TestPoint}" DisplayMemberPath="Label" Width="Auto"
+                                          ToolTip="The preset point the party stands on"/>
+                            </DockPanel>
+                            <TextBlock Text="{Binding TestNeeds}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Foreground="{StaticResource GoldLightBrush}"/>
+                            <TextBlock Text="{Binding TestNote}" Style="{StaticResource GdHint}" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Expander>
+                </Grid>
+            </common:PopOutHost>
+        </Grid>
+
+        <GridSplitter x:Name="TimelineSplitter" Grid.Row="2" Height="6" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" ResizeBehavior="PreviousAndNext" Margin="0,1,0,0"/>
+        <common:PopOutHost Grid.Row="3" Title="Timeline" ButtonMargin="0,8,10,0">
+            <Border x:Name="TimelineCard" Style="{StaticResource GdCard}" Margin="0" Padding="6" Visibility="Collapsed">
+                <local:L2TimelineView x:Name="Timeline"/>
+            </Border>
+        </common:PopOutHost>
+
+        <DockPanel Grid.Row="4" Margin="0,10,0,0" LastChildFill="True">
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <Button Content="↶ Undo" Style="{StaticResource LufiaButton}" Command="{Binding UndoCommand}" IsEnabled="{Binding CanUndo}" ToolTip="{Binding UndoTip}" Margin="0,0,4,0"/>
+                <Button Content="↷ Redo" Style="{StaticResource LufiaButton}" Command="{Binding RedoCommand}" IsEnabled="{Binding CanRedo}" ToolTip="{Binding RedoTip}" Margin="0,0,12,0"/>
+                <Button Content="↺ Revert" Style="{StaticResource LufiaButton}" Command="{Binding RevertCommand}" Margin="0,0,8,0" ToolTip="Put the event back as the project has it"/>
+                <Button Content="✔ Save" Style="{StaticResource LufiaButtonGold}" Command="{Binding SaveCommand}" IsEnabled="{Binding IsDirty}" Margin="0,0,8,0"
+                        ToolTip="Write the event into the ROM now (it is written by itself when you leave it, save the project or press Apply)"/>
+                <Button x:Name="CloseButton" Content="Close" Style="{StaticResource LufiaButton}" Click="Close_Click" Visibility="Collapsed"/>
+            </StackPanel>
+            <TextBlock Text="{Binding Status}" Style="{StaticResource LufiaLabel}" Foreground="{StaticResource GoldLightBrush}" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,10,0"/>
+        </DockPanel>
+    </Grid>
+</UserControl>

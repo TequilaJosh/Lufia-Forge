@@ -34,11 +34,13 @@ public partial class Lufia2ViewModel : ObservableObject
 
     /// <summary>Asks the view to show a page (by its header).</summary>
     public event Action<string>? ShowPage;
+    /// <summary>Asks the view to pop up the event editor on an event of a map (the Maps page's characters and areas).</summary>
+    public event Action<int, int, int>? OpenEditor;
 
     public Lufia2ViewModel()
     {
-        // the Maps tab's "Talk event..." / "Event...": the event in the Events tab
-        Maps.OpenEventRequested += (map, head, id) => { Events.ShowEvent(map, head, id); ShowPage?.Invoke("Events"); };
+        // the Maps tab's "Talk event..." / "Event..." and double-clicking a character or an area: the event editor pops up
+        Maps.OpenEventRequested += (map, head, id) => OpenEditor?.Invoke(map, head, id);
         // the Maps tab's battle zone list: "Monsters..." shows the zone on the Encounters page
         Maps.OpenZoneRequested += zone => { Encounters.ShowZone(zone); ShowPage?.Invoke("Encounters"); };
         // a monster added on the Monsters page: the Encounters page offers it

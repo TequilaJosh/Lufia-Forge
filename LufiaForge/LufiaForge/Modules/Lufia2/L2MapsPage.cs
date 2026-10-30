@@ -417,10 +417,31 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
     /// <summary>Draws the map again (after any change) and its overlays.</summary>
     public void Refresh()
     {
+        ReadEventOwners();
         DrawMap();
         DrawOverlays();
         UpdateUndoState();
         UpdateInspector();
+    }
+
+    /// <summary>The characters that have a talk event and the step-on areas that have an event (marked on the map).</summary>
+    private HashSet<int> _talkIds = new(), _triggerIds = new();
+
+    private void ReadEventOwners()
+    {
+        _talkIds = new(); _triggerIds = new();
+        if (_rom == null || _edit == null) return;
+        try
+        {
+            int block = L2Events.Block(_rom, _edit.MapId);
+            if (block < 0) return;
+            foreach (var e in L2EventBlocks.ReadLists(_rom, block))
+            {
+                if (e.Head == L2EventBlocks.TalkList) _talkIds.Add(e.Id);
+                else if (e.Head == L2EventBlocks.TriggerList) _triggerIds.Add(e.Id);
+            }
+        }
+        catch (Exception) { }
     }
 
     /// <summary>Kept for callers that only want a redraw.</summary>
@@ -505,7 +526,7 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
         if (ShowTriggers)
         {
             var t = _edit.Records(L2MapEdit.Triggers);
-            for (int i = 0; i < t.Count; i++) { var b = t[i].Bytes; Box(b[1], b[2], b[3], b[4], TriggerBrush, $"T{b[0]}", Sel(SelKind.Trigger, i)); }
+            for (int i = 0; i < t.Count; i++) { var b = t[i].Bytes; Box(b[1], b[2], b[3], b[4], TriggerBrush, $"T{b[0]}" + (_triggerIds.Contains(b[0]) ? " ▶" : ""), Sel(SelKind.Trigger, i)); }
         }
         if (ShowTreasure)
         {
@@ -526,7 +547,8 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
                 bool s = Sel(SelKind.Character, i);
                 if (!s && !AtStoryPoint(0x4F + b[0])) continue;   // not on the map at the story point picked
                 if (s) Box(b[3], b[4], b[5], b[6], WalkBrush, "", false);
-                Box(b[1], b[2], b[1] + 1, b[2] + 1, CharBrush, $"C{b[0]}", s);
+                // a speech mark: talking to it plays an event (double-click to open it)
+                Box(b[1], b[2], b[1] + 1, b[2] + 1, CharBrush, $"C{b[0]}" + (_talkIds.Contains(0x4F + b[0]) ? " 💬" : ""), s);
             }
         }
     }

@@ -349,7 +349,7 @@
                                 </StackPanel>
                                 <WrapPanel Margin="0,6,0,0">
                                     <Button Content="✎  Event..." Style="{StaticResource LufiaButtonGold}" Command="{Binding OpenTriggerEventCommand}" Margin="0,0,6,4"
-                                            ToolTip="Writes the map and opens the event walking onto it plays (Events tab). Double-clicking the area opens it too."/>
+                                            ToolTip="Writes the map and opens the event walking onto it plays in the event editor (steps, stage, timeline). Double-clicking the area opens it too."/>
                                     <Button Content="✕ Delete" Style="{StaticResource LufiaButton}" Command="{Binding DeleteSelectedCommand}" Margin="0,0,0,4"
                                             ToolTip="Delete this area and its event (Del)"/>
                                 </WrapPanel>
@@ -391,7 +391,7 @@
                                 <TextBlock Text="{Binding TalkPreview}" Style="{StaticResource GdHint}" FontStyle="Italic" Margin="0,6,0,0" TextWrapping="Wrap"/>
                                 <WrapPanel Margin="0,6,0,0">
                                     <Button Content="✎  Talk event…" Style="{StaticResource LufiaButtonGold}" Command="{Binding OpenTalkEventCommand}" Margin="0,0,6,4"
-                                            ToolTip="Writes the map and opens what it says (Events tab); makes a short one if it has none. Double-clicking the character opens it too."/>
+                                            ToolTip="Writes the map and opens what it says in the event editor (steps, stage, timeline); makes a short one if it has none. Double-clicking the character opens it too."/>
                                     <Button Content="✕ Remove" Style="{StaticResource LufiaButton}" Command="{Binding DeleteSelectedCommand}" Margin="0,0,0,4"
                                             ToolTip="Takes the character out of the map: its place, its creation in the start-up script and its talk event (Del)"/>
                                 </WrapPanel>
