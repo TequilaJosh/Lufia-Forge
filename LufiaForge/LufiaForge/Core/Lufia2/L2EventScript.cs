@@ -71,6 +71,9 @@ public sealed class L2EventScript
     public static bool StopsFlow(byte[] b) => b.Length == 0 || b[0] switch
     {
         0x00 or 0x42 or 0x84 or 0x16 or 0x5E or 0x83 or 0xA5 or 0x1C or 0x12 or 0x02 or 0x11 or 0x5C or 0x5D => true,
+        // a shop, the church, a capsule monster joining and BC end the event too ($80:A350 -> $80:A368 clears the
+        // event's state; 73 of the game's shops are followed by a 00 it never reaches)
+        0x18 or 0x19 or 0x81 or 0xBC => true,
         0x5B => b.Length > 1 && b[1] is 3 or 6,
         _ => !L2Script.Commands.ContainsKey(b[0]),
     };
@@ -153,6 +156,16 @@ public sealed class L2EventScript
         // steps that overlap
         for (int i = 1; i < Steps.Count; i++)
             if (Steps[i - 1].At + Steps[i - 1].OriginalLength > Steps[i].At) Problem ??= $"Steps overlap at {Steps[i].At:X6}.";
+        // the entry first: a script laid out again starts with its first step, and pages treat step 0 as the top. A step
+        // above the start (a jump back into code placed before it) would otherwise become the entry. None of the US
+        // game's 1322 events has one; an edited one can.
+        int entry = Steps.FindIndex(x => x.At == Start);
+        if (entry > 0)
+        {
+            var before = Steps.Take(entry).ToList();
+            Steps.RemoveRange(0, entry);
+            Steps.AddRange(before);
+        }
     }
 
     /// <summary>A jump past the end of a bank (the game's $80:C102 makes it carry on in the next one): file offsets are

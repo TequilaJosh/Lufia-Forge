@@ -467,8 +467,8 @@ public static class L2EventCommands
             ps: P("exit", L2Kind.Exit, 1));
         One(0x83, "Send the player elsewhere (before the map loads)", Places, (b, w) => $"Instead, go through {w.Exit(b[1])}", null,
             "Only in the \"before the map loads\" event.", rare: true, ps: P("exit", L2Kind.Exit, 1));
-        One(0x85, "Choose where the player arrives (before the map loads)", Places, (b, w) => $"Arrive at {w.Point(b[1])}, facing {Opt(Facings, b[2] >> 4)}", null,
-            "Only in the \"before the map loads\" event.", rare: true, ps: new[] { P("point", L2Kind.Point, 1), new L2ParamDef { Label = "facing", Kind = L2Kind.Choice, Options = Facings, Get = b => b[2] >> 4, Set = (b, v) => b[2] = (byte)(v << 4) } });
+        One(0x85, "Choose where the player arrives (before the map loads)", Places, (b, w) => $"Arrive at {w.Point(b[1])}, facing {Opt(Facings, b[2] & 15)}", null,
+            "Only in the \"before the map loads\" event.", rare: true, ps: new[] { P("point", L2Kind.Point, 1), new L2ParamDef { Label = "facing", Kind = L2Kind.Choice, Options = Facings, Get = b => b[2] & 15, Set = (b, v) => b[2] = (byte)(v & 15) } });   // the byte is the facing ($80:BE04 shifts it into $05B2's high nibble)
         One(0x69, "Map settings", Places, (b, _) => "Map settings: " + (b[1] == 0 ? "none" : string.Join(", ", MapModeBits.Where(m => (b[1] & m.Item1) != 0).Select(m => m.Item2))),
             new byte[] { 0x69, 0x08 }, "Usually in the start-up script: towns use 08 or 98, dungeons 01 or 11.", ps: P("settings", L2Kind.Hex, 1));
         One(0xA9, "Where Escape leads", Places, (b, w) => b[1] >= 2 ? $"Escape leads to {w.Map(b[1])}, point {b[2]}" : $"Escape leads to world map spot {b[2]}", null,
@@ -651,8 +651,9 @@ public static class L2EventCommands
         return CameraForm(b) switch
         {
             1 => new[] { form, L2ParamDef.Nibble("direction", L2Kind.Choice, 1, true, options: Directions), L2ParamDef.Byte("tiles", L2Kind.Number, 2, 63, min: 1), speed },
-            2 => new[] { form, L2ParamDef.Byte("point", L2Kind.Point, 2), speed },
-            3 => new[] { form, L2ParamDef.Byte("x (left edge)", L2Kind.Number, 2), L2ParamDef.Byte("y (top edge)", L2Kind.Number, 3), speed },
+            // (the byte after the form can't be FF: "41 xx FF" is "wait for the camera", one byte shorter)
+            2 => new[] { form, L2ParamDef.Byte("point", L2Kind.Point, 2, 0xFE), speed },
+            3 => new[] { form, L2ParamDef.Byte("x (left edge)", L2Kind.Number, 2, 0xFE), L2ParamDef.Byte("y (top edge)", L2Kind.Number, 3), speed },
             4 => new[] { form },
             _ => new[] { form, speed },
         };

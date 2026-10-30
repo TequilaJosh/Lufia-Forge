@@ -39,6 +39,7 @@ public partial class L2EventsView : UserControl
     private void NewEvent_Click(object sender, RoutedEventArgs e)
     {
         if (Page?.CurrentRom == null || Page.CurrentMap < 0) return;
+        if (!Page.AskBeforeLeaving()) return;   // the new event is opened after: unsaved steps would be dropped
         var w = new L2NewEventWindow(Page) { Owner = Window.GetWindow(this) };
         w.ShowDialog();
     }

@@ -391,6 +391,7 @@
                     <Button DockPanel.Dock="Right" Content="Test in the game" Style="{StaticResource LufiaButtonGold}" Padding="8,3" Margin="6,0,0,0" Command="{Binding TestInGameCommand}"/>
                     <ComboBox Style="{StaticResource GdCombo}" ItemsSource="{Binding PointChoices}" SelectedItem="{Binding TestPoint}" DisplayMemberPath="Label" Width="Auto"/>
                 </DockPanel>
+                <TextBlock Text="{Binding TestNeeds}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Foreground="{StaticResource GoldLightBrush}"/>
                 <TextBlock Text="{Binding TestNote}" Style="{StaticResource GdHint}" TextWrapping="Wrap"/>
             </StackPanel>
         </Grid>

@@ -229,7 +229,7 @@ public static class L2Script
     public sealed record Op(int At, int Length, string Text, bool IsText = false);
 
     private static readonly HashSet<int> TextStart = new() { 0x08, 0x13, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x9E, 0x10 };
-    private static readonly HashSet<int> Ends = new() { 0x00, 0x42, 0xB8, 0x84, 0x16, 0x5E, 0x83, 0xA5, 0x02, 0x11, 0x5C, 0x5D };
+    private static readonly HashSet<int> Ends = new() { 0x00, 0x42, 0xB8, 0x84, 0x16, 0x5E, 0x83, 0xA5, 0x02, 0x11, 0x5C, 0x5D, 0x18, 0x19, 0x81, 0xBC };
 
     private static int Condition14(RomBuffer rom, int p)
     {
@@ -373,7 +373,7 @@ public static class L2Script
             0x2E => $"hide {Actor(a[0])}",
             0x2F => $"place {Actor(a[0])} at ({a[1]}, {a[2]})",
             0x30 => $"place {Actor(a[0])} at preset point {a[1]:X2}",
-            0x31 => $"{Actor(a[0])} turns {(a[1] < 4 ? new[] { "up", "right", "down", "left" }[a[1]] : $"to {a[1]:X2}")}",
+            0x31 => $"{Actor(a[0])} turns {(a[1] is >= 1 and <= 4 ? new[] { "up", "down", "left", "right" }[a[1] - 1] : $"to {a[1]:X2}")}",
             0x33 => $"{Actor(a[1])} walks path {a[0]:X2}",
             0x34 => $"{Actor(a[0])} uses map sprite {a[1]:X2}",
             0x36 => $"wait until {Actor(a[0])} stops",
