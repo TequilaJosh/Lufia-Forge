@@ -454,6 +454,19 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
             var speakers = new L2Speakers(rom, map);
             var starts = L2MapInfo.Records(rom, map, L2MapInfo.Characters, 8).ToDictionary(r => 0x4F + r.Bytes[0], r => r.Bytes);
             var triggers = L2MapInfo.Records(rom, map, L2MapInfo.Triggers, 5).ToDictionary(r => (int)r.Bytes[0], r => r.Bytes);
+            var goTos = L2Cutscene.GoTos(rom, map);
+            string From(int scene)
+            {
+                if (!goTos.TryGetValue(scene, out var l)) return "started by \"Go to another map\"";
+                string One((int Map, int Head, int Id, int Point) g) => (g.Map == map ? "this map's " : $"{MapNameOf(rom, g.Map)} ({g.Map:X2}) ") + g.Head switch
+                {
+                    L2EventBlocks.SceneList => $"scene {g.Id:X2}",
+                    L2EventBlocks.TalkList => g.Id >= 0x50 ? $"talk to character {g.Id - 0x4F}" : $"talk to story character {g.Id:X2}",
+                    L2EventBlocks.TriggerList => $"step-on area {g.Id}",
+                    _ => $"event {g.Id:X2}",
+                };
+                return "started from " + One(l[0]) + (l.Count > 1 ? $" and {l.Count - 1} more" : "");
+            }
             foreach (var e in L2EventBlocks.ReadLists(rom, block).Where(e => e.IsScript).OrderBy(e => e.Head == 2 ? 9 : e.Head).ThenBy(e => e.Id))
             {
                 string preview = FirstText(rom, block + e.Offset, block);
@@ -464,7 +477,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
                         ? $"Step on area {e.Id} ({t[1]},{t[2]})-({t[3] - 1},{t[4] - 1})" : $"Step on area {e.Id} (no area on the map)",
                     L2EventBlocks.SceneList => L2Cutscene.Starter(rom, map, e.Id) is { } st
                         ? $"Scene {e.Id:X2}: when the party enters the map" + (st.Flag >= 0 ? $" (story flag {st.Flag:X2} {(st.MustBeOn ? "on" : "off")})" : "")
-                        : $"Scene {e.Id:X2} (started by \"Go to another map\")",
+                        : $"Scene {e.Id:X2} ({From(e.Id)})",
                     L2EventBlocks.GameList => e.Id switch
                     {
                         0 => "When the map is shown",
@@ -540,14 +553,13 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
             _heroStandIns.TryAdd(kv.Value.Sprite, kv.Key);
         foreach (var (h, id) in _heroStandIns) _who[h] = ($"{L2EventCommands.HeroNames[h]} (party; on this map also {id:X2})", h);
         _pointSpots = L2StoryClear.PresetPoints(rom, map);
+        _goToPoints = L2Cutscene.GoToPoints(rom, map);
         _points = L2MapInfo.Records(rom, map, L2MapInfo.Points, 3).Select(r => ((int)r.Bytes[0], $"point {r.Bytes[0]} ({r.Bytes[1]},{r.Bytes[2]})")).ToList();
         _paths = L2MapInfo.Records(rom, map, L2MapInfo.Paths, 6).Select(r => ((int)r.Bytes[0], $"path {r.Bytes[0]} (from {r.Bytes[1]},{r.Bytes[2]})")).ToList();
         _areas = L2MapInfo.Records(rom, map, L2MapInfo.Areas, 5).Select(r => ((int)r.Bytes[0], $"area {r.Bytes[0]} ({r.Bytes[1]},{r.Bytes[2]})-({r.Bytes[3] - 1},{r.Bytes[4] - 1})")).ToList();
         _exits = L2MapInfo.Records(rom, map, L2MapInfo.Exits, 9).Select(r => ((int)r.Bytes[0], $"exit {r.Bytes[0]} to {(r.Bytes[8] < _maps.Length ? _maps[r.Bytes[8]] : "map " + r.Bytes[8].ToString("X2"))}")).ToList();
         _doors = L2MapInfo.Records(rom, map, L2MapInfo.Doors, 15).Select(r => ((int)r.Bytes[0], $"door {r.Bytes[0]} ({r.Bytes[1]},{r.Bytes[2]})")).ToList();
-        PointChoices.Clear();
-        foreach (var p in _pointSpots) PointChoices.Add(new L2Option(p.Id, $"point {p.Id} ({p.X}, {p.Y})"));
-        TestPoint = PointChoices.FirstOrDefault();
+        ReadPointChoices();
         try
         {
             var (w, h, px) = L2Maps.Render(rom, map);
@@ -557,6 +569,61 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         }
         catch (Exception ex) { MapImage = null; Status = "The map can't be drawn: " + ex.Message; }
     }
+
+    /// <summary>Where an exit of another map puts the party on this one (for a map without preset points), or null.</summary>
+    private (int X, int Y)? _arrival;
+
+    /// <summary>The test's start choices: the map's preset points, or (a map the party only reaches through exits, like
+    /// the towers' upper floors) a new one, where an exit into the map lands or where the party stands on the stage.</summary>
+    private void ReadPointChoices()
+    {
+        var rom = _rom!;
+        PointChoices.Clear();
+        int game = GamePoint();
+        foreach (var p in _pointSpots) PointChoices.Add(new L2Option(p.Id, $"point {p.Id} ({p.X}, {p.Y})" + (p.Id == game ? ", where the game starts it" : "")));
+        _arrival = null;
+        if (_pointSpots.Count == 0)
+        {
+            string from = "";
+            for (int m = 0; m < L2Maps.Count && _arrival == null; m++)
+            {
+                if (m == _map) continue;
+                foreach (var (_, b) in L2MapInfo.Records(rom, m, L2MapInfo.Exits, 9))
+                    if (b[8] == _map) { _arrival = (b[6], b[7]); from = _maps.ElementAtOrDefault(m) ?? $"map {m:X2}"; break; }
+            }
+            PointChoices.Add(new L2Option(NewPoint, _arrival is { } a
+                ? $"a new preset point at ({a.X}, {a.Y}), where the exit from {from} arrives (or Party start...)"
+                : "a new preset point where the party stands on the stage (Party start... moves it)"));
+        }
+        TestPoint = PointChoices.FirstOrDefault(p => p.Value == game) ?? PointChoices.FirstOrDefault();
+    }
+
+    /// <summary>The scenes of this map started by "Go to another map": the point the game puts the party on.</summary>
+    private Dictionary<int, int> _goToPoints = new();
+
+    /// <summary>The preset point the game starts the event with, or -1: a scene's "on entering" point, else the point of
+    /// the "Go to another map" that starts it, else the new game's (when it starts with this scene); a step-on event's:
+    /// a point on its area. On another point the camera is elsewhere, and a box over a character off to the side runs
+    /// off the screen and wraps round (Elcid's scene 01 on point 0 instead of 4).</summary>
+    private int GamePoint()
+    {
+        var rom = _rom!;
+        var e = _event?.Entry;
+        if (e?.Head == L2EventBlocks.SceneList)
+        {
+            if (L2Cutscene.Starter(rom, _map, e.Id)?.Point is int sp && sp >= 0) return sp;
+            if (_goToPoints.TryGetValue(e.Id, out int gp)) return gp;
+            var (m, s, np) = L2MapEdit.NewGame(rom);
+            if (m == _map && s == e.Id) return np;
+        }
+        if (e?.Head == L2EventBlocks.TriggerList && L2MapInfo.Records(rom, _map, L2MapInfo.Triggers, 5).FirstOrDefault(r => r.Bytes[0] == e.Id) is { Bytes: var t } && t != null)
+            foreach (var p in _pointSpots)
+                if (p.X >= t[1] && p.X < t[3] && p.Y >= t[2] && p.Y < t[4]) return p.Id;
+        return -1;
+    }
+
+    /// <summary>The test choice that adds a preset point first.</summary>
+    private const int NewPoint = -1;
 
     /// <summary>A character's name for the stage and descriptions (short: no sprite).</summary>
     public string Name(int id)
@@ -1304,9 +1371,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         var e = _event?.Entry;
         if (e?.Head == L2EventBlocks.SceneList)
         {
-            int p = L2Cutscene.Starter(rom, _map, e.Id)?.Point ?? -1;
-            var (m, s, np) = L2MapEdit.NewGame(rom);
-            if (p < 0 && m == _map && s == e.Id) p = np;
+            int p = GamePoint();
             var pt = _pointSpots.FirstOrDefault(x => x.Id == p);
             if (pt != default) return (pt.X, pt.Y);
         }
@@ -1315,7 +1380,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         if (e?.Head == L2EventBlocks.TalkList && L2MapInfo.Records(rom, _map, L2MapInfo.Characters, 8).FirstOrDefault(r => 0x4F + r.Bytes[0] == e.Id) is { Bytes: var c } && c != null)
             return (c[1], c[2] + 1);
         if (TestPoint != null && _pointSpots.FirstOrDefault(x => x.Id == TestPoint.Value) is var tp && tp != default) return (tp.X, tp.Y);
-        return _pointSpots.Count > 0 ? (_pointSpots[0].X, _pointSpots[0].Y) : (8, 8);
+        return _pointSpots.Count > 0 ? (_pointSpots[0].X, _pointSpots[0].Y) : _arrival ?? (8, 8);
     }
 
     private void Simulate()
@@ -1790,15 +1855,36 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
     [RelayCommand]
     public void TestInGame()
     {
-        if (_rom == null || _main == null || _event?.Entry == null) { Status = "Pick an event of the map first (the start-up script can't be tested this way)."; return; }
+        if (_rom == null || _main == null || _map < 0) return;
         if (HasPendingEdits && !SaveNow(quiet: true)) return;
         if (TestPoint == null) { Status = "The map has no preset point for the party to start on: add one on the Maps page."; return; }
         try
         {
+            int point = TestPoint.Value;
+            string added = "";
+            if (point == NewPoint)
+            {
+                // a map the party only reaches through exits: a preset point is added where the party stands
+                var (x, y) = LeaderStart();
+                point = 0;
+                if (!L2MapInfo.AddRecord(_rom, _map, L2MapInfo.Points, 3, new[] { (byte)point, (byte)x, (byte)y }))
+                    throw new InvalidOperationException("the map's info block would be too big for a preset point.");
+                _pointSpots = L2StoryClear.PresetPoints(_rom, _map);
+                ReadPointChoices();
+                added = $"Preset point {point} added at ({x}, {y}). ";
+            }
             var flags = StartFlags.Where(f => !f.IsCounter && f.IsOn).Select(f => f.Number).ToList();
             var counters = StartFlags.Where(f => f.IsCounter && f.Value != 0).ToDictionary(f => f.Number, f => Math.Clamp(f.Value, 0, 255));
-            string set = L2Cutscene.SetTest(_rom, _map, _event.Entry.Head, _event.Entry.Id, TestPoint.Value, flags, counters);
+            // the start-up script (no event of the lists): the game just starts on the map, which runs it as it loads
+            string set = added + (_event?.Entry is { } e
+                ? L2Cutscene.SetTest(_rom, _map, e.Head, e.Id, point, flags, counters)
+                : L2Cutscene.SetMapTest(_rom, _map, point, flags, counters));
             _main.NotifyRomModified($"Lufia II: new game starts with an event on map {_map:X2}");
+            // an event that ends by going to another scene carries on there in the game (Elcid's scene 01 into the
+            // rest of the ending)
+            var next = _script?.Steps.Where(s => s.Op == 0x16 && s.Bytes.Length >= 4).Select(s => (Map: (int)s.Bytes[1], Scene: (int)s.Bytes[2])).Distinct().ToList() ?? new();
+            if (_event?.Entry != null && next.Count > 0)
+                set += $" At its end the event goes to {string.Join(" or ", next.Select(n => $"{_maps.ElementAtOrDefault(n.Map)} ({n.Map:X2}) scene {n.Scene:X2}"))}, so the game carries on there.";
             Status = set + " " + _main.PlayInBizHawk();
         }
         catch (Exception ex) { Status = "Not set: " + ex.Message; }

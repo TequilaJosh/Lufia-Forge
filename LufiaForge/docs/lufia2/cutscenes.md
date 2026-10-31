@@ -52,6 +52,13 @@ The page is laid out like Lufia 1's Cutscenes tab, and the Events page and the M
    party on the area: its walks start from there); for a talk cutscene talk to the character (one that doesn't speak
    as "the one talked to" plays at once). Keep it as a hack's own start, or press **Normal start** for the game's
    opening again. The party, gold and items the new game starts with are on the Characters page.
+   The point picked first is the one the game uses: a scene's "on entering" point, else the point of the "Go to another
+   map" that starts it (the Events list says where each scene is started from), else a point on a step-on area. On
+   another point the camera is elsewhere, and a box over a character off to the side runs off the screen and wraps
+   round (Elcid's scene 01, the ending's, on point 0 instead of 4). A map without preset points (the towers' upper
+   floors, reached only through exits) offers a new one where an exit into the map lands (or where **Party start...**
+   put the party); it is added to the map when the test is set. With the start-up script picked, a new game simply
+   starts on the map. An event that ends with "Go to another map" carries on there in the game, and the status says so.
 
 The **Events** page is the same editor with a map's events in a list (the start-up script, scenes, talks, areas, the
 game's own events and the puzzle scripts), and the **Maps** page opens it in a window of its own: characters with a
