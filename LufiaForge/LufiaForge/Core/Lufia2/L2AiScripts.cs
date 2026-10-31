@@ -394,7 +394,7 @@ public static class L2AiScripts
         {
             int at = 0x28000 + (rom.ReadUInt16Le(AttackNameTable + (n - 1) * 2) & 0x7FFF) + 1;
             var sb = new System.Text.StringBuilder();
-            for (int i = 0; i < 37 && at + i < rom.Length; i++) { byte c = rom.ReadByte(at + i); if (c == 0) break; sb.Append(c is >= 0x20 and < 0x7F ? (char)c : '?'); }
+            for (int i = 0; i < 37 && at + i < rom.Length; i++) { byte c = rom.ReadByte(at + i); if (c == 0) break; sb.Append(L2Charset.ToChar(rom, c) ?? '?'); }
             names[n] = sb.ToString();
         }
         return names;

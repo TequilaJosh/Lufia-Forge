@@ -72,7 +72,13 @@ public static class TextDecoder
                           Lufia1Constants.Mte3PtrTableOffset,
                           Lufia1Constants.Mte3EntryCount);
         _encodeTable = BuildEncodeTable(_mte1Words, _mte3Words);
+        _letters = Core.DutchLetters.IsApplied(rom) ? Core.DutchLetters.Map.ToDictionary(m => m.Code, m => m.Letter) : new();
+        _letterCodes = _letters.ToDictionary(kv => kv.Value, kv => kv.Key);
     }
+
+    /// <summary>Dutch letters in the ROM's font (<see cref="Core.DutchLetters"/>): code to letter and back.</summary>
+    private static Dictionary<byte, char> _letters = new();
+    private static Dictionary<char, byte> _letterCodes = new();
 
     // -------------------------------------------------------------------------
     // Decode
@@ -249,7 +255,7 @@ public static class TextDecoder
             // ------------------------------------------------------------------
             if (b >= 0x20 && b <= 0x7E)
             {
-                char c = (char)b;
+                char c = _letters.TryGetValue(b, out char letter) ? letter : (char)b;
                 tokens.Add(new TextToken(TextTokenKind.Ascii, pos, 1, c.ToString()));
                 text.Append(c);
                 pos++;
@@ -529,7 +535,9 @@ public static class TextDecoder
             // Plain printable ASCII
             // ----------------------------------------------------------------
             char ch = text[i];
-            if (ch >= 0x20 && ch <= 0x7E)
+            if (rom != null && _letterCodes.TryGetValue(ch, out byte letterCode))
+                bytes.Add(letterCode);
+            else if (ch >= 0x20 && ch <= 0x7E)
                 bytes.Add((byte)ch);
             // Non-printable, non-tag chars are silently dropped.
             i++;

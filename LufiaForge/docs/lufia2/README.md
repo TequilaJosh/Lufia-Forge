@@ -21,6 +21,7 @@ the items marked as checked were also tested in the running game (BizHawk). The 
 | [graphics.md](graphics.md) | Every packed file classified; battle backgrounds, title, fonts, sprites; map sprites, painting, new sprites and palettes; monster battle sprites, new ones |
 | [settings.md](settings.md) | Game-wide values: random battle rate, walking speed, run button, sell price, level cap, gold cap, inns |
 | [romsize.md](romsize.md) | The 8 MB ROM (ExLoROM): what goes in the upper 4 MB (events, map sprites, map info), where it runs, what was checked |
+| [dutch.md](dutch.md) | The Dutch Lufia II: where it keeps its text, putting its translation into a Lufia II (USA) or Frue Lufia ROM, its letters; Dutch letters and names for Lufia 1 |
 
 ## The ROM at a glance
 

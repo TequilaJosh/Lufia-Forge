@@ -153,8 +153,13 @@ public static class L2Gfx
         list.Add(new Asset { Group = "Title screen", Name = "Lufia II logo (sprites)", Kind = Kind.PackedSheet, Id = 0x28D, Bpp = 4,
             Palettes = Rows("Logo colours", LogoPalette, 8, 0x20), DefaultPalette = 6, Note = "Packed file 28D, sprite tiles; the logo uses sprite colours 6 at $A6:EA20." });
         var menu2 = new List<PaletteChoice> { Grey }.Concat(Rows("Menu text colours", MenuPalette2bpp, 8, 8)).ToList();
-        list.Add(new Asset { Group = "Fonts", Name = "Dialogue font (8 x 16)", Kind = Kind.Font8x16, Id = DialogueFont, Size = 0x600, Bpp = 1,
-            Note = "96 letters from space (ASCII order), 1 bit per pixel, at $9A:F970." });
+        // the Dutch font (L2Dutch.Import) sits elsewhere and starts at character 10: read where the glyph code points
+        var (fontOp, from10) = L2Dutch.FontSite(rom);
+        int fontAt = fontOp >= 0 ? L2Rom.SnesToFile((int)rom.ReadUInt24Le(fontOp)) : DialogueFont;
+        list.Add(new Asset { Group = "Fonts", Name = "Dialogue font (8 x 16)", Kind = Kind.Font8x16, Id = fontAt, Size = from10 ? 0x700 : 0x600, Bpp = 1,
+            Note = from10
+                ? $"The Dutch font: 112 letters from character 10 (10-1F accented letters, then ASCII order), 1 bit per pixel, at ${L2Rom.FileToSnes(fontAt):X6}."
+                : $"96 letters from space (ASCII order), 1 bit per pixel, at ${L2Rom.FileToSnes(fontAt):X6}." });
         list.Add(new Asset { Group = "Fonts", Name = "Menu font and icons", Kind = Kind.RomSheet, Id = MenuFont, Size = 0x1000, Bpp = 2, Palettes = menu2,
             Note = "256 tiles at $9F:8500, tile = letter code; item icons from row 6." });
         list.Add(new Asset { Group = "Fonts", Name = "Second font", Kind = Kind.RomSheet, Id = SecondFont, Size = 0x1000, Bpp = 2, Palettes = menu2,

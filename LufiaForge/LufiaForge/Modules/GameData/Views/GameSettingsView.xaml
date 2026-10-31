@@ -93,6 +93,20 @@
 
                 <Border Style="{StaticResource GdCard}" Width="360">
                     <StackPanel>
+                        <TextBlock Text="DUTCH" Style="{StaticResource GdSection}"/>
+                        <CheckBox Content="{Binding DutchLettersLabel}" Style="{StaticResource GdCheck}" IsChecked="{Binding DutchLetters}"
+                                  ToolTip="Puts accented letters in both fonts (dialogue and names). Needs the 2 MB expanded ROM. Untick and Apply to put the signs back."/>
+                        <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="20,0,0,6"
+                                   Text="They take the places of # $ % * ; = ^ \ ] ` | _, signs the game never shows as text (= is the name screen's last sign: it becomes ö there). Type the letters themselves in the text and event editors and in names (é, not #). Thanks to Sinrevi for asking."/>
+                        <Button Content="Dutch names from Lufia II" Command="{Binding DutchNamesCommand}" HorizontalAlignment="Left" Margin="0,6,0,0" Padding="10,3"
+                                ToolTip="The items, spells and monsters Lufia 1 shares with Lufia II get the names the Dutch translation of Lufia II gives them. Lufia Forge keeps a copy of those names, so no Dutch ROM is needed. Names you changed yourself are left as they are. Edit, Undo takes it back."/>
+                        <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0"
+                                   Text="There is no Dutch Lufia 1. This names the 135 items, spells and monsters both games share as the Dutch Lufia II does (Short Sword: Kort zwaard, Thunder: Donder). The rest, and the dialogue, are yours to write."/>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource GdCard}" Width="360">
+                    <StackPanel>
                         <TextBlock Text="ROM HEADER" Style="{StaticResource GdSection}"/>
                         <TextBlock Text="Internal title (21 characters)" Style="{StaticResource LufiaLabel}" Margin="0,0,0,2"/>
                         <TextBox Style="{StaticResource GdText}" MaxLength="21"

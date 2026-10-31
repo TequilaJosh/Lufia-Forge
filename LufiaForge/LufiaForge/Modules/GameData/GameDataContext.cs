@@ -73,7 +73,7 @@ public sealed class GameDataContext
     public string ReadName(int offset, int length)
     {
         var bytes = Rom.ReadBytes(offset, length);
-        var chars = bytes.Select(b => (char)b).ToArray();
+        var chars = bytes.Select(b => Core.DutchLetters.Show(Rom, b)).ToArray();
         return new string(chars).TrimEnd(' ', '\0');
     }
 
@@ -84,7 +84,7 @@ public sealed class GameDataContext
         for (int i = 0; i < length; i++)
         {
             if (i < name.Length)
-                bytes[i] = name[i] <= 0xFF ? (byte)name[i] : (byte)'?';
+                bytes[i] = Core.DutchLetters.Code(Rom, name[i]) ?? (byte)'?';
             else
                 bytes[i] = pad;
         }

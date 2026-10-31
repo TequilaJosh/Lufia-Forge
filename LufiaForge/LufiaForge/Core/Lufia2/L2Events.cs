@@ -168,7 +168,7 @@ public static class L2Events
         if (WriteLine(rom, line, text)) return "Written in place.";
         text = text.Replace("\r", "");
         var step = ToStepText(text) ?? throw new InvalidOperationException("The text has to end with [WAIT], [END] or [CHOICE].");
-        if (L2EventText.Check(step.Text) is { } why) throw new InvalidOperationException(why);
+        if (L2EventText.Check(step.Text, rom) is { } why) throw new InvalidOperationException(why);
         bool Change(L2EventScript s)
         {
             bool hit = false;
@@ -210,7 +210,8 @@ public static class L2Events
     }
 
     /// <summary>Replaces a line's text in place: the new text must not be longer once encoded; a shorter one is
-    /// filled up with 04 00 (a pause of no time) and a space. Returns false when it doesn't fit.</summary>
+    /// filled up with 04 80 (a pause of no time, as the event editor fills; 04 00 would set the letters' voice) and a
+    /// space. Returns false when it doesn't fit.</summary>
     public static bool WriteLine(RomBuffer rom, Line line, string text)
     {
         var bytes = L2Text.Encode(rom, text).ToList();
@@ -220,7 +221,7 @@ public static class L2Events
         bytes.RemoveAt(bytes.Count - 1);
         int fill = line.Length - 1 - bytes.Count;
         if (fill % 2 == 1) { bytes.Add((byte)' '); fill--; }
-        for (; fill > 0; fill -= 2) { bytes.Add(4); bytes.Add(0); }
+        for (; fill > 0; fill -= 2) { bytes.Add(4); bytes.Add(0x80); }
         bytes.Add(last);
         rom.WriteBytes(line.Offset, bytes.ToArray());
         return true;
