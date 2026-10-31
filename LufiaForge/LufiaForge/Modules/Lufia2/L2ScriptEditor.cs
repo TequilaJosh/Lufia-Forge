@@ -295,6 +295,12 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
     // names for the drop-downs and descriptions
     private string[] _items = Array.Empty<string>(), _spells = Array.Empty<string>(), _songs = Array.Empty<string>(), _maps = Array.Empty<string>();
     private Dictionary<int, (string Name, int Sprite)> _who = new();
+    /// <summary>Hero (1-6) to the character that stands for it on this map (same sprite, not in the party).</summary>
+    private Dictionary<int, int> _heroStandIns = new();
+    /// <summary>The one naming of characters (<see cref="L2Speakers"/>) for this map.</summary>
+    private L2Speakers? _speakers;
+    /// <summary>Who speaks each text step of the script (index: label), as the game picks it.</summary>
+    private Dictionary<int, string> _spoken = new();
     private List<(int Id, string Name)> _points = new(), _paths = new(), _areas = new(), _exits = new(), _doors = new();
     private List<(int Id, int X, int Y)> _pointSpots = new();
     private HashSet<int> _cast = new();
@@ -445,7 +451,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         int block = L2Events.Block(rom, map);
         if (block >= 0)
         {
-            var sprites = L2MapInfo.CharacterSprites(rom, map);
+            var speakers = new L2Speakers(rom, map);
             var starts = L2MapInfo.Records(rom, map, L2MapInfo.Characters, 8).ToDictionary(r => 0x4F + r.Bytes[0], r => r.Bytes);
             var triggers = L2MapInfo.Records(rom, map, L2MapInfo.Triggers, 5).ToDictionary(r => (int)r.Bytes[0], r => r.Bytes);
             foreach (var e in L2EventBlocks.ReadLists(rom, block).Where(e => e.IsScript).OrderBy(e => e.Head == 2 ? 9 : e.Head).ThenBy(e => e.Id))
@@ -453,7 +459,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
                 string preview = FirstText(rom, block + e.Offset, block);
                 string title = e.Head switch
                 {
-                    L2EventBlocks.TalkList => "Talk to " + WhoTitle(e.Id, sprites, starts),
+                    L2EventBlocks.TalkList => "Talk to " + WhoTitle(e.Id, speakers, starts),
                     L2EventBlocks.TriggerList => triggers.TryGetValue(e.Id, out var t)
                         ? $"Step on area {e.Id} ({t[1]},{t[2]})-({t[3] - 1},{t[4] - 1})" : $"Step on area {e.Id} (no area on the map)",
                     L2EventBlocks.SceneList => L2Cutscene.Starter(rom, map, e.Id) is { } st
@@ -475,13 +481,10 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         return list;
     }
 
-    private static string WhoTitle(int id, Dictionary<int, int> sprites, Dictionary<int, byte[]> starts)
+    private static string WhoTitle(int id, L2Speakers speakers, Dictionary<int, byte[]> starts)
     {
-        if (id < 7) return L2EventCommands.HeroNames[id];
-        if (id < 0x50) return $"story character {id:X2}";
-        string at = starts.TryGetValue(id, out var b) ? $" at ({b[1]},{b[2]})" : "";
-        string spr = sprites.TryGetValue(id, out int s) ? $", sprite {L2Sprites.Name(s)}" : "";
-        return $"character {id - 0x4F}{at}{spr}";
+        string at = id >= 0x50 && starts.TryGetValue(id, out var b) ? $" at ({b[1]},{b[2]})" : "";
+        return speakers.Label(id) + at;
     }
 
     /// <summary>The editor's title for an event: the map and what starts the event.</summary>
@@ -517,18 +520,25 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         int map = _map;
         _who = new();
         _choices.Clear();
-        for (int h = 0; h < 7; h++) _who[h] = (L2EventCommands.HeroNames[h], h);
+        _speakers = new L2Speakers(rom, map);
+        for (int h = 0; h < 7; h++) _who[h] = (_speakers.Label(h), h);
         var sprites = L2MapInfo.CharacterSprites(rom, map);
         _cast = L2Cutscene.CastIds(rom, map);
+        string Made(int id) => _cast.Contains(id) ? ", made for cutscenes" : "";
         foreach (var (_, b) in L2MapInfo.Records(rom, map, L2MapInfo.Characters, 8))
         {
             int id = 0x4F + b[0];
-            int spr = sprites.TryGetValue(id, out int s) ? s : -1;
-            _who[id] = ($"{(_cast.Contains(id) ? "cutscene character" : "character")} {b[0]} at ({b[1]},{b[2]}){(spr >= 0 ? $", sprite {L2Sprites.Name(spr)}" : "")}", spr);
+            _who[id] = ($"{_speakers.Label(id)} at ({b[1]},{b[2]}){Made(id)}", _speakers.SpriteOf(id));
         }
-        foreach (var kv in sprites.Where(kv => !_who.ContainsKey(kv.Key))) _who[kv.Key] = ($"{(_cast.Contains(kv.Key) ? "cutscene character" : "character")} {kv.Key - 0x4F}, sprite {L2Sprites.Name(kv.Value)}", kv.Value);
+        foreach (var kv in sprites.Where(kv => !_who.ContainsKey(kv.Key))) _who[kv.Key] = (_speakers.Label(kv.Key) + Made(kv.Key), kv.Value);
         _persistent = L2Persistent.On(L2Persistent.All(rom), map);
-        foreach (var p in _persistent.Where(p => !_who.ContainsKey(p.Id))) _who[p.Id] = ($"story character {p.Id:X2}, sprite {L2Sprites.Name(p.Sprite)}", p.Sprite);
+        foreach (var p in _persistent.Where(p => !_who.ContainsKey(p.Id))) _who[p.Id] = (_speakers.Label(p.Id), p.Sprite);
+        // a hero standing on the map as a character of its own (Selan at home in Parcelyte is story character 19 with
+        // her sprite 01): text for the hero then has to come from that character, the party's hero isn't there
+        _heroStandIns = new();
+        foreach (var kv in _who.Where(kv => kv.Key >= 0x10 && kv.Value.Sprite is >= 1 and < 7).OrderBy(kv => kv.Key))
+            _heroStandIns.TryAdd(kv.Value.Sprite, kv.Key);
+        foreach (var (h, id) in _heroStandIns) _who[h] = ($"{L2EventCommands.HeroNames[h]} (party; on this map also {id:X2})", h);
         _pointSpots = L2StoryClear.PresetPoints(rom, map);
         _points = L2MapInfo.Records(rom, map, L2MapInfo.Points, 3).Select(r => ((int)r.Bytes[0], $"point {r.Bytes[0]} ({r.Bytes[1]},{r.Bytes[2]})")).ToList();
         _paths = L2MapInfo.Records(rom, map, L2MapInfo.Paths, 6).Select(r => ((int)r.Bytes[0], $"path {r.Bytes[0]} (from {r.Bytes[1]},{r.Bytes[2]})")).ToList();
@@ -548,14 +558,13 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         catch (Exception ex) { MapImage = null; Status = "The map can't be drawn: " + ex.Message; }
     }
 
-    /// <summary>A character's name for the stage and descriptions (short).</summary>
+    /// <summary>A character's name for the stage and descriptions (short: no sprite).</summary>
     public string Name(int id)
     {
         if (id < 0) return "nobody";
         if (id < 7) return L2EventCommands.HeroNames[id];
         if (id == 0xFF) return "everyone";
-        if (id >= 0x50) return _cast.Contains(id) ? $"cutscene character {id - 0x4F}" : $"character {id - 0x4F}";
-        return $"story character {id:X2}";
+        return _speakers?.Label(id, sprite: false) ?? L2EventCommands.DefaultWho(id);
     }
 
     private string LongName(int id) => _who.TryGetValue(id, out var w) ? w.Name : L2EventCommands.DefaultWho(id);
@@ -668,6 +677,17 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
 
     private static string Short(string s) => s.Length > 60 ? s[..60] + "..." : s;
 
+    /// <summary>Who says a text step, as the game picks the speaker (the same naming as the Text page and playback).</summary>
+    private string SpokenBy(L2Step s)
+    {
+        if (_script == null || _speakers == null) return "";
+        int i = _script.Steps.IndexOf(s);
+        int talkedTo = _event?.Entry is { Head: L2EventBlocks.TalkList } te ? te.Id : -1;
+        try { _spoken = _speakers.ForScript(_script, talkedTo); } catch (Exception) { }
+        if (!_spoken.TryGetValue(i, out var who)) return s.Op == 0x9E ? "Narration." : "Not reached from the start of the event.";
+        return who == "Narration" ? "Narration." : s.Op == 0x10 ? who + "." : "Spoken by " + who + ".";
+    }
+
     /// <summary>Fills a card from its step: the sentence, the text, the fields (when <paramref name="fields"/>).</summary>
     private void FillLine(L2LineVm vm, bool fields)
     {
@@ -678,7 +698,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         {
             var def = L2EventCommands.Find(s.Op);
             vm.CommandName = s.IsText ? (s.Op == 0x10 ? "Ask a question" : "") : def?.Name ?? $"Unknown command {s.Op:X2}";
-            vm.Description = s.IsText ? (s.Op == 0x10 ? "Write the question, then one line per answer at the end." : def?.Describe(s.Bytes, WordsFor(s)) ?? "") : Sentence(s);
+            vm.Description = s.IsText ? SpokenBy(s) + (s.Op == 0x10 ? " Write the question, then one line per answer at the end." : "") : Sentence(s);
             vm.WaitsText = !s.IsText && def?.Waits.Length > 0 ? "The event waits here " + def.Waits + "." : "";
             vm.SureText = def?.SureText ?? "";
             vm.BytesText = Convert.ToHexString(s.Bytes) + (s.IsText ? " + text" : "");
@@ -708,6 +728,8 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
             if (_owners != null && s.At >= 0 && _owners.TryGetValue(s.At, out var o) && o.Count > 1 && _event?.Entry is { } me)
                 notes.Add("shared with " + string.Join(", ", o.Where(x => x != me).Take(3).Select(EntryName)) + (o.Count > 4 ? "..." : ""));
             if (s.EndsFlow && !s.IsText && s.Op is not (0x00 or 0x42)) notes.Add("the event doesn't go on below");
+            if (s.IsText && L2Cutscene.SpeakerActor(s.Bytes) is var hero && _heroStandIns.TryGetValue(hero, out int standIn))
+                notes.Add($"{L2EventCommands.HeroNames[hero]} also stands on this map as character {standIn:X2}: when {L2EventCommands.HeroNames[hero]} isn't in the party here, the box points at someone else, so pick {standIn:X2} as the speaker (A character of the map...)");
             vm.Note = string.Join("; ", notes);
             vm.Notify(nameof(L2LineVm.CanOpenScene));
             vm.Notify(nameof(L2LineVm.OpenSceneText));
@@ -800,7 +822,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         // story characters (10-4F) this script names
         if (_script != null)
             foreach (var id in _script.Steps.SelectMany(st => L2EventCommands.Find(st.Op)?.FieldsFor(st.Bytes).Where(f => f.Kind is L2Kind.Who).Select(f => SafeGet(f, st.Bytes)) ?? Enumerable.Empty<int>()).Distinct())
-                if (id is >= 0x10 and < 0x50 && list.All(o => o.Value != id)) list.Add(new L2Option(id, $"{id:X2} Story character {id:X2}"));
+                if (id is >= 0x10 and < 0x50 && list.All(o => o.Value != id)) list.Add(new L2Option(id, $"{id:X2} {L2EventCommands.Cap(_speakers?.Label(id) ?? $"story character {id:X2}")}"));
         if (all) list.Add(new L2Option(0xFF, "FF Everyone"));
         return list;
     }
@@ -1303,8 +1325,11 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         var start = L2Cutscene.Initial(_rom, _map, x, y, _persistent);
         start.Flags.UnionWith(_flagsOn);
         foreach (var kv in _countersAtStart) start.Counters[kv.Key] = kv.Value;
+        int talkedTo = _event?.Entry is { Head: L2EventBlocks.TalkList } te ? te.Id : -1;
+        start.Talker = start.TalkSave = talkedTo >= 0 ? talkedTo : 0xFF;
         _start = start;
         var steps = _script?.Steps ?? new List<L2Step>();
+        try { _spoken = _script != null && _speakers != null ? _speakers.ForScript(_script, talkedTo) : new(); } catch (Exception) { _spoken = new(); }
         _states = L2Cutscene.Simulate(_rom, _map, start, steps, Name);
         _run = L2Cutscene.Run(_rom, _map, start, steps, Name, PlayAnswer?.Value ?? 0);
         _firstVisit.Clear();

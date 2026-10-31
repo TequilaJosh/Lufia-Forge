@@ -202,7 +202,7 @@ public static class L2Script
         [0xB5] = (0, "$089D = 0, $085D = FF", 'L'),
         [0xB6] = (2, "actor xx $7FE316 = yy", 'L'),
         [0xB7] = (1, "actor xx $8E:BAF6/BAE7", 'L'),
-        [0xB8] = (0, "end script (variant of 00)", 'M'),
+        [0xB8] = (0, "next message stays up while the player walks on", 'M'),
         [0xB9] = (1, "party member xx: $BC = FF unless status bit 2", 'L'),
         [0xBA] = (1, "party member xx $82:FD15", 'L'),
         [0xBB] = (0, "menu/message 7 (report)", 'M'),
@@ -229,7 +229,8 @@ public static class L2Script
     public sealed record Op(int At, int Length, string Text, bool IsText = false);
 
     private static readonly HashSet<int> TextStart = new() { 0x08, 0x13, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x9E, 0x10 };
-    private static readonly HashSet<int> Ends = new() { 0x00, 0x42, 0xB8, 0x84, 0x16, 0x5E, 0x83, 0xA5, 0x02, 0x11, 0x5C, 0x5D, 0x18, 0x19, 0x81, 0xBC };
+    // (not B8: it makes the next message stay up while the player walks on, and that message follows it)
+    private static readonly HashSet<int> Ends = new() { 0x00, 0x42, 0x84, 0x16, 0x5E, 0x83, 0xA5, 0x02, 0x11, 0x5C, 0x5D, 0x18, 0x19, 0x81, 0xBC };
 
     private static int Condition14(RomBuffer rom, int p)
     {
@@ -345,7 +346,7 @@ public static class L2Script
         string Map(int id) => id < n.Maps.Length ? $"map {id:X2} {n.Maps[id]}" : $"map {id:X2}";
         string what = c switch
         {
-            0x08 => "text, spoken by the one talked to",
+            0x08 => "text, spoken by the current speaker (the one talked to in a talk, else the last one named)",
             0x10 => $"choice of {a[0]}: " + string.Join(", ", Enumerable.Range(0, a[0]).Select(i => Ptr(1 + i * 2))),
             0x12 => $"by variable {a[0]:X2} (then +1), jump to one of: " + string.Join(", ", Enumerable.Range(0, a[1]).Select(i => Ptr(2 + i * 2))),
             0x13 => $"text, spoken by {Actor(a[0])}",

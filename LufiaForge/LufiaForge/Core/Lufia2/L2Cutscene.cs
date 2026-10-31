@@ -161,10 +161,14 @@ public sealed class L2StageState
     public int BranchTo { get; set; } = -1;
     /// <summary>It jumped (false: went on to the next step).</summary>
     public bool Jumped { get; set; }
+    /// <summary>The game's current speaker ($09AB: 08 and 10 speak as it) and the one a text ending 01 goes back to
+    /// ($09AC: the one talked to in a talk event); FF: none (<see cref="L2Speakers"/>).</summary>
+    public int Talker { get; set; } = 0xFF;
+    public int TalkSave { get; set; } = 0xFF;
 
     public L2StageState Copy()
     {
-        var s = new L2StageState { CameraX = CameraX, CameraY = CameraY, CameraOnLeader = CameraOnLeader, Dark = Dark, Shaking = Shaking, Song = Song };
+        var s = new L2StageState { CameraX = CameraX, CameraY = CameraY, CameraOnLeader = CameraOnLeader, Dark = Dark, Shaking = Shaking, Song = Song, Talker = Talker, TalkSave = TalkSave };
         foreach (var kv in Actors) s.Actors[kv.Key] = kv.Value.Copy();
         s.Flags.UnionWith(Flags);
         foreach (var kv in Counters) s.Counters[kv.Key] = kv.Value;
@@ -457,11 +461,12 @@ public static class L2Cutscene
     public static List<L2StageState> Simulate(RomBuffer rom, int map, L2StageState start, IReadOnlyList<L2Step> steps, Func<int, string> name)
     {
         var m = L2StageMap.Read(rom, map);
+        var sp = new L2Speakers(rom, map);
         var list = new List<L2StageState> { start.Copy() };
         var cur = start.Copy();
         for (int i = 0; i < steps.Count; i++)
         {
-            cur = Apply(cur, steps, i, m, name);
+            cur = Apply(cur, steps, i, m, name, sp);
             list.Add(cur);
         }
         return list;
@@ -480,12 +485,13 @@ public static class L2Cutscene
     public static List<RunStep> Run(RomBuffer rom, int map, L2StageState start, IReadOnlyList<L2Step> steps, Func<int, string> name, int answer = 0, int limit = 3000)
     {
         var m = L2StageMap.Read(rom, map);
+        var sp = new L2Speakers(rom, map);
         var run = new List<RunStep>();
         var cur = start.Copy();
         int i = 0;
         while (i >= 0 && i < steps.Count && run.Count < limit)
         {
-            cur = Apply(cur, steps, i, m, name);
+            cur = Apply(cur, steps, i, m, name, sp);
             int next = Next(steps, i, cur, answer);
             run.Add(new RunStep(i, cur));
             i = next;
@@ -574,7 +580,7 @@ public static class L2Cutscene
     }
 
     /// <summary>The stage after step <paramref name="i"/> of <paramref name="steps"/>, from <paramref name="cur"/>.</summary>
-    private static L2StageState Apply(L2StageState cur, IReadOnlyList<L2Step> steps, int i, L2StageMap m, Func<int, string> name)
+    private static L2StageState Apply(L2StageState cur, IReadOnlyList<L2Step> steps, int i, L2StageMap m, Func<int, string> name, L2Speakers sp)
     {
         var st = steps[i];
         var points = m.Points;
@@ -590,14 +596,20 @@ public static class L2Cutscene
         int op = st.Op;
         if (st.IsText)
         {
-            int who = SpeakerActor(b);
-            s.Speaker = op switch { 0x9E => "", 0x08 => "the one talked to", 0x10 => "question", _ => name(who) };
+            // as the game picks the speaker (L2Speakers): 13 / 61-67 name one, 08 and 10 speak as the current one
+            if (op is 0x13 or (>= 0x61 and <= 0x67)) s.Talker = SpeakerActor(b);
+            int who = s.Talker;
+            int drawnAs = who is >= 0 and < 7 && s.Actors.TryGetValue(who, out var spk) && spk.Sprite >= 0 && spk.Sprite != who ? spk.Sprite : -1;
+            string label = who == 0xFF ? "" : sp.Label(who, drawnAs, sprite: false);
+            s.Speaker = op switch { 0x9E => "", 0x10 => label.Length > 0 ? label + " asks" : "question", _ => label.Length > 0 ? label : "no speaker set" };
             s.Text = st.Text;
-            s.Caption = s.Speaker.Length > 0 ? $"{s.Speaker} speaks" : "Narration";
+            s.Caption = op == 0x9E ? "Narration" : who == 0xFF ? (op == 0x10 ? "A question" : "Text with no speaker set (the box goes over the last character the game found)") : $"{label} speaks";
             s.Frames = 60 + st.Text.Length * 2;
+            if (st.End == 0x01 && s.TalkSave != 0xFF) s.Talker = s.TalkSave;
         }
         else switch (op)
         {
+            case 0x34 when b.Length >= 3: { var a = A(b[1]); a.Sprite = L2Sprites.ToEditor(sp.Rom, sp.Map, b[2]); s.Caption = $"{name(b[1])} is shown as sprite {L2Sprites.Name(a.Sprite)}"; break; }
             case 0x2F when b.Length >= 4: { var a = A(b[1]); a.X = b[2]; a.Y = b[3]; s.Caption = $"{name(b[1])} is put on ({b[2]}, {b[3]})"; break; }
             case 0x30 when b.Length >= 3 && points.TryGetValue(b[2], out var p): { var a = A(b[1]); a.X = p.X; a.Y = p.Y; s.Caption = $"{name(b[1])} is put on point {b[2]}"; break; }
             case 0x98 when b.Length >= 3: { var a = A(b[1]); if (points.TryGetValue(b[2], out var p2)) { a.X = p2.X; a.Y = p2.Y; } a.Visible = true; s.Caption = $"{name(b[1])} appears"; s.Frames = 30; break; }

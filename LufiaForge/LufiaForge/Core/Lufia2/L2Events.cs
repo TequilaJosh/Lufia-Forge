@@ -51,6 +51,8 @@ public static class L2Events
     public static List<Line> Lines(RomBuffer rom, int map)
     {
         var lines = new SortedDictionary<int, Line>();
+        Dictionary<int, string> who;
+        try { who = L2Speakers.ForMap(rom, map); } catch (Exception) { who = new(); }
         foreach (var (_, ops) in L2Script.MapScripts(rom, map))
         {
             var byEnd = ops.Where(o => !o.IsText).GroupBy(o => o.At + o.Length).ToDictionary(g => g.Key, g => g.First());
@@ -71,6 +73,7 @@ public static class L2Events
                         _ => "(text)",
                     };
                 }
+                if (who.TryGetValue(t.At, out var named)) speaker = named;
                 lines[t.At] = new Line(map, t.At, t.Length, speaker, t.Text);
             }
         }

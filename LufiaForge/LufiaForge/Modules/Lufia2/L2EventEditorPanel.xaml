@@ -91,6 +91,8 @@
                                 <TextBox Text="{Binding Text, UpdateSourceTrigger=PropertyChanged, Delay=250}" Style="{StaticResource GdText}"
                                          AcceptsReturn="True" TextWrapping="Wrap" FontFamily="Consolas" FontSize="13"
                                          MinHeight="56" Margin="0,4,0,2" HorizontalAlignment="Stretch" Width="Auto"/>
+                                <TextBlock Text="{Binding Description}" Foreground="#FF8CC8FF" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,2"
+                                           ToolTip="Who the game puts the box over: 13 and the hero commands name a speaker, 'the person talked to' and questions speak as the current one (the one talked to in a talk, else the last one named)"/>
                                 <DockPanel>
                                     <ComboBox DockPanel.Dock="Right" Style="{StaticResource GdCombo}" Width="190" ItemsSource="{Binding EndingChoices}" SelectedItem="{Binding Ending}" DisplayMemberPath="Label"
                                               Visibility="{Binding CanChangeEnding, Converter={StaticResource BoolToVisibilityConverter}}" ToolTip="What happens after the text"/>
