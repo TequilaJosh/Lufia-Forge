@@ -123,6 +123,8 @@ public static class FontPatch
                 if (!rom.ReadBytes(Lufia1Small + ch * 16, 16).SequenceEqual(g)) changed++;
                 rom.WriteBytes(Lufia1Small + ch * 16, g);
             }
+        // the Dutch letters sit on signs this font just replaced: made again from its letters
+        if (DutchLetters.IsApplied(rom)) DutchLetters.Apply(rom);
         rom.FixChecksum();
         return changed;
     }
@@ -153,6 +155,7 @@ public static class FontPatch
         var space = ExpansionSpace.Load(rom);
         space.Free(b);
         space.Save();
+        if (DutchLetters.IsApplied(rom)) DutchLetters.Apply(rom);   // (the font put back had the signs there)
         rom.FixChecksum();
     }
 }

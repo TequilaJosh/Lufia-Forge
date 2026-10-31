@@ -219,7 +219,7 @@ public static class L2Rom
         {
             byte b = rom.ReadByte(offset + i);
             if (b == 0) break;
-            sb.Append(b is >= 0x20 and < 0x7F ? (char)b : '?');
+            sb.Append(L2Charset.ToChar(rom, b) ?? '?');
         }
         return sb.ToString().TrimEnd();
     }
@@ -231,7 +231,7 @@ public static class L2Rom
         for (int i = 0; i < length; i++)
         {
             char c = i < name.Length ? name[i] : ' ';
-            bytes[i] = c is >= ' ' and < (char)0x7F ? (byte)c : (byte)' ';
+            bytes[i] = L2Charset.ToByte(rom, c) ?? (byte)' ';
         }
         rom.WriteBytes(offset, bytes);
     }

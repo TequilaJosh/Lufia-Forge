@@ -1,0 +1,819 @@
+{
+  "about": "Dutch names for Lufia 1, from the Dutch translation of Lufia II: the items, spells and monsters both games share (same English name). Ids are Lufia 1's.",
+  "items": [
+    {
+      "id": 1,
+      "en": "Knife",
+      "nl": "Mes",
+      "fits": true
+    },
+    {
+      "id": 3,
+      "en": "Mace",
+      "nl": "Knots",
+      "fits": true
+    },
+    {
+      "id": 4,
+      "en": "Dagger",
+      "nl": "Dolk",
+      "fits": true
+    },
+    {
+      "id": 5,
+      "en": "Long Knife",
+      "nl": "Lang mes",
+      "fits": true
+    },
+    {
+      "id": 6,
+      "en": "Short Sword",
+      "nl": "Kort zwaard",
+      "fits": true
+    },
+    {
+      "id": 7,
+      "en": "Rod",
+      "nl": "Roede",
+      "fits": true
+    },
+    {
+      "id": 8,
+      "en": "Gladius",
+      "nl": "Gladius",
+      "fits": true
+    },
+    {
+      "id": 11,
+      "en": "Staff",
+      "nl": "Staf",
+      "fits": true
+    },
+    {
+      "id": 12,
+      "en": "Scimitar",
+      "nl": "Kromzwaard",
+      "fits": true
+    },
+    {
+      "id": 13,
+      "en": "Rapier",
+      "nl": "Rapier",
+      "fits": true
+    },
+    {
+      "id": 14,
+      "en": "Long Sword",
+      "nl": "Lang zwaard",
+      "fits": true
+    },
+    {
+      "id": 15,
+      "en": "Long Staff",
+      "nl": "Lange staf",
+      "fits": true
+    },
+    {
+      "id": 17,
+      "en": "Spear",
+      "nl": "Speer",
+      "fits": true
+    },
+    {
+      "id": 18,
+      "en": "Morning Star",
+      "nl": "Goedendag",
+      "fits": true
+    },
+    {
+      "id": 22,
+      "en": "Trident",
+      "nl": "Drietand",
+      "fits": true
+    },
+    {
+      "id": 23,
+      "en": "Silver Rod",
+      "nl": "Zilv.-roede",
+      "fits": true
+    },
+    {
+      "id": 24,
+      "en": "Silver Sword",
+      "nl": "Zilv.-zwaard",
+      "fits": true
+    },
+    {
+      "id": 25,
+      "en": "Buster Sword",
+      "nl": "Kliefzwaard",
+      "fits": true
+    },
+    {
+      "id": 35,
+      "en": "Dual Blade",
+      "nl": "Dubbelzwaard",
+      "fits": true
+    },
+    {
+      "id": 36,
+      "en": "Dress",
+      "nl": "Jurk",
+      "fits": true
+    },
+    {
+      "id": 37,
+      "en": "Cloth",
+      "nl": "Hemd",
+      "fits": true
+    },
+    {
+      "id": 38,
+      "en": "Cloth Armor",
+      "nl": "Pantserhemd",
+      "fits": true
+    },
+    {
+      "id": 39,
+      "en": "Robe",
+      "nl": "Mantel",
+      "fits": true
+    },
+    {
+      "id": 42,
+      "en": "Light Armor",
+      "nl": "Dun pantser",
+      "fits": true
+    },
+    {
+      "id": 48,
+      "en": "Quilted Silk",
+      "nl": "Luxe zijde",
+      "fits": true
+    },
+    {
+      "id": 51,
+      "en": "Silver Armor",
+      "nl": "Zilv.pantser",
+      "fits": true
+    },
+    {
+      "id": 52,
+      "en": "Silver Robe",
+      "nl": "Zilvermantel",
+      "fits": true
+    },
+    {
+      "id": 55,
+      "en": "Zircon Armor",
+      "nl": "Zirk.pantser",
+      "fits": true
+    },
+    {
+      "id": 57,
+      "en": "Bracelet",
+      "nl": "Armband",
+      "fits": true
+    },
+    {
+      "id": 59,
+      "en": "Wood Shield",
+      "nl": "Hout-schild",
+      "fits": true
+    },
+    {
+      "id": 60,
+      "en": "Buckler",
+      "nl": "Bord",
+      "fits": true
+    },
+    {
+      "id": 62,
+      "en": "Kite Shield",
+      "nl": "Licht schild",
+      "fits": true
+    },
+    {
+      "id": 63,
+      "en": "Round Shield",
+      "nl": "Rond schild",
+      "fits": true
+    },
+    {
+      "id": 65,
+      "en": "Brone Shield",
+      "nl": "Brons-schild",
+      "fits": true
+    },
+    {
+      "id": 71,
+      "en": "Zircon Plate",
+      "nl": "Zirk.harnas",
+      "fits": true
+    },
+    {
+      "id": 76,
+      "en": "Glass Cap",
+      "nl": "Glazen pet",
+      "fits": true
+    },
+    {
+      "id": 78,
+      "en": "Red Beret",
+      "nl": "Rode Baret",
+      "fits": true
+    },
+    {
+      "id": 80,
+      "en": "Plate Cap",
+      "nl": "Plaat-pet",
+      "fits": true
+    },
+    {
+      "id": 102,
+      "en": "Power Ring",
+      "nl": "Krachtring",
+      "fits": true
+    },
+    {
+      "id": 103,
+      "en": "HiPower Ring",
+      "nl": "E-krachtring",
+      "fits": true
+    },
+    {
+      "id": 106,
+      "en": "Mind Ring",
+      "nl": "IQ-ring",
+      "fits": true
+    },
+    {
+      "id": 107,
+      "en": "Sonic Ring",
+      "nl": "Tempo-ring",
+      "fits": true
+    },
+    {
+      "id": 109,
+      "en": "Undead Ring",
+      "nl": "Ondood-ring",
+      "fits": true
+    },
+    {
+      "id": 110,
+      "en": "Ghost Ring",
+      "nl": "Spookring",
+      "fits": true
+    },
+    {
+      "id": 111,
+      "en": "Dragon Ring",
+      "nl": "Drakenring",
+      "fits": true
+    },
+    {
+      "id": 112,
+      "en": "Sea Ring",
+      "nl": "Zeering",
+      "fits": true
+    },
+    {
+      "id": 114,
+      "en": "Water Ring",
+      "nl": "Aquaring",
+      "fits": true
+    },
+    {
+      "id": 115,
+      "en": "Fire Ring",
+      "nl": "Vuurring",
+      "fits": true
+    },
+    {
+      "id": 116,
+      "en": "Ice Ring",
+      "nl": "IJsring",
+      "fits": true
+    },
+    {
+      "id": 120,
+      "en": "Water Ring",
+      "nl": "Aquaring",
+      "fits": true
+    },
+    {
+      "id": 137,
+      "en": "Engage Ring",
+      "nl": "Contactring",
+      "fits": true
+    },
+    {
+      "id": 148,
+      "en": "Potion",
+      "nl": "Elixer",
+      "fits": true
+    },
+    {
+      "id": 153,
+      "en": "Antidote",
+      "nl": "Tegengif",
+      "fits": true
+    },
+    {
+      "id": 158,
+      "en": "Mystery Pin",
+      "nl": "Myst.speld",
+      "fits": true
+    },
+    {
+      "id": 159,
+      "en": "Shriek",
+      "nl": "Gil",
+      "fits": true
+    },
+    {
+      "id": 161,
+      "en": "Magic Guard",
+      "nl": "Blokker",
+      "fits": true
+    },
+    {
+      "id": 162,
+      "en": "Power Gourd",
+      "nl": "Krachtnectar",
+      "fits": true
+    },
+    {
+      "id": 163,
+      "en": "Mind Gourd",
+      "nl": "IQ-nectar",
+      "fits": true
+    },
+    {
+      "id": 164,
+      "en": "Power Potion",
+      "nl": "Krachtdrank",
+      "fits": true
+    },
+    {
+      "id": 165,
+      "en": "Spell Potion",
+      "nl": "Toverdrank",
+      "fits": true
+    },
+    {
+      "id": 166,
+      "en": "Speed Potion",
+      "nl": "Snel-drank",
+      "fits": true
+    },
+    {
+      "id": 167,
+      "en": "Mind Potion",
+      "nl": "IQ-drank",
+      "fits": true
+    },
+    {
+      "id": 170,
+      "en": "Smoke Ball",
+      "nl": "Rookbal",
+      "fits": true
+    },
+    {
+      "id": 171,
+      "en": "Arrow",
+      "nl": "Pijl",
+      "fits": true
+    },
+    {
+      "id": 182,
+      "en": "Bomb",
+      "nl": "Bom",
+      "fits": true
+    },
+    {
+      "id": 185,
+      "en": "Miracle",
+      "nl": "Wonder",
+      "fits": true
+    },
+    {
+      "id": 187,
+      "en": "Pear Cider",
+      "nl": "Perencider",
+      "fits": true
+    },
+    {
+      "id": 188,
+      "en": "Sour Cider",
+      "nl": "Zure cider",
+      "fits": true
+    },
+    {
+      "id": 189,
+      "en": "Lime Cider",
+      "nl": "Limoencider",
+      "fits": true
+    },
+    {
+      "id": 190,
+      "en": "Plum Cider",
+      "nl": "Pruimencider",
+      "fits": true
+    },
+    {
+      "id": 191,
+      "en": "Apple Cider",
+      "nl": "Appelcider",
+      "fits": true
+    },
+    {
+      "id": 194,
+      "en": "Earring",
+      "nl": "Oorbel",
+      "fits": true
+    },
+    {
+      "id": 207,
+      "en": "Small Knife",
+      "nl": "Klein mes",
+      "fits": true
+    },
+    {
+      "id": 208,
+      "en": "Pot",
+      "nl": "Pan",
+      "fits": true
+    },
+    {
+      "id": 210,
+      "en": "Apron",
+      "nl": "Schort",
+      "fits": true
+    },
+    {
+      "id": 211,
+      "en": "Dragon Egg",
+      "nl": "Drakenei",
+      "fits": true
+    },
+    {
+      "id": 212,
+      "en": "Crown",
+      "nl": "Kroon",
+      "fits": true
+    },
+    {
+      "id": 221,
+      "en": "Escape",
+      "nl": "Ontsnap",
+      "fits": true
+    },
+    {
+      "id": 222,
+      "en": "Magic Jar",
+      "nl": "Magiefles",
+      "fits": true
+    },
+    {
+      "id": 223,
+      "en": "Dragon Tooth",
+      "nl": "Drakentand",
+      "fits": true
+    },
+    {
+      "id": 229,
+      "en": "Bomb",
+      "nl": "Bom",
+      "fits": true
+    },
+    {
+      "id": 243,
+      "en": "Shrine Key",
+      "nl": "Temp.sleutel",
+      "fits": true
+    },
+    {
+      "id": 245,
+      "en": "Light Key",
+      "nl": "Lichtsleutel",
+      "fits": true
+    }
+  ],
+  "spells": [
+    {
+      "id": 1,
+      "en": "Flash",
+      "nl": "Flits",
+      "fits": true
+    },
+    {
+      "id": 2,
+      "en": "Bolt",
+      "nl": "Schicht",
+      "fits": true
+    },
+    {
+      "id": 3,
+      "en": "Thunder",
+      "nl": "Donder",
+      "fits": true
+    },
+    {
+      "id": 4,
+      "en": "Spark",
+      "nl": "Vonk",
+      "fits": true
+    },
+    {
+      "id": 14,
+      "en": "Blizzard",
+      "nl": "Sneeuw",
+      "fits": true
+    },
+    {
+      "id": 16,
+      "en": "Perish",
+      "nl": "Instant",
+      "fits": true
+    },
+    {
+      "id": 18,
+      "en": "Drowsy",
+      "nl": "Suf",
+      "fits": true
+    },
+    {
+      "id": 21,
+      "en": "Dread",
+      "nl": "Vrees",
+      "fits": true
+    },
+    {
+      "id": 22,
+      "en": "Deflect",
+      "nl": "Ontwijk",
+      "fits": true
+    },
+    {
+      "id": 24,
+      "en": "Absorb",
+      "nl": "Absorb",
+      "fits": true
+    },
+    {
+      "id": 25,
+      "en": "Fake",
+      "nl": "Schijn",
+      "fits": true
+    },
+    {
+      "id": 26,
+      "en": "Trick",
+      "nl": "Truc",
+      "fits": true
+    },
+    {
+      "id": 27,
+      "en": "Confuse",
+      "nl": "Verwar",
+      "fits": true
+    },
+    {
+      "id": 28,
+      "en": "Bravery",
+      "nl": "Moed",
+      "fits": true
+    },
+    {
+      "id": 29,
+      "en": "Courage",
+      "nl": "Durf",
+      "fits": true
+    },
+    {
+      "id": 30,
+      "en": "Shield",
+      "nl": "Schild",
+      "fits": true
+    },
+    {
+      "id": 32,
+      "en": "Mirror",
+      "nl": "Spiegel",
+      "fits": true
+    },
+    {
+      "id": 33,
+      "en": "Statue",
+      "nl": "Standbeeld",
+      "fits": false
+    },
+    {
+      "id": 34,
+      "en": "Strong",
+      "nl": "Sterk",
+      "fits": true
+    },
+    {
+      "id": 35,
+      "en": "Stronger",
+      "nl": "Sterker",
+      "fits": true
+    },
+    {
+      "id": 36,
+      "en": "Champion",
+      "nl": "Kampioen",
+      "fits": true
+    },
+    {
+      "id": 38,
+      "en": "Valor",
+      "nl": "Oplader",
+      "fits": true
+    },
+    {
+      "id": 39,
+      "en": "Poison",
+      "nl": "Gif",
+      "fits": true
+    },
+    {
+      "id": 42,
+      "en": "Rally",
+      "nl": "Herstel",
+      "fits": true
+    },
+    {
+      "id": 44,
+      "en": "Waken",
+      "nl": "Wekker",
+      "fits": true
+    },
+    {
+      "id": 45,
+      "en": "Warp",
+      "nl": "Warp",
+      "fits": true
+    },
+    {
+      "id": 46,
+      "en": "Escape",
+      "nl": "Ontsnap",
+      "fits": true
+    }
+  ],
+  "monsters": [
+    {
+      "id": 9,
+      "en": "Spider",
+      "nl": "Spin",
+      "fits": true
+    },
+    {
+      "id": 10,
+      "en": "Beetle",
+      "nl": "Kever",
+      "fits": true
+    },
+    {
+      "id": 14,
+      "en": "Ghoul",
+      "nl": "Grafkop",
+      "fits": true
+    },
+    {
+      "id": 17,
+      "en": "Skeleton",
+      "nl": "Skelet",
+      "fits": true
+    },
+    {
+      "id": 19,
+      "en": "Mummy",
+      "nl": "Mummie",
+      "fits": true
+    },
+    {
+      "id": 28,
+      "en": "Tarantula",
+      "nl": "Tarantula",
+      "fits": true
+    },
+    {
+      "id": 44,
+      "en": "Zombie",
+      "nl": "Zombie",
+      "fits": true
+    },
+    {
+      "id": 50,
+      "en": "Gargoyle",
+      "nl": "Gargoyle",
+      "fits": true
+    },
+    {
+      "id": 58,
+      "en": "Goblin",
+      "nl": "Goblin",
+      "fits": true
+    },
+    {
+      "id": 111,
+      "en": "Lizard Man",
+      "nl": "Hagedisman",
+      "fits": true
+    },
+    {
+      "id": 112,
+      "en": "Basilisk",
+      "nl": "Kamhagedis",
+      "fits": true
+    },
+    {
+      "id": 113,
+      "en": "Gorgon",
+      "nl": "Gorgo",
+      "fits": true
+    },
+    {
+      "id": 115,
+      "en": "Vampire",
+      "nl": "Vampier",
+      "fits": true
+    },
+    {
+      "id": 116,
+      "en": "Salamander",
+      "nl": "Salamander",
+      "fits": true
+    },
+    {
+      "id": 128,
+      "en": "Troll",
+      "nl": "Trol",
+      "fits": true
+    },
+    {
+      "id": 130,
+      "en": "Dragon",
+      "nl": "Draak",
+      "fits": true
+    },
+    {
+      "id": 144,
+      "en": "Gades",
+      "nl": "Gades",
+      "fits": true
+    },
+    {
+      "id": 145,
+      "en": "Gades",
+      "nl": "Gades",
+      "fits": true
+    },
+    {
+      "id": 146,
+      "en": "Amon",
+      "nl": "Amon",
+      "fits": true
+    },
+    {
+      "id": 147,
+      "en": "Erim",
+      "nl": "Erim",
+      "fits": true
+    },
+    {
+      "id": 148,
+      "en": "Daos",
+      "nl": "Daos",
+      "fits": true
+    },
+    {
+      "id": 151,
+      "en": "Follower",
+      "nl": "Assistent",
+      "fits": true
+    },
+    {
+      "id": 161,
+      "en": "Gades",
+      "nl": "Gades",
+      "fits": true
+    },
+    {
+      "id": 162,
+      "en": "Amon",
+      "nl": "Amon",
+      "fits": true
+    },
+    {
+      "id": 163,
+      "en": "Daos",
+      "nl": "Daos",
+      "fits": true
+    }
+  ]
+}

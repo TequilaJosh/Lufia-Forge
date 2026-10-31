@@ -50,6 +50,25 @@ public partial class PatchManagerViewModel : ObservableObject
         Hack("foomy", "The Wrath of Foomy v8.2", "Frue Lufia, but the final boss is Foomy (50000 HP).",
             "The same as Frue Lufia, except that instead of Daos the final boss is Foomy, \"Snoomy\": 50000 HP, ATP 2000, DFP 10000 " +
             "(with some smaller changes to Erim, the Egg Dragon and Master). See licenses/patches/Lufia2_WrathOfFoomy_v8-2.txt."),
+        new BuiltInPatch
+        {
+            Name = "Dutch translation", Category = "Community", Icon = "📜", Credit = "the makers of the Dutch Lufia II (read from your copy of their ROM)",
+            Summary = "The Dutch Lufia II's text in this game: the dialogue, the names, the descriptions and the fonts with the Dutch letters.",
+            Description = "Reads the Dutch Lufia II (the translation built on the European release; pick its .sfc or the .zip) and puts its text into " +
+                "this ROM: all 5,455 lines of dialogue, the item, spell, monster, IP attack and map names, the descriptions, and both fonts with " +
+                "the Dutch letters (é ë ï and the others, typed as letters in the editors). The game stays this one, so it runs at 60 Hz, and on " +
+                "Frue Lufia or another hack its fixes stay: add the hack first, then this. The menus and battle messages stay English.",
+            NeedsExpandedRom = false, ReloadsAll = true,
+            ConfirmText = "Put the Dutch translation into this ROM?\n\nPick the Dutch Lufia II ROM (.sfc or .zip) next. The dialogue of every map is written again (Edit, Undo takes it back).",
+            IsApplied = Core.Lufia2.L2Charset.IsDutch, IsOriginal = rom => rom.IsLufia2,
+            Apply = rom =>
+            {
+                var pick = new Microsoft.Win32.OpenFileDialog { Title = "Pick the Dutch Lufia II ROM", Filter = "Lufia II (Dutch) (*.sfc;*.smc;*.zip)|*.sfc;*.smc;*.zip|All files (*.*)|*.*" };
+                if (pick.ShowDialog() != true) throw new OperationCanceledException("no Dutch ROM was picked.");
+                var report = Core.Lufia2.L2Dutch.Import(rom, Core.Lufia2.L2Dutch.ReadFile(pick.FileName));
+                MessageBox.Show("Imported: " + report, "Dutch translation", MessageBoxButton.OK, MessageBoxImage.Information);
+            },
+        },
     };
 
     private static BuiltInPatch Hack(string id, string name, string summary, string description) => new()

@@ -408,12 +408,12 @@ public static class L2Magic
     /// battle list shows 13).</summary>
     public static void SetIpName(RomBuffer rom, int ip, string name)
     {
-        name = new string(name.Trim().Select(c => c is >= ' ' and < (char)0x7F ? c : ' ').ToArray());
+        name = new string(name.Trim().Select(c => L2Charset.CanShow(rom, c) ? c : ' ').ToArray());
         if (name.Length == 0) throw new InvalidOperationException("The name can't be empty.");
         if (name.Length > IpNameLength) name = name[..IpNameLength];
         var a = L2Battle.ReadIp(rom, ip);
         if (a.Name == name && a.NameLength == name.Length) return;
-        var bytes = Encoding.ASCII.GetBytes(name).Append((byte)0).ToArray();
+        var bytes = name.Select(c => L2Charset.ToByte(rom, c) ?? (byte)' ').Append((byte)0).ToArray();
         if (name.Length <= a.NameLength)
         {
             rom.WriteBytes(a.Offset + 6, bytes);

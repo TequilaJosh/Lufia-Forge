@@ -59,7 +59,7 @@ public static class L2Maps
             else if (b == 5) sb.Append(words[rom.ReadByte(p++)]);
             else if (b == 6) sb.Append(words[0x100 + rom.ReadByte(p++)]);
             else if (b >= 0x80) sb.Append(words[0x200 + (b & 0x7F)]);
-            else sb.Append(b is >= 0x20 and < 0x7F ? (char)b : '~');
+            else sb.Append(L2Charset.ToChar(rom, b) ?? '~');
         }
         return keepSpaces ? sb.ToString() : sb.ToString().Trim();
     }

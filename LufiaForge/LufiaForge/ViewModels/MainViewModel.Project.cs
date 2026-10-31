@@ -121,9 +121,10 @@ public partial class MainViewModel
         var dialog = new OpenFileDialog
         {
             Title = "Pick the Lufia 1 or Lufia II ROM to start a project from",
-            Filter = "SNES ROM files (*.sfc;*.smc)|*.sfc;*.smc|All files (*.*)|*.*"
+            Filter = "SNES ROM files (*.sfc;*.smc)|*.sfc;*.smc|The Dutch Lufia II (*.sfc;*.smc;*.zip)|*.sfc;*.smc;*.zip|All files (*.*)|*.*"
         };
         if (dialog.ShowDialog() != true) return;
+        if (TryDutch(dialog.FileName)) return;
         var report = RomLoader.Load(dialog.FileName);
         switch (report.Result)
         {
@@ -237,6 +238,51 @@ public partial class MainViewModel
             _openNote = " Shrine maps CF and F1, garbled in the US game, were fixed as in the European release (Edit, Undo takes it back).";
         }
         catch (Exception ex) { _openNote = " Lufia II's shrine maps CF and F1 couldn't be fixed: " + ex.Message; }
+    }
+
+    /// <summary>The Dutch Lufia II picked for a new project: Lufia Forge edits the US game's layout, so the Dutch text
+    /// goes into a Lufia II (USA) ROM or a hack built on one, picked next (<see cref="Core.Lufia2.L2Dutch"/>). Returns
+    /// false when the file isn't the Dutch ROM.</summary>
+    private bool TryDutch(string path)
+    {
+        byte[] dutch;
+        try { dutch = Core.Lufia2.L2Dutch.ReadFile(path); }   // (a .zip too)
+        catch { return false; }
+        if (MessageBox.Show("This is the Dutch Lufia II, a translation built on the European release, which keeps its data in other places " +
+                "than the US game.\n\nLufia Forge edits Lufia II (USA) and the hacks built on it, so it puts the Dutch translation into one of " +
+                "those: the dialogue, the names, the descriptions and the fonts with the Dutch letters. The game then runs at 60 Hz, and a hack " +
+                "like Frue Lufia keeps its fixes. The menus and battle messages stay English.\n\nPick the Lufia II (USA) ROM, or a ROM of a hack " +
+                "built on it, next.", "Dutch Lufia II", MessageBoxButton.OKCancel, MessageBoxImage.Information) != MessageBoxResult.OK) return true;
+        var pick = new OpenFileDialog
+        {
+            Title = "Pick the Lufia II (USA) ROM (or a hack built on it) to put the Dutch text into",
+            Filter = "SNES ROM files (*.sfc;*.smc)|*.sfc;*.smc|All files (*.*)|*.*",
+        };
+        if (pick.ShowDialog() != true) return true;
+        var report = RomLoader.Load(pick.FileName);
+        if (report.Buffer == null || report.Buffer.Game != GameKind.Lufia2)
+        {
+            MessageBox.Show("That isn't Lufia II (USA) or a hack built on it. " + report.Message, "Dutch Lufia II", MessageBoxButton.OK, MessageBoxImage.Error);
+            return true;
+        }
+        var ask = new Modules.Common.NewProjectWindow(path) { Owner = Application.Current?.MainWindow };
+        if (ask.ShowDialog() != true) return true;
+        try
+        {
+            var rom = report.Buffer.ToArray();
+            var project = LufiaProject.Create(ask.ProjectPath, ask.ProjectName, rom, pick.FileName);
+            Use(project, rom);
+            var done = Core.Lufia2.L2Dutch.Import(RomBuffer!, dutch);
+            NotifyRomModified("Dutch translation from " + Path.GetFileName(path));
+            ReloadModules();
+            StatusMessage = $"Project \"{project.Name}\" started from {Path.GetFileName(pick.FileName)} with the Dutch translation: {done} Save Project keeps it.";
+            StatusDetail = project.Path;
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"The project couldn't be made: {ex.Message}", "New project", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        return true;
     }
 
     /// <summary>The ROM file next to the project (what Export ROM and BizHawk use): "&lt;project&gt;.sfc".</summary>

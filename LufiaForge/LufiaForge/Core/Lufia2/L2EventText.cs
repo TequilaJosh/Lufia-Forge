@@ -13,14 +13,18 @@ public static class L2EventText
 {
     /// <summary>Reads text from <paramref name="at"/> to its end code; <paramref name="next"/> is the byte after the end
     /// code (or where reading stopped).</summary>
-    public static string Decode(RomBuffer rom, int at, out int next, out byte end, out bool backReference)
+    public static string Decode(RomBuffer rom, int at, out int next, out byte end, out bool backReference) =>
+        DecodeCore(rom, at, int.MaxValue, 0, out next, out end, out backReference);
+
+    /// <summary>Decodes up to <paramref name="limit"/> bytes (a back-reference copies that many bytes of earlier text).</summary>
+    private static string DecodeCore(RomBuffer rom, int at, int limit, int depth, out int next, out byte end, out bool backReference)
     {
         var words = L2Text.Words(rom);
         var sb = new StringBuilder();
         int p = at;
         end = 0xFF;
         backReference = false;
-        for (int guard = 0; guard < 4000 && p < rom.Length; guard++)
+        for (int guard = 0; guard < 4000 && p < rom.Length && p - at < limit; guard++)
         {
             byte b = rom.ReadByte(p++);
             if (b is 0x00 or 0x01 or 0x0B) { end = b; break; }
@@ -41,17 +45,15 @@ public static class L2EventText
                 {
                     byte lo = rom.ReadByte(p), hi = rom.ReadByte(p + 1);
                     int d = lo | (hi & 0x0F) << 8, n = (hi >> 4) + 2;
-                    string earlier = L2Text.Decode(rom, p - d, out _, 400).Replace("[END]", "").Replace("[WAIT]", "").Replace("[CHOICE]", "");
-                    earlier = earlier.Replace("[NAME]", "\u0001");
-                    string part = earlier.Length > n ? earlier[..n] : earlier;
-                    sb.Append(part.Replace("\u0001", "[Name]"));
+                    // n bytes of the text d bytes back (bytes, not letters: a Dutch letter 10-1F or a word is one byte)
+                    if (depth < 4) sb.Append(DecodeCore(rom, p - d, n, depth + 1, out _, out _, out _));
                     backReference = true;
                     p += 2;
                     break;
                 }
                 case >= 0x0C and <= 0x0F: sb.Append("?!,."[b - 0x0C]).Append('\n'); break;
                 case >= 0x80: sb.Append(words[0x200 + (b & 0x7F)]); break;
-                case >= 0x20 and < 0x7F: sb.Append((char)b); break;
+                case not 0x5B when L2Charset.ToChar(rom, b) is char ch: sb.Append(ch); break;   // "[" itself shows as [5B], so it reads back
                 default: sb.Append($"[{b:X2}]"); break;
             }
         }
@@ -60,7 +62,7 @@ public static class L2EventText
     }
 
     /// <summary>Checks typed text: returns what's wrong, or null.</summary>
-    public static string? Check(string text)
+    public static string? Check(string text, RomBuffer? rom = null)
     {
         foreach (var t in Tokens(text))
         {
@@ -69,12 +71,13 @@ public static class L2EventText
             if (t.StartsWith("Voice ") && int.TryParse(t[6..], out int v)) { if (v is < 0 or > 0x7F) return $"[{t}]: voices are 0 to 127."; continue; }
             if (t.StartsWith("Glyph ") && t.Length == 8 && IsHex(t[6..])) continue;
             // codes shown as [XX] that are written back as they are (08 opens the game's questions: inns, shops...);
-            // not the end codes 00-02 and 0B
-            if (t.Length == 2 && IsHex(t) && Convert.ToInt32(t, 16) is 0x03 or 0x08 or >= 0x0C and <= 0x1F or 0x7F) continue;
+            // not the end codes 00-02 and 0B; 5B is "[" itself (in the Dutch font "(")
+            if (t.Length == 2 && IsHex(t) && Convert.ToInt32(t, 16) is 0x03 or 0x08 or >= 0x0C and <= 0x1F or 0x5B or 0x7F) continue;
             return $"[{t}] isn't a known code. Use [Name], [Pause 20], [Voice 3] or [Glyph 41].";
         }
         foreach (char c in text)
-            if (c != '\n' && (c < ' ' || c > '~')) return $"The game has no letter for '{c}'.";
+            if (c != '\n' && !(rom != null ? L2Charset.CanShow(rom, c) : c is >= ' ' and <= '~'))
+                return $"The game has no letter for '{c}'." + (rom != null && !L2Charset.IsDutch(rom) && c > 0x7F ? " Accented letters come with the Dutch font (Import the Dutch translation)." : "");
         return null;
     }
 

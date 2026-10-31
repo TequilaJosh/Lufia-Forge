@@ -36,6 +36,23 @@ public partial class GameSettingsViewModel : GameDataEditorBase
     public string[] MenuButtonLabels { get; } = LufiaForge.Core.MenuButtonPatch.Buttons.Select(b => b.Name).ToArray();
     [ObservableProperty] private bool _retargetFix;
     [ObservableProperty] private bool _canRetargetFix;
+    /// <summary>Dutch letters in the fonts (<see cref="LufiaForge.Core.DutchLetters"/>).</summary>
+    [ObservableProperty] private bool _dutchLetters;
+    [ObservableProperty] private string _dutchText = "";
+
+    public string DutchLettersLabel { get; } = "Dutch letters (" + string.Join(" ", LufiaForge.Core.DutchLetters.Map.Select(m => m.Letter)) + ")";
+
+    /// <summary>The items, spells and monsters Lufia 1 shares with Lufia II get their names from the Dutch Lufia II.</summary>
+    [RelayCommand]
+    private void DutchNames()
+    {
+        if (Ctx == null) return;
+        var rom = Ctx.Rom;
+        LufiaForge.Core.DutchLetters.NamesResult? result = null;
+        Commit("Dutch names from Lufia II", () => result = LufiaForge.Core.DutchLetters.ApplyLufia2Names(rom), namesChanged: true);
+        if (result != null && !Status.StartsWith("Error")) Status = result.ToString();
+        DutchLetters = LufiaForge.Core.DutchLetters.IsApplied(rom);
+    }
 
     /// <summary>Encounter presets: (label, rate); the last is "custom".</summary>
     public static readonly (string Label, int Rate)[] Presets =
@@ -99,6 +116,7 @@ public partial class GameSettingsViewModel : GameDataEditorBase
         CanMenuButton     = menu >= 0;
         MenuButton        = Math.Max(0, menu);
         UpdateMenuText();
+        DutchLetters      = LufiaForge.Core.DutchLetters.IsApplied(rom);
         RetargetFix       = LufiaForge.Core.Battle.RetargetPatch.IsApplied(rom);
         CanRetargetFix    = RetargetFix || LufiaForge.Core.Battle.RetargetPatch.IsOriginal(rom);
         InternalTitle     = rom.ReadAscii(GameDataOffsets.InternalTitle, GameDataOffsets.InternalTitleLen).TrimEnd();
@@ -117,7 +135,8 @@ public partial class GameSettingsViewModel : GameDataEditorBase
         var rom = Ctx.Rom;
         bool patchWanted = HoldLPatch, patched = LufiaForge.Core.Battle.EncounterPatch.IsApplied(rom);
         bool fixWanted = RetargetFix, fixed_ = LufiaForge.Core.Battle.RetargetPatch.IsApplied(rom);
-        if ((patchWanted && !patched || fixWanted && !fixed_) && rom.Length < Core.Maps.MapWriter.ExpandedSize && !AutoWriting &&
+        bool lettersWanted = DutchLetters, letters = LufiaForge.Core.DutchLetters.IsApplied(rom);
+        if ((patchWanted && !patched || fixWanted && !fixed_ || lettersWanted && !letters) && rom.Length < Core.Maps.MapWriter.ExpandedSize && !AutoWriting &&
             System.Windows.MessageBox.Show("The patches you ticked add small routines to the expanded part of the ROM. Expand the ROM to 2 MB?",
                 "Expand ROM?", System.Windows.MessageBoxButton.YesNo) != System.Windows.MessageBoxResult.Yes)
         { Status = "Not applied: the ROM was not expanded."; return; }
@@ -128,6 +147,8 @@ public partial class GameSettingsViewModel : GameDataEditorBase
             if (!patchWanted && patched) LufiaForge.Core.Battle.EncounterPatch.Remove(rom);
             if (fixWanted && !fixed_) LufiaForge.Core.Battle.RetargetPatch.Apply(rom);
             if (!fixWanted && fixed_) LufiaForge.Core.Battle.RetargetPatch.Remove(rom);
+            if (lettersWanted && !letters) LufiaForge.Core.DutchLetters.Apply(rom);
+            if (!lettersWanted && letters) LufiaForge.Core.DutchLetters.Remove(rom);
             if (LufiaForge.Core.MenuButtonPatch.Current(rom) >= 0) LufiaForge.Core.MenuButtonPatch.Set(rom, MenuButton);
             rom.WriteByte(GameDataOffsets.WalkSpeed, (byte)(FastWalk ? 0x20 : 0x10));
             rom.WriteBytes(GameDataOffsets.WalkSpeedPatch,

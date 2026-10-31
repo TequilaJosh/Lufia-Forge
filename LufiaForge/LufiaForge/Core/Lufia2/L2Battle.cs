@@ -221,7 +221,7 @@ public static class L2Battle
         {
             byte b = rom.ReadByte(o + n);
             if (b == 0) break;
-            if (b is < 0x20 or >= 0x7F) return false;
+            if (L2Charset.ToChar(rom, b) == null) return false;
         }
         return n > 0 && rom.ReadByte(o) != 0x20;
     }
@@ -292,7 +292,7 @@ public static class L2Battle
         var used = L2AiScripts.MonsterScriptBytes(rom);
         int room = NameRoom(rom, m, used), free = NameFree(rom, m, used);
         string name = m.Name.Length > room ? m.Name[..room] : m.Name;
-        var bytes = new List<byte>(name.Select(c => c is >= ' ' and < (char)0x7F ? (byte)c : (byte)' '));
+        var bytes = new List<byte>(name.Select(c => L2Charset.ToByte(rom, c) ?? (byte)' '));
         if (bytes.Count < free) bytes.Add(0);
         rom.WriteBytes(o, bytes.ToArray());
     }

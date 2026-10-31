@@ -183,7 +183,7 @@ public partial class L2NewEventWindow : Window
     private void Ok_Click(object sender, RoutedEventArgs e)
     {
         string text = TextBox.Text.Replace("\r", "");
-        if (L2EventText.Check(text) is { } problem) { ChoiceText.Text = problem; return; }
+        if (L2EventText.Check(text, _rom) is { } problem) { ChoiceText.Text = problem; return; }
         int flag = OnceCheck.IsChecked == true && AfterRadio.IsChecked != true ? _flag : -1;
         int block = L2Events.Block(_rom, _map);
         try

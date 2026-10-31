@@ -718,7 +718,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
     private string SizeNote(L2Step s)
     {
         if (_rom == null) return "";
-        string? problem = L2EventText.Check(s.Text);
+        string? problem = L2EventText.Check(s.Text, _rom);
         int size = L2EventScript.SizeOf(_rom, s, s.At >= 0);
         int longest = L2Events.LongestLine(s.Text);
         string room = s.At >= 0 && size > s.OriginalLength ? $" (it had {s.OriginalLength}: longer text moves the map's events to the event space when saved)" : "";
@@ -1159,7 +1159,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         // every text must be text the game can show (texts not changed are written as they are: the game's own can hold
         // codes typed text can't)
         for (int i = 0; i < _script.Steps.Count; i++)
-            if (_script.Steps[i].TextChanged && L2EventText.Check(_script.Steps[i].Text) is { } p) { Status = $"Not saved: step {i + 1}: {p}"; return false; }
+            if (_script.Steps[i].TextChanged && L2EventText.Check(_script.Steps[i].Text, _rom) is { } p) { Status = $"Not saved: step {i + 1}: {p}"; return false; }
         // the last step must end the event, or the game runs on into whatever follows
         bool added = false;
         if (!_script.Steps[^1].EndsFlow) { _script.Steps.Add(new L2Step { Bytes = new byte[] { 0x00 } }); added = true; }

@@ -24,7 +24,7 @@ public static class L2Text
         for (int k = 0; k < WordCount; k++)
         {
             int at = Dictionary + rom.ReadUInt16Le(Dictionary + k * 2);
-            w[k] = Encoding.Latin1.GetString(rom.ReadUntil(at, 0, 40));
+            w[k] = new string(rom.ReadUntil(at, 0, 40).Select(b => L2Charset.ToChar(rom, b) ?? '?').ToArray());
         }
         _wordsRom = rom; _words = w;
         return w;
@@ -47,22 +47,26 @@ public static class L2Text
             if (b == 0x0B) { sb.Append("[CHOICE]"); break; }
             if (b == 0x0A && depth < 4)
             {
-                // a back-reference: (hi >> 4) + 2 letters of the text d bytes back from here
+                // a back-reference: (hi >> 4) + 2 bytes of the text d bytes back from here (bytes, not letters: a
+                // Dutch letter 10-1F or a dictionary word is one byte of them)
                 byte lo = rom.ReadByte(p), hi = rom.ReadByte(p + 1);
                 int d = lo | (hi & 0x0F) << 8, n = (hi >> 4) + 2;
-                string earlier = DecodeAt(rom, p - d, out _, 400, depth + 1).Replace("[END]", "").Replace("[WAIT]", "");
-                sb.Append(earlier.Length > n ? earlier[..n] : earlier);
+                sb.Append(DecodeAt(rom, p - d, out _, n, depth + 1).Replace("[END]", "").Replace("[WAIT]", "").Replace("[CHOICE]", ""));
                 p += 2;
             }
             else if (b == 7) sb.Append($"[GLYPH {rom.ReadByte(p++):X2}]");
             else if (b == 3) sb.Append('\n');
-            else if (b == 4) sb.Append($"[PAUSE {rom.ReadByte(p++):X2}]");
+            else if (b == 4)
+            {
+                byte v = rom.ReadByte(p++);
+                if (v != 0x80) sb.Append($"[PAUSE {v:X2}]");   // 04 80, a pause of no time, only fills up shortened text
+            }
             else if (b == 5) sb.Append(words[rom.ReadByte(p++)]);
             else if (b == 6) sb.Append(words[0x100 + rom.ReadByte(p++)]);
             else if (b >= 0x80) sb.Append(words[0x200 + (b & 0x7F)]);
             else if (b is >= 0x0C and <= 0x0F) sb.Append("?!,."[b - 0x0C]).Append('\n');
             else if (b == 9) sb.Append("[NAME]");
-            else if (b is >= 0x20 and < 0x7F) sb.Append((char)b);
+            else if (b != 0x5B && L2Charset.ToChar(rom, b) is char ch) sb.Append(ch);   // "[" itself shows as [5B], so it reads back
             else sb.Append($"[{b:X2}]");
         }
         end = p;
@@ -109,7 +113,7 @@ public static class L2Text
                 i += words[k].Length;
                 continue;
             }
-            outp.Add(c is >= ' ' and < (char)0x7F ? (byte)c : (byte)'?');
+            outp.Add(L2Charset.ToByte(rom, c) ?? (byte)'?');
             i++;
         }
         return outp.ToArray();

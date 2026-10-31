@@ -53,7 +53,7 @@ public static class L2Capsules
         var r = new Record
         {
             Index = i, At = a,
-            Name = Encoding.ASCII.GetString(rom.ReadBytes(a, 12)).TrimEnd(' ', '\0'),
+            Name = L2Rom.Name(rom, a, 12),
             Form = rom.ReadByte(a + 0x0D), Type = rom.ReadByte(a + 0x0E),
             AiScript = rom.ReadUInt16Le(a + 0x25), DefenseScript = rom.ReadUInt16Le(a + 0x27),
         };
@@ -68,10 +68,7 @@ public static class L2Capsules
     public static void Write(RomBuffer rom, Record r)
     {
         int a = r.At;
-        var name = Enumerable.Repeat((byte)' ', 12).ToArray();
-        var src = Encoding.ASCII.GetBytes(r.Name.Length > 12 ? r.Name[..12] : r.Name);
-        Array.Copy(src, name, src.Length);
-        rom.WriteBytes(a, name);
+        L2Rom.WriteName(rom, a, 12, r.Name);
         rom.WriteByte(a + 0x0D, (byte)Math.Clamp(r.Form, 1, Forms));
         rom.WriteByte(a + 0x0E, (byte)r.Type);
         for (int s = 0; s < 3; s++) { rom.WriteByte(a + 0x0F + s, (byte)r.Attacks[s]); rom.WriteByte(a + 0x12 + s, (byte)r.Learned[s]); }
@@ -80,14 +77,11 @@ public static class L2Capsules
     }
 
     /// <summary>The 7 monsters' default names (5 letters).</summary>
-    public static string MonsterName(RomBuffer rom, int m) => Encoding.ASCII.GetString(rom.ReadBytes(Names + m * NameLength, NameLength)).TrimEnd(' ', '\0');
+    public static string MonsterName(RomBuffer rom, int m) => L2Rom.Name(rom, Names + m * NameLength, NameLength);
 
     public static void WriteMonsterName(RomBuffer rom, int m, string name)
     {
-        var b = Enumerable.Repeat((byte)' ', NameLength).ToArray();
-        var src = Encoding.ASCII.GetBytes(name.Length > NameLength ? name[..NameLength] : name);
-        Array.Copy(src, b, src.Length);
-        rom.WriteBytes(Names + m * NameLength, b);
+        L2Rom.WriteName(rom, Names + m * NameLength, NameLength, name);
     }
 
     public static int[] Curve(RomBuffer rom, int id) => rom.ReadBytes(Curves + id * 8, 8).Select(b => (int)b).ToArray();
@@ -117,7 +111,7 @@ public static class L2Capsules
     }
 
     public static string[] AttackNameList(RomBuffer rom) => Enumerable.Range(0, AttackNameCount)
-        .Select(i => Encoding.ASCII.GetString(rom.ReadUntil(AttackNames + rom.ReadUInt16Le(AttackNames + i * 2), 0, 32))).ToArray();
+        .Select(i => new string(rom.ReadUntil(AttackNames + rom.ReadUInt16Le(AttackNames + i * 2), 0, 32).Select(b => L2Charset.ToChar(rom, b) ?? '?').ToArray())).ToArray();
 
     public static int AttackAt(RomBuffer rom, int i) => Attacks + rom.ReadUInt16Le(Attacks + i * 2);
 

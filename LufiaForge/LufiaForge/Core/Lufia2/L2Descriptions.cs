@@ -67,11 +67,53 @@ public static class L2Descriptions
     public static string[] DescriptionWords(RomBuffer rom)
     {
         if (_words != null && ReferenceEquals(_wordsRom, rom)) return _words;
-        int n = rom.ReadUInt16Le(Words) / 2;
+        int list = WordsAt(rom);
+        int n = rom.ReadUInt16Le(list) / 2;
         var w = new string[n];
-        for (int k = 0; k < n; k++) w[k] = Encoding.Latin1.GetString(rom.ReadUntil(Words + rom.ReadUInt16Le(Words + k * 2), 0, 40));
+        for (int k = 0; k < n; k++) w[k] = new string(rom.ReadUntil(list + rom.ReadUInt16Le(list + k * 2), 0, 40).Select(b => L2Charset.ToChar(rom, b) ?? '?').ToArray());
         _wordsRom = rom; _words = w;
         return w;
+    }
+
+    /// <summary>The two LDA $9E:DDCC,X of $85:C4F1 that read the word list (operands).</summary>
+    private static readonly int[] WordSites = { 0x2C58A, 0x2C598 };
+
+    /// <summary>Where the word list is: read from the code (<see cref="SetWords"/> moves it), else the game's place.</summary>
+    public static int WordsAt(RomBuffer rom)
+    {
+        if (rom.Length > WordSites[1] + 3 && WordSites.All(s => rom.ReadByte(s - 1) == 0xBF))
+        {
+            int snes = (int)rom.ReadUInt24Le(WordSites[0]);
+            if (snes == (int)rom.ReadUInt24Le(WordSites[1])) return L2Rom.SnesToFile(snes);
+        }
+        return Words;
+    }
+
+    /// <summary>Puts a new word list in the added space and points the code at it (the descriptions are encoded again
+    /// with it by the caller: what the old codes meant changes).</summary>
+    public static void SetWords(RomBuffer rom, IReadOnlyList<string> words)
+    {
+        if (!WordSites.All(s => rom.ReadByte(s - 1) == 0xBF)) throw new InvalidOperationException("This ROM's description code isn't the US game's.");
+        var head = new List<byte>(); var body = new List<byte>();
+        int n = Math.Min(words.Count, 0x80 + 5 * 0xFF);
+        for (int k = 0; k < n; k++)
+        {
+            head.Add((byte)(n * 2 + body.Count)); head.Add((byte)((n * 2 + body.Count) >> 8));
+            body.AddRange(words[k].Select(c => L2Charset.ToByte(rom, c) ?? (byte)'?'));
+            body.Add(0);
+        }
+        var bytes = head.Concat(body).ToArray();
+        int at = L2Rom.Allocate(rom, bytes.Length);
+        rom.WriteBytes(at, bytes);
+        PointWords(rom, at);
+    }
+
+    /// <summary>Points the code at the word list at file offset <paramref name="at"/>.</summary>
+    public static void PointWords(RomBuffer rom, int at)
+    {
+        int snes = L2Rom.FileToSnes(at);
+        foreach (int s in WordSites) rom.WriteBytes(s, new[] { (byte)snes, (byte)(snes >> 8), (byte)(snes >> 16) });
+        _words = null; _wordsRom = null;
     }
 
     public static int At(RomBuffer rom, int entry)
@@ -96,7 +138,7 @@ public static class L2Descriptions
             byte c = b[i];
             if (c >= 0x80) sb.Append(words[c & 0x7F]);
             else if (c == 0x0A) sb.Append('\n');
-            else if (c >= 0x20) sb.Append((char)c);
+            else if (c >= 0x20) sb.Append(L2Charset.ToChar(rom, c) ?? '?');
             else if (c >= 0x10) sb.Append(Lookup(dict, (c - 0x10) * 0xFF + b[++i]));
             else if (c >= 5) sb.Append(Lookup(words, (c - 5) * 0xFF + b[++i] + 0x80));
             else sb.Append($"[{c:X2}]");
@@ -125,7 +167,8 @@ public static class L2Descriptions
             if (ch == '\n') { outp.Add(0x0A); i++; continue; }
             var hit = cands.FirstOrDefault(c => string.CompareOrdinal(text, i, c.w, 0, c.w.Length) == 0);
             if (hit.w != null) { outp.AddRange(hit.code); i += hit.w.Length; continue; }
-            outp.Add(ch is >= ' ' and < (char)0x7F ? (byte)ch : (byte)'?');
+            // 10-1F are dictionary words here, so only the letters at 20 and up (in the Dutch font " is ë...)
+            outp.Add(L2Charset.ToByte(rom, ch) is byte cb && cb >= 0x20 ? cb : (byte)'?');
             i++;
         }
         outp.Add(0);
@@ -169,6 +212,21 @@ public static class L2Descriptions
             return Write(rom, moved, text);
         }
         return Pack(rom, Enumerable.Range(0, n).Select(e => e == entry ? mine : Encode(rom, Read(rom, e))).ToList());
+    }
+
+    /// <summary>Sets many entries at once (numbers as in the ROM's layout now), packed once; moved to the added space
+    /// when they don't fit where the game has them. Returns null, or why they don't fit.</summary>
+    public static string? WriteMany(RomBuffer rom, IReadOnlyDictionary<int, string> texts)
+    {
+        int n = EntryCount(rom);
+        var mine = texts.Where(kv => kv.Key >= 0 && kv.Key < n).ToDictionary(kv => kv.Key, kv => Encode(rom, kv.Value));
+        if (Pack(rom, Enumerable.Range(0, n).Select(e => mine.TryGetValue(e, out var b) ? b : Raw(rom, e)).ToList()) == null) return null;
+        if (!IsMoved(rom) && CanMove(rom))
+        {
+            Move(rom);
+            return WriteMany(rom, texts.ToDictionary(kv => kv.Key >= IpBase && kv.Key < Count ? kv.Key + 0xD0 : kv.Key, kv => kv.Value));
+        }
+        return Pack(rom, Enumerable.Range(0, n).Select(e => mine.TryGetValue(e, out var b) ? b : Encode(rom, Read(rom, e))).ToList());
     }
 
     /// <summary>Writes the descriptions packed (identical ones shared), or returns why they don't fit.</summary>
