@@ -191,6 +191,7 @@ public partial class SpellEditorViewModel : GameDataEditorBase
         if (Ctx == null || !IsEditable) return;
         var rom = Ctx.Rom;
         int o   = _recordOffset;
+        if (Core.DutchLetters.Unwritable(Ctx.Rom, Name) is string badName) { Status = "Name: " + badName + "."; return; }
         bool renamed = Name != Ctx.ReadName(o, GameDataOffsets.SpellNameLen);
 
         Commit($"Spell {SelectedIndex:X2}", () =>

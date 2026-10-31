@@ -212,6 +212,7 @@ public partial class EventLineVm : ObservableObject
         get
         {
             if (!Op.IsText) return "";
+            if (Core.DutchLetters.Unwritable(Owner.Script.Rom, Op.Text) is string bad) return "Can't be saved: " + bad + ".";
             int now = Owner.Script.EncodeText(Op.Text, Op.Terminator).Length;
             if (Op.IsNew) return $"{now} bytes (new)";
             int was = Op.RawLength - Op.Bytes.Length;

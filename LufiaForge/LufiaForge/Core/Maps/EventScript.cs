@@ -111,6 +111,7 @@ public sealed class EventScript
     public string? StopReason { get; private set; }
 
     private readonly RomBuffer _rom;
+    public RomBuffer Rom => _rom;
     private readonly List<ScriptOp> _original = new();
 
     private EventScript(RomBuffer rom, int mapId, int ev, int blockBase, int start)
@@ -780,6 +781,9 @@ public sealed class EventScript
     /// <summary>Write the edited event to the ROM. Returns a description of what was done and where.</summary>
     public string Save(bool allowExpand)
     {
+        foreach (var o in Ops.Where(o => o.IsText && (o.IsNew || o.TextChanged)))
+            if (DutchLetters.Unwritable(_rom, o.Text) is string bad)
+                throw new InvalidOperationException(bad + ".");
         // the rename command needs its engine patch (added the first time an event uses it)
         if (Ops.Any(o => !o.IsText && o.Bytes.Length > 0 && o.Bytes[0] == Battle.RenamePatch.Op) && !Battle.RenamePatch.IsApplied(_rom))
         {
