@@ -232,6 +232,7 @@ public partial class TextEditorViewModel : ObservableObject, LufiaForge.ViewMode
         if (s == null || SelectedRow.Line.Line >= s.Ops.Count) { SizeText = ""; return; }
         var op = s.Ops[SelectedRow.Line.Line];
         int was = op.RawLength - op.Bytes.Length;
+        if (Core.DutchLetters.Unwritable(_rom, EditText) is string bad) { SizeText = "Can't be saved: " + bad + "."; return; }
         int now = s.EncodeText(EditText, op.Terminator).Length;
         SizeText = EditText.Replace("\r", "") == op.OriginalText ? $"{was} bytes"
                  : now == was ? $"{now} bytes (same size: saved in place)"

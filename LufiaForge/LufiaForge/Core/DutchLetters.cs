@@ -117,6 +117,22 @@ public static class DutchLetters
         return (byte)c;
     }
 
+    /// <summary>Why <paramref name="text"/> can't be written to a Lufia 1 ROM as typed (a letter the fonts don't have),
+    /// or null. Before, such a letter was dropped without a word (egoïstisch came out egostisch).</summary>
+    public static string? Unwritable(RomBuffer rom, string text)
+    {
+        var missing = text.Where(c => c > 0x7E && Code(rom, c) == null).Distinct().ToList();
+        if (missing.Count == 0) return null;
+        var dutch = missing.Where(c => Map.Any(m => m.Letter == c)).ToList();
+        var other = missing.Except(dutch).ToList();
+        string Join(List<char> l) => string.Join(" ", l);
+        if (other.Count == 0)
+            return $"{Join(dutch)} need{(dutch.Count == 1 ? "s" : "")} the Dutch letters (Game Data, Game Settings, Dutch)";
+        return $"{Join(other)} {(other.Count == 1 ? "isn't" : "aren't")} in Lufia 1's font" +
+               (dutch.Count > 0 ? $"; {Join(dutch)} need{(dutch.Count == 1 ? "s" : "")} the Dutch letters (Game Data, Game Settings, Dutch)" : "") +
+               (IsApplied(rom) ? "" : $". The Dutch letters are {string.Join(" ", Map.Select(m => m.Letter))}");
+    }
+
     /// <summary>Text with the letters written as the codes they have in the game (when the letters are in).</summary>
     public static string ToCodes(string text)
     {
@@ -189,7 +205,40 @@ public static class DutchLetters
     /// 2-13.</summary>
     private static byte[] TextGlyph(byte[] letter, Accent accent, bool capital) => Compose(letter, accent, rowsAbove: capital ? 1 : 2);
 
-    private static byte[] SmallGlyph(byte[] rows, Accent accent) => Compose(rows, accent, rowsAbove: 2);
+    /// <summary>An 8x8 glyph of the small font (item lists, the Restored descriptions): its lower case letters start on
+    /// row 2, so the accent takes rows 0-1 and touches the letter, as the Dutch Lufia II's menu font draws them; a capital
+    /// loses two of its repeated rows to make the room (É is a shorter E there too). Before, every accent of this font
+    /// was one dot on row 0 (é è ë ê looked the same, ï like an i).</summary>
+    private static byte[] SmallGlyph(byte[] g, Accent accent)
+    {
+        var rows = g.ToList();
+        int bottom = rows.FindLastIndex(r => r != 0);
+        if (bottom < 0) return g;
+        int top = bottom;
+        while (top > 0 && rows[top - 1] != 0) top--;
+        for (int r = 0; r < top; r++) rows[r] = 0;   // an i's dot goes
+        // a capital: drop rows that repeat the one above until the letter starts on row 2
+        for (int r = top + 1; top < 2 && r < bottom; )
+            if (rows[r] == rows[r - 1]) { rows.RemoveAt(r); rows.Insert(0, 0); top++; r++; }
+            else r++;
+        var o = rows.ToArray();
+        int ink = 0;
+        for (int r = top; r <= bottom; r++) ink |= o[r];
+        int left = 0, right = 7;
+        while (left < 7 && (ink & 0x80 >> left) == 0) left++;
+        while (right > 0 && (ink & 0x80 >> right) == 0) right--;
+        int cx = (left + right + 1) / 2;
+        int low = top - 1, high = top - 2;
+        void Dot(int row, int col) { if (row >= 0 && row < o.Length && col is >= 0 and < 8) o[row] |= (byte)(0x80 >> col); }
+        switch (accent)
+        {
+            case Accent.Acute: Dot(low, cx); Dot(high, cx + 1); break;
+            case Accent.Grave: Dot(low, cx); Dot(high, cx - 1); break;
+            case Accent.Diaeresis: Dot(high, cx - 1); Dot(high, cx + 1); break;
+            case Accent.Circumflex: Dot(high, cx); Dot(low, cx - 1); Dot(low, cx + 1); break;
+        }
+        return o;
+    }
 
     private static byte[] Compose(byte[] g, Accent accent, int rowsAbove)
     {

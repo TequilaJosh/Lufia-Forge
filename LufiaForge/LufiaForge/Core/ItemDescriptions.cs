@@ -18,6 +18,14 @@ public sealed class ItemDescriptions
     public const int MaxLines = 2;
     /// <summary>The longest line the hack's own texts use (the window holds this much).</summary>
     public const int MaxLineLength = 30;
+    /// <summary>The letters the window shows (measured in BizHawk: its frame is fixed, a 23rd letter sits on the frame;
+    /// Restored's own texts reach 23 with "A three-pronged weapon.").</summary>
+    public const int VisibleLineLength = 22;
+
+    /// <summary>A soft warning when a line runs past the window's frame, or "".</summary>
+    public static string Warning(string text) =>
+        text.Replace("\r", "").Split('\n').Any(l => l.TrimEnd().Length > VisibleLineLength)
+            ? $"a line is longer than the {VisibleLineLength} letters the window shows, the rest runs over its frame" : "";
 
     private readonly RomBuffer _rom;
     /// <summary>End of the room the texts may use (the zero-filled rest of the bank after them).</summary>
@@ -59,17 +67,20 @@ public sealed class ItemDescriptions
     {
         int o = FileOffset(Pointer(_rom, item));
         var sb = new StringBuilder();
-        for (int b; (b = _rom.ReadByte(o)) != 0; o++) sb.Append((char)b);
+        for (int b; (b = _rom.ReadByte(o)) != 0; o++) sb.Append(DutchLetters.Show(_rom, (byte)b));
         return sb.ToString().Replace("\n\n", "\n");
     }
 
-    /// <summary>Why a text can't be used, or null.</summary>
-    public static string? Problem(string text)
+    /// <summary>Why a text can't be used, or null. With the Dutch letters in (<see cref="DutchLetters"/>) they can be
+    /// typed too.</summary>
+    public static string? Problem(string text, RomBuffer? rom = null)
     {
         var lines = text.Replace("\r", "").Split('\n');
         if (lines.Length > MaxLines) return $"at most {MaxLines} lines";
         if (lines.Any(l => l.Length > MaxLineLength)) return $"a line is longer than {MaxLineLength} characters (the window would cut it)";
-        if (text.Replace("\r", "").Replace("\n", "").Any(c => c < 0x20 || c > 0x7E)) return "only plain letters, digits and punctuation";
+        string flat = text.Replace("\r", "").Replace("\n", "");
+        if (rom != null && DutchLetters.Unwritable(rom, flat) is string bad) return bad;
+        if (flat.Any(c => c < 0x20 || c > 0x7E && (rom == null || DutchLetters.Code(rom, c) == null))) return "only plain letters, digits and punctuation";
         return null;
     }
 
@@ -83,12 +94,12 @@ public sealed class ItemDescriptions
         for (int i = 0; i < Count; i++)
         {
             string t = texts[i].Replace("\r", "");
-            if (Problem(t) is string bad) throw new InvalidOperationException($"Item {i:X2}'s description: {bad}.");
+            if (Problem(t, _rom) is string bad) throw new InvalidOperationException($"Item {i:X2}'s description: {bad}.");
             if (!at.TryGetValue(t, out int pos))
             {
                 pos = TextStart + data.Count;
                 at[t] = pos;
-                data.AddRange(Encoding.ASCII.GetBytes(t.Replace("\n", "\n\n")));
+                data.AddRange(Bytes(t));
                 data.Add(0);
             }
             ptr[i] = pos;
@@ -104,5 +115,8 @@ public sealed class ItemDescriptions
 
     /// <summary>Room left for longer texts, in bytes.</summary>
     public int Free(IReadOnlyList<string> texts) =>
-        Limit - TextStart - texts.Select(t => t.Replace("\r", "")).Distinct().Sum(t => Encoding.ASCII.GetByteCount(t.Replace("\n", "\n\n")) + 1);
+        Limit - TextStart - texts.Select(t => t.Replace("\r", "")).Distinct().Sum(t => Bytes(t).Length + 1);
+
+    /// <summary>A text's bytes: a letter each (a Dutch letter as its code), a line break as two 0A.</summary>
+    private byte[] Bytes(string text) => text.Replace("\n", "\n\n").Select(c => DutchLetters.Code(_rom, c) ?? (byte)'?').ToArray();
 }

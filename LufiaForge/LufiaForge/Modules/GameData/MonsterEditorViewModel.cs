@@ -273,6 +273,7 @@ public partial class MonsterEditorViewModel : GameDataEditorBase
 
         var rom = Ctx.Rom;
         int o   = _recordOffset;
+        if (Core.DutchLetters.Unwritable(Ctx.Rom, Name) is string badName) { Status = "Name: " + badName + "."; return; }
         bool renamed = Name != Ctx.ReadName(o, GameDataOffsets.MonsterNameLen);
 
         Commit($"Monster {SelectedIndex:X2}", () =>

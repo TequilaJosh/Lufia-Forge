@@ -136,7 +136,8 @@ public partial class ItemEditorViewModel : GameDataEditorBase
         if (_descriptions != null)
         {
             Description = _descriptions.Read(SelectedIndex);
-            DescriptionInfo = $"Shown when X is pressed on the item (added by the Restored hack). Up to {Core.ItemDescriptions.MaxLines} lines of {Core.ItemDescriptions.MaxLineLength} characters; " +
+            DescriptionInfo = $"Shown when X is pressed on the item (added by the Restored hack). Up to {Core.ItemDescriptions.MaxLines} lines; the window shows {Core.ItemDescriptions.VisibleLineLength} letters a line (up to {Core.ItemDescriptions.MaxLineLength} are written)" +
+                              (Core.DutchLetters.IsApplied(Ctx!.Rom) ? ", the Dutch letters included; " : "; ") +
                               $"{_descriptions.Free(AllDescriptions()):N0} bytes of room left for longer texts.";
         }
     }
@@ -173,10 +174,11 @@ public partial class ItemEditorViewModel : GameDataEditorBase
         string typed = Description.Replace("\r", "");
         if (_descriptions != null && typed != _descriptions.Read(SelectedIndex))
         {
-            if (Core.ItemDescriptions.Problem(typed) is string bad) { Status = "Description: " + bad + "."; return; }
+            if (Core.ItemDescriptions.Problem(typed, Ctx.Rom) is string bad) { Status = "Description: " + bad + "."; return; }
             newDescription = typed;
         }
 
+        if (Core.DutchLetters.Unwritable(Ctx.Rom, Name) is string badName) { Status = "Name: " + badName + "."; return; }
         bool renamed = Name != Ctx.ReadName(o, GameDataOffsets.ItemNameLen);
         Commit($"Item {SelectedIndex:X2}", () =>
         {
@@ -212,6 +214,7 @@ public partial class ItemEditorViewModel : GameDataEditorBase
         }, namesChanged: renamed);
 
         if (!renamed) LoadSelected();
+        if (newDescription != null && Core.ItemDescriptions.Warning(newDescription) is { Length: > 0 } warn) Status += " Warning, description: " + warn + ".";
     }
 
     private List<string> AllDescriptions() =>

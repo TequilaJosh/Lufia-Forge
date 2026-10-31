@@ -88,4 +88,16 @@ Signs left alone on purpose:
 
 `=` is the last sign on the name screen's grid, so a name can have an ö.
 
-**Checked in the game:** "é è ë ê ï ö ü á à ó ú É" and "egoïstisch, één, ideeën" show in a narration box.
+In the small font (item lists, menu names, Restored's descriptions) a letter is 8 rows tall and starts on row 2. The accent takes rows 0-1 and touches the letter, the way the Dutch Lufia II's menu font draws them. É is a shorter E there, made by dropping two of E's repeated rows.
+
+### Typing a letter the game can't show
+
+While the Dutch letters are off, a name, a line of dialogue or a description with é in it is not saved. Lufia Forge says why: "é needs the Dutch letters (Game Data, Game Settings, Dutch)". A letter that isn't one of the twelve, like ß, gets "ß isn't in Lufia 1's font". Before, such a letter was dropped without a word, so egoïstisch came out as egostisch. The text editor's size line says it before you save.
+
+### Item descriptions (Restored)
+
+With the Restored hack, item descriptions take the Dutch letters too. The window has a fixed width: it shows 22 letters a line, and a 23rd lands on its frame. Restored's own texts go up to 23 ("A three-pronged weapon."). So Lufia Forge still writes up to 30 letters a line and warns past 22.
+
+The Dutch Lufia II's item descriptions are not brought over. They describe Lufia II's items (other effects, other numbers, who can equip them), so they would be wrong for Lufia 1.
+
+**Checked in the game:** "é è ë ê ï ö ü á à ó ú É" and "egoïstisch, één, ideeën" show in a narration box and in Restored's description window (every letter distinct in the small font). In the window, from a project file: a name, a description and a line of dialogue with é are refused while the letters are off and saved once Game Settings puts them in.
