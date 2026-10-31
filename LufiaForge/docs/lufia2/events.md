@@ -48,6 +48,12 @@ the game's own scripts use it, **guess** = not confirmed.
   is why a line given to a hero who isn't in the party lands on someone else: in Parcelyte (2D) Selan at home is story
   character 19 with her sprite 01, not the party's Selan (Artemis's Camu scene, 2026-10-31). `34 actor sprite` shows
   an actor with another sprite: the opening's "Erim:" lines are Maxim's actor drawn as Erim (sprite 38).
+  `48 x y` puts the next box at a fixed place ($125D, as 9E does) over nobody: the game's off-screen voices (Shrine of
+  Daos E7 scene 62, Lake Cave 0A, Clamento 25, Narcysus 6A). On a map with dungeon controls (`69` bit 01, `$09A7`)
+  only the leader is made until `3D` lines up the party, so a hero's line before that goes over the leader (Divine
+  Shrine A8 area 1, map 37 area 1). All checked in BizHawk by logging every text box of the game's cutscenes (2,022
+  lines): the box landed where the labels say, apart from pose sprites (Lemmy crying, Selan's sprite 21, Maxim
+  collapsed: the same character with another sprite) and characters the test start doesn't put on the map.
 * **Speaker names** (`L2Speakers`): the Text page, the editor's cards and character lists, the event lists and
   playback all name a speaker the same way and follow the rule above: "Selan (party)", "Selan (story character 19,
   sprite 01)", "Lemmy (character 14, sprite 3D)", "Erim (Maxim's actor drawn as sprite 38)", "..., the one talked to",
