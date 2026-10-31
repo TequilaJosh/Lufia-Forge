@@ -110,6 +110,7 @@ public partial class L2CutscenesPage : ObservableObject
                 triggers = L2MapInfo.Records(rom, map, L2MapInfo.Triggers, 5).ToDictionary(r => (int)r.Bytes[0], r => r.Bytes);
             }
             catch (Exception) { continue; }
+            var speakers = new L2Speakers(rom, map);
             List<L2EventBlocks.Entry> entries;
             try { entries = L2EventBlocks.ReadLists(rom, block).Where(e => e.IsScript && e.Head != L2EventBlocks.GameList).OrderBy(e => e.Head == L2EventBlocks.SceneList ? 0 : e.Head).ThenBy(e => e.Id).ToList(); }
             catch (Exception) { continue; }
@@ -120,7 +121,7 @@ public partial class L2CutscenesPage : ObservableObject
                     L2EventBlocks.SceneList => L2Cutscene.Starter(rom, map, e.Id) is { } st
                         ? $"Scene {e.Id:X2}: when the party enters" + (st.Flag >= 0 ? $" (story flag {st.Flag:X2} {(st.MustBeOn ? "on" : "off")})" : "")
                         : $"Scene {e.Id:X2}: on arrival from another cutscene",
-                    L2EventBlocks.TalkList => "Talking to " + (e.Id < 7 ? L2EventCommands.HeroNames[e.Id] : e.Id < 0x50 ? $"story character {e.Id:X2}" : $"character {e.Id - 0x4F}" + (starts.TryGetValue(e.Id, out var c) ? $" at ({c[1]},{c[2]})" : "")),
+                    L2EventBlocks.TalkList => "Talking to " + speakers.Label(e.Id, sprite: false) + (e.Id >= 0x50 && starts.TryGetValue(e.Id, out var c) ? $" at ({c[1]},{c[2]})" : ""),
                     L2EventBlocks.TriggerList => triggers.TryGetValue(e.Id, out var t) ? $"Stepping onto ({t[1]},{t[2]})-({t[3] - 1},{t[4] - 1})" : $"Stepping onto area {e.Id} (not on the map)",
                     _ => $"Event {e.Id:X2}",
                 };

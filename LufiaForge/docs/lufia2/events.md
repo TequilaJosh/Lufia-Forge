@@ -39,6 +39,24 @@ the game's own scripts use it, **guess** = not confirmed.
   letters of the text d = lo + (hi & 0F) * 256 bytes back.
 * Speakers: 13 xx = character xx; **61-67 = Maxim, Selan, Guy, Artea, Dekar, Tia, Lexis** (the code maps them to actors
   0, 1, 2, 3, 5, 4, 6; hero 4 is Tia, 5 Dekar: data, Tia speaks with 66 in Alunze Castle, Dekar with 65).
+* **Who the box goes over** ($80:A06E -> $80:BC33): 13 xx and 61-67 store the actor in `$09AB`, so `13 01` is exactly
+  `62`, the party's Selan. 08 and 10 leave `$09AB` as it is: they speak as the current speaker. A talk starts with
+  `$09AB` = `$09AC` = the one talked to ($83:BB19), every other event with FF ($83:B740); a text ending `01` puts
+  `$09AC` back into `$09AB` when it isn't FF ($80:9DB3). So 08 is the one talked to in a talk, and outside a talk the
+  last one a 13 / 61-67 named; with no one named yet the box keeps the last place it had. The box goes over the first
+  shown actor with that id ($80:C33F -> $80:BF6F); when there is none it stays on the last actor the game found. That
+  is why a line given to a hero who isn't in the party lands on someone else: in Parcelyte (2D) Selan at home is story
+  character 19 with her sprite 01, not the party's Selan (Artemis's Camu scene, 2026-10-31). `34 actor sprite` shows
+  an actor with another sprite: the opening's "Erim:" lines are Maxim's actor drawn as Erim (sprite 38).
+* **Speaker names** (`L2Speakers`): the Text page, the editor's cards and character lists, the event lists and
+  playback all name a speaker the same way and follow the rule above: "Selan (party)", "Selan (story character 19,
+  sprite 01)", "Lemmy (character 14, sprite 3D)", "Erim (Maxim's actor drawn as sprite 38)", "..., the one talked to",
+  "..., still speaking", "No speaker set". Who a sprite or story character is comes from the game's text
+  (`Data/Lufia2_Speakers.json`: self-introductions, "Name:" lines, people addressed by name; the generic sprites by
+  role). Checked on all 5,452 text steps of the US game against a separate audit of every path through every event
+  (flags included): every label names the actor and sprite the game uses, and playback says the same on the 2,860 steps
+  it plays from the start. The Text page now lists all 5,452 (the 69 sign texts after `B8` were missing: B8 makes the
+  next message stay up while the player walks on, it doesn't end the event).
 * In the editor the text is plain text: Enter = new line, `[Name]` = the hero's name, `[Pause 20]` = 20 frames,
   `[Voice 3]`, `[Glyph 41]`. Words of the dictionary and repeats are written out; changed text is packed with the
   dictionary again. A box shows **4 lines of 28 letters** (28 measured by Artemis; checked in BizHawk 2026-10-30: a

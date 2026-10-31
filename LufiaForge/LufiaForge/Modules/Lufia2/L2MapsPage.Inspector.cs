@@ -58,7 +58,8 @@ public partial class L2MapsPage
             SelKind.Exit => $"{(_edit.IsWorld ? "entrance" : "exit")} {b[0]} to {(b[8] == 0 ? "the world map" : $"{b[8]:X2} {NameOf(b[8])}")} ({b[6]},{b[7]})",
             SelKind.Door => $"door {b[0]}",
             SelKind.Trigger => $"step-on area {b[0]}" + (_triggerIds.Contains(b[0]) ? " (plays an event: double-click to open it)" : ""),
-            SelKind.Character => $"character {b[0]} (sprite {(_edit.Sprites.TryGetValue(0x4F + b[0], out int sp) ? L2Sprites.Name(sp) : "none")})"
+            SelKind.Character => (_edit.Sprites.TryGetValue(0x4F + b[0], out int sp) && L2Speakers.SpriteName(sp) is { } who ? who + ", " : "") +
+                                 $"character {b[0]} (sprite {(_edit.Sprites.TryGetValue(0x4F + b[0], out int sp2) ? L2Sprites.Name(sp2) : "none")})"
                                  + (_talkIds.Contains(0x4F + b[0]) ? " (talking plays an event: double-click to open it)" : ""),
             SelKind.Point => $"preset point {b[0]}",
             _ => $"{(_edit.IsHidden(b) ? "hidden item" : "chest")} {b[0]} ({(_edit.ChestOf(b[0] & 0x1F) is { } c ? ItemName(c.Item) : "empty")})",
