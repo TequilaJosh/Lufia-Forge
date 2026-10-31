@@ -205,6 +205,8 @@ public partial class MainViewModel
 
     private void Use(LufiaProject project, byte[] rom)
     {
+        // a project made before Lufia Forge knew the ROM (the Dutch Lufia II was taken for Lufia 1)
+        if (GameDetect.Detect(rom) == GameKind.Unknown) throw new InvalidDataException(GameDetect.WhyNot(rom));
         _pendingChanges.Clear();
         Project = project;
         Core.Maps.MapNames.ProjectNames = project.MapNames;
