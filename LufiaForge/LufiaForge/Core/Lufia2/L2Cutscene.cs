@@ -165,10 +165,14 @@ public sealed class L2StageState
     /// ($09AC: the one talked to in a talk event); FF: none (<see cref="L2Speakers"/>).</summary>
     public int Talker { get; set; } = 0xFF;
     public int TalkSave { get; set; } = 0xFF;
+    /// <summary>A 48 placed the next text box (over nobody); the party is lined up (a dungeon shows only the leader
+    /// before 3D). Null: not known yet (the first step reads the map).</summary>
+    public bool BoxFixed { get; set; }
+    public bool? LinedUp { get; set; }
 
     public L2StageState Copy()
     {
-        var s = new L2StageState { CameraX = CameraX, CameraY = CameraY, CameraOnLeader = CameraOnLeader, Dark = Dark, Shaking = Shaking, Song = Song, Talker = Talker, TalkSave = TalkSave };
+        var s = new L2StageState { CameraX = CameraX, CameraY = CameraY, CameraOnLeader = CameraOnLeader, Dark = Dark, Shaking = Shaking, Song = Song, Talker = Talker, TalkSave = TalkSave, BoxFixed = BoxFixed, LinedUp = LinedUp };
         foreach (var kv in Actors) s.Actors[kv.Key] = kv.Value.Copy();
         s.Flags.UnionWith(Flags);
         foreach (var kv in Counters) s.Counters[kv.Key] = kv.Value;
@@ -464,6 +468,7 @@ public static class L2Cutscene
         var sp = new L2Speakers(rom, map);
         var list = new List<L2StageState> { start.Copy() };
         var cur = start.Copy();
+        cur.LinedUp ??= !sp.Dungeon;
         for (int i = 0; i < steps.Count; i++)
         {
             cur = Apply(cur, steps, i, m, name, sp);
@@ -488,6 +493,7 @@ public static class L2Cutscene
         var sp = new L2Speakers(rom, map);
         var run = new List<RunStep>();
         var cur = start.Copy();
+        cur.LinedUp ??= !sp.Dungeon;
         int i = 0;
         while (i >= 0 && i < steps.Count && run.Count < limit)
         {
@@ -601,14 +607,20 @@ public static class L2Cutscene
             int who = s.Talker;
             int drawnAs = who is >= 0 and < 7 && s.Actors.TryGetValue(who, out var spk) && spk.Sprite >= 0 && spk.Sprite != who ? spk.Sprite : -1;
             string label = who == 0xFF ? "" : sp.Label(who, drawnAs, sprite: false);
+            if (who is >= 1 and < 7 && s.LinedUp == false && op != 0x9E) label = L2Speakers.OverLeader(label);
+            if (s.BoxFixed && op == 0x08) label = L2Speakers.FixedBox;
+            else if (s.BoxFixed && op != 0x9E && label.Length > 0) label += " (off-screen: the box sits where the step before puts it)";
             s.Speaker = op switch { 0x9E => "", 0x10 => label.Length > 0 ? label + " asks" : "question", _ => label.Length > 0 ? label : "no speaker set" };
             s.Text = st.Text;
-            s.Caption = op == 0x9E ? "Narration" : who == 0xFF ? (op == 0x10 ? "A question" : "Text with no speaker set (the box goes over the last character the game found)") : $"{label} speaks";
+            s.Caption = op == 0x9E ? "Narration" : label.Length == 0 ? (op == 0x10 ? "A question" : "Text with no speaker set (the box goes over the last character the game found)") : $"{label} speaks";
             s.Frames = 60 + st.Text.Length * 2;
             if (st.End == 0x01 && s.TalkSave != 0xFF) s.Talker = s.TalkSave;
+            s.BoxFixed = false;
         }
         else switch (op)
         {
+            case 0x48: s.BoxFixed = true; s.Caption = "The next text box is put in a fixed place (over nobody)"; break;
+            case 0x3D: s.LinedUp = true; s.Caption = "The party lines up behind the leader"; break;
             case 0x34 when b.Length >= 3: { var a = A(b[1]); a.Sprite = L2Sprites.ToEditor(sp.Rom, sp.Map, b[2]); s.Caption = $"{name(b[1])} is shown as sprite {L2Sprites.Name(a.Sprite)}"; break; }
             case 0x2F when b.Length >= 4: { var a = A(b[1]); a.X = b[2]; a.Y = b[3]; s.Caption = $"{name(b[1])} is put on ({b[2]}, {b[3]})"; break; }
             case 0x30 when b.Length >= 3 && points.TryGetValue(b[2], out var p): { var a = A(b[1]); a.X = p.X; a.Y = p.Y; s.Caption = $"{name(b[1])} is put on point {b[2]}"; break; }

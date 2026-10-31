@@ -42,10 +42,26 @@ public sealed class L2Speakers
 
     public RomBuffer Rom { get; }
     public int Map { get; }
+    /// <summary>The map has dungeon controls (its start-up script's 69 with bit 01, $09A7): only the leader is made
+    /// until 3D lines up the party, so a hero's line before that goes over the leader ($84:8204; checked in BizHawk).</summary>
+    public bool Dungeon { get; }
+
+    /// <summary>Text after a 48: the box sits where 48 puts it ($125D), over nobody (checked in BizHawk: Shrine of Daos
+    /// E7 scene 62's "[Voice 1]Yeah, I'm fine." and the others).</summary>
+    public const string FixedBox = "Off-screen voice (the box sits where the step before puts it)";
+
+    /// <summary>A hero's line in a dungeon before the party lines up.</summary>
+    public static string OverLeader(string label) => label + ": only the leader is shown here until the party lines up (3D), so the box goes over the leader";
 
     public L2Speakers(RomBuffer rom, int map)
     {
         Rom = rom; Map = map;
+        try
+        {
+            int init = L2EventBlocks.InitScript(rom, map);
+            Dungeon = L2EventScript.Read(rom, init, L2EventBlocks.InitBase(init)).Steps.Any(s => s.Op == 0x69 && s.Bytes.Length >= 2 && (s.Bytes[1] & 1) != 0);
+        }
+        catch (Exception) { }
         try { _mapSprites = L2MapInfo.CharacterSprites(rom, map); } catch (Exception) { _mapSprites = new(); }
         try { _storySprites = L2Persistent.Start(rom).GroupBy(p => p.Id).ToDictionary(g => g.Key, g => g.First().Sprite); } catch (Exception) { _storySprites = new(); }
     }
@@ -94,37 +110,45 @@ public sealed class L2Speakers
         var index = new Dictionary<L2Step, int>(ReferenceEqualityComparer.Instance);
         for (int i = 0; i < steps.Count; i++) index[steps[i]] = i;
         int start = talkedTo >= 0 ? talkedTo : 0xFF;
-        var seen = new HashSet<(int, int, int, int)>();
+        var seen = new HashSet<(int, int, int, int, int)>();
         var said = new Dictionary<int, List<string>>();
-        var queue = new Queue<(int Step, int Spk, int Save, int Pose, int PoseOf)>();
-        queue.Enqueue((0, start, start, -1, -1));
+        // fixed: a 48 placed the next box; linedUp: 3D lined the party up (a dungeon shows only the leader before it)
+        var queue = new Queue<(int Step, int Spk, int Save, int Pose, int PoseOf, bool Fixed, bool LinedUp)>();
+        queue.Enqueue((0, start, start, -1, -1, false, !Dungeon));
         while (queue.Count > 0 && seen.Count < 20000)
         {
-            var (i, spk, save, pose, poseOf) = queue.Dequeue();
-            if (i < 0 || i >= steps.Count || !seen.Add((i, spk, save, pose << 8 | poseOf & 0xFF))) continue;
+            var (i, spk, save, pose, poseOf, fixedBox, linedUp) = queue.Dequeue();
+            if (i < 0 || i >= steps.Count || !seen.Add((i, spk, save, pose << 8 | poseOf & 0xFF, (fixedBox ? 1 : 0) | (linedUp ? 2 : 0)))) continue;
             var st = steps[i];
             var b = st.Bytes;
             if (st.IsText)
             {
                 if (st.Op == 0x13 || st.Op is >= 0x61 and <= 0x67) spk = L2Cutscene.SpeakerActor(b);
+                string who = spk == 0xFF ? "" : Label(spk, spk == poseOf ? pose : -1);
+                if (spk is >= 1 and < 7 && !linedUp && st.Op != 0x9E) who = OverLeader(who);
                 string label = st.Op switch
                 {
                     0x9E => "Narration",
+                    0x08 when fixedBox => FixedBox,
                     0x08 when spk == 0xFF => "No speaker set (the box goes over the last character the game found)",
-                    0x08 => Label(spk, spk == poseOf ? pose : -1) + (spk == talkedTo ? ", the one talked to" : ", still speaking"),
+                    0x08 => who + (spk == talkedTo ? ", the one talked to" : ", still speaking"),
                     0x10 when spk == 0xFF => "A question (no speaker set)",
-                    0x10 => "A question from " + Label(spk, spk == poseOf ? pose : -1),
-                    _ => Label(spk, spk == poseOf ? pose : -1),
+                    0x10 => "A question from " + who,
+                    _ when fixedBox => who + " (off-screen: the box sits where the step before puts it)",
+                    _ => who,
                 };
                 if (!said.TryGetValue(i, out var l)) said[i] = l = new();
                 if (!l.Contains(label)) l.Add(label);
                 if (st.End == 0x01 && save != 0xFF) spk = save;
+                fixedBox = false;
             }
             else if (st.Op == 0x34 && b.Length >= 3) { pose = L2Sprites.ToEditor(Rom, Map, b[2]); poseOf = b[1]; }
             else if (st.Op is 0x68 or 0x7B && b.Length >= 3 && b[1] == poseOf) { pose = -1; poseOf = -1; }
+            else if (st.Op == 0x48) fixedBox = true;
+            else if (st.Op == 0x3D) linedUp = true;
             foreach (var j in st.Jumps)
-                if (j.Step != null && index.TryGetValue(j.Step, out int to)) queue.Enqueue((to, spk, save, pose, poseOf));
-            if (!st.EndsFlow) queue.Enqueue((i + 1, spk, save, pose, poseOf));
+                if (j.Step != null && index.TryGetValue(j.Step, out int to)) queue.Enqueue((to, spk, save, pose, poseOf, fixedBox, linedUp));
+            if (!st.EndsFlow) queue.Enqueue((i + 1, spk, save, pose, poseOf, fixedBox, linedUp));
         }
         return said.ToDictionary(kv => kv.Key, kv => string.Join(" or ", kv.Value));
     }
