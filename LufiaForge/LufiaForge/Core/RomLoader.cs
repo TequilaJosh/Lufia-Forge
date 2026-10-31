@@ -57,7 +57,7 @@ public static class RomLoader
                 return new RomLoadReport(
                     RomLoadResult.WrongGame,
                     null,
-                    $"ROM title \"{title}\" is neither Lufia 1 nor Lufia II (or the ROM is too small). Wrong game or wrong region?",
+                    GameDetect.WhyNot(raw),
                     hadSmcHeader,
                     title,
                     raw.Length);
