@@ -1052,6 +1052,49 @@ public static class L2Cutscene
                (head == L2EventBlocks.TalkList ? " Talk to the character to start the cutscene (it speaks as the one talked to, so it needs the talk)." : "") + extra;
     }
 
+    /// <summary>The preset point the game puts the party on for each scene of <paramref name="map"/>: the point of a
+    /// "Go to another map" (16 map scene point) of any event that starts it (Elcid's scene 01 is started from map A2
+    /// with point 4; on another point the camera is elsewhere and a box over a character off to the side runs off the
+    /// screen and wraps round). Test starts (scenes F0 up) don't count.</summary>
+    public static Dictionary<int, int> GoToPoints(RomBuffer rom, int map) =>
+        GoTos(rom, map).ToDictionary(kv => kv.Key, kv => kv.Value[0].Point);
+
+    /// <summary>The events that start each scene of <paramref name="map"/> with "Go to another map" (16 map scene point):
+    /// their map, list, id and the point (Elcid's scene 01 is the ending's, started from map A2 scene 03). Test starts
+    /// (scenes F0 up) don't count.</summary>
+    public static Dictionary<int, List<(int Map, int Head, int Id, int Point)>> GoTos(RomBuffer rom, int map)
+    {
+        var found = new Dictionary<int, List<(int, int, int, int)>>();
+        for (int m = 0; m < L2Maps.Count; m++)
+        {
+            int block = L2Events.Block(rom, m);
+            if (block < 0) continue;
+            List<L2EventBlocks.Entry> lists;
+            try { lists = L2EventBlocks.ReadLists(rom, block); } catch (Exception) { continue; }
+            foreach (var e in lists.Where(e => e.IsScript && !(e.Head == L2EventBlocks.SceneList && e.Id >= 0xF0)))
+            {
+                L2EventScript s;
+                try { s = L2EventScript.Read(rom, block + e.Offset, block); } catch (Exception) { continue; }
+                foreach (var st in s.Steps)
+                    if (st.Op == 0x16 && st.Bytes.Length >= 4 && st.Bytes[1] == map)
+                    {
+                        if (!found.TryGetValue(st.Bytes[2], out var l)) found[st.Bytes[2]] = l = new();
+                        if (!l.Any(x => x.Item1 == m && x.Item2 == e.Head && x.Item3 == e.Id)) l.Add((m, e.Head, e.Id, st.Bytes[3]));
+                    }
+            }
+        }
+        return found;
+    }
+
+    /// <summary>A new game starts on the map (its start-up script runs as it loads), the party on <paramref name="point"/>,
+    /// with the story <paramref name="flags"/> and <paramref name="counters"/> set.</summary>
+    public static string SetMapTest(RomBuffer rom, int map, int point, IReadOnlyCollection<int>? flags = null, IReadOnlyDictionary<int, int>? counters = null)
+    {
+        if (!L2StoryClear.CanStart(rom)) throw new InvalidOperationException("This ROM's new-game code isn't the US game's, so the start can't be moved.");
+        L2StartParty.Keep(rom);
+        return L2MapEdit.SetTestStart(rom, map, point, flags, counters);
+    }
+
     /// <summary>Commands whose first operand is an actor (33, "walks path", has it second).</summary>
     private static readonly HashSet<int> ActorFirst = new() { 0x13, 0x2D, 0x2E, 0x2F, 0x30, 0x31, 0x34, 0x6C, 0x7A, 0x89, 0x98, 0x99, 0x9D, 0xA3 };
 
