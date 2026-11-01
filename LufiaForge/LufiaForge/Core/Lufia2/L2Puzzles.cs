@@ -255,7 +255,7 @@ public static class L2Puzzles
         return q + 1 + 2 - p;
     }
 
-    private static List<int> Targets(RomBuffer rom, int p, int len, int block)
+    public static List<int> Targets(RomBuffer rom, int p, int len, int block)
     {
         int op = rom.ReadByte(p);
         var t = new List<int>();
@@ -313,7 +313,7 @@ public static class L2Puzzles
         var list = new List<(string, List<L2Script.Op>, string)>();
         int block = Block(rom, map);
         if (block < 0) return list;
-        int end = NextBlock(rom, block);
+        int end = End(rom, block);
         var words = new L2PuzzleText(rom, map);
         foreach (var (cat, id, off) in Entries(rom, block))
         {
@@ -365,10 +365,15 @@ public static class L2Puzzles
         return list;
     }
 
-    private static int NextBlock(RomBuffer rom, int block)
+    /// <summary>Where <paramref name="block"/>'s bytes end at the latest: the next map's block, the end of the game's
+    /// puzzle data, or for a block written in added space (<see cref="L2PuzzleBlock"/>, never across a bank) its bank's end.</summary>
+    public static int End(RomBuffer rom, int block)
     {
-        int next = 0x83E64;   // the end of the puzzle data
+        int next = block < DataEnd ? DataEnd : Math.Min(rom.Length, (block / 0x8000 + 1) * 0x8000);
         for (int m = 0; m < 0xF2; m++) { int b = Block(rom, m); if (b > block && b < next) next = b; }
         return next;
     }
+
+    /// <summary>The end of the game's own puzzle data.</summary>
+    public const int DataEnd = 0x83E64;
 }

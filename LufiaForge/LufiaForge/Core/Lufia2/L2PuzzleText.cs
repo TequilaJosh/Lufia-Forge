@@ -131,7 +131,13 @@ public sealed class L2PuzzleText
     private string Exit(int b) =>
         _exits.TryGetValue(b, out var e) ? $"exit {b} to {_mapName(e.Map)} at ({e.X}, {e.Y})" : $"exit {b}";
 
-    private string Door(int b) => _doors.TryGetValue(b, out var d) ? $"door {b} ({d.X}, {d.Y})" : $"door {b}";
+    /// <summary>A door operand: C0-FA are door n-C0 ($80:E9B0), FB-FE a value passed in.</summary>
+    private string Door(int b)
+    {
+        if (b >= 0xFB) return "the door passed in";
+        if (b >= 0xC0) b -= 0xC0;
+        return _doors.TryGetValue(b, out var d) ? $"door {b} ({d.X}, {d.Y})" : $"door {b}";
+    }
 
     private static string Var(int v) => $"variable {v:X2}";
     private static string Value(int x) => x >= 0xA0 && x < 0xC0 ? Var(x) : x >= 0xFC && x <= 0xFE ? $"the value passed in ({x - 0xFB})" : x.ToString();
@@ -203,8 +209,8 @@ public sealed class L2PuzzleText
             case 0xA9: return $"Run {Tail()} and come back{Passed()}";
             case 0xAA: return "Return to the step after the \"Run\"";
             case 0x63: return "Start the map's event 00 again (a fresh check of the room) and end this thread";
-            case 0x0D: return $"If this is room {A(1):X2} of the map: go to {W(2)}";
-            case 0x71: return $"If this isn't room {A(1):X2} of the map: go to {W(2)}";
+            case 0x0D: return $"If the leader faces direction {A(1)}: go to {W(2)}";
+            case 0x71: return $"If the leader doesn't face direction {A(1)}: go to {W(2)}";
             case 0x1A: return $"Take {Exit(A(1))}";
             case 0x85: return $"Set a warp to {P(A(1))} (kind {A(2):X2})";
             case 0x86: return "Start the warp";
