@@ -114,7 +114,11 @@ Playback runs the steps the way the game does, from the first one, and follows c
 * **Playback starts with** (above the stage) lists the story flags and counters the cutscene checks, with "the
   cutscene has played" on its plays-once flag. Tick the flags that are on as the cutscene starts (they are kept while
   the page is open, for every cutscene that checks them) and type the counters. Steps turn flags on and off (`1A`,
-  `1B`) and set counters (`1D`, `1E`, `1F`) as playback goes, and later checks see that.
+  `1B`) and set counters (`1D`, `1E`, `1F`) as playback goes, and later checks see that. A cutscene that with no flag
+  on only checks and ends (the game's own check the story so far: North Lighthouse 6F's step-on area 1 plays only with
+  flag 37 on and 39 off) opens with the flags it needs ticked, one at a time while playback then reaches more steps,
+  never its plays-once flag; Test in the game sets the same ones, so the cutscene plays there too (85 of the US game's
+  1,332 events open that way).
 * A check or jump step says in blue where playback went and why ("story flag EF is off: goes on to step 2", "story flag
   17 is on: goes to step 9"). Steps playback doesn't reach are greyed out and say so; clicking one shows the stage as
   if the steps were read top to bottom.
