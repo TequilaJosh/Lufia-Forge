@@ -398,7 +398,50 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         _startOverride = null;
         _picked = -1;
         ReadScript(-1);
+        if (TickFlagsToPlay()) { FillStartFlags(); Simulate(); Annotate(); ShowStage(); }
         TestNote = NewGameNote();
+    }
+
+    /// <summary>An event that only checks and ends with no story flag on (the game's own cutscenes check the story so far:
+    /// North Lighthouse 6F's step-on area 1 plays only with flag 37 on and 39 off) opens with the flags it needs ticked,
+    /// one at a time while playback then reaches more steps, so playback and Test in the game play it. Its played flag
+    /// stays off. False: nothing ticked.</summary>
+    private bool TickFlagsToPlay()
+    {
+        if (_rom == null || _script == null || _event?.Entry == null || _flagsOn.Count > 0) return false;
+        var steps = _script.Steps;
+        var (x, y) = LeaderStart();
+        int talkedTo = _event.Entry.Head == L2EventBlocks.TalkList ? _event.Entry.Id : -1;
+        List<int> Reached(IEnumerable<int> on)
+        {
+            var s = L2Cutscene.Initial(_rom, _map, x, y, _persistent);
+            s.Flags.UnionWith(on);
+            s.Talker = s.TalkSave = talkedTo >= 0 ? talkedTo : 0xFF;
+            try { return L2Cutscene.Run(_rom, _map, s, steps, Name).Select(r => r.Step).Distinct().ToList(); }
+            catch (Exception) { return new(); }
+        }
+        // does something: a step that isn't a check, a jump or the end
+        bool Plays(List<int> reached) => reached.Any(i => i < steps.Count && steps[i].Jumps.Count == 0 && steps[i].Op is not (0x00 or 0x42));
+        var none = Reached(Array.Empty<int>());
+        if (Plays(none)) return false;
+        int once = L2Cutscene.OnceFlag(_script);
+        var choices = L2Cutscene.Checked(steps).Flags.Where(f => f != once).ToList();
+        var on = new List<int>();
+        int best = none.Count;
+        while (true)
+        {
+            int pick = -1, most = best;
+            foreach (int f in choices.Except(on))
+            {
+                int n = Reached(on.Append(f)).Count;
+                if (n > most) { most = n; pick = f; }
+            }
+            if (pick < 0) break;
+            on.Add(pick); best = most;
+        }
+        if (on.Count == 0 || !Plays(Reached(on))) return false;
+        _flagsOn.UnionWith(on);
+        return true;
     }
 
     /// <summary>Opens one event of a map by its list and id (from the Maps page).</summary>
