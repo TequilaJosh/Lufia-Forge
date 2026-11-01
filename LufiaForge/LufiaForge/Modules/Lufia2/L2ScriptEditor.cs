@@ -985,7 +985,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
     {
         var uses = L2FlagUses.Get(rom).GetValueOrDefault(f);
         string use = f >= 0xF0 ? "cleared on every map change" : uses == null ? "not used by the game" : $"used {uses.Count}x";
-        return $"{f:X2}  {use}";
+        return L2StoryFlags.Label(f) is { } l ? $"{f:X2}  {l}  ({use})" : $"{f:X2}  {use}";
     }
 
     private void UpdateBytesDump()
@@ -1669,9 +1669,9 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         var (flags, counters) = L2Cutscene.Checked(_script.Steps);
         int once = L2Cutscene.OnceFlag(_script);
         foreach (int f in flags)
-            StartFlags.Add(new L2StartFlagVm { Number = f, IsOn = _flagsOn.Contains(f), Label = $"Story flag {f:X2} is on" + (f == once ? " (the event has played)" : ""), Changed = StartChanged });
+            StartFlags.Add(new L2StartFlagVm { Number = f, IsOn = _flagsOn.Contains(f), Label = $"Story flag {f:X2} is on" + (f == once ? " (the event has played)" : L2StoryFlags.Label(f) is { } fl ? $": {fl}" : ""), Changed = StartChanged });
         foreach (int c in counters)
-            StartFlags.Add(new L2StartFlagVm { Number = c, IsCounter = true, Value = _countersAtStart.TryGetValue(c, out int v) ? v : 0, Label = $"Counter {c:X2} is", Changed = StartChanged });
+            StartFlags.Add(new L2StartFlagVm { Number = c, IsCounter = true, Value = _countersAtStart.TryGetValue(c, out int v) ? v : 0, Label = $"Counter {c:X2}{(L2StoryFlags.CounterLabel(c) is { } cl ? $" ({cl})" : "")} is", Changed = StartChanged });
         HasStartFlags = StartFlags.Count > 0;
         HasQuestion = _script.Steps.Any(s => s.IsText && s.Op == 0x10);
     }

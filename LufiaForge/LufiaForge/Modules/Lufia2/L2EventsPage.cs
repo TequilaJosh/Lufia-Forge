@@ -156,7 +156,7 @@ public partial class L2EventsPage : L2Page
             var u = uses.GetValueOrDefault(f);
             int sets = u?.Count(x => x.StartsWith("set")) ?? 0, tests = u?.Count(x => x.StartsWith("test")) ?? 0;
             string engine = L2Flags.Reserved(f) is { } why ? $" (game: {why})" : "";
-            Flags.Add($"{f:X2}  {(u == null ? "unused" : $"set {sets}x, tested {tests}x")}{engine}");
+            Flags.Add($"{f:X2}  {(L2StoryFlags.Label(f) is { } l ? l + "  " : "")}{(u == null ? "unused" : $"set {sets}x, tested {tests}x")}{engine}");
         }
         OnSelectedFlagChanged(SelectedFlag);
     }
@@ -168,7 +168,8 @@ public partial class L2EventsPage : L2Page
     {
         if (Rom == null || value < 0) { FlagUsesText = ""; return; }
         string engine = L2Flags.Reserved(value) is { } why ? $"Used by the game's own code: {why}.\n\n" : "";
-        FlagUsesText = engine + (L2FlagUses.Get(Rom).TryGetValue(value, out var l) ? string.Join("\n", l) : "No event script uses this flag.");
+        string what = L2StoryFlags.Label(value) is { } name ? $"{name}.\n{L2StoryFlags.Note(value)}\n\n" : "";
+        FlagUsesText = what + engine + (L2FlagUses.Get(Rom).TryGetValue(value, out var l) ? string.Join("\n", l) : "No event script uses this flag.");
     }
 
     protected override bool IsField(string p) => false;

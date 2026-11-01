@@ -1,0 +1,930 @@
+{
+  "flags": {
+    "01": {
+      "label": "Maxim is in the party",
+      "note": "Set by Elcid (04) scene 01 when the game starts (Maxim's 120 gold) and by Parcelyte (2D) scene 02 in the Jeros epilogue."
+    },
+    "02": {
+      "label": "Selan is in the party",
+      "note": "Set when Selan joins in Parcelyte Castle (2F) talk 55 and Parcelyte (2D) scenes 02/04, and by Gruberik (69) talk 66; cleared in Bound Kingdom (46) talk 59 and Gruberik talk 53 (party reset for the cave)."
+    },
+    "03": {
+      "label": "Guy is in the party",
+      "note": "Set when Guy joins in Tanbel (1C talk 1C, 1D scene 01), Bound Kingdom (46) talk 59, Small Shrine to Aleyn (56) and Gruberik (69) talk 67; cleared in Parcelyte (2D), Parcelyte Castle (2F) talk 55, Ancient Tower 7F (52) and Gruberik talk 53."
+    },
+    "04": {
+      "label": "Artea is in the party",
+      "note": "Set when Artea joins in Eserikto (A6) scene 01 and Gruberik (69) talk 68; cleared by Gruberik talk 53 (party reset for the cave)."
+    },
+    "05": {
+      "label": "Dekar is in the party",
+      "note": "Set in Bound Kingdom (46) talk 59, Small Shrine to Aleyn (56) and Gruberik (69) talk 6A; cleared in Parcelyte (2D), Ancient Tower 7F (52), Karlloon North Shrine B1 (78) and Gruberik talk 53."
+    },
+    "06": {
+      "label": "Tia is in the party",
+      "note": "Set when Tia joins in Lake Cave B1 (0A) trigger 01 and Gruberik (69) talk 69; cleared when she leaves in Parcelyte (2C scene 01, 2D scene 02), Bound Kingdom (46) talk 59 and Gruberik talk 53."
+    },
+    "07": {
+      "label": "Lexis is in the party",
+      "note": "Set when Lexis joins in Treadool (7A) talk 2C and Gruberik (69) talk 6B; cleared in Mountain of No Return (A3) trigger 02 and Gruberik talk 53."
+    },
+    "08": {
+      "label": "Foomy accepted as a capsule monster",
+      "note": "Set in Foomy Woods (0E) trigger 01 when Capsule Monster Foomy joins."
+    },
+    "09": {
+      "label": "Capsule monster Shaggy found",
+      "note": "Set in North Dungeon B3 (49) talk 54 when Shaggy joins; the start-up script checks it to hide the capsule."
+    },
+    "0A": {
+      "label": "Opening over, the game proper has begun",
+      "note": "Set in Elcid (03) scene 02 as Maxim goes into Tia's house (map 04); while clear, the start-up scripts of Elcid, Tanbel, Parcelyte, Bound Kingdom, Treadool and Eserikto play the opening music and make the opening's characters."
+    },
+    "0B": {
+      "label": "Ending: Daos beaten, Maxim and Selan go home",
+      "note": "Set in map EC trigger 03 (Selan: let's go to our son); the start-up scripts of Elcid, Tanbel, Parcelyte, Bound Kingdom, Kirmo Laboratory and Eserikto then stop the music and make the ending's characters."
+    },
+    "0C": {
+      "label": "Capsule monster Hard Hat found",
+      "note": "Set in Tower of Sacrifice 4F (70) talk 57 when Hard Hat joins; the start-up script checks it."
+    },
+    "0D": {
+      "label": "Capsule monster Red Fish found",
+      "note": "Set in map EF (cave) talk 50 when Red Fish joins; the start-up script checks it."
+    },
+    "0E": {
+      "label": "Capsule monster Myconido found",
+      "note": "Set in Capsule Monsters' Shrine (ED) talk 50 when Myconido joins; the start-up script checks it."
+    },
+    "0F": {
+      "label": "Capsule monster Raddisher found",
+      "note": "Set in Flower Mountain (7E) talk 52 when Raddisher joins; the start-up script checks it."
+    },
+    "10": {
+      "label": "Capsule monster Armor Dog found",
+      "note": "Set in Ruby Cave B1 (27) talk 54 when Armor Dog joins; the start-up script checks it."
+    },
+    "15": {
+      "label": "Secret Skills Cave lesson finished",
+      "note": "Set in Secret Skills Cave (05) trigger 07 when Elcid's skills teacher ends the lesson; checked by Elcid talks."
+    },
+    "16": {
+      "label": "Had dinner at Tia's house",
+      "note": "Set in Elcid (04) trigger 01 when Maxim thanks Tia for dinner and goes home; checked by Elcid talks."
+    },
+    "17": {
+      "label": "Met Iris in the Cave to Sundletan",
+      "note": "Set in Cave to Sundletan B2 (07) trigger 01 (Iris: I am here to ascertain your future); checked by many Elcid talks."
+    },
+    "18": {
+      "label": "Tia joined in Lake Cave",
+      "note": "Set in Lake Cave B1 (0A) trigger 01 when Tia joins Maxim; checked by Elcid, Sundletan and Lake Cave events."
+    },
+    "19": {
+      "label": "Beat the earthquake monster in Lake Cave",
+      "note": "Set in Lake Cave B3 (0C) trigger 02 after battle 02 with the monster that made the earthquakes; checked by Sundletan, Lake Cave and Shrine to Alunze Kingdom."
+    },
+    "1A": {
+      "label": "Berty and Bart stole the Alunze crown",
+      "note": "Set in Alunze Castle (10) trigger 01 (the crown is a fake, Berty and Bart throw a bomb); checked by many Alunze talks."
+    },
+    "1B": {
+      "label": "Got the crown back in Alunze Castle B5",
+      "note": "Set in Alunze Castle B5 (14) trigger 03 when the party gets the crown; checked by many Alunze talks."
+    },
+    "1C": {
+      "label": "Returned the crown to the king of Alunze",
+      "note": "Set in Alunze Castle (10) talk 59 (any of the gold rewards); checked by Sundletan and Alunze talks."
+    },
+    "1D": {
+      "label": "Beat the key monster in Alunze NW Cave",
+      "note": "Set in Alunze Northwest Cave B4 (1B) trigger 01 before battle 05 with the monster that has the boy's key."
+    },
+    "1E": {
+      "label": "Guy offered to go to the tower with Maxim",
+      "note": "Set in Tanbel (1C) talk 1C when Guy joins to go to the tower; checked by Tanbel talks and Tanbel Southeast Tower 6F."
+    },
+    "1F": {
+      "label": "Iris warped the party out of Tanbel tower",
+      "note": "Set in Tanbel Southeast Tower 6F (24) trigger 01 (Iris warps them to Tanbel); checked in Tanbel and the tower."
+    },
+    "20": {
+      "label": "Guy joined after Tanbel's tower",
+      "note": "Set in Tanbel (1D) scene 01 when Guy joins for good (Outta here, Tia); checked by Tanbel talks."
+    },
+    "21": {
+      "label": "Entered Ruby Cave B1",
+      "note": "Set by Ruby Cave B1 (27) trigger 01, a step-on spot with no lines; checked by Clamento (26) talk 55."
+    },
+    "22": {
+      "label": "Asked the soldier at Small Shrine to Parcelyte",
+      "note": "Set in Small Shrine to Parcelyte (2B) talk 50 (you need Rochy's permission to pass); checked by Clamento (26) talk 55."
+    },
+    "23": {
+      "label": "Ruby broke in Ruby Cave B4",
+      "note": "Set in Ruby Cave B4 (2A) trigger 01 (Guy: ruby can't be so easily broken)."
+    },
+    "24": {
+      "label": "Rescued Jaffy, got the Ruby Apple",
+      "note": "Set in Ruby Cave B4 (2A) talk 18 when Jaffy gives the Ruby Apple; checked by Clamento talks."
+    },
+    "25": {
+      "label": "Rochy gave permission, leaving Clamento",
+      "note": "Set in Clamento (25) scene 02 (Hey, Tia. We're leaving soon); checked by Clamento and Small Shrine to Parcelyte."
+    },
+    "26": {
+      "label": "Met Selan in Parcelyte (Lemmy)",
+      "note": "Set in Parcelyte (2C) trigger 01 when Selan comforts Lemmy and goes back to the castle; checked in Parcelyte Castle."
+    },
+    "27": {
+      "label": "Saw Selan in Parcelyte Castle",
+      "note": "Set in Parcelyte Castle (2E) trigger 02 (Guy: never seen such a strong woman); checked by Parcelyte Castle talks."
+    },
+    "28": {
+      "label": "Selan joined at Parcelyte Castle",
+      "note": "Set in Parcelyte Castle (2F) talk 55 to the king when Selan joins; checked by Parcelyte talks and the Treasure Sword Shrine."
+    },
+    "29": {
+      "label": "Lost to Treasure Sword Shrine guardian 1",
+      "note": "Set in Treasure Sword Shrine 4F (33) talk 50 after battle 09 with the first guardian; checked by trigger 02."
+    },
+    "2A": {
+      "label": "Lost to Treasure Sword Shrine guardian 2",
+      "note": "Set in Treasure Sword Shrine 4F (33) talk 51 after battle 0A with the second guardian; checked by trigger 02."
+    },
+    "2B": {
+      "label": "Guy and Selan split up to fight guardians",
+      "note": "Set in Treasure Sword Shrine 4F (33) trigger 02 (Guy: I'll fight with her); checked by trigger 03."
+    },
+    "2C": {
+      "label": "Treasure Sword Shrine guardians beaten",
+      "note": "Set in Treasure Sword Shrine 4F (33) trigger 03 (the Treasure Sword is through this door); checked by its start-up and load events."
+    },
+    "2D": {
+      "label": "Treasure Sword handed in, Gordovan task",
+      "note": "Set in Parcelyte Castle (2F) talk 55 to the king when the Treasure Sword is taken and Selan joins for the Gordovan investigation."
+    },
+    "2E": {
+      "label": "Gordovan West Tower 6F scene played",
+      "note": "Set in Gordovan West Tower 6F (3D) trigger 01 (Tia: I was just thinking about something); checked by Parcelyte and Gordovan talks."
+    },
+    "2F": {
+      "label": "Reported Gordovan to the king, off to Merix",
+      "note": "Set in Parcelyte Castle (2F) talk 55 when Guy leaves and Selan says to head through the tower for Merix Village."
+    },
+    "30": {
+      "label": "Reached Cave Bridge B5",
+      "note": "Set by Cave Bridge B5 (44) trigger 01, a step-on spot with no lines; checked by its start-up and load events."
+    },
+    "31": {
+      "label": "Merix bridge builder finished the bridge",
+      "note": "Set in Cave Bridge B1 (40) trigger 01 when the bridge builder finishes his job; checked by Merix Village talks."
+    },
+    "32": {
+      "label": "Bound king asked Dekar to help Alex",
+      "note": "Set in Bound Kingdom (46) trigger 01 (the king asks Dekar to help Alex secretly); checked by Bound Kingdom, North Dungeon B4 and Small Shrine to Aleyn."
+    },
+    "33": {
+      "label": "North Dungeon B4 cleared",
+      "note": "Set in North Dungeon B4 (4A) trigger 01 (Selan: let's go back to Bound Kingdom); checked by many Bound Kingdom talks."
+    },
+    "34": {
+      "label": "Party split: Guy and Dekar to Ancient Tower",
+      "note": "Set in Bound Kingdom (46) talk 59 when Selan and Tia leave and Guy and Dekar join; checked by Tanbel, Parcelyte, Bound Kingdom and Ancient Tower talks."
+    },
+    "35": {
+      "label": "Earthquake shook Sundletan",
+      "note": "Set in Sundletan (08) trigger 01 (an earthquake, no lines); checked by Lake Cave B3 and Shrine to Alunze Kingdom."
+    },
+    "36": {
+      "label": "Back in Parcelyte after the Ancient Tower",
+      "note": "Set by the Ancient Tower 4F (55) warp to Parcelyte and Parcelyte (2C) scene 03 (Maxim's confession to Selan); cleared in Parcelyte Castle (2E) scene 01 and Parcelyte (2D) scene 02."
+    },
+    "37": {
+      "label": "Idura took Jeros (to the North Lighthouse)",
+      "note": "Set in Parcelyte (2D) scene 02 (Idura: come to the North Lighthouse; Selan rejoins); checked by Parcelyte, Gordovan, Bound Kingdom talks."
+    },
+    "38": {
+      "label": "Told the king of Parcelyte about Idura",
+      "note": "Set in Parcelyte Castle (2F) talk 55 (Maxim heads for the North Lighthouse before anything happens to Jeros)."
+    },
+    "39": {
+      "label": "Jeros saved at North Lighthouse 6F",
+      "note": "Set in North Lighthouse 6F (5D) trigger 01 (track down Idura, but first take Jeros back to Parcelyte); checked by Tanbel, Parcelyte and Bound Kingdom talks."
+    },
+    "3A": {
+      "label": "Made a deal with the Aleyn shipwright",
+      "note": "Set in Phant (67) talk 22 (Dekar: take us to the East Continent when you finish the ship); checked by Parcelyte and Phantom Tree Mountain."
+    },
+    "3B": {
+      "label": "Arrived in Aleyn: Guy and Dekar stay in town",
+      "note": "Set in Port Town of Aleyn (5E) scene 01 when Guy and Dekar leave the party to chill in town; checked by Aleyn talks."
+    },
+    "3C": {
+      "label": "Stayed at the inn in Aleyn",
+      "note": "Set in Port Town of Aleyn (5F) talk 50, the innkeeper (10 gold); checked by Aleyn talks."
+    },
+    "3E": {
+      "label": "All set off for the Tower of Sacrifice",
+      "note": "Set in Narcysus (6A) trigger 01 (Guy: let's all go together); checked by Narcysus talks and Tower of Sacrifice 6F."
+    },
+    "3F": {
+      "label": "On the way to the Tower of Sacrifice",
+      "note": "Set in Narcysus (6A) trigger 01 and cleared in Tower of Sacrifice 6F (72) trigger 01; checked by both start-up scripts."
+    },
+    "40": {
+      "label": "Tower of Sacrifice cleared",
+      "note": "Set in Tower of Sacrifice 6F (72) trigger 01 (let's go back to Narcysus); checked by Narcysus, Karlloon and Small Shrine to Treadool."
+    },
+    "41": {
+      "label": "Dekar lost at Karlloon shrine (Iris prays)",
+      "note": "Set in Karlloon (73) scene 01 (Iris prays for Dekar); changes the world map; checked by Karlloon and Small Shrine to Treadool."
+    },
+    "42": {
+      "label": "Heard Lexis is in the cave north of Treadool",
+      "note": "Set in Treadool (7A) talk 50, the sailor; checked by Treadool and Lexis Shaia Laboratory."
+    },
+    "43": {
+      "label": "Lexis agreed to build the ship's engine",
+      "note": "Set in Lexis Shaia Laboratory (7D) talk 2C (go to Aleyn and talk to Jyad); checked by Aleyn and Treadool talks."
+    },
+    "44": {
+      "label": "Jyad will bring the ship to Treadool",
+      "note": "Set in Port Town of Aleyn (5F) talk 22, the shipwright; checked by Treadool and Lexis Shaia Laboratory."
+    },
+    "45": {
+      "label": "Asked to find Leefa on Flower Mountain",
+      "note": "Set in Treadool (7B) scene 01 (the boy: my sister picks flowers on the mountain south of here); checked by Flower Mountain."
+    },
+    "46": {
+      "label": "Got the Pretty Flower",
+      "note": "Set in Flower Mountain (7E) trigger 01 when the party gets the Pretty Flower; checked by Treadool."
+    },
+    "47": {
+      "label": "Gave the Pretty Flower to Leefa",
+      "note": "Set in Treadool (7B) talk 24 to Leefa (the flower is taken); checked by Treadool and Lexis Shaia Laboratory."
+    },
+    "48": {
+      "label": "Heard about the Ruby Icon ceremony",
+      "note": "Set in Dankirk Kingdom (89) talks 25 (Prince Leon), 5E (king) or 5F (minister); checked by trigger 01."
+    },
+    "49": {
+      "label": "Ruby Icon stolen in Dankirk",
+      "note": "Set in Dankirk Kingdom (89) trigger 01 (the guards can't find it, tell Prince Leon); checked by Clamento and Dankirk talks."
+    },
+    "4A": {
+      "label": "Jaffy made the replica Ruby Icon",
+      "note": "Set in Clamento (26) talk 18 when Jaffy gives the Ruby Icon (item Glass angel); checked by Clamento and Dankirk."
+    },
+    "4B": {
+      "label": "Gave the Ruby Icon to Prince Leon",
+      "note": "Set in Dankirk Kingdom (89) talk 25 when the Glass angel is handed over; checked by Dankirk and Dankirk North Cave."
+    },
+    "4C": {
+      "label": "Peace ceremony of Dankirk and Auralio held",
+      "note": "Set in Dankirk Kingdom (88) scene 01 (Prince Leon and Princess Thea); checked by Dankirk, Auralio and Dankirk North Cave."
+    },
+    "4D": {
+      "label": "Prince Leon went back to Auralio",
+      "note": "Set in Dankirk Kingdom (88) trigger 01, which moves Prince Leon to Auralio (8B) after the ceremony; checked by the Dankirk (89) start-up script."
+    },
+    "4E": {
+      "label": "Hans went to the Northeast Tower",
+      "note": "Set in Ferim Kingdom (92) talk 28 (Hans: I've got to go); checked by Ferim and Northeast Tower 1F."
+    },
+    "4F": {
+      "label": "Hans found the blue stone (Northeast Tower)",
+      "note": "Set in Northeast Tower 5F (98) talk 28 (Hans returns to the castle with the stone); checked by Ferim Kingdom."
+    },
+    "50": {
+      "label": "Ferim attacked again (they did it again)",
+      "note": "Set in Ferim Kingdom (92) trigger 01 (Guy: not again, they did it again); changes the world map; checked by Ferim, Small Shrine to Agurio, Treble, Kirmo."
+    },
+    "51": {
+      "label": "Talked with Iris in Agurio",
+      "note": "Set in Agurio (9A) talk 12 (Iris: the time will come for me to tell you); checked by Ferim, Treble and Kirmo Laboratory talks."
+    },
+    "53": {
+      "label": "Kirmo elder saw an elf take it",
+      "note": "Set in Kirmo Laboratory (A2) scene 01 (the elder saw pointy ears; Lexis: we must get them back); checked by Portravia, Kirmo and Mountain of No Return."
+    },
+    "54": {
+      "label": "Artea joined in Eserikto to save Karyn",
+      "note": "Set in Eserikto (A6) scene 01 when Artea joins; checked by Kirmo Laboratory and Divine Shrine 3F."
+    },
+    "55": {
+      "label": "Divine Shrine 3F: Artea fights on with Maxim",
+      "note": "Set in Divine Shrine 3F (AA) trigger 01 (Artea: for Karyn and Milka, joins); checked by Portravia, Kirmo and Eserikto talks."
+    },
+    "56": {
+      "label": "Lexis sent the party to Barnan",
+      "note": "Set in Kirmo Laboratory (A2) talk 2C (Barnan's west of the sea); checked by Barnan talks."
+    },
+    "57": {
+      "label": "Spirits put to rest in Shrine of Vengeance",
+      "note": "Set in Shrine of Vengeance 4F (B2) trigger 01 (Artea helped them rest); checked by Barnan and Durale."
+    },
+    "58": {
+      "label": "Barnan: off to Durale",
+      "note": "Set in Barnan (AC) talk 12 (Selan: we're heading for Durale); checked by Barnan and Durale talks."
+    },
+    "59": {
+      "label": "Met Arek at the Tower of Truth",
+      "note": "Set in Tower of Truth 6F (BD) talk 12 (Iris: isn't that right, Sir Arek?); checked by Durale, Chaed and Dragon Mountain."
+    },
+    "5A": {
+      "label": "Old man of Dragon Mountain went to Chaed",
+      "note": "Set in Dragon Mountain (C7) talk 2D (the old man: talk at my place in Chaed); checked by Chaed talks."
+    },
+    "5B": {
+      "label": "Chaed scene 01 played (Excerion)",
+      "note": "Set in Chaed (BE) scene 01 (Selan: we have Excerion to get there); plays once, nothing else checks it."
+    },
+    "5C": {
+      "label": "Queen Marla asked for help (Dual Blade)",
+      "note": "Set in Submarine Town of Preamarl (CA) talk 2E to Marla; checked by Preamarl and Submarine Cave to Shrine."
+    },
+    "5D": {
+      "label": "Saw the mermaids trapped in the sea cave",
+      "note": "Set in Submarine Cave to Shrine (CC) trigger 01 (Selan: we have to save them); checked by the cave's other triggers."
+    },
+    "5E": {
+      "label": "Found Queen Marla in the Submarine Shrine",
+      "note": "Set in Submarine Cave Shrine (CD) talk 2E to Marla; checked by the shrine's start-up and load events."
+    },
+    "5F": {
+      "label": "Doom Island rose into the sky",
+      "note": "Set in Chaed (D0) scene 01 (Artea: the island is in the sky); changes the world map; checked by Portravia, Kirmo, Barnan, Durale talks."
+    },
+    "60": {
+      "label": "Lexis: check Dankirk North Cave for the engine",
+      "note": "Set in Kirmo Laboratory (A2) talk 2C (Selan: the North Cave in Dankirk is linked elsewhere); checked by Dankirk North Cave B5."
+    },
+    "61": {
+      "label": "Berty's gang cleared the way (castle D5 B4)",
+      "note": "Set in map D5 (castle) B4 trigger 01 (Berty: this is nothing, gone); checked by map D6 (kingdom) start-up scripts."
+    },
+    "62": {
+      "label": "Got the engine (Portravia)",
+      "note": "Set in Portravia (A0) scene 03 (Artea: we've got the engine, let's go to Lexis); changes the world map; checked by Dankirk North Cave and Kirmo."
+    },
+    "63": {
+      "label": "Engine fitted, flying west to Narvick",
+      "note": "Set in Kirmo Laboratory (A2) talk 2C when Lexis takes the Engine (head west by air to Narvick)."
+    },
+    "64": {
+      "label": "Lisa agreed to go to the South Tower",
+      "note": "Set in map D9 talk 54, the old man (take Lisa to the South Tower); checked by D9 talks."
+    },
+    "65": {
+      "label": "Lisa is travelling with the party",
+      "note": "Set in map D9 talk 54 with flag 64; cleared at map DC (South Tower top) trigger 01 when Lisa stays to help."
+    },
+    "66": {
+      "label": "Lisa's tower done (South Tower)",
+      "note": "Set in map DC trigger 01 (Lisa: go and defeat Daos); checked by D9 talks and map E0."
+    },
+    "67": {
+      "label": "Marie agreed to go to Strahda Island",
+      "note": "Set in map D9 talk 54 (Marie: take me to Strahda Island); checked by D9 talks."
+    },
+    "68": {
+      "label": "Marie is travelling with the party",
+      "note": "Set in map D9 talk 54 with flag 67; cleared at map E0 trigger 01 when Marie stays (Divine Helmet given)."
+    },
+    "69": {
+      "label": "Marie's tower done, got the Divine Helmet",
+      "note": "Set in map E0 trigger 01 (the Divine Helmet is given); checked by D9 talks and map E4."
+    },
+    "6A": {
+      "label": "Clare agreed to go to Kamirno Island",
+      "note": "Set in map D9 talk 54 (Clare: the tower on Kamirno Island); checked by the same talk."
+    },
+    "6B": {
+      "label": "Clare is travelling with the party",
+      "note": "Set in map D9 talk 54 with flag 6A; cleared at map E4 trigger 01 when the three sisters combine their power."
+    },
+    "6C": {
+      "label": "Sisters' power combined, warped to Portravia",
+      "note": "Set in map E4 scene 01 (Selan: warp, to Portravia); checked by Portravia and Kirmo Laboratory talks."
+    },
+    "6D": {
+      "label": "Maxim asked Selan for a moment (Kirmo)",
+      "note": "Set in Kirmo Laboratory (A2) scene 02 before Maxim and Selan go to Portravia (6, 16); checked by Portravia triggers 01-03."
+    },
+    "6E": {
+      "label": "Ready to storm Doom Island (Portravia)",
+      "note": "Set in Portravia (A0) scene 06 (Guy: now it's our turn to show our stuff); checked by Portravia and Kirmo talks."
+    },
+    "6F": {
+      "label": "Dekar came back (Portravia)",
+      "note": "Set in Portravia (A0) scene 04 when Dekar appears (just go get the Sinistrals); plays once."
+    },
+    "70": {
+      "label": "Gades beaten in the Shrine of Daos",
+      "note": "Set in Shrine of Daos 1F (E7) trigger 01 after battle 21 with Gades."
+    },
+    "71": {
+      "label": "Amon beaten in the Shrine of Daos",
+      "note": "Set in Shrine of Daos 3F (E9) trigger 01 after battle 22 with Amon."
+    },
+    "72": {
+      "label": "Faced Erim in the Shrine of Daos 4F",
+      "note": "Set in Shrine of Daos 4F (EA) trigger 01 (Erim: is this human emotion?); checked by its start-up script."
+    },
+    "73": {
+      "label": "Daos beaten, the shrine collapses",
+      "note": "Set in Shrine of Daos 5F (EB) trigger 01 after battle 24 with Daos (Selan is hurt, Iris says everything is up to you now, the others leave the party); checked by 4F and 5F."
+    },
+    "74": {
+      "label": "First Mystic Stone broken",
+      "note": "Set in map EC trigger 01 (breaks the first Mystic Stone); checked by its load event."
+    },
+    "75": {
+      "label": "Second Mystic Stone broken",
+      "note": "Set in map EC trigger 02 (breaks the second Mystic Stone); checked by its load event."
+    },
+    "77": {
+      "label": "Skills teacher invited Maxim to the cave",
+      "note": "Set in Elcid (03) trigger 02 (the teacher waits at the dungeon south of here); checked by Elcid talk 50."
+    },
+    "78": {
+      "label": "Guy left at Parcelyte Castle (for Merix)",
+      "note": "Set in Parcelyte Castle (2F) talk 55 when Guy leaves and Maxim and Selan head for Merix; checked by Tanbel (1D) talk 56."
+    },
+    "79": {
+      "label": "Aleyn arrival scene played",
+      "note": "Set in Port Town of Aleyn (5E) scene 01 with flag 3B; checked by Aleyn triggers 01-03."
+    },
+    "7B": {
+      "label": "Opening: Arek sent Erim (prologue)",
+      "note": "Set in Arek Daos Shrine (02) scene 01 (Arek: would you go?) and cleared by its scene 02; checked by its start-up script."
+    },
+    "7C": {
+      "label": "Alunze Castle in uproar (crown theft)",
+      "note": "Set in Alunze Castle (10) trigger 01 with flag 1A; cleared in trigger 02 (the soldier hit by the bomb); checked by on load 00."
+    },
+    "7D": {
+      "label": "Opened the shrine door for Hilda",
+      "note": "Set in Alunze North Shrine (17) talk 17 when the shrine key is used for Hilda; nothing checks it."
+    },
+    "7E": {
+      "label": "Iris: something generates the magic",
+      "note": "Set in Karlloon North Shrine 3F (77) talk 12 (Idura is dead but magic works); checked by Karlloon North Shrine 1F and B1."
+    },
+    "7F": {
+      "label": "Lexis joined, the ship is ready",
+      "note": "Set in Treadool (7A) talk 2C with flag 07 (now we have the ship); checked by Treadool talks."
+    },
+    "80": {
+      "label": "Talked with Iris in Agurio (until Treble)",
+      "note": "Set in Agurio (9A) talk 12 with flag 51; checked and cleared by Treble (9B) on load 00."
+    },
+    "81": {
+      "label": "Sinistrals attacking Portravia",
+      "note": "Set in Kirmo Laboratory (A2) talk 2C (Guy: it's the Sinistrals!); cleared in Kirmo scene 04; checked by Portravia's start-up and load events."
+    },
+    "82": {
+      "label": "Daos spoke on entering his shrine",
+      "note": "Set in Shrine of Daos 1F (E7) scene 62 (you made it to my shrine at last); plays once."
+    },
+    "83": {
+      "label": "Ending: Maxim's last words to Selan",
+      "note": "Set in map EC trigger 03 with flag 0B (Selan, I changed the course); nothing checks it."
+    },
+    "84": {
+      "label": "A year later: peace in Parcelyte",
+      "note": "Set in Parcelyte (2C) scene 01 (thanks to Maxim defeating Gades); checked by Parcelyte (2D) start-up and triggers 01-02."
+    },
+    "85": {
+      "label": "Ancient Tower 7F: Tia waits for Maxim",
+      "note": "Set in Ancient Tower 7F (52) trigger 01 (Tia: promise me you'll come back; Guy and Dekar leave); checked by its load event."
+    },
+    "86": {
+      "label": "Lost to Daos without the Dual Blade",
+      "note": "Set in map CF trigger 01 (Daos: you are not worthy of wielding Dual Blade), then sent to Chaed; checked by Preamarl and the Submarine Shrine."
+    },
+    "87": {
+      "label": "Dekar held off the monsters (Portravia)",
+      "note": "Set in Portravia (A0) scene 05 (Dekar: you just go ahead and get up there); checked by Portravia triggers and Kirmo."
+    },
+    "88": {
+      "label": "Clamento man wants the ruby",
+      "note": "Set in Clamento (26) talk 55 (if you find that ruby, sell it to me); checked by Ruby Cave B4."
+    },
+    "89": {
+      "label": "Tia spaced out in Cave Bridge B5",
+      "note": "Set in Cave Bridge B5 (44) scene 01 (Tia: it would have been easier if you'd been cold); checked by Cave Bridge B3."
+    },
+    "8A": {
+      "label": "Met Prince Alex (he was Dekar)",
+      "note": "Set in Bound Kingdom (45) trigger 01 (Maxim: so, he was Dekar); cleared in talk 1D; checked by its load event and talk 50."
+    },
+    "8B": {
+      "label": "Heard Abel took the door key to the cave",
+      "note": "Set in Alunze North Shrine (17) talks 50 and 51 (the old man and the boy); checked by Alunze Northwest Cave B1."
+    },
+    "8C": {
+      "label": "Heard Jyad is on the North Mountain",
+      "note": "Set in Port Town of Aleyn (5E talks 50, 53, 56; 5F talks 57, 58), the sailors and girl; checked by Phant (67) talk 22."
+    },
+    "8D": {
+      "label": "Fought the monster at Phant",
+      "note": "Set in Phant (67) trigger 01 (Maxim: this might be the one!) with battle 12."
+    },
+    "8E": {
+      "label": "Beat Idura at Karlloon North Shrine",
+      "note": "Set in Karlloon North Shrine 3F (77) trigger 02 after battle 14 with Idura; checked by its triggers 01 and 03."
+    },
+    "8F": {
+      "label": "Beat the Flower Mountain boss",
+      "note": "Set in Flower Mountain (7E) trigger 02 with battle 15; checked by its start-up script."
+    },
+    "90": {
+      "label": "Mountain of No Return step marker",
+      "note": "Set by Mountain of No Return (A5) trigger 01 and cleared by trigger 02 (no lines); no script checks it."
+    },
+    "91": {
+      "label": "Got the Jade of Mermaids",
+      "note": "Set in Chaed (BF) talk 2D when the old man gives the Mermaid jade."
+    },
+    "92": {
+      "label": "Artea warped the party to Eserikto",
+      "note": "Set in Mountain of No Return (A3) trigger 02 (Artea: I'll warp us); Lexis leaves the party."
+    },
+    "93": {
+      "label": "Items left with the Ancient Cave guard",
+      "note": "Set in Ancient Cave (F0) talk 51 (I will keep your items here); cleared when they are returned (talk 52, trigger 01)."
+    },
+    "94": {
+      "label": "Prince Leon thanked the party in Auralio",
+      "note": "Set in Auralio Kingdom (8B) talk 25 (watergate kept open, VIP card)."
+    },
+    "95": {
+      "label": "Auralio watergate open to the ship",
+      "note": "Set in Auralio Kingdom (8B) talk 25 (Prince Leon) or 58 (the attendant); the game code reads it for where the ship can be parked."
+    },
+    "96": {
+      "label": "Elcid meeting: what should we do?",
+      "note": "Set in Elcid (03) trigger 01 (the skills teacher asks for ideas); checked by Elcid and Cave to Sundletan events."
+    },
+    "97": {
+      "label": "Met Berty and Bart in Alunze Castle B5",
+      "note": "Set in Alunze Castle B5 (14) trigger 01 (Tia: what weirdos); checked by its load events."
+    },
+    "98": {
+      "label": "Saw Hilda back with Guy in Tanbel",
+      "note": "Set in Tanbel (1C) talk 17 to Hilda (Tia: they're so close); checked by Tanbel talk 1C."
+    },
+    "99": {
+      "label": "The Margos ship is finished",
+      "note": "Set in Port Town of Aleyn (5E) talk 22 (Jyad: this is the newly born Margos); checked by Aleyn triggers 01-03."
+    },
+    "9A": {
+      "label": "Saw Prince Alex in Bound Kingdom",
+      "note": "Set in Bound Kingdom (45) trigger 01 with flag 8A (Prince Alex goes back in); checked by its start-up and load events."
+    },
+    "9B": {
+      "label": "Gades visited the king of Bound",
+      "note": "Set in Bound Kingdom (45) trigger 02 (the soldier: Gades talked only with the King and left)."
+    },
+    "9C": {
+      "label": "Used the Ancient Tower 4F warp device",
+      "note": "Set in Ancient Tower 4F (55) trigger 01 (a device in this tower, back to Parcelyte); checked by Ancient Tower 1F talk 50."
+    },
+    "9D": {
+      "label": "Guy and Dekar rejoined (to Aleyn)",
+      "note": "Set in Small Shrine to Aleyn (56) trigger 01 when Guy and Dekar join the party."
+    },
+    "9E": {
+      "label": "Skills lesson: monster movement",
+      "note": "Set in Secret Skills Cave (05) trigger 01 (monsters move only when you move, get that jelly); checked by the teacher's talk 11."
+    },
+    "9F": {
+      "label": "Skills lesson: don't get surrounded",
+      "note": "Set in Secret Skills Cave (05) trigger 0B; checked by talk 11 and trigger 02."
+    },
+    "A0": {
+      "label": "Skills lesson: switch and locked door",
+      "note": "Set in Secret Skills Cave (05) trigger 08 (stand on the switch at the upper left); checked by talk 11."
+    },
+    "A1": {
+      "label": "Skills lesson: jumping down cliffs",
+      "note": "Set in Secret Skills Cave (05) trigger 03 (arrows on the cliff, jump down); checked by talk 11."
+    },
+    "A2": {
+      "label": "Skills lesson: defeat all monsters",
+      "note": "Set in Secret Skills Cave (05) trigger 04 (the next door opens when all monsters are defeated); checked by talk 11."
+    },
+    "A3": {
+      "label": "Skills lesson: cutting grass",
+      "note": "Set in Secret Skills Cave (05) trigger 05 (B swings the sword, switches under grass); checked by talk 11."
+    },
+    "A4": {
+      "label": "Talked to the soldier hit by the bomb",
+      "note": "Set in Alunze Castle (10) trigger 02 (the bomb exploded before they threw it); clears flag 7C; checked by talk 5C."
+    },
+    "A6": {
+      "label": "Hans heading back with the stone",
+      "note": "Set in Northeast Tower 5F (98) talk 28 with flag 4F; cleared by Ferim Kingdom (92) trigger 01; checked by Ferim on load 00."
+    },
+    "A7": {
+      "label": "Milka spoke about her mother (Eserikto)",
+      "note": "Set in Eserikto (A6) trigger 01 (Milka: my mother saved you)."
+    },
+    "A8": {
+      "label": "Found the sea water in Dankirk North Cave",
+      "note": "Set in Dankirk North Cave B5 (90) trigger 02 (linked to some kind of submarine cave)."
+    },
+    "A9": {
+      "label": "Found Abel in Alunze Northwest Cave",
+      "note": "Set in Alunze Northwest Cave B1 (18) trigger 01 (Abel: oh my goodness); checked by Alunze North Shrine and the cave's B4."
+    },
+    "AA": {
+      "label": "Alunze Castle B5 passage opened",
+      "note": "Set in Alunze Castle B5 (14) trigger 04, which changes the map (no lines); checked by its load event."
+    },
+    "AB": {
+      "label": "Skills lesson: R button and pot on slate",
+      "note": "Set in Secret Skills Cave (05) trigger 06; checked by talk 11 and trigger 07."
+    },
+    "AC": {
+      "label": "Learned the Reset spell",
+      "note": "Set in Secret Skills Cave (05) scene 01 or trigger 0D when Maxim learns Reset; checked by trigger 0D."
+    },
+    "AD": {
+      "label": "Heard a young woman went to the Lake Cave",
+      "note": "Set in Sundletan (08) talk 54 (a beauty asked for Maxim, then went to the Lake Cave)."
+    },
+    "AE": {
+      "label": "Talked to the soldier at the fallen bridge",
+      "note": "Set in Shrine to Alunze Kingdom (0D) talk 50 (the bridge fell; Tia went to the Lake Cave)."
+    },
+    "AF": {
+      "label": "Hilda asked for the small shrine key",
+      "note": "Set in Alunze North Shrine (17) talk 17 (Hilda lost the key and can't return to Tanbel)."
+    },
+    "B0": {
+      "label": "Iris warped the party to Tanbel",
+      "note": "Set in Tanbel Southeast Tower 6F (24) trigger 01 with flag 1F; cleared by Tanbel (1D) scene 01; checked by Tanbel start-up scripts."
+    },
+    "B1": {
+      "label": "Lost to a Treasure Sword Shrine guardian",
+      "note": "Set in Treasure Sword Shrine 4F (33) talks 50 and 51 after either guardian battle; checked by its load event and trigger 01."
+    },
+    "B2": {
+      "label": "Guy and Dekar in the Ancient Tower",
+      "note": "Set in Bound Kingdom (46) talk 59 when the party splits; cleared in Ancient Tower 7F (52) trigger 01; checked by its load event."
+    },
+    "B3": {
+      "label": "Parcelyte in peacetime (after Ancient Tower)",
+      "note": "Set by the Ancient Tower 4F (55) warp to Parcelyte; cleared in Parcelyte (2D) scene 02 when Idura takes Jeros; checked by Parcelyte start-up scripts."
+    },
+    "B4": {
+      "label": "Dekar left at Karlloon shrine (scene next)",
+      "note": "Set in Karlloon North Shrine B1 (78) trigger 01 when Dekar leaves; cleared in Karlloon (73) scene 01; checked by its start-up script."
+    },
+    "B5": {
+      "label": "Leefa brought home to Treadool",
+      "note": "Set in Treadool (7A) talk 24 (the boy: bring her inside); cleared by Treadool (7B) scene 01; checked by its start-up script."
+    },
+    "B6": {
+      "label": "Dankirk peace talk done (ceremony next)",
+      "note": "Set in Dankirk Kingdom (89) scene 01 (the rest is up to Dankirk and Auralio); cleared in Dankirk (88) scene 01."
+    },
+    "B7": {
+      "label": "Treble boy asked about submarines",
+      "note": "Set in Treble (9B) talk 55 (Lexis: submarines dive, they don't sink)."
+    },
+    "B8": {
+      "label": "Warping to Eserikto (Artea scene next)",
+      "note": "Set in Mountain of No Return (A3) trigger 02; cleared in Eserikto (A6) scene 01; checked by its start-up script."
+    },
+    "B9": {
+      "label": "Told to stand before Foomy's spring",
+      "note": "Set in Foomy Woods (0E) trigger 02 (the woman: if your fight is just, Foomy will join)."
+    },
+    "BA": {
+      "label": "Divine Shrine 3F blessing (stats up)",
+      "note": "Set in Divine Shrine 3F (AA) trigger 02 (the attributes of all members increase); checked by its load event."
+    },
+    "BB": {
+      "label": "Sinistrals attack: off to Portravia",
+      "note": "Set in Kirmo Laboratory (A2) talk 2C (it's the Sinistrals); cleared in Portravia (A0) scene 05; checked by both start-up scripts."
+    },
+    "BC": {
+      "label": "Dekar back, fighting in Portravia",
+      "note": "Set in Portravia (A0) scene 04 when Dekar returns; cleared by its scene 05; checked by Portravia and Kirmo start-up scripts."
+    },
+    "BE": {
+      "label": "Iris talked in Karlloon North Shrine 3F",
+      "note": "Set in Karlloon North Shrine 3F (77) talk 12 with flag 7E; checked by the shrine's load events."
+    },
+    "BF": {
+      "label": "Sisters' power combined (report to Lexis)",
+      "note": "Set in map E4 trigger 01 (Clare: combine all our power); cleared in Kirmo Laboratory (A2) talk 2C; checked by Portravia, Kirmo and Shrine of Daos 5F."
+    },
+    "C0": {
+      "label": "Solved the Dragon Mountain panel trick",
+      "note": "Set in Dragon Mountain (C2) scene 02; checked by talk 58 (I see you have solved it); cleared when the world map loads."
+    },
+    "C1": {
+      "label": "Beat the Egg Dragon, got the Egg Sword",
+      "note": "Set in Small Shrine to Dragon Egg (9F) talk 50 when the Egg Sword and Egg Ring are given."
+    },
+    "C2": {
+      "label": "Stayed at the Forfeit Island inn",
+      "note": "Set in Forfeit Island (86) talk 50, the innkeeper (20 gold); checked and cleared by Markao (87) talk 6A, the bar hostess; cleared when the world map loads."
+    },
+    "C3": {
+      "label": "Beat the Ancient Cave master",
+      "note": "Set in Ancient Cave Final Floor (F1) trigger 01 when the master gives the Ancient key; checked by Ancient Cave (F0) talk 52."
+    },
+    "C4": {
+      "label": "Gruberik: told about the Ancient Cave",
+      "note": "Set in Gruberik (68) scene 02 (go to the Cafe before the cave); checked by Gruberik (69) start-up script and talk 53."
+    },
+    "C5": {
+      "label": "Island in the sky over Chaed (Daos speech)",
+      "note": "Set in Chaed (BE) scene 02 (Look, an island in the sky!); cleared by Shrine of Daos 5F (EB) scene 02, Daos' speech."
+    },
+    "C6": {
+      "label": "Storming the Shrine of Daos (Daos speaks)",
+      "note": "Set in Portravia (A0) scene 05; cleared by Shrine of Daos 1F (E7) scene 62; checked by E7 and EB load events."
+    },
+    "C7": {
+      "label": "Escaping the Ancient Tower",
+      "note": "Set in Ancient Tower 7F (52) trigger 01; cleared by the Ancient Tower 4F (55) warp; checked by map 4B and 7F load events."
+    },
+    "C8": {
+      "label": "Iris Sword taken out of the Ancient Cave",
+      "note": "Game code: Iris treasures taken out of the Ancient Cave (C8-D0, order assumed to match D2-DA); checked by Gruberik (69) talk 59, the cafe hostess."
+    },
+    "C9": {
+      "label": "Iris Shield taken out of the Ancient Cave",
+      "note": "Game code: Iris treasures taken out of the Ancient Cave (C8-D0, order assumed); checked by Gruberik (69) talk 59."
+    },
+    "CA": {
+      "label": "Iris Helmet taken out of the Ancient Cave",
+      "note": "Game code: Iris treasures taken out of the Ancient Cave (C8-D0, order assumed); checked by Gruberik (69) talk 59."
+    },
+    "CB": {
+      "label": "Iris Armor taken out of the Ancient Cave",
+      "note": "Game code: Iris treasures taken out of the Ancient Cave (C8-D0, order assumed); checked by Gruberik (69) talk 59."
+    },
+    "CC": {
+      "label": "Iris Ring taken out of the Ancient Cave",
+      "note": "Game code: Iris treasures taken out of the Ancient Cave (C8-D0, order assumed); checked by Gruberik (69) talk 59."
+    },
+    "CD": {
+      "label": "Iris Jewel taken out of the Ancient Cave",
+      "note": "Game code: Iris treasures taken out of the Ancient Cave (C8-D0, order assumed); checked by Gruberik (69) talk 59."
+    },
+    "CE": {
+      "label": "Iris Staff taken out of the Ancient Cave",
+      "note": "Game code: Iris treasures taken out of the Ancient Cave (C8-D0, order assumed); checked by Gruberik (69) talk 59."
+    },
+    "CF": {
+      "label": "Iris Pot taken out of the Ancient Cave",
+      "note": "Game code: Iris treasures taken out of the Ancient Cave (C8-D0, order assumed); checked by Gruberik (69) talk 59."
+    },
+    "D0": {
+      "label": "Iris Tiara taken out of the Ancient Cave",
+      "note": "Game code: Iris treasures taken out of the Ancient Cave (C8-D0, order assumed); checked by Gruberik (69) talk 59."
+    },
+    "D1": {
+      "label": "Ancient Cave boss beaten (trophy)",
+      "note": "Set in Ancient Cave Final Floor (F1) trigger 01 with flag C3; checked by Gruberik (69) talk 59 to display the boss trophy."
+    },
+    "D2": {
+      "label": "Iris Sword on display at the Gruberik cafe",
+      "note": "Set in Gruberik (69) talk 59 when the hostess takes the Iris sword; checked by its load event."
+    },
+    "D3": {
+      "label": "Iris Shield on display at the Gruberik cafe",
+      "note": "Set in Gruberik (69) talk 59 when the hostess takes the Iris shield; checked by its load event."
+    },
+    "D4": {
+      "label": "Iris Helmet on display at the Gruberik cafe",
+      "note": "Set in Gruberik (69) talk 59 when the hostess takes the Iris helmet; checked by its load event."
+    },
+    "D5": {
+      "label": "Iris Armor on display at the Gruberik cafe",
+      "note": "Set in Gruberik (69) talk 59 when the hostess takes the Iris armor; checked by its load event."
+    },
+    "D6": {
+      "label": "Iris Ring on display at the Gruberik cafe",
+      "note": "Set in Gruberik (69) talk 59 when the hostess takes the Iris ring; checked by its load event."
+    },
+    "D7": {
+      "label": "Iris Jewel on display at the Gruberik cafe",
+      "note": "Set in Gruberik (69) talk 59 when the hostess takes the Iris jewel; checked by its load event."
+    },
+    "D8": {
+      "label": "Iris Staff on display at the Gruberik cafe",
+      "note": "Set in Gruberik (69) talk 59 when the hostess takes the Iris staff; checked by its load event."
+    },
+    "D9": {
+      "label": "Iris Pot on display at the Gruberik cafe",
+      "note": "Set in Gruberik (69) talk 59 when the hostess takes the Iris pot; checked by its load event."
+    },
+    "DA": {
+      "label": "Iris Tiara on display at the Gruberik cafe",
+      "note": "Set in Gruberik (69) talk 59 when the hostess takes the Iris tiara; checked by its load event."
+    },
+    "DB": {
+      "label": "Ancient Cave boss trophy on display",
+      "note": "Set in Gruberik (69) talk 59 (you defeated the boss in the Ancient Cave, let me display it); checked by its load event."
+    },
+    "F0": {
+      "label": "Scratch (this map): skills step / ship trip",
+      "note": "Cleared on every map change; set in Secret Skills Cave (05) trigger 09 and by the Aleyn shipwright's trips (5E, 68, 6A talk 22)."
+    },
+    "F1": {
+      "label": "Scratch (this map): Reset given / ship trip",
+      "note": "Cleared on every map change; set in Secret Skills Cave (05) trigger 0D and by the shipwright's trips (5E, 68, 6A talk 22)."
+    },
+    "F2": {
+      "label": "Scratch (this map): pillar lesson explained",
+      "note": "Cleared on every map change; set and checked in Secret Skills Cave (05) talk 11 (push the pillar onto the switch)."
+    },
+    "FA": {
+      "label": "Scratch (this map): already talked or seen",
+      "note": "Cleared on every map change; set by many one-visit lines (Sundletan old man, Dragon Mountain trick, Ancient Cave, submarine caves) so they show once per visit."
+    },
+    "FB": {
+      "label": "Scratch (this map): Reset lesson / cave entry",
+      "note": "Cleared on every map change; set in Secret Skills Cave (05) scene 01 and Ancient Cave (F0) trigger 01."
+    },
+    "FC": {
+      "label": "Scratch (this map): skills lesson / cave door",
+      "note": "Cleared on every map change; set in Secret Skills Cave (05) trigger 12 and Ancient Cave (F0) trigger 02 (the treasures are in the back room)."
+    },
+    "FD": {
+      "label": "Scratch (this map): arrow switch lesson",
+      "note": "Cleared on every map change; set in Secret Skills Cave (05) trigger 13 (hit that switch with an Arrow)."
+    },
+    "FE": {
+      "label": "Set after some story battles",
+      "note": "Set by the game code after some story battles; checked by Ancient Cave Final Floor (F1) trigger 01."
+    },
+    "FF": {
+      "label": "Answer of a check / party did not win",
+      "note": "Set by the game code: the answer of checks, and \"the party did not win\" after a story battle; tested right after most story battles."
+    }
+  },
+  "counters": {
+    "01": {
+      "label": "Line turn: Alunze Castle B2 talk 50",
+      "note": "Command 12 in Alunze Castle (11) B2 talk 50 picks a line by it and adds 1, so each talk says the next line; nothing else uses it."
+    },
+    "02": {
+      "label": "Line turn: Hilda in Alunze North Shrine",
+      "note": "Command 12 in Alunze North Shrine (17) talk 17 (Hilda) picks a line by it and adds 1."
+    },
+    "03": {
+      "label": "Sundletan earthquake scene step",
+      "note": "Command 12 in Sundletan (08) trigger 01 picks the earthquake branch by it and adds 1 (flag 35 is set there)."
+    },
+    "04": {
+      "label": "Times Daisy asked about Tia (Sundletan)",
+      "note": "Command 12 and +1 in Sundletan (09) talk 13, Daisy (isn't Tia with you?)."
+    },
+    "05": {
+      "label": "Line turn: Clamento man (talk 55)",
+      "note": "Command 12 in Clamento (26) talk 55, the man who wants the ruby, picks a line by it and adds 1."
+    },
+    "06": {
+      "label": "Line turn: Merix Village talk 55",
+      "note": "Command 12 in Merix Village (3F) talk 55 picks a line by it and adds 1."
+    },
+    "07": {
+      "label": "Nights at the Aleyn inn",
+      "note": "Added 1 by the innkeeper in Port Town of Aleyn (5F) talk 50; at 2 the inn talk moves the story on (flag 3C)."
+    },
+    "08": {
+      "label": "Egg Dragon wishes granted",
+      "note": "Added 1 per wish in Small Shrine to Dragon Egg (9F) talk 50 (potions, fruits, Ancient Shield, Super Rings); at 4 or more no wish is left."
+    },
+    "0A": {
+      "label": "Gordovan West Tower elevator floor",
+      "note": "Set to 1-5 by the elevator choice in Gordovan West Tower 1F-5F (38-3C) trigger 00 and checked by each floor's load event; the World Map load sets it to 5; Durale (B5) talk 50 also turns lines by it."
+    },
+    "0B": {
+      "label": "Members picked for the Ancient Cave party",
+      "note": "Set to 0 by Gruberik (69) talk 53 and +1 each time a hero joins (talks 66-6B); at 3 or more the party is full."
+    },
+    "0C": {
+      "label": "Line turn: Merix Village talk 1B",
+      "note": "Command 12 in Merix Village (3F) talk 1B picks a line by it and adds 1."
+    },
+    "0D": {
+      "label": "Times the Sundletan man spoke of earthquakes",
+      "note": "Command 12 and +1 in Sundletan (08) talk 54 (that earthquake was a big one)."
+    },
+    "0E": {
+      "label": "Iris treasures on display (Gruberik cafe)",
+      "note": "Added 1 in Gruberik (69) talk 59 for each Iris treasure or the boss trophy the hostess displays; 10 means all are shown."
+    }
+  }
+}
