@@ -175,6 +175,18 @@ public partial class L2StartFlagVm : ObservableObject
     partial void OnValueChanged(int value) => Changed?.Invoke();
 }
 
+/// <summary>A place a puzzle step touches, marked on the stage (map pixels).</summary>
+public sealed class L2StageMark
+{
+    public double Left { get; init; }
+    public double Top { get; init; }
+    public double Width { get; init; }
+    public double Height { get; init; }
+    public string Label { get; init; } = "";
+    /// <summary>The source of a tile copy (drawn in another colour).</summary>
+    public bool IsSource { get; init; }
+}
+
 /// <summary>A character drawn on the stage.</summary>
 public sealed class L2StageActor
 {
@@ -408,6 +420,10 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
 
     /// <summary>Heroes 1-6 for the test start, ticked when they are in the party (Maxim always leads).</summary>
     public ObservableCollection<L2StartFlagVm> TestParty { get; } = new();
+
+    /// <summary>The places the picked puzzle step touches, drawn over the stage.</summary>
+    public ObservableCollection<L2StageMark> PuzzleMarks { get; } = new();
+    private L2PuzzleText? _puzzleText;
     [ObservableProperty] private string _testPartyWhy = "";
     private bool _partyByHand, _fillingParty;
 
@@ -547,7 +563,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
                 list.Add(new L2EventItem { Title = title, Entry = e, Preview = preview });
             }
         }
-        foreach (var (title, ops) in L2Puzzles.MapScripts(rom, map)) list.Add(new L2EventItem { Title = title, PuzzleOps = ops, Preview = "A puzzle script (switches, doors, spots): its own commands." });
+        foreach (var (title, ops, preview) in L2Puzzles.MapScripts(rom, map)) list.Add(new L2EventItem { Title = title, PuzzleOps = ops, Preview = preview });
         return list;
     }
 
@@ -704,11 +720,15 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         if (e == null || rom == null) { HasScript = false; CanEdit = false; IsPuzzle = false; Info = ""; Simulate(); ShowStage(); return; }
         HasScript = true;
         IsPuzzle = e.PuzzleOps != null;
+        _puzzleText = null;
+        PuzzleMarks.Clear();
         if (e.PuzzleOps != null)
         {
             CanEdit = false;
             for (int i = 0; i < e.PuzzleOps.Count; i++) Lines.Add(new L2LineVm(this, e.PuzzleOps[i], i) { BytesText = Convert.ToHexString(rom.ReadBytes(e.PuzzleOps[i].At, e.PuzzleOps[i].Length)) });
-            Info = "A puzzle script: switches, doors and spots run with their own commands. Pick a command and change its bytes under the list (it must keep its size).";
+            Info = "A puzzle script (switches, doors, blocks to push, bomb and sword spots), in words. Spots and areas are the map's puzzle places; " +
+                   "switches are the puzzle's own on/off flags, not story flags; a tile change copies a piece of the map kept off to the side (the changed floor or wall) onto the place. " +
+                   "A step that runs as its own thread says which step starts it.";
             Simulate(); ShowStage();
             SelectedLine = keepLine >= 0 && keepLine < Lines.Count ? keepLine : -1;
             return;
@@ -1259,10 +1279,23 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
 
     partial void OnSelectedLineChanged(int value)
     {
+        PuzzleMarks.Clear();
         if (IsPuzzle && value >= 0 && value < Lines.Count && Lines[value].PuzzleOp is { } op && _rom != null)
+        {
             PuzzleBytes = string.Join(" ", _rom.ReadBytes(op.At, op.Length).Select(b => b.ToString("X2")));
+            // what the step touches, marked on the stage
+            try
+            {
+                _puzzleText ??= new L2PuzzleText(_rom, _map);
+                foreach (var (x, y, w, h, label) in _puzzleText.Marks(_rom, op.At))
+                    PuzzleMarks.Add(new L2StageMark { Left = x * 16, Top = y * 16, Width = w * 16, Height = h * 16, Label = label, IsSource = label == "copied from" });
+            }
+            catch (Exception) { }
+        }
         _textLine = null;
         if (!IsPlaying) ShowStage();
+        // (after the stage, which brings the view back to the camera)
+        if (PuzzleMarks.Count > 0) ScrollRequested?.Invoke(PuzzleMarks[0].Left + PuzzleMarks[0].Width / 2, PuzzleMarks[0].Top + PuzzleMarks[0].Height / 2);
     }
 
     public void HighlightLine(int index)
