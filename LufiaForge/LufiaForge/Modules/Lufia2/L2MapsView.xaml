@@ -55,6 +55,9 @@
                     <RadioButton GroupName="L2MapTool" Style="{StaticResource LufiaToolRadio}" IsChecked="{Binding IsAddHiddenTool}" Content="＋ Hidden item"
                                  ToolTip="Add hidden item (H): click a block; nothing shows, pressing A facing it finds the item once"
                                  Visibility="{Binding IsWorldMap, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+                    <RadioButton GroupName="L2MapTool" Style="{StaticResource LufiaToolRadio}" IsChecked="{Binding IsAddPuzzleTool}" Content="＋ Puzzle"
+                                 ToolTip="Add puzzle (U): a wall blasted open, a passage cut, a door drawn open when a bomb, sword, arrow, hammer or the action button hits a spot"
+                                 Visibility="{Binding IsWorldMap, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
 
                     <StackPanel Orientation="Horizontal" Margin="14,0,0,0" Visibility="{Binding IsAreaTool, Converter={StaticResource BoolToVisibilityConverter}}">
                         <Rectangle Width="1" Fill="{StaticResource BorderPurpleBrush}" Margin="0,2,12,2"/>
@@ -153,6 +156,11 @@
                             <StackPanel Orientation="Horizontal" Margin="12,0,0,0" Visibility="{Binding IsCollisionTool, Converter={StaticResource BoolToVisibilityConverter}}">
                                 <TextBlock Text="Collision to paint" Style="{StaticResource LufiaLabel}" VerticalAlignment="Center" Margin="0,0,6,0"/>
                                 <ComboBox Style="{StaticResource GdCombo}" Width="190" ItemsSource="{Binding CollisionChoices}" SelectedIndex="{Binding CollisionKind}"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="12,0,0,0" Visibility="{Binding PuzzleOptionsVisible, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <TextBlock Text="Set off by" Style="{StaticResource LufiaLabel}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <ComboBox Style="{StaticResource GdCombo}" Width="260" ItemsSource="{Binding PuzzleTriggerChoices}" SelectedIndex="{Binding PuzzleTrigger}"
+                                          ToolTip="What sets the change off at the spot clicked last. The map gets dungeon controls (the game runs puzzles only then), and field tools are allowed for a bomb, sword, arrow or hammer."/>
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Margin="12,0,0,0" Visibility="{Binding ChestLookVisible, Converter={StaticResource BoolToVisibilityConverter}}">
                                 <TextBlock Text="Chest picture" Style="{StaticResource LufiaLabel}" VerticalAlignment="Center" Margin="0,0,6,0"/>

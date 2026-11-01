@@ -95,6 +95,21 @@ is written), `Modules/Lufia2/L2MapWindows.cs` (pick a place, pieces and presets,
   place 1 empty and place 2 filled is a fixed battle (the other places are layout data): only place 2 can change.
 * Lufia II keeps its 242 maps in fixed tables, so maps can't be added or deleted (yet): resize one, paint it, place
   pieces of others on it.
+* **＋ Puzzle (U)**: a wall blasted open, a passage cut, a door drawn open. First paint the look it changes to somewhere
+  else on the map (Paint and Collision, walls and all, as the game's own maps keep their opened walls off to the side).
+  Pick what sets it off (a bomb, a sword hit, an arrow, the hammer, the action button), then: drag over what changes,
+  click the top-left of the look, click the block that sets it off. It is written at once (the map's other changes
+  first): a tile copy of the look (map info +16, layers 33: both layers' blocks and their wall flags), a spot where it
+  goes (+22), the trigger spot (+1A bomb, +1C sword, +1E arrow, +20 action button, +2A hammer), a puzzle switch from
+  00-1F (the ones a save keeps), the trigger's puzzle script (once: change the tiles, switch on) and a step in the map's
+  set-up that redraws it when the party comes back. A map without puzzles gets a puzzle block. The game runs puzzles
+  only with dungeon controls (Map settings 69 bit 01 in the start-up script; every one of the game's 146 puzzle maps has
+  it) and field tools need bit 40 off, so the start-up script's Map settings are turned that way (the status says so).
+  Walls are flags of the upper layer (40 walkable, 80 blocked, 04 / 08 a wall on the cell's top / bottom edge), so the
+  piece that changes must take in the floor block in front of the wall too: its edge flag is the wall. Checked in the
+  game: Secret Skills Cave (05) and Clamento (26, a town: dungeon controls turned on) open with the action button, the
+  party walks through, and after the map loads again the set-up has drawn it open (with the switch cleared first the
+  wall is back). Test in the game starts with switches 00-1F off (event command AA).
 
 ## 2. How it is written
 

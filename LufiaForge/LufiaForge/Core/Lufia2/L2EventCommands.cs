@@ -607,7 +607,7 @@ public static class L2EventCommands
         One(0xA8, "Enter or leave the Ancient Cave", Special, (b, _) => b[1] == 0 ? "Enter the Ancient Cave (party and items reset)" : "Leave the Ancient Cave", null, "", 'D', rare: true,
             ps: Pk("", 1, L((0, "enter"), (1, "leave"))));
         One(0xA6, "Place the cave floor's monsters", Special, (_, _) => "Place this floor's monsters (Ancient Cave)", null, "", '?', rare: true);
-        One(0xAA, "Clear the puzzle movement flags", Special, (_, _) => "Clear the puzzle movement flags", null, "", 'C', rare: true);
+        One(0xAA, "Turn puzzle switches 00-1F off", Special, (_, _) => "Turn puzzle switches 00-1F off", null, "The map's puzzle switches 00-1F ($7F:D100-D103, $80:AC18), the ones a save keeps.", 'C', rare: true);
         One(0xAD, "Rebuild the treasure list", Special, (_, _) => "Rebuild a treasure list (Dragon egg wish?)", null, "", '?', rare: true);
         One(0xBB, "Show the report screen", Special, (_, _) => "Show the report screen (defeats and other records) and end", null, "The game uses it at the end.", 'G', rare: true);
         One(0xBC, "Draw the map again and end", Special, (_, _) => "Draw the map again and end the event", null, "", 'C', rare: true);
