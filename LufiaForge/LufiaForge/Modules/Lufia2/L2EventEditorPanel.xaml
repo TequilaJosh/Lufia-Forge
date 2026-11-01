@@ -290,6 +290,30 @@
                                                Visibility="{Binding ShowCamera, Converter={StaticResource BoolToVisibilityConverter}}">
                                         <Rectangle.Fill><SolidColorBrush Color="Black" Opacity="{Binding Darkness}"/></Rectangle.Fill>
                                     </Rectangle>
+                                    <!-- the places the picked puzzle step touches -->
+                                    <ItemsControl ItemsSource="{Binding PuzzleMarks}">
+                                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><Canvas/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemContainerStyle>
+                                            <Style TargetType="ContentPresenter">
+                                                <Setter Property="Canvas.Left" Value="{Binding Left}"/>
+                                                <Setter Property="Canvas.Top" Value="{Binding Top}"/>
+                                            </Style>
+                                        </ItemsControl.ItemContainerStyle>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid Width="{Binding Width}" Height="{Binding Height}">
+                                                    <Rectangle x:Name="Box" Stroke="#FF40E0FF" StrokeThickness="2" Fill="#4040E0FF"/>
+                                                    <TextBlock Text="{Binding Label}" Foreground="White" Background="#C0000000" FontSize="6" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0,-8,-40,0"/>
+                                                </Grid>
+                                                <DataTemplate.Triggers>
+                                                    <DataTrigger Binding="{Binding IsSource}" Value="True">
+                                                        <Setter TargetName="Box" Property="Stroke" Value="#FFFFB040"/>
+                                                        <Setter TargetName="Box" Property="Fill" Value="#40FFB040"/>
+                                                    </DataTrigger>
+                                                </DataTemplate.Triggers>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
                                     <!-- the tile a walk hits (a wall, another character) -->
                                     <Grid Width="16" Height="16" Canvas.Left="{Binding WarnLeft}" Canvas.Top="{Binding WarnTop}"
                                           Visibility="{Binding HasWarning, Converter={StaticResource BoolToVisibilityConverter}}">

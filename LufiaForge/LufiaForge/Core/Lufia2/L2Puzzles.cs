@@ -290,24 +290,77 @@ public static class L2Puzzles
         return ops.Values.ToList();
     }
 
-    /// <summary>A map's puzzle scripts by category and id (object groups shown as their member lists).</summary>
-    public static List<(string Title, List<L2Script.Op> Ops)> MapScripts(RomBuffer rom, int map)
+    /// <summary>When each category's scripts run, and the map-info list of their spots (id, x, y), if any.</summary>
+    private static readonly (string When, int List)[] Triggers =
     {
-        var list = new List<(string, List<L2Script.Op>)>();
+        ("", -1), ("Pressing the action button facing action spot", 0x20), ("A sword hit on sword spot", 0x1C), ("An arrow on arrow spot", 0x1E),
+        ("A bomb on bomb spot", 0x1A), ("", -1), ("", -1), ("A hammer on hammer spot", 0x2A),
+    };
+
+    /// <summary>What starts a category-00 script (by id; the callers of $80:E722 with category 00).</summary>
+    private static string EngineEvent(int id) => id switch
+    {
+        0x00 => "Room check (runs while the room's puzzles are active, and after a warp)",
+        0x02 => "As the map loads (sets the room up)",
+        0x03 => "Stepping on a trigger tile (tile type 9)",
+        _ => $"Game event {id:X2} (started by the game's own code)",
+    };
+
+    /// <summary>A map's puzzle scripts by category and id, each command in words (<see cref="L2PuzzleText"/>) with its
+    /// jumps as step numbers; a step started from elsewhere says so. Object groups are shown as their member lists.</summary>
+    public static List<(string Title, List<L2Script.Op> Ops, string Preview)> MapScripts(RomBuffer rom, int map)
+    {
+        var list = new List<(string, List<L2Script.Op>, string)>();
         int block = Block(rom, map);
         if (block < 0) return list;
         int end = NextBlock(rom, block);
+        var words = new L2PuzzleText(rom, map);
         foreach (var (cat, id, off) in Entries(rom, block))
         {
-            string title = $"Puzzle: {Categories[cat]} {id:X2}{(cat == 0 && id == 2 ? " (room set-up)" : "")}";
             if (cat == 5)
             {
-                var members = new List<string>();
-                for (int p = block + off; p < end && rom.ReadByte(p) != 0xFF && members.Count < 64; p++) members.Add(rom.ReadByte(p).ToString("X2"));
-                list.Add((title, new List<L2Script.Op> { new(block + off, members.Count + 1, "members: " + string.Join(" ", members)) }));
+                var members = new List<int>();
+                for (int p = block + off; p < end && rom.ReadByte(p) != 0xFF && members.Count < 64; p++) members.Add(rom.ReadByte(p));
+                string text = $"Group {id} is {string.Join(", ", members.Select(m => words.Place(m + 0x60)))}: a command given this group (place {0x80 + id:X2}) works on all of them.";
+                list.Add(($"Puzzle: group {id}", new List<L2Script.Op> { new(block + off, members.Count + 1, text) }, $"{members.Count} places that commands use together"));
                 continue;
             }
-            list.Add((title, Walk(rom, block + off, block, end)));
+            string when;
+            if (cat == 0) when = EngineEvent(id);
+            else if (cat < Triggers.Length && Triggers[cat].List >= 0)
+            {
+                var spot = L2MapInfo.Records(rom, map, Triggers[cat].List, 3).FirstOrDefault(r => r.Bytes[0] == id).Bytes;
+                when = $"{Triggers[cat].When} {id}" + (spot != null ? $" ({spot[1]}, {spot[2]})" : "");
+            }
+            else when = $"{Categories[cat]} {id:X2}";
+            var raw = Walk(rom, block + off, block, end);
+            var step = new Dictionary<int, int>();
+            for (int i = 0; i < raw.Count; i++) step[raw[i].At] = i;
+            string Step(int a) => step.TryGetValue(a, out int i) ? $"step {i + 1}" : $"ROM 0x{a:X6}";
+            // where each step is started from (other than the step before it)
+            var from = new Dictionary<int, List<string>>();
+            for (int i = 0; i < raw.Count; i++)
+            {
+                int op = rom.ReadByte(raw[i].At);
+                foreach (int t in Targets(rom, raw[i].At, raw[i].Length, block))
+                {
+                    if (!from.TryGetValue(t, out var l)) from[t] = l = new();
+                    l.Add(op is 0x26 or 0x27 ? $"started as its own thread by step {i + 1}" : op == 0xA9 ? $"run by step {i + 1}" : $"reached from step {i + 1}");
+                }
+            }
+            var ops = new List<L2Script.Op>();
+            for (int i = 0; i < raw.Count; i++)
+            {
+                // the place a "keep the answer" step stores for: the one the test before it (going up the list) read
+                int tested = -1;
+                for (int k = i - 1; k >= 0 && tested < 0; k--)
+                    if (rom.ReadByte(raw[k].At) is 0x13 or 0x15 or 0x17 or 0x72 && raw[k].Length > 1) tested = rom.ReadByte(raw[k].At + 1);
+                if (tested >= 0xA0) tested = -1;   // (known only as it runs)
+                string text = raw[i].Text.StartsWith("(not") ? raw[i].Text : words.Describe(rom, raw[i].At, block, Step, tested);
+                if (from.TryGetValue(raw[i].At, out var by)) text += "\n(" + string.Join("; ", by.Distinct()) + ")";
+                ops.Add(new L2Script.Op(raw[i].At, raw[i].Length, text));
+            }
+            list.Add(($"Puzzle: {when}", ops, $"{ops.Count} steps: " + (ops.Count > 0 ? ops[0].Text.Split('\n')[0] : "")));
         }
         return list;
     }

@@ -98,6 +98,27 @@ title/ending.
     **A0-BF** = the value of variable `D074+n` (then resolved again); **E0-FF** = rectangle register n-E0;
     **FB** = the thread's anchor spot; FC-FE = thread parameters.
   * `v` variable number `D074+v`; `b` plain byte; `w` u16 block offset; `[..FF]` FF-terminated byte list.
+* **Places, corrected from the code (2026-10-31).** A spot is looked up as id **p - 20** (`$80:EA37`: `SBC #$20`,
+  then `$80:E912` on list $22), so place 20 is spot 00 and North Lighthouse 5F's places 20-28 are its spots 0-8.
+  Which values mean what depends on the reader the command uses:
+  * `$80:EA09` alone (06, 0E, 7A, A8, 91, 22, 25, 2A, 5E, 0F, 6C): every value 20-DF is spot p-20 (map 39 has spots
+    64-6F, used as places 84-8F), E0-FA rectangle registers, FB the anchor, FC-FE parameters (resolved again).
+  * `$80:E9ED` then `$80:EA09` (85, 9C, BA, BC, A7, 94-96): the same, but A0-BF are first replaced by the variable's
+    value.
+  * `$80:E92A` (moves 64-67, 7C-81, A3-A6, AF-B3 through `$80:E004`; 69, 55, 78): below 60 a spot, 60-7F area p-60 of
+    list $24 (x2, y2 not included: `$80:E15A` tests x1 <= x < x2), E0-FA rectangle registers.
+  * The tests (12-18, 6D-6F, 72-74, 04, 05, 70) also take 80-9F, object group n-80: `$80:E566` runs the test on every
+    member + 60 (members are area numbers) and ORs the answers.
+  * The "occupancy" tests 12/13/6D compare the leader's tile (`$06BA`, `$06E2`) with the spot, or test it inside the
+    area; 15-18, 6E/6F and 72-74 read the collision map (bit 01 a character, 08 a movable object).
+* **Tile copies** (06, 0E, 7A, 94-96 and others through `$83:8B40`): b is a record of map-info list **+16** (10 bytes:
+  id, layers, x, y, width, height, then FF ?? ?? FF; `$80:BFAA` finds it by id). The rectangle at (x, y) of the map is
+  copied onto the place: maps keep the changed look of a floor, a hole or a switch off to the side. FC-FE as b are
+  values passed to the thread.
+* **Move directions** (64-67, 7C-7F, A3-A6, AF-B2): 0 up, 1 down, 2 left, 3 right, as the actors'. North Lighthouse 5F
+  moves its block with 65 three times from (34, 20), then redraws (34, 21) and (34, 22): it slides down into the hole.
+* The event editor shows every puzzle command in these words (`L2PuzzleText`), jumps as step numbers, the step that
+  starts a thread on the thread's first step, and marks a picked step's places (and a tile copy's source) on the stage.
 
 ## 2. Opcode table
 

@@ -67,6 +67,10 @@ public partial class L2EventEditorPanel : UserControl
         "Commands: pick values from the lists, jump targets by step, ＋ inserts below, ✕ deletes, drag the grip to reorder. On the stage, click a character, then a tile: it walks, " +
         "appears or turns there. Story flags are shared by the whole game, so change them with care. Edits are written when you leave the event (or press Save).";
 
+    private const string PuzzleHelp =
+        "Pick a step to see the places it uses on the stage: blue is the spot or area, orange is the piece of the map a tile change copies from. " +
+        "Show bytes gives the raw commands; pick a step and change its bytes under the list (it must keep its size).";
+
     /// <summary>Cutscene layout (the Cutscenes page): the stage is always shown and gets most of the room.</summary>
     public bool CutsceneMode
     {
@@ -114,7 +118,9 @@ public partial class L2EventEditorPanel : UserControl
     {
         if (_editor == null) return;
         bool moves = _editor.Script?.Steps.Any(s => !s.IsText && s.Op is 0x2D or 0x2E or 0x2F or 0x30 or 0x7A or 0x98 or 0x99 or 0xA3 or 0x3A or 0xC4 or 0x41) == true;
-        if (_cutsceneMode || StageToggle.IsChecked == true || (moves && !_stageChosen)) ShowStage(true);
+        // a puzzle script: its steps mark their places on the stage
+        if (!_cutsceneMode) HelpText.Text = _editor.IsPuzzle ? PuzzleHelp : DefaultHelp;
+        if (_cutsceneMode || StageToggle.IsChecked == true || ((moves || _editor.IsPuzzle) && !_stageChosen)) ShowStage(true);
         if (_cutsceneMode && !_timelineChosen) ShowTimeline(true);
         else if (TimelineCard.Visibility == Visibility.Visible) Timeline.Refresh();
         if (_editor.SelectedLine >= 0) _editor.HighlightLine(_editor.SelectedLine);
@@ -128,7 +134,7 @@ public partial class L2EventEditorPanel : UserControl
             _editor.HighlightLine(_editor.SelectedLine);
             Timeline.SelectLine(_editor.SelectedLine);
         }
-        else if (e.PropertyName == nameof(L2ScriptEditor.Title)) Refresh();
+        else if (e.PropertyName is nameof(L2ScriptEditor.Title) or nameof(L2ScriptEditor.IsPuzzle)) Refresh();
     }
 
     // ── the steps ──
