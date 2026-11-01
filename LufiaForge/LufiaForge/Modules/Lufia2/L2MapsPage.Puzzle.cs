@@ -1,3 +1,6 @@
+using System.Collections.ObjectModel;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using LufiaForge.Core.Lufia2;
 
@@ -95,4 +98,123 @@ public partial class L2MapsPage
         }
         catch (Exception ex) { Status = "Not added: " + ex.Message; ResetPuzzle(); }
     }
+
+    // ---------------------------------------------------------------- presets (R): a door or a bomb piece from the game
+
+    public static readonly (L2PuzzlePresets.Kind Kind, string Label)[] PresetKinds =
+    {
+        (L2PuzzlePresets.Kind.Door, "Door (opens when the party faces it and presses A)"),
+        (L2PuzzlePresets.Kind.BombWall, "Bomb piece (a wall, statue or pillar a bomb breaks)"),
+    };
+    public List<string> PresetKindChoices { get; } = PresetKinds.Select(k => k.Label).ToList();
+    [ObservableProperty] private int _presetKind;
+    public ObservableCollection<L2PresetChoice> PresetChoices { get; } = new();
+    [ObservableProperty] private L2PresetChoice? _selectedPreset;
+
+    public bool IsAddPresetTool { get => Tool == L2Tool.AddPreset; set { if (value) Tool = L2Tool.AddPreset; } }
+    public bool PresetOptionsVisible => Tool == L2Tool.AddPreset && _world == null && _edit != null;
+
+    private List<L2PuzzlePresets.Preset>? _gamePresets;
+    /// <summary>0: click where the closed piece goes; 1: click where the open one is kept.</summary>
+    private int _presetStep;
+    private (int X, int Y) _presetAt;
+    private ((int Block, byte Flags)[][] Closed, (int Block, byte Flags)[][] Open)? _presetCells;
+
+    private string PresetHint => _presetStep == 1
+        ? "Preset (R), 2 of 2: click where the open look is kept: anywhere on the map, best where the camera never goes (the game keeps them off to the side). The puzzle is written then. Right-click starts again (Ctrl+Z takes the piece back)."
+        : "Preset (R), 1 of 2: pick a door or a bomb piece below, then click where it goes (its top-left block). Then click where its open look is kept; the puzzle that opens it is made for you.";
+
+    partial void OnPresetKindChanged(int value) => FillPresets();
+
+    /// <summary>The game's presets of the picked kind: this map's graphics first.</summary>
+    private void FillPresets()
+    {
+        PresetChoices.Clear();
+        if (_rom == null || _edit == null || _edit.IsWorld) { SelectedPreset = null; return; }
+        _gamePresets ??= L2PuzzlePresets.Game(_rom);
+        var kind = PresetKinds[Math.Clamp(PresetKind, 0, PresetKinds.Length - 1)].Kind;
+        int bs = _edit.BlockSetIndex, ts = _edit.TileSetIndex, ps = _edit.PaletteSetIndex;
+        foreach (var p in _gamePresets.Where(p => p.Kind == kind)
+                     .OrderBy(p => p.BlockSet == bs && p.TileSet == ts && p.PaletteSet == ps ? 0 : p.TileSet == ts ? 1 : 2).ThenBy(p => p.Map))
+        {
+            string fit = p.BlockSet == bs && p.TileSet == ts && p.PaletteSet == ps ? " (same graphics)" : p.TileSet == ts ? " (same tiles)" : "";
+            var (w, h, px) = L2PuzzlePresets.Picture(_rom, p);
+            var img = BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgra32, null, px.Select(c => (int)(c == 0 ? 0xFF000000u : c)).ToArray(), w * 4);
+            img.Freeze();
+            PresetChoices.Add(new L2PresetChoice { Preset = p, Label = p.Name + fit, Image = img });
+        }
+        SelectedPreset = PresetChoices.FirstOrDefault();
+    }
+
+    private void ResetPreset() { _presetStep = 0; _presetCells = null; AreaRect = null; OnPropertyChanged(nameof(ToolHint)); }
+
+    /// <summary>Paints preset cells at (x, y): both layers' blocks, and the upper layer's flags (the walls).</summary>
+    private void PaintCells((int Block, byte Flags)[][] cells, int w, int h, int x, int y)
+    {
+        if (_edit == null) return;
+        for (int j = 0; j < h; j++)
+            for (int i = 0; i < w; i++)
+            {
+                var c = cells[j * w + i];
+                for (int l = 0; l < _edit.Map.Layers.Length && l < c.Length; l++)
+                {
+                    var L = _edit.Map.Layers[l];
+                    if (x + i >= L.Width || y + j >= L.Height) continue;
+                    L.Blocks[(y + j) * L.Width + x + i] = c[l].Block;
+                    L.Flags[(y + j) * L.Width + x + i] = c[l].Flags;
+                }
+            }
+    }
+
+    private void PresetDown(int cx, int cy, bool right)
+    {
+        if (right) { ResetPreset(); return; }
+        if (_edit == null || _rom == null || SelectedPreset?.Preset is not { } p) { Status = "Pick a preset below first."; return; }
+        if (cx + p.W > _edit.Width || cy + p.H > _edit.Height) { Status = $"It doesn't fit there: it is {p.W} x {p.H} blocks."; return; }
+        if (_presetStep == 0)
+        {
+            try { _presetCells = L2PuzzlePresets.Translate(_rom, p, _edit); }
+            catch (Exception ex) { Status = "This piece can't be used on this map: " + ex.Message; return; }
+            Record("placing a preset");
+            PaintCells(_presetCells.Value.Closed, p.W, p.H, cx, cy);
+            DropIfSame(); DrawMap(); UpdateUndoState();
+            _presetAt = (cx, cy);
+            AreaRect = (cx, cy, cx + p.W, cy + p.H);
+            _presetStep = 1;
+            OnPropertyChanged(nameof(ToolHint));
+            return;
+        }
+        if (_presetCells is not { } cells) { ResetPreset(); return; }
+        var r = (X1: cx, Y1: cy, X2: cx + p.W, Y2: cy + p.H);
+        if (r.X1 < _presetAt.X + p.W && _presetAt.X < r.X2 && r.Y1 < _presetAt.Y + p.H && _presetAt.Y < r.Y2) { Status = "The open look must go somewhere else than the piece itself."; return; }
+        Record("placing a preset's open look");
+        PaintCells(cells.Open, p.W, p.H, cx, cy);
+        DropIfSame(); DrawMap(); UpdateUndoState();
+        // write the map, then the puzzle that changes the piece into the open look
+        var why = WritePendingEdits();
+        if (why != null) { Status = "Not added: the map couldn't be written: " + why; ResetPreset(); return; }
+        var trigger = p.Kind == L2PuzzlePresets.Kind.Door ? L2PuzzleBuild.Trigger.ActionButton : L2PuzzleBuild.Trigger.Bomb;
+        int map = _edit.MapId;
+        try
+        {
+            string done = L2PuzzleBuild.AddTileChange(_rom, map, trigger, _presetAt.X + p.TriggerX, _presetAt.Y + p.TriggerY,
+                _presetAt.X, _presetAt.Y, p.W, p.H, cx, cy);
+            _main?.NotifyRomModified($"Lufia II: {(p.Kind == L2PuzzlePresets.Kind.Door ? "door" : "bomb piece")} on map {map:X2}");
+            _edit = new L2MapEdit(_rom, map);
+            _history.Clear(); _redo.Clear();
+            UpdateUndoState();
+            ResetPreset();
+            Refresh();
+            Status = done;
+        }
+        catch (Exception ex) { Status = "The pieces are painted, but the puzzle wasn't added: " + ex.Message; ResetPreset(); }
+    }
+}
+
+/// <summary>A preset in the Maps page's list: its picture (closed, then open) and where it comes from.</summary>
+public sealed class L2PresetChoice
+{
+    public L2PuzzlePresets.Preset? Preset { get; init; }
+    public string Label { get; init; } = "";
+    public BitmapSource? Image { get; init; }
 }

@@ -55,6 +55,9 @@
                     <RadioButton GroupName="L2MapTool" Style="{StaticResource LufiaToolRadio}" IsChecked="{Binding IsAddHiddenTool}" Content="＋ Hidden item"
                                  ToolTip="Add hidden item (H): click a block; nothing shows, pressing A facing it finds the item once"
                                  Visibility="{Binding IsWorldMap, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+                    <RadioButton GroupName="L2MapTool" Style="{StaticResource LufiaToolRadio}" IsChecked="{Binding IsAddPresetTool}" Content="＋ Door / bomb piece"
+                                 ToolTip="Add a preset (R): a door or a bomb piece from the game; click where it goes, then where its open look is kept, and the puzzle is made for you"
+                                 Visibility="{Binding IsWorldMap, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
                     <RadioButton GroupName="L2MapTool" Style="{StaticResource LufiaToolRadio}" IsChecked="{Binding IsAddPuzzleTool}" Content="＋ Puzzle"
                                  ToolTip="Add puzzle (U): a wall blasted open, a passage cut, a door drawn open when a bomb, sword, arrow, hammer or the action button hits a spot"
                                  Visibility="{Binding IsWorldMap, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
@@ -156,6 +159,20 @@
                             <StackPanel Orientation="Horizontal" Margin="12,0,0,0" Visibility="{Binding IsCollisionTool, Converter={StaticResource BoolToVisibilityConverter}}">
                                 <TextBlock Text="Collision to paint" Style="{StaticResource LufiaLabel}" VerticalAlignment="Center" Margin="0,0,6,0"/>
                                 <ComboBox Style="{StaticResource GdCombo}" Width="190" ItemsSource="{Binding CollisionChoices}" SelectedIndex="{Binding CollisionKind}"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="12,0,0,0" Visibility="{Binding PresetOptionsVisible, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <ComboBox Style="{StaticResource GdCombo}" Width="300" ItemsSource="{Binding PresetKindChoices}" SelectedIndex="{Binding PresetKind}"/>
+                                <ComboBox Style="{StaticResource GdCombo}" Width="340" Margin="6,0,0,0" ItemsSource="{Binding PresetChoices}" SelectedItem="{Binding SelectedPreset}"
+                                          ToolTip="The game's own pieces: closed on the left, open on the right. This map's graphics first; others have their blocks brought into this map's block set (a piece whose tiles the map's graphics can't take is refused).">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal">
+                                                <Image Source="{Binding Image}" MaxHeight="64" Stretch="Uniform" RenderOptions.BitmapScalingMode="NearestNeighbor" Margin="0,0,6,0"/>
+                                                <TextBlock Text="{Binding Label}" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Margin="12,0,0,0" Visibility="{Binding PuzzleOptionsVisible, Converter={StaticResource BoolToVisibilityConverter}}">
                                 <TextBlock Text="Set off by" Style="{StaticResource LufiaLabel}" VerticalAlignment="Center" Margin="0,0,6,0"/>

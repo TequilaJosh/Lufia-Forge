@@ -110,6 +110,16 @@ is written), `Modules/Lufia2/L2MapWindows.cs` (pick a place, pieces and presets,
   game: Secret Skills Cave (05) and Clamento (26, a town: dungeon controls turned on) open with the action button, the
   party walks through, and after the map loads again the set-up has drawn it open (with the switch cleared first the
   wall is back). Test in the game starts with switches 00-1F off (event command AA).
+* **＋ Door / bomb piece (R)**: the same, ready-made from the game's own pieces (L2PuzzlePresets): 138 doors (each map's
+  door records +02 and their looks +04: the closed and the open picture) and 102 bomb pieces (cracked walls, pillars,
+  statues, grates: every tile change of a bomb spot's script, the place written there, the bomb spot itself, a place
+  handed on to a thread, or a door the bomb opens). Pick one (this map's graphics first; others have their blocks and
+  tiles brought into this map's sets, as chests do), click where it goes, then click where its open look is kept
+  (anywhere, best off to the side); both are painted and the puzzle is written: a door opens when the party faces it
+  and presses A, a bomb piece breaks when a bomb goes off where the game's own bomb spot was. A door's trigger is the
+  cell the party faces when it stops: walls are cell edges (04 a wall on the top edge), so above the lowest cell with
+  one. Checked in the game: Secret Skills Cave's red door placed across the passage above preset point 1 stops the
+  party, A opens it, the party walks through, and it is open again after the map loads.
 
 ## 2. How it is written
 
