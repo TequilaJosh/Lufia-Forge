@@ -620,7 +620,9 @@ public sealed class L2MapEdit
                 if (s.Problem != null) throw new InvalidOperationException("The cutscene can't be copied into the start: " + s.Problem);
             }
             else s = L2EventScript.New(blk);
-            s.Steps.InsertRange(0, new[] { new byte[] { 0x2D, 0x00 }, new byte[] { 0x59, 0x18 }, new byte[] { 0x76 } }.Select(b => new L2Step { Bytes = b }));
+            // (AA: puzzle switches 00-1F off, $80:AC18: a test start would otherwise keep what was in RAM, and a puzzle's
+            // set-up would draw it solved)
+            s.Steps.InsertRange(0, new[] { new byte[] { 0x2D, 0x00 }, new byte[] { 0x59, 0x18 }, new byte[] { 0x76 }, new byte[] { 0xAA } }.Select(b => new L2Step { Bytes = b }));
             return s;
         }
         // a scene written before (F0 up, starting "2D 00 59 18 76") is used again

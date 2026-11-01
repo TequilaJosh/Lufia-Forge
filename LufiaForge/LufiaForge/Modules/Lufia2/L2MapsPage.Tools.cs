@@ -9,7 +9,7 @@ using LufiaForge.Core.Lufia2;
 
 namespace LufiaForge.Modules.Lufia2;
 
-public enum L2Tool { Select, Paint, Pick, Area, Collision, AddExit, AddTrigger, AddCharacter, AddPoint, AddChest, AddHidden }
+public enum L2Tool { Select, Paint, Pick, Area, Collision, AddExit, AddTrigger, AddCharacter, AddPoint, AddChest, AddHidden, AddPuzzle }
 
 /// <summary>What can be picked on the map: its list in the info block and the record's index there.</summary>
 public enum SelKind { Exit, Door, Trigger, Character, Point, Treasure }
@@ -38,9 +38,10 @@ public partial class L2MapsPage
         if (value == L2Tool.AddChest) FillChestLooks();   // (this map's own chests as they are now)
         OnPropertyChanged(nameof(ChestLookVisible));
         foreach (var n in new[] { nameof(IsSelectTool), nameof(IsPaintTool), nameof(IsPickTool), nameof(IsAreaTool), nameof(IsCollisionTool),
-                                  nameof(IsAddExitTool), nameof(IsAddTriggerTool), nameof(IsAddCharacterTool), nameof(IsAddPointTool), nameof(IsAddChestTool), nameof(IsAddHiddenTool) })
+                                  nameof(IsAddExitTool), nameof(IsAddTriggerTool), nameof(IsAddCharacterTool), nameof(IsAddPointTool), nameof(IsAddChestTool), nameof(IsAddHiddenTool), nameof(IsAddPuzzleTool), nameof(PuzzleOptionsVisible) })
             OnPropertyChanged(n);
         if (value != L2Tool.Area) AreaRect = null;
+        _puzzleStep = 0;
         StopStamp();
         BrushPreviewVisible = false;
         OnPropertyChanged(nameof(ToolHint));
@@ -58,6 +59,7 @@ public partial class L2MapsPage
         L2Tool.AddCharacter => "Add character (C): click where it stands, then pick its sprite and how it moves.",
         L2Tool.AddPoint => "Add preset point (A): click a block. Scenes put the party or characters on preset points (Go to another map, Put a character on a point).",
         L2Tool.AddChest => "Add chest (K): click a block; it gets the chest picture picked below (this map's own, or any chest of the game: its blocks come into this map's block set) and its own opened flag, so it gives its item (or gold) once. Pick what it holds in the inspector.",
+        L2Tool.AddPuzzle => PuzzleHint,
         L2Tool.AddHidden => "Add hidden item (H): click a block; nothing shows there, and pressing A facing it finds the item, once. Pick the item in the inspector.",
         _ => "",
     };
@@ -151,6 +153,9 @@ public partial class L2MapsPage
             case L2Tool.AddHidden:
                 AddTreasure(cx, cy, Tool == L2Tool.AddHidden);
                 break;
+            case L2Tool.AddPuzzle:
+                PuzzleDown(cx, cy, right);
+                break;
             case L2Tool.Select:
                 SelectAt(cx, cy, doubleClick);
                 break;
@@ -176,6 +181,7 @@ public partial class L2MapsPage
             case L2Tool.Area:
             case L2Tool.AddExit:
             case L2Tool.AddTrigger:
+            case L2Tool.AddPuzzle when _puzzleStep == 0:
                 if (_areaStart is { } s) AreaRect = (Math.Min(s.X, cx), Math.Min(s.Y, cy), Math.Max(s.X, cx) + 1, Math.Max(s.Y, cy) + 1);
                 break;
             case L2Tool.Select: DragSelection(cx, cy); break;
@@ -197,6 +203,8 @@ public partial class L2MapsPage
                 AddExit(r.X1, r.Y1, r.X2, r.Y2); AreaRect = null; break;
             case L2Tool.AddTrigger when AreaRect is { } r:
                 AddTrigger(r.X1, r.Y1, r.X2, r.Y2); AreaRect = null; break;
+            case L2Tool.AddPuzzle when _puzzleStep == 0:
+                PuzzleUp(); break;
             case L2Tool.Select:
                 if (_dragMoved) DropIfSame(); else if (_history.Count > 0 && _dragOriginal != null) DropIfSame();
                 _dragOriginal = null;
@@ -643,6 +651,7 @@ public partial class L2MapsPage
             case System.Windows.Input.Key.A: Tool = L2Tool.AddPoint; return true;
             case System.Windows.Input.Key.K: Tool = L2Tool.AddChest; return true;
             case System.Windows.Input.Key.H: Tool = L2Tool.AddHidden; return true;
+            case System.Windows.Input.Key.U: Tool = L2Tool.AddPuzzle; return true;
             case System.Windows.Input.Key.Escape: Escape(); return true;
             case System.Windows.Input.Key.Delete:
                 if (Tool == L2Tool.Area && AreaRect != null) DeleteArea(); else DeleteSelected();
