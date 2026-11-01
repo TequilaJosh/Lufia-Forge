@@ -208,6 +208,13 @@ loaded again). A new cutscene has one line ("...") to start from.
 Characters of the map (the game's own) can be used in steps too, and so can the heroes (the leader is always there;
 the others only while in the party).
 
+**The Characters section** (above the steps, on the Events and Cutscenes pages and in the editor window) lists who is on
+the map: each one's sprite, the start-up script line that makes it (`68` / `7B`, with the story flags it is made
+under), where it stands (its character start), story characters (`35`, and where a new game puts them) and the one
+talked to in a talk. The ones the open event uses come first, with the lines that use them, speak as them or change
+their sprite (`34`). "Start-up line n" opens the start-up script at that line (◀ Back returns); "Line n" picks the line
+in the event. Open or shut, it stays so for the next event (`L2ScriptEditor.FillCast`).
+
 ## 5. Things found in the game
 
 * **Commands that find a character skip hidden ones.** `2F`, `A3` and most character commands find the actor with

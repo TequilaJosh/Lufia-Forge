@@ -474,10 +474,10 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         return true;
     }
 
-    /// <summary>Opens one event of a map by its list and id (from the Maps page).</summary>
+    /// <summary>Opens one event of a map by its list and id (from the Maps page); list -1 is the start-up script.</summary>
     public bool Load(RomBuffer rom, MainViewModel main, int map, int head, int id)
     {
-        var item = ItemsOf(rom, map).FirstOrDefault(e => e.Entry?.Head == head && e.Entry?.Id == id);
+        var item = head < 0 ? ItemsOf(rom, map).FirstOrDefault(e => e.IsInit) : ItemsOf(rom, map).FirstOrDefault(e => e.Entry?.Head == head && e.Entry?.Id == id);
         if (item == null) return false;
         if (!ReferenceEquals(rom, _rom) || _maps.Length == 0) ReadRomNames(rom);
         Load(rom, main, map, item, TitleOf(rom, map, item));
@@ -490,6 +490,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         Stop();
         _script = null; _event = null; _saved = null;
         Lines.Clear(); _undo.Clear(); _redo.Clear(); UpdateUndo();
+        Cast.Clear(); CastHeader = "";
         HasScript = false; CanEdit = false; IsDirty = false; IsPuzzle = false;
         Title = ""; Info = ""; Status = ""; BytesDump = "";
         _states = new(); _run = new(); _firstVisit.Clear(); _start = null;
@@ -717,7 +718,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         _picked = -1;
         var e = _event;
         var rom = _rom;
-        if (e == null || rom == null) { HasScript = false; CanEdit = false; IsPuzzle = false; Info = ""; Simulate(); ShowStage(); return; }
+        if (e == null || rom == null) { HasScript = false; CanEdit = false; IsPuzzle = false; Info = ""; FillCast(); Simulate(); ShowStage(); return; }
         HasScript = true;
         IsPuzzle = e.PuzzleOps != null;
         _puzzleText = null;
@@ -729,6 +730,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
             Info = "A puzzle script (switches, doors, blocks to push, bomb and sword spots), in words. Spots and areas are the map's puzzle places; " +
                    "switches are the puzzle's own on/off flags, not story flags; a tile change copies a piece of the map kept off to the side (the changed floor or wall) onto the place. " +
                    "A step that runs as its own thread says which step starts it.";
+            FillCast();
             Simulate(); ShowStage();
             SelectedLine = keepLine >= 0 && keepLine < Lines.Count ? keepLine : -1;
             return;
@@ -758,6 +760,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         foreach (var l in Lines) FillLine(l, fields: true);
         TestNeeds = e.Entry != null ? L2Cutscene.DescribeNeeds(rom, _map, e.Entry.Head, e.Entry.Id) : "";
         FillStartFlags();
+        FillCast();
         Simulate();
         Annotate();
         UpdateBytesDump();
@@ -1047,6 +1050,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
             }
             else foreach (var l in Lines) FillLine(l, fields: l == fieldsOf);
             FillStartFlags();
+            FillCast();
             Simulate();
             Annotate();
             UpdateBytesDump();

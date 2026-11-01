@@ -45,7 +45,11 @@ public partial class L2EventEditorPanel : UserControl
         TimelineSplitter.DragCompleted += (_, e) => { if (Common.LayoutMemory.Moved(e)) Common.LayoutMemory.Set("l2events.timeline", Common.LayoutMemory.Format(new GridLength(TimelineRow.ActualHeight))); };
         TimelineSplitter.MouseDoubleClick += (_, _) => { Common.LayoutMemory.Set("l2events.timeline", null); TimelineRow.Height = new GridLength(220); };
         // while it's on screen its edits are written by themselves (saving the project, Apply to ROM in the top bar)
-        Loaded += (_, _) => { if (_editor != null) Main?.Register(_editor); };
+        Loaded += (_, _) =>
+        {
+            if (_editor != null) Main?.Register(_editor);
+            CastExpander.IsExpanded = Common.LayoutMemory.Get("l2events.cast") == "1";   // (open or shut on another page meanwhile)
+        };
         Unloaded += (_, _) =>
         {
             if (_editor == null) return;
@@ -265,6 +269,14 @@ public partial class L2EventEditorPanel : UserControl
         if (sender is Button { DataContext: L2LineVm line }) _editor?.Delete(line.Index);
     }
 
+    private void CastLink_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: L2CastLink link }) _editor?.GoTo(link);
+    }
+
+    private void CastExpander_Changed(object sender, RoutedEventArgs e) =>
+        Common.LayoutMemory.Set("l2events.cast", CastExpander.IsExpanded ? "1" : null);
+
     private void Follow_Click(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement { DataContext: L2FieldVm f }) f.Follow();
@@ -283,9 +295,10 @@ public partial class L2EventEditorPanel : UserControl
     /// <summary>Opens another event in place of this one (◀ Back comes back).</summary>
     private void OpenOther(int map, int head, int id)
     {
-        if (_editor?.Rom == null || _editor.Main == null || _editor.Event?.Entry is not { } here) return;
+        // (the start-up script is list -1)
+        if (_editor?.Rom == null || _editor.Main == null || _editor.Event is not { PuzzleOps: null } here || here.Entry == null && !here.IsInit) return;
         if (!_editor.ConfirmLeave()) return;
-        var back = (_editor.Map, here.Head, here.Id);
+        var back = (_editor.Map, here.Entry?.Head ?? -1, here.Entry?.Id ?? -1);
         if (!_editor.Load(_editor.Rom, _editor.Main, map, head, id)) { _editor.Status = $"Map {map:X2} has no scene {id:X2}: make it there first (New cutscene, \"when another cutscene sends the party here\")."; return; }
         _history.Push(back);
         BackButton.Visibility = Visibility.Visible;

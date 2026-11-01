@@ -16,6 +16,14 @@ Lufia II is a 2.5 MB LoROM. Lufia Forge grows it to 3 and then 4 MB by itself as
 * Measured in BizHawk (a read hook on banks `$00-$7D`, boot, opening, walking, menus): the game reads nothing there but
   bank `$00` (its vectors and interrupt code), and 24 reads of `$60:CF7E` in the opening that land in empty space on
   any size of ROM.
+* **Battle window frame (found 2026-11-01).** A battle read bank `$01` too: the frame helpers `$81:E542` and `$81:E570`
+  read the frame pieces (`$81:87B7-`) with `LDA $01:0000,X`, `$01:0002,X` and `$01:0004,X` (`$81:E548`, `E54F`, `E55D`,
+  `E570`, `E580`). On 4 MB that is bank `$81`; on 8 MB it is the upper 4 MB, empty or holding events, so the hero's
+  status window in battle lost its blue border (or showed garbage when events were there). Lufia Forge points the five
+  reads at bank `$81` (`L2Rom.FixLowBankReads`): when it makes a ROM 8 MB, and when it opens an 8 MB ROM made before
+  (one Edit, Undo step). Every long address in the decompiled code was checked: these are the only reads of banks
+  `$01-$7D` (the others are SRAM, `$70:xxxx`). With the fix, a battle on 8 MB (the opening's script battle, menus
+  opened) reads nothing from the upper 4 MB and every screenshot matches the 2.5 MB game's (BSNESv115+).
 
 ## 2. What goes in the upper 4 MB
 

@@ -38,7 +38,11 @@ public static class L2MapInfo
 
     /// <summary>A create in a map's start-up script: the character, its sprite (Lufia Forge's number) and the story
     /// checks that lead to it ("if ... else skip" around it), in words, or "" when it is always made.</summary>
-    public sealed record Create(int Id, int Sprite, string When, IReadOnlyList<(int Flag, bool On)> Flags);
+    public sealed record Create(int Id, int Sprite, string When, IReadOnlyList<(int Flag, bool On)> Flags)
+    {
+        /// <summary>The step of the start-up script that makes it (0 is the first).</summary>
+        public int Step { get; init; } = -1;
+    }
 
     /// <summary>Every character create of the map's start-up script in order, with the flag checks it sits under:
     /// a check (15 / 6A / 14 with flags only) that jumps forward over it. A character made in more than one place (a
@@ -70,7 +74,7 @@ public static class L2MapInfo
             if (st.Op is 0x68 or 0x7B && b.Length >= 3 && b[1] is >= 0x50 and < 0x80 && L2Sprites.ToEditor(rom, map, b[2]) is var spr && spr < count)
             {
                 var flags = open.SelectMany(o => o.Need).ToList();
-                list.Add(new Create(b[1], spr, string.Join(" and ", flags.Select(f => $"story flag {f.Flag:X2} {(f.On ? "on" : "off")}")), flags));
+                list.Add(new Create(b[1], spr, string.Join(" and ", flags.Select(f => $"story flag {f.Flag:X2} {(f.On ? "on" : "off")}")), flags) { Step = i });
             }
         }
         return list;

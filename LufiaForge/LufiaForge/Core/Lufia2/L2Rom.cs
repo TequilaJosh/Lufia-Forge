@@ -59,8 +59,9 @@ public static class L2Rom
     /// banks $00-$7D (addresses $8000-$FFFF) the upper 4 MB. The game runs in $80-$FF, so it is unchanged; only the
     /// console's start and its interrupts go through bank $00, which holds a copy of the first bank
     /// (<see cref="RomBuffer.IsExLoRomCopy"/>). Measured in BizHawk (2026-10-27): the game reads nothing else from
-    /// banks $00-$7D. Banks $01-$3F also see the RAM at $0000-$1FFF, like $80-$BF, so event scripts can live there
-    /// (<see cref="L2EventSpace"/>); banks $40-$7D hold other data (<see cref="Allocate"/> with upper: true).
+    /// banks $00-$7D, but for the battle window frame (2026-11-01, <see cref="FixLowBankReads"/>). Banks $01-$3F also
+    /// see the RAM at $0000-$1FFF, like $80-$BF, so event scripts can live there (<see cref="L2EventSpace"/>); banks
+    /// $40-$7D hold other data (<see cref="Allocate"/> with upper: true).
     /// Works in Snes9x, bsnes / higan / BizHawk's "BSNESv115+" core and others that know ExLoROM; BizHawk's older
     /// "BSNES" core can't run it.
     /// </summary>
@@ -87,7 +88,30 @@ public static class L2Rom
         if (rom.Length < MaxSize) rom.Expand(MaxSize);
         rom.Expand(ExSize, 0x00);
         rom.WriteBytes(UpperStart, rom.ReadBytes(0, 0x8000));
+        FixLowBankReads(rom);
         rom.FixChecksum();
+    }
+
+    /// <summary>The one place the game reads ROM through banks $01-$7D (found 2026-11-01: every long address in the
+    /// decompiled code, and every CPU read and DMA source bank in a battle, logged in BizHawk): the battle window frame
+    /// helpers $81:E542 and $81:E570 read their pieces ($81:87B7-) with LDA $01:0000,X / $01:0002,X / $01:0004,X. On a
+    /// 4 MB ROM that is bank $81; on 8 MB it is the upper 4 MB (empty, or the events put there), so the hero's status
+    /// window in battle lost its border or showed garbage. Reading bank $81 is the same on every size (its
+    /// $0000-$1FFF is RAM as in bank $01).</summary>
+    private static readonly int[] LowBankReads = { 0xE548, 0xE54F, 0xE55D, 0xE570, 0xE580 };
+
+    /// <summary>Whether an 8 MB ROM still has the battle window reads through bank $01 (<see cref="FixLowBankReads"/>).</summary>
+    public static bool NeedsLowBankFix(RomBuffer rom) =>
+        IsExLoRom(rom) && LowBankReads.Any(a => rom.ReadByte(a) == 0xBF && rom.ReadByte(a + 3) == 0x01);
+
+    /// <summary>Points the battle window frame reads at bank $81 (see <see cref="LowBankReads"/>). Returns whether
+    /// anything changed.</summary>
+    public static bool FixLowBankReads(RomBuffer rom)
+    {
+        bool changed = false;
+        foreach (int a in LowBankReads)
+            if (rom.ReadByte(a) == 0xBF && rom.ReadByte(a + 3) == 0x01) { rom.WriteByte(a + 3, 0x81); changed = true; }
+        return changed;
     }
 
     /// <summary>Bytes still free in the upper 4 MB (data banks $40-$7D), 0 on a smaller ROM.</summary>
