@@ -923,6 +923,61 @@ public static class L2Cutscene
         script.Steps.Count > 1 && Is(script.Steps[0], 0x15, 4) && script.Steps.Skip(1).Take(3).Any(s => Is(s, 0x1A, 2) && s.Bytes[1] == script.Steps[0].Bytes[1])
             ? script.Steps[0].Bytes[1] : -1;
 
+    /// <summary>The story flags an event needs on to play, when with none on it only checks and ends (the game's own
+    /// cutscenes check the story so far: North Lighthouse 6F's step-on area 1 plays only with flag 37 on and 39 off):
+    /// ticked one at a time while playback then reaches more steps, never its plays-once flag. Empty: it plays without
+    /// any (or no flag makes it play). <paramref name="start"/> makes the starting stage with the given flags on.</summary>
+    public static List<int> FlagsToPlay(RomBuffer rom, int map, L2EventScript script, Func<IEnumerable<int>, L2StageState> start, Func<int, string> name)
+    {
+        var steps = script.Steps;
+        List<int> Reached(IEnumerable<int> on)
+        {
+            try { return Run(rom, map, start(on), steps, name).Select(r => r.Step).Distinct().ToList(); }
+            catch (Exception) { return new(); }
+        }
+        // does something: a step that isn't a check, a jump or the end
+        bool Plays(List<int> reached) => reached.Any(i => i < steps.Count && steps[i].Jumps.Count == 0 && steps[i].Op is not (0x00 or 0x42));
+        var none = Reached(Array.Empty<int>());
+        var on = new List<int>();
+        if (Plays(none)) return on;
+        int once = OnceFlag(script);
+        var choices = Checked(steps).Flags.Where(f => f != once).ToList();
+        int best = none.Count;
+        while (true)
+        {
+            int pick = -1, most = best;
+            foreach (int f in choices.Except(on))
+            {
+                int n = Reached(on.Append(f)).Count;
+                if (n > most) { most = n; pick = f; }
+            }
+            if (pick < 0) break;
+            on.Add(pick); best = most;
+        }
+        return on.Count > 0 && Plays(Reached(on)) ? on : new List<int>();
+    }
+
+    /// <summary><see cref="FlagsToPlay(RomBuffer, int, L2EventScript, Func{IEnumerable{int}, L2StageState}, Func{int, string})"/>
+    /// for an event of a map's lists, the party on the map's first preset point.</summary>
+    public static List<int> FlagsToPlay(RomBuffer rom, int map, int head, int id)
+    {
+        int block = L2Events.Block(rom, map);
+        var e = block < 0 ? null : L2EventBlocks.ReadLists(rom, block).FirstOrDefault(x => x.Head == head && x.Id == id && x.IsScript);
+        if (e == null) return new();
+        L2EventScript s;
+        try { s = L2EventScript.Read(rom, block + e.Offset, block); } catch (Exception) { return new(); }
+        if (s.Problem != null) return new();
+        var pts = L2StoryClear.PresetPoints(rom, map);
+        var (x, y) = pts.Count > 0 ? (pts[0].X, pts[0].Y) : (8, 8);
+        return FlagsToPlay(rom, map, s, on =>
+        {
+            var st = Initial(rom, map, x, y);
+            st.Flags.UnionWith(on);
+            st.Talker = st.TalkSave = head == L2EventBlocks.TalkList ? id : 0xFF;
+            return st;
+        }, _ => "");
+    }
+
     /// <summary>
     /// A character that appears only in cutscenes: "Add a map character" at the top of the start-up script (skipped once
     /// <paramref name="flag"/> is on, when it is given), hidden right after the map's characters are made. Cutscene steps
@@ -1005,7 +1060,8 @@ public static class L2Cutscene
     /// (the party on <paramref name="point"/>); others wait for the talk. The story <paramref name="flags"/> and
     /// <paramref name="counters"/> are set as the new game starts (the game's own cutscenes check the story so far and
     /// skip themselves without them), and so is what the cutscene's characters need (<see cref="Needs"/>).</summary>
-    public static string SetTest(RomBuffer rom, int map, int head, int id, int point, IReadOnlyCollection<int>? flags = null, IReadOnlyDictionary<int, int>? counters = null)
+    public static string SetTest(RomBuffer rom, int map, int head, int id, int point, IReadOnlyCollection<int>? flags = null, IReadOnlyDictionary<int, int>? counters = null,
+        IReadOnlyList<int>? party = null)
     {
         if (!L2StoryClear.CanStart(rom)) throw new InvalidOperationException("This ROM's new-game code isn't the US game's, so the start can't be moved.");
         if (!L2StoryClear.PresetPoints(rom, map).Any(p => p.Id == point)) throw new InvalidOperationException($"Map {map:X2} has no preset point {point}: add one on the Maps page.");
@@ -1034,10 +1090,10 @@ public static class L2Cutscene
             // the "on entering" check: its flag on when it must be, the played flag and a must-be-off flag off
             all.Remove(st.Played);
             if (st.Flag >= 0) { if (st.MustBeOn) { if (!all.Contains(st.Flag)) all.Add(st.Flag); } else all.Remove(st.Flag); }
-            return L2MapEdit.SetTestStart(rom, map, point, all, counters, null, place) + $" On entering the map the cutscene starts (with the party on point {st.Point})." + extra;
+            return L2MapEdit.SetTestStart(rom, map, point, all, counters, null, place, party) + $" On entering the map the cutscene starts (with the party on point {st.Point})." + extra;
         }
-        if (head == L2EventBlocks.SceneList && all.Count + (counters?.Count ?? 0) + place.Count > 0)
-            return L2MapEdit.StartWithFlags(rom, map, id, point, all, counters, place) + $" Then the cutscene (scene {id:X2}) plays." + extra;
+        if (head == L2EventBlocks.SceneList && all.Count + (counters?.Count ?? 0) + place.Count + L2MapEdit.PartyChanges(rom, party).Count > 0)
+            return L2MapEdit.StartWithFlags(rom, map, id, point, all, counters, place, party) + $" Then the cutscene (scene {id:X2}) plays." + extra;
         if (head == L2EventBlocks.SceneList)
         {
             rom.WriteByte(L2StoryClear.NewGameMapAt, (byte)map);
@@ -1046,9 +1102,9 @@ public static class L2Cutscene
             return $"A new game now starts with this cutscene (map {map:X2}, scene {id:X2}, the party on point {point}).";
         }
         if (head == L2EventBlocks.TriggerList || head == L2EventBlocks.TalkList && !SpeaksAsTalkedTo(rom, map, head, id))
-            return L2MapEdit.SetTestStart(rom, map, point, all, counters, (head, id), place) + " The cutscene plays as the game starts" +
+            return L2MapEdit.SetTestStart(rom, map, point, all, counters, (head, id), place, party) + " The cutscene plays as the game starts" +
                    (head == L2EventBlocks.TriggerList ? " (pick a point on its area: its walks start from there)." : ".") + extra;
-        return L2MapEdit.SetTestStart(rom, map, point, all, counters, null, place) +
+        return L2MapEdit.SetTestStart(rom, map, point, all, counters, null, place, party) +
                (head == L2EventBlocks.TalkList ? " Talk to the character to start the cutscene (it speaks as the one talked to, so it needs the talk)." : "") + extra;
     }
 
@@ -1088,11 +1144,12 @@ public static class L2Cutscene
 
     /// <summary>A new game starts on the map (its start-up script runs as it loads), the party on <paramref name="point"/>,
     /// with the story <paramref name="flags"/> and <paramref name="counters"/> set.</summary>
-    public static string SetMapTest(RomBuffer rom, int map, int point, IReadOnlyCollection<int>? flags = null, IReadOnlyDictionary<int, int>? counters = null)
+    public static string SetMapTest(RomBuffer rom, int map, int point, IReadOnlyCollection<int>? flags = null, IReadOnlyDictionary<int, int>? counters = null,
+        IReadOnlyList<int>? party = null)
     {
         if (!L2StoryClear.CanStart(rom)) throw new InvalidOperationException("This ROM's new-game code isn't the US game's, so the start can't be moved.");
         L2StartParty.Keep(rom);
-        return L2MapEdit.SetTestStart(rom, map, point, flags, counters);
+        return L2MapEdit.SetTestStart(rom, map, point, flags, counters, null, null, party);
     }
 
     /// <summary>Commands whose first operand is an actor (33, "walks path", has it second).</summary>

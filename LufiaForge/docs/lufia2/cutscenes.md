@@ -59,6 +59,16 @@ The page is laid out like Lufia 1's Cutscenes tab, and the Events page and the M
    floors, reached only through exits) offers a new one where an exit into the map lands (or where **Party start...**
    put the party); it is added to the map when the test is set. With the start-up script picked, a new game simply
    starts on the map. An event that ends with "Go to another map" carries on there in the game, and the status says so.
+   **Party** (ticks for Selan, Guy, Artea, Tia, Dekar, Lexis; Maxim always leads) is who is in the party as the test
+   starts: the story's party at this event and the heroes the cutscene uses. Story flags 02-07 are "in the party"
+   (Selan 02, Guy 03, Artea 04, Dekar 05, Tia 06, Lexis 07): every join (2B) sets its hero's flag and every leave (2C)
+   clears it. The flags the event needs say which events came before it (the one that sets each, and back through what
+   that one needs, the scene's sender and the flags that make a talk's character); the joins and leaves among them, in
+   story order, give the party, and a hero the cutscene walks, speaks as or names is always in (up to four). The test
+   start makes it with the game's own joins and leaves. Without it a hero missing from the new game's party had no
+   character, so her walk did nothing and her lines went over whoever was found (North Lighthouse 6F's step-on area 1
+   with Maxim alone: Selan's lines over story character 21; its story party is Maxim and Selan, from Parcelyte 2D scene
+   02). Tick to change it; the ticks stay until another event is opened.
 
 The **Events** page is the same editor with a map's events in a list (the start-up script, scenes, talks, areas, the
 game's own events and the puzzle scripts), and the **Maps** page opens it in a window of its own: characters with a

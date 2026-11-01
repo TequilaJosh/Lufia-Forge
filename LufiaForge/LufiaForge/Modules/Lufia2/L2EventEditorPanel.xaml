@@ -355,7 +355,7 @@
                     <!-- test in the game -->
                     <Expander Grid.Row="4" x:Name="TestExpander" Header="Test in the game (or start the game here)" Foreground="{StaticResource GoldBrush}" Margin="0,6,0,0">
                         <StackPanel Margin="0,4,0,0">
-                            <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Text="Writes the ROM and opens it in BizHawk: a new game starts on this map with the party on the point picked and the story flags ticked above turned on. A scene or a step-on event plays at once; a talk event when you talk (or at once, when it doesn't speak as the one talked to). Keep it as your game's start, or press Normal start for the opening again."/>
+                            <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Text="Writes the ROM and opens it in BizHawk: a new game starts on this map with the party on the point picked and the story flags ticked above turned on, with the party below (the story's party here and the heroes the cutscene uses; tick to change it). A scene or a step-on event plays at once; a talk event when you talk (or at once, when it doesn't speak as the one talked to). Keep it as your game's start, or press Normal start for the opening again."/>
                             <DockPanel Margin="0,4,0,0">
                                 <Button DockPanel.Dock="Right" Content="Normal start" Style="{StaticResource LufiaButton}" Padding="8,3" Margin="6,0,0,0" Command="{Binding NormalStartCommand}"
                                         ToolTip="A new game starts as in the game again"/>
@@ -363,6 +363,19 @@
                                 <ComboBox Style="{StaticResource GdCombo}" ItemsSource="{Binding PointChoices}" SelectedItem="{Binding TestPoint}" DisplayMemberPath="Label" Width="Auto"
                                           ToolTip="The preset point the party stands on"/>
                             </DockPanel>
+                            <WrapPanel Margin="0,4,0,0">
+                                <TextBlock Text="Party:" Style="{StaticResource GdHint}" VerticalAlignment="Center" Margin="0,0,8,0"
+                                           ToolTip="Who is in the party when the test starts: the story's party here and the heroes the cutscene uses"/>
+                                <ItemsControl ItemsSource="{Binding TestParty}">
+                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <CheckBox Content="{Binding Label}" IsChecked="{Binding IsOn}" Style="{StaticResource GdCheck}" Margin="0,0,12,0" VerticalAlignment="Center"/>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </WrapPanel>
+                            <TextBlock Text="{Binding TestPartyWhy}" Style="{StaticResource GdHint}" TextWrapping="Wrap"/>
                             <TextBlock Text="{Binding TestNeeds}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Foreground="{StaticResource GoldLightBrush}"/>
                             <TextBlock Text="{Binding TestNote}" Style="{StaticResource GdHint}" TextWrapping="Wrap"/>
                         </StackPanel>
