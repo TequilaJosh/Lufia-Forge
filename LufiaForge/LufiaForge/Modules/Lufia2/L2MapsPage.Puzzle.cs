@@ -99,40 +99,120 @@ public partial class L2MapsPage
         catch (Exception ex) { Status = "Not added: " + ex.Message; ResetPuzzle(); }
     }
 
-    // ---------------------------------------------------------------- presets (R): a door or a bomb piece from the game
+    // ---------------------------------------------------------------- presets (R): doors, bomb pieces, spikes
 
-    public static readonly (L2PuzzlePresets.Kind Kind, string Label)[] PresetKinds =
+    /// <summary>What the preset tool places.</summary>
+    public enum PresetKindId { Door, BombPiece, SpikesLever, SpikesPlate, SpikesSteps }
+
+    public static readonly (PresetKindId Kind, string Label)[] PresetKinds =
     {
-        (L2PuzzlePresets.Kind.Door, "Door (opens when the party faces it and presses A)"),
-        (L2PuzzlePresets.Kind.BombWall, "Bomb piece (a wall, statue or pillar a bomb breaks)"),
+        (PresetKindId.Door, "Door (one of the game's)"),
+        (PresetKindId.BombPiece, "Bomb piece (a wall, statue or pillar a bomb breaks)"),
+        (PresetKindId.SpikesLever, "Spikes a lever raises and lowers (paint them first)"),
+        (PresetKindId.SpikesPlate, "Spikes a floor plate lowers (paint them first)"),
+        (PresetKindId.SpikesSteps, "Spikes that go up and down as the party walks (paint them first)"),
     };
     public List<string> PresetKindChoices { get; } = PresetKinds.Select(k => k.Label).ToList();
     [ObservableProperty] private int _presetKind;
+
+    /// <summary>What opens a placed door.</summary>
+    public static readonly string[] DoorOpeners =
+    {
+        "Facing it and pressing A", "A floor plate (click it after the door)", "A lever or wall switch (click it after the door)",
+        "A key item (walking up to it)", "A story flag (open once it is on)",
+    };
+    public List<string> DoorOpenerChoices { get; } = DoorOpeners.ToList();
+    [ObservableProperty] private int _doorOpener;
+    public List<L2Option> KeyItemChoices { get; } = new();
+    [ObservableProperty] private L2Option? _keyItem;
+    [ObservableProperty] private bool _useUpKey = true;
+    public List<L2Option> FlagChoices { get; } = new();
+    [ObservableProperty] private L2Option? _doorFlag;
+    [ObservableProperty] private int _spikeSteps = 3;
+
     public ObservableCollection<L2PresetChoice> PresetChoices { get; } = new();
     [ObservableProperty] private L2PresetChoice? _selectedPreset;
 
     public bool IsAddPresetTool { get => Tool == L2Tool.AddPreset; set { if (value) Tool = L2Tool.AddPreset; } }
     public bool PresetOptionsVisible => Tool == L2Tool.AddPreset && _world == null && _edit != null;
+    private PresetKindId CurrentKind => PresetKinds[Math.Clamp(PresetKind, 0, PresetKinds.Length - 1)].Kind;
+    public bool PresetListVisible => PresetOptionsVisible && CurrentKind is PresetKindId.Door or PresetKindId.BombPiece;
+    public bool DoorOptionsVisible => PresetOptionsVisible && CurrentKind == PresetKindId.Door;
+    public bool KeyOptionsVisible => DoorOptionsVisible && DoorOpener == 3;
+    public bool FlagOptionsVisible => DoorOptionsVisible && DoorOpener == 4;
+    public bool StepOptionsVisible => PresetOptionsVisible && CurrentKind == PresetKindId.SpikesSteps;
 
     private List<L2PuzzlePresets.Preset>? _gamePresets;
-    /// <summary>0: click where the closed piece goes; 1: click where the open one is kept.</summary>
-    private int _presetStep;
-    private (int X, int Y) _presetAt;
+    /// <summary>The clicks done so far (map blocks) and what each next click is for.</summary>
+    private readonly List<(int X, int Y)> _presetClicks = new();
+    private (int X1, int Y1, int X2, int Y2)? _spikeRect;
     private ((int Block, byte Flags)[][] Closed, (int Block, byte Flags)[][] Open)? _presetCells;
 
-    private string PresetHint => _presetStep == 1
-        ? "Preset (R), 2 of 2: click where the open look is kept: anywhere on the map, best where the camera never goes (the game keeps them off to the side). The puzzle is written then. Right-click starts again (Ctrl+Z takes the piece back)."
-        : "Preset (R), 1 of 2: pick a door or a bomb piece below, then click where it goes (its top-left block). Then click where its open look is kept; the puzzle that opens it is made for you.";
+    /// <summary>The clicks the picked kind needs, in order (a drag for painted spikes comes first).</summary>
+    private List<string> PresetSteps()
+    {
+        var l = new List<string>();
+        switch (CurrentKind)
+        {
+            case PresetKindId.Door:
+                l.Add("click where the door goes (its top-left block)");
+                l.Add("click where its open look is kept: anywhere, best where the camera never goes");
+                if (DoorOpener == 1) l.Add("click the floor plate's block (the party stepping on it, or a pushed block, opens the door)");
+                if (DoorOpener == 2) l.Add("click the lever's block (the party faces it and presses A)");
+                break;
+            case PresetKindId.BombPiece:
+                l.Add("click where the piece goes (its top-left block)");
+                l.Add("click where its broken look is kept: anywhere, best where the camera never goes");
+                break;
+            default:
+                l.Add("drag over the spikes as painted now (raised)");
+                l.Add("click the top-left of their lowered look, painted somewhere else on the map");
+                if (CurrentKind != PresetKindId.SpikesPlate) l.Add("click where a copy of the raised look is kept (it is painted there for you)");
+                if (CurrentKind == PresetKindId.SpikesLever) l.Add("click the lever's block (the party faces it and presses A)");
+                if (CurrentKind == PresetKindId.SpikesPlate) l.Add("click the floor plate's block");
+                break;
+        }
+        return l;
+    }
 
-    partial void OnPresetKindChanged(int value) => FillPresets();
+    private string PresetHint
+    {
+        get
+        {
+            var steps = PresetSteps();
+            int n = _presetClicks.Count + (_spikeRect != null && _presetClicks.Count == 0 ? 1 : 0);
+            n = Math.Min(n, steps.Count - 1);
+            return $"Preset (R), {n + 1} of {steps.Count}: {steps[n]}. The puzzle is made after the last click. Right-click starts again (Ctrl+Z takes back what was painted).";
+        }
+    }
 
-    /// <summary>The game's presets of the picked kind: this map's graphics first.</summary>
+    partial void OnPresetKindChanged(int value) { ResetPreset(); FillPresets(); NotifyPresetOptions(); }
+    partial void OnDoorOpenerChanged(int value) { ResetPreset(); NotifyPresetOptions(); }
+
+    private void NotifyPresetOptions()
+    {
+        foreach (var n in new[] { nameof(PresetListVisible), nameof(DoorOptionsVisible), nameof(KeyOptionsVisible), nameof(FlagOptionsVisible), nameof(StepOptionsVisible), nameof(ToolHint) })
+            OnPropertyChanged(n);
+    }
+
+    /// <summary>The game's presets of the picked kind (this map's graphics first), and the item and flag lists.</summary>
     private void FillPresets()
     {
         PresetChoices.Clear();
         if (_rom == null || _edit == null || _edit.IsWorld) { SelectedPreset = null; return; }
+        if (KeyItemChoices.Count == 0)
+        {
+            try { KeyItemChoices.AddRange(L2Battle.Items(_rom).Select((it, i) => new L2Option(i, $"{i:X3} {it.Name.Trim()}"))); } catch (Exception) { }
+            KeyItem = KeyItemChoices.FirstOrDefault(o => o.Label.Contains("key", StringComparison.OrdinalIgnoreCase)) ?? KeyItemChoices.FirstOrDefault();
+        }
+        if (FlagChoices.Count == 0)
+        {
+            FlagChoices.AddRange(Enumerable.Range(1, 0xEF).Select(f => new L2Option(f, $"{f:X2}  {L2StoryFlags.Label(f) ?? "(not used by the game)"}")));
+            DoorFlag = FlagChoices.FirstOrDefault();
+        }
+        var kind = CurrentKind switch { PresetKindId.Door => L2PuzzlePresets.Kind.Door, PresetKindId.BombPiece => L2PuzzlePresets.Kind.BombWall, _ => (L2PuzzlePresets.Kind?)null };
+        if (kind == null) { SelectedPreset = null; return; }
         _gamePresets ??= L2PuzzlePresets.Game(_rom);
-        var kind = PresetKinds[Math.Clamp(PresetKind, 0, PresetKinds.Length - 1)].Kind;
         int bs = _edit.BlockSetIndex, ts = _edit.TileSetIndex, ps = _edit.PaletteSetIndex;
         foreach (var p in _gamePresets.Where(p => p.Kind == kind)
                      .OrderBy(p => p.BlockSet == bs && p.TileSet == ts && p.PaletteSet == ps ? 0 : p.TileSet == ts ? 1 : 2).ThenBy(p => p.Map))
@@ -146,9 +226,9 @@ public partial class L2MapsPage
         SelectedPreset = PresetChoices.FirstOrDefault();
     }
 
-    private void ResetPreset() { _presetStep = 0; _presetCells = null; AreaRect = null; OnPropertyChanged(nameof(ToolHint)); }
+    private void ResetPreset() { _presetClicks.Clear(); _spikeRect = null; _presetCells = null; AreaRect = null; OnPropertyChanged(nameof(ToolHint)); }
 
-    /// <summary>Paints preset cells at (x, y): both layers' blocks, and the upper layer's flags (the walls).</summary>
+    /// <summary>Paints cells at (x, y): both layers' blocks and flags (the walls are the upper layer's).</summary>
     private void PaintCells((int Block, byte Flags)[][] cells, int w, int h, int x, int y)
     {
         if (_edit == null) return;
@@ -166,40 +246,126 @@ public partial class L2MapsPage
             }
     }
 
+    private (int Block, byte Flags)[][] CellsAt(int x, int y, int w, int h)
+    {
+        var cells = new (int, byte)[w * h][];
+        for (int j = 0; j < h; j++) for (int i = 0; i < w; i++) cells[j * w + i] = _edit!.CellAt(x + i, y + j);
+        return cells;
+    }
+
+    /// <summary>A press with the preset tool: one more click of <see cref="PresetSteps"/> (painted spikes start with a drag).</summary>
     private void PresetDown(int cx, int cy, bool right)
     {
         if (right) { ResetPreset(); return; }
-        if (_edit == null || _rom == null || SelectedPreset?.Preset is not { } p) { Status = "Pick a preset below first."; return; }
-        if (cx + p.W > _edit.Width || cy + p.H > _edit.Height) { Status = $"It doesn't fit there: it is {p.W} x {p.H} blocks."; return; }
-        if (_presetStep == 0)
+        if (_edit == null || _rom == null) return;
+        bool painted = CurrentKind is PresetKindId.SpikesLever or PresetKindId.SpikesPlate or PresetKindId.SpikesSteps;
+        if (painted && _spikeRect == null)
         {
-            try { _presetCells = L2PuzzlePresets.Translate(_rom, p, _edit); }
-            catch (Exception ex) { Status = "This piece can't be used on this map: " + ex.Message; return; }
-            Record("placing a preset");
-            PaintCells(_presetCells.Value.Closed, p.W, p.H, cx, cy);
-            DropIfSame(); DrawMap(); UpdateUndoState();
-            _presetAt = (cx, cy);
-            AreaRect = (cx, cy, cx + p.W, cy + p.H);
-            _presetStep = 1;
-            OnPropertyChanged(nameof(ToolHint));
+            _areaStart = (cx, cy);
+            AreaRect = (cx, cy, cx + 1, cy + 1);
+            _dragging = true;
             return;
         }
-        if (_presetCells is not { } cells) { ResetPreset(); return; }
-        var r = (X1: cx, Y1: cy, X2: cx + p.W, Y2: cy + p.H);
-        if (r.X1 < _presetAt.X + p.W && _presetAt.X < r.X2 && r.Y1 < _presetAt.Y + p.H && _presetAt.Y < r.Y2) { Status = "The open look must go somewhere else than the piece itself."; return; }
-        Record("placing a preset's open look");
-        PaintCells(cells.Open, p.W, p.H, cx, cy);
-        DropIfSame(); DrawMap(); UpdateUndoState();
-        // write the map, then the puzzle that changes the piece into the open look
+        int w, h;
+        if (painted) { var r = _spikeRect!.Value; w = r.X2 - r.X1; h = r.Y2 - r.Y1; }
+        else
+        {
+            if (SelectedPreset?.Preset is not { } p) { Status = "Pick a preset below first."; return; }
+            w = p.W; h = p.H;
+        }
+        int step = _presetClicks.Count + (painted ? 1 : 0);
+        var steps = PresetSteps();
+        bool isPiece = step <= 2 && !(painted && step == 0);   // a click that places a w x h look (not a plate or lever)
+        if (isPiece && (cx + w > _edit.Width || cy + h > _edit.Height)) { Status = $"It doesn't fit there: it is {w} x {h} blocks."; return; }
+        if (!painted && step == 0)
+        {
+            // the door or bomb piece itself
+            var p = SelectedPreset!.Preset!;
+            try { _presetCells = L2PuzzlePresets.Translate(_rom, p, _edit); }
+            catch (Exception ex) { Status = "This piece can't be used on this map: " + ex.Message.Replace("the chest's", "the piece's").Replace("chest", "piece") + " Pick one marked (same graphics) or (same tiles)."; return; }
+            Record("placing a preset");
+            PaintCells(_presetCells.Value.Closed, w, h, cx, cy);
+            DropIfSame(); DrawMap(); UpdateUndoState();
+            AreaRect = (cx, cy, cx + w, cy + h);
+        }
+        else if (!painted && step == 1)
+        {
+            Record("placing a preset's open look");
+            PaintCells(_presetCells!.Value.Open, w, h, cx, cy);
+            DropIfSame(); DrawMap(); UpdateUndoState();
+        }
+        else if (painted && step == 2 && CurrentKind != PresetKindId.SpikesPlate)
+        {
+            // a copy of the raised look, painted here
+            var r = _spikeRect!.Value;
+            Record("keeping a copy of the raised spikes");
+            PaintCells(CellsAt(r.X1, r.Y1, w, h), w, h, cx, cy);
+            DropIfSame(); DrawMap(); UpdateUndoState();
+        }
+        _presetClicks.Add((cx, cy));
+        if (_presetClicks.Count + (painted ? 1 : 0) < steps.Count) { OnPropertyChanged(nameof(ToolHint)); return; }
+        WritePreset(w, h);
+    }
+
+    /// <summary>The drag of painted spikes ended.</summary>
+    private void PresetUp()
+    {
+        if (AreaRect is not { } r) return;
+        _spikeRect = r;
+        OnPropertyChanged(nameof(ToolHint));
+    }
+
+    /// <summary>All the clicks are in: the map is written, then the puzzle.</summary>
+    private void WritePreset(int w, int h)
+    {
+        if (_edit == null || _rom == null) return;
         var why = WritePendingEdits();
         if (why != null) { Status = "Not added: the map couldn't be written: " + why; ResetPreset(); return; }
-        var trigger = p.Kind == L2PuzzlePresets.Kind.Door ? L2PuzzleBuild.Trigger.ActionButton : L2PuzzleBuild.Trigger.Bomb;
         int map = _edit.MapId;
+        var k = _presetClicks;
         try
         {
-            string done = L2PuzzleBuild.AddTileChange(_rom, map, trigger, _presetAt.X + p.TriggerX, _presetAt.Y + p.TriggerY,
-                _presetAt.X, _presetAt.Y, p.W, p.H, cx, cy);
-            _main?.NotifyRomModified($"Lufia II: {(p.Kind == L2PuzzlePresets.Kind.Door ? "door" : "bomb piece")} on map {map:X2}");
+            string done;
+            switch (CurrentKind)
+            {
+                case PresetKindId.Door:
+                {
+                    var p = SelectedPreset!.Preset!;
+                    var (x, y) = k[0]; var (ox, oy) = k[1];
+                    int tx = x + p.TriggerX, ty = y + p.TriggerY;
+                    done = DoorOpener switch
+                    {
+                        1 => L2PuzzleBuild.AddPlateChange(_rom, map, k[2].X, k[2].Y, x, y, w, h, ox, oy),
+                        2 => L2PuzzleBuild.AddTileChange(_rom, map, L2PuzzleBuild.Trigger.ActionButton, k[2].X, k[2].Y, x, y, w, h, ox, oy, 0x10),
+                        // (the step-on area on the floor block just below the door: a step event on the door's own
+                        // blocks never played in the game)
+                        3 => L2PuzzleBuild.AddKeyDoor(_rom, map, tx, y + h, x, y, w, h, ox, oy, KeyItem?.Value ?? 0,
+                                 (KeyItem?.Label ?? "key").Split(' ', 2).Last(), UseUpKey, L2FlagUses.Free(_rom)),
+                        4 => L2PuzzleBuild.AddFlagDoor(_rom, map, x, y, w, h, ox, oy, DoorFlag?.Value ?? 1),
+                        _ => L2PuzzleBuild.AddTileChange(_rom, map, L2PuzzleBuild.Trigger.ActionButton, tx, ty, x, y, w, h, ox, oy),
+                    };
+                    break;
+                }
+                case PresetKindId.BombPiece:
+                {
+                    var p = SelectedPreset!.Preset!;
+                    done = L2PuzzleBuild.AddTileChange(_rom, map, L2PuzzleBuild.Trigger.Bomb, k[0].X + p.TriggerX, k[0].Y + p.TriggerY, k[0].X, k[0].Y, w, h, k[1].X, k[1].Y);
+                    break;
+                }
+                default:
+                {
+                    var r = _spikeRect!.Value;
+                    done = CurrentKind switch
+                    {
+                        PresetKindId.SpikesLever => L2PuzzleBuild.AddLeverToggle(_rom, map, k[2].X, k[2].Y, r.X1, r.Y1, w, h, k[1].X, k[1].Y, k[0].X, k[0].Y),
+                        PresetKindId.SpikesPlate => L2PuzzleBuild.AddPlateChange(_rom, map, k[1].X, k[1].Y, r.X1, r.Y1, w, h, k[0].X, k[0].Y),
+                        _ => L2PuzzleBuild.AddStepTimer(_rom, map, r.X1, r.Y1, w, h, k[1].X, k[1].Y, k[0].X, k[0].Y, SpikeSteps),
+                    };
+                    break;
+                }
+            }
+            L2FlagUses.Invalidate();
+            _main?.NotifyRomModified($"Lufia II: puzzle on map {map:X2}");
             _edit = new L2MapEdit(_rom, map);
             _history.Clear(); _redo.Clear();
             UpdateUndoState();

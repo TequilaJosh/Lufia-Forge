@@ -37,7 +37,8 @@ public partial class L2MapsPage
     {
         if (value == L2Tool.AddChest) FillChestLooks();   // (this map's own chests as they are now)
         if (value == L2Tool.AddPreset) FillPresets();
-        _presetStep = 0; _presetCells = null;
+        _presetClicks.Clear(); _spikeRect = null; _presetCells = null;
+        NotifyPresetOptions();
         OnPropertyChanged(nameof(ChestLookVisible));
         foreach (var n in new[] { nameof(IsSelectTool), nameof(IsPaintTool), nameof(IsPickTool), nameof(IsAreaTool), nameof(IsCollisionTool),
                                   nameof(IsAddExitTool), nameof(IsAddTriggerTool), nameof(IsAddCharacterTool), nameof(IsAddPointTool), nameof(IsAddChestTool), nameof(IsAddHiddenTool), nameof(IsAddPuzzleTool), nameof(PuzzleOptionsVisible), nameof(IsAddPresetTool), nameof(PresetOptionsVisible) })
@@ -188,6 +189,7 @@ public partial class L2MapsPage
             case L2Tool.AddExit:
             case L2Tool.AddTrigger:
             case L2Tool.AddPuzzle when _puzzleStep == 0:
+            case L2Tool.AddPreset when _spikeRect == null:
                 if (_areaStart is { } s) AreaRect = (Math.Min(s.X, cx), Math.Min(s.Y, cy), Math.Max(s.X, cx) + 1, Math.Max(s.Y, cy) + 1);
                 break;
             case L2Tool.Select: DragSelection(cx, cy); break;
@@ -211,6 +213,8 @@ public partial class L2MapsPage
                 AddTrigger(r.X1, r.Y1, r.X2, r.Y2); AreaRect = null; break;
             case L2Tool.AddPuzzle when _puzzleStep == 0:
                 PuzzleUp(); break;
+            case L2Tool.AddPreset when _spikeRect == null:
+                PresetUp(); break;
             case L2Tool.Select:
                 if (_dragMoved) DropIfSame(); else if (_history.Count > 0 && _dragOriginal != null) DropIfSame();
                 _dragOriginal = null;

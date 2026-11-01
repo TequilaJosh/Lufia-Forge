@@ -120,6 +120,21 @@ is written), `Modules/Lufia2/L2MapWindows.cs` (pick a place, pieces and presets,
   cell the party faces when it stops: walls are cell edges (04 a wall on the top edge), so above the lowest cell with
   one. Checked in the game: Secret Skills Cave's red door placed across the passage above preset point 1 stops the
   party, A opens it, the party walks through, and it is open again after the map loads.
+  What opens a door (picked beside it): **facing it and pressing A**; **a floor plate** (click it after the door: the
+  room check, which the game runs after every step the party takes, opens the door once anyone, or a pushed block,
+  stands on it); **a lever or wall switch** (click it: the party faces it and presses A); **a key item** (pick the item,
+  and whether it is used up: a step-on area on the floor block below the door plays an event, "Used the KEY. The door
+  opened." with event command 43 opening it and a story flag remembering, or "It's locked."); **a story flag** (pick it:
+  the map's "on entering" event draws the door open while the flag is on; an event that sets it can open the door at
+  once with 43, between the two areas the status names). **Spikes** are painted by you (raised where they stand, the
+  lowered look elsewhere): drag over them, click the lowered look, then (a lever, or every few steps) click where a
+  copy of the raised look is kept (painted there for you), then the lever or plate. A lever raises and lowers them each
+  press; a plate lowers them once; "as the party walks" changes them every N steps (the room check counts steps in a
+  puzzle variable; pushing against a wall counts too). A real clock is not possible: a puzzle thread that loops with
+  waits holds the party still while it runs. Checked in the game (Secret Skills Cave): the plate door, the key door with
+  and without the item, the flag door with the flag on and off, a lever (open, close, open), and spikes every 3 steps.
+  A piece from other graphics needs room in this map's block set (Secret Skills Cave's is full, so only its own
+  graphics' pieces fit there).
 
 ## 2. How it is written
 
