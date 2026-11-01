@@ -55,8 +55,8 @@
                     <RadioButton GroupName="L2MapTool" Style="{StaticResource LufiaToolRadio}" IsChecked="{Binding IsAddHiddenTool}" Content="＋ Hidden item"
                                  ToolTip="Add hidden item (H): click a block; nothing shows, pressing A facing it finds the item once"
                                  Visibility="{Binding IsWorldMap, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
-                    <RadioButton GroupName="L2MapTool" Style="{StaticResource LufiaToolRadio}" IsChecked="{Binding IsAddPresetTool}" Content="＋ Door / bomb piece"
-                                 ToolTip="Add a preset (R): a door or a bomb piece from the game; click where it goes, then where its open look is kept, and the puzzle is made for you"
+                    <RadioButton GroupName="L2MapTool" Style="{StaticResource LufiaToolRadio}" IsChecked="{Binding IsAddPresetTool}" Content="＋ Door / bomb / spikes"
+                                 ToolTip="Add a preset (R): a door (opened by A, a plate, a lever, a key or a story flag), a bomb piece, or spikes (a lever, a plate, or every few steps); the puzzle is made for you"
                                  Visibility="{Binding IsWorldMap, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
                     <RadioButton GroupName="L2MapTool" Style="{StaticResource LufiaToolRadio}" IsChecked="{Binding IsAddPuzzleTool}" Content="＋ Puzzle"
                                  ToolTip="Add puzzle (U): a wall blasted open, a passage cut, a door drawn open when a bomb, sword, arrow, hammer or the action button hits a spot"
@@ -162,7 +162,23 @@
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Margin="12,0,0,0" Visibility="{Binding PresetOptionsVisible, Converter={StaticResource BoolToVisibilityConverter}}">
                                 <ComboBox Style="{StaticResource GdCombo}" Width="300" ItemsSource="{Binding PresetKindChoices}" SelectedIndex="{Binding PresetKind}"/>
+                                <ComboBox Style="{StaticResource GdCombo}" Width="250" Margin="6,0,0,0" ItemsSource="{Binding DoorOpenerChoices}" SelectedIndex="{Binding DoorOpener}"
+                                          ToolTip="What opens the door" Visibility="{Binding DoorOptionsVisible, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                <StackPanel Orientation="Horizontal" Margin="6,0,0,0" Visibility="{Binding KeyOptionsVisible, Converter={StaticResource BoolToVisibilityConverter}}">
+                                    <ComboBox Style="{StaticResource GdCombo}" Width="200" ItemsSource="{Binding KeyItemChoices}" SelectedItem="{Binding KeyItem}" DisplayMemberPath="Label"
+                                              ToolTip="The item that opens it (walking up to the door with it); without it the party reads It's locked."/>
+                                    <CheckBox Content="Used up" IsChecked="{Binding UseUpKey}" Style="{StaticResource GdCheck}" VerticalAlignment="Center" Margin="6,0,0,0"/>
+                                </StackPanel>
+                                <ComboBox Style="{StaticResource GdCombo}" Width="300" Margin="6,0,0,0" ItemsSource="{Binding FlagChoices}" SelectedItem="{Binding DoorFlag}" DisplayMemberPath="Label"
+                                          ToolTip="The door is drawn open when the party enters the map with this story flag on (an event sets it)"
+                                          Visibility="{Binding FlagOptionsVisible, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                <StackPanel Orientation="Horizontal" Margin="6,0,0,0" Visibility="{Binding StepOptionsVisible, Converter={StaticResource BoolToVisibilityConverter}}">
+                                    <TextBlock Text="Change every" Style="{StaticResource LufiaLabel}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                    <TextBox Style="{StaticResource GdNumber}" Text="{Binding SpikeSteps}" Width="40"/>
+                                    <TextBlock Text="steps" Style="{StaticResource LufiaLabel}" VerticalAlignment="Center" Margin="4,0,0,0"/>
+                                </StackPanel>
                                 <ComboBox Style="{StaticResource GdCombo}" Width="340" Margin="6,0,0,0" ItemsSource="{Binding PresetChoices}" SelectedItem="{Binding SelectedPreset}"
+                                          Visibility="{Binding PresetListVisible, Converter={StaticResource BoolToVisibilityConverter}}"
                                           ToolTip="The game's own pieces: closed on the left, open on the right. This map's graphics first; others have their blocks brought into this map's block set (a piece whose tiles the map's graphics can't take is refused).">
                                     <ComboBox.ItemTemplate>
                                         <DataTemplate>

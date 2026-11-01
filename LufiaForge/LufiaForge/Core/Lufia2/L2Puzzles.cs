@@ -357,7 +357,10 @@ public static class L2Puzzles
                     if (rom.ReadByte(raw[k].At) is 0x13 or 0x15 or 0x17 or 0x72 && raw[k].Length > 1) tested = rom.ReadByte(raw[k].At + 1);
                 if (tested >= 0xA0) tested = -1;   // (known only as it runs)
                 string text = raw[i].Text.StartsWith("(not") ? raw[i].Text : words.Describe(rom, raw[i].At, block, Step, tested);
-                if (from.TryGetValue(raw[i].At, out var by)) text += "\n(" + string.Join("; ", by.Distinct()) + ")";
+                var notes = from.TryGetValue(raw[i].At, out var by) ? by.Distinct().ToList() : new List<string>();
+                // (the steps are in ROM order: a script with steps put before it starts further down)
+                if (raw[i].At == block + off && i > 0) notes.Insert(0, "the script starts here");
+                if (notes.Count > 0) text += "\n(" + string.Join("; ", notes) + ")";
                 ops.Add(new L2Script.Op(raw[i].At, raw[i].Length, text));
             }
             list.Add(($"Puzzle: {when}", ops, $"{ops.Count} steps: " + (ops.Count > 0 ? ops[0].Text.Split('\n')[0] : "")));

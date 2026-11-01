@@ -119,6 +119,22 @@ title/ending.
   moves its block with 65 three times from (34, 20), then redraws (34, 21) and (34, 22): it slides down into the hole.
 * The event editor shows every puzzle command in these words (`L2PuzzleText`), jumps as step numbers, the step that
   starts a thread on the thread's first step, and marks a picked step's places (and a tile copy's source) on the stage.
+* **Checked in the game (2026-11-01, BizHawk, Secret Skills Cave):**
+  * The game runs a map's puzzles only with dungeon controls (Map settings 69 bit 01; all 146 puzzle maps have it).
+  * The room check (category 00 id 00) runs after every step the party takes, pushing against a wall included
+    (`$83:BFE8` sets `$7FD0A3` = 01; `$83:821F` starts it). Plates and step counters go there.
+  * Puzzle threads run every field frame (`$83:808C` -> `$83:81C6` -> `$80:CBAE`), but a thread waiting (11) holds the
+    party still, so a loop with waits freezes the game's control; a thread started by the set-up as the map loads ran
+    once and stopped at its first wait. The game itself has no wait loops.
+  * BB b starts scene b (list +4, `$83:B727` with X = 4: Tanbel Southeast Tower 5F's lever scenes), but a scene of an
+    added scene id started from an added action spot never played (the scene start ran, the event interpreter did
+    not), with or without waits before it. Doors that need an event (a key) use a step-on area instead.
+  * Switches 00-1F are kept in the save; a new game (and the test start, which clears them with event AA) starts with
+    them in whatever state RAM had.
+  * Variables A0-BF are bytes at `$7F:D114-D133` (D074 + the operand); 32 adds 1, 35 compares.
+  * A step-on event on a door's own blocks (flags E8 / EC) never played; on an ordinary floor block it does.
+  * Event command 43 (copy area onto area) opens a door from a step-on event, and from the "on entering" event (+2 id
+    01) as the map loads; in the start-up script it showed nothing (the game never uses it there).
 
 ## 2. Opcode table
 
