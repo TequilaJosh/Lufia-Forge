@@ -181,6 +181,61 @@
             </DockPanel>
             <TextBlock Text="{Binding Info}" Style="{StaticResource GdHint}" TextWrapping="Wrap"/>
             <TextBlock x:Name="HelpText" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+
+            <!-- the map's characters: sprite, the start-up line that makes each, the lines of this event that use it -->
+            <Expander x:Name="CastExpander" Header="{Binding CastHeader}" Foreground="{StaticResource GoldBrush}" Margin="0,6,0,0"
+                      Expanded="CastExpander_Changed" Collapsed="CastExpander_Changed"
+                      ToolTip="Who is on this map: the sprite each one has, the line of the start-up script that makes it, where it stands, and the lines of this event that use it">
+                <Expander.Style>
+                    <Style TargetType="Expander">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding CastHeader}" Value=""><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Expander.Style>
+                <Border Style="{StaticResource GdCard}" Margin="0,4,0,0" Padding="6,2">
+                    <ScrollViewer MaxHeight="210" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <ItemsControl ItemsSource="{Binding Cast}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Padding="0,4" BorderThickness="0,0,0,1" BorderBrush="{StaticResource BorderPurpleBrush}" Opacity="{Binding Dim}">
+                                        <DockPanel>
+                                            <Border DockPanel.Dock="Left" MinWidth="36" MinHeight="36" Margin="0,0,10,0" Background="#FF120A1E" CornerRadius="3" VerticalAlignment="Top">
+                                                <Image Source="{Binding Picture}" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor" Margin="2"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                            <StackPanel>
+                                                <WrapPanel>
+                                                    <TextBlock Text="{Binding Name}" Foreground="{StaticResource GoldLightBrush}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,10,2"/>
+                                                    <ItemsControl ItemsSource="{Binding Links}">
+                                                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <Button Content="{Binding Label}" ToolTip="{Binding Tip}" Style="{StaticResource LufiaButton}" Padding="6,0" Margin="0,0,4,2"
+                                                                        Click="CastLink_Click"/>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </WrapPanel>
+                                                <TextBlock Text="{Binding Made}" Style="{StaticResource GdHint}" TextWrapping="Wrap"/>
+                                                <TextBlock Text="{Binding Uses}" Foreground="#FF8CC8FF" FontSize="11" TextWrapping="Wrap">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding Uses}" Value=""><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </DockPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Border>
+            </Expander>
         </StackPanel>
 
         <Grid x:Name="BodyGrid" Grid.Row="1">

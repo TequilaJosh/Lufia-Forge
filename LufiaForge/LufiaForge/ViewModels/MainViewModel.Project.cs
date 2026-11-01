@@ -223,21 +223,29 @@ public partial class MainViewModel
     }
 
     /// <summary>Mistakes in the game Lufia Forge puts right as a ROM is opened (each one Edit, Undo step): Lufia II's
-    /// shrine maps CF and F1, drawn wrong in the US game (<see cref="Core.Lufia2.L2ShrineFix"/>).</summary>
+    /// shrine maps CF and F1, drawn wrong in the US game (<see cref="Core.Lufia2.L2ShrineFix"/>), and on an 8 MB Lufia II
+    /// ROM made before 2026-11-01 the battle window frame read from the upper 4 MB (<see cref="Core.Lufia2.L2Rom.FixLowBankReads"/>).</summary>
     private string _openNote = "";
 
     private void FixKnownBugs(RomBuffer rom)
     {
         _openNote = "";
+        if (Core.Lufia2.L2Rom.NeedsLowBankFix(rom))
+        {
+            Core.Lufia2.L2Rom.FixLowBankReads(rom);
+            NotifyRomModified("Lufia II: battle window border fixed for the 8 MB ROM (read from bank $81, not the upper 4 MB)");
+            OnPropertyChanged(nameof(RomBuffer));
+            _openNote = " The hero's battle window border, broken on 8 MB ROMs, was fixed (Edit, Undo takes it back).";
+        }
         if (!Core.Lufia2.L2ShrineFix.Needed(rom)) return;
         try
         {
             Core.Lufia2.L2ShrineFix.Apply(rom);
             NotifyRomModified("Lufia II: shrine maps CF and F1 fixed as in the European release (block set 17 and tile set 11; maps E7-EB keep their look)");
             OnPropertyChanged(nameof(RomBuffer));   // the pages read the fixed ROM
-            _openNote = " Shrine maps CF and F1, garbled in the US game, were fixed as in the European release (Edit, Undo takes it back).";
+            _openNote += " Shrine maps CF and F1, garbled in the US game, were fixed as in the European release (Edit, Undo takes it back).";
         }
-        catch (Exception ex) { _openNote = " Lufia II's shrine maps CF and F1 couldn't be fixed: " + ex.Message; }
+        catch (Exception ex) { _openNote += " Lufia II's shrine maps CF and F1 couldn't be fixed: " + ex.Message; }
     }
 
     /// <summary>The Dutch Lufia II picked for a new project: Lufia Forge edits the US game's layout, so the Dutch text
