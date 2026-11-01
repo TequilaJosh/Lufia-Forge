@@ -399,8 +399,43 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         _picked = -1;
         ReadScript(-1);
         if (TickFlagsToPlay()) { FillStartFlags(); Simulate(); Annotate(); ShowStage(); }
+        _partyByHand = false;
+        FillTestParty();
         TestNote = NewGameNote();
     }
+
+    // ------------------------------------------------------------------ the party in the test
+
+    /// <summary>Heroes 1-6 for the test start, ticked when they are in the party (Maxim always leads).</summary>
+    public ObservableCollection<L2StartFlagVm> TestParty { get; } = new();
+    [ObservableProperty] private string _testPartyWhy = "";
+    private bool _partyByHand, _fillingParty;
+
+    /// <summary>The story's party at this event (<see cref="L2StoryParty"/>), unless picked by hand.</summary>
+    private void FillTestParty()
+    {
+        if (_rom == null || _map < 0 || _event == null || _event.PuzzleOps != null) { TestParty.Clear(); TestPartyWhy = ""; return; }
+        if (_partyByHand) return;
+        L2StoryParty.Result r;
+        try { r = L2StoryParty.Of(_rom, _map, _event.Entry?.Head ?? -1, _event.Entry?.Id ?? -1, _flagsOn.ToList()); }
+        catch (Exception) { r = new L2StoryParty.Result(new List<int> { 0 }, "Maxim"); }
+        _fillingParty = true;
+        TestParty.Clear();
+        for (int h = 1; h < 7; h++)
+            TestParty.Add(new L2StartFlagVm { Number = h, Label = L2EventCommands.HeroNames[h], IsOn = r.Heroes.Contains(h), Changed = PartyChanged });
+        _fillingParty = false;
+        TestPartyWhy = "Maxim leads" + (r.Heroes.Count > 1 ? "; the story's party here: " + r.Why[(r.Why.IndexOf(", ") + 2)..] : " alone: the story's party here has no one else (as far as the story flags show).");
+    }
+
+    private void PartyChanged()
+    {
+        if (_fillingParty) return;
+        _partyByHand = true;
+        int n = TestParty.Count(h => h.IsOn);
+        TestPartyWhy = "Picked by hand" + (n > L2StoryParty.MaxParty - 1 ? $": only {L2StoryParty.MaxParty - 1} can join Maxim, the first ones ticked are taken." : ".");
+    }
+
+    private List<int> PartyForTest() => new[] { 0 }.Concat(TestParty.Where(h => h.IsOn).Select(h => h.Number)).Take(L2StoryParty.MaxParty).ToList();
 
     /// <summary>An event that only checks and ends with no story flag on (the game's own cutscenes check the story so far:
     /// North Lighthouse 6F's step-on area 1 plays only with flag 37 on and 39 off) opens with the flags it needs ticked,
@@ -409,37 +444,16 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
     private bool TickFlagsToPlay()
     {
         if (_rom == null || _script == null || _event?.Entry == null || _flagsOn.Count > 0) return false;
-        var steps = _script.Steps;
         var (x, y) = LeaderStart();
         int talkedTo = _event.Entry.Head == L2EventBlocks.TalkList ? _event.Entry.Id : -1;
-        List<int> Reached(IEnumerable<int> on)
+        var on = L2Cutscene.FlagsToPlay(_rom, _map, _script, f =>
         {
             var s = L2Cutscene.Initial(_rom, _map, x, y, _persistent);
-            s.Flags.UnionWith(on);
+            s.Flags.UnionWith(f);
             s.Talker = s.TalkSave = talkedTo >= 0 ? talkedTo : 0xFF;
-            try { return L2Cutscene.Run(_rom, _map, s, steps, Name).Select(r => r.Step).Distinct().ToList(); }
-            catch (Exception) { return new(); }
-        }
-        // does something: a step that isn't a check, a jump or the end
-        bool Plays(List<int> reached) => reached.Any(i => i < steps.Count && steps[i].Jumps.Count == 0 && steps[i].Op is not (0x00 or 0x42));
-        var none = Reached(Array.Empty<int>());
-        if (Plays(none)) return false;
-        int once = L2Cutscene.OnceFlag(_script);
-        var choices = L2Cutscene.Checked(steps).Flags.Where(f => f != once).ToList();
-        var on = new List<int>();
-        int best = none.Count;
-        while (true)
-        {
-            int pick = -1, most = best;
-            foreach (int f in choices.Except(on))
-            {
-                int n = Reached(on.Append(f)).Count;
-                if (n > most) { most = n; pick = f; }
-            }
-            if (pick < 0) break;
-            on.Add(pick); best = most;
-        }
-        if (on.Count == 0 || !Plays(Reached(on))) return false;
+            return s;
+        }, Name);
+        if (on.Count == 0) return false;
         _flagsOn.UnionWith(on);
         return true;
     }
@@ -1639,6 +1653,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         }
         Stop();
         Simulate(); Annotate(); ShowStage();
+        FillTestParty();
     }
 
     // ------------------------------------------------------------------ the stage: clicks
@@ -1919,9 +1934,10 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
             var flags = StartFlags.Where(f => !f.IsCounter && f.IsOn).Select(f => f.Number).ToList();
             var counters = StartFlags.Where(f => f.IsCounter && f.Value != 0).ToDictionary(f => f.Number, f => Math.Clamp(f.Value, 0, 255));
             // the start-up script (no event of the lists): the game just starts on the map, which runs it as it loads
+            var party = PartyForTest();
             string set = added + (_event?.Entry is { } e
-                ? L2Cutscene.SetTest(_rom, _map, e.Head, e.Id, point, flags, counters)
-                : L2Cutscene.SetMapTest(_rom, _map, point, flags, counters));
+                ? L2Cutscene.SetTest(_rom, _map, e.Head, e.Id, point, flags, counters, party)
+                : L2Cutscene.SetMapTest(_rom, _map, point, flags, counters, party));
             _main.NotifyRomModified($"Lufia II: new game starts with an event on map {_map:X2}");
             // an event that ends by going to another scene carries on there in the game (Elcid's scene 01 into the
             // rest of the ending)
