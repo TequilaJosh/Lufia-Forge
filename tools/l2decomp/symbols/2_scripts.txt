@@ -1,0 +1,479 @@
+# Bank $80:C000-$80:FFFF and bank $8E: script helpers, text boxes, map names, the puzzle script
+# interpreter (docs/lufia2/scripts3.md), the map loader and map graphics loader.
+
+# ---- event script helpers
+func 80:C0D0 ReadEventScriptWord     | Reads a u16 from the running event script (two ReadScriptByte calls, low byte first).
+func 80:C0DA SignExtendByte          | Sets the high byte of A to FF when AL is negative, else 00 (A = the signed byte AL).
+func 80:C0EC UnreadScriptByte        | Steps the event script pointer Y back one byte, moving into the previous bank ($09B9) when Y leaves $8000.
+func 80:C102 SetScriptPointer        | Y = A as a script address: a 16-bit sum that wrapped below $8000 has $8000 added and the script bank ($09B9) moves to the next bank.
+func 80:C11C ReleaseAllActors        | Clears bit 01 (held by the event) of $0622 on all 0x28 actor slots.
+func 80:C12E FindEventScript         | Looks up a script of the map's event block: AL = id, X = list offset (+2..+C); Y and the script bank are set to its start, carry set (Y = FFFF) when the id is not in the list.
+func 80:C195 HoldActorsFrom5         | Sets bit 01 (held by the event) of $0622 on actor slots 5-27.
+func 80:C1A7 PlaceActorAtLookup      | Shows actor slot $A7 (clears $0736 and the hidden bit 04 of $0622) and puts it at the tile in $120A/$120B from a map-info lookup.
+func 80:C1DF SetSpeakerVoice         | Text voice of the speaker: when $09AB is not FF, finds that actor and sets $1260 = 0x45 + ($1291,X >> 5).
+func 80:C01D FindCharacterStart      | Looks up record AL of the map-info list +10 (character starts, 8 bytes): x, y and the rest to $120A.., carry set when there is none.
+func 80:C05C FindPoint               | Looks up record AL of the map-info list +0E (points, 3 bytes): x to $120A, y to $120B; carry set (and zeros) when there is none.
+func 80:C093 FindMapArea             | Looks up record AL of the map-info list +14 (areas, 5 bytes): its four coordinates to $120A-$120D; carry set when there is none.
+
+# ---- text boxes
+func 80:C1FD CloseTextBoxIfOpen      | When text mode is on ($099C bit 0) and $09A7 & 02 is clear, clears $125D and closes the box ($84:8328, $74 = 8). (guess)
+func 80:C21A MapNameTimer            | Counts the map-name box timer $7FD0C1 down; at 0 it sets it to FF, clears $099C bits 80/20 and closes the box ($84:8328).
+func 80:C23D OpenTextBox             | Opens the dialogue box for command 08: clears the text buffer (ClearTextBuffer), draws the frame (DrawTextBoxFrame, or the full-width one when $09A7 & 02 is set), queues the DMA and sets text mode ($099C bit 0).
+func 80:C2A1 DrawWideTextBox         | The text box used when $09A7 & 02 is set: clears the box area and writes tile numbers $2500.. row by row into the BG3 map buffer at $7E:3000. (guess)
+func 80:C305 DrawTextBoxFrame        | Draws the text box frame into the BG3 map buffer $7E:3000 (border tiles $20D6..), sized from the measured text ($125B width, $125C lines) and placed over the speaker $09AB, with the speech tail (table $80:C514) on the side the speaker faces.
+func 80:C52C DrawTextBoxEdgeRow      | One top or bottom row of the text box frame at X in $7E:3000 (A = corner tile, $63 = width); X moves to the next row.
+func 80:C557 TileXYToMapOffset       | A = x + y * 64 (x in the low byte, y in the high byte of A): the byte offset of a tile in a 32-column tilemap buffer.
+func 80:C56E QueueTextLineDma        | Queues the DMA of one finished text line: the glyphs from $7E:D000 and the box's map row from $7E:3040, then counts the line ($7FD087). (guess)
+func 80:C5DD WriteTextLineTiles      | Writes the tile numbers ($2100 + n) of text line $7FD087 into the box rows of the BG3 map buffer $7E:3042/$7E:3082.
+func 80:C61D ClearTilemapArea        | Clears 0x140 bytes of RAM at X (bank $7E) and queues them for DMA channel 0 to VRAM address Y.
+func 80:C784 ClearTextBuffer         | Clears the text glyph buffer $7E:D000-$7E:DFFF with the background word of colour $09AD (table $80:C7BE) and resets the text cursor ($09AF, $09B1 = $D000, $09B3).
+func 80:C7C2 DrawGlyph               | Draws letter $09AF of the 8x16 font ($9A:F970, 16 bytes a letter) at $09B1 in the text buffer, plane 1 from the colour mask $80:C815[$09AD]; $09B1 moves on.
+func 80:C817 TakeButtonPress47       | AL = button mask: when the buttons are in $47 and still latched in $4B, clears them from $4B; Z clear when they were latched. (guess)
+func 80:C81E TakeButtonPress46       | AL = button mask: when the buttons are in $46 and still latched in $4A, clears them from $4A; Z clear when they were latched. (guess)
+func 80:C825 ShowMapNameOnEntry      | On entering a map: builds the floor name ($85:8019 text plus floor $7FE696 - 1) when $05B6 bit 0 is set, else copies the map's name ($87:8016 + map * 8) and shows it only when it differs from the last map's name ($7FD0C4).
+func 80:C8D5 ShowMapNameBox          | Shows the name box: measures the text at $09B7 (PrintWithDictionary), draws the frame, prints every letter (0A repeats included) into the glyph buffer, queues the DMA and starts the 0x78-frame timer $7FD0C1.
+
+# ---- puzzle script interpreter: core
+func 80:CBAE RunPuzzleThreads        | Runs the puzzle threads once (every field frame): for each of the 8 threads that is active ($7FD18C bit 7), counts its wait down and at 0 runs it from its saved pointer; sets $05B5 bit 02 while any thread is active and applies redraw requests ($1273).
+func 80:CC26 ApplyRedrawFlags        | Turns the redraw request bits of $1273 into the DMA flags of $74.
+func 80:CC35 PuzzleNextCommand       | Puzzle script: reads the next command byte and jumps to its handler (table $80:E5A4).
+func 80:CCA4 PuzzleNextCommand_CCA4  | A shared jump back to PuzzleNextCommand.
+func 80:CCD8 PuzzleNextCommand_CCD8  | A shared jump back to PuzzleNextCommand.
+func 80:CCDB LeaderInDoorway         | Carry set when the leader ($06BA, $06E2) stands in door $7FD04E's doorway (its record in map-info list +02 and the look it names in list +04): a door does not close on the party.
+func 80:CD41 FindObjectOfKindAt      | Reads a place and a kind m: looks for a movable object whose tile ($7FD6FC) is m + 10 inside the place (groups: any member); $7FD19A = FF and the thread anchor = that object's cell when found.
+func 80:CD8B FindObjectInRect        | Looks through the 0x30 movable objects for one inside the rectangle $9F-$A2 whose tile is $AE; found: carry set, $7FD19A = FF, the thread anchor ($7FD17C/$7FD184) = its cell.
+func 80:CDD0 RestoreDataBank_CDD0    | The shared end of FindObjectInRect: pulls the data bank.
+func 80:CE5C ReadTileCopyModeAndPlace | Reads the mode of 8D/8E/92 into $7FD05F and the destination place (to $7FD046/$7FD047), then reads the next operand.
+func 80:CE7E RectToCopySize          | Resolves a place as a rectangle and stores its x, y, width and height in $7FD04A-$7FD04D (the source of a tile copy).
+
+# ---- puzzle commands (handler names keep the command number)
+func 80:CC42 Puzzle00_End            | Ends the thread ($7FD18C = 0); also commands 07 2C 2D 2E 56 62 93 9B AC AD.
+func 80:CC4A Puzzle01_IfSwitchOn     | 01 f w: if puzzle switch f is on, go to w.
+func 80:CC61 Puzzle0C_IfSwitchOff    | 0C f w: if puzzle switch f is off, go to w.
+func 80:CC78 Puzzle02_OpenDoor       | 02 b: opens door b (C0-FA = door n-C0) with its animation ($83:F559), or at once ($83:8AD5) when $0583 bit 7 is set; nothing when it is open.
+func 80:CCA7 Puzzle03_CloseDoor      | 03 b: closes door b with its animation, or at once when $0583 bit 7 is set; not while the leader stands in the doorway.
+func 80:CD1D Puzzle05_TestObjectKindAt | 05 p m: is a movable object of tile m + 10 in p? The answer and whether it changed go to the thread result.
+func 80:CD23 Puzzle04_IfObjectKindAt | 04 p m w: if a movable object of tile m + 10 is in p, go to w.
+func 80:CD32 Puzzle70_IfNoObjectKindAt | 70 p m w: if no movable object of tile m + 10 is in p, go to w.
+func 80:CD88 PuzzleGroupTestObjectKind | Group member test for 04/05/70 (PuzzleCalls slot 2): resolves the member as a place and looks for the object kind in it (FindObjectInRect).
+func 80:CDD2 Puzzle0E_CopyTilesUp     | 0E p b: tile copy b onto place p as 06, but with $AE = FF the place is the bottom row of the copy (TileCopyFromBottom).
+func 80:CDD9 Puzzle7A_CopyTiles      | 7A p b: tile copy b (map-info list +16) onto place p and redraws ($83:8B40, $83:8B6A, $83:8E76).
+func 80:CE1B Puzzle8D_CopyRect       | 8D mode p r: copies the tile rectangle r onto place p (mode to $7FD05F) and redraws.
+func 80:CE27 Puzzle92_CopyRectAlt    | 92 mode p r: as 8D through the other redraw ($80:D112).
+func 80:CE33 Puzzle8E_CopyRectWH     | 8E mode p p w h: copies a w x h tile rectangle from the second place onto the first and redraws.
+func 80:CEA0 PuzzleBC_ActorGoTo      | BC a p: character a + 4F walks to place p ($80:A74D) and is released from the event.
+func 80:CECF PuzzleBD_CallE033       | BD b: calls $83:E033 with b. (never used by the game)
+func 80:CED9 Puzzle97_StepDown       | 97 a: character a + 4F takes one step down (y + 1).
+func 80:CEE0 Puzzle98_StepLeft       | 98 a: character a + 4F takes one step left (x - 1).
+func 80:CEE7 Puzzle99_StepUp         | 99 a: character a + 4F takes one step up (y - 1).
+func 80:CEEE Puzzle9A_StepRight      | 9A a: character a + 4F takes one step right (x + 1).
+func 80:CEF5 StartActorStep          | The end of 97-9A: sets actor $A7's target tile ($7FE5A6/$7FE5CE) to $8F/$91, speed $070A = 20, releases it from the event and starts the walk ($83:D416).
+func 80:CF20 ReadActorTile           | Reads a character operand (+4F), finds the actor (slot to $A7) and puts its tile in $8F/$91.
+func 80:CF3A Puzzle9C_VarTileBits    | 9C v p: variable v = the top two bits (0-3) of the block word at place p on the current layer ($83:F984).
+func 80:CF63 Puzzle9F_SameCell       | 9F p p: $7F:D10B bit 7 = whether the two places are the same cell.
+func 80:CF9D PuzzleA0_OpenDoorNow    | A0 b: opens door b at once, no animation ($83:8AD5).
+func 80:CFAA PuzzleA1_CloseDoorNow   | A1 b: closes door b at once, no animation ($83:8AE5).
+func 80:CFB7 PuzzleA2_Set05B5Bit20   | A2: sets $05B5 bit 20. (meaning unknown)
+func 80:CFBF PuzzleA7_BlockAttrToVarBF | A7 p: variable BF ($7F:D133) = the attribute byte of the block at place p ($83:FB71: looked up through $7FD03E).
+func 80:CFD8 Puzzle9D_VarFromRect    | 9D v r k: variable v = field k (0 x1, 40 y1, 80 x2, C0 y2) of rectangle register r.
+func 80:CFEA Puzzle9E_RectFromVar    | 9E v r k: field k of rectangle register r = variable v.
+func 80:CFFC ReadVarRectField        | Operands of 9D/9E: the variable to $56, the rectangle register field (r - E0 + k) to $54.
+func 80:D01D Puzzle90_RedrawRect     | 90 r: redraws the map under rectangle r ($83:8E76). (never used by the game)
+func 80:D03D Puzzle06_CopyTiles      | 06 p b: copies tile copy b (map-info list +16) onto place p and redraws it, movable objects inside included. The most used command.
+func 80:D051 Puzzle91_CopyTilesNoObjects | 91 p b: as 06 through the plain redraw, movable objects are not redrawn. (never used by the game)
+func 80:D065 PuzzleA8_CopyTilesVar   | A8 p x: as 06 with the tile copy number x resolved (a variable A0-BF).
+func 80:D077 ReadCopyDestination     | Reads a place (spot) operand and stores its cell as the destination of a tile copy ($7FD046/$7FD047).
+func 80:D087 Puzzle1F_CopyTilesAtXY  | 1F x y b: tile copy b onto cell (x, y). (never used by the game)
+func 80:D0AC StartTileCopy           | AL = tile copy number: loads its record ($83:8B40, source and size to $7FD04A-$7FD04D) and moves the destination for TileCopyFromBottom.
+func 80:D0BA DoTileCopy              | Copies the tile rectangle and redraws it; when the mode has bit 02, the movable objects inside are taken off first and drawn again after.
+func 80:D112 DoTileCopyPlain         | Copies the tile rectangle and redraws it, without the movable-object handling of DoTileCopy.
+func 80:D136 SaveTileCopyParams      | Saves the tile copy destination, source, size and mode ($7FD046-$7FD05F) in $7FD071-$7FD079.
+func 80:D15B RestoreTileCopyParams   | Puts the saved tile copy parameters back (and the destination in $8F/$91).
+func 80:D18C TileCopyFromBottom      | When $AE is not 0 (command 0E), moves the copy's destination up by its height - 1, so the place is its bottom row.
+func 80:D19F RedrawMarkedObjects     | Draws again every movable object marked by MarkObjectsInCopy (clears the mark; $83:8B40, $83:F422, $83:F86B).
+func 80:D1E1 HideMarkedObjects       | Takes the drawings of the movable objects marked by MarkObjectsInCopy off the map ($83:F750, $83:F442).
+func 80:D227 MarkObjectsInCopy       | Marks (bit 0 of $7FD75C) every present movable object inside the tile copy's rectangle; AL = the marks ORed (bit 7 set when any).
+func 80:D274 Puzzle08_SwitchOn       | 08 f: turns puzzle switch f on.
+func 80:D28A Puzzle09_SwitchOff      | 09 f: turns puzzle switch f off.
+func 80:D2A2 Puzzle0A_Goto           | 0A w: goes to block + w (also the "jump taken" end of every conditional command).
+func 80:D2B2 PuzzleSkipJump          | The "jump not taken" end of a conditional command: skips the u16 target and runs the next command.
+func 80:D2BB Puzzle0B_Sound          | 0B b: plays sound effect b ($84:8775).
+func 80:D2C5 Puzzle0D_IfLeaderFaces  | 0D b w: if the leader faces direction b ($0692), go to w.
+func 80:D2D3 Puzzle71_IfLeaderNotFaces | 71 b w: if the leader does not face direction b, go to w.
+func 80:D2E1 Puzzle0F_IfObjectKindBit0 | 0F p w: if bit 0 of the object kind of the block at place p ($83:FB51: $7FD296[attribute] when the attribute has a high nibble) is set, go to w.
+func 80:D2EE Puzzle6C_IfNotObjectKindBit0 | 6C p w: if bit 0 of the object kind of the block at place p ($83:FB51) is clear, go to w.
+func 80:D2FB ReadPlaceCellFB51       | Reads a spot operand into $8F/$91 and calls $83:FB51 for that cell (shared by 0F and 6C).
+func 80:D30D Puzzle10_RefreshMap     | 10: $83:8E66 and redraw requests 03 in $1273 (refresh the map).
+func 80:D319 Puzzle11_Wait           | 11 n: the thread waits n frames: $7FD18C = 80 | n and its script pointer is saved; runs on from here when the count ends.
+func 80:D31C PuzzleYield             | Saves the thread's pointer and sets its wait to AL frames (80 | AL), ending this frame's run (the "wait until" commands).
+func 80:D336 Puzzle21_RemoveObjectAtXY | 21 x y: takes away the movable object at cell (x, y) and redraws the floor under it. (never used by the game)
+func 80:D346 Puzzle22_RemoveObject   | 22 p: takes away the movable object on place p (its slot freed, its tiles put back and redrawn).
+func 80:D357 RemoveObjectAtCell      | Takes away the movable object at cell $8F/$91: frees its slot ($7FD69C = FF) and puts the map tiles back; with no object there, a cell whose tile kind ($83:FB71) has a high nibble is cleared the same way.
+func 80:D3C6 RedrawLayerAfterRemove  | Redraws map layer $05AA ($83:8E85) and requests redraw 02 in $1273.
+func 80:D3D6 Puzzle2A_AddObject      | 2A p b: adds a movable object on place p in a free slot, drawn with tile copy b (its tile = b + 10), and draws it.
+func 80:D426 FindFreeObjectSlot      | X = the first free movable object slot ($7FD75C bit 7 clear) of 0x30, or 0 when all are taken.
+func 80:D439 Puzzle23_LeaderActionByFacing | 23 b: the leader (actor 0) runs action $83:C1A5[facing] + b ($83:D350), then walks with flags 20 in $0622 and $7FE4DE = 8.
+func 80:D47E Puzzle6A_LeaderAction   | 6A b: the leader (actor 0) runs action b ($83:D350).
+func 80:D49B StopLeaderPathIfNeeded  | When $7FD0A1 bit 2 is set, clears the leader's path bit 08 in $0622 and calls $83:CA68. (guess)
+func 80:D4B0 PuzzleAE_ActorAction    | AE b: the actor in $7FD0A2 runs action b ($83:D350).
+func 80:D4CA Puzzle6B_WaitLeader     | 6B: waits (re-runs next frame) while the leader is shown and an action runs ($0622 bit 80).
+func 80:D4E0 Puzzle24_SpriteAtXY     | 24 x y o: creates sprite object o ($83:DF87, a free slot of $064A) at cell (x, y). (never used by the game)
+func 80:D4EC Puzzle25_SpriteAt       | 25 p o: creates sprite object o ($83:DF87) at place p.
+func 80:D516 Puzzle78_SpritesInArea  | 78 p b x: creates b sprite objects x at random cells inside place p (puffs, sparks).
+func 80:D533 SpritesAtRandomCells    | Creates $00 sprite objects of kind $01, each at a random cell of the rectangle $9F-$A2 (pixel position to $7FDDFE/$7FDE8E).
+func 80:D583 RandomPixelInRange      | AL = start, AH = width in cells: a random cell in that range plus a random 0-15 pixel offset, as a pixel coordinate. (guess)
+func 80:D5A5 Puzzle79_LeaderDrawFlags | 79 b: $7FE316 (the leader's drawing flags; 80 = not drawn) = b.
+func 80:D5AF Puzzle7B_Call8EBD77     | 7B: calls $8E:BD77.
+func 80:D5BC Puzzle8C_RedrawLeader   | 8C: redraws the leader's sprite ($83:BB93, $83:A21A), held by the event meanwhile.
+func 80:D5E4 PuzzleB8_Set72Bit0      | B8: sets $72 bit 0. (meaning unknown)
+func 80:D5EB PuzzleB9_Clear72Bit0    | B9: clears $72 bit 0, then as 8C.
+func 80:D5F2 Puzzle8F_RedrawChest    | 8F b: finds treasure b of the map's chest list ($91:B8B5) and draws its look (map-info list +04) opened or closed by its opened flag in $093B, through DoTileCopy.
+func 80:D686 PuzzleBA_MoveTreasure   | BA t p: moves record t of the map's treasure list (map-info +26, the copy at $7E:F000) to the cell of place p.
+func 80:D6B4 PuzzleBB_StartScene     | BB b: clears $099C bit 80 and starts scene b of the event block's +4 list ($83:B727 with X = 4).
+func 80:D6CA Puzzle26_SpawnIfChanged | 26 [params FF] w: if the last test changed (result bit 0), starts a new thread at w with the parameters (as 27); else skips the list and target.
+func 80:D6E9 Puzzle27_Spawn          | 27 [params FF] w: starts a new thread at w with the parameters in its FC.. (FB-FE in the list are this thread's values) and runs it at once, then goes on.
+func 80:D73A SetUpNewThread          | For spawn and call: X = the new thread; copies the caller's FB-FE to $7FD19C, makes X the current thread ($A7), gives it the caller's result and reads the FF-ended parameter list into its FC.. (values FB-FE replaced by the caller's).
+func 80:D79B PuzzleA9_Call           | A9 [params FF] w: calls w: pushes a 10-byte frame ($7FD466: thread and depth, return address, the caller's FB-FE, result) and runs w with the parameters in FC...
+func 80:D849 PuzzleAA_Return         | AA: returns from A9: finds this thread's top frame, puts back FB-FE, the result and the return address.
+func 80:D8C8 PuzzleAB_ClearWarpKind  | AB: $7FD0BF = FF (as 85 does).
+func 80:D8D1 Puzzle30_VarAdd         | 30 v b: variable v += b.
+func 80:D8E0 Puzzle31_VarSub         | 31 v b: variable v -= b.
+func 80:D8F2 Puzzle32_VarInc         | 32 v: variable v += 1.
+func 80:D906 Puzzle33_VarDec         | 33 v: variable v -= 1.
+func 80:D91A Puzzle34_VarSet         | 34 v b: variable v = b.
+func 80:D924 Puzzle2F_VarSetValue    | 2F v x: variable v = x, x resolved (A0-BF: another variable's value).
+func 80:D93B Puzzle35_IfVarEq        | 35 v b w: if variable v == b, go to w.
+func 80:D94A Puzzle36_IfVarNe        | 36 v b w: if variable v != b, go to w.
+func 80:D959 Puzzle37_IfVarGt        | 37 v b w: if variable v > b, go to w.
+func 80:D968 Puzzle38_IfVarLt        | 38 v b w: if variable v < b, go to w (compares with b - 1, so b = 0 wraps to FF).
+func 80:D975 Puzzle39_IfVarGe        | 39 v b w: if variable v >= b, go to w (compares with b - 1).
+func 80:D982 Puzzle3A_IfVarLe        | 3A v b w: if variable v <= b, go to w.
+func 80:D98E Puzzle3B_IfVarEqValue   | 3B v x w: if variable v == x (x resolved), go to w.
+func 80:D99D Puzzle3C_IfVarNeValue   | 3C v x w: if variable v != x (x resolved), go to w.
+func 80:D9AC Puzzle3D_IfVarGtValue   | 3D v x w: if variable v > x (x resolved), go to w.
+func 80:D9BB Puzzle3E_IfVarLtValue   | 3E v x w: if variable v < x (x resolved), go to w.
+func 80:D9CB Puzzle3F_IfVarGeValue   | 3F v x w: if variable v >= x (x resolved), go to w.
+func 80:D9DB Puzzle40_IfVarLeValue   | 40 v x w: if variable v <= x (x resolved), go to w.
+func 80:D9EA PuzzleGoto_D9EA         | A shared jump to Puzzle0A_Goto (35, 37).
+func 80:D9F0 ReadVarAndByte          | Reads a variable operand (X = its number, FB-FE resolved) and the next byte into AL.
+func 80:D9FC Puzzle41_RectField      | 41-54 r [b]: changes one field of rectangle register r: (op - 41) / 5 picks x1, y1, x2, y2 (table $80:DA4B), (op - 41) % 5 the change (table $80:DA53: = b, += b, -= b, + 1, - 1).
+table 80:DA53 RectFieldOps           | The five changes of commands 41-54: = b, += b, -= b, + 1, - 1 (pointer to the field in $5D).
+func 80:DA5D RectFieldSet            | 41/46/4B/50: field = the next script byte.
+func 80:DA63 RectFieldAdd            | 42/47/4C/51: field += the next script byte.
+func 80:DA6B RectFieldSub            | 43/48/4D/52: field -= the next script byte.
+func 80:DA76 RectFieldInc            | 44/49/4E/53: field + 1.
+func 80:DA7C RectFieldDec            | 45/4A/4F/54: field - 1.
+func 80:DA82 Puzzle55_RectFromPlaceRaw | 55 r p: rectangle register r (not resolved) = place p as x1, y1, x2, y2 (PlaceToRect). (never used by the game)
+func 80:DA98 Puzzle69_RectFromPlace  | 69 r p: rectangle register r = place p as x1, y1, x2, y2 (PlaceToRect).
+func 80:DAC9 Puzzle83_RectWidth      | 83 r b: rectangle register r: x2 = x1 + b.
+func 80:DAD7 Puzzle84_RectHeight     | 84 r b: rectangle register r: y2 = y1 + b.
+func 80:DAE5 ReadRectAndByte         | Reads a rectangle register operand (X = r - E0) and the next byte; carry clear.
+func 80:DAF2 Puzzle85_SetWarp        | 85 p b: warp destination: $05BD/$05BE = the cell of place p, $05BF = b, $7FD0BF = FF.
+func 80:DB11 Puzzle86_StartWarp      | 86: starts the warp set by 85 ($05B5 bit 80, $05B3 bit 08).
+func 80:DB1E Puzzle57_Nop            | 57: does nothing.
+func 80:DB21 Puzzle58_ScrollLayer    | 58 s dx dy a b: layer s scroll target $7FD0CE/$7FD0D6 + 2s += signed dx/dy, speeds a/b ($7FD0DE/$7FD0E6), and scroll mode on ($1261 bit 40).
+func 80:DB6A PuzzleB4_CameraOffset   | B4 dx dy b: camera target ($7FD08B/$7FD08D) = the scroll of layer $05AA + signed dx/dy, speed $05A8 = b, camera mode on ($1261 bit 08).
+func 80:DB9D PuzzleBE_ViewFromLeader | BE dx dy: moves the map view to the leader's tile + (dx, dy) ($83:8D42, $83:A21A) and turns camera mode on ($1261 bit 08).
+func 80:DBCA PuzzleB5_CameraRelease  | B5: camera back on the leader ($1261 bit 08 off).
+func 80:DBD2 SignExtendByte_DBD2     | Sets the high byte of A to FF when AL is negative (A was cleared before, so A = the signed byte).
+func 80:DBDD PuzzleB6_LeaderWalkThrough | B6: the leader walks through things: $0622 bit 02 on ($83:FA12).
+func 80:DBF5 PuzzleB7_LeaderSolid    | B7: the leader no longer walks through things: $0622 bit 02 off ($83:FA3F).
+func 80:DC0D Puzzle59_EndScroll      | 59: when scroll mode ($1261 bit 40) was on, turns it off and puts the scroll back on the leader (redraws the layers); else copies the current scroll of every layer into the scroll targets.
+func 80:DCAC Puzzle5A_PushObjectUp   | 5A o b: movable object o slides one cell up (facing 04) at speed b.
+func 80:DCB1 Puzzle5B_PushObjectDown | 5B o b: movable object o slides one cell down (facing 00) at speed b.
+func 80:DCB6 Puzzle5C_PushObjectLeft | 5C o b: movable object o slides one cell left (facing 02) at speed b.
+func 80:DCBB Puzzle5D_PushObjectRight | 5D o b: movable object o slides one cell right (facing 06) at speed b.
+func 80:DCC0 PushObjectCommand       | Shared part of 5A-5D: AL = facing to $23, the object to $7FD0BE, the speed to $22, then SlideObject.
+func 80:DCDA SlideObject             | Starts movable object $7FD0BE sliding one cell toward facing $23 at speed $22: when the way is free ($83:C079) it becomes an actor ($83:C108, slot kept in $7FD72C), walks, and the collision map bit 08 moves to the new cell. Also used when the party pushes a block.
+func 80:DD86 Puzzle68_WaitActor      | 68 o: waits (re-runs next frame) while actor slot o (resolved) is shown and an action runs ($0622 bit 80).
+func 80:DD8F Puzzle5F_WaitObject     | 5F o: waits while the actor that movable object o slides as ($7FD72C) is shown and moving.
+func 80:DDB5 Puzzle60_HideCharacter  | 60 a: hides character a + 4F ($0622 bit 04, $0736 bit 20; $8E:BB17).
+func 80:DDCC Puzzle61_ShowCharacter  | 61 a: shows character a + 4F again ($8E:BAF6).
+func 80:DDE3 Puzzle63_RestartRoomCheck | 63: starts the block's event 00 (the room check) as a new thread and ends this one.
+func 80:DDF2 Puzzle64_SlideBlockUp   | 64 p b s: a block drawn with tile copy b moves up from place p at speed s (an actor made of the tiles, action 4C; a rectangle register as p follows it).
+func 80:DDFA Puzzle65_SlideBlockDown | 65 p b s: as 64, moving down (action 4D).
+func 80:DE02 Puzzle66_SlideBlockLeft | 66 p b s: as 64, moving left (action 4E).
+func 80:DE0A Puzzle67_SlideBlockRight | 67 p b s: as 64, moving right (action 4F).
+func 80:DE11 Puzzle81_SlideBlock5C   | 81 p b s: a block drawn with tile copy b at place p, facing right, runs action 5C at speed s. (never used by the game)
+func 80:DE32 Puzzle8A_Actor5D        | 8A o: actor slot o (resolved) runs action 5D, then $83:F7D4. (never used by the game)
+func 80:DE52 Puzzle8B_HideActor      | 8B o: actor slot o (resolved): hidden ($0622 bit 04), no sprite ($05D2 = FF), its action stopped (bit 80 off); $83:FA12, $83:F7D4.
+func 80:DE8C SlideBlockCommand       | Shared part of 64-67: AL = direction, AH = facing; reads the place, tile copy and speed, makes the block actor and starts action 4C + direction.
+func 80:DEAA PuzzleA3_SlideBlockUpVar | A3 p o s t: as 64 with the tile copy o resolved (variables) and the actor's drawing flags $7FE316 = t.
+func 80:DEB1 PuzzleA4_SlideBlockDownVar | A4 p o s t: as A3, moving down.
+func 80:DEB8 PuzzleA5_SlideBlockLeftVar | A5 p o s t: as A3, moving left.
+func 80:DEBF PuzzleA6_SlideBlockRightVar | A6 p o s t: as A3, moving right.
+func 80:DEC4 SlideBlockVarCommand    | Shared part of A3-A5: reads the place and the resolved tile copy, then SlideBlockWithFlags.
+func 80:DED3 Puzzle7C_SlideBlockUpFlags | 7C p b s t: as 64 plus the block's drawing flags $7FE316 = t.
+func 80:DEDA Puzzle7D_SlideBlockDownFlags | 7D p b s t: as 65 plus drawing flags t.
+func 80:DEE1 Puzzle7E_SlideBlockLeftFlags | 7E p b s t: as 66 plus drawing flags t.
+func 80:DEE8 Puzzle7F_SlideBlockRightFlags | 7F p b s t: as 67 plus drawing flags t.
+func 80:DEEF Puzzle80_BlockAction5C  | 80 p b s t: a block drawn with tile copy b at place p (no direction) runs action 5C at speed s, drawing flags t.
+func 80:DF19 SlideBlockFlagsCommand  | Shared part of 7C-7F: reads the place, tile copy, speed and drawing flags and starts the slide.
+func 80:DF25 SlideBlockWithFlags     | Makes the block actor (MakeBlockActor), starts action 4C + direction and sets its drawing flags $7FE316 from the next byte.
+func 80:DF40 PuzzleB3_BlockF5EA      | B3 p b t: a block drawn with tile copy b at place p (no direction), drawing flags t, then $83:F5EA. (guess: a jump or teleport)
+func 80:DF69 PuzzleAF_ActorWalkUp    | AF p o s: actor slot o (resolved) walks up to place p at speed s (action 74, $0736 bit 10).
+func 80:DF70 PuzzleB0_ActorWalkDown  | B0 p o s: actor slot o walks down to place p (action 75).
+func 80:DF77 PuzzleB1_ActorWalkLeft  | B1 p o s: actor slot o walks left to place p (action 76).
+func 80:DF7E PuzzleB2_ActorWalkRight | B2 p o s: actor slot o walks right to place p (action 77).
+func 80:DF83 ActorWalkCommand        | Shared part of AF-B1: reads the place and actor, starts action 74 + direction, speed $7FE4DE.
+func 80:DFB5 MakeBlockActorWithSpeed | MakeBlockActor, then the next script byte is the actor's speed ($7FE4DE).
+func 80:DFC2 MakeBlockActor          | AL = tile copy: loads it ($83:8B40) and makes an actor of those tiles ($83:C108) at $9F/$A0, facing $23; variable BF ($7F:D133) = its slot.
+func 80:E004 ReadMoveTarget          | AL = direction, AH = facing (FF = none): reads a place (as a rectangle) into $8F/$91; with a direction, a rectangle register operand is moved one cell that way ($83:FB12).
+func 80:E038 Puzzle82_RectFromObject | 82 r o: rectangle register r = the 1x1 cell of movable object o (when present).
+func 80:E078 Puzzle5E_VarObjectAt    | 5E v p: variable v = the number of the movable object at place p ($83:FB9B), FF when none.
+func 80:E09D Puzzle20_IfAnyStillMoving | 20 [chars FF] w: the answer is true unless one of characters c + 4F has $0736 bit 20 clear; then if it is false, go to w. (guess: bit 20 = arrived)
+func 80:E0CD Puzzle12_IfLeaderNotOn  | 12 p w: if the leader is not on place p, go to w.
+func 80:E0D3 Puzzle6D_IfLeaderOn     | 6D p w: if the leader is on place p, go to w.
+func 80:E0DC TestLeaderOnPlace       | Reads a place and tests whether the leader is on it (a spot, an area or rectangle, or any member of a group); $7FD19A = FF when true.
+func 80:E105 Puzzle13_TestLeaderOn   | 13 p: is the leader on place p? The answer and whether it changed go to the thread result.
+func 80:E132 LeaderOnSpot            | $7FD19A = FF when the leader's tile ($06BA, $06E2) is the cell of spot place AL.
+func 80:E147 LeaderInArea            | $7FD19A = FF when the leader is inside place AL as a rectangle (LeaderInRect).
+func 80:E153 LeaderOnGroup           | Runs LeaderInRect on every member of group place $7FD19B (ForEachGroupMember with X = 0).
+func 80:E15A LeaderInRect            | PuzzleCalls slot 0: carry set when the leader's tile is inside place AL as a rectangle (x1 <= x < x2, y1 <= y < y2).
+func 80:E177 Puzzle17_TestObjectOn   | 17 p: is a movable object on place p (collision map bit 08)? The answer and whether it changed go to the thread result.
+func 80:E181 Puzzle18_IfNoObjectOn   | 18 p w: if no movable object is on place p, go to w.
+func 80:E18B Puzzle6F_IfObjectOn     | 6F p w: if a movable object is on place p, go to w.
+func 80:E198 Puzzle72_TestCharOn     | 72 p: does a character stand on place p (collision map bit 01)? Answer and change to the thread result. (never used by the game)
+func 80:E1A2 Puzzle73_IfNoCharOn     | 73 p w: if no character stands on place p, go to w. (never used by the game)
+func 80:E1AC Puzzle74_IfCharOn       | 74 p w: if a character stands on place p, go to w.
+func 80:E1B9 Puzzle75_TestHitId      | 75 b: the answer is true when $7FD0A1 bit 0 is set and $7FD0F4 == b (the last tool or attack hit). (guess)
+func 80:E1BF Puzzle76_IfNotHitId     | 76 b w: as 75; if false, go to w.
+func 80:E1C5 Puzzle77_IfHitId        | 77 b w: as 75; if true, go to w.
+func 80:E1CE TestHitId               | Shared test of 75-77: $7FD19A = 81 when $7FD0A1 bit 0 is set and $7FD0F4 == the next byte, else 01.
+func 80:E1EE Puzzle87_TestSameBlocks | 87 m p p: are the blocks at the two places the same (10-bit block numbers of $7F:0000) on a layer of mask m? Answer to the thread. (never used by the game)
+func 80:E1F4 Puzzle88_IfNotSameBlocks | 88 m p p w: as 87; if false, go to w.
+func 80:E1FA Puzzle89_IfSameBlocks   | 89 m p p w: as 87; if true, go to w. (never used by the game)
+func 80:E203 CompareBlocksAtPlaces   | Shared test of 87-89: compares the block numbers at two places on the layers of mask m ($7FD008 = each layer's offset); $7FD19A = FF when a layer matches.
+func 80:E277 Puzzle94_TestLooksLike  | 94 p b: do the blocks at place p look like tile copy b (its whole rectangle)? Answer to the thread. (never used by the game)
+func 80:E27D Puzzle95_IfNotLooksLike | 95 p b w: if the blocks at place p do not look like tile copy b, go to w.
+func 80:E283 Puzzle96_IfLooksLike    | 96 p b w: if the blocks at place p look like tile copy b, go to w.
+func 80:E28C CompareWithTileCopy     | Shared test of 94-96: compares the block rectangle at the place with the source of tile copy b on the layers of its mode (bits 01, 02); $7FD19A = FF when equal.
+func 80:E2ED CompareBlockRect        | Compares a $7FD04C x $7FD04D block rectangle at two map offsets on layer X; carry set and $7FD19A = 0 at the first difference.
+func 80:E340 PullY_E340              | The shared end of CompareBlockRect: pulls Y.
+func 80:E344 Puzzle15_TestAnyoneOn   | 15 p: does anyone or anything stand on place p (collision bits 09)? Answer and change to the thread result.
+func 80:E34E Puzzle16_IfNobodyOn     | 16 p w: if no one and nothing stands on place p, go to w.
+func 80:E358 Puzzle6E_IfSomebodyOn   | 6E p w: if someone or something stands on place p, go to w.
+func 80:E365 TestCollisionAtPlace    | Reads a place and tests the collision map $7E:4000 with mask $AE on it (a spot cell, every cell of an area or rectangle, or any member of a group); $7FD19A = FF when a bit is set.
+func 80:E37B TestCollisionAtSpot     | The spot case of TestCollisionAtPlace: $7FD19A = FF when the cell's collision byte has a bit of $AE.
+func 80:E395 TestCollisionInRectJump | A jump to TestCollisionInRect (used by 14).
+func 80:E399 TestCollisionOnGroup    | Runs TestCollisionInRect on every member of group place $7FD19B (ForEachGroupMember with X = 2).
+func 80:E3A0 Puzzle14_IfSwitchOnOrEmpty | 14 p w: if switch p is on, go to w; else if no one and nothing stands on place p, go to w.
+func 80:E3D9 StoreTestAndChange      | Ends a test command: result bit 7 = the answer ($7FD19A), bit 0 set when the answer differs from switch [tested place]; stores it and the tested operand (FB) in the thread, then runs the next command.
+func 80:E40C StoreTestResult         | Ends a test command: stores the answer ($7FD19A) and the tested operand (FB) in the thread, then runs the next command.
+func 80:E421 Puzzle29_KeepTestInSwitch | 29: switch [the place tested last] = the last test's answer.
+func 80:E458 TestCollisionInRect     | PuzzleCalls slot 1: tests every cell of place AL as a rectangle in the collision map with mask $AE; carry set and $7FD19A = FF when one has a bit set.
+func 80:E4A1 Puzzle28_DoorByTest     | 28 b: opens door b when the last test was true, else closes it.
+func 80:E4AF GotoIfFalse             | Stores the answer in the thread; if it is false (bit 7 clear), go to the target, else skip it.
+func 80:E4BA GotoIfTrue              | Stores the answer in the thread; if it is true (bit 7 set), go to the target, else skip it (the "if not" commands use the answer as it is, the "if" ones invert it first).
+func 80:E4C5 StoreTestFlags          | Stores the tested operand and the answer in the thread; N = the answer.
+func 80:E4D8 Puzzle1E_IfChanged      | 1E wA wB: if the last test did not change, go to wA; else if it changed to false, go to wB; else go on.
+func 80:E4EB Puzzle19_IfFalse        | 19 w: if the last test was false, go to w.
+func 80:E4F9 Puzzle2B_UnlessBecameFalse | 2B w: unless the last test just changed to false, go to w.
+func 80:E50B Puzzle1A_TakeExit       | 1A b: takes exit b of the map's exit list (map-info +06, 9 bytes; $83:B76E).
+func 80:E52A Puzzle1B_WritePpu       | 1B a b: writes b to PPU register $2100 + a. (never used by the game)
+func 80:E538 Puzzle1C_ScreenEffect   | 1C a b: screen effect 5 with a and b ($7FD07E-$7FD080, $1261 bit 04).
+func 80:E554 Puzzle1D_Call80B97E     | 1D: calls $80:B97E.
+func 80:E55B InvertTestResult        | Inverts the answer in $7FD19A (for the "if ... goto" commands that jump when the test is false).
+func 80:E566 ForEachGroupMember      | X = helper (PuzzleCalls slot 0 leader, 1 collision, 2 object kind): runs it on each member + 60 (an area) of object group $7FD19B - 80 (block category 0A) until one answers true ($7FD19A = FF).
+func 80:E722 StartPuzzleThread       | Starts a puzzle script: X = block category, Y = id * 2; takes a free thread (or thread 0 when all 8 run), state 81 (runs next frame), its FB = the id, anchor = $8F/$91. Nothing when the map has no block.
+func 80:E78D FindPuzzleScript        | Looks up (category X, id Y / 2) in the puzzle block: Y and the bank ($7FD197/$7FD199) at the script; carry set when not found.
+func 80:E7DF StartStepScript         | Starts the block's event 03 (the leader stepped on a tile of type 9) with the anchor at $8F/$91.
+func 80:E7FA StartSpotScript         | Finds the map-info record (list X, 3 bytes) at $8F/$91; if there is one, starts the puzzle script of category Y with that record's id, and sets $05B5 bits 14. Used for bomb, sword, arrow and hammer hits.
+func 80:E817 StartActionButtonScript | Finds an action spot (map-info list +20) on the cell the leader faces; if there is one, starts its category 02 script; carry set when started.
+func 80:E844 LoadPuzzleBlockPointers | For map $05AC: clears the call stack, the chest list pointer $7FD1A0 = $91:B8B5[map], the puzzle block $7FD194/$7FD196 from $8F:8000 + 3 * map (FFFFFF: none).
+func 80:E898 SwitchBit               | AL = switch number: X = its byte (n >> 3) and AL = its mask ($80:BE45[n & 7]) in PuzzleSwitches.
+func 80:E8AD ReadPuzzleWord          | Reads a u16 from the puzzle script (low byte first).
+func 80:E8B9 ReadPuzzleByte          | Next byte of the puzzle script (LDA $0000,Y / INY, DB = $7FD199; past $FFFF the next bank at $8000).
+func 80:E8D0 UnreadPuzzleByte        | Steps the puzzle script pointer back one byte (into the previous bank below $8000).
+func 80:E8E2 SavePuzzlePointer       | Stores Y and the data bank in $7FD197/$7FD199.
+func 80:E8F4 SetPuzzlePointer        | Y = A as an address in the puzzle block's bank ($7FD196); a 16-bit sum below $8000 is moved into the next bank.
+func 80:E912 FindSpot                | AL = spot id: finds it in the map-info list +22 (3 bytes: id, x, y); X = its offset, or the list's first record when it is missing.
+func 80:E92A PlaceToRect             | AL = place: its rectangle in $9F-$A2 (x1, y1, x2, y2; end not included): FB the anchor cell, E0-FF a rectangle register, 60-DF area p-60 of map-info list +24 (carry set when missing), below 60 spot p-20 (x1, y1 only).
+func 80:E99D FindFreeThread          | X = the first free puzzle thread (state bit 7 clear) of 8, or 0 when all run.
+func 80:E9B0 ResolveDoor             | A door operand: C0-FA give door n-C0; FB-FE take the thread's value (minus C0 when C0-DF).
+func 80:E9BC ResolveThreadValue      | Operands FB-FE are replaced by the thread's value (FB the tested operand, FC-FE the parameters: $7FD15C + 8 * (n - FB) + thread); a value C0-DF has C0 taken off.
+func 80:E9ED ResolveValue            | As ResolveThreadValue (except FB), then A0-BF are replaced by that variable's value ($7FD074 + n).
+func 80:EA09 PlaceToCell             | AL = place: AL = x, AH = y: FB the anchor, E0-FA a rectangle register's x1, y1, else spot p-20 (map-info list +22). FC-FE are resolved first.
+func 80:EA47 SaveThreadSlot          | Keeps the current thread ($A7) in $7FD2A3 while a command works on an actor.
+func 80:EA50 RestoreThreadSlot       | Puts the thread number back in $A7 from $7FD2A3 ($83:AB4F).
+func 80:EA5B SetUpPuzzleRoom         | On loading a map: clears the thread data and the 0x30 movable objects, adds the objects of map-info list +28 (kind = $83:FB51 of their block), starts the block's event 02 (the set-up) and runs the threads once.
+func 80:EBAA ReadMapLayers           | Reads the layer headers of an unpacked map at $5D in $7F: a count, then per layer its header pointer ($7FD000), a word ($7FD020), width ($7FD010), height ($7FD018) and data start ($7FD008); $7FD038 counts the layers.
+func 80:EC18 SaveBlockBits3000       | Packs bits 3000 of every block word of layer $05AA into $7F:C000 (4 blocks a byte).
+func 80:EC78 SetMapSize              | $05B9/$05BB = the width and height of layer $05AA.
+func 80:EC98 LoadBlockSet            | A = packed file: unpacks the block set after the map ($7FD03A start, $7FD03C = the blocks at +10, $7FD03E = the attribute bytes); with $29 set, also the parallax tilemap file 0x166 + ($29 & F) ($7FD040).
+func 80:ECF2 AdvanceUnpackEnd        | $2D += $58: moves the free pointer after the last file Decompress unpacked into $7F.
+func 80:ECFE BlockSetOffset          | A = offset in the block set header: A = the u16 there + the block set start ($7FD03A).
+func 80:ED0E RestoreBlockBits3000    | Puts back bits 3000 of every block word of layer $05AA from $7F:C000 (as SaveBlockBits3000 saved them).
+func 80:ED9C BuildCollisionMap       | AL = layer: fills the collision map $7E:4000 (a byte per cell) from the blocks' attributes (high nibble set 08 movable object, 08 -> 02, 09 -> 80) and their wall bits (0C of the high byte, as 30); then marks the actors (01), the treasure spots of list +26 (01), the arrow spots of list +1E (04) and the movable objects (08, 40 above a two-high one).
+func 80:EEEB MarkSpotsInCollision    | X = map-info list offset: sets bit 04 in the collision map at every record's cell (3-byte records; used with list +1E).
+func 80:EF2F MarkActorsInCollision   | Sets bit 01 in the collision map on the cell of every shown, solid actor ($0622 bits 06 clear); a wide one ($7FE216 >= 2, sprite not 71-73) also marks the cell to its right.
+func 80:F2F3 SetColorMath            | From the unpacked map's header bytes 1-5: TM, TS, CGWSEL, CGADSUB and COLDATA; without them the defaults (TM = 1F, no colour math).
+func 80:F338 LoadMapPalette          | Copies the map's colour set from bank $9B ($7FD0F8) to the palette buffer at $0320 + $7FD0FA ($7FD0FA - $FF bytes, MVN).
+func 80:F35B CopyBlockTiles          | Copies the four 8x8 tiles of a block (tile set at $7E:4000) to the places the table $80:F42A gives, flipping them as the block's tile words say (a sprite made of map blocks).
+func 80:F3F1 FlipTileWordBits        | Reverses the bits of both bytes of A (a 4bpp row pair flipped left to right).
+func 80:F40A ReverseByteBits         | AL = AL with its 8 bits in reverse order.
+func 80:F47A DrawLayerScreen         | X = layer * 2: draws the visible part (16 block rows) of that layer from the map into its tilemap buffer, from the layer's scroll ($121E/$1226); nothing when the layer is unused ($7FD020 = FF).
+func 80:F4E7 PullRegisters_F4E7      | The shared end of DrawLayerScreen: pulls the saved registers.
+func 80:F4FD DrawLayerColumnRight    | Scrolling: draws the block column entering on the right of layer $5D into the column buffer and queues it ($1236/$1246).
+func 80:F518 DrawLayerColumnLeft     | Scrolling: draws the block column entering on the left of layer $5D and queues it.
+func 80:F589 DrawLayerRowTop         | Scrolling: draws the block row entering at the top of layer $5D and queues it ($122E/$123E).
+func 80:F5A2 DrawLayerRowBottom      | Scrolling: draws the block row entering at the bottom of layer $5D and queues it.
+func 80:F5ED DrawBlockColumn         | Draws 16 blocks down a map column into the tilemap buffer (the map wraps at its size); a block word with bits 3000 both set shows layer 0's block. (guess)
+func 80:F64E DrawBlockRow            | Draws A blocks along a map row into the tilemap buffer (wrapping like DrawBlockColumn).
+func 80:F6AA WrappedMapOffset        | X = the map word offset of column $87, row $89 (row * width + column) of the layer at $8D.
+func 80:F6C6 DrawScreenRow           | Draws one row of 16 blocks into the tilemap buffer for DrawLayerScreen.
+func 80:F734 SetUpLayerDraw          | A = x, Y = y in pixels, X = layer * 2: works out the wrapped map column and row, the buffer position ($2D) and map offset ($30), the block set ($7FD03C, or $7FD040 for the parallax layers 4 and up) for the draw routines.
+func 80:F81C WaitForDivide           | A delay (LDA $00) while the hardware divider works.
+func 80:F821 MarkLeaderRoom          | Puts back bits 3000 (RestoreBlockBits3000), then from the leader's tile follows the edges marked in bits 3000 of the map's block words and marks the room the leader is in, so it is drawn as seen from inside. (guess)
+func 80:FA12 PullDbAndFlags_FA12     | The shared end of MarkLeaderRoom: pulls the data bank and flags.
+func 80:FAC3 MarkRoomColumn          | Part of MarkLeaderRoom: sets bits 3000 on a run of block words down a column and its neighbours. (guess)
+func 80:FBCE ClearRoomBits           | Puts back bits 3000, clears them of every block word of layer 0 and redraws the screen with the display off ($83:8E4C). (guess)
+func 80:C431 DrawTextBoxFrame_C431   | A branch target inside DrawTextBoxFrame (the frame drawing after the box is placed); the analysis reached it with other register sizes, so this copy is mis-decoded.
+func 8E:B000 ReloadMapAndResume      | Fades out, reloads the current map ($83:85DC), starts the puzzle block's event 11 and runs it, fades in; then by $09C9 (1-3) starts a map change ($05B5 bits 80/88). (guess)
+func 8E:B09C CenterViewOnLeader      | Scroll target $05A4/$05A6 = the pixel position of actor $0734 - (80, 70), and centres the map view on its tile ($83:8D42).
+func 8E:B142 TakeButtonPress46_8E    | As TakeButtonPress46 ($80:C81E): clears the buttons of AL from the latch $4A when held in $46; Z clear when they were latched. (guess)
+func 8E:B149 TakeButtonPress47_8E    | As TakeButtonPress47 ($80:C817), for $47/$4B. (guess)
+func 8E:B28F RefreshRoom             | Marks the leader's room (MarkLeaderRoom), starts and runs the puzzle block's event 0A, redraws layers 0 and 1, rebuilds the collision map with the screen off. (guess)
+func 8E:B2EE StaffCredits            | The staff credits: unpacks file 0x40 (the font) to VRAM, then scrolls the text at $91:9AFF up the screen (codes: 00 end, 01 a centred name, 02 n wait n lines, 03 a picture, 04 fade, 05 a title line) and fades out.
+func 8E:B4FC CreditLineLength        | $58 = the length of the credits text line at $91:9AFF + X (up to its 00).
+func 8E:B50F DrawCreditLine          | Writes a credits text line into the BG map buffer at $7E:2000 + Y, two tiles a letter (table $8E:B59B), and waits 2 lines.
+func 8E:B534 DrawCreditPicture       | Writes 8 tile pairs (A, A + 10) of a credits picture into the BG map buffer.
+func 8E:B550 WaitForFrame_8E         | Waits until the frame counter $40 changes.
+func 8E:B557 DmaCreditsTiles         | DMA from $7E:6000 to VRAM address X, Y bytes.
+func 8E:B578 ClearNextCreditRow      | Moves the credits write position one row on ($60, wrapping at $1000) and clears that row of the BG map buffer.
+func 8E:B5FB MakeTextWithName        | Builds a message at $7E:E000: the text at $85:[$60] (up to 00) and then the 12-letter name at X with its trailing spaces cut ("Found " + item name).
+func 8E:B63B TryLockedDoor           | When the leader walks into a door (map-info list +02, 15 bytes, two door rectangles): looks the door up in the event block's key table (+2 id 03); with the key item, uses it (UseDoorKey); without it, shows "It's locked" ($85:8007); a door with no key opens ($83:F559). Carry set when a door was there.
+func 8E:B760 UseDoorKey              | Removes the key from the bag ($81:F1C5), shows "Used " + its name for 0x3C frames (or until a button) and opens door $7FD04E ($83:F559).
+func 8E:B7CD ReadScriptByte_8E       | Next byte of the event script (as ReadScriptByte: bank $09B9, next bank past $FFFF).
+func 8E:B7E2 CountUnopenedTreasure   | AL = how many treasures of the maps in the current map's group ($94:C998 group per map) are not opened yet (their bits in $093B).
+func 8E:B847 BuildCaveMapInfo        | Ancient Cave: makes the floor's map-info lists in $7E:F000 from the generated floor at $7FE6xx: an exit (F200), the doors (F400), the character starts (F600) and the treasure (F800).
+func 8E:B993 LoadFieldStateFromSave  | Loading a game (LoadSaveSlot): copies the field state from the save buffer ($7E:3812..) back: story flags and counters ($077E, 0x22C bytes), actors ($05D2, 0x164), door states ($7FD095), $09DF, the puzzle switches, the warp ($05BD-$05BF), the map and layer.
+func 8E:BA0D StoreFieldStateInSave   | Saving a game (SaveToSlot): copies the field state (story flags $077E.., actors, door states, $09DF, puzzle switches, warp, map, layer) into the save buffer at $7E:3812.
+func 8E:BA81 ResetFieldState         | Clears the field state for a new map: the puzzle threads, $7FD04F-$7FD05E, $7FD081-$7FD084, text and window state; layer $05AA = 2.
+func 8E:BAE7 SetActorWalkMode        | Actor X: $7FE3C6 = 2 and $0736 bit 10.
+func 8E:BAF6 ShowActor               | Shows actor $A7 again (clears $0622 bit 04); one hidden with HideActor ($0736 bit 20) is set up again ($81:8351 with its id - 50).
+func 8E:BB17 HideActor               | Hides actor $A7: $0622 bit 04, $0736 bit 20 and $83:FA12.
+func 8E:BB2E DebugCycleLeaderSprite  | With the buttons of $48 bit 20 / 10 pressed, steps the leader's sprite number ($02, 0-F9) down or up and makes the leader again with it. (guess: a debug feature)
+func 8E:BBA8 TakeButtonPress48       | As TakeButtonPress46, for $48/$4C.
+func 8E:BBAF TryWarpTile             | When the leader and the cell ahead are both of block attribute 6: with $7FD0FE = 0 and the saved spot ($089D/$08DD/$085D) here, runs script $49 (B404); else saves this spot and a marker actor (sprite FD) and runs script $48. Carry set when it did. (guess)
+func 8E:BC99 FindHiddenPartySlot     | $A7 = the last of actor slots 7..1 that is hidden ($0622 bit 04), else 0.
+func 8E:BCAD HideDragonEggs          | Event command AD: picks 8 random opened treasures of the whole game ($91:B8B5, not flagged 20), keeps them in $092B as the Dragon egg chests, closes them again and takes the eggs (item 2B) out of the bag.
+func 8E:BD5E PickNthTreasure         | Counts down $02 over the not yet picked entries of the treasure list at $7E:D000; X = the one reached, carry set when found.
+func 8E:BD77 UpdateLayerScroll       | Each frame: the scroll target is the camera ($1261 bit 08, $7FD08B/$7FD08D) or actor $0734 - (80, 70); every used layer scrolls by its mode (table $8E:BE6E) and the block columns and rows that come into view are drawn.
+table 8E:BE6E LayerScrollModes       | How a layer scrolls, by the low bits of its mode byte ($7FD020): 0 follow, 1 fixed, 2 slower (parallax), 3 constant drift, 4 faster.
+func 8E:BE78 ScrollFollow            | Scroll mode 0: moves the layer toward the target ($05A4/$05A6) at speed $05A8 (0 = at once), or toward the puzzle scroll targets when $1261 bit 40 is set.
+func 8E:BF24 ScrollFixed             | Scroll mode 1: the layer does not move.
+func 8E:BF25 ScrollParallaxSlow      | Scroll mode 2: the layer follows the target divided by 2^n (n from the mode's high and low nibbles, table $8E:BF93).
+func 8E:BF70 ShiftRightN             | A >>= $4E (with the carry), carry set when $4E is negative.
+func 8E:BF88 ReadParallaxShift       | $4E = $8E:BF93[AL], Z set when 0.
+func 8E:BF9B ScrollParallaxFast      | Scroll mode 4: the layer follows the target multiplied by 2^n.
+func 8E:BFDE ShiftLeftN              | A <<= $4E.
+func 8E:BFEE ScrollDrift             | Scroll mode 3: the layer drifts by a constant speed per frame ($8E:C04D by the mode's nibbles), wrapping at the layer's size.
+func 8E:C05F OpenTreasure            | The leader faces a treasure spot (map-info list +26): gives its item if its opened flag ($093B) is clear (a Dragon egg chest of $092B gives item 2B), sets the flag and counts it ($0B5F); in the Ancient Cave the floor's chests ($7FE746, opened bits $7FE733; counts $0B6E/$0B70). Carry set when there was a treasure.
+func 8E:C1C5 CountDragonEgg          | When the item A is 2B (Dragon egg), adds one to $0B61 and sets carry.
+func 8E:C1DE GiveTreasure            | Opens chest $7FD4EE ($83:F559), gives item $7FD4EF/$7FD4F0 (bit 7: gold or no item, $81:F414), shows "Found " + the name with its sound, holds the party 0xC8 frames, then puts back a chest whose item did not fit.
+func 8E:C338 ReadChestFlag           | X = chest record of $91:B8B5: $7FD4F1 = its opened flag number, $7FD4F2 = 1 when it is flag + 100.
+func 8E:C34F ChestFlagBit            | X and AL = the byte and mask of chest flag $7FD4F1 (+ 100 when $7FD4F2) in $093B.
+func 8E:C36D ReadChestItem           | X = chest record: A = its item (bit 40 of the first byte = item + 100).
+func 8E:E6EA ClearTable7FFABA        | Clears $09D1, $09D3 and the 0x90 bytes at $7F:FABA. (meaning unknown)
+func 8E:E700 ClearTable7FFB4A        | Clears the 0x48 bytes at $7F:FB4A. (meaning unknown)
+func 8E:E710 StoreSlotRecord         | Copies 6 + 6 bytes ($14D9, $14EB) and three words ($150F, $14B5, $14AF) into record Y of slot $09D3 (table $8E:E5D7, bank $7F). (meaning unknown)
+func 8E:E751 LoadSlotRecord          | When slot $09D3 changed: clears $14D9.. and, with $0B76 set, loads them from record Y of that slot (StoreSlotRecord's layout). (meaning unknown)
+func 8E:E688 ClearBgBuffers           | Clears the BG map buffers $7E:2000-$7E:27FF and $7E:3000-$7E:37FF.
+# ---- RAM: puzzle interpreter (bank $7F, docs/lufia2/scripts3.md)
+ram 7F:D18C 8 PuzzleThreadState       | Per puzzle thread: bit 7 running, low bits the frames left to wait (0 = free).
+ram 7F:D134 24 PuzzleThreadPtr        | Per puzzle thread (3 bytes each): where it goes on (u16 address, bank).
+ram 7F:D14C 8 PuzzleThreadResult      | Per thread: the last test, bit 7 true, bit 0 changed (differs from the switch of the tested place).
+ram 7F:D154 8 PuzzleThreadKind        | Per thread: the block category it was started from (7F for spawned and called threads).
+ram 7F:D15C 32 PuzzleThreadValues     | Per thread the values FB-FE, 8 bytes apart: FB = the last tested operand (the id when started), FC-FE = parameters.
+ram 7F:D17C 8 PuzzleAnchorX           | Per thread: x of the spot that set it off (place FB).
+ram 7F:D184 8 PuzzleAnchorY           | Per thread: y of the spot that set it off.
+ram 7F:D194 3 PuzzleBlockPtr          | The map's puzzle block ($8F:8000 + 3 * map): u16 address and bank (FF = none).
+ram 7F:D197 3 PuzzleScriptPtr         | The puzzle script being looked up or run: u16 address and bank.
+ram 7F:D19A 1 PuzzleAnswer            | The answer of the test being worked out (bit 7 true, bit 0 changed).
+ram 7F:D19B 1 PuzzleTestedPlace       | The place (or switch) the current test is about; kept as the thread's FB.
+ram 7F:D19C 4 PuzzleCallerValues      | The calling thread's FB-FE while a spawn or call reads its parameter list.
+ram 7F:D1A0 2 ChestListPtr            | The map's chest list: offset from $91:B8B5 (the u16 at $91:B8B5 + 2 * map).
+ram 7F:D1A3 32 PuzzleRectX1           | Rectangle registers E0-FF: x1.
+ram 7F:D1E3 32 PuzzleRectY1           | Rectangle registers E0-FF: y1.
+ram 7F:D223 32 PuzzleRectX2           | Rectangle registers E0-FF: x2 (not included).
+ram 7F:D263 32 PuzzleRectY2           | Rectangle registers E0-FF: y2 (not included).
+ram 7F:D2A3 1 SavedThreadSlot         | The puzzle thread number while a command works on an actor (SaveThreadSlot).
+ram 7F:D466 128 PuzzleCallStack       | Frames of puzzle calls (A9/AA), 10 bytes: thread | depth << 4, return address (3), the caller's FB-FE, the tested place, the result.
+ram 7F:D4E6 8 PuzzleCallDepth         | Per thread: how many calls (A9) are open.
+ram 7F:D69C 48 ObjectX                | Movable objects (0x30): x cell (FF = none).
+ram 7F:D6CC 48 ObjectY                | Movable objects: y cell.
+ram 7F:D6FC 48 ObjectKind             | Movable objects: kind = their tile copy number + 10 ($83:FB51 for the map's own).
+ram 7F:D72C 48 ObjectActor            | Movable objects: the actor slot one slides as.
+ram 7F:D75C 48 ObjectFlags            | Movable objects: bit 7 present, bit 0 marked inside a tile copy being drawn.
+ram 7F:D046 2 TileCopyDest            | Tile copy: destination x, y.
+ram 7F:D048 1 TileCopyId              | Tile copy: the record number (map-info list +16).
+ram 7F:D04A 2 TileCopySource          | Tile copy: source x, y.
+ram 7F:D04C 2 TileCopySize            | Tile copy: width, height.
+ram 7F:D04E 1 CurrentDoor             | The door (or chest) a command or the key check works on.
+ram 7F:D05F 1 TileCopyMode            | Tile copy: its layers byte (bits 01/02 layers, 10/20 and the like what is copied; also ORed into the redraw requests).
+ram 7F:D0BE 1 PushedObject            | The movable object being pushed (5A-5D, SlideObject).
+ram 7F:D0C1 1 MapNameBoxTimer         | Frames the map-name box stays up (FF = none).
+ram 7F:D0C4 2 LastMapNamePtr          | The name pointer ($87:8016 + map * 8) of the last map whose name was shown.
+ram 7F:E696 1 CaveFloor               | Ancient Cave: the floor number + 1 ("Ancient Dungeon B" n - 1). (guess)
+# ---- RAM: map, layers, scroll
+ram 7F:D000 8 LayerHeaderPtr          | Per map layer (4, u16): its header in the unpacked map at $7F:0000.
+ram 7F:D008 8 LayerData               | Per map layer: offset of its block words in $7F.
+ram 7F:D010 8 LayerWidth              | Per map layer: width in blocks (u16, high byte 0).
+ram 7F:D018 8 LayerHeight             | Per map layer: height in blocks.
+ram 7F:D020 8 LayerMode               | Per map layer: the word from its header; low byte = scroll mode (table $8E:BE6E), FF = unused; high byte = parallax shifts or speeds.
+ram 7F:D038 2 LayerCount2             | Number of map layers * 2.
+ram 7F:D03A 2 BlockSetStart           | Where the block set was unpacked in $7F.
+ram 7F:D03C 2 BlockSetBlocks          | The block set's blocks (start + 10, 8 bytes a block).
+ram 7F:D03E 2 BlockAttributes         | The block set's attribute bytes (one per block).
+ram 7F:D040 2 ParallaxBlocks          | The parallax tilemap's blocks (layers 4 and up).
+ram 7F:D08B 2 CameraTargetX           | Puzzle camera (B4): scroll target x.
+ram 7F:D08D 2 CameraTargetY           | Puzzle camera (B4): scroll target y.
+ram 7F:D0CE 8 LayerScrollGoalX        | Per layer: the scroll goal x of puzzle command 58.
+ram 7F:D0D6 8 LayerScrollGoalY        | Per layer: the scroll goal y of command 58.
+ram 7F:D0DE 8 LayerScrollSpeedX       | Per layer: the x speed of command 58.
+ram 7F:D0E6 8 LayerScrollSpeedY       | Per layer: the y speed of command 58.
+ram 7E:05AA 2 CurrentLayer            | The map layer the party walks on (its collision and size are used).
+ram 7E:05B9 2 MapWidth                | Width in blocks of the current layer.
+ram 7E:05BB 2 MapHeight               | Height in blocks of the current layer.
+ram 7E:05A4 2 ScrollTargetX           | The scroll the layers move to (the leader - 80, or the camera target).
+ram 7E:05A6 2 ScrollTargetY           | The scroll the layers move to (the leader - 70).
+ram 7E:05A8 2 ScrollSpeed             | How fast the layers move to the target (0 = at once).
+ram 7E:121E 8 LayerScrollX            | Per layer: scroll x in pixels.
+ram 7E:1226 8 LayerScrollY            | Per layer: scroll y in pixels.
+ram 7E:1261 1 ScrollFlags             | 04 screen effect (1C), 08 camera target (B4/BE), 40 puzzle layer scroll (58).
+ram 7E:1273 1 RedrawRequests          | Layers to send to VRAM this frame (tile copy modes ORed in; ApplyRedrawFlags).
+ram 7E:0734 1 ViewActor               | The actor the screen follows.
+ram 7E:05BD 3 WarpTarget              | Where a warp goes: x, y and a kind or facing (puzzle 85).
+# ---- RAM: actors and work registers
+ram 7E:05FA 40 ActorId                | Per actor slot (0x28): its id (0-6 heroes, 10-4F story characters, 50+ map characters).
+ram 7E:05D2 40 ActorSprite            | Per actor slot: sprite (FF = none).
+ram 7E:0622 40 ActorFlags             | Per actor slot: 01 held by the event, 02 walks through things, 04 hidden, 08 walking a path, 80 an action runs.
+ram 7E:06BA 40 ActorTileX             | Per actor slot: x cell.
+ram 7E:06E2 40 ActorTileY             | Per actor slot: y cell.
+ram 7E:00A7 2 CurrentSlot             | The slot being worked on: the puzzle thread in the interpreter, an actor in the actor code ($83:AB4F sets $A9 = 2x, $AB = 3x).
+ram 7E:00A9 2 CurrentSlotX2           | CurrentSlot * 2.
+ram 7E:00AB 2 CurrentSlotX3           | CurrentSlot * 3.
+ram 7E:008F 2 WorkCellX               | A cell x being worked on (puzzle places, collision lookups).
+ram 7E:0091 2 WorkCellY               | A cell y being worked on.
+ram 7E:009F 4 WorkRect                | A place as a rectangle: x1, y1, x2, y2 (PlaceToRect).
+ram 7E:00AE 1 PuzzleTestMask          | Collision bits a test looks for (01 character, 08 object, 09 either), or the object kind (04/05/70), or the 0E flag.
+ram 7E:0040 1 FrameCounter            | Counts frames (WaitForFrame_8E waits for it to change).
+# ---- RAM: text, treasure
+ram 7E:09AB 1 TextSpeaker             | The actor the text box goes over (FF = none; events.md).
+ram 7E:09AD 1 TextColour              | The text colour (index of $80:C7BE / $80:C815).
+ram 7E:09AF 2 GlyphCode               | The letter being drawn (DrawGlyph).
+ram 7E:09B1 2 GlyphWritePtr           | Where the next letter goes in the text buffer $7E:D000.
+ram 7E:125B 1 TextBoxWidth            | Width of the measured text (letters of its longest line).
+ram 7E:125C 1 TextBoxLines            | Lines of the measured text.
+ram 7E:125D 2 TextBoxFixedPos         | A fixed place for the next box (0 = over the speaker; command 48, the map name).
+ram 7E:093B 64 ChestOpenedFlags       | Opened flags of the treasures (512 bits; maps.md).
+ram 7E:092B 16 DragonEggChests        | The 8 treasures that hold a Dragon egg after event AD (their flag words).
+ram 7E:0B5F 2 TreasuresOpened         | Counts the treasures opened.
+ram 7E:0B61 2 DragonEggCount          | Counts the Dragon eggs found.
+# ---- notes
+note 80:E58B | JSR ($E59E,X) runs the member test; BCC loops to the next member, a true answer ends with $7FD19A = FF
+note 80:CC35 | the puzzle interpreter: one command per jump; handlers end by jumping back here or by returning (wait or end)
+func 8E:E5EF ReportScreenLoop        | The "LUFIA 2 REPORT" screen: loads the hero sprites and palettes, shows pages 1-3 ($DF) one after another, each until a button (WaitForButtons); the cancel button leaves, after page 3 it starts again at page 1.
+func 8E:E642 DrawReportPage          | Draws report page $DF ("LUFIA 2 REPORT n/3": play time, stays, battles, each hero's defeats...) from the text at $8E:D623, with $00-$15 pointing at the 7 hero records ($0BAD + n * 0xBE), then fades in.
+func 8E:E6A7 SetUpReportSprites      | Puts the 7 hero sprites of the report screen in place: menu sprite scripts ($86:8CDA) at the x, y pairs of $8E:D903.

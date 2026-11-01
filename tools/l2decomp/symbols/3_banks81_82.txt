@@ -1,0 +1,1017 @@
+# Banks $81 and $82: names from reading the decompiled code (tools/l2decomp) and docs/lufia2.
+# Bank $81: battle engine (start, animations, actions, monster AI glue, rewards), item/spell/character helpers.
+# Bank $82: menus (cursor, windows, lists, item/spell/equip/status/shop/capsule screens).
+
+# ======================================================================= bank $82: menu building blocks
+func 82:8044 QueueVramDma           | Sends a block to VRAM through the NMI queue: source $5D-$5F, VRAM word address $60, size $58 (sets $75 = 41, waits a frame).
+func 82:8069 FillMenuBackground     | Fills the 32x32 map at $7E:2800 with 4x4-tile blocks starting at tile $0C10 + $155E and asks for its upload (guess: the menu's patterned backdrop).
+func 82:80A5 DrawTileBlock4x4       | Writes one 4x4 block of consecutive tile numbers (A = first) into the $7E:2800 map at offset $54.
+func 82:80CA SetRectPalette         | Changes the palette bits of a rectangle of the $7E:2800 map: A = map offset, X = width (high) / height (low), Y = palette.
+func 82:810E DrawWindowFrame        | Draws a menu window into the $7E:2000 map: A = map offset, X = width (high byte) / height (low byte); inside filled with tile $080F, edges and corners from $82:827E.
+func 82:81E6 DrawWindowTopEdge      | DrawWindowFrame helper: a horizontal edge (width - 4 tiles, two alternating tiles of piece Y).
+func 82:820B DrawWindowCorner       | DrawWindowFrame helper: a 2x2 corner piece (piece Y of $82:827E).
+func 82:8230 DrawWindowSideEdge     | DrawWindowFrame helper: a vertical edge (height - 4 rows, piece Y).
+func 82:8259 DrawWindowShortCap     | DrawWindowFrame helper for windows 3 rows high: a 2x3 end piece (piece Y).
+func 82:82E2 DrawHorizontalBar      | Draws a one-row bar of X tiles into the $7E:2000 map at offset A (end tiles and alternating middle tiles from $82:82DA).
+func 82:831A FillRectTileRun        | Fills a rectangle of the $7E:2000 map with consecutive tile numbers: A = map offset, X = width (high) / height (low), Y = first tile.
+func 82:8345 SaveMenuMaps           | Copies the window map $7E:2000 and the text map $7E:3000 to $7E:83C0 / $7E:8BC0 (to put them back after a sub-screen).
+func 82:836A RestoreMenuMaps        | Copies the maps saved by SaveMenuMaps back to $7E:2000 and $7E:3000.
+func 82:838F ClearMenuMaps          | Clears the window map $7E:2000 and the text map $7E:3000, asks for both uploads and waits a frame.
+func 82:83B5 ClearMenuRect          | Clears a rectangle of both menu maps: A = map offset, X = width (high) / height (low).
+func 82:83EB ClearTextRect          | Clears a rectangle of the text map $7E:3000 only: A = map offset, X = width (high) / height (low).
+func 82:841E SetItemTextColour      | Picks the text colour for item $0A06 in a list ($0564: 20 white, 24 grey = can't be used here, 28 = can't be dropped), by the menu mode $153E and the item's use flags ($81:F194); items 29, 2A, 2D check the map mode $09A7.
+func 82:8483 SetSpellTextColour     | Picks the text colour for spell $0A0B ($0564: 20 usable, 24 grey): grey when it can't be cast on the field or costs more MP than $151D; spells 24-26 check the map mode $09A7.
+func 82:84D5 DrawInventoryRows      | Draws $15 rows of the inventory list ($0A8D, from slot $0000) at map offset $11: each row's item name and count, coloured by SetItemTextColour.
+func 82:84F7 DrawInventoryRow       | DrawInventoryRows helper: one inventory slot X (name with text $8E:C9B1, count with $8E:C9B7).
+func 82:8526 DrawSpellRows          | Draws $15 rows of a two-column spell list (bytes at [$2A] from index $0000, FF = empty) at map offset $11.
+func 82:854F DrawSpellEntry         | DrawSpellRows helper: one spell name (text $8E:CA0C / $8E:CA34), coloured by SetSpellTextColour.
+func 82:8579 DrawItemIndexRows      | Draws $15 rows of items picked out of the inventory by a list of slot offsets at [$FC] (FFFF = end), with colours from $7E:9CF0.
+func 82:859B DrawItemIndexRow       | DrawItemIndexRows helper: one row.
+func 82:85D2 DrawShopItemRows       | Draws $15 rows of a shop's item list ([$FC], 0 = end): name and price (price through ShopPrice; $154C = 1 also runs $82:98C7).
+func 82:8636 DrawShopSpellRows      | Draws $15 rows of a spell shop's list (bytes at [$FC], FF = end): name and price ($0B87 through ShopPrice).
+func 82:8680 DrawTextListRows       | Draws $15 rows of a list of texts in bank $8E (pointers at $7E:943C, FFFF = end) with text $8E:D062, in white.
+func 82:86C4 DrawEquipRows          | Draws $15 rows of a list whose entries come from $82:FC3F (an item per row, skipped when it returns C set) with text $8E:C9B1 (guess: the equipment choices).
+func 82:86E5 DrawEquipRow           | DrawEquipRows helper: one row.
+func 82:8704 ResetMenuSprites       | Clears the held buttons ($4A/$4C = FFFF) and the sprite buffer, asks for map uploads and fades the screen in ($86:8B1C) (guess).
+func 82:8720 CursorInput            | Moves cursor X (0-5) by the buttons in $14AB/$14AC: returns C clear and AL = 1 moved, 2 A, 3 B, 4 X, 5 Y, 6 L, 7 R, 8 Start, 9 Select; C set when nothing was pressed.
+func 82:88A0 CursorIndex            | $14B3 = row x columns + column of cursor X.
+func 82:88CB CursorPlace            | Puts cursor X's sprite where its column and row say (origin + column x step, origin + row x step).
+func 82:891E CursorLoadLayout       | Loads cursor X's layout from the 7-byte record at $A6:F518 + Y (origin x/y, columns, rows, step x/y, flags) and places it.
+func 82:895B SetObjShape            | Shows menu sprite X with shape A (1-based, through the table $82:897D).
+func 82:898D ClampPartyCursor       | Puts cursor X back on the first entry if it points past the party ($0A7A members, two per row).
+func 82:89A4 HideCursorSprites      | Turns off menu sprites 5-15 and resets their animation sets.
+func 82:89BC ShowObjAlone           | Hides menu sprite X, then shows sprite Y with shape A.
+func 82:89C4 OpenCursor             | Shows the cursor sprite pair ($58 = X, $5A = Y; shapes $56/$57) and loads the cursor's layout from record $54 (guess).
+func 82:89EC OpenCursorSliding      | OpenCursor, then slides the new cursor in from the previous one.
+func 82:89FA SlideObj               | Animates menu sprite Y (AL != 0) or X from the other sprite's place to its own, a line step at a time (a frame every 16 steps).
+func 82:8AD8 SlideObjStepX          | SlideObj helper: one step across.
+func 82:8AE9 SlideObjStepY          | SlideObj helper: one step down.
+func 82:8AFA SlideObjMaybeWait      | SlideObj helper: counts steps and runs a menu frame every 16.
+func 82:8B08 RunCursor              | One step of the current cursor ($14A9): reads the buttons and moves it (AL != 0: runs a menu frame first). Returns AL = the CursorInput result, 0A/0B when it ran into the top/bottom of a scrolling list.
+func 82:8B4B ReadMenuButtons        | Takes the newly pressed buttons ($4A/$4B, those also held in $46/$47) into $14AB/$14AC, so each press is seen once. Returns C set when none.
+func 82:8C43 UpdateScrollBar        | Places the scroll bar sprite (object 0B) by the list's top row $150F and step $150D, picking its look (4 at the ends, 5 between).
+func 82:8C85 SetUpScrollBar         | Sets the list's hidden row count $152E (X entries, halved when C is set, minus the $1530 rows shown), the bar step and the bar.
+func 82:8C9C PlaceScrollBar         | Puts the scroll bar sprite (object 0B) at Y (x high, y low).
+func 82:8CC1 ScrollBarStep          | Works out the scroll bar step $150D = $150B / $152E and shows the bar only when the list scrolls.
+func 82:8CE9 ScrollListPage         | Moves the list's top row $150F up (C set) or down by a page ($1530 rows) and updates $14B5. Returns C set when it can't move.
+func 82:8F5E ScrollTextDown         | Scrolls the rows of a list in the text map $7E:3000 down by one entry ($1530 rows, from row $153C), clearing the top one.
+func 82:9009 ScrollTextUp           | Scrolls the rows of a list in the text map $7E:3000 up by one entry, clearing the bottom one.
+func 82:9073 DrawBigText            | Draws text [$08] with the 8x16 dialogue font into a picture buffer (X = rows low / columns high; 05-07 pick a colour, 0A ends a line, 15 = glyph EC); C clear first clears the buffer.
+func 82:90F6 DrawBigTextPad         | DrawBigText helper: pads the rest of a line with spaces.
+func 82:9113 SendBigText            | Sends the picture buffer $7E:D000 drawn by DrawBigText to VRAM X ($0B = length in tiles).
+func 82:9133 FillTileGrid           | Writes a grid of consecutive tile numbers (from $0000) into the text map at Y, two rows per line (for the 8x16 font picture): X = lines low / columns high.
+func 82:9169 DrawNumberSmall        | Draws a number 0-999 (A) in two tiles of the text map at X using the menu's two-digit tiles (no leading zeroes).
+func 82:9189 DrawNumberSmallZero    | Like DrawNumberSmall but always draws the hundreds tile.
+func 82:91AB SplitDigits            | Splits A (at most 999) into hundreds $0000, tens $0002 and ones $0004.
+func 82:91D2 CountHundreds          | SplitDigits helper.
+func 82:91DE CountTens              | SplitDigits helper.
+func 82:91EA CountOnes              | SplitDigits helper.
+func 82:91F0 DrawTwoDigitTile       | DrawNumberSmall helper: the tile for the tens and ones ($60 + 16 x tens + ones).
+func 82:9214 HideObjsByMask         | Hides menu sprites 0-15 whose bit is set in X.
+func 82:922D HideObjsByMaskHigh     | Hides menu sprites 16-31 whose bit is set in X.
+func 82:9246 ChoosePartyMember      | Runs a cursor over the party ($0A7A members) until a choice: options in $14BF (bit 0 sound, 1 slide back on B, 08 L/R, 10 X, 20 Down picks...). Returns AL and C set on B.
+func 82:92F9 ShowCursorPicked       | Shows the current cursor ($14A9) with shape 6 (the picked look).
+func 82:9302 PartyMemberBit         | AL = the bit of the character in party slot Y (1 << character).
+func 82:9313 DrawMoreMarker         | Draws the "more" marker (text $8E:D4DE at $35E0) when $156A is set.
+func 82:9330 WaitFramesOrButton     | Waits AL (bits 0-6) menu frames, ending early on A or B.
+func 82:9353 WaitMenuFrames         | Waits AL menu frames.
+func 82:935D WaitForButtons         | Waits until a button of $156C (returns C clear) or of $156E (returns C set) is pressed.
+func 82:9380 WaitButtonOrTimer      | Waits for A or B while $1567 is not 0.
+func 82:93C2 WaitOneFrame           | Waits until the frame counter $40 changes.
+func 82:93CF PlacePartyObjs         | Places menu sprites 0..(party size - 1) at the positions listed at [$5D].
+func 82:93F6 StartWindowHdma        | Starts the menu window effect A: $0596 and the HDMA table pointer $F4 from $8E:E57E / $8E:E5A0 (guess: the window opening).
+func 82:942F ExpToNextLevel         | $08-$0A = EXP still needed (24-bit): the character block at X, +$62 minus +$5F.
+
+ram 7E:2000 2048 WindowMap          | 32x32 tilemap buffer the menus draw window frames into (the battle background map is unpacked here in battle).
+ram 7E:2800 2048 BackdropMap        | 32x32 tilemap buffer of the menu's backdrop (guess).
+ram 7E:3000 2048 TextMap            | 32x32 tilemap buffer of the menu text (and the battle message window).
+ram 7E:14A9 2 CursorObj             | The running cursor's sprite (cursor number = sprite - 5).
+ram 7E:14AB 1 MenuPressedLo         | Buttons pressed this menu frame: 80 A, 40 X, 20 L, 10 R.
+ram 7E:14AC 1 MenuPressedHi         | Buttons pressed this menu frame: 80 B, 40 Y, 20 Select, 10 Start, 08 Up, 04 Down, 02 Left, 01 Right.
+ram 7E:14B3 2 CursorPick            | The entry under the cursor (row x columns + column).
+ram 7E:14C1 1 CursorFlags           | Per cursor: bit 0 = list scrolls; 80 / 40 set when it ran into the top / bottom. Indexed by object / cursor; battles use these bytes for other things.
+ram 7E:14C7 1 CursorCount           | Per cursor: how many entries there are (0 = the whole grid).
+ram 7E:14CD 1 CursorOriginX         | Per cursor: x of the first entry.
+ram 7E:14D3 1 CursorOriginXHi       | Per cursor: x high byte.
+ram 7E:14D9 1 CursorColumn          | Per cursor: the column it is on.
+ram 7E:14DF 1 CursorOriginY         | Per cursor: y of the first entry.
+ram 7E:14E5 1 CursorOriginYHi       | Per cursor: y high byte.
+ram 7E:14EB 1 CursorRow             | Per cursor: the row it is on.
+ram 7E:14F1 1 CursorColumns         | Per cursor: columns.
+ram 7E:14F7 1 CursorRows            | Per cursor: rows.
+ram 7E:14FD 1 CursorStepX           | Per cursor: pixels between columns.
+ram 7E:1503 1 CursorStepY           | Per cursor: pixels between rows.
+ram 7E:150F 2 ListTop               | The first list entry shown in a scrolling list.
+ram 7E:152E 2 ListHidden            | How many list entries are beyond the window (0 = the list doesn't scroll).
+ram 7E:1530 2 ListRowsShown         | How many entries a scrolling list window shows.
+ram 7E:11D8 1 ObjActive            | Menu sprite objects 0-15: 0 = off (the object code runs 0x30 of them). Indexed by object / cursor; battles use these bytes for other things.
+ram 7E:1208 1 ObjAnim              | Object: the animation / shape set.
+ram 7E:1388 1 ObjX                 | Object: x (low byte).
+ram 7E:13B8 1 ObjXHi               | Object: x high byte.
+ram 7E:13E8 1 ObjY                 | Object: y (low byte).
+ram 7E:1418 1 ObjYHi               | Object: y high byte.
+ram 7E:1448 1 ObjFrame             | Object: the frame of its animation.
+ram 7E:0A06 2 ItemId                | The item being looked at / used (bits 0-8).
+ram 7E:0A0B 1 SpellId               | The spell being looked at / cast.
+ram 7E:0A7A 1 PartyCount            | How many heroes are in the party.
+ram 7E:0A7B 4 PartyMembers          | The party's characters (FF = empty slot).
+ram 7E:0A8D 192 Inventory           | 0x60 u16 slots: bits 0-8 item, bits 9-15 count.
+
+# ---- party panels, gold, prices
+func 82:9449 BuildDestinationList   | Builds the list of towns to travel to: every entry of $8E:D06E whose visited bit is set in $097B goes to $7E:943C (text), $93C4 and $9400; FFFF ends it. Returns AL = the count.
+func 82:94C0 DrawHeroNameColoured   | Prints the name of the hero block [$2A] (text $8E:D439) in the colour of its state $1550: 7 fine, 3 HP at most 1/4, 5 HP at most 1/8 or status bits 01/04.
+func 82:950E DrawHeroHpMp           | Draws level, HP / max HP and MP / max MP of hero block [$2A] at map offset X with DrawNumberSmall, HP coloured by its state.
+func 82:9588 HideHealEffect         | Turns off the effect sprites of the party slots whose bits are set in $0A04.
+func 82:95BF ShowHealEffect         | Shows the recovery effect over the party slots in $0A04: digit sprites of the amounts at $0A38 + 3 x slot, effect kind $0A62, frames from HealEffectFrames (guess).
+func 82:95FA PlaceHealEffect        | ShowHealEffect helper: puts one slot's effect and digit sprites around party sprite X.
+func 82:970B ShowHealDigit          | ShowHealEffect helper: shows digit sprite X.
+func 82:975D HealEffectFrame0       | HealEffectFrames slot 0: turns on one effect sprite of the slot (guess).
+func 82:9765 HealEffectFrame1       | HealEffectFrames slot 1 (guess).
+func 82:9770 HealEffectFrame2       | HealEffectFrames slot 2 (guess).
+func 82:977B HealEffectFrame3       | HealEffectFrames slot 3 (guess).
+func 82:9786 HealEffectFrame4       | HealEffectFrames slot 4 (guess).
+table 82:978E HealEffectFrames      | ShowHealEffect: what each of the 5 effect frames turns on.
+func 82:97E3 BuzzMosaic             | Plays sound 3 and runs the 8-step mosaic effect from $82:9800 (used when a choice can't be made) (guess).
+func 82:9808 AddGold                | Gold $0A8A (24-bit) += $09BA, capped at 9,999,999.
+func 82:983D SubtractGold           | Gold $0A8A -= $09BA.
+func 82:9855 CompareGold            | Compares gold with $09BA: returns C set when the party has at least that much.
+func 82:9867 AddCoins               | $0B55 (24-bit) += $09BD, capped at 9,999,999 (guess: casino coins).
+func 82:989D SubtractCoins          | $0B55 -= $09BD (guess: casino coins).
+func 82:98B5 CompareCoins           | Compares $0B55 with $09BD: C set when there are enough (guess: casino coins).
+func 82:98C7 PriceTimes200          | $09BD-$09BF = X x 200 (24-bit) (guess: a price in the second money).
+func 82:9918 ShopPrice              | X = price as shown: halved (rounded up) in the sell list ($1544 = 0), and in the buy lists when Selan is in the party wearing ring $167.
+func 82:994B ShopPriceEnd           | ShopPrice's exit (PLP / PLY), reached as a separate entry.
+func 82:994E RecalcAllHeroStats     | Recomputes the stats of all 7 hero blocks ($0BAD + n x $BE): equipment bonuses ($82:F846) and final stats ($81:F4D5).
+func 82:9971 HeroBlockOfSlot        | [$2A] = the hero block of party slot $22 (from $0A80).
+func 82:9984 HighlightPartySlot     | Sets palette 2 on the 15x5 party panel of the slot under the cursor ($14B3, offsets $8E:E576).
+func 82:999B ShowPartyObjs          | Hides menu sprites 0-4 and shows each party member's sprite, posed by their state.
+func 82:99BE ShowHeroObj            | Shows party sprite X for hero block Y, posed by state: 4 dead (status 04), 1 status 01, 2 HP at most 1/8, 0 fine.
+func 82:99F3 ShowPartyObjsPose      | Shows every party sprite with pose AL.
+func 82:9A14 NextPartyMember        | Moves $22 to the previous (C set) or next party member, wrapping, copies that member's sprite to object 4 and sets [$2A].
+func 82:9A4E OpenFieldMenu          | The field menu: sets up the screen (bank $86 helpers), the backdrop and sprites, runs MainMenu, then closes it.
+func 82:9AA3 InitMenuSettings       | Game start: clears $0B4D-$0B50, sets the CONFIG defaults (message speed $0B52 = 0, battle cursor $0B53 = 1, status cursor $0B76 = 1, music $0B54 from $80:9634) and $09C0 / $09C2.
+func 82:9AE0 DrawMainMenu           | Draws the main menu screen: party sprites at $8E:D8E3, the command window and party panel, then fades in.
+func 82:9B10 DrawMainMenuWindows    | The main menu's windows, cursor (layout 0) and command words.
+func 82:9B51 DrawItemSpellScreen    | Draws the ITEM screen (USE SORT DROP), or the SPELL screen (USE SORT) with $09D1 = 2, or the SCENARIO list with $09D1 = 7, with cursors and scroll bar.
+func 82:9C10 SetUpListScrollBar     | Scroll bar of the item / spell / scenario list by $09D1 (two columns for spells).
+func 82:9C52 FocusItemList          | Moves the cursor from the command words into the list.
+func 82:9C7D OpenTargetCursor       | Opens the party cursor for using an item or spell on someone (spells also draw the ALL choice, text $8E:D57C) (guess).
+func 82:9CB2 DrawDestinationScreen  | Draws the "PLACE WHERE YOU MOVE TO" window of the town list, its cursor and scroll bar.
+func 82:9D55 DrawFoundItemScreen    | Draws the screen shown when an item is found with the bag full: party sprites, windows, the inventory list.
+func 82:9DD3 DrawFoundItemHeader    | The "GET ITEM" window (the item and its choices) and the party sprites.
+func 82:9DF3 OpenPartyCursorUse     | Opens the party cursor at entry $E7 (guess).
+func 82:9E07 OpenPartyCursorUse2    | Opens the party cursor at entry $E7, other shapes (guess).
+func 82:9E1B OpenPartyCursorGive    | Opens the party cursor at entry $EE (guess).
+func 82:9E2F DrawFoundItemLine      | With $09D1 = FF (an item found), prints the item $09CF and its count (text $8E:D31E).
+func 82:9E67 DrawStatusScreen       | Draws the STATUS page of party slot $14B3 (windows, the hero's sprite as object 4, PartyPanels 2).
+func 82:9EF2 OpenPartyCursor        | Opens the cursor over the party panel (layout $0E).
+func 82:9F0C DrawEquipHeroScreen    | Draws the top of the EQUIP screen for party slot $14B3 (guess).
+func 82:9F6F DrawEquipCommands      | Draws the EQUIP command window (EQUIP STRONGEST REMOVE REMOVE ALL DROP) and its cursor.
+func 82:9FB0 DrawEquipChoiceList    | Draws the list of items that fit the equipment slot $14EE, with the scroll bar.
+func 82:9FFB OpenEquipSlotCursor    | Opens the cursor over the equipment slots (guess).
+func 82:A023 DrawConfigScreen       | Draws the CONFIG screen (MESSAGE SPEED, BATTLE CURSOR, STATUS CURSOR, MUSIC) and its cursor.
+func 82:A07D DrawConfigValues       | Prints the four settings ($0B52 message speed, $0B53 battle cursor, $0B76 status cursor, $0B54 music) with the chosen value of each in the bright colour.
+func 82:A0C7 PickConfigColours      | Clears the colour flag ($0000-$0002) of the chosen value AL through ConfigValueColour.
+func 82:A0DA ConfigValue0           | ConfigValueColour slot 0: value 0 is the chosen one.
+func 82:A0DD ConfigValue1           | ConfigValueColour slot 1.
+func 82:A0E0 ConfigValue2           | ConfigValueColour slot 2.
+table 82:A0D4 ConfigValueColour     | PickConfigColours: one slot per value.
+func 82:A0E3 DrawCapsuleScreen      | Draws the CAPSULE screen (FEED CHANGE NAME): the monster's picture ($82:CF9D) and sprite, its stats and attacks.
+func 82:A1D8 DrawCapsuleFeedScreen  | Draws the capsule FEED screen (FEED / SELECT SORT) with the item list.
+func 82:A233 DrawCapsuleFeedWindows | DrawCapsuleFeedScreen helper: windows, the monster's name and the cursors.
+func 82:A2E3 DrawCapsuleFormCursor  | Capsule CHANGE: draws the form list cursor for the active monster $11A3 / form $11A4 (guess).
+func 82:A318 DrawPartyPanel         | Draws a party text panel by AL through PartyPanels (0 main menu, 1 names, 2 status page, 3 hero header, 4 HP / MP).
+table 82:A322 PartyPanels           | DrawPartyPanel kinds: 0 main menu words + names, 1 names, 2 status page, 3 hero header, 4 HP / MP numbers.
+func 82:A32C DrawMainMenuText       | PartyPanels 0: the command words, the time / gold line and every party member's name.
+func 82:A345 DrawPartyNames         | PartyPanels 1: every party member's name in its state colour.
+func 82:A373 DrawStatusPage         | PartyPanels 2: the status page of [$2A] (stats, IP gauge as a percentage, EXP and EXP to the next level).
+func 82:A3D6 DrawHeroHeader         | PartyPanels 3: name and the short stat lines of [$2A].
+func 82:A403 DrawPartyHpMp          | PartyPanels 4: level, HP and MP of every party member.
+func 82:A42D PartyPanelDone         | End of the party panels (RTS).
+
+# ---- main menu
+func 82:A432 MainMenu               | The field menu's command loop: A runs MainMenuCommands[cursor]; B closes; Select shows or hides the capsule monster; with $057C set, X + L give debug items, spells, gold or a capsule.
+func 82:A4BE RunMainMenuCommand     | Jumps to MainMenuCommands[AL].
+table 82:A4C1 MainMenuCommands      | Main menu commands by cursor place: 0 ITEM, 1 STATUS, 2 SPELL, 3 CHANGE, 4 CAPSULE, 5 CONFIG, 6 EQUIP, 7 SCENARIO.
+func 82:A582 LearnSpellList         | Debug: hero AL learns every spell listed at [$08] (FF = end) through $82:FD3D.
+func 82:A62D MainMenuNameDebug      | SCENARIO with L + Select held: picks a party member and opens special menu 1 ($82:E746) for them (guess: renaming).
+func 82:A658 ItemSpellMenu          | ITEM (and SPELL, $09D1 = 2) screen loop: the cursor over the command words and the list, paging with L / R, then use or sort.
+func 82:A711 ItemListLoop           | The cursor loop in the item / spell list: moving, scrolling, picking an entry (guess).
+func 82:A88E ScenarioMenu           | MainMenuCommands 7, SCENARIO: the list of story items, scrolling (guess).
+func 82:A918 ListMoveCursor         | Moves the list cursor by $14AF, scrolling the list when it leaves the window (guess).
+func 82:A9B5 SortInventory          | ITEM SORT: puts the inventory in the game's order (item kinds by the tables $8E:E52E-$8E:E568) (guess).
+func 82:AAFF ItemCommand            | What happens with the picked item (use, give, drop, feed) (guess).
+func 82:AB46 ItemCommandBack        | ItemCommand helper: puts the cursor back (guess).
+func 82:AB89 DropItemConfirmed      | Drops the picked item ($82:FC08) and redraws the list (guess).
+func 82:AB9A DropForFoundItem       | Drops the picked item ($82:FC1F) to make room for the found one, then redraws (guess).
+func 82:ABB1 UseItem                | USE of an item: on whom (party cursor), then the item's effect ($81:EFDF / $81:EF93 / $81:F034), the recovery effect and the redraw.
+func 82:AC84 DrawListPage           | Redraws the visible page of the item, spell or equipment list by the menu mode $153E and $09D1.
+func 82:ACDB DrawListLine           | Draws the one list line that scrolls in.
+func 82:AD20 ScrollListDown         | Scrolls the item list down a line (text moved, a new line drawn).
+func 82:ADA3 ScrollListDownCursor   | ScrollListDown helper: moves the cursor sprite.
+func 82:ADB4 ScrollListUp           | Scrolls the item list up a line.
+func 82:AE53 ScrollListUpCursor     | ScrollListUp helper: moves the cursor sprite.
+func 82:AE64 ClearHealTargets       | Clears from $0A04 the party slots ruled out by $8E:D8BB (guess).
+func 82:AE6F UseItemOnField         | Uses item $0A06 on the field ($81:EFDF); travel items open the town list and close the menu (guess).
+func 82:AEF3 UseItemOnFieldDone     | UseItemOnField helper: sound and $81:F034.
+func 82:AF00 CastSpellOnField       | Casts spell $0A0B on the field ($81:F34D); travel spells open the town list and close the menu (guess).
+func 82:AF78 CastSpellPayMp         | Takes the spell's MP ($81:F3BC) and plays the sound.
+func 82:AF8E ChooseDestination      | The "PLACE WHERE YOU MOVE TO" list of towns (BuildDestinationList); the pick goes to $09C9-$09CB.
+func 82:B03F RestoreListPlace       | Puts back the list top and cursor saved at $93C0 / $93C2.
+func 82:B052 DrawDestinationPage    | Draws the visible page of the town list.
+func 82:B072 DrawDestinationLine    | Draws one line of the town list.
+func 82:B080 ScrollDestinationsDown | Scrolls the town list down.
+func 82:B0BE ScrollDestinationsUp   | Scrolls the town list up.
+func 82:B104 FoundItemMenu          | Special menu (Table_82_E8CE slot 04): an item was found with the bag full ($09CF): GET / NOW / SELECT / SORT / DROP (FoundItemCommands).
+func 82:B14B FoundItemCommand       | Jumps to FoundItemCommands.
+table 82:B14E FoundItemCommands     | Found-item window: 0 GET, 1 NOW (use it now), 2 SELECT, 3 SORT, 4 DROP (guess from the window text).
+func 82:B183 UseFoundItemNow        | FoundItemCommands 1: use the found item on someone now (guess).
+func 82:B1CE TakeFoundItem          | FoundItemCommands 0: puts the found item $09CF in the bag ($82:F9F2) (guess).
+func 82:B1FE UseItemOnMember        | Uses item $09CF / $0A06 on the party member picked with the cursor, with the recovery effect (guess).
+func 82:B2C5 LiftCurseItem          | Item effect 25 used on party slot $14B3: lifts the curses of what the member wears (LiftCurses) and recomputes the stats; C set when nothing was cursed.
+func 82:B2FE StatusMenu             | MainMenuCommands 1, STATUS: pick a party member, show the page; Left / Right turn to the next member.
+func 82:B370 SpellMenu              | MainMenuCommands 2, SPELL: pick the caster, then the spell list (ItemSpellMenu).
+func 82:B3AD SortSpells             | SPELL SORT: puts the caster's spells in order (guess).
+func 82:B42D DropItemAsk            | DROP: asks and drops the picked item (guess).
+func 82:B45B CastSpellMenu          | Casting a spell from the menu: MP check, target (one or all), effect ($81:F34D / $81:F2E7), MP taken, recovery effect.
+func 82:B564 SpellTargetAll         | Marks all party members ($0A04) as targets (guess).
+func 82:B58A SpellTargetOne         | Marks one party member as the target (guess).
+func 82:B59A ShowSpellTargetObjs    | Shows the target sprites from $8E:D8E3 (guess).
+func 82:B5CF LoadPickedSpell        | Loads the picked spell into $0A0B and its record ($81:F414) (guess).
+func 82:B5ED LoadCasterMp           | $151B / $151D = the caster's MP (hero block of slot $13).
+func 82:B60A NextCaster             | SPELL screen: turns to the next party member's spells (guess).
+func 82:B67C ChangeMenu             | MainMenuCommands 3, CHANGE: pick two party members and swap their places.
+func 82:B6EF SwapPartyMembers       | Swaps two party slots: the party list $0A7B, block pointers $0A80 and their sprites.
+func 82:B7B2 EquipMenu              | MainMenuCommands 6, EQUIP: pick a party member, then the equipment commands.
+func 82:B7E5 EquipMenuEnd           | EquipMenu's exit.
+func 82:B7E7 EquipCommandLoop       | The EQUIP command window loop: Left / Right change the hero, A runs EquipCommands.
+func 82:B7FE EquipCommandDone       | EquipCommandLoop helper.
+func 82:B818 EquipCommandEquip      | EquipCommands 0, 2, 4: pick a slot, then an item.
+func 82:B824 EquipCommandStrongest  | EquipCommands 1: STRONGEST.
+func 82:B82A EquipCommandRemoveAll  | EquipCommands 3: REMOVE ALL.
+table 82:B80E EquipCommands         | EQUIP window commands: 0 EQUIP, 1 STRONGEST, 2 REMOVE, 3 REMOVE ALL, 4 DROP (2 and 4 use the EQUIP slot cursor).
+func 82:B863 EquipSlotLoop          | EQUIP: the cursor over the hero's equipment slots ($14EE), then the choice list (guess).
+func 82:B907 EquipChooseItem        | EQUIP: the list of items that fit the slot, showing the stat changes (ATP DFP STR AGL INT GUT MGR) of each.
+func 82:BA0C EquipChooseItemBack    | EquipChooseItem helper (guess).
+func 82:BA65 EquipStrongest         | STRONGEST: for every slot picks the best item the hero can wear and equips it (guess).
+func 82:BB6E CompareEquipStats      | EquipStrongest helper: compares two items' bonuses ($0B95-$0B9B) (guess).
+func 82:BB91 RemoveEquipSlot        | REMOVE: takes off the item in slot $14EE (guess).
+func 82:BBE8 RemoveAllEquip         | REMOVE ALL: takes off every item (guess).
+func 82:BC46 DropEquipItem          | DROP of an item in the equipment lists (guess).
+func 82:BC96 DrawEquipChoicePage    | Draws the visible page of the equipment choice list.
+func 82:BCB6 DrawEquipChoiceLine    | Draws one line of it.
+func 82:BCC4 ScrollEquipChoicesDown | Scrolls the equipment choice list down.
+func 82:BD02 ScrollEquipChoicesUp   | Scrolls the equipment choice list up.
+func 82:BD48 DrawEquipSlots         | Draws the hero's equipped items, one per slot (item kinds $8E:E538-$8E:E568) (guess).
+func 82:BD9B DrawEquipSlotItem      | DrawEquipSlots helper: one slot (guess).
+func 82:BDDB DrawEquipSlotEmpty     | DrawEquipSlots helper: an empty slot (guess).
+func 82:BE04 BuildEquipChoices      | Builds the list of inventory items that fit equipment slot AL and the hero (PartyMemberBit) into $7E:9CF0 and sets the scroll bar (guess).
+func 82:BE71 ReadEquipBonuses       | Loads item $0A06's record ($81:F1C5) and copies its stat bonuses to $37-$43 and $0B95-$0B9D (guess).
+func 82:BED9 PreviewEquipChoice     | Shows what the item under the cursor would change (guess).
+func 82:BEF0 PreviewEquipStats      | PreviewEquipChoice helper (guess).
+func 82:BF13 ConfigMenu             | MainMenuCommands 5, CONFIG: draws the screen and runs its loop.
+func 82:BF28 ConfigLoop             | The CONFIG cursor: Left / Right change the setting under it (ConfigLeft / ConfigRight), B leaves.
+func 82:BF3B ConfigLoopReturn       | ConfigLoop helper.
+func 82:BF58 ConfigChange           | Jumps to the change handler of setting $14B3.
+func 82:BF79 ConfigMessageFaster    | Message speed one step faster ($0B52).
+func 82:BF88 ConfigMessageSlower    | Message speed one step slower ($0B52).
+func 82:BF99 ConfigToggleBattleCursor | Battle cursor clear / memory ($0B53).
+func 82:BFA3 ConfigToggleStatusCursor | Status cursor clear / memory ($0B76).
+func 82:BFAD ConfigToggleMusic      | Stereo / mono ($0B54), sent to the sound program ($80:9623).
+func 82:BFBB ConfigRedraw           | Redraws the settings.
+table 82:BF52 ConfigLeft            | CONFIG, Left pressed: 0 message speed, 1 battle cursor, 2 status cursor, 3 music.
+table 82:BF5E ConfigRight           | CONFIG, Right pressed: 0 message speed, 1 battle cursor, 2 status cursor, 3 music.
+func 82:BFC5 CapsuleMenu            | MainMenuCommands 4, CAPSULE: the capsule monster screen loop (CapsuleCommands).
+func 82:C044 CapsuleMenuCommand     | Jumps to CapsuleCommands.
+table 82:C047 CapsuleCommands       | CAPSULE commands: 0 FEED, 1 CHANGE, 2 NAME.
+func 82:C04D CapsuleFeed            | CapsuleCommands 0: FEED.
+func 82:C051 CapsuleChange          | CapsuleCommands 1: CHANGE (pick a form).
+func 82:C055 CapsuleName            | CapsuleCommands 2: NAME (special menu $82:E746).
+func 82:C0AC CapsuleFeedMenu        | FEED: builds the item list ($82:FBA7) and runs the item list loop.
+func 82:C0BE CapsuleFeedLoop        | The FEED screen loop: FEED / SELECT / SORT, feeding with $82:CC3C and $82:C504 (guess).
+func 82:C0DD CapsuleFeedLoopEnd     | CapsuleFeedLoop helper.
+func 82:C101 CapsuleFeedCommand     | Jumps to CapsuleFeedCommands by $14B3.
+table 82:C107 CapsuleFeedCommands   | FEED window commands: 0 into the list, 1 SORT, 2 back (guess).
+func 82:C10D CapsuleFeedPick        | CapsuleFeedCommands 0: into the item list.
+func 82:C115 CapsuleFeedSort        | CapsuleFeedCommands 1: SortInventory.
+func 82:C11A CapsuleFeedBack        | CapsuleFeedCommands 2: back to the capsule screen.
+func 82:C170 CapsuleFormMenu        | CHANGE: the forms the monster has reached; picking one changes the active form $11A4 and its stats.
+
+ram 7E:09D1 2 MenuCommand           | The main menu command running (0 item, 2 spell, 7 scenario, FF a found item).
+ram 7E:09BA 3 GoldAmount            | Gold to add, take or compare.
+ram 7E:09BD 3 CoinAmount            | Amount of $0B55 to add, take or compare (guess).
+ram 7E:0B53 1 ConfigBattleCursor    | CONFIG battle cursor (0 clear, 1 memory).
+ram 7E:0B76 1 ConfigStatusCursor    | CONFIG status cursor (0 clear, 1 memory).
+ram 7E:0B54 1 ConfigMusic           | CONFIG music: stereo or mono.
+ram 7E:0A7F 1 CapsuleSlot           | 7 when a capsule monster is with the party, FF when not.
+ram 7E:1544 1 ShopMode              | The shop tab in use: 0 the sell list (half prices, ShopPrice), 1 items, 2 spells, 3 the pawn list (ShopPickHandlers).
+
+# ---- capsule monsters (docs/lufia2/capsules.md)
+func 82:C261 CapsuleToPartyBlock    | When a capsule monster is with the party ($0A7F = 7): fills its party block $10DF (name, level, EXP, next EXP, stats) and points it at its record (bank $97, offset $09C4) and the record's four script offsets.
+func 82:C2AE InitCapsules           | Game start: clears the capsule RAM $119D-$11D7, names (from $8E:D558) to $7F:F180, levels 1, EXP 0, and no capsule with the party ($0A7F = FF).
+func 82:C2FD ResetCapsules          | Puts every capsule monster back to level 1 and form 1 (EXP 0, meters cleared), used from $84:8888 (guess: the Ancient Cave start).
+func 82:C352 SetCapsulesOwned       | Sets the owned / highest form byte of all 7 capsule monsters to AL, clears the meters and makes monster 0 form 1 active (debug and $83:ACB7).
+func 82:C37B ClearCapsuleMeters     | Clears the craved-item flags $11A5 and the feeding meters $11C2.
+func 82:C38B CapsuleRecord          | $09C4 = offset in bank $97 of the active capsule's record (index monster x 5 + form - 1, table $97:DCB8).
+func 82:C3B1 CapsuleAttackName      | X = address in bank $A5 of capsule attack name A (table $A5:DF00).
+func 82:C3C4 CapsuleRecordIndex     | AL = monster x 5 + form - 1 of the active capsule (sprite and palette number).
+func 82:C3D3 CapsuleSaveOffsets     | $09D9 / $09DB / $09DD = the active capsule's offsets into the level ($7F:F1A3), EXP ($7F:F1AA) and name ($7F:F180) arrays.
+func 82:C3F8 LoadCapsuleBlock       | Copies the active capsule's name, level and EXP from the $7F:F180 arrays into its party block $10DF.
+func 82:C443 StoreCapsuleBlock      | Copies the party block's name, level and EXP back to the active capsule's $7F:F180 arrays.
+func 82:C482 CapsuleFormsAddress    | X = $11BB + active capsule (its owned / highest form byte).
+func 82:C492 CapsuleMeterAddress    | X = $11C2 + active capsule (its feeding meter).
+func 82:C4A2 CapsuleLearnedAddress  | X = $11CA + 2 x active capsule (its learned attack bits).
+func 82:C4B3 CapsuleSlotAttack      | AL = name id of attack slot AL of the active capsule's form: record +$0F + slot, or +$12 + slot once that slot is learned.
+func 82:C4E4 CapsuleBit             | AL = the bit of the active capsule ($8E:D8BB).
+func 82:C4F4 CapsulePickinessAddress | X = $11A6 + active capsule (its pickiness).
+func 82:C504 CapsuleWishAddress     | X = $11AD + 2 x active capsule (its craved item).
+func 82:C515 ResetPickiness         | Sets every capsule's pickiness $11A6 from its highest form ($8E:E485).
+func 82:C53A ResetActivePickiness   | Sets the active capsule's pickiness from its highest form ($8E:E485).
+func 82:C554 DrawCravedItem         | A = a random item of price tier A ($95:FF16 lists).
+func 82:C577 PickCapsuleWish        | When the active capsule can be fed and has no wish yet, draws its craved item ($11AD) from its pickiness tier. C set = it can't be fed.
+func 82:C5A2 RefreshCapsuleWish     | Clears the wish display state and shows the active capsule's wish again.
+func 82:C5AF DrawCapsuleWishLine    | Main menu: when the capsule is shown ($09C8 bit 0), prints its name and what it craves.
+func 82:C5F3 ShowCapsuleWish        | Loads the craved item into $1556 and its tier into $1555 and starts the blinking of the wish ($1553).
+func 82:C627 BlinkCapsuleWish       | Each menu frame: toggles $1552 every 32 frames while a wish is shown.
+func 82:C647 IsCapsuleFruit         | Item $0A06: AL = 1 for item $35, AL = 0 for the active capsule's own fruit ($8E:E4A8); C set for anything else.
+func 82:C672 DrawFeedWindow         | Prints the feed window text $8E:C79F.
+func 82:C683 FeedCapsule            | Feeds item $0A06 to the active capsule: refuses items that can't be dropped, checks pickiness and fruit (form 5 too), adds meter points, evolves at 32.
+func 82:C784 ClearCapsuleWish       | Clears the active capsule's craved-item flag in $11A5.
+func 82:C78E EvolveCapsule          | At a full meter: form + 1, meter 0, new pickiness, the evolution animation, new stats and sprite.
+func 82:C818 CapsuleEvolveAnimation | The evolution scene: flashes the old and new pictures and swaps the sprite and palette.
+func 82:C85A DrawEvolveBackground   | Evolution scene: copies the 8x8 block $A6:FA8D into the window map.
+func 82:C8B7 ClearEvolveBackground  | Evolution scene: clears that part of the window map.
+func 82:C8ED ShowEvolveObjs         | Evolution scene: shows the sparkle sprites.
+func 82:C929 EvolveStep1            | Evolution scene step (guess).
+func 82:C93C EvolveStep2            | Evolution scene step (guess).
+func 82:C958 EvolveFlash            | Evolution scene: the flashing between the two forms (colour steps $82:C9D0).
+func 82:CA18 EvolveFlashColours     | EvolveFlash helper (guess).
+func 82:CA62 SortFeedList           | FEED: puts the copied inventory ($7E:8000) in the feeding order (guess).
+func 82:CAB1 SortFeedListStep       | SortFeedList helper (guess).
+func 82:CB00 SortFeedListSwap       | SortFeedList helper (guess).
+func 82:CB10 FeedSparkle            | The sparkle animation of a feeding: moves the meter up by 4 x points + 4 steps (at most 32).
+func 82:CB55 FeedSparkleObjs        | FeedSparkle helper: places random sparkle sprites.
+func 82:CB8C FeedSparkleMove        | FeedSparkle helper: moves the sparkles a frame.
+func 82:CBAF FeedSparkleMeter       | FeedSparkle helper: adds a step to the meter $11C2 and redraws it.
+func 82:CBD2 FeedPoints             | Works out the points of the fed item (own fruit, wished item x 3, other items by price) and shows the reaction.
+func 82:CC3C CapsuleCanEat          | C clear when the active capsule can be fed normally: its form is its highest, below 4, and it isn't in form 5.
+func 82:CC58 CapsuleForm5Fruit      | The form-5 fruits: fruit $8E:E49A while in form $8E:E4B6 turns the monster into form 5; its own fruit turns it back.
+func 82:CCFE CapsuleLearnBit        | $11 = the learned-attack bit of slot $19 in the active form (bit 3 x (form - 1) + slot) (guess).
+func 82:CD1F CapsuleTryLearn        | After a battle: 1 in 8, a random slot learns its upgraded attack if it has one and shows its name (RTL, called from $81:D9E1).
+func 82:CD41 CapsuleLearnSlot       | CapsuleTryLearn helper: learns the slot if record +$12 + slot is not 0 and not learned yet.
+func 82:CD83 CapsuleLevelUp         | After a battle: the capsule's EXP against its next level (up to 99), new stats, the level-up numbers (called from $81:D9E1).
+func 82:CE23 CapsuleFixExp          | Makes the active capsule's EXP at least what its level needs, then works out the next level's EXP (guess).
+func 82:CE52 CapsuleNextLevelExp    | Works out the active capsule's EXP for the next level ($1141, through CapsuleExpTable).
+func 82:CEAB CapsuleExpTable        | The capsule EXP curve: an 8.8 accumulator from 20 grows by $8E:E4CB per 8 levels, capped at 9,999,999.
+func 82:CF72 CopyCapsulePalette     | Copies the active form's 16 colours ($97:D258 + $20 x index) into the menu palette.
+func 82:CF9D LoadCapsulePicture     | Unpacks the active form's battle sprite (file $194 + index) to $7E:4000 and lays it out for the menu.
+func 82:CFD4 SendCapsulePicture     | DMA channel 0: sends the capsule picture to VRAM.
+func 82:CFFD SendCapsulePalette     | DMA channel 1: sends the capsule colours to the palette.
+func 82:D026 ArrangeCapsulePicture  | LoadCapsulePicture helper: reorders the 16x16 squares of the unpacked sprite.
+func 82:D07B DrawCapsuleInfo        | Prints the capsule's name, class (form name), alignment, tribe and its three attack slots.
+func 82:D121 DrawCapsuleStats       | Prints the capsule's HP, ATP, DFP, STR, AGL, INT, GUT, MGR and EXP to the next level.
+func 82:D13A DrawCapsuleMeter       | Clears and redraws the feeding meter (or not, when it can't eat).
+func 82:D150 DrawMeterBar           | Draws the feeding meter bar from $11C2 of the active capsule into the text map.
+func 82:D1A4 DrawCapsuleFormList    | Draws the forms the capsule has reached as picture blocks ($82:D230 / $82:D23C).
+func 82:D248 PlaceCapsuleObj        | Puts the capsule's sprite at its place for the monster ($8E:E458).
+func 82:D270 CapsuleStats           | Recomputes the capsule's stats: clears the bonus words ($82:F6A4 / $82:F6D4), then CapsuleBaseStats.
+func 82:D283 CapsuleBaseStats       | Base stats of the capsule from its record and level (growth curves, CapsuleStatGrowth), ATP / DFP from the record, then $81:F4D5.
+func 82:D31C CapsuleStatGrowth      | One stat's growth: sum over the levels of curve $A6:F420 (full, half or quarter by form), divided by 16.
+func 82:D378 EvolveFadeOld          | Evolution colour fade helper (guess).
+func 82:D397 EvolveColourStep       | Evolution colour fade helper: one step of a colour (guess).
+func 82:D3AC EvolveFadeColours      | Evolution colour fade (guess).
+func 82:D443 EvolveFadeIn           | Evolution colour fade (guess).
+func 82:D4A8 EvolveWindowOff        | Evolution scene: window effect step $1565 (guess).
+func 82:D4D0 EvolveScreenRestore    | Evolution scene: restores the main / sub screens and colour maths and the window effect.
+func 82:D4EE EvolveLoadObjs         | Evolution scene: unpacks the sparkle graphics and sends them to VRAM.
+func 82:D577 EvolveMeterSparkle     | Evolution scene: the meter emptying with sparkles.
+func 82:D5E9 EvolveSparkleStep      | EvolveMeterSparkle helper (guess).
+func 82:D5FC EvolveSparkleShow      | EvolveMeterSparkle helper: shows a sparkle (guess).
+func 82:D62F EvolveSparkleMove      | EvolveMeterSparkle helper: moves sparkles on a circle (sine $80:8486 / $80:8450) (guess).
+func 82:D68C EvolveSparkleAngle     | EvolveSparkleMove helper (guess).
+
+# ---- shops (event command 18)
+func 82:D69C ShopScreen             | Event command 18: opens shop $30 (screen set up by the bank $86 helpers, then ShopLoop).
+func 82:D702 DrawShopBackdrop       | Shop: the backdrop, the scroll bar and party sprites.
+func 82:D721 DrawShopTabsWindow     | Shop: the window of the shop's tabs ($1540 / $1542).
+func 82:D749 DrawShopHeader         | Shop: the tab words, gold and the party's HP lines.
+func 82:D79D OpenShopListCursor     | Shop: moves the cursor into the list.
+func 82:D7BC DrawShopItemInfo       | Shop: the window of the item under the cursor (HAVE / EQUIPPED counts, price, how many can be bought: 99 - owned).
+func 82:D8A5 DrawShopWhoCursor      | Shop: asks who gets the item (party cursor).
+func 82:D8D4 DrawShopSpellInfo      | Spell shop: the window of the spell under the cursor.
+func 82:D905 DrawShopSpellCost      | Spell shop: price and "CONSUME MP" of spell $0A0B, and who can learn it.
+func 82:D970 DrawShopSellInfo       | Shop sell list: the window of the inventory item under the cursor.
+func 82:DA13 LoadShopEntryPrice     | Loads the record of item $09CF and its shown price ($82:9918) and marks who can equip it.
+func 82:DA5C DrawShopTabBlocks      | Shop: draws the tab blocks (FillRectTileRun).
+func 82:DA8F ShopLoop               | Shop main loop: the tab cursor (buy lists, spells, coins, pawn, sell), A opens a list, B leaves.
+func 82:DAD8 SelectShopTab          | Shop: switches to the tab under the cursor (list built, drawn).
+func 82:DB15 ShopListLoop           | Shop: the cursor loop in a list (by tab through Table_82_DBCC and the scroll tables), buying or selling the pick.
+func 82:DBC9 ShopListPick           | Jumps to Table_82_DBCC by the tab $1544.
+table 82:DBCC ShopPickHandlers      | What A does in a shop list, by tab $1544: 0 sell, 1 buy, 2 learn a spell, 3 buy (pawn list).
+func 82:DC10 ShopListRedrawLine     | Jumps to Table_82_DC16 by the tab.
+table 82:DC16 ShopLineRedraw        | Shop: redraws the entry after a change, by tab.
+func 82:DC1E ShopRedrawItemPage     | ShopLineRedraw 1 / 3: redraws the item lines, owners and counts.
+func 82:DC27 ShopRedrawNothing      | ShopLineRedraw 0 (RTS).
+func 82:DC28 ShopRedrawSpellPage    | ShopLineRedraw 2: redraws the spell owners.
+func 82:DC49 ShopListInfo           | Jumps to Table_82_DC4C by the tab.
+table 82:DC4C ShopInfoWindows       | Shop: the info window of the entry under the cursor, by tab.
+func 82:DC54 ShopInfoSell           | ShopInfoWindows 0: an inventory slot.
+func 82:DC5A ShopInfoItem           | ShopInfoWindows 1 / 3: an item for sale.
+func 82:DC60 ShopInfoSpell          | ShopInfoWindows 2: a spell for sale.
+func 82:DC69 DrawShopList           | Shop: clears the list window and draws the list of the current tab.
+func 82:DC8A DrawShopListPage       | Shop: draws the visible page of the list through Table_82_DCA6.
+func 82:DCA3 DrawShopListPageJump   | Jumps to Table_82_DCA6 by the tab.
+table 82:DCA6 ShopPageDrawers       | Shop list pages by tab: 0 inventory, 1 / 3 items with prices, 2 spells with prices.
+func 82:DCAE ShopPageInventory      | ShopPageDrawers 0: the inventory (sell list).
+func 82:DCC1 ShopPageItems          | ShopPageDrawers 1 / 3: items with prices.
+func 82:DCCF ShopPageSpells         | ShopPageDrawers 2: spells with prices.
+func 82:DCDD ShopLineInventory      | One line of the inventory list.
+func 82:DCF4 ShopLineItem           | One line of an item list.
+func 82:DD06 ShopLineSpell          | One line of a spell list.
+func 82:DD18 ShopScrollDown         | Jumps to Table_82_DD2A by the tab (scroll a line down), then the cursor part.
+table 82:DD2A ShopScrollDownLines   | Shop: the line drawn when the list scrolls down, by tab.
+func 82:DD32 ShopScrollDownInventory | ShopScrollDownLines 0.
+func 82:DD41 ShopScrollDownItem     | ShopScrollDownLines 1 / 3.
+func 82:DD50 ShopScrollDownSpell    | ShopScrollDownLines 2.
+func 82:DD62 ShopScrollDownCursor   | Shop: cursor part of scrolling down (guess).
+func 82:DD95 ShopScrollDownText     | Shop: moves the list text down a line.
+func 82:DDAE ShopScrollUp           | Jumps to Table_82_DDC3 by the tab (scroll a line up).
+table 82:DDC3 ShopScrollUpLines     | Shop: the line drawn when the list scrolls up, by tab.
+func 82:DDCB ShopScrollUpInventory  | ShopScrollUpLines 0.
+func 82:DDDE ShopScrollUpItem       | ShopScrollUpLines 1 / 3.
+func 82:DDF1 ShopScrollUpSpell      | ShopScrollUpLines 2.
+func 82:DE07 ShopScrollUpCursor     | Shop: cursor part of scrolling up (guess).
+func 82:DE3A ShopScrollUpText       | Shop: moves the list text up a line.
+func 82:DE53 ShopMessage            | Prints a shopkeeper line (text in bank $8E at Y) in the message window and waits.
+func 82:DE75 ShopBought             | After a purchase: takes one from the pawn stock (tab 3), plays the sounds and the "thank you" line.
+func 82:DEA4 ShopSell               | ShopPickHandlers 0: sells the inventory item under the cursor (not for items that can't be dropped): how many, gold added, the item goes to the pawn stock $7F:F080.
+func 82:DF45 ShopBuy                | ShopPickHandlers 1 / 3: buying an item: how many, the gold check, coins or items (Table_82_DFA8).
+func 82:DFA5 ShopBuyKind            | Jumps to Table_82_DFA8.
+table 82:DFA8 ShopBuyKinds          | Shop purchase: 0 / 1 an item, 2 coins.
+func 82:DFC4 ShopGiveEquipment      | Buying equipment: who gets it, then equips it on them if they want ($82:E0F8).
+func 82:E012 SetShopPriceKind       | $154C = 2 on the coin tab, 1 on another tab of a shop that sells coins, else 0.
+func 82:E02C ShopBuyItem            | ShopBuyKinds 0 / 1: pays (gold, or coins with $154C) and adds the items.
+func 82:E0A9 ShopBuyCoins           | ShopBuyKinds 2: buys casino coins (amount from ShopCoinAmount) for gold.
+func 82:E0E2 ShopCoinAmount         | A = the coins of coin package $09CF (items $18A on, table $82:E0F0).
+func 82:E0F8 ShopEquipBought        | Equips the item just bought on the chosen member and puts the old one in the bag.
+func 82:E140 ShopAddBoughtItem      | Adds $1547 of item $09CF to the bag (stack or new slot).
+func 82:E167 ShopLearnSpell         | ShopPickHandlers 2: who learns the spell, the gold check, the spell added.
+func 82:E1DE ShowLearnerObjs        | Spell shop: poses the party sprites by who can learn spell $09CF.
+func 82:E20C ShopTotalPrice         | $09BA = price $1545 x count $1547.
+func 82:E22C ChooseBuyCount         | Shop: Up / Down choose how many ($1547, up to $1548), with the total price.
+func 82:E290 PayShopPrice           | Jumps to Table_82_E293 by $154C: pays with gold or coins.
+table 82:E293 ShopPayKinds          | 0 SubtractGold, 1 SubtractCoins.
+func 82:E297 LoadShop               | Reads shop $30's record: look $1543, tab mask $1540, then each list (pawn list built from $7F:F080, item lists 2-8, spell list) to $93C0 / $93D0.
+func 82:E319 NoteShopList           | LoadShop helper: counts a tab and keeps its list's address at $93C0 + X.
+func 82:E327 BuildShopList          | Builds the list of the current tab (and the scroll bar), marking what is already owned or full.
+func 82:E433 BuildPawnList          | The pawn tab: every item with a count in $7F:F080, as u16 (count << 9 | item) at $7E:97E0; the count to $93D0.
+func 82:E46B CountItemList          | LoadShop helper: length of a u16 item list (0000 ends it) to $93D0 + X.
+func 82:E484 CountSpellList         | LoadShop helper: length of a spell list (FF ends it) to $93D0 + X.
+func 82:E49E DrawShopTabWords       | Shop: the tab words (PAWN, COIN, ITEM ...) for the bits of $1540 (text $8E:D366).
+func 82:E4D5 DrawPartyHp            | Shop: every party member's HP (offsets $82:E51A).
+func 82:E504 DrawPartyHpOne         | DrawPartyHp helper.
+func 82:E522 MarkWhoCanEquip        | Shop: loads item $09CF and poses the party sprites by who can equip it (and whether it is better).
+func 82:E569 CompareWithEquipped    | MarkWhoCanEquip helper: the item against what the member wears now ($82:F76B).
+func 82:E586 DrawEquipGains         | Shop: for each member, the stat change if they equip item $09CF.
+func 82:E5AC EquipGainOne           | DrawEquipGains helper: one member ($82:F7FD).
+func 82:E5E1 DrawEquipGainNumbers   | Shop: prints the gains (offsets $82:E689).
+func 82:E624 DrawGainNumber         | DrawEquipGainNumbers helper: an up / down marked number.
+func 82:E664 PoseByGain             | DrawEquipGainNumbers helper: poses a party sprite by the gain.
+func 82:E691 MarkWhoCanLearn        | Spell shop: loads spell $09CF and poses the party sprites by who can learn it.
+func 82:E6BE PoseLearner            | MarkWhoCanLearn helper: one member.
+func 82:E6FC ShopSpellUnderCursor   | $09CF = the spell under the shop cursor.
+func 82:E709 ShopItemUnderCursor    | $09CF = the item under the shop cursor.
+func 82:E718 ShopSlotUnderCursor    | $09CF = the inventory item under the sell cursor.
+note 82:E729 | ShopMenu only points [$08] at shop $30's record (offset from $97:EE9F); LoadShop reads it.
+
+# ---- special menus (event commands 19, 81, BB, title)
+func 82:E746 SpecialMenu            | Opens special screen $30 through SpecialMenus (event commands 19 church, 81 capsule joins, BB report, the title's load / new game, renaming).
+table 82:E74B SpecialMenus          | Special screens by $30: 0 load a game, 1 rename (name entry for [$2A]), 2 church (save, cure, lift), 3 a capsule joins ($31 = monster), 4 an item found ($09CF), 5 save, 6 / 7 file screens, 8 recompute the party's stats (guess for 5-7).
+func 82:E75D SpecialLoadGame        | SpecialMenus 0: the title's file screen (save files read from $70:0000).
+func 82:E77C SpecialRename          | SpecialMenus 1: name entry for the block [$2A].
+func 82:E78D SpecialChurch          | SpecialMenus 2: the church screen ($155A = 1).
+func 82:E7AA SpecialCapsuleJoins    | SpecialMenus 3: capsule monster $31 joins: owned, its joining level ($8E:E4C4), EXP to match, name entry; it becomes the active capsule if there was none.
+func 82:E80C SpecialItemFound       | SpecialMenus 4: adds item $09CF ($82:F9F2); when the bag is full, opens the found-item screen.
+func 82:E861 SpecialMenu5           | SpecialMenus 5: a file screen with $155A = 1 (guess: save).
+func 82:E87B SpecialMenu6           | SpecialMenus 6 / 7: a file screen (guess).
+func 82:E893 SpecialRecalcParty     | SpecialMenus 8: recomputes every party member's equipment bonuses and stats.
+func 82:E8B2 RunSpecialScreen       | Clears $7F:F080's copy state ($82:F660), runs SpecialScreens[$30], then clears the maps and returns to the field.
+func 82:E8CB SpecialScreenJump      | Jumps to SpecialScreens[AL].
+table 82:E8CE SpecialScreens        | The screens' loops: 0 file select, 1 name entry, 2 church, 3 name entry, 4 found item, 5 save, 6 erase data, 7 report ($8E:E5EF). Slots 08-0A of the C# table are not entries (the table has 8; the code at $82:E8DE follows).
+func 82:E8DE SetUpSpecialScreen     | Sets up the screen (bank $86 helpers), clears the menu sprites and sets $156B.
+func 82:E917 DrawFileScreenObjs     | File screens: the party sprites and frames ($86:9022 / $86:916C).
+func 82:E941 FileSelectScreen       | SpecialScreens 0: reads the save files ($82:F20A) and runs the file select.
+func 82:E95D ChurchScreen           | SpecialScreens 2: the church (SAVE, CURE, LIFT).
+func 82:E998 ReadSaveSlots          | Checks the three save files in SRAM ($70:0000, $80:905F) and keeps which are used ($09C0-$09C2, $1559).
+func 82:E9D5 FileSelectLoop         | The file select cursor: A loads a file, B / a new game (guess).
+func 82:EA3B FileCommandLoop        | The file screen's commands for the chosen file (load, copy, erase) (guess).
+func 82:EAF4 SaveScreen             | SpecialScreens 5: choose a file to save in, ask, save ($80:905F).
+func 82:EB9A SaveConfirm            | Save screen: YES / NO and the save.
+func 82:EBF2 NameEntryScreen        | SpecialScreens 1 / 3: the name entry screen (windows, letters, the name).
+func 82:EC0A NameEntryLoop          | Name entry: the cursor over the letters, A adds one, B deletes, Start ends.
+func 82:EC21 NameEntryContinue      | Back to NameEntryLoop with AL = 0 (read the buttons at once).
+func 82:EC94 NameEntryRowDown       | Name entry: cursor layout change (guess).
+func 82:ECA6 NameEntryRowUp         | Name entry: cursor layout change (guess).
+func 82:ECAF NameEntryLength        | Name entry: the name's length (guess).
+func 82:ECC7 ChurchCommandLoop      | Church: the SAVE / CURE / LIFT cursor.
+func 82:ECF3 ChurchCure             | Church CURE ($31 = 0) / LIFT: pick a member (LIFT only those with cursed items), the price and the cure.
+func 82:ED50 ChurchCureConfirm      | Church: asks, takes the gold and cures the member.
+func 82:EDDF ChurchCureApply        | Church: CURE clears status bits 01 / 04 and fills HP; LIFT lifts the curses and recomputes the stats; then the panel is redrawn.
+func 82:EE28 EraseDataScreen        | SpecialScreens 6: "Erase data?" for a save file, YES / NO.
+func 82:EEC2 DrawEraseQuestion      | Prints the erase questions (text $8E:D5CA, YES / NO).
+func 82:EEF2 ReportScreen           | SpecialScreens 7: the "LUFIA 2 REPORT" screen ($8E:E5EF).
+func 82:EEF7 FileScreenCursor       | File screens: the cursor over the files.
+func 82:EF25 DrawFileWindows        | File screens: the SAVE / START BY / RETRY BY / GIFT windows and the three files.
+func 82:EFB5 HideFileCursor         | File screens: hides the cursor sprites.
+func 82:EFC5 DrawGameSaved          | Prints "Game saved".
+func 82:EFF6 FileConfirm            | File screens: "Save over this file?" / "Start game from this file?" with the file's details.
+func 82:F0A2 DrawNameEntryWindows   | Name entry: the windows and cursors.
+func 82:F0F6 DrawNameEntryName      | Name entry: "NAME" and the name so far.
+func 82:F117 DrawNameEntryLetters   | Name entry: the letter grid.
+func 82:F139 DrawChurchWindows      | Church: the SAVE / CURE / LIFT window and the party.
+func 82:F190 DrawChurchQuestion     | Church: the question window (YES / NO, time, gold).
+func 82:F20A ReadAllSaveHeaders     | Reads the three save files' headers for the file screen.
+func 82:F22B ReadSaveHeader         | Reads one save file's header (party, level, time, place) from SRAM.
+func 82:F2CE DrawSaveFiles          | Draws the three save files.
+func 82:F2FE DrawSaveFile           | Draws one save file: NAME, TIME, level and the party's sprites.
+func 82:F383 SaveFileObjSet         | DrawSaveFile helper: sprite set.
+func 82:F395 SaveFileObjs           | DrawSaveFile helper: places the party's sprites.
+func 82:F3DD HideSaveFileObjs       | File screens: hides a file's sprites (guess).
+func 82:F3FC PoseSaveFileObjs       | File screens: poses the sprites of the chosen file.
+func 82:F427 DrawSaveFilePlace      | DrawSaveFile helper: the file's text lines.
+func 82:F481 SaveSlotCursorStart    | Puts the file cursor on the last used file ($09C0-$09C2).
+func 82:F496 DrawSavePlaceName      | Prints the map name of a save ($87:8016 list, CopyMapName) with the big font.
+func 82:F4F4 NameLetterOffset       | Name entry: the place of letter $14AD (guess).
+func 82:F50A DrawNameSoFar          | Name entry: draws the typed name.
+func 82:F523 AddNameLetter          | Name entry: adds the letter under the cursor ($8E:CB9F grid).
+func 82:F556 DrawNameLetter         | Name entry: draws one letter of the name with the font ($80:8E16 / $80:8E49).
+func 82:F585 DeleteNameLetter       | Name entry: removes the last letter.
+func 82:F5AF DeleteNameLetterB      | Name entry: B pressed (DeleteNameLetter).
+func 82:F5B5 ChurchPrice            | Church: the price for a member, from the level and (LIFT) the cursed items' prices $0B89 (guess).
+func 82:F637 ChurchMessage          | Church: prints a priest line ("Who do you want to cure?") and waits.
+func 82:F660 SaveScreenState        | Copies $7E:0100 and the pawn stock $7F:F080 to $7E:93C0 / $7E:A498 (guess: kept while a screen uses the RAM).
+func 82:F682 RestoreScreenState     | Copies them back.
+
+# ---- equipment and inventory helpers
+func 82:F6A4 ClearEquipBonus        | Clears the hero block's equipment bonus words +$86..+$92 (ATP DFP STR AGL INT GUT MGR).
+func 82:F6D4 ClearStatBonus         | Clears the hero block's bonus set +$74..+$84.
+func 82:F6F2 ItemEquipKind          | AL = the equipment slot of the loaded item (record byte $0B8B) (guess).
+func 82:F703 EquipSlotOffset        | Y = the hero block offset of equipment slot A ($66 + 2 x slot).
+func 82:F710 LoadEquippedItem       | Loads the record of the item in slot Y of [$2A] ($81:F1C5).
+func 82:F722 AddEquipBonuses        | Adds the loaded item's ATP / DFP / stat bonuses ($0B95-$0B9D) to the hero block's +$86..+$92.
+func 82:F76B CompareEquipBonuses    | The loaded item's bonuses against the ones in $37-$43 (gains).
+func 82:F7FD EquipBonusDelta        | Bonus differences into $37-$43.
+func 82:F846 SumEquipBonuses        | The hero block [$2A]: clears the equipment bonuses and adds those of each equipped item.
+func 82:F864 PreviewEquipBonuses    | The bonuses the hero would have with item $0A06 in its slot (EQUIP list preview).
+func 82:F87D CountCursedItems       | A = how many equipped items of [$2A] are cursed (flags bit 08).
+func 82:F893 EquippedItem           | $0A06 = item in equipment slot A of [$2A] (Y = its offset); C set when it is cursed (flags bit 08).
+func 82:F8C6 LiftCurses             | Every cursed item [$2A] wears becomes the next item number (its uncursed version).
+func 82:F8DC UnequipToBag           | Takes the item off slot A of [$2A] (C set: only if it isn't cursed) and puts it in the bag. C set when that can't be done.
+func 82:F925 EquipFromSlot          | Equips the item of inventory slot X in [$2A]'s slot Y, the old one going to the bag. C set when there's no room.
+func 82:F97D EquipItemBought        | Equips item $09CF on [$2A]'s slot Y, the old one going to the bag. C set when there's no room.
+func 82:F9B6 SwapWithBagSlot        | Swaps the equipped item with the inventory slot X (one of each).
+func 82:F9C9 MarkCursedSlots        | Status page: $1525 + slot = 5 (red) for cursed equipment, else 7.
+func 82:F9E8 PutInBagSlot           | Inventory slot X = item Y with count A.
+func 82:F9F2 AddItem                | Adds $09CD of item $09CF to the bag (a story item sets its flag instead). C set when there's no room.
+func 82:FA2E GiveScenarioItem       | Item $09CF: a scenario item sets its flag in $091E (A = 0); A = 1 already owned, 2 not a scenario item.
+func 82:FA57 RemoveItem             | Takes $09CD of item $09CF from the bag (a scenario item clears its flag) (event, $80:A4B1). C set when not there.
+func 82:FA77 TakeScenarioItem       | Item $09CF: a scenario item clears its flag in $091E (A = 0); A = 1 not owned, 2 not a scenario item.
+func 82:FAA0 AddToStack             | Inventory slot X: count + A, at most 99.
+func 82:FAD0 TakeFromStack          | Inventory slot X: count - A; at 0 the slot is emptied.
+func 82:FAF4 StackFull              | C set when inventory slot X holds 99.
+func 82:FB04 BagFull                | Counts the used inventory slots (A); 96 = full.
+func 82:FB1F FindItem               | Looks for item A: a scenario item gives A = 1 / C clear when owned; else X = its inventory slot and A = its count with C clear, or C set when not found.
+func 82:FB51 ScenarioItemFlag       | Item A in the scenario list $97:FDA0: A = 0 owned / 1 not owned (Y / X = its flag word and bit in $091E), 2 = not a scenario item.
+func 82:FB94 FindEmptySlot          | X = the first empty inventory slot; C set when the bag is full.
+func 82:FBA7 CopyInventory          | Copies the inventory to $7E:8000.
+func 82:FBE5 ListPickOffset         | A = 2 x (cursor $14B3 + list top $14B5).
+func 82:FBEE LoadSlotItem           | Inventory slot $14AF: $0A06 = its item and its record loaded ($81:F1C5); C set when empty.
+func 82:FC08 SwapInventorySlots     | Swaps inventory slots $14AF and $14B1.
+func 82:FC1F DropSlotItem           | Drops the stack in slot $14AF (not when the record says it can't be dropped, bit 20): it goes to the pawn stock. C set when refused.
+func 82:FC3F NthScenarioItem        | A = the X-th scenario item owned (from $97:FDA0 and the flags $091E); C set when there aren't that many.
+func 82:FC7D PawnCount              | A = the pawn-stock count of item X (4 bits in $7F:F080).
+func 82:FC97 AddToPawn              | Pawn stock of item X + A (at most 15): items sold, dropped or fed go there.
+func 82:FCC7 TakeFromPawn           | Pawn stock of item X - A (bought back).
+func 82:FCED PawnNibble             | PawnCount helper: the byte and nibble of item X.
+func 82:FD15 StripHeroEquipment     | Event command BA: hero A loses every equipped item (each goes to the pawn stock).
+func 82:FD3D LearnSpell             | Hero A learns spell $0A0B if the spell allows that hero ($0B82 bits): added to the first FF of the hero's list. C set when not allowed or already known (event command 23).
+
+# ---- item and spell descriptions
+func 82:FD81 ShowDescription        | Y / Select over an item, spell or IP attack: opens the description window (pages through Table_82_FDF2) until B.
+func 82:FDEC DescriptionPage        | Jumps to Table_82_FDF2 by $1511.
+table 82:FDF2 DescriptionPages      | Description window pages: 0 the description text, 1 the IP attack page (guess).
+func 82:FDF6 DrawDescriptionPage    | DescriptionPages 0: the window, the name and the description text in the big font.
+func 82:FE44 DrawDescriptionPage2   | DescriptionPages 1: the second page (guess).
+func 82:FE89 DescriptionClose       | Closes the description window.
+func 82:FE98 DescriptionWindowMode  | Description window: window effect setting $1565 (guess).
+func 82:FEC0 DescriptionWindowOff   | Turns the window masks off (WOBJSEL).
+func 82:FEC8 LoadDescriptionSubject | Loads the record of the item ($0A06) or spell ($0A0B) being described and its text pointer.
+func 82:FEFE LoadIpAttackText       | Description of the item's IP attack (table $84:8F10).
+func 82:FF3A DrawDescriptionText    | Draws the description text with DrawBigText and sends it to VRAM.
+func 82:FF99 DrawDescriptionTitle   | Prints the subject's name over the description.
+
+ram 7E:091E 8 ScenarioItems         | One bit per scenario (story) item of the list $97:FDA0.
+ram 7E:1547 2 BuyCount              | How many are being bought / sold.
+ram 7E:1545 2 UnitPrice             | Price of the entry under the cursor.
+ram 7E:10DF 190 CapsuleBlock        | The active capsule monster as a party member (same layout as a hero block).
+ram 7E:11A3 1 ActiveCapsule         | Active capsule monster 0-6.
+ram 7E:11A4 1 ActiveCapsuleForm     | Its form 1-5.
+ram 7E:11A5 1 CapsuleWishFlags      | Bit n: a craved item was chosen for monster n.
+ram 7E:11A6 7 CapsulePickiness      | Per monster: the lowest price tier it eats.
+ram 7E:11AD 14 CapsuleWishes        | Per monster: craved item.
+ram 7E:11BB 7 CapsuleForms          | Per monster: 0 not owned, bits 0-2 highest form, bit 3 in form 5.
+ram 7E:11C2 7 CapsuleMeters         | Per monster: feeding meter 0-32.
+ram 7E:11CA 14 CapsuleLearned       | Per monster: learned attack bits.
+ram 7E:09C4 2 CapsuleRecordPtr      | Offset in bank $97 of the active capsule's record.
+ram 7F:F080 233 PawnStock           | 4 bits per item: how many of it went to the shops (sold, dropped, fed); the pawn tab sells them back.
+ram 7F:F180 35 CapsuleNames         | 7 capsule names, 5 letters each.
+ram 7F:F1A3 7 CapsuleLevels         | Capsule levels.
+ram 7F:F1AA 21 CapsuleExp           | Capsule EXP (24-bit each).
+
+# ======================================================================= bank $81: battle
+func 81:8000 SetUpBattle            | Battle start: who strikes first ($7FF8A1 / random: $11E7 = 1 party first, 2 monsters first, 3 normal), the heroes in battle ($153C-$1540, $0A80 blocks), the monster combatants, story-battle parties, the battle screen and the opening message.
+func 81:81E6 SetUpBattleMonsters    | Fills the six monster places: from a story battle's formation ($97:C53D, with fixed places, EXP, gold and battle flags) or from the group built in $7FF756, and works out each place's x / y from the monsters' sprite sizes.
+func 81:839F BuildMonsterGroup      | Builds the monsters of encounter group A ($97:BE93, 8 bytes: monster pairs and counts) into $7FF756 + X: shuffles the pairs, then deals monsters while they fit across the screen (24 tiles). Fixed groups go to $81:84CF.
+func 81:84FC AddMonsterIfFits       | BuildMonsterGroup helper: adds one monster of pair AL when its width still fits ($11 = tiles used, at most 24).
+func 81:851E InitBattleScreen       | Battle screen set-up: clears the scroll and the VRAM queue, hero sprite flags, status balloons (file $190), monster graphics, the font and $96:FF3C tiles, background, palettes, the NMI hook ($85:8DC5) and the "X appeared" / first-strike messages ($81:F283 / $81:F291).
+func 81:876B EndBattleScreen        | Battle end: saves the battle records, shows the total defeat (unless story battles 0B / 25 or $7FF8A3 bit 7), fades out and unhooks the NMI.
+func 81:8821 RunBattle              | Runs a whole battle from the field: clears the battle RAM $11D8-$220B, keeps the stack pointer in $1395 (for AbortBattle), sets up, runs the rounds, then the after-battle clean-up. Also clears the capsule wish flags $11A5.
+func 81:8855 AbortBattle            | Leaves the battle from anywhere (flee, a script's end): puts back the stack saved by RunBattle and does its closing steps.
+func 81:886F BattleRounds           | The round loop: commands (when the party may act, $11E7 bit 0), monster turns, the turns themselves, until the battle is over ($11E7 bit 7); then the victory song and rewards ($81:D9E1).
+func 81:8909 BattleRoundsNop        | RTS.
+func 81:890A RunTurns               | Runs every turn of the round from the turn list ($1B8C, 3 bytes each, 0 ends): the fighter's action ($81:A79A), then the end-of-round status steps.
+func 81:895E PlayBattleAnimation    | Plays battle animation A ($95:8000 table) and returns when it ends: 30 tracks ($7E:4F8F, 0x2C bytes) and 64 objects ($7E:54B7, 0x2D bytes) run their scripts (AnimOps) once a frame (docs/lufia2/spell-animations.md).
+note 81:8AA4 | JSR ($8C5C,X) runs one opcode; handlers come back here and the BRA reads the next, AnimEndStep leaves the loop.
+note 81:8B15 | the same loop for objects.
+table 81:8C5C AnimOps               | Battle animation opcodes (only 00-23 are in this C# table; the game's table has 256 entries, docs/lufia2/spell-animations.md).
+func 81:8C58 AnimEndStep            | Opcode handler ending: drops the opcode loop's return (PLX / RTS) so the track waits for its next step.
+func 81:8C5A AnimOpHang             | AnimOps 07 and the unused slots: a dead loop (BRA to itself).
+func 81:8E92 UpdateAnimObjects      | Each animation frame: turns the 64 animation objects into sprites (three OAM areas $4B4A / $4C8A / $4DCA).
+func 81:8EEA AnimObjToOam           | UpdateAnimObjects helper: one object's sprite entry.
+func 81:8F91 FindFreeAnimObject     | X = the first free animation object ($7E:54B7, 0x2D bytes each).
+func 81:8FAB FindFreeAnimTrack      | X = the first free animation track ($7E:4F8F, 0x2C bytes each).
+func 81:915B AnimOp00_End           | AnimOps 00: the track stops (one fewer running, $1BEC).
+func 81:9169 AnimOp01_Wait          | AnimOps 01: waits one step (the step length).
+func 81:917F AnimOp02_StepLength    | AnimOps 02 n: step length n frames.
+func 81:918F AnimOp03_Goto          | AnimOps 03 w: goes to w.
+func 81:9198 AnimOp04_Call          | AnimOps 04 w: calls w (return address at +5).
+func 81:91AD AnimOp05_Return        | AnimOps 05: returns to +5.
+func 81:91B7 AnimOp06_IfByte        | AnimOps 06 w b v: goes to w when byte +b of the track is v.
+func 81:91F2 AnimOp08_TrackOnTarget | AnimOps 08 w: starts a track at w on the target.
+func 81:920F AnimOp09_TrackOnEach   | AnimOps 09 w: starts a track at w on every target.
+func 81:929E AnimOp0A_StartObject   | AnimOps 0A: starts an animation object (script, place, kind).
+func 81:92BE AnimOp0B_CallRoutine   | AnimOps 0B n: calls routine n of the table $81:8E5C (through JML [$129B]).
+func 81:92E9 AnimOp0C_TrackOnAttacker | AnimOps 0C w: starts a track at w for the attacker (its place from $97:FE26 for heroes).
+func 81:9393 AnimOp0D_Track         | AnimOps 0D w: starts a track at w on the track's own fighter (monster places $96:FFEC) (guess).
+func 81:940E AnimOp0E_TrackOnEachMonster | AnimOps 0E w: starts a track at w for each target in $4F0B (guess).
+func 81:94CA AnimOp0F_HeroSwing     | AnimOps 0F: goes to the attacking hero's script (7 words follow, one per character $153D).
+func 81:94EB AnimOp10_Loop1         | AnimOps 10 n: loop 1 starts (n times).
+func 81:9500 AnimOp11_Loop2         | AnimOps 11 n: loop 2 starts.
+func 81:9515 AnimOp12_Loop3         | AnimOps 12 n: loop 3 starts.
+func 81:952A AnimOp13_Loop4         | AnimOps 13 n: loop 4 starts.
+func 81:953F AnimOp18_EndLoop1      | AnimOps 18: end of loop 1.
+func 81:9553 AnimOp19_EndLoop2      | AnimOps 19: end of loop 2.
+func 81:9567 AnimOp1A_EndLoop3      | AnimOps 1A: end of loop 3.
+func 81:957B AnimOp1B_EndLoop4      | AnimOps 1B: end of loop 4.
+func 81:958F AnimOp20_Graphics      | AnimOps 20 b w1 w2: unpacks graphics w1 ($85:EF53) to $7E:A000 for VRAM $4000 and w2 to $7E:DF00 for VRAM $1800.
+func 81:963A AnimOp21_SetByte       | AnimOps 21 i v: $123C + i = v (guess).
+func 81:9653 AnimOp22_Bg3Map        | AnimOps 22 b: BG3SC = b | 8.
+func 81:9662 AnimOp23_Nop           | AnimOps 23: RTS (the rest of the opcodes are in code the tracer did not reach).
+
+# ---- turns and actions
+func 81:A79A FighterTurn            | One fighter's turn (AL = fighter: 0-3 heroes, 10 capsule, 80+ monsters, 20 special): skips it when asleep / paralysed / gone (status 2C), confusion (10) makes action 0F; a capsule runs its AI ($81:B1A3), a monster its script ($81:B1C9); then the action.
+func 81:A832 DoAction               | Performs the queued action: targets ($81:B228), then BattleActions[action kind $7FF454 & 1F].
+table 81:A867 BattleActions         | Action kinds (register 23): 00 none, 01 attack, 02 spell, 03 item, 04 defend, 05 / 0A effect only (special attack / magic damage), 06 flee, 07 call a monster, 08 IP attack, 09 spell without MP, 0B capsule attack, 0C taunt, 0D named attack, 0E name only, 0F confused attack; 10-1F the same without showing the name.
+func 81:A8A7 ActionNone             | BattleActions 00, 10, 1A, 1F: RTL.
+func 81:A8A8 ActionAttack           | BattleActions 01: weapon attack: the weapon's animation (record +0x23 - 1, or 0E / E0 / F0), its battle script or the plain attack ($85:EF24 / $85:EF26), then the ring's battle script.
+func 81:A968 ActionSpell            | BattleActions 02: shows the spell's name, then casts it.
+func 81:A977 ActionSpellSilent      | BattleActions 12: casts spell $7FF456: not when silenced (status 02), MP check and cost, animation spell + $12 (17 becomes 36 for monsters), the spell's script.
+func 81:A9F2 NotEnoughMp            | "Not enough MP" message ($81:F20C) for 30 frames.
+func 81:A9F7 SpellFailMessage       | Shows battle message X (silenced: $81:F1FE) for 30 frames.
+func 81:AA1B ActionItem             | BattleActions 03: shows the item's name, then uses it.
+func 81:AA2E ActionItemSilent       | BattleActions 13: uses item $7FF456: its animation, used up ($81:F15B), its battle script.
+func 81:AAD0 ActionDefend           | BattleActions 04: the fighter defends (+$10 bit 0) and the message.
+func 81:AB07 ActionEffect           | BattleActions 05 / 0A / 15: only the effect step (ActionDone).
+func 81:AB0C ActionIpAttack         | BattleActions 08: IP attack $7FF456: shows its name, takes its IP cost (record +5) from the gauge (+$BC), animation, effect script ($81:F46B); "not enough IP" message ($81:F21B) otherwise.
+func 81:AB94 ActionFlee             | BattleActions 06: a monster runs away (gone, off the turn list); the party tries to flee: refused in a no-escape battle ($81:F1F0), else "ran away" ($81:F1E7), counts $0B5D and ends the battle.
+func 81:AC72 ActionCallMonster      | BattleActions 07: calls monster $7FF456 in when there's room ($81:F245 / $81:F257), else "no one came" ($81:F26A).
+func 81:AD3B ActionCapsuleAttack    | BattleActions 0B: capsule attack $7FF456 ($97:F63B): name, animation (00 = F0), script from +2.
+func 81:AD8D ActionTaunt            | BattleActions 0C: shows the attack name, then message $81:F2B8 (guess: "but nothing happened").
+func 81:AE0F ActionNamedAttack      | BattleActions 0D: an attack with a name: the effect, then the weapon (or E0 / F0) animation and the hit flash (DC / DD).
+func 81:AEE1 ActionNameOnly         | BattleActions 0E: shows the attack name for 60 frames.
+func 81:AF37 ActionConfused         | BattleActions 0F: a confused fighter (status 10) attacks a random side with its weapon.
+func 81:AF7A ActionFreeSpell        | BattleActions 09: shows the name, casts spell $7FF456 without MP.
+func 81:AF89 ActionFreeSpellSilent  | BattleActions 19: casts spell $7FF456 without MP or name (IP-style casts, op 54).
+func 81:AFC4 ActionStepForward      | Runs the attacker's pose for the action kind once per action ($0A5C) through ActionPoses.
+table 81:AFD9 ActionPoses           | The attacker's pose by action kind (0-F) (guess).
+func 81:AFF9 PoseNormal             | ActionPoses: the attacker's pose ($85:E5C2) (guess).
+func 81:B002 PoseAttack             | ActionPoses 01: pose unless $11DE (guess).
+func 81:B012 PoseCast               | ActionPoses 02 / 09 / 0A: pose and the hero's casting animation ($97:FE26 by character) (guess).
+func 81:B047 PoseItem               | ActionPoses 0B: plays an animation (guess).
+func 81:B04E PoseDefend             | ActionPoses 04 / 06 (guess).
+func 81:B057 ActionDone             | After an action's script: when it wasn't cancelled ($0A5B), the effect step (damage, statuses, messages) and ActionResults.
+func 81:B08A ActionResults          | Shows what the action did: the animation, damage numbers, fallen fighters, the battle end (victory: $81:D9E1).
+func 81:B139 ShowHitFlash           | ActionResults helper: a screen effect and the animation $1262.
+func 81:B174 ShowFallen             | ActionResults helper: the fallen monsters' effect and redraw.
+
+# ---- fighters, targets, sprites
+func 81:B1A3 CapsuleTurnScript      | A capsule monster's turn: runs its AI script (block +$4A from its record in bank $97, $10DF + $45), or the plain attack $85:EF20.
+func 81:B1C9 MonsterTurnScript      | A monster's turn: its attack script (combatant +$4A, from the record of $81:FCE2 in bank $96), or the plain attack $85:EF20.
+func 81:B228 ResolveTargets         | Turns the target mask AL into the fighters who can still be hit (BattleTargetMask); when none of the chosen ones is left, picks a random one on that side.
+func 81:B264 BattleTargetMask       | AL = bit mask of the fighters on side AL (80 = monsters) who aren't gone (status 04), bit 7 kept for the monster side.
+func 81:B2B5 FighterBlock           | X = the combatant block of fighter AL, a target bit (heroes 01-10, monsters with bit 7 and bits 0-5), from the hero-side or monster combatant pointers.
+func 81:B2DB FighterResultEntry     | X = the fighter AL's entry in the 7-byte list at $1499 (guess: its damage display).
+func 81:B336 InvertFighterColours   | Writes the inverted colours of palette $11 (from $7F:F1DB) into the colour buffer (a flash).
+func 81:B367 RestoreFighterColours  | Puts palette $11's colours back from $7F:F1DB (guess).
+func 81:B444 FadeFighterColours     | Darkens / tints palette $11 step by step (the total defeat fade) (guess).
+func 81:B48B FadeColourStep         | FadeFighterColours helper (guess).
+func 81:B505 BlendChannel           | FadeColourStep helper: one colour channel moved toward the target (guess).
+func 81:B54A ColourToChannels       | Splits colour $15 into its channels with grey weights 4D / 97 (guess: a brightness value).
+func 81:B5A3 ClearBattleOam         | Hides all 128 sprites in the OAM buffer $7E:0100 and clears the high table $7E:0300.
+func 81:B5C4 BuildBattleOam         | Each battle frame: builds the OAM buffer from the animation, cursor and fighter sprite lists (BattleFrame).
+func 81:B705 CopySpriteList         | BuildBattleOam helper: copies one sprite list into the OAM buffer.
+func 81:B7D9 FighterSize            | $00 / $01 = the size (8x8 tiles across / down) of fighter AL (heroes 4x4, the capsule 6x6, monsters from their sprite).
+func 81:B80A FighterPlace           | $00 / $01 = the screen place of fighter AL (from the $1399 13-byte entries) (guess).
+func 81:B8B1 FighterPlaceCursor     | $22 / $23 = the place where the target cursor points at fighter AL (guess).
+func 81:B974 LoadBattlePalette      | Copies 16 colours from bank $24, Y into palette row AL of the battle colour buffer and $7F:F1DB.
+func 81:B9AF SendBattlePalette      | Copies the battle colours $7F:F1DB to the colour buffer $7E:0320 and asks for the upload.
+func 81:B9C7 LoadBattleBackground   | Battle background $11E1 (18 = none): its record ($97:FD40, 4 bytes) to $11E2-$11E5, tiles and map unpacked (files $16C / $179, the map delta-decoded), palettes, the effect (docs/lufia2/graphics.md).
+func 81:BAE8 DrawBattleHeroes       | Draws the 4 hero battle sprites (pose by state).
+func 81:BAFB DrawHeroSprite         | DrawBattleHeroes helper: hero slot AL (dead / status / fine poses).
+func 81:BB75 CopyHeroPose           | Copies a hero pose's tiles into the sprite buffer through the WRAM port ($97:B52C / $97:B534).
+func 81:BBE0 DrawHeroSpriteCommand  | Like DrawHeroSprite (DrawBattleHeroes) with the command-input pose (guess).
+func 81:BC55 LoadCapsuleBattleSprite | Unpacks the capsule's battle sprite (file $194 + $154D) to $7E:DF00 and lays out its squares, or clears it when there's no capsule.
+func 81:BCCC PlaceSpriteSquares     | Copies a sprite's 16x16 squares into the OBJ buffer $7E:6000 (8 per row of $400).
+func 81:BD47 BuildSpriteObjs        | Entry of BuildSpriteObjs16.
+func 81:BD4B BuildSpriteObjs16      | Makes the 16x16 sprite entries of a fighter picture (row by row, $02 across, $03 down) at x $06 / y $07.
+func 81:BDC8 BuildSpriteObjsShifted | Entry of BuildSpriteObjsShifted16.
+func 81:BDCC BuildSpriteObjsShifted16 | Like BuildSpriteObjs16, moved by the sprite's width (guess).
+func 81:BE54 DrawPictureToBg        | Entry of DrawPictureToBg8.
+func 81:BE58 DrawPictureToBg8       | Writes a rectangle of tile numbers ($00 first tile, $02 / $03 size, [$08] map) into a battle BG map buffer.
+func 81:BEBC LoadListFrameTop       | Copies a window frame piece ($97:D6B8 + AL x $80) to $7E:8DC0 (the battle list window) (guess).
+func 81:BEED LoadListFrameSide      | Copies a window frame piece ($97:D938 + AL x $80) to $7E:8D40 (guess).
+func 81:BF3F BuildBattleItemList    | The battle ITEM list: the inventory items usable in battle into $7E:DF00 (16 bytes each, FF = not usable) (guess).
+func 81:C031 BuildBattleSpellList   | The battle SPELL list of the hero $1BE8 into $7E:DF00 (guess).
+func 81:C129 BuildBattleIpList      | The battle IP list of the hero $1BE8: the IP attacks of what the hero wears, with the gauge ($81:F45E) (guess).
+func 81:C240 EndRound               | Marks the round over ($11E7 bits 0-1) and redraws the status icons and sprites.
+func 81:C254 QueueMonsterTurns      | Puts every monster that can act in the turn list, by AGL + bonus with a random spread (InsertTurn).
+func 81:C294 QueueCapsuleTurn       | Puts the capsule monster in the turn list (AGL + bonus with a spread).
+func 81:C2C0 InitBattleColourRegs   | Copies 16 bytes from $97:B401 to $123C (colour / window settings) (guess).
+func 81:C2D0 ClearBattleMap2000     | Clears $7E:2000-$27FF (the background map buffer).
+func 81:C2E3 ClearBattleMap2800     | Fills $7E:2800-$2FFF with tile $2100 (empty).
+func 81:C2FB ClearBattleMap3000     | Clears $7E:3000-$37FF (the message window map).
+func 81:C30E ClearBattleMap3800     | Clears $7E:3800-$3FFF.
+func 81:C321 BattleFadeOut          | Fades the screen out over 15 frames.
+func 81:C339 BattleFadeIn           | Clears the message map and fades the screen in.
+func 81:C35F BattleScreenEffect     | A screen effect A for the current targets: builds the target list $4F0B-$4F1F (places from $95:FFED), used by the hit animations (guess).
+func 81:C3EE ScreenEffectTargets    | BattleScreenEffect helper: goes through the target results (guess).
+func 81:C477 ScreenEffectTarget     | BattleScreenEffect helper: one target's place and size (guess).
+func 81:C5CF MonsterCombatantOf     | X = the combatant offset of fighter AL (a target bit).
+func 81:C600 ShowTurnResults        | After the turns: for each fighter, the result list and status messages (guess).
+func 81:C652 ShowFighterResult      | ShowTurnResults helper: one fighter (guess).
+func 81:C739 PartyCommandPhase      | The party's command input of a round: the window, the status bar, each hero's command (FIGHT / SPELL / ITEM / IP / ...) and targets (guess).
+func 81:CB77 CommandIconCursor      | The battle command icons and their cursor (palettes $97:FDE6) (guess).
+func 81:CC2E RunHeroCommand         | The chosen command of hero $1BE8: its list (items, spells, IP) and target, stored as the hero's action (guess).
+func 81:D12F BattleListWindow       | The battle list window AL: 0 items, 1 spells, 2 IP attacks; the cursor starts where it was when CONFIG battle cursor is memory ($1363).
+func 81:D19A RedrawBattleList       | Redraws the battle list window (guess).
+func 81:D1C1 DrawListTitle          | Draws a zero-terminated text of bank $85 at X into the list window (guess).
+func 81:D218 ShowBattleList         | Shows the list window (colour maths, main / sub screens) (guess).
+func 81:D237 BattleListInput        | The battle list's button loop: A picks, B cancels, Y / Up / Down move (guess).
+func 81:D274 BattleListPageUp       | Battle list: page up (guess).
+func 81:D27E BattleListPageUpStep   | Battle list: page up helper (guess).
+func 81:D29D BattleListScrollTo     | Battle list: scrolls to entry AL (guess).
+func 81:D2C2 BattleListMove         | Battle list: a cursor move by the pressed direction ($97:B58A / $97:B59A steps) (guess).
+func 81:D2D9 BattleListMoveTo       | Battle list: a cursor move to entry AL (guess).
+func 81:D309 BattleListScrollDown   | Battle list: scrolls down (guess).
+func 81:D336 RedrawBattleListPage   | Battle list: redraws the visible page (guess).
+func 81:D34B BattleListScrollStep   | Battle list: one scroll step (guess).
+func 81:D358 BattleListScroll       | Battle list: the smooth scroll (guess).
+func 81:D3F8 BattleListScrollBar    | Battle list: sets the scroll bar $4AC4 (guess).
+func 81:D442 BattleListFrame        | Battle list: a frame (sprites, the bar, the latched buttons) (guess).
+func 81:D472 BattleListWait         | Battle list: a frame, then back to the input loop (guess).
+func 81:D482 BattleListPick         | Battle list: A on the entry under the cursor (guess).
+func 81:D4A5 BattleListPickEntry    | Battle list: takes the entry ($7E:DF00 not 0) and keeps the cursor place for the hero (guess).
+func 81:D4D7 BattleListCancel       | Battle list: B (sound 1).
+func 81:D4E0 ChooseTargets          | The target picker: the cursor over heroes or monsters by the target byte AL (bit 7 starts on the enemies, low bits: one / all / either side, docs/lufia2/battlescript.md).
+func 81:D920 TargetCursorAll        | ChooseTargets helper: cursor sprites for "all" (guess).
+func 81:D92C TargetCursorOne        | ChooseTargets helper: the cursor sprite on one target (guess).
+func 81:D948 TargetCursorCorner     | ChooseTargets helper (guess).
+func 81:D956 TargetCursorSprite     | ChooseTargets helper: writes one cursor sprite entry at $4ABE (guess).
+func 81:D975 ShowCommandHelp        | Battle: shows a help line (text $81:F077) in the window (guess).
+func 81:D9D0 BattleIdleFrame        | Animates the monster sprites and draws the battle sprites (one frame's sprite work).
+func 81:D9E1 BattleVictory          | After a won battle: gold and EXP (x4 with $0B51 & 3, capped at 9,999,999), the item drop, level ups (each hero, the capsule's learning and level, $82:CD1F / $82:CD83) and their windows.
+func 81:DD7F ShowLevelUpWindow      | Victory: the level-up window (guess).
+func 81:DDE7 PrintRewardText        | Victory: prints a reward line (Y = text) in the message window (guess).
+func 81:DE55 RewardTextNewLine      | PrintRewardText helper: a new line (guess).
+func 81:DE9E WaitBattleButton       | Waits for A or B ($DD bits A0) in battle frames.
+func 81:DEA9 DrawPartyStatusBar     | Draws every hero's status bar entry (name, HP / MP / IP) (guess).
+func 81:DEE9 DrawStatusBar          | Draws the status bar frame and the heroes' entries.
+func 81:DEF4 DrawListWindowFrame    | The battle list window frame ($28 x $0B at $2842).
+func 81:DF0A ClearCommandIcons      | Clears the command icon area of the $7E:2800 map (tile $2100).
+func 81:DFA2 DrawBattleListLines    | Battle list: draws 8 lines from entry X (guess).
+func 81:DFB2 DrawBattleListLine     | Battle list: one line, by list kind $1B (guess).
+func 81:E019 DrawBattleItemLine     | Battle list line: an item (guess).
+func 81:E094 DrawBattleSpellLine    | Battle list line: a spell (guess).
+func 81:E100 DrawBattleIpLine       | Battle list line: an IP attack (guess).
+func 81:E16F DrawMessageWindowFrame | Draws the battle message window frame ($20 x $0E at $2800) (guess).
+func 81:E1B5 DrawHeroStatusEntry    | Draws hero X's status bar entry: name, HP and MP numbers and gauges (guess).
+func 81:E2AF DrawGaugeEnd           | Status bar helper (guess).
+func 81:E2C8 DrawHpNumber           | Status bar helper: a number up to 999 (guess).
+func 81:E308 DrawGauge              | Status bar helper: a gauge of $11 (x 26) (guess).
+func 81:E3AE DrawWindowFrameAt      | Battle window frame at X ($09F2 x $09F3 tiles, tile $2154) (guess).
+func 81:E3CD DrawHelpWindowFrame    | Battle help window frame (tile $2167) (guess).
+func 81:E3EC DrawIpGaugeFrame       | IP gauge frame (tile $10F0) (guess).
+func 81:E405 DrawIpGauge            | IP gauge (guess).
+func 81:E479 DrawFrameRowTop        | Window frame helper: the top row (guess).
+func 81:E4AD DrawFrameRowSide       | Window frame helper: a side row (guess).
+func 81:E4D1 DrawHeroNameTiles      | Status bar: the hero's name tiles (5 letters) (guess).
+func 81:E503 DrawFrameFromPieces    | Window frame helper: from pieces in bank $01 (guess).
+func 81:E542 DrawFramePieceRow      | Window frame helper (guess).
+func 81:E570 DrawFramePieceSide     | Window frame helper (guess).
+func 81:E593 DrawStatusBarFrame     | The status bar's frame rows ($2D80 / $2DC0, tile $2155) (guess).
+func 81:E5C1 DrawStatusBarRow       | DrawStatusBarFrame helper (guess).
+func 81:E604 DrawStatusBarRowEnd    | DrawStatusBarFrame helper (guess).
+func 81:E63A DrawStatusEntries      | Draws the 4 hero entries of the status bar.
+func 81:E645 DrawStatusEntry        | DrawStatusEntries helper: one hero ($81:8819 places) (guess).
+func 81:E73B ClearMessageText       | Battle message: clears the text tiles at $7E:3800 (guess).
+func 81:E792 LoadMessageWindowMap   | Unpacks the battle message window map (file $23F) to $7E:3000.
+func 81:E7A5 BattleHelpNop          | RTL (called from ShowBattleHelp).
+func 81:E7D2 FillWindowRect         | Fills a $09F2 x $09F3 rectangle of a battle map at X with tile $09F6 (guess).
+func 81:E808 SplitNumber999         | Splits X (up to 999) into hundreds / tens / ones $B2-$B4 (guess).
+func 81:E835 BattleCharToTiles      | A battle text character AL to its tile numbers (dictionary codes $CD up) (guess).
+func 81:E872 LoadStatusBarTilesA    | Unpacks the status bar tiles (file $18D) to $7E:A000 and draws the heroes' names on them with the $9F:8500 font.
+func 81:E877 LoadStatusBarTilesB    | Unpacks the other status bar tiles (file $18E) to $7E:A000 and draws the names on them.
+func 81:E8E1 DrawNameGlyph          | Draws one letter of a name into the status bar tiles.
+func 81:E8EE OrGlyphIntoTiles       | ORs a $9F:8500 font glyph into the tiles at $7E:A000 + X.
+func 81:EA35 DrawMessageGlyph       | Battle message: draws a glyph of the 8x16 font ($9A:F970) into the text tiles (guess).
+func 81:EB34 CopyBigGlyph           | Copies an 8x16 font glyph (16 bytes) to $120F (docs/lufia2/graphics.md).
+func 81:EB62 CopyBigGlyphShifted    | Copies an 8x16 glyph, shifted for a half column (guess).
+func 81:EB93 DrawHeroSpritesCommand | Draws the 4 heroes with the command-input poses (guess).
+func 81:EBF4 DrawHeroSpritesActing  | Draws the heroes and marks the one choosing a command (guess).
+
+# ---- new game, party, items, spells, levels
+func 81:EC35 NewGameParty           | New game: clears $7E:F000-$7E:FFFF and sets up the heroes (NewGameHeroes).
+func 81:EC41 ClearWram1F000         | Clears $7E:F000-$7E:FFFF.
+func 81:EC56 NewGameHeroes          | Writes the new-game records ($85:B2B0) to the hero blocks $0BAD.., the party, gold and inventory ($85:B2A1).
+func 81:ED35 ResetHeroesLevel1      | Resets every hero to level 1 with no gear or spells ($85:B395 records) (from AncientCaveClearParty).
+func 81:ED8E InitHeroBlock          | Builds one hero block at [$B2] from its new-game record at X (name, stats for level 1, EXP to the next level).
+func 81:EE94 ResetHeroBlock         | Like InitHeroBlock for the reset (keeps the name) (guess).
+func 81:EF93 UseItemEffect          | Runs item $0A06's menu script on the party slots in $0A04 and applies the effect.
+func 81:EFDF ItemWouldWork          | Runs item $0A06's menu script on $0A04 without applying it: C set when it would do nothing.
+func 81:F034 UseUpItem              | Takes one of item $0A06 from the bag (UseUpItemStack).
+func 81:F057 ItemCount              | A = how many of item $0A06 the bag holds (0 when none).
+func 81:F085 AddDroppedItem         | Battle drop: adds item $0A06 (count in the high bits) to the bag; C set when it didn't fit.
+func 81:F0A2 AddItemCount           | Adds $09F4 of item $09F2 to its stack (at most 99) or to an empty slot.
+func 81:F114 TakeFromSlot           | Takes $09F4 from inventory slot $0A08 (guess).
+func 81:F15B UseUpItemStack         | Takes the count in $0A06's high bits of item $0A06 from the bag (the stack emptied at 0).
+func 81:F194 ItemFlags              | A = item $0A06's record byte +0 (use flags: 01, 08 cursed, 20 can't be dropped, 40 ...).
+func 81:F1AB ItemUsers              | X = item $0A06's record word +7 (who can equip it, guess).
+func 81:F1C5 LoadItem               | Loads item $0A06: name to $0B77, record fields to $0B84.. (icon $0B87, price $0B89, equip bits $0B8B, the script words of each use to $0B8D + 2 x bit, animation $0BA7).
+func 81:F2E7 CastSpellOnTargets     | Menu cast: runs spell $0A0B's script on each target in $0A04 and applies it (guess).
+func 81:F34D CastSpellOnField       | Menu / field cast of spell $0A0B: its script and effect; C set when it did nothing (guess).
+func 81:F3BC PayMp                  | Takes spell $0A0B's MP (record +0C) from the caster (party slot bit $0A03).
+func 81:F3F4 SpellMp                | AL = spell $0A0B's MP cost (record +0C).
+func 81:F404 SpellFlags             | AL = spell $0A0B's flags (record +08).
+func 81:F414 LoadSpell              | Loads spell $0A0B: 0x14 bytes to $0B77 (name 8, a 00, record +08..+12).
+func 81:F46B IpEffectScript         | A = address of IP effect script A ($95:F1EF table).
+func 81:F476 CapsuleAttackRecord    | A = address of capsule attack A ($97:F63B table).
+func 81:F481 PreviewHeroStats       | Works out hero block X's stats with the bonuses at +$37 on a copy at $7E:3800 and writes the results to +$37 (the EQUIP preview).
+func 81:F4D5 RecalcHeroStats        | Recomputes the final stats of block X (CalcHeroStats), keeping the registers.
+func 81:F4E9 RecalcHeroStatsEntry   | Entry of CalcHeroStats (from UnpackSaveData).
+func 81:F4ED CalcHeroStats          | Block [TargetPtr]: max HP / MP, ATP, DFP and STR'..MGR' from base + bonuses (GUT' at most 199).
+func 81:F5BD InnHeal                | The inn: every living party member gets full HP and MP and loses statuses (event command 17).
+func 81:F5ED HealPartyHp            | Every living party member: HP = max HP.
+func 81:F60B HealPartyMp            | Every living party member: MP = max MP.
+func 81:F629 ClearPartyStatus       | Clears every party member's status byte.
+func 81:F723 JoinParty              | Event command 2B: hero AL takes the first empty party slot; AL = 1 when the party was full or the hero is there.
+func 81:F74F LeaveParty             | Event command 2C: hero AL leaves the party; AL = 2 when not in it.
+func 81:F789 RebuildPartyBlocksEntry | Entry of RebuildPartyBlocks.
+func 81:F78D RebuildPartyBlocks     | Rebuilds the party's block pointers $0A80 from the party list ($85:9EBA).
+func 81:F7BD HeroBlockOf            | X = the block of character X ($85:9EBA).
+func 81:F7CA CheckLevelUp           | After a battle, hero A: when the EXP reach the next level, raises it and applies the level-up (returns C / AL = 1).
+func 81:F7ED ApplyLevelUp           | The level-up of block X: new stats for the level ($81:F87F) with the random part, never lower than before.
+func 81:F87F StatsForLevel          | Stats of hero $09FA at level $09FE ($97 tables, 7 u16 into $0A1C-$0A28).
+func 81:F979 LevelUpIfEnough        | Hero $09FA: when EXP >= the needed total and the level isn't 99, level + 1 and the next total (AL = 1).
+func 81:F9E9 ExpForLevel            | The total EXP hero $09FA needs for level $09FE + 1 into $0A2A (24-bit).
+func 81:FAC9 RunEffectScript        | Runs a battle script: Y = offset from the base $0A42 / bank $0A44 (0 = none), through RunBattleScript.
+func 81:FAF5 PartyBlockOfBit        | Y / X = the party slot and block of the slot bit AL.
+func 81:FB79 MonsterRecordByte0E    | AL = monster A's record byte +0E.
+func 81:FBA2 MonsterSpriteBits      | The top 3 bits of monster sprite AL's size bytes ($97:CA64) (docs/lufia2/graphics.md).
+func 81:FBDB MonsterExpGold         | $09FC = EXP (record +1D), $09FE = gold (+1F) of monster $09FA.
+func 81:FC0B BuildMonsterCombatant  | Copies the monster record $09F2 into the combatant block at [$B2] (stats, scripts by tag: 07 attack at +$4A, 08 defense at +$4C) (docs/lufia2/battlescript.md).
+func 81:FCE2 MonsterRecordAddress   | A = monster AL's record address in bank $96 ($96:85C0).
+
+# ---- misread table slots, decoding notes
+func 82:EC25 NameEntryContinueFrame | Back to NameEntryLoop with AL = 1 (a menu frame first).
+
+# ---- battle animation opcodes 24-FF (table $81:8C5C read in full)
+func 81:8FC5 StartObjectAtTrack     | Starts an animation object at $1494 placed at the track Y's place plus the offsets $1496 / $1497 (signed), kind $1498, inheriting the track's variables +13..+1A.
+func 81:8FE9 StartObjectAtTrackY    | StartObjectAtTrack's tail from the y offset on (entered with A 16-bit).
+func 81:9007 StartObjectAtTrackEnd  | StartObjectAtTrack's tail from the variables copy on.
+func 81:905B StartObjectRelative    | Starts an animation object at $1494 whose place is the offsets $1496 / $1497 relative to the track (+1B / +1D), kind $1498, owned by object slot 40 - $15EB.
+func 81:907F StartObjectRelativeY   | StartObjectRelative's tail from the y offset on.
+func 81:9092 StartObjectRelativeEnd | StartObjectRelative's tail from the variables copy on.
+func 81:90DF StartTrackHere         | Starts an animation track at $1494 at the place of track Y plus $1496 / $1497, inheriting its variables +13..+1A.
+func 81:912C CopyAnimColours        | Copies X bytes of colours from $96:8000 + 32 x (next script word) into $7F:F1DB (through the WRAM port, address set by the caller) and the colour buffer at $0B, and asks for the upload.
+func 81:9F39 StartHitObject         | AnimOp71 helper: starts an animation object with script $95:8200[$12] at $04 / $05 (attributes $14, step $13).
+func 81:B396 FadePaletteRow         | Fades the 15 colours of palette row $11 toward black ($13 below 80, by 40 - $13) or white ($13 80 up) into the colour buffer.
+func 81:B3F8 ScaleColour            | FadePaletteRow helper: multiplies the three channels of colour $15 by WRMPYA / 32.
+func 81:9664 AnimOp27_UnpackFile    | AnimOps 27 w a: unpacks graphics file w ($85:EF53 index) to $7E:a.
+func 81:968A AnimOp28_RestoreColours | AnimOps 28 r w: copies colours back from $7F:F1DB to the colour buffer (row r, start and count from w).
+func 81:96C6 AnimOp2C_LoadColours   | AnimOps 2C r c n w: n colours from $96:8000 + 32 w into palette row r from colour c.
+func 81:96F6 AnimOp2D_ClearMap3000  | AnimOps 2D: clears the $7E:3000 map.
+func 81:96FA AnimOp2E_ClearMap2800  | AnimOps 2E: clears the $7E:2800 map.
+func 81:96FE AnimOp30_ScrollBg3By   | AnimOps 30 dx dy: adds the signed dx / dy to BG3's scroll.
+func 81:9738 AnimOp31_SetBg3Scroll  | AnimOps 31 x y: sets BG3's scroll (signed bytes).
+func 81:976B AnimOp33_ScrollBg1By   | AnimOps 33 dx dy: adds the signed dx / dy to BG1's scroll.
+func 81:97A5 AnimOp34_SetBg1Scroll  | AnimOps 34 x y: sets BG1's scroll (signed bytes).
+func 81:97D8 AnimOp50_CopyMapRect   | AnimOps 50 w1 w2 w3: copies a rectangle (w3 = width / height) from the $7E:3800 map at w2 to the $7E:3000 map at w1 (column / row words).
+func 81:9853 AnimOp51_SetFade       | AnimOps 51 r v: fade level v for palette row r (kept at $1BF1 + r; 40 = none, below toward black, above toward white).
+func 81:986E AnimOp52_CopyMapAtTrack | AnimOps 52 w ...: copies a map rectangle around the track's place (its size from +23) (guess).
+func 81:9934 AnimOp53_Nop           | AnimOps 53: RTS.
+func 81:9935 AnimOp54_AddFade       | AnimOps 54 r d: adds d to palette row r's fade level, kept within 40-C0.
+func 81:9968 AnimOp55_RedrawStatusBar | AnimOps 55: redraws the status bar and the status icons.
+func 81:9976 AnimOp56_TrackIfCritical | AnimOps 56 w: starts a track at w when the action made a critical hit ($7FFAB7).
+func 81:9999 AnimOp59_QueueBg3Map   | AnimOps 59 b: sends map b of $97:B554 to VRAM $3800 after the frame ($15B4).
+func 81:99A5 AnimOp5A_EndBgWave     | AnimOps 5A: ends the background wave effect ($1260 = FF) and queues map 4 (guess).
+func 81:99B0 AnimOp5B_StartBgWave   | AnimOps 5B: copies the window map to $7E:3800, starts the background wave effect ($1260 = 1) and queues map 4 (guess).
+func 81:99D0 AnimOp5C_UnpackToVram  | AnimOps 5C w a n: unpacks graphics w ($85:EF53) to $7E:DF00 and queues n bytes of it to VRAM a.
+func 81:9A12 AnimOp5D_UnpackToVram2 | AnimOps 5D w a n: the same as 5C.
+func 81:9A54 AnimOp5E_CircleWindow  | AnimOps 5E v: a round window of the radius in track variable v (StartCircleWindowHdma), or turns the window off when it is FF (guess).
+func 81:9AB1 AnimOp5F_WindowWidth   | AnimOps 5F v: a window from 80 - x to 7F + x for x = track variable v (below 7C), else off (guess).
+func 81:9AF7 AnimOp60_MoveHero      | AnimOps 60 dx dy: sets the offset of the track's hero sprite ($13A2 / $13A4 of its 13-byte entry).
+func 81:9B56 AnimOp61_HeroPose      | AnimOps 61 p: the track's hero takes pose p.
+func 81:9B7E AnimOp62_MonsterDraw   | AnimOps 62 m: monster draw mode m ($15AB), the scene redrawn and the colours sent.
+func 81:9BA3 AnimOp63_Skip          | AnimOps 63 b: skips its byte.
+func 81:9BAC AnimOp64_FlipMonster   | AnimOps 64: flips the track's monster sprite (FlipMonsterSprite).
+func 81:9BBE AnimOp65_MoveHeroParts | AnimOps 65 dx dy: moves the pieces of the track's hero sprite ($48C0 lists) by dx / dy (guess).
+func 81:9C76 AnimOp66_SpriteFlag    | AnimOps 66 b: sets bit 7 of the track's monster (or capsule) sprite record from b (guess: priority or hidden).
+func 81:9CCC AnimOp67_TargetHeroPose | AnimOps 67 p: the target hero takes pose p, unless asleep, dead or paralysed (status 2D).
+func 81:9D0B AnimOp68_FlipCapsule   | AnimOps 68: flips the capsule's sprite (FlipCapsuleSprite).
+func 81:9D1F AnimOp69_MoveCapsule   | AnimOps 69 dx dy: moves the capsule's sprite ($13D2 / $13D4).
+func 81:9DC9 AnimOp6A_HeroNormalPose | AnimOps 6A: the track's hero goes back to its standing pose ($1547 + slot).
+func 81:9DF6 AnimOp6B_MonsterDrawMode | AnimOps 6B m: monster draw mode m without the full redraw.
+func 81:9E13 AnimOp70_Sound         | AnimOps 70 b: plays sound b.
+func 81:9E22 AnimOp71_HitObjects    | AnimOps 71: starts a hit object ($95:8200 scripts) on each target listed at $4F0B by BattleScreenEffect (guess).
+func 81:9F8B AnimOp72_SoundIfFree   | AnimOps 72 b: plays sound b, skipped when few tracks are free or in a boss battle (guess from the tests).
+func 81:A03A AnimOp80_SetAngleRel   | AnimOps 80 a: angle +23 = +24 + a.
+func 81:A04E AnimOp81_AddAngle      | AnimOps 81 a: angle +23 += a.
+func 81:A062 AnimOp82_AimAt         | AnimOps 82 x y: angle +23 = the direction from the object to x / y (VectorAngle).
+func 81:A094 AnimOp83_Advance       | AnimOps 83 r: moves the object r along its angle (PolarToXY).
+func 81:A0C4 AnimOp84_Retreat       | AnimOps 84 r: moves the object r against its angle.
+func 81:A0F4 AnimOp85_RetreatAt     | AnimOps 85 a r: moves the object r against angle +23 + a.
+func 81:A12A AnimOp87_SpriteWord    | AnimOps 87 w: the object's sprite from a packed word (flip bits, size, palette, priority, tile), name table 0.
+func 81:A162 AnimOp88_SpriteWord2   | AnimOps 88 w: as 87 with name table bit set.
+func 81:A19C AnimOp89_Sprite        | AnimOps 89 a t p s: the object's sprite: attributes, tile, priority, size.
+func 81:A1CA AnimOp8C_Hang          | AnimOps 8C: a dead loop.
+func 81:A1CC AnimOp8E_StartObject   | AnimOps 8E w x y k: starts an object at w at x / y relative to this one, kind k.
+func 81:A1EC AnimOp8F_SpriteUnchanged | AnimOps 8F: clears the "sprite changed" flag +26.
+func 81:A1F5 AnimOp90_Detach        | AnimOps 90: the object no longer belongs to a fighter (+25 = FF).
+func 81:A1FF AnimOp91_RandomVar     | AnimOps 91 v r: track variable v = a random number from -r/2 to r/2 (byte or word by $81:A25F).
+func 81:A264 AnimOp94_PlaceAtAngle  | AnimOps 94 a r: places the object at r along angle a from its base.
+func 81:A295 AnimOp95_SetOffset     | AnimOps 95 x y: the object's offset +1B / +1D = x / y.
+func 81:A2B0 AnimOp96_StartObjectAt | AnimOps 96 w a r k: starts an object at w placed r along angle a, kind k.
+func 81:A31D AnimOp97_PlaceByVars   | AnimOps 97 v1 v2: places the object along angle = variable v1 at radius = variable v2.
+func 81:A35E AnimOp98_SpriteAttr    | AnimOps 98 b: sprite attributes (flip bits) +2B.
+func 81:A373 AnimOp99_SpriteTile    | AnimOps 99 b: sprite tile +27.
+func 81:A388 AnimOp9A_SpritePalette | AnimOps 9A b: sprite palette bits +28.
+func 81:A39D AnimOp9B_TileFromVar   | AnimOps 9B v: sprite tile = track variable v.
+func 81:A3BF AnimOp9C_SpritePriority | AnimOps 9C b: sprite priority +29.
+func 81:A3D4 AnimOp9D_SpriteSize    | AnimOps 9D b: sprite size +2A.
+func 81:A3E9 AnimOpC0_SetVar        | AnimOps C0 v w: track variable v = w.
+func 81:A40B AnimOpC1_AddVar        | AnimOps C1 v w: track variable v += w.
+func 81:A431 AnimOpC2_RandomAngle   | AnimOps C2 v: track variable v = a random even number 0-FE.
+func 81:A455 AnimOpD0_StartObject   | AnimOps D0 w: starts an object at w at this track's place.
+func 81:A46E AnimOpD1_StartObjectK80 | AnimOps D1 w: the same with kind 80.
+func 81:A489 AnimOpD2_StartObjectKind | AnimOps D2 w k: the same with kind k.
+func 81:A4A6 AnimOpD3_StartObject32 | AnimOps D3 w: starts an object at w at +32 / +32, kind 20.
+func 81:A4C3 AnimOpD4_StartChild    | AnimOps D4 w: starts an object at w relative to this object.
+func 81:A4DC AnimOpD5_StartChildK80 | AnimOps D5 w: the same with kind 80.
+func 81:A4F7 AnimOpD6_StartChildRight | AnimOps D6 w: the same 16 pixels to the right.
+func 81:A512 AnimOpD7_StartChildUp  | AnimOps D7 w: the same 16 pixels up.
+func 81:A52D AnimOpD8_StartChildKind | AnimOps D8 w k: relative to this object, kind k.
+func 81:A54A AnimOpD9_StartChildY   | AnimOps D9 w y: relative to this object, y offset y.
+func 81:A567 AnimOpDA_SpriteTileOnly | AnimOps DA t: sprite tile t, priority 3, no flips, small size.
+func 81:A588 AnimOpDB_TileFromVar17 | AnimOps DB: sprite tile = track byte +17.
+func 81:A598 AnimOpDC_PlaceByVars13 | AnimOps DC: places the object along angle +13 at radius +15.
+func 81:A5BD AnimOpDD_BgColours     | AnimOps DD w: 16 colours from $96:8000 + 32 w into colours $10.. (background palette 1).
+func 81:A5D5 AnimOpDE_ObjColours1   | AnimOps DE w: 16 colours into colours $90.. (sprite palette 1).
+func 81:A5ED AnimOpDF_ObjColours2   | AnimOps DF w: 16 colours into colours $A0.. (sprite palette 2).
+func 81:A605 AnimOpE0_Step1         | AnimOps E0: step length 1 frame.
+func 81:A60F AnimOpE1_Step2         | AnimOps E1: step length 2.
+func 81:A619 AnimOpE2_Step3         | AnimOps E2: step length 3.
+func 81:A623 AnimOpE3_Step4         | AnimOps E3: step length 4.
+func 81:A62D AnimOpE4_Step5         | AnimOps E4: step length 5.
+func 81:A637 AnimOpE5_Step6         | AnimOps E5: step length 6.
+func 81:A641 AnimOpE6_Step8         | AnimOps E6: step length 8.
+func 81:A64B AnimOpE7_Step10        | AnimOps E7: step length 10.
+func 81:A655 AnimOpE8_Step20        | AnimOps E8: step length 20.
+func 81:A65F AnimOpE9_TrackHere     | AnimOps E9 w: starts a track at w here.
+func 81:A676 AnimOpEA_TrackHereY    | AnimOps EA w y: starts a track at w here, x offset 80, y offset y.
+func 81:A696 AnimOpEB_CancelBg3Map  | AnimOps EB: $15B4 = 0 (guess: the queued map 0).
+func 81:A69A AnimOpEC_Advance       | AnimOps EC r: moves the object r (a byte) along its angle.
+func 81:A6C6 AnimOpED_Retreat       | AnimOps ED r: moves the object r against its angle.
+func 81:A6F2 AnimOpEE_Advance1      | AnimOps EE: moves the object 1 along its angle.
+func 81:A71C AnimOpEF_Advance2      | AnimOps EF: moves 2 along its angle.
+func 81:A746 AnimOpF0_Advance3      | AnimOps F0: moves 3 along its angle.
+func 81:A770 AnimOpF1_Advance4      | AnimOps F1: moves 4 along its angle.

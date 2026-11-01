@@ -1,0 +1,474 @@
+# Bank $85: the battle engine (battle script interpreter, targeting, damage, battle display), plus save packing.
+# Names checked against docs/lufia2/battlescript.md and the code; "(guess)" marks inferences.
+
+# ---- battle script interpreter core
+func 85:B452 RunBattleScript       | JSL entry of the battle script interpreter: saves registers, clears $0A60, then runs opcodes from [$BB] until 00 or 4F ends the script (called by the runner $81:FAC9).
+func 85:B45E NextBattleOp          | Reads the next battle script opcode at [$BB], loads the attacker/target pointers (UpdateCombatantPointers) and jumps through BattleOps; every handler ends here.
+func 85:B476 BattleOp4F_Cancel     | Op 4F: ends the script with $0A5B = FF (the action is cancelled). Op 00 (at $85:B473, LDA #0 then a BIT that hides this LDA #$FF) ends it with $0A5B = 0.
+func 85:B53D BattleOp01_DoActionNow | Op 01: performs the queued action now (pushes the interpreter state, $81:A832, ApplyActionEffect, pops the state) and goes on with the script.
+func 85:B551 BattleOp03_Goto       | Op 03 w: jumps to w, an offset from the owning record ($BB = $0A42 + w). The other jumps come here when taken.
+func 85:B560 BattleOp04_IfFailedGoto | Op 04 w: jumps to w when register 10 (the last action failed) is not 0.
+func 85:B582 BattleOp05_ChanceGoto | Op 05 b w: jumps to w when a random number 0..FE is below b (chance b/255).
+func 85:B598 BattleOp06_IfEqualGoto | Op 06 r v w: jumps to w when register r == value v.
+func 85:B5AD BattleOp07_IfNotEqualGoto | Op 07 r v w: jumps to w when register r != value v.
+func 85:B5C2 BattleOp08_IfGreaterGoto | Op 08 r v w: jumps to w when register r > value v (signed).
+func 85:B5E7 BattleOp09_IfLessGoto | Op 09 r v w: jumps to w when register r < value v (signed).
+func 85:B60A BattleOp0A_IfGreaterOrEqualGoto | Op 0A r v w: jumps to w when register r >= value v (signed).
+func 85:B62D BattleOp0B_IfLessOrEqualGoto | Op 0B r v w: jumps to w when register r <= value v (signed).
+func 85:B652 BattleOp3F_IfCapsuleAttackLearnedGoto | Op 3F b w: jumps to w when bit (b - 1) of the active capsule monster's learned-attack bits (CapsuleLearnedMask) is set.
+func 85:B670 BattleOp0C_Set        | Op 0C r v: register r = value v.
+func 85:B67C BattleOp0D_Add        | Op 0D r v: register r += value v.
+func 85:B698 BattleOp0E_Subtract   | Op 0E r v: register r -= value v.
+func 85:B6B7 BattleOp0F_Multiply   | Op 0F r v: register r *= value v (16 x 16 multiply, low 16 bits kept).
+func 85:B6D2 BattleOp10_DivideSigned | Op 10 r v: register r /= v, signed: a negative register is negated, divided (24 / 8-bit divide, so only v's low byte counts) and negated back.
+func 85:B71D BattleOp55_DivideUnsigned | Op 55 r v: register r /= v unsigned (only v's low byte is the divisor).
+func 85:B73B BattleOp11_Random     | Op 11 r: register r = a random number from 0 to register r - 1 (RandomBelow).
+func 85:B753 BattleOp12_Ratio      | Op 12 r r2: register r = (register r * 256 / register r2) & FF, a fraction of 256 (LongDivide; never used by the game).
+func 85:B77B BattleOp13_GetTargetStat | Op 13 r s: register r = stat s of the targets (register 21); several targets give their average.
+func 85:B7A8 BattleOp14_SetTargetStat | Op 14 r s: stat s of every target (register 21) = register r.
+func 85:B7CF BattleOp15_GetOwnStat | Op 15 r s: register r = stat s of the script's owner: the attacker (register 20), or the target when $0A52 is set (a defence script).
+func 85:B81C BattleOp4E_GetAttackerStat | Op 4E r s: register r = stat s of the attacker (register 20).
+func 85:B849 BattleOp16_And        | Op 16 r v: register r &= value v.
+func 85:B864 BattleOp17_Or         | Op 17 r v: register r |= value v.
+func 85:B87F BattleOp18_Xor        | Op 18 r v: register r ^= value v.
+func 85:B89A BattleOp19_Abs        | Op 19 r: register r = abs(register r).
+func 85:B8B4 BattleOp1A_Negate     | Op 1A r: register r = -register r.
+func 85:B8CC BattleOp1B_Sign       | Op 1B r: register r = sign of register r (-1, 0 or 1).
+func 85:B8EB BattleOp1C_GetRoundCounter | Op 1C r: register r = $11E8 (a battle counter, the round number; guess).
+func 85:B8F7 BattleOp40_GetCapsuleLearnedMask | Op 40 r: register r = the active capsule monster's learned-attack bits (CapsuleLearnedMask).
+func 85:B904 BattleOp1D_ApplyEffect | Op 1D: runs ApplyActionEffect (the effect step of op 01 without performing the action).
+func 85:B90B BattleOp1E_ShowAttackName | Op 1E b: register 25 = b, shows enemy attack name b (EnemyAttackName) and sets the message timer $1264 to 120 frames.
+func 85:B91F BattleOp1F_SetElement | Op 1F w: register 27 (the attack's element bits) = w.
+func 85:B92C BattleOp20_SetCritical | Op 20 b b2: register 28 = b (critical chance), register 29 = b2 (critical multiplier).
+func 85:B93D BattleOp21_PhysicalDamage | Op 21 w v b: physical damage: element (reg 27) = w, reg 26 = 20, action kind (reg 23) = 5, damage (reg 2A) = -v, spread (reg 2B) = 20; the last byte is read and ignored.
+func 85:B96E BattleOp22_MagicDamage | Op 22 w v b: magic damage: element = w, reg 26 = 1DC, action kind = 0A, damage (reg 2A) = -(v + the attacker's INT + its INT battle bonus), spread = 20; the last byte is read and ignored.
+func 85:B9B8 BattleOp23_FixedDamage | Op 23 w: fixed damage: reg 2A = -w, spread = 20, reg 26 = 20. It loads 5 for the action kind but never stores it (a bug in the game: reg 23 keeps its value).
+func 85:B9DA BattleOp24_ChangeStatBy | Op 24 t v b: queues a change of stat class t (HP MP maxHP maxMP ATP DFP STR AGL INT GUT MGR, offsets $85:9F04) by v with spread b, in the 6-byte register record of that stat (HP's is reg 2A/2B).
+func 85:BA02 BattleOp25_ChangeStatPercent | Op 25 t b: queues a change of stat class t by b percent (record +4) and clears its spread.
+func 85:BA28 BattleOp26_SetCureChance | Op 26 e b: chance b of curing status e (status record $85:9F0F + 2).
+func 85:BA47 BattleOp27_SetInflictChance | Op 27 e b: chance b of causing status e (status record $85:9F0F).
+func 85:BA64 BattleOp28_PlainAttack | Op 28: plain attack: action kind 1, argument 0, no battle animation ($1262 = FF), no name ($1269 = 0).
+func 85:BA81 BattleOp29_Defend     | Op 29: defend (action kind 4).
+func 85:BA8A BattleOp2A_Flee       | Op 2A: run away (action kind 6); the script goes on.
+func 85:BA93 BattleOp2B_UseItem    | Op 2B w: use item w (action kind 3, argument w).
+func 85:BAA6 BattleOp2C_CastSpell  | Op 2C b: cast spell b: when the attacker has the MP ($81:F3F4) and its status word (stat 14) lacks bit 1, action kind 12, argument b, loads the spell and shows its name; else action kind 2 and register 10 = 2 (failed).
+func 85:BB15 BattleOp2D_CallMonster | Op 2D b: calls monster b to the battle (action kind 7) when AddMonsterToBattle finds room; else register 10 = 2 (failed).
+func 85:BB46 BattleOp2E_Action0D   | Op 2E: action kind 0D (never used by the game).
+func 85:BB4F BattleOp2F_CountFallenAllies | Op 2F r: register r = how many of the hero side's 5 slots hold a fallen fighter (flag 04 at +0F); 0 when the target is on the enemy side.
+func 85:BB7E BattleOp30_GetSideCount | Op 30 r: register r = a count for the attacker's side: $15FE for a monster, else $153C in battle or the party count $0A7A outside (guess: number of fighters).
+func 85:BBA2 BattleOp32_ChooseTarget | Op 32 b ...: register 10 = 0, then picks the targets (register 21) with mode b through TargetModes.
+table 85:BBB6 TargetModes          | Target modes of op 32: 00 keep, 01 random enemy of the attacker, 02 lowest by a stat, 03 highest by a stat, 04 whole side with fallen heroes, 05 whole target side, 06 self, 07 random own side, 08 random hero.
+func 85:BBCA TargetMode00_Keep     | Op 32 mode 00: keeps the current target.
+func 85:BBCD TargetMode01_RandomOpponent | Op 32 mode 01: a random living fighter of the side opposite the attacker (random slot 0-5 until one is alive).
+func 85:BBF8 TargetMode02_LowestStat | Op 32 mode 02 s n k: ranks the living fighters of the target's side by stat s, lowest first (values negated, shuffled, sorted), and takes k of them from rank n.
+func 85:BC26 TargetMode03_HighestStat | Op 32 mode 03 s n k: ranks the living fighters of the target's side by stat s, highest first (shuffled, sorted) and takes k of them from rank n.
+func 85:BC39 TargetMode04_SideWithFallen | Op 32 mode 04: the whole target side; on the hero side every hero slot that is filled (fallen ones too) and the capsule monster only while alive (guess: for revival).
+func 85:BC56 TargetMode05_WholeSide | Op 32 mode 05: every living fighter on the target's side.
+func 85:BC66 TargetMode06_Self     | Op 32 mode 06: the attacker itself (register 21 = register 20).
+func 85:BC73 TargetMode07_RandomAlly | Op 32 mode 07: a random living fighter of the attacker's own side.
+func 85:BC9C TargetMode08_RandomHero | Op 32 mode 08: a random living hero (capsule monster excluded); register 10 = FF when none is alive.
+func 85:BCCF BattleOp35_SetSpecialEffect | Op 35 b: $0A62 = b (the special effect number, e.g. drain).
+func 85:BCD8 BattleOp36_SetSpecialEffectIfFailed | Op 36 b: $0A62 = b when register 10 is not 0.
+func 85:BCED BattleOp37_WeaponAttack | Op 37: weapon attack: action kind 1; when reg 2A is 0 it becomes -(ATP + register 5E + the ATP battle bonus); spread (reg 2B) = 40.
+func 85:BD2C BattleOp3C_AddInt     | Op 3C: adds the attacker's INT to the size of the amount in reg 2A (keeping its sign), as the healing spells do after op 24.
+func 85:BD54 BattleOp3D_PlayAnimation | Op 3D b: plays battle animation b now ($81:895E).
+func 85:BD5E BattleOp3E_CapsuleAttack | Op 3E b: capsule attack b (action kind 0B, argument b).
+func 85:BD6E BattleOp41_DoNothing  | Op 41: action kind 0C, an action that does nothing (a taunt); the script goes on.
+func 85:BD77 BattleOp42_CallShared | Op 42 w: calls shared battle script w from the library $96:FADD (saves $BB/$BD in $0A48 and the base in $0A45; one level only).
+func 85:BDB2 BattleOp43_Return     | Op 43: returns from a shared script called by op 42.
+func 85:BDCB BattleOp44_SetHeroBattleByte | Op 44 i b: battle byte i of the owner's hero (FighterBattleCounters) = b.
+func 85:BDDA BattleOp45_GetHeroBattleByte | Op 45 r i: register r = battle byte i of the owner's hero.
+func 85:BDF3 BattleOp46_IfHeroBattleByteZeroGoto | Op 46 i w: jumps to w when battle byte i of the owner's hero is 0.
+func 85:BE06 BattleOp47_TimedMessage | Op 47 v: message timer $1264 = v, then waits for the message (ShowBattleMessageWait).
+func 85:BE13 BattleOp48_CloseMessage | Op 48: closes the battle message ($85:9671).
+func 85:BE1A BattleOp49_WaitTimer  | Op 49: waits until the message timer $1264 counts down to 0.
+func 85:BE22 BattleOp56_SetMessageTimer | Op 56 v: message timer $1264 = v.
+func 85:BE2B BattleOp4A_WaitFrames | Op 4A b: b times: updates the battle display ($85:8A2F) and waits a frame (WaitBattleFrame).
+func 85:BE43 BattleOp4B_Effect4    | Op 4B: $81:C35F with A = 4 (a screen effect; guess).
+func 85:BE4C BattleOp4C_Effect     | Op 4C b: $81:C35F with A = b (a screen effect; guess).
+func 85:BE56 BattleOp4D_DropFallenTargets | Op 4D: keeps only the living fighters in register 21.
+func 85:BE68 BattleOp50_MaskTargets | Op 50: when $0A5D bit 7 is clear, register 21 = (register 21 | EF) & $0A5D.
+func 85:BE7D BattleOp51_SetReflectFlag2 | Op 51: when reg 26 bit 0 is clear, reg 61 |= 2 (Dark reflector).
+func 85:BE96 BattleOp52_SetReflectFlag4 | Op 52: reg 61 |= 4.
+func 85:BEBF BattleOp53_Action09   | Op 53 b: action kind 9 with argument b; register 10 = 0.
+func 85:BEDA BattleOp54_CastIpStyle | Op 54 b: action kind 19 (a spell cast IP-style, without MP or name) with argument b; register 10 = 0.
+func 85:BEF5 BattleOp57_ItemBoost  | Op 57 w b: when the attacker is a hero and his equipped item (+$6E) is w, scales reg 2A (damage) by b/64 and registers 38 and 41 the same way (capped at 100), via ScaleByBoost.
+func 85:BF73 ScaleByBoost          | A = A * $09FA / 64, capped at 7FFF (op 57's boost).
+func 85:BF97 BattleOp58_EerieLight | Op 58: SaveHeroBattleStats (Eerie light).
+func 85:BF9E BattleOp59_SaveMonsterStats | Op 59: SaveMonsterBattleStats.
+func 85:BFA5 BattleOp5A_SetAnimation | Op 5A b: battle animation $1262 = b.
+func 85:BFAE BattleOp5B_NoLoseOnSelfKill | Op 5B: $7F:F8A5 = 0 (the battle is lost if the monster kills itself).
+func 85:BFB6 BattleOp5C_HideDamage | Op 5C: $7F:FAB6 = FF (no damage number shown).
+
+# ---- operand readers and registers
+func 85:BFBF ReadScriptByte8       | Reads the next byte of the battle script ([$BB]) into A's low byte.
+func 85:BFCA ReadScriptWord        | Reads the next word of the battle script into X.
+func 85:BFD8 ReadValueOperand      | Reads a value operand into X: a word with bit 15 set names a register (its low byte), else it is the number itself.
+func 85:BFED GetBattleRegister     | X = battle register A: 00-7F the shared words $7F:F40E + 2r, 80-FF the owner's own words at combatant + $15 + 2(r & 7F).
+func 85:C023 SetBattleRegister     | Battle register A = X (same layout as GetBattleRegister).
+func 85:C05F GetAttackerStat       | X = stat A of the attacker ([$BE]); stats B (IP) and C (level) are bytes.
+func 85:C099 StatOffset            | X = the combatant offset of stat A (table $85:9E47: 0 HP, 1 MP, 2 maxHP, 3 maxMP, 4 ATP, 5 DFP, 6 STR, 7 AGL, 8 INT, 9 GUT, A MGR, B IP, C level, D-13 battle bonuses, 14 status).
+func 85:C0AA GetHeroBattleByte     | A = battle byte X of the owner's hero (FighterBattleCounters).
+func 85:C0B3 SetHeroBattleByte     | Battle byte X of the owner's hero = A.
+func 85:C0BE HeroBattleByteIndex   | X = index of battle byte A of the owner's hero: $14E6 + 6 x slot ($97:FE26 maps the fighter bit to a slot); a monster owner crashes (BRK).
+func 85:C0F8 FilledSlotMask        | A = bits of the filled slots of side A (bit 7 = enemies): on the hero side every slot with a fighter, fallen too; on the enemy side as LivingSideMask.
+func 85:C117 LivingSideMask        | A = bits of the living fighters on side A (bit 7 = enemies; the bit 7 is kept in the result): 5 hero-side slots ($0A64) or 6 monster slots ($0A6E), not fallen (flag 04 at +0F).
+func 85:C135 LivingSideMask_EnemyLoop | The enemy-side loop of LivingSideMask (entered with C set from its body).
+func 85:C15B LivingSideMask_HeroLoop | The hero-side loop of LivingSideMask (entered with C set from its body).
+func 85:C168 CombatantPointer      | X = the combatant struct of fighter A (bit 7 = enemy side, low 6 bits a one-bit mask, or 0 = slot 0): from $0A64 in battle ($0A13 set), else from the party pointers $0A80.
+func 85:C1A1 CapsuleLearnedMask    | A = the 3 learned-attack bits of the active capsule monster ($11A3) at its current form ($11A4): word $11CA + 2 x capsule, shifted right 3 x (form - 1).
+func 85:C1C7 GetFightersStat       | Stat $FAA8 of every fighter in mask $FAAA, averaged when there are several, into $7F:FAA6 (BRK when the mask is empty).
+func 85:C23F SetFightersStat       | Writes $7F:FAA6 into stat $FAA8 of every fighter in mask $FAAA.
+func 85:C28F PushScriptState       | Pushes the interpreter state ($BE, $C1, $BB, $0A42, $BD, $0A44) on the stack at $7F:F986 (pointer $0A4B), so op 01 can run other scripts.
+func 85:C2C2 PushScriptWord        | Pushes word A on the interpreter state stack.
+func 85:C2C3 PushScriptByte        | Pushes byte A on the interpreter state stack.
+func 85:C2C9 PopScriptState        | Pops the interpreter state pushed by PushScriptState.
+func 85:C300 PopScriptValue        | Reads the next value of the interpreter state stack ($7F:F986 + X).
+func 85:C306 BuildTargetRanking    | Reads stat s and fills the ranking list $11EB (3 bytes each: fighter bit, value) with every living fighter on the target's side (used by target modes 02/03).
+func 85:C3B2 RankingStatValue      | $7F:FAA6 = the value of ranking stat $09F2 for one fighter: below 80 a plain stat; 80+ a pair from $85:9E71 (e.g. maxHP and HP), their difference when bit 7, as a fraction of the first when bit 6 (HP lost, HP lost %).
+func 85:C428 PickFromRanking       | Reads rank n and count k, and ORs the fighter bits of k entries of the ranking from rank n into A (the new targets).
+func 85:C45E SortRanking           | Sorts the ranking list by value, highest first (bubble sort, $22 passes: the stat number, a slip for the count that only matters to the unused modes 02-03).
+func 85:C49A ShuffleRanking        | Shuffles the ranking list (24 passes of random swaps of neighbours) so ties fall at random.
+func 85:C4DE UpdateCombatantPointers | $C1 = the target's combatant struct (register 21), $BE = the attacker's (register 20).
+
+# ---- RAM of the interpreter
+ram 7E:00BB 3 BattleScriptPtr      | The running battle script (24-bit pointer, [$BB]).
+ram 7E:00BE 2 AttackerPtr          | The attacker's combatant struct (register 20).
+ram 7E:00C1 2 TargetPtr            | The target's combatant struct (register 21).
+ram 7E:0A42 3 BattleScriptBase     | Where the running script's record starts: jumps are offsets from it (bank at $0A44).
+ram 7E:0A45 3 SharedScriptReturnBase | Op 42's saved script base.
+ram 7E:0A48 3 SharedScriptReturnPtr | Op 42's saved script pointer.
+ram 7E:0A4B 2 ScriptStateStackPtr  | Pointer into the interpreter state stack $7F:F986 (PushScriptState).
+ram 7E:0A52 1 ScriptOwnerIsTarget  | Nonzero while a defence script runs: own-stat reads and registers 80-FF use the target.
+ram 7E:0A5B 1 BattleScriptResult   | How the last script ended: 0 (op 00) or FF (op 4F, cancelled).
+ram 7E:0A62 1 SpecialEffect        | Special effect number of the action (ops 35/36).
+ram 7E:0A64 10 HeroSideCombatants  | Combatant pointers of the hero side in battle: 4 heroes and the capsule monster (0 = empty).
+ram 7E:0A6E 12 MonsterCombatants   | Combatant pointers of the 6 monster slots (0 = empty).
+ram 7E:0A7A 1 PartyCount           | Number of heroes in the party.
+ram 7E:0A80 8 PartyPointers        | RAM blocks of the 4 party slots (0 = empty).
+ram 7E:11A3 1 ActiveCapsule        | The capsule monster in the party.
+ram 7E:11A4 1 ActiveCapsuleForm    | Its form (level 1-5).
+ram 7E:11CA 14 CapsuleLearnedAttacks | Per capsule monster a word with 3 learned-attack bits per form.
+ram 7E:11EB 36 TargetRanking       | The ranking list of target modes 02/03: 3-byte entries (fighter bit, value).
+ram 7E:1262 1 BattleAnimation      | The battle animation to play ($95:8000 table; FF = none).
+ram 7E:1264 2 BattleMessageTimer   | Frames a battle message stays up (counted down).
+ram 7E:1269 32 BattleNameText      | The attack, spell or item name shown in battle (text).
+ram 7E:14E6 66 FighterBattleCounters | Six battle counters per fighter slot (11 slots), counted down by 1 each round (StartRound); the heroes' are read and set by ops 44-46.
+ram 7F:F40E 32 BattleRegisters     | Battle script shared registers 00-0F (words; the shared registers 00-7F run from here, 2 bytes each, and the named ones follow as Reg...).
+ram 7F:F42E 2 RegFailed            | Battle register 10: the last action failed (nonzero).
+ram 7F:F44E 2 RegAttacker          | Battle register 20: the attacker (fighter byte: bit 7 = monster side, low bits its slot bit).
+ram 7F:F450 2 RegTargets           | Battle register 21: the targets (fighter bits, bit 7 = monster side).
+ram 7F:F454 2 RegActionKind        | Battle register 23: the action's kind (1 attack, 2 failed spell, 3 item, 4 defend, 5 physical, 6 flee, 7 call monster, 0A magic, 0B capsule attack, 0C nothing, 12 spell, 19 IP-style spell).
+ram 7F:F456 2 RegActionArg         | Battle register 24: the action's argument (spell, item, monster ...).
+ram 7F:F458 2 RegAttackName        | Battle register 25: the enemy attack name number.
+ram 7F:F45A 2 RegDamageClass       | Battle register 26: 20 for physical, 1DC for magic damage (guess: which defences apply).
+ram 7F:F45C 2 RegElement           | Battle register 27: the attack's element bits.
+ram 7F:F45E 2 RegCriticalChance    | Battle register 28: the critical hit chance.
+ram 7F:F460 2 RegCriticalMultiplier | Battle register 29: the critical hit multiplier.
+ram 7F:F462 2 RegDamage            | Battle register 2A: the HP change (negative = damage).
+ram 7F:F464 2 RegDamageSpread      | Battle register 2B: the HP change's random spread.
+ram 7F:F4D0 2 RegReflectFlags      | Battle register 61: reflect / special flags (ops 51, 52).
+ram 7F:F986 64 ScriptStateStack    | The interpreter state stack (PushScriptState).
+ram 7F:FAA6 2 FighterStatValue     | GetFightersStat result / SetFightersStat value.
+ram 7F:FAA8 2 FighterStatOffset    | Which stat GetFightersStat reads (stat number, then its offset).
+ram 7F:FAAA 2 FighterStatMask      | Which fighters GetFightersStat reads (fighter bits).
+ram 7F:FAB6 1 HideDamageNumber     | FF: no damage number shown (op 5C).
+ram 7F:F8A5 1 LoseOnSelfKill       | Cleared by op 5B (guess: 0 = the battle is lost when the monster kills itself).
+
+# ---- applying an action's effect to its targets (damage, healing, status, stats, death, rewards)
+func 85:CCCE ClearEffectRegisters  | Clears battle registers 22-63 ($7F:F452-$F4D5): the effect of the next action starts from nothing.
+func 85:CD10 ReadHeroSpecialEffects | For the 4 hero result records ($7F:F60C, F62A, F648, F666) copies each one's special effect and its value into $0A37-$0A42 (3 bytes each) via ReadResultSpecialEffect.
+func 85:CD5D ReadResultSpecialEffect | $09F2 = the special effect of the result record at X (0 when none or when its kind is 5), $09F4 = the word at the record offset $85:A6ED gives for that effect.
+func 85:CD8C SaveEffectRegisters   | Copies battle registers 20-63 ($7F:F44E, 0x88 bytes) to the saved copy $7F:F4D6.
+func 85:CD9B RestoreEffectRegisters | Copies the saved registers $7F:F4D6 back to registers 20-63.
+func 85:CDAA LoadFighterRecordToB5 | Copies the 12-byte battle record of fighter A ($7F, FighterRecordPtr) to [$B5].
+func 85:CDD0 LoadFighterRecordToB8 | Clears the effect registers and copies the 12-byte battle record of fighter A to [$B8].
+func 85:CDFA FighterRecordPtr      | X = the 12-byte battle record of fighter A in bank $7F (table $85:9EEC: heroes $F55E.., monsters from $F5A6).
+func 85:CE21 ApplyActionEffect     | Applies the saved action (registers at $7F:F4D6) to every target and writes the results ($7F:F60C..); when reg 26 bit 1 is set (drain) the attacker then gets back what the targets lost (SumDrainedAmounts).
+func 85:CE6F ApplyEffectToAllTargets | For each target bit in the saved reg 21: copies the action registers ([$B5] -> [$B8]), works out rows (RowDefenseFactor), applies it (ApplyEffectToTarget) and writes the result; a reflected action is applied to the attacker instead. When reg 26 bit 8 is set (magic) the amounts are shared: a gain is divided by the number of targets n, a loss scaled by $85:9E9B[n]/256 (2: 147, 3: 128, 4: 114, 5: 104).
+func 85:CF68 SumDrainedAmounts     | For a drain: target = the attacker, registers 26-5D cleared, then the HP/MP/stat changes of every successful result record (kind 80) summed and negated into them.
+func 85:CFAB AddResultToDrain      | Adds the 11 stat changes of the result record at X (when its kind is 80) to registers 2A, 2D, ... (the drain sum).
+func 85:D025 RowDefenseFactor      | Register 22 = the damage cut out of 256: 40 for each of attacker and target in the back row (unless reg 26 bit 6), plus 60 when the target defends (+10 bit 0, unless reg 26 bit 7).
+func 85:D080 BackRowFlag           | A = 1 when fighter A stands in the back row: heroes in slots 3 and 4; a monster when some living monster has its front flag $134B set and this one has not.
+func 85:D0CD ApplyEffectToTarget   | Applies the action in [$B8] to target reg 21; returns C when it bounces back (reg 26 bit 4 and status bit 7, bit 5 and status bit 6, or reg 61 bit 1). Order: defence (MGR or DFP + battle bonus) and the target's defence script, spread and critical roll, damage formula, status cures and causes, HP, IP gain, MP, stat bonuses, death and rewards.
+note 85:D116 | Damage taken: the target may wake up or come to its senses (cure chance of statuses 4 and 5): 100 when hit by its own side, 20 by the other side.
+note 85:D1BC | Spreads become random: reg 2B = random(0 .. reg 2B - 1), reg 2E likewise. Critical: random(0..99) < reg 28 multiplies by reg 29 / 16 and ignores the defence; else the multiplier is 10 (x1).
+note 85:D20C | Damage = ((|amount| x mult / 16) x (256 + spread) / 256 - defence / 2), not below 0, then / 2, then cut by reg 22 / 256 (rows, defending). Healing = amount x mult / 16 x (256 + spread) / 256.
+note 85:D4A5 | HP: healing stops at max HP; damage stops at 0 and 0 HP kills.
+note 85:D508 | IP gain when a monster hurts a hero: (1 - cos(90 x damage / HP before)) x 2 x GUT x 128/100, + 12, capped 255, added to the hero's IP (+BC).
+note 85:D699 | The target falls: status = dead only, HP 0. A monster adds its EXP to $1605 and gold to $1608 and rolls its item drop (the first drop of the battle is kept in $160B); a hero loses his IP and +BA counts up.
+func 85:D711 WouldEffectWork       | Outside battle (items and spells used from the menu): for each target, whether the saved action would change anything (WouldEffectWorkOnTarget); returns C when it would.
+func 85:D7CE WouldEffectWorkOnTarget | Returns C when the action in [$B8] would heal, raise, lower, cure or cause something on target reg 21 (compared with what is already at its limit); a fallen target only when the action has a revive (byte +66).
+func 85:D82C EffectChangeBits      | $0A00/$0A01 = the statuses the action may cause / cure; $09FA/$09FB = the stats (HP MP ATP-MGR) it raises / lowers.
+func 85:D8A1 EffectChangeBit       | Sets the next bit of $09F4 (raise) or $09F6 (lower) when the stat change at [$B8]+Y is positive or negative.
+func 85:D8B9 TargetLimitBits       | $09FC/$09FD = the target's stats already at their limit (HP and MP at max, STR AGL INT MGR at 999, GUT at 199) / already at 0; $09FE/$09FF = its statuses off / on.
+func 85:D94F WriteTargetResult     | Writes the result of one target (result kind $0A2D, special effect $0A62, the 11 stat changes, statuses caused $0A35 and cured $0A36) into its 30-byte record (TargetResultPtr) through the WRAM port.
+func 85:D9C9 TargetResultPtr       | X = the 30-byte action result record of fighter A in bank $7F (table $85:9ED6: $F60C + 1E x slot; heroes 0-4, monsters 5-10).
+func 85:D9F0 RemoveFromTurnList    | Marks fighter $09FA as gone (FF) in the battle's turn list $1B8C (3-byte entries).
+func 85:DA11 RunHeroArmorScripts   | In battle: runs the armor scripts (property word 3, "when hit") of the target hero's six equipped items (+6E, +70, +68, +6A, +6C, +66), keeping $0A62.
+func 85:DA43 RunItemArmorScript    | Loads item Y ($81:F1C5) and runs its armor script ($0B93) with base = the item record (bank $96).
+func 85:DA5F HeroSlotByte153D      | A = $153D[slot of fighter A] (slot from $97:FE26; guess: the hero id in that battle slot).
+func 85:DA71 ClearHeroBattleBonuses | Sets the battle bonuses (+37..+43: ATP DFP STR AGL INT GUT MGR) of every party member to 0 (Eerie light, battle start).
+func 85:DA9C ClearMonsterBattleBonuses | Sets the battle bonuses (+37..+43) of every monster to 0.
+func 85:DB6D LongDivide            | 16-step division: quotient ($63, 16-bit) = $65 x 256 / $58, an 8.8 fraction (e.g. damage / HP, HP lost / max HP).
+func 85:DC6F Divide24By8           | $5D-$5F (24-bit) /= $54 (8-bit), with the hardware divider.
+func 85:DCA3 Multiply16x16         | $63-$66 = $54-$55 x $56-$57 (with the 8 x 8 hardware multiplier).
+func 85:DCEA RandomBelow           | A = a random number from 0 to A - 1: A x (a 16-bit random number) / 65536.
+func 85:DD19 ApplyRandomSpread     | $56 = $56 varied at random by $54/256 of itself: d = $56 x $54 / 256 + 1, result = $56 - d + random(d) + random(d) (0..FFFF).
+func 85:DE1E Cosine                | $63 = cos(angle $54, 256 = a full turn) from the quarter sine table $97:B226; bit 15 set = negative.
+ram 7F:F452 2 RegDamageCut         | Battle register 22: the damage cut out of 256 from rows and defending (RowDefenseFactor).
+ram 7F:F468 2 RegMpChange          | Battle register 2D: the MP change (negative = MP lost).
+ram 7F:F46A 2 RegMpSpread          | Battle register 2E: the MP change's spread.
+ram 7F:F4CC 2 RegDefence           | Battle register 5F: the target's defence (DFP or MGR plus the battle bonus) for this hit; 0 on a critical.
+ram 7F:F4D6 136 SavedEffectRegisters | Copy of registers 20-63 of the action being applied (SaveEffectRegisters); +02 its targets, +0C its reg 26.
+ram 7F:F5EE 30 TargetResultBuffer  | One target's result before it is copied to its record (WriteTargetResult).
+ram 7F:F60C 330 TargetResults      | 11 result records of 30 bytes (heroes 0-4, monsters 5-10): kind, special effect, 11 stat changes, statuses caused and cured.
+ram 7F:FAB7 1 CriticalHitCount     | Critical hits of the action being applied.
+ram 7E:0A2D 1 TargetResultKind     | Result of the target being processed: 80 done, 2 bounced, 3 reflected, 4 drain step.
+ram 7E:0A35 1 StatusesCaused       | The statuses newly caused on the target (bit 2 = killed).
+ram 7E:0A36 1 StatusesCured        | The statuses cured on the target.
+ram 7E:1605 3 BattleExpTotal       | EXP won in this battle (24-bit).
+ram 7E:1608 3 BattleGoldTotal      | Gold won in this battle (24-bit).
+ram 7E:160B 2 BattleItemDrop       | The item dropped in this battle (item | 200; 0 = none yet).
+ram 7E:0A13 1 InBattle             | Nonzero during a battle (fighters come from $0A64, stat changes go to battle bonuses).
+note 85:D33A | Stat changes in percent (ATP..MGR): a raise of p% adds (stat x p / 100 - battle bonus) / 2, a drop takes (stat + bonus) x p / 100 / 2 (rounded up).
+
+# ---- the developers' debug menu (texts "EV FLAGS", "TP FLAGS", "LOAD / SAVE BANK0-3", "DEBUG COMMAND")
+func 85:8045 DebugFlagEditor       | Debug screen "EV FLAGS / TP FLAGS": a page of 16 rows of story flags ($077E bits) and counters ($079E), or with X puzzle switches and variables; up/down picks a row, left/right the column, L/R the page, A/B add or take 1, Select opens the save/load menu, Y the debug command menu, Start leaves.
+func 85:821C DebugChangeFlag       | Debug: adds A to the counter (or puzzle variable) of the cursor row, or flips the flag (puzzle switch) bit of that row.
+func 85:8267 DebugEraseCursor      | Debug: erases the cursor tile of the current row in the text layer buffer $7E:3000.
+func 85:8274 DebugDrawCursor       | Debug: draws the cursor tile (203E) at the current row in the text layer buffer.
+func 85:8281 DebugCursorOffset     | Debug: X = the text layer offset of the cursor: row $03 x 0x40 + 0x104, plus 0x1C for the right column ($02).
+func 85:829D DebugDrawFlagPage     | Debug: draws the 16 rows of the page from flag $00: each row's flag bit (ON/OFF) and its counter value.
+func 85:8312 DebugFlagBitIndex     | Debug: X = bit (flag $22 & 7), Y = byte (flag $22 / 8) of a flag number.
+func 85:8322 DebugSaveLoadMenu     | Debug "LOAD / SAVE BANK0-3": picks a save slot (shows EMPTY ones) and saves ($80:90C9) or loads ($80:9099) it; a load restarts the game on the saved map. Returns C to go back.
+func 85:8415 DebugMenu             | Shows the debug text at X; Start opens the flag editor (DebugFlagEditor), A closes it.
+func 85:84A9 ClearTextLayerBuffer  | Clears the text layer tilemap buffer $7E:3000-$37FF.
+func 85:850E JoypadHighPressed     | Z clear when one of buttons A (high byte: B Y Select Start up down left right) is held ($47) and newly pressed ($4B); clears those new-press bits.
+func 85:8515 JoypadLowPressed      | Z clear when one of buttons A (low byte: A X L R) is held ($46) and newly pressed ($4A); clears those new-press bits.
+func 85:851C WaitForNextFrame      | Waits until the frame counter $0040 changes.
+
+# ---- battle sprites and the battle scene
+func 85:8850 CycleStatusIcons      | Each frame: for every hero-side fighter with a status (poison, silence, paralysis, confusion, sleep: +0F & 3B) steps its icon timer and shows the next status icon in turn ($85:9EA6 bits, $85:9EB0 icons) above it ($1435 records); hides it otherwise.
+func 85:8905 SetMonsterPoses       | For each monster sets its sprite pose byte ($13DA + 15 x slot): 2 when status bit 3 (paralysed), 1 when bit 5 (asleep), else the monster's own ($81:FBA2).
+func 85:894A AnimateMonsterSprites | Moves the monster sprites by their pose each frame: pose 1 bobs up and down ($85:9E37), pose 2 shakes, pose 20 jitters at random (RandomBits).
+func 85:89E5 ResetMonsterSpriteOffsets | Sets the x/y offsets ($13E3/$13E5) of the 6 monster sprites to 0.
+func 85:8A03 InitHeroSpriteRecords | Copies the 5 hero sprite records (13 bytes each) from $97:CA1D to $1399 and marks the slots that hold a fighter.
+func 85:8A2F DrawBattleSprites     | Per frame: draws the heroes, the capsule monster and the status icons as sprites, and the monsters as sprites or on the background ($11DE, $15AB).
+func 85:8A39 RedrawBattleScene     | Clears the battle background tilemap $7E:2800, loads the sprite palettes, then draws everything as DrawBattleSprites.
+func 85:8A95 ReturnOnly_8A95       | Does nothing (RTS).
+func 85:8A96 DrawBattleSpritesAll  | Loads the palettes and draws heroes, capsule monster, icons and monster sprites.
+func 85:8AAF LoadHeroSpritePalettes | Copies the hero sprite palettes ($97:CCF8, 0x40 bytes) and the capsule's ($7E:4800, 0x20 bytes) into the palette buffer ($7F:F35B, $7F:F3BB).
+func 85:8AF4 LoadMonsterSpritePalettes | Copies the monster palettes ($7E:4820, 0x60 bytes) to the sprite palettes of the buffer ($7F:F2FB): monsters drawn as sprites.
+func 85:8B22 LoadMonsterBgPalettes | Copies the monster palettes ($7E:4820) to the background palettes of the buffer ($7F:F27B): monsters drawn on the background.
+func 85:8B4B DrawHeroSprites       | Builds the OAM entries ($81:BD47) of the hero sprites from their records ($139A, 13 bytes each).
+func 85:8BC0 DrawCapsuleSprite     | Builds the OAM entries of the capsule monster's sprite (record $13CE).
+func 85:8C27 DrawStatusIconSprites | Builds the OAM entries of the status icons over the heroes (records $1435).
+func 85:8C98 DrawMonsterSprites    | Builds the OAM entries of the monster sprites (6 records of 15 bytes at $13DB).
+func 85:8D2E DrawMonstersOnBg      | Writes the monsters into the background tilemap $7E:2800 ($81:BE54) instead of sprites.
+func 85:8F4A RandomBits            | Steps the bit generator $122F-$1239 by one bit; returns Z clear when the bit out is 1 (guess: a shift-register random source).
+func 85:8F67 RecoverStatusesAtTurn | For every fighter (heroes, then monsters): RecoverStatusesOf.
+func 85:8F8A RecoverStatusesOf     | Clears fighter $03's result record and, for each of sleep (bit 5), confusion (bit 4) and paralysis (bit 3), ends it with chance 1 in 7 and shows "wakes up" / "normalizes" / "can move".
+func 85:903F ShowStatusRecovered   | Shows the status message of $1269 for 45 frames, redraws the status icons and the scene, then closes it.
+func 85:9099 CountDownMirror       | For every fighter: CountDownMirrorOf.
+func 85:90BC CountDownMirrorOf     | Counts down the mirror (status bit 7) of fighter $03; at 0 it ends with "loses mirror".
+func 85:9114 ShowMirrorLost        | Shows the message of $1269 for 45 frames and closes it.
+func 85:9150 CopyFighterName       | Copies the name at X (DB) to the battle text $1269, trims trailing spaces (10) and sets the text length $1266.
+func 85:9173 AppendStatusMessage   | Appends status message A (table BattleStatusMessages: cured, wakes up, escapes, normalizes, defends, can move, loses mirror) to the battle text.
+table 85:EFD3 BattleStatusMessages | Status messages 0-6: " cured.", " wakes up.", " escapes.", " normalizes.", " defends.", " can move.", " loses mirror.".
+func 85:919C UpdateStatusIcons     | CycleStatusIcons (called every frame).
+func 85:91A1 RefreshStatusIcons    | Copies each hero-side fighter's status (+0F) to its icon record ($147A); a new status restarts the icon cycle.
+func 85:91D0 RefreshStatusIcons_Next | The loop step of RefreshStatusIcons (entered from its body).
+func 85:91D1 RefreshStatusIcons_Skip | RefreshStatusIcons' loop read with 16-bit A (skips empty slots).
+func 85:91E0 ClearStatusIcons      | Clears the status icon timers ($1479) and records ($1435).
+func 85:9236 AllHeroesDisabled     | Returns C when none of the 4 heroes can act (each slot empty, fallen, confused or asleep: +0F & 34).
+func 85:9255 HeroDisabled          | Returns C when fighter X is missing, fallen, confused or asleep.
+func 85:9265 ClearBattleRegisters  | Clears the battle registers and results $7F:F44E-$F749.
+
+# ---- VRAM transfer queue ($1A8F: 16 entries of 6 bytes: +0 byte count (written last, 0 = free), +2 source in $7E, +4 VRAM word address; the reader was not found, so the layout is a guess)
+func 85:9ADD QueueVram_C000_To_3000_2000 | Queues a VRAM upload: 0x2000 bytes from $7E:C000 to VRAM $3000.
+func 85:9AF4 QueueVram_2000_To_0000_800 | Queues a VRAM upload: 0x800 bytes from $7E:2000 to VRAM $0000.
+func 85:9B0B QueueVram_A000_To_5000_1000 | Queues a VRAM upload: 0x1000 bytes from $7E:A000 to VRAM $5000.
+func 85:9B22 QueueVram_A800_To_5400_800 | Queues a VRAM upload: 0x800 bytes from $7E:A800 to VRAM $5400.
+func 85:9B39 QueueVram_8000_To_6000_2000 | Queues a VRAM upload: 0x2000 bytes from $7E:8000 to VRAM $6000.
+func 85:9B50 QueueVram_6000_To_7000_2000 | Queues a VRAM upload: 0x2000 bytes from $7E:6000 to VRAM $7000.
+func 85:9B67 QueueVram_2800_To_5C00_800 | Queues a VRAM upload: 0x800 bytes from $7E:2800 to VRAM $5C00.
+func 85:9B7E QueueVram_3000_To_0800_400 | Queues a VRAM upload: 0x400 bytes from $7E:3000 to VRAM $0800.
+func 85:9B95 QueueVram_3400_To_0C00_400 | Queues a VRAM upload: 0x400 bytes from $7E:3400 to VRAM $0C00.
+func 85:9BAC QueueVram_3800_To_1800_400 | Queues a VRAM upload: 0x400 bytes from $7E:3800 to VRAM $1800.
+func 85:9BC3 QueueVram_3000_To_0800_1000 | Queues a VRAM upload: 0x1000 bytes from $7E:3000 to VRAM $0800.
+func 85:9BDA QueueVram_9800_To_6C00_800 | Queues a VRAM upload: 0x800 bytes from $7E:9800 to VRAM $6C00.
+func 85:9BF1 QueueVram_2800_To_5C00_700 | Queues a VRAM upload: 0x700 bytes from $7E:2800 to VRAM $5C00.
+func 85:9C08 QueueVram_3000_To_0800_800 | Queues a VRAM upload: 0x800 bytes from $7E:3000 to VRAM $0800.
+func 85:9C1F QueueVram_A000_To_4000_1000 | Queues a VRAM upload: 0x1000 bytes from $7E:A000 to VRAM $4000.
+func 85:9C36 QueueVram_B000_To_4800_1000 | Queues a VRAM upload: 0x1000 bytes from $7E:B000 to VRAM $4800.
+func 85:9C4D QueueVram_DF00_To_1800_1000 | Queues a VRAM upload: 0x1000 bytes from $7E:DF00 to VRAM $1800.
+func 85:9C64 QueueVram_8C00_To_4400_400 | Queues a VRAM upload: 0x400 bytes from $7E:8C00 to VRAM $4400.
+func 85:9C7B QueueVram_3800_To_0C00_C0 | Queues a VRAM upload: 0xC0 bytes from $7E:3800 to VRAM $0C00.
+func 85:9C92 QueueVram_DF00_To_4000_800 | Queues a VRAM upload: 0x800 bytes from $7E:DF00 to VRAM $4000.
+func 85:9CA9 QueueVram_3070_To_0838_4 | Queues a VRAM upload: 0x4 bytes from $7E:3070 to VRAM $0838.
+func 85:9CC0 QueueVram_3800_To_0C00_80 | Queues a VRAM upload: 0x80 bytes from $7E:3800 to VRAM $0C00.
+func 85:9CD7 QueueVram_2800_To_5C00_400 | Queues a VRAM upload: 0x400 bytes from $7E:2800 to VRAM $5C00.
+func 85:9CEE QueueVram_3000_To_0800_600 | Queues a VRAM upload: 0x600 bytes from $7E:3000 to VRAM $0800.
+func 85:9D1C QueueVram_DF00_To_6000_800 | Queues a VRAM upload: 0x800 bytes from $7E:DF00 to VRAM $6000.
+func 85:9D33 QueueVram_6000_To_7000_1000 | Queues a VRAM upload: 0x1000 bytes from $7E:6000 to VRAM $7000.
+func 85:9D4A QueueVram_7000_To_7800_1000 | Queues a VRAM upload: 0x1000 bytes from $7E:7000 to VRAM $7800.
+func 85:9D61 QueueVram_C000_To_2000_AC0 | Queues a VRAM upload: 0xAC0 bytes from $7E:C000 to VRAM $2000.
+func 85:9D78 QueueVram_EE00_To_0E00_1C0 | Queues a VRAM upload: 0x1C0 bytes from $7E:EE00 to VRAM $0E00.
+func 85:9D8F QueueVram_6000_To_4000_800 | Queues a VRAM upload: 0x800 bytes from $7E:6000 to VRAM $4000.
+func 85:9DA6 QueueVram_6800_To_4400_C00 | Queues a VRAM upload: 0xC00 bytes from $7E:6800 to VRAM $4400.
+func 85:9DBD QueueVram_7400_To_4A00_C00 | Queues a VRAM upload: 0xC00 bytes from $7E:7400 to VRAM $4A00.
+func 85:9DD4 QueueVram_2C00_To_5E00_300_AndMore | Queues a VRAM upload: 0x300 bytes from $7E:2C00 to VRAM $5E00; 0x400 bytes from $7E:3400 to VRAM $0A00.
+func 85:ECDB FindFreeVramQueueEntry | Y = the first free entry (word +0 = 0) of the VRAM transfer queue $1A8F (16 entries of 6 bytes); BRK when it is full. The layout (+0 count, +2 source in $7E, +4 VRAM address) is read from the writers (guess).
+ram 7E:1A8F 96 VramQueue          | VRAM transfer queue: 16 entries of 6 bytes (+0 byte count, 0 = free and written last; +2 source address in $7E; +4 VRAM word address) (guess at the layout).
+
+# ---- turn order
+func 85:9275 QueueConfusedHeroes   | For each hero-side fighter that is confused (status bit 4): fills its action record (command 0F, the confused action) and puts it in the turn list by AGL + AGL battle bonus.
+func 85:92CE StoreFighterAction    | Writes the chosen action ($1B7F fighter, $1B81, $1B83 command, $1B85 argument) into that fighter's 12-byte action record (FighterRecordPtr).
+func 85:92FF QueueFighterTurn      | Puts fighter $1B7F in the turn list with speed $1B87 (InsertTurn).
+func 85:9326 SetHeroCommands       | Sets the command byte (+6) of the 4 hero action records ($7F:F564, F570, F57C, F588) to A.
+func 85:9337 InsertTurn            | Inserts fighter $54 with speed $56 into the turn list $1B8C (3-byte entries: fighter, 16-bit speed), keeping it sorted fastest first.
+func 85:937D RemoveTurn            | Removes fighter A from the turn list and closes the gap.
+ram 7E:1B8C 36 TurnList            | The round's turn order: up to 12 entries of 3 bytes (fighter, 16-bit speed), fastest first; FF = the fighter is gone.
+ram 7E:1B7F 2 ChosenActionFighter  | The fighter whose action is being stored (StoreFighterAction).
+ram 7E:1B87 2 ChosenActionSpeed    | Its speed for the turn list.
+
+# ---- battle state checks, slots
+func 85:93B7 CheckBattleOver       | Saves every status (SaveFighterStatuses); when all heroes or all monsters have fallen, sets $11E7 bit 7 and $7F:F8A2 (0 = won, 1 = lost: the heroes' statuses are then cleared) and returns C.
+table 85:9422 HeroOrderSwaps       | By $153C (heroes in battle, 0-4): how the hero slots $0A64 and their ids $153D are swapped (none, none, 0-1, 0-2, 0-3 and 1-2).
+func 85:9419 SwapHeroOrder         | Reverses the order of the heroes in the battle slots by their number ($153C) through HeroOrderSwaps (guess: the battle shows the party right to left).
+func 85:942C SwapHeroOrder_None    | HeroOrderSwaps 0 and 1: nothing to swap.
+func 85:942D SwapHeroOrder_Two     | HeroOrderSwaps 2: swaps hero slots 0 and 1.
+func 85:9445 SwapHeroOrder_Three   | HeroOrderSwaps 3: swaps hero slots 0 and 2.
+func 85:9460 SwapHeroOrder_Four    | HeroOrderSwaps 4: swaps slots 0 and 3, and 1 and 2.
+func 85:948C HideFallenMonsters    | Hides the sprites ($13DB bit 7) of the fallen monsters; when the capsule monster ($0A88) has fallen, clears its graphics ($7E:DF00) and uploads that.
+
+# ---- battle text and messages
+func 85:94E7 SetBattleText         | Copies 37 bytes of text from X (bank $7E/DB) to the battle text $1269.
+func 85:9510 SetBattleTextFromName | Copies the loaded name $0B77 (item or spell, 13 letters) to the battle text, trailing spaces taken off.
+func 85:9578 SetBattleTextIpAttack | Battle text = the name of IP attack A (record +6, IpAttackRecord); $1266 = 1 when it has one.
+func 85:95C6 SetBattleTextMessage  | Battle text = message A of the table $A5:DF00; $1266 = 1.
+func 85:95FE ShowBattleMessage     | Lays out the battle text ($81:E73B); when it is not empty opens the message window ($81:E792), uploads it, sets the timer $1264 (120 frames when unset) and starts the window effect (StartMessageWindowHdma); empty: closes the window.
+func 85:9671 CloseBattleMessage    | Ends the battle message: timer $1264 = 1 and the text layer rows cleared when $1266 is set.
+func 85:9A7D TrimBattleText        | Takes the trailing spaces off the battle text and counts its length into $22; returns C.
+func 85:9AAA SaveDirectPage        | Copies $00-$32 to $7F:F3DB.
+func 85:9ABC RestoreDirectPage     | Copies $7F:F3DB back to $00-$32.
+func 85:9ACE TextColumnBack32      | $24 -= 0x20 (text position one row up; guess).
+func 85:9906 ShowBattleHelp        | While the help button is held in a battle menu: shows the description of the item, spell or IP attack under the cursor ($1B: 0 item, 1 spell, 2 IP) in a window, then restores the screen.
+func 85:9A71 ClearHelpRow          | Clears 0x40 bytes of the help window buffer $7E:EE00 + X (X moves on).
+ram 7E:1266 2 BattleTextLength     | Length / shown flag of the battle text ($1269).
+ram 7E:12F3 1 OamDirty             | FF: send the sprite table at the next battle frame.
+
+# ---- inventory backup (cancelled turns)
+func 85:96A2 BackupInventory       | Copies the item list $0A8D (0xC0 bytes) to $7F:F8A6 before the heroes choose their actions.
+func 85:96B0 RestoreInventory      | Copies the item list back from $7F:F8A6.
+func 85:96BE CancelChosenItems     | Restores the item list and, for the first X heroes whose chosen command is 3 (item), takes the chosen item out again ($81:F15B) (guess: going back in the command menu).
+
+# ---- boss pictures
+func 85:972E DrawBossTilemap       | Fills 15 rows of 16 tiles of the battle tilemap from $7E:2816 with consecutive tiles from 3710: a boss picture on the background.
+func 85:9790 FillTilemapRow16      | Writes 16 consecutive tile numbers from A at X.
+func 85:97D1 DrawBossSprites       | In a boss battle ($11DE): loads the monster palettes to both halves and builds the boss's 8 x 7 sprite grid (BuildSpriteGrid).
+func 85:9884 BuildSpriteGrid       | Builds OAM entries for a grid of $02 x $03 16-pixel sprites from tile $00 at $06/$07; returns the count.
+ram 7E:11DE 1 BossBattle           | Nonzero when the monster is a large boss picture (drawn as a whole background or sprite grid).
+ram 7E:15AB 1 MonsterDrawMode      | 1 = monsters drawn on the background, 2 = as sprites.
+
+# ---- HDMA effects
+func 85:A701 StartBgWaveHdma       | HDMA channel 0 on BG1HOFS from the wave table $7E:4400 (StepBgWave): the battle background ripples (guess).
+func 85:A736 StepBgWave            | Fills the wave table $7E:4400 (32 bytes) from the sine table $85:9F42 at phase $0596 + $1B1A, offset $0594.
+func 85:A804 StartBattleScrollHdma | HDMA set-up for the battle screen: BG3VOFS lines from $7E:4000 (channel 7), window and colour math tables (channels 1, 4, 5).
+func 85:A8E7 StepBattleScrollHdma  | Steps the scroll table of StartBattleScrollHdma (guess).
+func 85:A972 StartMenuScrollHdma   | Like StartBattleScrollHdma with other tables, for the screen of $81:DD7F (guess).
+func 85:AA3D StepMenuScrollHdma    | Steps the scroll table of StartMenuScrollHdma (guess).
+func 85:AADC StartMessageWindowHdma | HDMA channel 4 on BG2VOFS (table $85:A0CE): the battle message window opening.
+func 85:AB5B StartObselHdma        | HDMA channel 3 on OBSEL (table $85:A081) (guess: other sprite sizes in part of the screen).
+func 85:AB78 StartBg2HScrollHdma   | HDMA channel 7 on BG2HOFS (table $85:A092).
+func 85:AB98 StartBattleWindowHdma | HDMA channels 5 (TM, $85:A09E) and 2 (CGWSEL, $85:A0AE): the screen split of the battle menu.
+func 85:ABE4 StartLineMaskHdma     | HDMA channel 1 on TM from $7E:4200 (all lines 1F): the per-line layer mask the boss dissolve uses.
+
+# ---- item, spell and IP attack descriptions
+func 85:C4F1 BuildDescription      | Writes the description of $0A11 (item n, spell 200+n, IP attack 300+n; 300+ minus D0) from the table $97:8000 to $7F:F000, expanding dictionary words: 80+ one byte ($9E:DDCC), 0B-0F two bytes ($8E:EA00), 01-09 two bytes ($9E:DDCC from 80).
+
+# ---- save data packing (the 0x435-byte save image at $7E:3BC8, checksum at $3FFD)
+func 85:C60E UnpackSaveData        | Unpacks the save image $7E:3BC8 (when its checksum matches): names, party, items $0A8A, flags $7F:F080, the 7 heroes (UnpackHeroRecord), the capsule monsters (UnpackCapsuleRecords), then recomputes stats and counts heroes due a level-up.
+func 85:C754 UnpackHeroRecord      | Unpacks one hero: HP, MP, EXP, equipment, spell list (6-bit ids, 3F = none), IP and level, base-stat deltas and bonus bits.
+func 85:C8CF UnpackCapsuleRecords  | Unpacks the capsule monsters' levels and stats (3-bit fields and bit-packed bytes).
+func 85:C932 CountLevelUpDue       | $22 += 1 when hero Y has EXP >= the next level's and is below level 99.
+func 85:C954 PackSaveData          | Packs the game into the save image $7E:3BC8 (0x435 bytes) and stores its checksum at $3FFD.
+func 85:CA22 PackHeroRecord        | Packs one hero (the reverse of UnpackHeroRecord): stats stored as deltas from the level formula (HeroStatDeltas).
+func 85:CB7B PackCapsuleRecords    | Packs the capsule monsters (the reverse of UnpackCapsuleRecords).
+func 85:CBD2 PackThreeBits         | Shifts 3 bits of A into $22, $23 and $24 (one each).
+func 85:CBDC AddLevelBaseStats     | For the 7 heroes: adds the level formula's base stats ($81:F87F, bank $97) to the stored deltas and sets the next level's EXP ($81:F9E9).
+func 85:CC69 HeroStatDeltas        | $0A1C-$0A28 = the hero's base stats minus the level formula's ($81:F87F).
+func 85:DE6C SaveImageChecksum          | $22 = the 16-bit checksum (add with carry, alternating bytes) of $26 bytes at [$2A].
+
+# ---- monsters in battle: graphics slots and screen places
+func 85:DE8E ClearMonsterKinds     | Marks the 6 monster slots' kinds $1327 as empty (FF).
+func 85:DE9D SetUpMonsterSprites   | Fills the 6 monster sprite records ($13DB, 15 bytes) from the slots (SetUpMonsterSprite); empty slots get 0.
+func 85:DEDC SetUpMonsterSprite    | Fills one monster sprite record: shown, position $132D/$1333, graphics kind, palette, size and pose from its kind (MonsterKindIndex).
+func 85:DF35 MonsterKindIndex      | X = which of the 3 loaded monster kinds ($1300) is monster A.
+func 85:DF44 CollectMonsterKinds   | Lists the up to 3 different monsters of the battle in $1300 (BRK on a fourth), with their graphics, palette, size (tiles across/down, total) and pose.
+func 85:DFB9 FreeFallenMonsterSlots | Empties the slots of fallen monsters (combatant cleared) and forgets the kinds no monster uses any more.
+func 85:E02D FindMonsterPlace      | A = a free column on the 32-column monster row wide enough for monster A ($1269 as scratch), nearest the middle; FF when there is none.
+func 85:E0E4 AddMonsterToBattle    | Checks a monster A can join (a free slot, its kind loaded or a free kind with at most 0x40 graphics tiles in all, and a place on screen); returns C when there is no room.
+func 85:E174 SortMonsterSlots      | Sorts the monster slots left to right by x position (arrays $1327-$1351, $7E:DF00 as scratch) and fixes the bits that point at them.
+func 85:E3F9 MonsterSlotBit        | A = the slot bit of monster slot $13 after sorting ($1275).
+func 85:E412 CallMonsterIn         | Brings monster A into the battle (a called companion): place, combatant ($81:FC0B), front row with the monster's chance ($81:FB79), sort, graphics and sprites, then shows it.
+func 85:E4E5 MonstersToSprites     | Uploads the monster graphics and turns the monsters from background tiles into sprites (before one joins).
+func 85:E5C2 FlashFighter          | Flashes fighter A when hit: copies its palette, inverts it and switches between the two for a few frames (monsters, heroes, the capsule monster at 10, or the boss).
+func 85:E665 FlashMonsterFrames    | FlashFighter: 5 frames of monster palette $24.
+func 85:E670 FlashMonsterFrame     | FlashFighter: sets the monster's palette ($13DD) to $24 and shows a frame.
+func 85:E6FE FlashWaitFrames       | FlashFighter: waits 5 battle frames.
+func 85:E709 FlashWaitFrame        | FlashFighter: waits one battle frame.
+func 85:E79B FlashHeroFrames       | FlashFighter: 5 frames of hero palette $24.
+func 85:E7A6 FlashHeroFrame        | FlashFighter: sets the hero's palette ($139C) to $24 and shows a frame.
+func 85:E7BC BossDefeatDissolve    | Boss battles only: the boss picture breaks up line by line (random lines of the layer mask turned off) while the screen shakes, with sounds 0D and 6B.
+func 85:EAE4 BattleFrameWithSprites | Sends the sprites and waits one battle frame.
+func 85:EAEF ShowTotalDefeat       | Shows "Total defeat.", plays sound D2, fades the palettes out, then the screen.
+func 85:EB91 LoadMonsterKindGraphics | Unpacks each monster kind's graphics (file 1B7 + graphic) and puts its tiles (LoadMonsterTiles) and palette (LoadMonsterPalette) in place.
+func 85:EBE0 LoadMonsterTiles      | Places the tiles of monster graphic A (once per graphic) in the monster tile area, returning its first tile.
+func 85:EC4D LoadMonsterPalette    | Copies a monster palette (32 bytes) from the unpacked file to the next palette of $7E:4820; returns its number.
+func 85:EC81 BattleFrame           | One battle frame: status icons, sprites when $12F3 is set, wait for the frame, the debug pause (Start, when $057C is set), new button presses into $DD.
+func 85:ECF0 StartRound            | Starts a round: icons and scene redrawn, registers and turn list cleared, round counter $11E8 + 1 (stops at FF), defending (+10 bit 0) ended for everyone, every fighter's battle counters $14E6 counted down.
+func 85:ED51 SaveFighterStatuses   | Copies the status of the 5 hero-side and 6 monster fighters to $1C01-$1C0B.
+func 85:EDB2 ClearAllBattleBonuses | ClearHeroBattleBonuses and ClearMonsterBattleBonuses.
+func 85:EDBB ClearHeroStatusesAfterBattle | Clears every status but poison and death (and the +10 flags) of the 7 heroes, and the capsule monster's.
+func 85:EDDB ClearHeroOwnRegisters | Clears the own registers 80-87 (+15..+24) of the 5 hero-side fighters.
+func 85:EDF1 UnpackRecordsF1BF     | Unpacks 7 four-byte records from $7F:F1BF into 7-byte records at $1363 (guess: saved positions or ranges).
+func 85:EE3E PackRecordsF1BF       | Packs the 7 records at $1363 back into $7F:F1BF.
+func 85:EE82 ClearHeroStatuses     | Clears the status of the 4 heroes (a lost battle that goes on).
+func 85:EE9B ClearStatusIfPresent  | Clears the status of fighter X unless Z (no fighter).
+func 85:EEA1 RecordMonsterFormation | Unless $7F:F8A3 is 1 or FF: writes the living monsters' ids and their front-row bits into record $7F:F8A4 of $7F:F756 (10 bytes each) (guess: remembered formations).
+ram 7E:1300 3 MonsterKinds         | The up to 3 different monsters of the battle (FF = none).
+ram 7E:1327 6 MonsterSlotKind      | Per monster slot: which of the 3 kinds (FF = empty).
+ram 7E:132D 6 MonsterSlotX         | Per monster slot: x position.
+ram 7E:1333 6 MonsterSlotY         | Per monster slot: y position.
+ram 7E:1345 6 MonsterSlotId        | Per monster slot: the monster's id.
+ram 7E:134B 6 MonsterFrontRow      | Per monster slot: 1 = in the front row.
+ram 7E:153C 1 HeroesInBattle       | Number of heroes in the battle slots.
+ram 7E:153D 5 BattleHeroIds        | The hero (or capsule) in each battle slot.
+ram 7E:11E8 1 RoundCounter         | Rounds of this battle (stops at FF; op 1C).
+ram 7F:F8A2 1 BattleLost           | 0 = won, 1 = lost (CheckBattleOver).
+
+# ---- pointers of the effect step, and notes where the C# loops read wrongly
+ram 7E:00B5 3 ActionRegsSource     | The action's saved registers being applied (normally $7F:F4D6).
+ram 7E:00B8 3 ActionRegs           | The registers the effect step works on for one target (normally $7F:F44E, register 20).
+note 85:B659 | Loop: shift $55 left (b - 1) times, then test the learned bits.
+note 85:BBFE | Loop: negate the value of every ranking entry until an empty one.
+note 85:C1B9 | Loop: shift right 3 bits per form above 1.
+note 85:C462 | Bubble sort; the number of passes is $22, the stat number op 32 read, not the entry count $23 (unused by the game's scripts).
+note 85:CE76 | Loop over the target bits 01-20 of the saved reg 21 until the bit reaches 40.
+note 85:D33A | Loop over the 7 stat-percent fields ATP..MGR (Y = 30, 36 .. 54) until Y = 5A.
+
+# ---- after the tool update: op 00 and the routines reached from the animation ops
+func 85:B473 BattleOp00_End        | Op 00: ends the script with $0A5B = 0 (the action goes ahead); restores the registers saved by RunBattleScript and returns.
+func 85:920E FlipMonsterSprite     | Toggles bit 5 of monster slot A's sprite record ($13DB + 15 x slot), the sprite's horizontal flip (animation op 64; guess).
+func 85:922D FlipCapsuleSprite     | Toggles bit 5 of the capsule monster's sprite record ($13CE), its horizontal flip (animation op 68; guess).
+func 85:B1D6 StartCircleWindowHdma | HDMA channel 6 on the window 2 edges (WH2/WH3) from $7E:4200 (BuildCircleWindow): a round window of radius $1B4A centred on the screen (animation op 5E).
+func 85:B208 BuildCircleWindow     | When the radius $1B4A changed: fills the window table $7E:4200 with left = 7F - w, right = 80 + w per line from the circle's half-widths (CircleHalfWidths); radius 0 closes the window on every line.
+func 85:B26D CircleHalfWidths      | Midpoint circle: writes the half-width of each line of a circle of radius $C6 into $7E:4600.
+func 85:B276 CircleHalfWidths_Loop | The loop of CircleHalfWidths read with 16-bit A and 8-bit X/Y.
+func 85:DAC7 VectorAngle           | $54 = the angle (256 = a full turn; 0 = +y, 40 = +x, 80 = -y, C0 = -x) of the vector x = $56, y = $58 (animation op 82).
+func 85:DD63 PolarToXY             | $56 = radius $5A x sin(angle $54), $58 = radius x cos(angle), exact on the four main directions (animation ops 83-85, 94-97 and others).
+func 85:DE2A Sine                  | $63 = sin(angle $54, 256 = a full turn) from the quarter sine table $97:B226; bit 15 set = negative.
+func 85:DE55 SineTableNegative     | Tail of Sine/Cosine: $63 = table $97:B226 entry X with bit 15 set (negative).
+func 85:DE62 SineTablePositive     | Tail of Sine/Cosine: $63 = table $97:B226 entry X.

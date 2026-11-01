@@ -1,0 +1,567 @@
+# Banks $84 and $86 (names by the bank 84/86 pass). See syms.py for the format.
+
+# ---- bank 84: field screen effects run each frame ($1261 / $1262 flags)
+func 84:8000 FieldScreenEffects  | Per-frame field screen effects chosen by the bits of $1261: 04 random screen shake, 02 / 01 brightness up / down, 30 colour cycle of $1271, 80 fixed-colour (COLDATA) fade toward $1287; bit 01 of $1262 runs 84:8E07.
+func 84:80C0 ColorCycleDown      | One step of the $1271 cycle downward; clears bit 10 of $1261 when it reaches E0.
+func 84:80D3 ColorCycleUp        | One step of the $1271 cycle upward; clears bit 20 of $1261 when it reaches FF.
+func 84:80E6 ScreenBrightenStep  | Every $7F:D08F frames raises the brightness ($0583) by $7F:D090; stops (bit 02 of $1261) at full brightness 0F.
+func 84:8115 ScreenDarkenStep    | Every $7F:D08F frames lowers the brightness ($0583) by $7F:D090; at black sets forced blank ($0583 = 80) and clears every effect bit.
+func 84:8145 ScreenShakeStep     | Screen shake: with chance $7F:D080 / 256 picks a random offset within +-$7F:D07F/2 and puts it in $7F:D081 (or $7F:D083 on a coin flip).
+
+# ---- bank 84: field helpers called by event commands
+func 84:8193 UploadQueuedTiles   | Sends up to 8 queued tile uploads ($05C2 sizes, $11D9 banks, $11E9 VRAM addresses, $11F9 sources) to VRAM in two halves $100 words apart, then clears the queue.
+func 84:8204 RebuildPartyActors  | Re-creates the party's map characters from $0926 (party members): sets each one's sprite, position and facing behind the leader. Used by hero joins / leaves and "line up the party".
+func 84:82D5 CharacterSlotOffsets | From the character index in $A7, writes $A9 = index * 2 and $AB = index * 3 (word and long table offsets), clearing the high bytes.
+func 84:82E7 LoadSecondFont      | Queues the second 2bpp font ($9F:BA80, 0x1000 bytes) for DMA to VRAM $1000 and waits a frame (event command 5B).
+func 84:8311 RefreshFieldLayers  | Redraws the three field layers (80:F47A for X = 4, 2, 0) and waits a frame with $74 = 80, then sets $74 = 20.
+func 84:8328 ClearTextLayer      | Clears the BG3 tilemap buffer $7E:3000-$37FF and resets the BG3 scroll ($059C-$059F) and bit 0 of $099C.
+func 84:8363 WaitFrame           | Waits until the frame counter $40 changes (one vertical blank).
+func 84:8685 SetMosaicWaitFrame  | Writes A to MOSAIC and waits a frame.
+func 84:8758 TakeButtonPressHigh84 | Tests mask A against buttons held in $47 (B Y Select Start and the pad) that were let go since last taken ($4B); returns Z clear for a fresh press and takes it.
+func 84:875F TakeButtonPressLow84  | Tests mask A against buttons held in $46 (A X L R) that were let go since last taken ($4A); returns Z clear for a fresh press and takes it.
+func 84:8766 QueueSoundEffect    | Puts sound effect A in $17AC to be played later, unless sounds are off (bit 02 of $05B6).
+func 84:8775 PlaySoundUnlessOff  | Plays sound effect A now (80:953B) unless sounds are off (bit 02 of $05B6); event command 4C and puzzle command 0B.
+
+# ---- bank 84: debug battle viewer
+func 84:9B3E DebugMonsterViewer  | Debug viewer for battles: X / Y step the monster ($11DC, 0-CC), A / B the battle background ($11DB, 0-18), right / up / left raise the backdrop colour's red / green / blue ($11D8-$11DA), down resets it; holding L shows a window.
+func 84:9CD4 DebugViewerLoadBackground | Loads battle background $11DB when it changed (81:B9C7) and queues its tiles and map for upload.
+func 84:9D2C DebugViewerLoadMonster | Loads monster $11DC as the battle's only enemy: its record, sprite size and graphics. (guess)
+func 84:9E1C CopyBlock32Bytes    | Copies 32 bytes from $7E:0000+X (16 words). (guess)
+
+# ---- bank 84: casino shared code
+func 84:A455 CasinoSetUpScreen   | Casino screen set-up: mode 1 with BG3 priority, BG maps $0000/$0400/$0800/$0C00, windows off, scroll cleared, menu font $9F:8500 to VRAM $1000; clears the map buffers and OAM buffer.
+func 84:A4DD ClearBgMapBuffers   | Clears the four BG map buffers $7E:2000-$3FFF.
+func 84:A4FD CasinoClearOam      | Clears the OAM buffer at $7E:0100: every sprite to Y = F0 and the high table to 0.
+func 84:A529 CasinoLoadShared    | Loads the casino's shared palette ($A6:EC20 into CGRAM buffers $0320 and $0420) and tiles (file 295 to VRAM $3000).
+func 84:A569 UnpackToVram        | Unpacks file $54 to $7E:4000 and DMAs $0000 bytes of it to VRAM address $0002, then waits a frame.
+func 84:A5A8 CasinoWaitFrame     | Waits until the frame counter $40 changes, keeping A and the flags.
+func 84:A5B5 CasinoFadeIn        | Starts a fade in at speed 8 ($0581 = 88) and waits until it ends.
+func 84:A5CA CasinoFadeOut       | Starts a fade out at speed 8 ($0581 = C8) and waits until it ends.
+func 84:A5DF CasinoMultiply      | 16 x 16 multiply: $7E:6008 x $7E:600A -> $7E:600C (low) / $7E:600E (high), shift and add.
+func 84:A607 CasinoPlaySound     | Plays sound effect A (80:953B).
+func 84:A60C CasinoPlaySong      | Plays song A (80:93FE).
+
+ram 7E:6008 2 CasinoMulA        | CasinoMultiply input (shifted out as it runs).
+ram 7E:600A 2 CasinoMulB        | CasinoMultiply input.
+ram 7E:600C 4 CasinoMulResult   | CasinoMultiply 32-bit result.
+func 84:9F1A CasinoReadButtons   | Takes one fresh button press: returns the direction in the high byte (1 up, 2 down, 4 right, 8 left) and the button in the low byte (1 A, 2 B, 3 Y, 4 X, 5 L, 6 R, 7 Select, 8 Start), 0 for none.
+func 84:A000 CasinoCopySpriteGroup | Copies a sprite group definition from [$08] (16-byte header, then 2 words per sprite) to $7E:68D8.
+func 84:A02A CasinoAddSpriteGroup | Pushes the sprite group at $68D8 as the next entry of the sprite group stack ($685E): its animation, grid (columns, rows, step) and sprites go into the OAM buffer at $69D8 at position $68E4.
+func 84:A0DA CasinoRemoveSpriteGroup | Pops the last sprite group ($685E) and hides its sprites in the OAM buffer.
+func 84:A112 CasinoMoveCursor    | Runs the cursor of sprite group A on its grid: the pad moves it a step (wrapping), its frames animate; returns 0 when A is pressed, 1 for B. Column in $689C, row in $68A6.
+func 84:A2B3 CasinoOpenWindow    | Opens a framed window at column $6016, row $6018, size $601A x $601C (style $6012) on BG1 ($7E:2000), saving what was under it on the window stack ($6010).
+func 84:A36A CasinoWindowRow     | Draws one row of a window frame (left tile, A+1 across, right tile) at $6052 and moves down a row.
+func 84:A39B CasinoCloseWindow   | Closes the last window of the stack ($6010), putting back the map it covered.
+func 84:A3FC CasinoPayoutDiv10   | Divides the payout $69E4 by 10.
+func 84:A421 CasinoAddPayout     | Adds the payout $69E4 to the casino coins $0B55 (with the coin sound 22), capped at 9,999,999.
+
+# ---- bank 84: blackjack (event command 18 F0)
+func 84:A705 Blackjack           | Casino blackjack (event command 18 F0): card table set-up, bet, deal, hits and stands against three seats (dealer stands at 17), hand ranks and the payout, repeated until the player leaves.
+func 84:AAAF BlackjackFadeOut    | Fades the card table out (CasinoFadeOut).
+func 84:AAB5 CasinoMessageWindow | Opens a window for a message record at [$08]+Y (width, height, text) placed from $0002 (column low, row high) and prints the text in it.
+func 84:AB01 BlackjackSetUpChips | Makes OAM sprites 0x60 up large and draws three sprites with 84:C6E8. (guess)
+func 84:AB23 CasinoChooseOption  | Shows the choice cursor (sprite group $84:B807) at $7133/$7135 and waits for A or B; returns the choice in $0000 (column, or 1 for B).
+func 84:AB61 BlackjackRankHand   | Sorts hand $0002 and works out its special rank (Black Jack, Three Seven, Straight Storm, Five Card ...) into $0000.
+func 84:AC66 BlackjackPlaceBet   | Bet window: shows coins and bet, the pad changes the bet (1-99, never more than the coins), A confirms; takes the bet from the coins. (guess)
+func 84:AD9D BlackjackShowWin    | Works out the win (bet $69DC doubled once per rank step $70E9) and shows it with 84:C7A6.
+func 84:ADC0 BlackjackDrawDeck   | Draws the deck pile (6 x 4 tiles from 04C8) on the table map and refreshes it.
+func 84:ADF3 BlackjackShowTotal  | Draws the two-digit total of hand $0002 (BlackjackHandValue) on the table map.
+func 84:AE30 DrawDigitTile       | Writes digit tile A at map offset X of BG1 and its lower half (A + 10) one row below.
+func 84:AE43 DivideBy10          | A = A / 10 with the hardware divider (remainder left in RDMPY).
+func 84:AE5E BlackjackHandValue  | Total of hand $0002 into $0000: picture cards count 10, aces 11 unless that goes over 21.
+func 84:AEE1 BlackjackShowStartNumbers | Prints two random numbers (0-98) and the bet $69DC on the table at the start. (guess)
+func 84:AF11 CasinoPrintCoinLabel | Prints the text $84:F945 at map position 3656.
+func 84:AF1C BlackjackDrawFromDeck | Takes the next card from the deck ($7036, position $0015) into the next slot of hand $0017 ($709E); returns it in $0022.
+func 84:AF4B BlackjackOpeningDeal | Opening deal: three face-down cards to choose from, the player's and the dealer's first cards, totals and table pieces.
+func 84:AFB8 BlackjackSlideCardIn | Puts a card (position and target from the deal list at [$19]) on screen and slides it into place.
+func 84:AFFC BlackjackDealFaceUp | Turns over the next deck card at $0024 face up and moves the place right for the next one.
+func 84:B027 BlackjackPickCard   | The player picks one of three face-down cards with the cursor; it becomes their first card and the others are shuffled back. (guess)
+func 84:B11E CardToTableMap      | Moves a card from sprites onto the BG1 table map (its sprites hidden, tiles written).
+func 84:B13D CardSlideToFront    | Moves card sprite group $0002 to the front of OAM and slides it. (guess)
+func 84:B16D SwapCardSprites     | Swaps the 48 OAM words of card slot X with slot 0 (draw order).
+func 84:B18E BlackjackDealToHand | Deals the next deck card to hand $0017: places it from the deal list $84:B719, slides it, turns it and adds it to the hand.
+func 84:B22B CardTurnOver        | Card turn-over animation: lifts the card, then shows the two in-between frames ($84:B663, $84:B693).
+func 84:B274 HideCardSprites     | Hides the 24 sprites of card slot $0002.
+func 84:B295 CardSpritePosition  | Reads the screen position of card slot $0002's first sprite back into $0024.
+func 84:B2BC BuildCardTiles      | Builds the 4 x 6 tile list ($7006) for card $0022 (rank low byte, suit high byte), face up or back ($0028).
+func 84:B387 DrawCardOnMap       | Writes the card tile list $7006 into BG1 at map offset $0024 with the card's palette.
+func 84:B3C9 DrawCardSprites     | Writes the card tile list $7006 as the 24 sprites of card slot $0002 at $0024 with the card's palette.
+func 84:B429 PutCardSprite       | Writes one card sprite (position A, tile from $7006+Y | $0028) to the OAM buffer.
+func 84:B43B MoveCardSprites     | Moves the 24 sprites of card slot $0002 by $0000 (x) and $0001 (y).
+func 84:B45B MoveSprite          | Adds $0000 / $0001 to the x / y of one OAM buffer sprite and steps to the next.
+func 84:B472 SetCardSpriteTiles  | Sets the 24 sprites of card slot $0002 to the tiles of the frame at [$08] (bank 84).
+func 84:B49B PutSpriteTile       | Copies one tile word from [$08]+Y to an OAM buffer sprite and steps both.
+func 84:B4A7 NewCardDeck         | Fills the deck $7036 with the 52 cards in order (rank 1-13, suit in the high byte) and sets the bet $69DC to 1.
+func 84:B4D9 ShuffleDeck         | Shuffles the deck with 513 random swaps and empties the hands ($709E) and their counts ($70C6).
+func 84:B523 LoadCardTableMap    | Unpacks file 29E (card table tilemap) and copies it to the BG2 map buffer $7E:2800.
+func 84:B54F BlackjackDrawLabels | Draws two rows of label tiles (246A, 247A) on the table map and refreshes it.
+func 84:B57F CardTableSetUp      | Card table screen (blackjack and poker): palette $A6:ED20, tiles 296 and 297, map 29E, a new deck, labels, then fades in.
+ram 7E:69E4 2 CasinoPayout      | Coins won, added to the coins by CasinoAddPayout.
+ram 7E:69DC 2 CasinoBet         | The bet of the card games.
+ram 7E:7036 104 CardDeck        | The 52 cards (word each: rank 1-13 low byte, suit 0-3 high byte), shuffled by ShuffleDeck.
+ram 7E:709E 40 CardHands        | Card hands: 4 hands of 5 cards (words).
+ram 7E:70C6 8 CardHandCounts    | Cards in each of the 4 hands.
+ram 7E:6010 2 CasinoWindowCount | Windows open on the casino window stack.
+ram 7E:685E 2 CasinoSpriteGroups | Sprite groups on the casino sprite group stack.
+
+# ---- bank 84: poker (event command 18 F4)
+func 84:B827 Poker               | Casino poker (event command 18 F4): the player and three computer players ante 10 coins, five cards each, betting rounds (fold, call, raise), the draw, the showdown; a draw carries the pot over (up to 60000), a win pays pot x 10 (pot up to 9999).
+func 84:BA1F PokerDrawSeatMarkers | Draws the four seats' markers (in the game or folded) with PokerSeatMarker.
+func 84:BA40 PokerSumPot         | Pot $69DC = the four seats' bets ($710F-$7115).
+func 84:BA53 PokerShowdown       | Showdown: ranks the hands still in, compares them (draw when the best two are equal) and shows the winner; when everyone else folded the last player wins. Result in $0000.
+func 84:BAF1 PokerShowHandName   | Opens a window naming the hand rank of a seat (One Pair ... Royal Straight Flush).
+func 84:BB2F PokerCompareHands   | Compares two ranked hands (rank $70E7, then the high cards $70EF / $70F7 / $70FF) to order the seats. (guess)
+func 84:BBDA CasinoWindowTextPos | X = the map address of the first text position inside the window at $6016 / $6018.
+func 84:BBF1 PokerRankSeats      | Ranks the hand of every seat still in (PokerRankHand) and sorts the seats by it into $7141. (guess)
+func 84:BC78 PokerComputerTurn   | A computer player's betting turn (seat $0011): from its hand rank and its style it folds, calls or raises, and says so in a window.
+func 84:BD83 PokerSeatCalls      | Seat $0011 calls: its bet becomes the current bet $7127 plus the pot amount. (guess)
+func 84:BD96 PokerPrintRaise     | Prints the raise amount $0013 as digit sprites at the window position $7149. (guess)
+func 84:BDC2 PokerComputerDecide | Picks a computer player's action and raise from its hand rank, the pot and random numbers. (guess)
+func 84:BEE0 PokerOpenWindow     | Opens the current window (CasinoOpenWindow).
+func 84:BEE4 PokerWindowSpritePos | $7149 = the screen position (x low, y high) of the window at $6016 / $6018, two tiles in.
+func 84:BF0B PokerDrawRound      | The draw: for each computer player still in, chooses cards to change (PokerComputerDraw). (guess)
+func 84:BF67 PokerComputerDraw   | A computer player changes cards, says how many in a window, and gets new ones. (guess)
+func 84:C028 PokerPlayerTurn     | The player's betting turn: Fold, Call or Raise menu, the raise amount with the pad, coins paid. (guess)
+func 84:C1E8 PokerRefundDifference | Gives back (bet $69E0 - $000B) x 10 coins.
+func 84:C20A PokerPayDifference  | Takes ($000B - $69E0) x 10 coins.
+func 84:C22C HideFirstSprites    | Hides the first 12 sprites of the OAM buffer.
+func 84:C243 SlideCoinSprites    | Moves the first 12 sprites by (4, 2) a frame for 24 frames (coins sliding to the pot). (guess)
+func 84:C26F DrawCoinsAndBet     | Draws the coins and the bet ($710F) as big digits on the table map. (guess)
+func 84:C299 DrawBigDigit        | Draws one big digit (tiles from $84:A611) on the BG1 map. (guess)
+func 84:C2CE DrawBigDigitSprites | Draws a number as big digit sprites ($84:A611) at the OAM buffer. (guess)
+func 84:C31B SplitTens           | $0000 = A / 10 and $0002 = (A / 10) x 10 (A without its last digit).
+func 84:C350 CasinoInputAmount   | Changes the amount $000B with the pad (up / down 1, left / right 10, limit $69DE) until A or B. (guess)
+func 84:C3B4 PokerSortHand       | Sorts a hand's cards by rank into $70DD and counts equal ranks. (guess)
+func 84:C42A PokerRankHand       | Works out the poker rank of hand $0024 (pairs, three and four of a kind, straight, flush, full house, straight flush, royal) into $70E7 with its high cards.
+func 84:C55B PokerCountRank      | Counts the cards of one rank in the sorted hand $70DD. (guess)
+func 84:C578 PokerPrintBets      | Prints the three computer players' coins ($7111-$7115) and the player's bet $710F on the table.
+func 84:C5AF PokerDealToSeat     | Deals the next deck card to seat $0017 (face down for the computer players when $0030 says so) and slides it in.
+func 84:C64B CasinoWaitWithCursor | Shows a blinking arrow sprite at X and waits for a button press, cycling its frames.
+func 84:C69C PokerNewRound       | Clears the screen buffers and resets the round: bets, seats in ($7107), round counters, window and sprite stacks, large OAM sprites.
+func 84:C6E8 PokerSeatMarker     | Writes the three sprites of seat X's marker (position $84:B7DD, look by whether the seat is in) to the OAM buffer at Y.
+func 84:C73A RevealAllHands      | Turns every hand's cards face up on the table map (positions $84:B79B), one by one with the card sound.
+func 84:C794 WaitForButton       | Waits a frame at a time until a button is pressed, then plays the cancel sound 2.
+func 84:C7A6 CasinoCountPayout   | Win window: counts the win $0000 into the coins in steps of 10000, 1000 ... 1 with the coin sound, then waits for a button.
+func 84:C819 PokerPrintPot       | Prints the carried pot $714B (text $84:FD30).
+ram 7E:7107 8 PokerSeatsIn      | Poker: per seat (player, three computer players) nonzero while still in the hand.
+ram 7E:710F 8 PokerSeatBets     | Poker: each seat's bet.
+ram 7E:714B 2 PokerCarriedPot   | Poker: the pot carried over from a drawn game (up to 60000).
+ram 7E:70E7 8 PokerHandRanks    | Hand rank of each seat (blackjack and poker).
+
+# ---- bank 84: bingo ball game (event command 18 F1)
+func 84:C826 BallGame            | Casino ball game (event command 18 F1): a shuffled 5 x 5 card of numbers, 13 balls dropped down the tube and steered with the pad, lines of five pay ("in a row"), then an extra "ball of chance" offer; repeats while the player wants.
+func 84:CAF1 BallGameYesNo       | Yes / No choice with a blinking arrow sprite; returns the answer in A. (guess)
+func 84:CB64 BallGameBallOfChance | The extra ball: drops ball 14, counts the lines again, and pays or says "Too bad. You lose." when no new line was made.
+func 84:CBCD BallGameFrame       | One frame of the ball game: moves the background sprites (BallGameAnimateSprites), refreshes BG1 and OAM, waits a frame.
+func 84:CBE2 BallGameCountLines  | Counts the finished lines of the card (rows, columns and both diagonals whose five cells add up to 100 or more) into $71CA; line sums in $71B2.
+func 84:CCD3 BallGameNewBall     | Sets up the next ball ($71FA balls left): its number from $714E, its look (special numbers $71FE / $7200 differ), its start place at the top of the tube.
+func 84:CD5F BallGameShowBallsLeft | Draws the balls left ($71FA) as two big digits on the map ("LAST BALLS").
+func 84:CD95 DrawTallDigit       | Writes digit tile A at BG1 map offset X and its lower half one row below.
+func 84:CDA8 BallGameMoveBall    | Moves the falling ball one frame (speed, sine / cosine steps through 80:8450 / 80:8486) and stops it in a cell; clears $30 when it has landed. (guess)
+func 84:CEB3 BallGameScaleStep   | Multiplies a signed step by the ball's speed $71F6 (hardware multiplier) for BallGameMoveBall. (guess)
+func 84:CEE4 BallGameOpenHole    | Animates the target cell of the card opening for the ball. (guess)
+func 84:CF91 BallGameCloseHole   | Animates the target cell of the card closing again. (guess)
+func 84:D016 BallGameSteerBall   | The pad moves the falling ball's target column; redraws the cells it passes. (guess)
+func 84:D09B BallGameSaveCell    | Saves the four map tiles of a card cell ($71D2-$71D8). (guess)
+func 84:D0CB BallGameRestoreCell | Puts back the four map tiles saved by BallGameSaveCell. (guess)
+func 84:D0EF BallGameMoveTarget  | Moves the target to the next cell in the pressed direction. (guess)
+func 84:D17A BallGameDrawCard    | Draws the 5 x 5 card ($70B8) on the BG1 map: each cell's number tiles from $84:DA69, marked cells in another palette.
+func 84:D1EF BallGameBet         | Bet window: chooses the bet with the pad (BallGameDrawBet) and takes it from the coins. (guess)
+func 84:D414 BallGameDrawBet     | Draws the bet as big digit sprites ($84:A611). (guess)
+func 84:D456 BallGamePayout      | Pays the lines made: the win from the line count $71CA and the bet, counted into the coins.
+func 84:D538 BallGameIndexCells  | Builds $70EA: for each number, the card cell it is in.
+func 84:D558 BallGameAnimateSprites | Moves the background decoration sprites ($7000 x, $703C speed, $7078 kind) and writes them to the OAM buffer. (guess)
+func 84:D684 BallGameNewRound    | New round: clears the line sums and wins, 13 balls, all cells unmarked, clears the win display.
+func 84:D70A BallGameLoadMaps    | Unpacks maps 2A0 (to $7E:2000, with the priority bit) and 29F (to $7E:2800) for the ball game screen.
+func 84:D765 BallGameSetUp       | Places 49 decoration sprites at random positions and speeds, and the ball order $714E. (guess)
+func 84:D860 BallGameShuffleCard | Shuffles the 25 numbers of the card $70B8 with 25 random swaps.
+func 84:D892 BallGameShuffleBalls | Shuffles the ball order $714E and picks the special numbers $71FE / $7200. (guess)
+ram 7E:70B8 50 BallGameCard     | Ball game: the 5 x 5 card (word per cell: number low byte, marked in the high byte).
+ram 7E:71CA 2 BallGameLines     | Ball game: finished lines.
+ram 7E:71FA 2 BallGameBallsLeft | Ball game: balls left to drop (13, the ball of chance is 14).
+
+# ---- bank 84: slot machines ("Flower Garden" 18 F2 / F7+, "Adventure 7" 18 F3 / F5 / F6)
+func 84:DA9B FlowerGardenSlots   | "Flower Garden" slot machine (event command 18 F2 and others): screen set-up, then bet 1-3 lines, spin, stop, pay, with its bonus modes ($7170); on leaving the credits ($71AE) go back to the coins at 10 each.
+func 84:DC55 SlotWaitInput       | Stirs the random numbers (80:8299), runs a frame (SlotFrame) and reads a button (CasinoReadButtons).
+func 84:DC60 SlotShowBonusCount  | In bonus mode 8 shows the bonus count $7178 on the counter display.
+func 84:DC87 SlotBonusSpin       | Spin of the bonus modes (bits 02 / 04 of $7170): reels stop on chosen symbols, the bonus counter counts down. (guess)
+func 84:DE6E SlotReelStopStep    | Waits for the reel's stop button and slows reel $713C to a stop. (guess)
+func 84:DEB9 SlotNormalSpin      | Normal spin: the three reels start (SlotStartReels) and each stops on its button (84:E6C8, 84:E74F, 84:E773). (guess)
+func 84:DEDC SlotPickOutcome     | Decides the spin's outcome before the reels stop (bonus chances from $84:F2F0 / $84:F2FC, the machine's state $716C-$7176). (guess)
+func 84:E194 SlotBetLines        | Bet input: up adds a line (1-3, a credit each, the line lamps lit), Select shows the payout table, B leaves; ends with the bet lines in $7184 (0 = leave).
+func 84:E2A8 SlotTakeCredit      | Takes one credit for a line: from the machine's credits $71AE, else 10 coins from $0B55; updates the counters.
+func 84:E30F SlotDimLineLamps    | Dims the three bet line lamps on the machine map (SlotSetMapPalette).
+func 84:E334 SlotPayout          | Checks the bet lines for wins (SlotCheckLines), adds the win to the credits (up to 50, the rest to the coins) with the counting sound, flashes the winning lines.
+func 84:E3F6 SlotSumLineWins     | Adds up the wins of the bet lines ($7188) into $0000. (guess)
+func 84:E416 SlotCheckLines      | Looks up each bet line's three symbols ($7146 / $7162) in the payout rules and stores each line's win in $7188. (guess)
+func 84:E489 SlotCheckLine2      | Win check for the second bet line. (guess)
+func 84:E4C4 SlotCheckLine3      | Win check for the diagonal bet lines. (guess)
+func 84:E507 SlotBonusActive     | Returns whether a bonus mode (bits of $7170 / $7176) is running. (guess)
+func 84:E51A SlotReturn          | Empty routine (RTS).
+func 84:E51B SlotStartBonus      | Starts a bonus mode won on a line: its song, map change and counters. (guess)
+func 84:E569 SlotEndBonus        | Ends or continues a bonus mode and updates its counter display. (guess)
+func 84:E5B5 SlotStartReels      | Starts the three reels spinning with the start sound and random start speeds. (guess)
+func 84:E640 SlotReelSymbolAt    | Symbol of reel $713C at a position (reel strip times width, hardware multiplier). (guess)
+func 84:E673 SlotStopReelOn      | Stops a reel on a wanted symbol for the decided outcome. (guess)
+func 84:E6C8 SlotStopReel1       | Stops the first reel. (guess)
+func 84:E74F SlotStopReel2       | Stops the second reel. (guess)
+func 84:E773 SlotStopReel3       | Stops the third reel. (guess)
+func 84:E7EF SlotReelNextSymbol  | Steps a reel to its next symbol. (guess)
+func 84:E817 SlotSaveReelPos     | Copies a reel's position ($7140) to its stop position ($717E).
+func 84:E829 SlotReadWindow      | Reads the 3 x 3 symbols in the window from the reel stop positions ($717E-$7182, strips $7006 / $7040 / ...) into $7146-$7162.
+func 84:E906 SlotReadReelColumn  | Reads one reel's three visible symbols (SlotReadSymbol x 3).
+func 84:E91B SlotReadSymbol      | Reads one symbol of a reel strip at [$08] into the window list.
+func 84:E92A SlotShowReels       | Draws the reels at their stop places and resets the counters' display. (guess)
+func 84:E9B1 SlotFrame           | One frame of the slot machine: reel sprites (SlotDrawReels), lamps (SlotAnimateLamps), BG / OAM refresh, auto-repeat of the A button.
+func 84:E9E3 SlotDrawReels       | Moves the three reels by their speeds ($712A) and draws their symbols as sprites. (guess)
+func 84:EA4B SlotDrawReelSprites | Draws the symbols of the three reels ($7000-$7004 positions, $712A-$712E) as sprites from $84 data at [$08]. (guess)
+func 84:EAA5 SlotDrawReelColumn  | Draws one reel's symbol sprites. (guess)
+func 84:EB36 SlotSetCounter      | Turns the number $7194 into the digit sprites of counter $7196 (credits, win, bonus) and stores their value in $7198.
+func 84:EBC0 SlotDiv10           | A = A / 10 (hardware divider).
+func 84:EBDB SlotFlashCounters   | Shows the counters marked in $71A0-$71A4 with their new values ($71A6-$71AA), blinking for four frames.
+func 84:EC18 SlotCounterSprites  | Writes the digit sprites of one counter (value A) at OAM offset X.
+func 84:EC4F SlotSetUp           | Slot machine set-up: reel strips from $84:F215, random start positions, counters, modes and bonus state cleared. (guess)
+func 84:ED9E SlotNewSpin         | Clears the window stack and line lamps for a new spin.
+func 84:EDCB SlotLightBetLamps   | Lights the bet line lamps for $71B0 lines (SlotSetMapPalette).
+func 84:EDFA FlowerGardenLoadMaps | Unpacks the Flower Garden maps (2A1 machine to $7E:2000, 2A2 scenery to $7E:2800, 2A3 / 2A4 payout tables kept at $7E:A000 / $7E:4000).
+func 84:EE4B FlowerGardenPayTable | Select: fades to the payout table pages (maps 2A3 / 2A4, title 2A5), left / right turn pages, then back to the machine. (guess)
+func 84:EF4E SlotUnpackFile      | Unpacks file $54 to $7E:A000.
+func 84:EF60 SlotCopyMapToBg1    | Copies the map at $7E:A000 to the BG1 map buffer $7E:2000.
+func 84:EF74 SlotCopyMapToBg2    | Copies the map at $7E:A000 to the BG2 map buffer $7E:2800.
+func 84:EF88 SlotPayTableScroll  | Moves the payout table page ($71C0 / $71C2 / $71E0). (guess)
+func 84:EFC4 SlotPayTableDraw    | Draws the payout table entries ($84:F308 / $84:F37A) for the current page. (guess)
+func 84:F01A SlotRestoreMachineMap | Copies part of the saved machine map ($7E:A000) back into BG1 (ends a flash). (guess)
+func 84:F034 SlotAnimateLamps    | Blinks the lamps on the machine map ($71B0 / $71B8-$71BC). (guess)
+func 84:F09C SlotDrawLineLamps   | Draws the bet line lamps for the lines chosen so far ($7192). (guess)
+func 84:F0D4 SlotDrawBetButton   | Draws the blinking bet button area ($71B2 / $71B4). (guess)
+func 84:F105 SlotSetMapPalette   | Sets the palette bits ($0004) of a $0000 x $0006 tile area of the BG1 map at $0002 (lamps on / off).
+func 84:F173 SlotCopyReelGraphics | Copies the reel symbol tiles from the list at [$08] into $7E:4000. (guess)
+func 84:F38A Adventure7Slots     | "Adventure 7" slot machine (event command 18 F3 / F5 / F6: 1, 10 or 100 coins a credit, $0030): set-up, then bet, spin, stop and pay like the Flower Garden machine.
+func 84:F4C6 Adventure7StartReels | Starts the Adventure 7 reels with random speeds. (guess)
+func 84:F53C Adventure7Payout    | Checks the lines and pays the Adventure 7 win, counting it into the coins. (guess)
+func 84:F589 Adventure7SumLineWins | Adds up the line wins ($7188) of the bet lines. (guess)
+func 84:F5A5 Adventure7CheckLines | Looks up the bet lines' symbols in the Adventure 7 payout rules and flashes the winners. (guess)
+func 84:F648 Adventure7BetLines  | Adventure 7 bet input: lines 1-3 at $0030 coins each, B leaves. (guess)
+func 84:F74E Adventure7TakeCoins | Takes the price of a line ($71B6 coins) from the coins and updates the display. (guess)
+func 84:F78F Adventure7ReelStrips | Builds the Adventure 7 reel strips ($7006) from $84:F824 / $84:F8D2. (guess)
+func 84:F7D3 Adventure7LoadMaps  | Unpacks the Adventure 7 maps (2A7 machine, 2A6 frame) into the BG map buffers.
+ram 7E:71AE 2 SlotCredits       | Slot machine credits (up to 50), paid back at 10 coins each.
+ram 7E:7184 2 SlotLinesBet      | Slot machine: lines bet (0 = leave).
+ram 7E:7170 2 SlotBonusMode     | Slot machine bonus mode bits. (guess)
+
+# ---- bank 84: map characters' turn mode, Ancient Cave, battle start, map palette effects
+func 84:836A FieldPickCharacterMode | Field mode run each frame while bit 01 of $05B7 is on (set by 83:C460): a window lists the map characters ($1559 slots) to pick from with the pad, A picks (mosaic flash), "Rest" ends it; then every character is put back to normal movement. (guess)
+func 84:863E FieldPickCharacterMove | Moves the pick to the character in direction A (C1 / 41) and redraws the window. (guess)
+func 84:868C MarkPickedCharacter | Sets the look A of the picked character ($171C) and its highlight bit 10 in $7F:DB0C.
+func 84:869E UnmarkPickedCharacter | Clears the picked character's look and highlight bits and sets $1723 = 1.
+func 84:86C0 PickedCharacterEntry | A = the word at $14B9 for the picked list entry ($171B - $171A) (its item or name). (guess)
+func 84:86D7 DrawPickWindowName  | Prints the picked entry's item name (81:F1C5) centred in the pick window, or "Rest" when $1723 is set. (guess)
+func 84:878A EnterAncientCave    | Event command A8 00, going into the Ancient Cave: counts the visit ($0B6A), takes out the items of the cave list ($94:EEA0) from the bag and the heroes' equipment to $7F:BF00, saves the RAM areas listed at $84:8B20 to $7F:B000, then clears the party's things (AncientCaveClearParty).
+func 84:8862 AddKeptCaveItem     | Appends item word A to the kept item list at $7F:BF00 ($60 = its length).
+func 84:886D IsCaveListItem      | Returns C set when item A (low 9 bits) is in the Ancient Cave item list $94:EEA0.
+func 84:8888 AncientCaveClearParty | Zero-fills the RAM areas listed at $84:8B59, puts the start item 1402 in the bag, gives back the kept items of $7F:BF00 (unless $7F:E759 is set) and rebuilds the party's stats (81:ED35, 82:C2FD).
+func 84:890B LeaveAncientCave    | Event command A8 01, leaving the Ancient Cave: adds the cave's play time and counts, keeps the Iris treasures found ($91:FFCA) and the cave list items, and brings back the saved RAM areas from $7F:B000.
+func 84:8AF4 SaveCaveListItem    | Writes item A through the WRAM port when it is in the cave item list $94:EEA0 (used when leaving the cave). (guess)
+func 84:8B9C AncientCaveRestart  | Clears the party's things again for a new cave run without giving back items ($7F:E759 = FF), counts it ($0B6C) and sets the map-change flags. (guess)
+func 84:8BC7 StoryBattleSwirl    | Start of a story battle (event command 53): clears the BG maps, switches to mode 2 and swirls BG1 / BG2 with sine-table HDMA scroll and offset-per-tile waves ($80:84ED) while the screen fades out.
+func 84:8D4D WaitFrame2          | Waits until the frame counter $40 changes (one frame).
+func 84:8D54 MapPaletteScaleStep | Steps the map palette brightness factor $1284 by $1282 toward $1285 and writes the map's colours ($9B:[$7F:D0F8], $7F:D0FA of them) times it into the CGRAM buffer $0320; at 80 puts the normal palette back (80:F338).
+func 84:8E07 MapPaletteTintStep  | Steps the map palette toward the colour $1274 / $1276 / $1278 (steps $127A-$127E, every $1283 frames) into the CGRAM buffer $0320. (guess)
+ram 7E:0B6A 2 CaveVisitCount    | Times the party went into the Ancient Cave (stops at FFFF).
+
+# ---- bank 86: title sequence (event command 5B 01)
+func 86:8000 TitleScreen         | The title sequence (event command 5B 01, from 80:BB94): screen set-up, title graphics (files 283-288), palette $A6:B000, then the animated scene; returns C set when a button cut it short.
+func 86:8033 TitleSetUpScreen    | Title PPU set-up: mode 1, BG1 / BG2 chr $2000, BG3 chr $6000, maps $1000 / $1400 / $1800, windows and colour maths for the scene, map buffers and OAM cleared.
+func 86:80DB TitleLoadGraphics   | Unpacks the title tiles (283 BG1 / BG2 to VRAM $2000, 284 BG3 to $6000, 285 sprites to $0000) and queues them for DMA (82:8044).
+func 86:8157 TitleLoadPalette    | Copies the title palette $A6:B000 (BG) and $A6:B100 (sprites) to the CGRAM buffers $0320 / $0420.
+func 86:817A TitleLoadMaps       | Unpacks the title tilemaps 286 / 287 / 288 to $7E:93C0 / $7E:A3C0 / $7E:B3C0.
+func 86:81D0 TitlePlay           | Runs the title scene: sets up the layers and objects, fades in, then the long scene (first time, $30 = 0) or the short one; returns C set when the player pressed a button.
+func 86:81FB TitleLongScene      | The long title scene: timed waits and waves of light objects (TitleStartObject / TitlePlayObjects); returns C set when cut short.
+func 86:8298 TitleShortScene     | The short title scene (shown again later): returns C set when cut short.
+func 86:82C8 TitlePlayObjects    | Plays the scene's light objects with their sound (26) until all have ended (frames: scroll, objects, palette cycle, sprites); returns C set when Start / A is pressed.
+func 86:8305 TitleFadeIn         | Fades in (speed 4) while the scene keeps running.
+func 86:830F TitleFadeOut        | Fades out while the scene keeps running.
+func 86:8339 TitleWait           | Waits X frames scrolling the layers; returns C set when Start / A is pressed.
+func 86:835B TitleStartObject    | Starts a wave of title light objects: kind A, path X, slot Y (tables $86:8A41-$86:8A53).
+func 86:838C TitleMoveObjects    | Moves every live title object one frame along its path. (guess)
+func 86:83C3 TitleObjectStep     | One frame of one title object: position on its circle, size and look. (guess)
+func 86:83F2 TitleObjectCircle   | Works out a title object's place on a circle from its angle and radius (sine / cosine 80:8450 / 80:8486, Multiply16). (guess)
+func 86:8503 TitleObjectScale    | Scales the product by $1583 for the circle radius. (guess)
+func 86:8513 TitleObjectFrame    | Picks a title object's animation frame from $86:8AC0. (guess)
+func 86:8530 TitleObjectSpeed    | Steps a title object's angle and radius by its speeds ($86:8A71). (guess)
+func 86:856F TitleObjectTrail    | Leaves a trail object behind a title light. (guess)
+func 86:85C2 TitleObjectSpawn    | Spawns child objects from a title light (sparkles). (guess)
+func 86:8637 TitleObjectsLeft    | Returns C clear while any of the 4B title objects at $7E:C448 (13 bytes each) is alive.
+func 86:8655 TitleObjectInitSlot | Sets up a title object's start values from $8E:D911. (guess)
+func 86:866A TitleObjectInit     | Puts a new title object in the first free slot and runs its first step. (guess)
+func 86:8695 TitleScrollSea      | Every 8 steps of $15A1 advances the sea's wave row ($15B8, 0-3F) and rewrites the BG3 scroll table from $7E:B3C4. (guess)
+func 86:86ED TitleScrollLayers   | Advances the title layer scrolls (TitleLayerSpeeds, TitleScrollSea) and asks the NMI to send them (bit 01 of $1566).
+func 86:86FC TitleLayerSpeeds    | Adds each of 13 scroll speeds ($86:8726) to the 24-bit scroll positions $1587 / $1597 / $15A7.
+func 86:8740 CopyTitleMap        | Copies a title tilemap with its width / height header (at Y in bank 7E) into the BG map buffer X.
+func 86:8784 TitleSetUpLayers    | Copies the three title maps into the BG buffers, clears the scroll positions and sets up the three HDMA channels (TitleSetHdma).
+func 86:87D3 ClearTitleScroll    | Clears the title scroll positions $1587-$15BF.
+func 86:8865 TitleSetHdma        | Sets up HDMA channel A of the title (table pointers $86:88A6-$86:88B7 into $F3-$FB) and asks the NMI to start it.
+func 86:88BE TitleDrawObjects    | Writes the live title objects into the OAM buffer (TitleDrawObject).
+func 86:88E5 TitleDrawObject     | Writes one title object's sprites (its frame list at [$08]) into the OAM buffer at its place. (guess)
+func 86:8996 TitleCyclePalette   | Rotates four 16-colour rows of the CGRAM buffer ($04A0-$0502) one colour (the shimmering lights) and asks for a palette upload.
+func 86:89FD ClearTitleObjects   | Kills all 4B title objects at $7E:C448.
+
+# ---- bank 86: menu screen helpers (bank 82 menus)
+func 86:8B1C MenuFadeIn          | Fades in (speed 16) running menu frames until it ends.
+func 86:8B32 MenuFadeOut         | Fades out (speed 16) running menu frames until it ends.
+func 86:8B48 WaitFrame86         | Waits until the frame counter $40 changes.
+func 86:8B55 MenuFrame           | One menu frame: steps the menu sprite animations, rebuilds the OAM buffer from the 48 menu sprites ($11D8), refreshes and waits a frame. 82 callers.
+func 86:8B73 MenuAnimateSprites  | Steps the animation of every live menu sprite (48 slots from $11D8).
+func 86:8B87 MenuAnimateSprite   | Steps menu sprite X's animation script: counts down $1478, then reads the next frame from the script at $12C8 / $12F8 / $1238 into $1328 / $1358 / $1448.
+func 86:8BCF ClearOamBuffer86    | Clears the OAM buffer at $7E:0100: every sprite to Y = F0 and the high table to 0.
+func 86:8BF5 MenuBuildOam        | Writes the live menu sprites to the OAM buffer (slots 0C-2F first, then 00-0B, so the first twelve are drawn on top).
+func 86:8C1F MenuDrawSprite      | Writes menu sprite X's frame (pieces at [$1328 / $1358 / $1238]) at its position ($1388 / $13B8) into the OAM buffer.
+func 86:8CDA MenuSetSpriteScript | Sets menu sprite X's animation script to entry Y of the table $8E:D9A9.
+func 86:8CF5 MenuStartSprite     | Starts menu sprite X on its animation script ($1268 / $1298 / $1238): first frame, timer and pieces ready. 25 callers.
+func 86:8D47 MenuSetWindowColours | Copies 16 bytes of window colour settings from $86:8D93 + X to $1530-$153F. (guess)
+func 86:8DBB ResetDisplayState   | Stops HDMA and clears the display requests ($6A, $71-$74, $F2, $1565-$1568) before a screen change.
+func 86:8DD7 MenuSetUpScreen     | Menu PPU set-up: mode 1, BG maps and chr, windows off, the four map buffers and OAM cleared.
+func 86:8E6B ClearMenuSprites    | Clears the menu sprite tables $11D8-$15BF (1000 bytes).
+func 86:8E79 MenuInitState       | Clears the menu's state variables ($14B5, $150F, $156A, $1553, $1560 ...) and the button repeat mask.
+func 86:8EB0 LoadMenuFont        | Font $9F:8500 to VRAM $6000 and the labels file 289 (HP MP, stats, digits) to VRAM $6800.
+func 86:8EF1 LoadMenuSmallTiles  | File 28A (16 small 2bpp tiles) to VRAM $6A00.
+func 86:8F1B LoadMenuWindows     | File 282 (window and frame graphics) to VRAM $4000.
+func 86:8F45 LoadMenuSprites     | File 281 (menu sprites: digits, hands, gems, initials) to VRAM $2000.
+func 86:8F6F LoadPartySprites    | For each party member ($0A7B, $0A7A of them) copies their sprite sheet ($8E:E5C2) to VRAM from $6000. (guess)
+func 86:8FF6 CopySpriteSheetRows | Copies one hero's sprite sheet in two rows (CopySpriteSheetRow). (guess)
+func 86:9009 CopySpriteSheetRow  | Queues one row of a sprite sheet for DMA ($057E / $057F, source [$08]). (guess)
+func 86:9022 LoadMenuExtraSprites | Copies the sprite sheets listed at $86:90AB to VRAM from $6000. (guess)
+func 86:906A CopySpriteSheetRow2 | Queues one row of a sprite sheet for DMA (16-bit version). (guess)
+func 86:9093 QueueSpriteSheetDma | Queues the DMA of a sprite sheet (82:8044). (guess)
+func 86:90C0 LoadMenuPalette     | Copies 64 bytes of menu colours $9F:8200 to the CGRAM buffer $0320.
+func 86:90D3 LoadMenuPalette2    | Copies 32 bytes of colours $9F:8420 to the CGRAM buffer $0340.
+func 86:90E6 LoadMenuBgPalettes  | Copies 192 bytes of colours $9F:8040 to the CGRAM buffer $0360.
+func 86:90F9 LoadMenuSpritePalettes | Copies 128 bytes of colours $9F:8100 to the sprite CGRAM buffer $0420.
+func 86:910C LoadMenuPalette5    | Copies 32 bytes of colours $9F:8140 to the CGRAM buffer $04C0.
+func 86:911F LoadPartyPalettes   | Copies each party member's sprite palette (table $86:9165) to the CGRAM buffer from $04A0.
+func 86:916C LoadHeroPalettes    | Copies hero palettes ($A6:BF00 + 32 x hero) into the CGRAM buffer from $04A0. (guess)
+
+# ---- bank 86: world map (mode 7 when flying; $09EA world: 0 surface, 1 sea floor, 2 scenes)
+func 86:919E WorldMapMain        | World map (from 83:B18E): picks the world, finds the arrival point (WorldMapFindArrival, else $05B0 / $05B1 tiles and facing $05B2), loads it, fades in, then the world map loop for ever (left through the saved stack $09E8).
+func 86:91FE TileToPixel         | Y = tile A x 16 + 8 (the pixel centre of a world map tile).
+func 86:924C WorldMapReload      | Loads the current world again (WorldMapLoad, WorldMapSetUp) and runs the world map loop. (guess)
+func 86:925C WorldMapLoop        | The world map loop: on each tile centre checks the A button, entrances, encounters and the menu; then moves the party, the objects and the scroll, and waits a frame.
+func 86:92A1 WorldMapSetUp       | World map screen set-up: display state, VRAM tiles and palettes (WorldMapUploadGraphics), mode 7 or flat mode, the visible map, the camera and the objects.
+func 86:92DF TitleWorldFlyover   | The world map behind the title logo (event command 5B 01 with $30 = 2): loads the surface world, the "Lufia II" logo (TitleLoadLogo) and song 6, then flies the camera along the path $86:DC81 / $86:DC8F until a button (Start / A) or its end.
+func 86:944E TitleFlyoverCheckButtons | During the title flyover: Start or A starts the fade-out ($11E0 = FF); returns C set once the screen is black.
+func 86:9470 CameraPathStart     | Starts five camera path tracks (the list at X: counts in $121A, steps in $1206) and copies their start values to the camera ($11E8 / $11EA, $1210 / $1212 / $11FC-$1200, $1247 / $1249).
+func 86:94D4 CameraPathStep      | Advances the five camera path tracks one frame (adding each step to its value, next segment when the count runs out); returns C set at the end of the path.
+func 86:9537 TitleSetUpSkyHdma   | Builds the HDMA tables of the title flyover's sky and colour gradient at $7F:DE00 / $7F:E000 and the palette upload request. (guess)
+func 86:95CA TitleLogoPaletteStep | Steps the logo palette fade ($16FE / $16FF) and requests its upload. (guess)
+func 86:9618 BuildGradientHdma   | Writes a colour gradient table (from $7F:D8E0) for HDMA. (guess)
+func 86:966C BuildGradientHdma2  | Writes a second colour gradient table (from $7F:D8E0) for HDMA. (guess)
+func 86:96BC WorldMapButtons     | On a tile centre: A with the airship parked lets the party board it; other buttons switch the view. (guess)
+func 86:973C WorldMapReturn      | Empty routine (RTS).
+func 86:973D WorldMapReturn2     | Empty routine (RTS).
+func 86:973E WorldMapRequestRefresh | Asks the NMI to send the OAM buffer ($72 = 80) and sets $11D9 = FF.
+func 86:9748 WorldMapWaitFrames  | Waits A frames.
+func 86:974F WorldMapWaitFrame   | Waits until the frame counter $40 changes, keeping A (returns its sign in N).
+func 86:9758 WorldMapMoveParty   | Moves the party (WorldMapWalk) unless a scene runs ($11DE negative).
+func 86:9766 WorldMapWalk        | Reads the pad on each tile centre and moves the party, ship or airship a tile: terrain checks, boarding and leaving, take-off and landing, the step counter, the facing; between centres keeps walking.
+func 86:98C6 WorldMapStepUp      | Step handler: the next tile is above ($5A - 1).
+func 86:98CD WorldMapStepLeft    | Step handler: the next tile is to the left ($58 - 1).
+func 86:98D4 WorldMapStepDown    | Step handler: the next tile is below ($5A + 1).
+func 86:98DB WorldMapStepRight   | Step handler: the next tile is to the right ($58 + 1); then checks it like the others (WorldMapTryStep).
+func 86:98E0 WorldMapTryStep     | Checks the tile $58 / $5A for the party or vehicle (terrain, parked vehicle, coast to leave the ship) and starts the step or turns only.
+func 86:98F7 WorldMapTurnOnly    | Turns the party to the facing without moving. (guess)
+func 86:9929 WorldMapNoStep      | Step handler for no direction (RTS).
+func 86:992B WorldMapSetFacing   | Sets the moving object's facing from the direction in Y ($1202 / $1203) and changes its animation when the facing changed.
+func 86:994C WorldMapSpinStep    | Adds $1245 to $1244 (airship turning). (guess)
+func 86:995B WorldMapUpdateCamera | Moves the camera ($11EC-$11F4) by the speed from WorldMapDirectionStep and works out the party's tile ($11F2 / $11F4).
+func 86:99BF WorldMapStreamMap   | When the party's tile changed, draws the newly visible row (WorldMapDrawRow) or column (WorldMapDrawColumn) into the map in VRAM.
+func 86:9A44 WorldMapSaveTile    | Remembers the party's tile ($11F2 / $11F4 to $11F6 / $11F7).
+func 86:9A71 WorldMapTerrainAt   | A = the terrain (passability) of the world map tile at $58 / $5A: big block from the map, small block quarter, then the small block's terrain byte.
+func 86:9AB1 WorldMapAtParkedVehicle | Returns C set when the tile $58 / $5A is where the vehicle is parked ($09E3 / $09E4), for walking onto it.
+func 86:9AB8 WorldMapAtParkedVehicle2 | Same check as WorldMapAtParkedVehicle, entered after the vehicle test. (guess)
+func 86:9ADB WorldMapOpenMenu    | X opens the menu on the world map (not while flying): fades out, runs the menu (82:9A4E), then reloads and fades the world map back in.
+func 86:9B30 WorldMapAfterMenu   | After the menu: puts back the party and the vehicle and redraws the world map. (guess)
+func 86:9B91 WorldMapRestoreParty | Puts the party object back at the camera place with its facing. (guess)
+func 86:9BBE WorldMapPartyFacing | Sets the party object's facing. (guess)
+func 86:9BCA WorldMapFindArrival | When the party came from a map exit ($09C9 = 1): looks up exit $09CB in the world's exit list and places the party (and the vehicle) there; returns C set when found.
+func 86:9C71 WorldMapEncounterCheck | Random battles: counts steps ($11E3 / $11E4) and rolls; on land the zone under the party ($7F:E000) picks a group from $97:C494 (background 0 or 4 by terrain), at sea a level-based group from $86:9DC7 (background 3); runs the battle (81:8821) and game over when lost.
+func 86:9DD6 WorldMapBattleSwirl | The world map's battle start: camera swirl along a path, the battle song and the fade. (guess)
+func 86:9E3B RandomBelowTotal    | $0002 = a random number below the encounter weights' total $0000 (80:82C7, 86:A52F). (guess)
+func 86:9E4F WorldMapEntranceCheck | On a tile centre: when the party stands in an entrance area of the world's exit list it fades out and goes to that map ($05AC, arrival $05B0 / $05B2).
+func 86:9EDD WorldMapFindExitAt  | Searches the world's exit list for an area holding the tile $58 / $5A; returns C set and X at the record when found.
+func 86:9F13 WorldMapExitRecord  | Points X at exit record $0000 of the world's exit list. (guess)
+func 86:9F35 WorldMapExitList    | Points DB:X at the world's map info ($CF:FCBC by the world record $86:CE36): the exit list.
+func 86:9F55 AirshipLand         | Airship landing: comes down, the palette fades from the sky colours ($A6:B400) to the land, the party walks off. (guess)
+func 86:9F5C AirshipLandHere     | Airship landing at the current place. (guess)
+func 86:9F7D AirshipDescend      | Airship coming down step by step to the ground. (guess)
+func 86:9FD1 AirshipDescendEnd   | Last steps of the airship coming down. (guess)
+func 86:A03B PaletteFadeTowards  | Moves each colour of the CGRAM buffer ($0340) one step toward the palette at DB:Y, and requests the upload.
+func 86:A0A2 RequestPaletteUpload | Asks for the CGRAM buffer $0320 (E0 bytes) to be sent to CGRAM ($1701-$1706).
+func 86:A0B9 AirshipTakeOff      | Airship take-off: the camera rises to flying height ($11FC to 100), the palette fades to the sky colours ($A6:B200). (guess)
+func 86:A0C6 AirshipTakeOffSong  | Airship take-off with the flying song (12). (guess)
+func 86:A0D9 AirshipRise         | Airship rising step by step. (guess)
+func 86:A0F7 AirshipRiseStep     | One frame of the airship rising. (guess)
+func 86:A137 AirshipRiseEnd      | Last steps of the airship rising. (guess)
+func 86:A1A0 AirshipTurn         | Turns the airship to its facing. (guess)
+func 86:A1C5 BoardVehicle        | The party boards the vehicle $09E0 (hides the parked one, $09E1 = FF) and its song (table $86:A410) plays.
+func 86:A1EC LeaveVehicle        | The party leaves the vehicle: the vehicle is parked where it is ($1488 / $148B, WorldMapParkVehicle), $09E1 = 0, the step counter reset and the walking song.
+func 86:A28B WorldMapVehicleArrival | Puts the parked vehicle's tile ($09E3 / $09E4) into $0004 / $0006. (guess)
+func 86:A2AE WorldMapArrivalFromExit | Places the party at the exit record of $09EE. (guess)
+func 86:A2C6 WorldMapParkVehicle | Stores the vehicle's tile ($1488 / $148B / 16) in $09E3 / $09E4 and its facing $1495 in $09E2.
+func 86:A2E7 WorldMapUpDownChoice | Up / down choose $1242 (1 / FF) while waiting for a button. (guess)
+func 86:A338 WorldMapUpDownShow  | Shows the up / down choice. (guess)
+func 86:A357 WorldMapPlaceObject | Puts an object at the camera place ($11E8 / $11EA). (guess)
+func 86:A375 WorldMapArrivalNone | Arrival style handler that does nothing (RTS).
+func 86:A376 WorldMapArriveFlying | Arrival style: the party arrives in the airship, flying ($11DE = 1, height 28). (guess)
+func 86:A38C WorldMapArriveFlying2 | Arrival style: arrives flying with the camera turned. (guess)
+func 86:A3A2 WorldMapArriveFlying3 | Arrival style: arrives flying when $09E0 says so. (guess)
+func 86:A3AB WorldMapArriveOnFoot | Arrival style: the party walks in on foot. (guess)
+func 86:A3E4 WorldMapArriveLanding | Arrival style: the airship lands (AirshipLand).
+func 86:A3E8 WorldMapArriveTakeOff | Arrival style: the airship takes off where it stands. (guess)
+func 86:A417 WorldMapDirectionStep | Speed vector of the camera from its angle ($1248 / $1249) and speed, through the sine table $97:B226 (table $86:A46B by quadrant).
+func 86:A473 DirectionQuadrant0  | Speed vector for angles 0-3F (sine / cosine signs). (guess)
+func 86:A496 DirectionQuadrant1  | Speed vector for angles 40-7F. (guess)
+func 86:A4AD DirectionQuadrant2  | Speed vector for angles 80-BF. (guess)
+func 86:A4BC DirectionQuadrant3  | Speed vector for angles C0-FF. (guess)
+func 86:A4D3 SineOfAngle         | Sine of angle $0000 from $97:B226. (guess)
+func 86:A4FA CosineOfAngle       | Cosine of angle $0000 from $97:B226. (guess)
+func 86:A52F WorldMapMultiply       | $0000 x $0004 (16-bit x 16-bit) with the 8-bit hardware multiplier. (guess)
+func 86:A583 Multiply8x16        | $004E x $0050 with the hardware multiplier into $0052. (guess)
+func 86:A5A9 SignedMultiply      | Signed 16 x 16 multiply of $0000 and $0002 into $0004 (unrolled). (guess)
+func 86:A791 WorldMapSetScroll   | BG scroll from the camera: $0594 = x - 80, $0596 = y - 70 (in the air another vertical place), the camera kept in $11F8 / $11FA.
+func 86:A7CE WorldMapMode7Matrix | Works out the mode 7 matrix ($1707-$170D) for the camera (flat 100 / 0 while walking, rotated and scaled while flying), and the flying view's HDMA. (guess)
+func 86:A7F8 Mode7PerspectiveHdma | Builds the per-line mode 7 scale tables of the flying view (sine $97:B226, height $11FF). (guess)
+func 86:A894 Mode7CenterMatrix   | Works out the mode 7 centre and the four matrix values from the angle $1201 and height $11FC (handlers $86:A9A8 by quadrant). (guess)
+func 86:A913 Mode7MatrixAB       | Mode 7 values A and B from the angle and scale. (guess)
+func 86:A956 Mode7MatrixCD       | Mode 7 values C and D from the angle and scale. (guess)
+func 86:A9B0 Mode7Quadrant0      | Mode 7 centre and matrix for angles 0-3F. (guess)
+func 86:AA5B Mode7Quadrant1      | Mode 7 centre and matrix for angles 40-7F. (guess)
+func 86:AB0E Mode7Quadrant3      | Mode 7 centre and matrix for angles C0-FF. (guess)
+func 86:ABC1 Mode7Quadrant2      | Mode 7 centre and matrix for angles 80-BF. (guess)
+func 86:AC6C WorldMapDrawRow     | Draws one row of world map tiles (big blocks [$DF], small blocks [$E3] / [$E7]) into the mode 7 map buffer $7F:0000.
+func 86:ACFE WorldMapDrawColumn  | Draws one column of world map tiles into the buffer $7F:DF00.
+func 86:AD82 WorldMapDrawScreen  | Draws the whole visible world map around the camera and sends it to VRAM with DMA (screen off).
+func 86:ADEE WorldMapWrapRow     | Wraps the map row and column $58 / $5A to the world's size. (guess)
+func 86:AE05 WorldMapBlockAt     | Reads the big block number at $58 / $5A from the world map ($7F:4000) into [$08]. (guess)
+func 86:AE1E WorldMapSetMode7    | Mode 7 PPU set-up for the world map (BGMODE 7, M7SEL, main / sub screens, colour maths) and the matrix reset (100, 0, 0, 100).
+func 86:AE4D WorldMapApplyChanges | Applies the world map changes switched on by story flags (table $86:AE97: flag, place, new big block), e.g. flags 41, 50, 5F, 62.
+func 86:AEB1 WorldMapScene       | World map scenes (event command 5B, from 80:BA69): loads world 2 in mode 7, then runs scene handler $54 from the table $86:AF0A (ships, the airship, Doom Island ...), then fades out.
+func 86:CBBF UploadPalette       | Sends the CGRAM buffer $0320 (256 colours) to CGRAM with DMA (screen off).
+func 86:CBF0 WorldMapCopyHdma    | Copies the world's HDMA / window table into $7F:4038 from the list at [$08]. (guess)
+func 86:CC3C WorldMapPlaceParty  | Places the party, the vehicle and the camera for the arrival and runs the arrival style handler (table $86:A367), then the world's song.
+func 86:CCFC WorldMapLoad        | Unpacks the world's tiles (to $7F:0000) and map (to $7F:4000) from the world record ($86:CE32 / $86:CE34), applies the story flag changes, and for the surface world the battle zone map 193 to $7F:E000.
+func 86:CD41 WorldMapUploadGraphics | Screen off: world tiles and map to VRAM (WorldMapUploadTiles, WorldMapUploadBlocks), the HDMA table and the palette.
+func 86:CD67 WorldMapUploadTiles | DMAs the unpacked mode 7 tiles ($7F:0000, 4000 bytes) to the high bytes of VRAM (the mode 7 pixels).
+func 86:CD91 WorldMapUploadBlocks | Copies the world's palette and extra palette (world record $86:CE38 / $86:CE41) to the CGRAM buffers with WRAM DMA.
+func 86:CDF5 WorldMapSelectWorld | $09EB = world $09EA x 12; sets the long pointers to its big blocks ($DF / $E3), small blocks ($E7 / $EA / $ED) from the world record $86:CE3B.
+func 86:CE68 TitleLoadLogo       | Unpacks the "Lufia II Rise of the Sinistrals" logo (file 28D) to $7F:0000, DMAs it to VRAM $4000 and loads its palettes ($A6:B800, $A6:EA20).
+func 86:D2D6 WorldMapResetState  | Clears the world map's display and object state ($6A, $72-$74, $1365, $1710 / $1711 ...) and the windows.
+func 86:D32D WorldMapLeave       | Leaving the world map: parks the vehicle (WorldMapParkVehicle), screen off, HDMA and windows off.
+func 86:D330 WorldMapScreenOff   | Screen off, HDMA and windows off, display requests cleared.
+func 86:D34A WorldMapRedraw      | Loads and places the world map again (WorldMapLoad, WorldMapPlaceParty) and waits for the fade.
+func 86:D35D PlaySongIfNew       | Plays song A (80:93FE) unless it is already the current song $099D.
+func 86:D378 WorldMapPlaySound   | Plays sound effect A (80:953B).
+func 86:D37D FadeOutFast         | Starts a fade out at speed 16 ($0581 = D0).
+func 86:D381 FadeInFast          | Starts a fade in at speed 16 (FadeInSpeed with A = 10).
+func 86:D385 FadeInSpeed         | Starts a fade in at speed A ($0581 = 80 | A).
+func 86:D397 WaitFadeEnd         | Runs frames until the fade ($0581) has ended.
+func 86:D3A5 ScreenOff           | Forced blank now: INIDISP and $0583 = 8F.
+func 86:D3AE ScreenOn            | Turns the screen on at full brightness ($0583 and INIDISP). (guess)
+table 86:AF0A WorldMapSceneHandlers | World map scenes of event command 5B (index = the scene byte x 2): ships, the airship, the sinking and rising of islands (handlers at $86:AF3A-$86:C04E).
+table 86:98A6 WorldMapStepHandlers | Step handlers by the pad's direction bits (up, down, left, right and the combinations).
+table 86:A367 WorldMapArrivalStyles | How the party arrives on the world map (on foot, flying, landing, taking off).
+table 86:A46B DirectionQuadrants | Speed vector by angle quadrant.
+table 86:A9A8 Mode7Quadrants     | Mode 7 centre and matrix by angle quadrant.
+ram 7E:09EA 1 WorldMapWorld     | Which world map: 0 the surface, 1 the sea floor, 2 the scene world.
+ram 7E:09EB 2 WorldMapRecord    | $09EA x 12: offset of the world's record in $86:CE32.
+ram 7E:09E3 2 ParkedVehicleTile | The parked vehicle's tile (x, y).
+
+# ---- bank 86: world map objects (22 records of 1D bytes at $1469: the party, ships, scene sprites) and their sprites
+func 84:80BF FieldScreenEffectsEnd | The end (RTS) of FieldScreenEffects, reached with 8-bit X / Y.
+func 86:E0B9 WorldObjectSetAnim  | Sets world map object X's animation A ($10) and, by its facing $0F, its frame list from $86:EBA7: frame pointer, timer, frame count and sizes.
+func 86:E11F WorldObjectsAnimate | Steps the animation of the 22 world map objects at $1469 (frame timers $15, frame $11 of $14), multiplying in the facing's frame set.
+func 86:E186 WorldObjectNextFrame | Moves world map object X to its next animation frame (E0B9's lookup plus the frame offset). (guess)
+func 86:E1B9 WorldMapBuildOam    | Builds the world map's OAM buffer each frame: clears it, places the objects relative to the camera (flat or mode 7 projection), sorts them by depth, gives their graphics VRAM slots ($12A5) and writes their sprites by size (table $86:E281).
+func 86:E287 WorldObjectsPlaceFlat | Works out the screen place of the 22 objects for the flat (walking) view (WorldObjectPlace).
+func 86:E295 WorldObjectPlace    | Screen place of object X from its map place and the camera ($58 / $5A): stores x / y at $07 / $09 and adds visible objects to the depth list $124F.
+func 86:E2D2 WorldObjectsPlaceMode7 | Works out the objects' screen places through the mode 7 rotation and scale (flying view). (guess)
+func 86:E356 Mode7Project        | Rotates and scales a map offset by the mode 7 angle and scale ($004E / $0011 / $0012). (guess)
+func 86:E3AB WorldObjectsDraw    | Writes the sprites of the objects in the depth list ($124B of them), then the party's shadow object $16CA.
+func 86:E3CE WorldObjectDraw     | Writes one object's sprites (WorldObjectDrawBySize).
+func 86:E3D2 WorldObjectDrawBySize | Writes object X's sprites through the handler for its size $17 (table $86:E3DF).
+func 86:E3E5 WorldObjectDraw32   | Writes a 32 x 32 object's sprites after giving its graphics a VRAM slot. (guess)
+func 86:E3F6 WorldObjectDraw16   | Writes a 16 x 16 object's sprites after giving its graphics a VRAM slot. (guess)
+func 86:E40B WorldObjectDrawBig  | Writes a large (several sprite) object after giving its graphics a VRAM slot. (guess)
+func 86:E430 WorldObjectVramSlot | Finds the VRAM slot holding object X's frame graphics ($19), or takes a free one and queues the upload; returns C set when none was free. (guess)
+func 86:E479 PutWorldSprite16    | Writes one 16 x 16 object sprite (position, tile, palette, flip for facing 3) to the OAM buffer and its high-table bits.
+func 86:E4E7 PutWorldSprite32    | Writes one 32 x 32 object sprite to the OAM buffer and its high-table bits. (guess)
+func 86:E555 PutWorldSpriteGroup | Writes an object made of several sprites to the OAM buffer. (guess)
+func 86:E5BB SetWorldOamHighBits | Puts the size / x bits $0005 of sprite $1467 into its place in the OAM high table ($0300), through table $86:E5DA, and counts the sprite.
+func 86:E5E2 OamHighBitsSlot0    | Puts the two bits of $0005 into bits 0-1 of A (first sprite of a high-table byte).
+func 86:E5ED OamHighBitsSlot1    | Puts the two bits of $0005 into bits 2-3 of A.
+func 86:E5FA OamHighBitsSlot2    | Puts the two bits of $0005 into bits 4-5 of A.
+func 86:E609 OamHighBitsSlot3    | Puts the two bits of $0005 into bits 6-7 of A.
+func 86:E617 ClearVramSlots      | Clears the 32 object graphics VRAM slots ($12A5 / $12E5) and sets their VRAM addresses from $86:D8B6. (guess)
+func 86:E640 FreeVramSlots       | Marks the 32 object graphics VRAM slots ($12E5) unused for this frame.
+func 86:E650 ClearWorldOam       | Hides every sprite of the OAM buffer (Y = E0).
+func 86:E686 SortWorldObjects    | Sorts the depth list ($124F, keys $127B) so far objects are drawn first. (guess)
+func 86:E6C4 ClearWorldObjects   | Resets the 22 world map objects at $1469 (index, animation, offsets cleared, y = FFFF: not shown).
+func 86:E709 WorldObjectAddress  | X = $1469 + A x 1D: the record of world map object A.
+func 86:E8CE TitleFlyoverSparkles | Moves the title flyover's sparkles ($1E50-$1E56 speeds and the list at $1E58) and writes them as sprites. (guess)
+func 86:E9D4 TitleFlyoverSetUpSparkles | Sets up the 22 sparkle sprites of the title flyover from $86:F34C / $86:F34E. (guess)
+func 86:EA43 DrawSpriteList      | Draws each entry of a sprite list at X (6 bytes each, ends with a negative word) with DrawSpriteListEntry. (guess)
+func 86:EA58 DrawSpriteListEntry | Draws one sprite list entry (tile, place relative to $58 / $5A, size) into the OAM buffer. (guess)
+func 86:EB11 PutListSprite16     | Writes one small sprite of a sprite list entry to the OAM buffer. (guess)
+func 86:EB52 PutListSprite32     | Writes one large sprite of a sprite list entry to the OAM buffer. (guess)
+table 86:E281 WorldSpriteWriters | Sprite writers by object size (16 x 16, 32 x 32, group).
+table 86:E3DF WorldObjectDrawers | Object drawers by object size.
+table 86:E5DA OamHighBitSlots    | Where a sprite's two high-table bits go in its byte (sprites 0-3).
+
+# ---- bank 86: world map scenes (event command 5B, table WorldMapSceneHandlers $86:AF0A, slots 01-16)
+func 86:AF3A WorldMapScene02_ShipFlyover | Scene 02: camera path $86:DD47 / $86:DD55 over the scene world with the ship object ($1486, animation 1C) at the camera, then the timed scene script $86:AF6D.
+func 86:AF40 WorldMapSceneShipCommon | Shared body of the ship scenes 03-07: starts the camera path given in X / Y, sets up the world, puts the ship object (animation 1C) at the camera and plays the scene script $86:AF6D.
+func 86:AF88 WorldMapScene03_ShipFlyover | Scene 03: the ship scene on camera path $86:DD95 / $86:DDA3.
+func 86:AF90 WorldMapScene04_ShipFlyover | Scene 04: the ship scene on camera path $86:DD47 / $86:DDE3.
+func 86:AF98 WorldMapScene05_ShipFlyover | Scene 05: the ship scene on camera path $86:DE2B / $86:DE39.
+func 86:AFA0 WorldMapScene06_ShipFlyover | Scene 06: the ship scene on camera path $86:DD95 / $86:DE81.
+func 86:AFA8 WorldMapScene07_ShipFlyover | Scene 07: the ship scene on camera path $86:DEC1 / $86:DECF.
+func 86:AFB0 WorldMapScene08_None | Scene 08: does nothing (RTS).
+func 86:AFB1 WorldMapScene09_None | Scene 09: does nothing (RTS).
+func 86:AFB2 WorldMapScene0A_Effect | Scene 0A: camera path $86:DF0F / $86:DF1D, the five effect objects placed at (748, D28 - 20), scene script $86:AFDD.
+func 86:AFE3 WorldMapScene0B_EffectLights | Scene 0B: like 0A (camera path $86:DF41 / $86:DF4F) with the circle-light windows and a fixed colour (COLDATA 71), scene script $86:B020.
+func 86:B15A WorldMapScene0C_EffectLights | Scene 0C: effect sprites file 292, camera path $86:DF63 / $86:DF71, effect objects at (860, 8B8 - 20), circle lights (COLDATA D4), scene script $86:B1AD.
+func 86:B19A LoadSceneSprites292 | Unpacks the scene effect sprites (file 292) to $7E:E000.
+func 86:B59E WorldMapScene0D_Ship | Scene 0D: camera path $86:DF85 / $86:DF93, the ship object (animation 1) at the camera, circle-light set-up, scene script $86:B5D2.
+func 86:B63B WorldMapScene0E_TwoPart | Scene 0E: effect sprites 292 with two circle lights (scene script $86:B732), then a fade, the ship / airship sprites (file 290) and a second camera path $86:DFF3 / $86:E001 with its own palette and script.
+func 86:BB5C WorldMapScene0F_Effect | Scene 0F: effect sprites 291 and 294, camera path $86:E00F / $86:E01D, the sky gradient, effect objects next to the camera, circle lights, scene script $86:BBF9.
+func 86:BB8C SceneSkyGradient    | Sets up the scenes' sky colour gradient (BuildGradientHdma2 into $0340, the palette $7F:DC20 copied in) and asks for the palette upload.
+func 86:BBC4 PlaceEffectsAtCamera | Places the scene's effect objects at the camera (x + 10, y + 8, 20 up) with SceneEffectsPlace.
+func 86:BBE6 LoadSceneSprites291 | Unpacks the scene effect sprites (file 291) to $7E:E000.
+func 86:BE30 WorldMapScene10_Party | Scene 10: effect sprites 291, camera path $86:E033 / $86:E04F, three objects ($1469, $1486, $1534, animation 20 with different frames) placed around the camera, scene script $86:BED9.
+func 86:BE72 SetSceneObjectAnim20 | Sets world map object X to animation 20 facing 0.
+func 86:BE7A PlaceSceneTrio      | Places the scene's effect objects and the three objects of scene 10 at fixed offsets from the camera.
+func 86:BEC4 PlaceObjectOffset   | Puts world map object X at the scene place ($1520 / $1523) plus the offsets A (x) and Y (y).
+func 86:BF70 WorldMapScene11_Sprites293 | Scene 11: camera path $86:E041 / $86:E04F with the sky gradient and the sprites of file 293, scene script $86:BFDE.
+func 86:BF7A WorldMapSceneSprites293Common | Shared body of scenes 11-15 and 01: starts the camera path in X / Y, sky gradient, sprites 293 to VRAM, sprite list cleared, circle lights, then plays the scene script whose address was pushed.
+func 86:BF99 LoadSceneSprites293 | Screen and interrupts off, unpacks file 293 to $7E:E000 and DMAs it to VRAM $4000, then turns the NMI back on.
+func 86:BFF5 WorldMapScene12_Sprites293 | Scene 12: the file 293 scene on camera path $86:E04F / $86:E05D, script $86:BFDE.
+func 86:C002 WorldMapScene13_Sprites293 | Scene 13: the file 293 scene on camera path $86:E04F / $86:E06B, script $86:BFDE.
+func 86:C00F WorldMapScene01_Sprites293 | Scene 01: the file 293 scene on camera path $86:E04F / $86:E079 with its own script $86:C01C.
+func 86:C041 WorldMapScene15_Sprites293 | Scene 15: the file 293 scene on camera path $86:E04F / $86:E087, script $86:BFDE.
+func 86:C04E WorldMapScene16_Sprites294 | Scene 16: sprites 294, camera path $86:E095 / $86:E0A3, sky gradient, objects $1469 / $1486 with animations 22 / 23, scene script $86:C09F.
+func 86:C08C LoadSceneSprites294 | Unpacks the scene sprites (file 294) to $7E:F000.
+func 86:C1D2 RunSceneScript      | Plays a scene script at X (+0 every-frame routine, +2 fade-in speed, then (frames, routine) steps): fades in and each frame steps the camera path and, by the bits of $1230, the camera, map streaming, mode 7, objects and OAM, calling the step whose frame is reached; ends with the path or when the screen is black.
+func 86:C246 SceneScriptStep     | Calls the scene script's routine for the current frame ($1226) when one of its (frames, routine) steps falls on it, else its every-frame routine.
+func 86:C284 SetUpSceneEffects   | Sets the five effect objects ($14A3-$1517) to animations 0D-11, facing 0.
+func 86:C2AD SetSceneEffectAnim  | Sets object X's facing to 0 and its animation to A.
+func 86:C2B3 SceneEffectsPlace   | Puts the effect objects at the scene place: x from $1520, y from $1523 minus $123E.
+func 86:C2D9 SetCircleLight      | Draws circle light A (centre, radius, half from the record at $1E50 + A x 6) into the next of its two HDMA window tables ($7F:D400 / D600 or D800 / DA00).
+func 86:C321 CircleLightRecord   | X = $1E50 + A x 6: the record of circle light A.
+func 86:C336 CopyCircleLight     | Copies the 6-byte circle light record at Y into circle light A's record.
+func 86:C358 BuildCircleWindow   | Writes the HDMA window table of a circle (centre $58 / $5A, radius $54, $56 = top or bottom half only) at [$60], using the half widths from CircleHalfWidths.
+func 86:C40A CircleWindowUpper   | Writes the window rows of the circle's upper part (left / right from the centre minus / plus the half width).
+func 86:C444 CircleWindowLower   | Writes the window rows of the circle's lower part.
+func 86:C4A8 CircleHalfWidths    | Midpoint circle: fills $7F:DE00 with the half width of each row of a circle of radius $04.
+func 86:C4B3 CircleHalfWidthsLoop | The CircleHalfWidths loop read with 16-bit A and 8-bit X / Y.
+func 86:C582 SetUpCircleLights   | Window and colour-maths set-up for the scenes' circle lights (windows 1 / 2 on sprites and BG, colour subtraction), empty window tables, light records at $1E68 cleared.
+func 86:E84F ClearSceneSprites   | Hides the first 16 sprites (tile 3E00, high bits cleared) and clears the scene sprite list at $1EC2.
+func 86:E8B5 ClearSpriteList     | Clears 8 sprite list entries of 6 bytes at X (kind FF, place 0).
