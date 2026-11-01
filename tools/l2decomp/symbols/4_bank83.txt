@@ -1,0 +1,681 @@
+# Bank $83: the field (towns and dungeons): main loop, map changes, map characters (actors), walking,
+# the field tools, step-on and action spots, tile changes, doors, chests. Written by the bank $83 pass.
+# Directions: walk actions 0 up, 1 down, 2 left, 3 right; facings (LeaderFacing, FB12) 0 down, 2 left, 4 up, 6 right.
+
+# ---- frame, input
+func 83:900C WaitForFrame        | Waits until the NMI frame counter ($40) changes.
+func 83:867B TakeButtonPress46_83 | As TakeButtonPress46: AL = buttons of $46 (A X L R); when held and still latched in $4A, clears the latch; Z clear = a fresh press.
+func 83:8674 TakeButtonPress47_83 | As TakeButtonPress47: AL = buttons of $47 (B Y Select Start, the pad); when held and still latched in $4B, clears the latch; Z clear = a fresh press.
+
+# ---- field main loop
+func 83:8000 FieldLoop           | The field's main loop (DB = $83): every frame runs the map change checks, animations, the leader's control, actors, puzzle threads and the menu button.
+func 83:8004 FieldLoopFrame      | One pass of the field main loop: map change or room change requests ($05B5), tile animation, actors, threads; X opens the menu when CanOpenFieldMenu allows it.
+func 83:80CA FieldLoopAgain      | Jumps back to the top of the field main loop.
+func 83:80CD CanOpenFieldMenu    | Returns Z set when the field menu may open: nothing moving, no event running, no window, no door animating.
+func 83:8192 FieldFrameNoMenu    | One field frame without the map change checks and the menu: waits for the frame, runs the actors (the leader's control unless held), animations and puzzle threads; used while fades and chest messages wait.
+
+# ---- after a step: room check, doorways, exits, trigger areas, field monsters
+func 83:81C6 FieldStepChecks     | Every field frame: runs the puzzle threads, field monster contact (dungeon controls), the room check after a step (category 00 id 00 when $7FD0A3 is set), and once a step has finished ($05B5 bit 4) the doorways, exits, trigger areas and the special block types 0B, 0C and 0D under the leader.
+func 83:813B StartHpRecoveryBlock | Leader on block type 0C: once (sets $05B7 bit 1) a ring of two sparkles round the leader, every living member's HP to full (HealPartyHp) and sound 2F.
+func 83:816D StartMpRecoveryBlock | Leader on block type 0B: once (sets $05B7 bit 2) a ring of two sparkles round the leader, every living member's MP to full (HealPartyMp) and sound 2F.
+func 83:8103 UpdateBlockEffects  | Each frame: ends the recovery block effects ($05B7 bits 1, 2) once their ring is gone, and runs the tool ring ($84:836A) while $05B7 bit 0 is set.
+func 83:812E EndHpRecoveryEffect | Clears $05B7 bit 1 when no ring with id 1 is left.
+func 83:8160 EndMpRecoveryEffect | Clears $05B7 bit 2 when no ring with id 1 is left.
+func 83:82A0 FindEffectObject    | Looks for A in the 31 ring ids (RingIds); returns C set when found (X = slot).
+func 83:82B2 SetUpRecoveryRing   | Sets the ring values at $1274-$1283 (spin, radius) for the recovery block sparkles. (guess)
+func 83:831E SwapAndShiftRight3  | 16-bit A: swaps its bytes and shifts right 3.
+func 83:8323 SwapAndShiftLeft2   | 16-bit A: swaps its bytes and shifts left 2.
+func 83:8327 MakeRecoveryRings   | Makes the two sparkle rings (ids 1 and 2) of a recovery block.
+func 83:834A MakeRecoveryRing    | A = ring id: makes the ring (MakeObjectRing) at the place in $08/$09 and sets its look ($15D9.. ring slots).
+func 83:8386 ReloadAfterBlockD   | Leader on block type 0D: fades out, plays sound 5, reloads the map's graphics and characters (85DC) and fades in. (guess)
+func 83:83A0 CheckSkipOpening    | Goes to StartGame when $05B5 bit 6 is set, or when MapMode bit 1 is set (the opening, guess) and A, B or Start is pressed.
+func 83:83E0 FieldBattleFromStep | Starts a battle with no field monster ($7FF8A3 = FF) through FieldMonsterBattle.
+func 83:83EB FieldMonsterBattle  | Battle on the field: waits for the sound, plays music 18, fights (RunFieldBattle); lost ($7FF8A2 = 1) restarts the game (Ancient Cave: $84:8B9C); else fades back in and runs the room's event 06.
+func 83:845B RunFieldBattle      | Runs a battle from the field (RunBattle) and comes back: a beaten field monster is hidden (HideActor), one with result 2 keeps walking (SetActorWalkMode); an event battle records the result in $079D bits 7 and 6; then the screen is reloaded (ReloadFieldScreen).
+func 83:84E1 WarpWithinMap       | Map change onto the same map ($05B3 bit 3): fades out, runs the room's event 10, reloads map info, start-up script, map and characters, puts the leader at $05BD,$05BE facing $05BF, runs the room check and fades in. Counts these in $0B63.
+func 83:B66E CheckDoorwayStep    | After a step: in a door rectangle (map info +02, record +0E set) or secret passage (+0A), stepping on its top or bottom row sets the room the leader goes into ($7FD0BF), the place $05BD,$05BE and asks for a room change ($05B5 bit 5).
+func 83:B711 CheckTriggerAreas   | After a step: the first trigger area (map info +0C) holding the leader starts its event (event block list +8).
+func 83:B727 StartBlockEvent     | A = id, X = event block list: starts that event script ($80:C12E) as the running script, with the leader held ($0622 bit 0).
+func 83:B747 CheckExits          | After a step: an exit (map info +06) holding the leader is taken (TakeExit); exits with arrival style 2 only while the leader faces up.
+func 83:B76E TakeExit            | X = exit record (map info +06): sets the arrival place ($05B0,$05B1), style ($05B2, F0 = keep the facing), target map ($05AE) and asks for a map change ($05B5 bit 7); style 1 starts a walk-in, 7 a door effect.
+func 83:B82F ShowStepEffectAtLeader | When $05B5 bit 3 is set: shows effect 4E at the leader's block and clears the bit.
+func 83:B851 FindRecordAt        | X = map info list offset, Y = record size: finds the record whose x,y (+1, +2) is the block $8F,$91; returns C set and X = record when found.
+func 83:B882 FindRectangleAt     | X = map info list offset, Y = record size: finds the record whose rectangle (+1..+4, ends not included) holds $8F,$91; returns C set and X = record.
+func 83:B8BF CheckFieldMonsterContact | Dungeons: a map character next to the leader with no talk event (a field monster) and nothing between them starts a battle (FieldMonsterBattle); $7FF8A1 gets the side it was met from.
+
+# ---- redraw after a map load, battle or menu
+func 83:85DC ReloadFieldScreen   | Screen off: resets the field's display state, resets the display (ResetFieldDisplay), reloads map info, the map's graphics and the characters' sprites, redraws every layer, screen back on.
+
+# ---- door and chest animations, tile copies
+func 83:8682 AnimateDoorsAndChests | Each frame: steps the 8 door / chest animations ($7FD057 slots): every 4 frames one row of a door (87CC) or chest (8783) opens or closes; $17AA gets a bit per running animation.
+func 83:86EA DrawOpenedChests    | Map load: draws the opened look of every chest of the map's chest list ($91:B8B5 via $7FD1A0) whose opened flag ($093B bits) is set.
+func 83:8728 DrawOpenDoors       | Map load: draws doors 00-3F that are open (DoorStates) with their open look.
+func 83:873F DrawLookOpened      | Draws the opened picture of chest / door look $7FD048 (map info +04: +2 x, y, +4 w, h) at $7FD046,$7FD047 and clears the wall flag of its cell.
+func 83:8761 DrawLookClosed      | Draws the closed picture of look $7FD048 (map info +04: +6 x, y, +8 w, h) at $7FD046,$7FD047 and sets the wall flags of its rows.
+func 83:8783 AnimateChestStep    | One step of a chest animation: finds the chest spot and its look, then draws the next opening or closing row.
+func 83:87A3 FindChestSpot       | $7FD04E & 7F = chest spot id: finds it in map info +26 (4 bytes) and puts its x, y, look in $7FD046, $7FD047, $7FD048.
+func 83:87CC AnimateDoorStep     | One step of a door animation ($7FD04E = door): on the first step marks it open or closed (DoorStates) and plays its sound, then draws the next row.
+func 83:881D PlayDoorSound       | Plays a door's sound (1E when the door's +0E byte is 1, else 0E or 0F by the look's width), unless $09A7 bit 1 or the screen is off.
+func 83:8848 FindDoorRecord      | A = door id: finds it in map info +02 (15 bytes) and puts its x, y, look (+0D) and sound byte (+0E) in $7FD046-$7FD048, $7FD060.
+func 83:8874 FindLook            | Finds look $7FD048 in map info +04 (10 bytes); its layers byte goes to $7FD05F. Returns C set.
+func 83:888C DoorRowClosing      | Draws the next row of a closing door or chest (the closed picture), sets its walls and redraws it.
+func 83:88D9 DoorRowOpening      | Draws the next row of an opening door or chest (the opened picture), clears its wall and redraws it.
+func 83:8927 SaveCopyRect        | Saves the tile copy rectangle ($7FD046-$7FD04D, layers $7FD05F) to $7FD067.
+func 83:894C RestoreCopyRect     | Restores the tile copy rectangle saved by SaveCopyRect.
+func 83:8971 CopyRowAndRedraw    | Copies one row of a door or chest picture onto the map with the movable objects taken off and put back, then queues the rows for redraw.
+func 83:898E SetWallRows         | Sets the top-edge wall flag (0x400) on the cells of the rows of $7FD046,$7FD047 (width $7FD04C) on the current layer.
+func 83:89CE ClearDoorWall       | When the look's layers byte has bit 5: clears the top-edge wall flag of the door's cell on the current layer.
+func 83:8A0A QueueRectRedraw     | Queues the changed rectangle of every shown layer the copy touches for drawing to the screen ($7FD4F8 count, $7FD4FA.. entries).
+func 83:8A6F ClearBlocksInRect   | A = layer: clears the block numbers (keeps the flags) of the rectangle $7FD046,$7FD047 size $7FD04C x $7FD04D.
+func 83:8AC9 IsDoorOpen          | A = door 00-3F: returns Z clear when its bit in DoorStates is set.
+func 83:8AD5 SetDoorOpen         | A = door: sets its bit in DoorStates.
+func 83:8AE5 SetDoorClosed       | A = door: clears its bit in DoorStates.
+func 83:8AF7 DoorBit             | A = door: X = its byte in DoorStates, $54 = its bit mask ($80:BE45).
+func 83:8B0E DrawNextPictureRow  | Draws the next row of a tile copy rising up from $7FD046,$7FD047 and redraws it (row counter $7FD04D). (guess: a piece rising or sinking)
+func 83:8B40 LoadTileCopy        | A = id: finds the tile copy in map info +16 (10 bytes) and puts its source x, y, width, height and layers in $7FD04A-$7FD04D and $7FD05F.
+func 83:8B6A CopyTileRect        | Copies the rectangle $7FD04A,$7FD04B size $7FD04C x $7FD04D onto $7FD046,$7FD047 on the layers of $7FD05F (bit 0x11 << n: both bits the whole cell but its 10 / 20 flags, low bit the block, high bit the 04 / 08 walls).
+func 83:8C8A RebuildCollisionRect | Rebuilds the collision map bytes ($7E:4000) of the rectangle $7FD046.. from its cells' wall flags and block types (type high nibble set: 08, type 8: 02, type 9: 80).
+func 83:8D42 SetLayerScroll      | Sets each layer's scroll ($121E, $1226 and $7FD028 in blocks) for the camera at block $56,$58 by the layer's scroll mode ($7FD020).
+func 83:8DDA ScrollHelperX       | SetLayerScroll helper: x offset and the layer's x speed nibble ($7FD021). (guess)
+func 83:8DF0 ScrollHelperY       | SetLayerScroll helper: stores x, y offset and the layer's y speed nibble. (guess)
+func 83:8E09 ScaleScrollDown     | SetLayerScroll helper: scales a scroll value by the speed (right shifts). (guess)
+func 83:8E1A ScaleScrollUp       | SetLayerScroll helper: scales a scroll value by the speed (left shifts). (guess)
+func 83:8E2B ScrollSpeedShifts   | SetLayerScroll helper: Y = shift count for a speed ($83:8E44); C set when it is 0. (guess)
+func 83:8E4C RedrawLayersAndWait | Redraws every layer's tilemap (RedrawAllLayers), asks the NMI to send them ($74 = A8) and waits a frame; saves all registers.
+func 83:8E66 RedrawAllLayers     | Redraws the screen tilemaps of the 4 layers ($80:F47A for each).
+func 83:8E76 RedrawRectBothLayers | Redraws the rectangle $7FD046.. on layers 0 and 1 (RedrawRectOnLayer).
+func 83:8E85 RedrawRectOnLayer   | X = layer * 2: redraws the part of the rectangle $7FD046.. that is on screen into that layer's tilemap buffer.
+func 83:9000 PixelsToBlocksUp    | 16-bit A = pixels: (A + 15) / 16, rounded up; 0 when negative.
+func 83:9004 PixelsToBlocks      | 16-bit A = pixels (N flag from the caller): A / 16; 0 when negative.
+
+# ---- Ancient Cave floor generator (map F0)
+func 83:9E31 SetUpAncientCaveFloor | Map change to the Ancient Cave: floor $7FE696 (deepest in $0B75); floor 99 goes to map F1; else picks the floor style ((floor - 1) / 10: tile set, block set, room file, music, map info template $83:9F73), reads the map info, generates the floor and counts it.
+func 83:9013 GenerateAncientCaveFloor | Builds an Ancient Cave floor: lays out rooms on a 16 x 16 grid ($7FEA00), links them, unpacks the room pieces and pastes them into both layers, then places the stairs, chests, items and field monsters (lists at $7FE6B1, $7FE736).
+func 83:99C8 AcSetPlaceFromA     | Ancient Cave: A (high x, low y) to $8F,$91 and Y = the cell offset (width 96).
+func 83:99D3 AcIsPlaceTaken      | Ancient Cave: returns C set when $8F,$91 is near the start ($7FE6A9,$7FE6AA) or on a field monster already placed.
+func 83:9A1C AcAddFieldMonster   | Ancient Cave: adds a field monster at $8F,$91 (up to 20): monster from the floor's pool ($94:D95C, floor * 2 + random 0-5), its sprite size from the sprite table ($94:DDF6, $CF:F000).
+func 83:9A6B AcIsNextToItem      | Ancient Cave: returns C set when one of the four blocks around $8F,$91 already holds a placed item (AcFindItemAt).
+func 83:9A9F AcFindItemAt        | Ancient Cave: returns C set when $54,$55 is in the placed item list ($7FE736 x, $7FE73E y).
+func 83:9ABC AcPlaceItemInRoom   | Ancient Cave: A = room: picks a random free block in it for an item (up to 8, list $7FE736/$7FE73E); returns C set when it hit the stairs.
+func 83:9B18 AcClearRoomMarks    | Ancient Cave: clears the two top bits of the 256 room grid bytes.
+func 83:9B27 AcCountRooms        | Ancient Cave: counts the used squares of the room grid into $7FE6AF.
+func 83:9B3C AcRoomCentre        | Ancient Cave: A (high x, low y) += (2, 3). (guess: the middle of a room square)
+func 83:9B44 AcRoomToBlockLong   | Long entry of AcRoomToBlock (called from bank $8E).
+func 83:9B48 AcRoomToBlock       | Ancient Cave: A = room grid square (yx nibbles): A = its top-left block (high x = x * 6, low y).
+func 83:9B62 AcLinkRooms         | Ancient Cave: walks the room grid from the start room, marking reached squares (bit 7) and listing the joins between different rooms in $7FE6F1. (guess)
+func 83:9BDD AcMarkRoomEdges     | Ancient Cave: a pass over the room grid that marks where rooms meet. (guess)
+func 83:9CA0 AcFillRoomRect      | Ancient Cave: fills the empty squares of the grid rectangle ($26,$27 size $24 x $25) with room number $54.
+func 83:9CCB AcGridIndex         | Ancient Cave: X = $91 * 16 + $8F (room grid square).
+func 83:9CD6 AcCellOffset48      | Ancient Cave: X = $91 * 96 + $8F * 2 (cell offset in a 48-wide map).
+func 83:9CF3 AcCellOffset        | Ancient Cave: Y = $91 * 192 + $8F * 2 (cell offset in the 96-wide floor).
+func 83:9D11 AcPickRandomRoom    | Ancient Cave: picks a random used square of the room grid; returns C set and A = the square.
+func 83:9D23 AcFindNthRoom       | Ancient Cave: finds the $54th used square of the room grid (from the end); returns C set and A = the square.
+func 83:9D39 AcAddLink           | Ancient Cave: adds A to the room join list ($7FE6F1, count $2D).
+func 83:9D46 AcSetUpperBlock     | Ancient Cave: 16-bit A = block: puts it in the upper layer cell at Y, keeping the cell's flags.
+func 83:9D68 AcCellOffsetY       | Ancient Cave: Y = $91 * 192 + $8F * 2 (same as AcCellOffset).
+func 83:9D88 AcPasteRoomPiece    | Ancient Cave: pastes room piece $22 (records $93:D69B: offset, width, height) from the unpacked room file at $7E:4000 into both layers at Y, skipping empty cells.
+func 83:9DE4 AcRandomAveraged    | Ancient Cave: the average of two random numbers below A (RandomBelowM7; leans to the middle).
+func 83:9E11 AcRandomIndex       | Ancient Cave: X = 2 * a random number below A.
+func 83:9E1B RandomBelowM7        | A = a random number from 0 to A - 1 ($80:82C7 times A through the mode 7 multiplier).
+
+# ---- field sprites (OAM)
+func 83:A21A DrawFieldSprites    | Builds the OAM for the field: every shown actor near the camera, sorted by height on screen ($7E:E200 keys, $E300 actors), drawn with its size and colours; queues changed frames.
+func 83:A253 DrawFieldSpritesWide | Part of DrawFieldSprites: the same code entered with 16-bit A (camera from $1220/$1228 or $7FD0EE when $1261 bit 6).
+func 83:A279 DrawFieldSpritesView | Part of DrawFieldSprites: the camera's visible window ($54-$5A).
+func 83:A29B DrawFieldSpritesSort | Part of DrawFieldSprites: tests each actor (shown, on screen) and inserts it into the sorted list.
+func 83:A2F2 DrawFieldSpritesInsert | Part of DrawFieldSprites: the insertion into the sorted list.
+func 83:A33A DrawSortedActor     | Part of DrawFieldSprites: draws the next actor of the sorted list.
+func 83:A37A ActorScreenPlace    | Actor $A7: its screen x, y ($8F, $91) from its pixel place plus draw offset minus the camera, and its colour and flip bits ($97).
+func 83:A421 ActorOamEntries     | Actor $A7: writes its OAM entries for its sprite size (Table_83_A48A) and goes on to the next sorted actor; at the end hands the OAM to the NMI.
+func 83:A473 FinishFieldOam      | End of DrawFieldSprites: keeps the OAM slot count ($7FD0B0) and asks the NMI to send the OAM ($72).
+func 83:A492 SendActorFrameIfChanged | When the actor's $0622 bit 5 is set: clears it and queues its new frame tiles (QueueActorFrameTiles).
+func 83:A4A2 OamOneTile          | Sprite size 0: one 16 x 16 OAM entry at $8F,$91.
+func 83:A4BF OamTwoHigh          | Sprite size 1: two OAM entries one above the other.
+func 83:A501 OamTwoWide          | Sprite size 2: two OAM entries side by side.
+func 83:A534 OamFour             | Sprite size 3: four OAM entries, placed by the flip bits (Table_83_A589).
+func 83:A591 OamFourNoFlip       | Four OAM entries, not flipped.
+func 83:A5C7 OamFourFlipX        | Four OAM entries, flipped across. (guess: order from the table)
+func 83:A5FD OamFourFlipY        | Four OAM entries, flipped up-down. (guess: order from the table)
+func 83:A633 OamFourFlipXY       | Four OAM entries, flipped both ways. (guess: order from the table)
+func 83:A669 SetOamHighBits      | Sets the size / x high bits of OAM entry $58 in the high table ($0300) and steps $58.
+func 83:AC7A ClearOam            | Clears the OAM buffer ($0100: every y = F0) and its high table ($0300); $7FD0B0 = 1.
+
+# ---- actors: set-up, sprites, sprite tiles
+func 83:A686 ClearAllActors      | Empties all 40 actors (sprite and id FF, hidden), and the follower and contact slots ($7FD0A2, $7FD0A3, $7FD0A6-AD).
+func 83:A6DF ClearActorMotion    | X = actor: clears its motion state ($7FE3C6-$7FE5CE), speed 8, pixel place and draw offset 0.
+func 83:A71C SetActorPixelPlace  | A, Y = pixel x, y of actor $A7: stores them and its block x, y (rounded).
+func 83:A746 SnapActorToBlock    | Actor $A7: pixel place ($7FDDAE, $7FDE3E) = its block x, y times 16.
+func 83:A76D ReloadActorSprites  | After a screen reload: gives every actor its sprite tiles again, rebuilds the event object sprites and queues the frames.
+func 83:A83B PlaceMapCharactersLoop | Part of PlaceMapCharacters: the loop over the actors, entered with other register sizes.
+func 83:A89A PlaceCharacterOffset | Part of PlaceMapCharacters: the draw offset (followers F8, others 0; y F0).
+func 83:A8BB PlaceCharacterOffsetZero | Part of PlaceMapCharacters: draw offset x 0.
+func 83:A8D2 PlaceCharacterStart | Part of PlaceMapCharacters: map characters (ids 10-6F): the walk area from the character start ($120E-$1211).
+func 83:A904 PlaceCharacterScript | Part of PlaceMapCharacters: picks the walking script ($070A).
+func 83:A92C PlaceCharacterHigh  | Part of PlaceMapCharacters: actors with ids 70 and up.
+func 83:A968 PlaceCharacterSetScript | Part of PlaceMapCharacters: stores the walking script number.
+func 83:A96B PlaceCharacterNext  | Part of PlaceMapCharacters: starts the walking script (StartWalkScript) and goes to the next actor.
+func 83:A973 PlaceCharactersEnd  | Part of PlaceMapCharacters: the end of the loop.
+func 83:A97E IsVehicleActor      | X = actor: returns C set for a vehicle (id FD with sprite 71-73).
+func 83:A998 ClearEventObjects   | Empties the 32 event object slots ($7FE1AE, $7FDB2C, $1559 = FF; $064A = 4).
+func 83:A9BA SetActorSprite      | A = sprite for actor $A7: reads its sprite table entry and gives it sprite tiles (saves all registers).
+func 83:A9D0 SetActorSpriteOnLoad | Map load: the same as SetActorSprite, for an actor whose tiles are found later.
+func 83:A9E5 ReadSpriteEntry     | A = sprite for actor $A7: from the sprite table $CF:F000 stores the sprite, size bits ($7FE216), frame flags ($1291), colour row ($7FE1CE) and tile address ($12B9).
+func 83:AA30 SetActorDrawOffsetY | Actor $A7: draw offset y ($7FDD1C) F0, moved up for 4-tile-high sprites, then its sprite tiles and frame tables.
+func 83:AA50 GiveActorSpriteTiles | Actor $A7: takes free sprite tile slots for its size, stores its tile number ($7FE25E), attribute ($7FE2A6) and VRAM address ($1331).
+func 83:AA7D SetActorFrameTables | Actor $A7: frame DMA size by sprite size ($1381, $83:ABFC) and frame list by animation kind ($13D1, $83:AC14).
+func 83:AAAF RemoveActor         | Actor $A7: hidden ($0622 bit 2), no sprite, its sprite tiles freed and its collision mark cleared.
+func 83:AAE1 QueueActorFrameLong | Long entry of QueueActorFrameTiles (called from bank $8E).
+func 83:AAE5 QueueActorFrameTiles | Actor $A7: queues the DMA of its current frame (facing $066A + frame $7FE2EE) to its sprite tiles ($11D9.. queue, count $0732).
+func 83:AB4F SetActorIndexes     | From actor $A7: $A9 = actor * 2, $AB = actor * 3 (word and long table indexes).
+func 83:AB61 ClearSpriteTileSlots | Frees all 128 sprite tile slots ($7E:E100).
+func 83:AB7C TakeSpriteTiles     | A = slots: finds that many free sprite tile slots in $7E:E100 (rows of 16), marks them with actor $A7 | 80; returns the tile number and attribute.
+func 83:ABCC FreeSpriteTiles     | Frees the sprite tile slots starting at tile $54 / attribute $55 for A slots.
+func 83:ABE9 SpriteTilesToVram   | A = tile number: A = its VRAM word address (tile * 16 + $2000).
+
+# ---- game start, new game, fades, map change
+func 83:ACB7 StartFieldAfterReset | After start-up (GoToFieldStart): new-game resets, then with B not held the game's opening (map 02, scene 01, point 06); with B held does what StartGame does.
+func 83:ACEF StartGame           | Starts play: a loaded save ($0B51 bit 7) goes on where it was saved (event block, map info, characters, start-up script, map); a new game sets up the field (NewGameFieldState) and starts on map 03 (or map 68 when $0B51 bit 1) at a point with arrival script 2.
+func 83:ADC2 ChangeMapNoMusic    | $099D = FF (no music playing yet), then ChangeMap.
+func 83:ADCA ResetForNewGame     | Saves registers and runs the new-game resets ($81:EC35, $82:9AA3, NewGameFieldState, ClearAllActors).
+func 83:ADDF NewGameFieldState   | New game: fills the persistent characters ($081E state, $085E map, $089E spot, $08DE sprite) from the table at $87:8000, clears the story flags and counters, visited maps, chest flags, the walking party and the field state.
+func 83:AEB5 AnimateMap          | Each field frame: the map's colour and tile animations ($09A9 bit 0) and the screen effects of bits 1 and 2 ($84:8E07 after $1280 frames, $84:8D54).
+func 83:AEED AnimateColours      | Colour animation: counts down each animated colour ($7FED01) and copies its next colour from the bank $A1 records into the CGRAM buffer ($0320), then asks the NMI to send it ($73 bit 0).
+func 83:AF54 AnimateTiles        | Tile animation: when its timer runs out, DMAs the next 0x1E0-byte frame of the map's animated tiles to VRAM $4010.
+func 83:AFCD FadeInField         | When the screen is dark: fades in ($0581 = 90) and waits for it, animating the map meanwhile.
+func 83:AFEA FadeOutField        | When the screen is lit: fades out ($0581 = D0) and waits for it, animating the map meanwhile.
+func 83:B007 LoadFontTiles       | DMAs the main 2bpp font ($9F:8500, 0x1000 bytes) to VRAM $1000 and the tiles at $A5:E2FC (0x300) to VRAM $1680.
+func 83:B062 ResetFieldDisplay   | Copies the 8 sprite colour rows ($A6:BF00) and $A6:FB0D into the CGRAM buffer, clears the redraw queues, layer scrolls and frame DMA queue, and sets the PPU registers for the field.
+func 83:B18E ChangeMap           | The full map change: screen off, threads and requests cleared; world maps (MapId < 2) go to bank $86; Ancient Cave floors are generated; then map info, start-up script, persistent characters, the leader at the arrival place facing $05B2's high nibble, characters, map load, music, and the arrival ($05B2 low nibble); ends in FieldLoop.
+func 83:B2B1 ChangeMapArrival    | Part of ChangeMap: the arrival place from the entrance spot ($80:C05C) or $05B0,$05B1 by the mode ($05B3).
+func 83:B2E9 ChangeMapScript     | Part of ChangeMap: the arrival place to $05BD,$05BE, then the start-up script and the persistent characters standing on this map.
+func 83:B343 ChangeMapPersistent | Part of ChangeMap: keeps the vehicle sprite of arrival styles 4-6 ($7FD0FE = 71-73), then makes the persistent characters (ids 10-4F) whose map is this one into actors, and the vehicle follower ($089D).
+func 83:B398 ChangeMapPersistentLoop | Part of ChangeMap: the loop over the 64 persistent characters ($081E state FF = none).
+func 83:B3CF ChangeMapLeader     | Part of ChangeMap: places the leader at $9F,$A1 facing $05B2's high nibble, then the characters, the map, the music and the arrival script or walk.
+func 83:B483 FinishArrival       | End of a map change: arrival style 1 walks the leader in (action 1E), 7 walks everyone in (87, 86) with a fade; else runs the room check and fades in. Goes to FieldLoop.
+func 83:B4BD ArrivalWalkIn       | Part of FinishArrival: A = the leader's action; starts it, fades in and goes to FieldLoop.
+func 83:B500 GoToFieldLoop       | Jumps to FieldLoop.
+func 83:B503 MarkMapVisited      | Sets the visited bit of MapId in $097B.
+func 83:B512 ClearDoorsAndAnims  | Closes every door (DoorStates = 0) and stops the 8 door / chest animations.
+func 83:B52E PlayMapMusic        | Plays the music in $7FD0FD unless it is FF.
+func 83:B581 ClearPuzzleState    | Map load: clears the puzzle switches 20 up ($7FD104-$7FD133), the 32 rectangle registers and the puzzle variables A0-BF.
+
+# ---- the leader's control: talking, the action button, walking, lifting, pushing, tools
+func 83:BA06 FindActorFaced      | Returns C set and $56 = the actor in front of the leader (across a counter too) on the same level; a sprite 70 actor in dungeons only when faced from below.
+func 83:BA5C LookDown            | FindActorFaced, facing down: the block below (or the one past a counter); Z clear when an actor stands there.
+func 83:BA76 IsActorOnBlock      | Z clear when the collision map has an actor (bit 0) at $8F,$91.
+func 83:BA80 LookLeft            | FindActorFaced, facing left.
+func 83:BA96 LookUp              | FindActorFaced, facing up.
+func 83:BAAC LookRight           | FindActorFaced, facing right.
+func 83:BAC2 FindActorAt         | Returns C set and $56 = the shown actor (8 up) standing on $8F,$91 (wide sprites cover two blocks).
+func 83:BB08 TalkToActor         | X = actor: when it has a talk event (event block list +6, its id) and is free, turns it to the leader, holds both and starts the event; returns C clear when started.
+func 83:BB76 ResetEventState     | Before an event starts: $099B = 80 (event running) and the text and window state cleared.
+func 83:BB93 UpdateActors        | Each frame, actors 0-39: the leader takes the player's input (LeaderControl) and the others their walking scripts (RunWalkScript), then every shown actor's motion script (RunMotionScript).
+func 83:BBA1 UpdateActorsLoop    | Part of UpdateActors: the loop, entered with other register sizes.
+func 83:BBCC UpdateActorsMotion  | Part of UpdateActors: runs the motion script and goes to the next actor.
+func 83:BBD1 UpdateActorsNext    | Part of UpdateActors: the next actor.
+func 83:BBF3 LeaderControl       | The leader's input, when nothing holds it: dungeon controls (MapMode bit 0) or town controls.
+func 83:BC28 DungeonControl      | Dungeon controls: A (or L) for the action button and throwing, Select for the tool ring, B swings the sword, Y uses the selected tool, the d-pad walks (DungeonWalk).
+func 83:BCC8 DungeonWalk         | D-pad in a dungeon: R held turns without walking; else walks a step, jumps off a ledge, pushes a block, or bumps into what is ahead (trying a locked door and a warp block).
+func 83:BDFC TryJumpOffLedge     | Walking onto a ledge (block type 1): when the landing blocks below are free starts the jump (action 8 + direction) and the room's event 01; returns C set.
+func 83:BE32 LedgeNone           | TryJumpOffLedge, facing up: no ledge jump.
+func 83:BE3B LedgeRight          | TryJumpOffLedge, facing right: checks the landing.
+func 83:BE3F LedgeLeft           | TryJumpOffLedge, facing left: checks the landing.
+func 83:BE43 LedgeDown           | TryJumpOffLedge, facing down: checks the block 3 below; C set when the jump can land.
+func 83:BE45 LedgeLandingSide    | TryJumpOffLedge helper: checks the block 2 below; C set when the jump can land.
+func 83:BE64 TurnInPlace         | R held with the d-pad: turns the leader to the pressed direction without walking (actions 24 / 28 + direction).
+func 83:BE90 DungeonActionButton | A (or L) in a dungeon: an action spot (map info +20) ahead, a chest, a character to talk to, a movable object to grab or lift, or (L held) the sword or tool on what is ahead.
+func 83:BF33 BlockAhead          | $8F,$91 = the block in front of the leader.
+func 83:BF3E ThrowCarried        | A while carrying ($7FD0A1 bit 0): throws the carried object ahead when the block in front is free and on the same level (actions 30 / 34 + direction, sound 42).
+func 83:BFB4 LiftObject          | Lifts the movable object in front of the leader: it becomes an actor carried over the leader ($7FD0A2, $7FD0A1 bit 0).
+func 83:C01C PushBlock           | Walking into a movable object: when it can move (CanMoveObject) starts pushing it ($7FD0A1 bit 1, $80:DCDA, sound 1A); returns C set.
+func 83:C079 CanMoveObject       | A = direction: returns C set when the movable object at $8F,$91 can move one block that way (free, no wall, same level, a floor or hole block).
+func 83:C0EF LeaderBlock         | $8F,$91 = the leader's block.
+func 83:C0FA TakeStepEventFlag   | When $099C bit 5 is set: clears it and sets $7FD0C1 = 1. (guess)
+func 83:C108 MakeCarriedActor    | Makes a free actor show a movable object being carried or moved (sprite FE, $7FD0A2), on the leader's block.
+func 83:C110 MakeCarriedActorEvent | The same as MakeCarriedActor, from event command BD.
+func 83:C161 ReadDpad            | D-pad pressed: $22 = walk action (0 up, 1 down, 2 left, 3 right; $83:D437), $23 = facing code; returns C set when one was.
+func 83:C180 ReleaseGrab         | Ends grabbing a block ($7FD0A1 bit 1): normal frame and speed 8.
+func 83:C1B4 TownControl         | Town controls: A talks or opens treasure, the d-pad walks (or bumps into a wall, trying a warp block and a locked door); debug: Select starts a battle.
+func 83:C232 TownWalkStep        | Town walk: speed (WalkSpeed), starts the step and marks it ($05B5 bit 3).
+func 83:C246 DpadToFacing        | A = the facing code ($83:C1B0) of the walk action in $22.
+func 83:C24F UseSelectedTool     | Y in a dungeon: uses Maxim's selected tool ($0C1F) by its item kind: 1 arrow, 3 hook (room event 0B), 4 bomb (put down ahead), 6 fire arrow, 7 hammer.
+func 83:C2FE StartToolObject     | Starts a tool's event object (A) and sets the tool bits (high byte of A) in $7FD0A1.
+func 83:C311 ShootArrow          | A = object (21 arrow, 23 fire arrow): the leader's shooting action and the flying event object ($7FD0A1 bit 3).
+func 83:C32D LeaderFacingAction  | Actor $A7 = 0; A = the walk action of the leader's facing ($83:C1A5).
+func 83:C33D FindEventObjectAt   | Returns C set when an event object (32 slots, $064A bit 7) stands on $8F,$91.
+func 83:C375 SwingSword          | B in a dungeon: room event 07 and the sword spot (map info +1C, category 04) ahead; then the swing: a reachable block ahead with a sword change is cut (BreakTileChange), a hard one clinks (sound 13), else just the swing (sound 1D). Not in a vehicle.
+func 83:C3DC CanCutAhead         | Returns Z clear when the block ahead has a sword change (TypeFlags bit 0; $7FD046,$7FD047 = it); a different level is only reached facing up.
+func 83:C40E CanReachAhead       | Returns C set when the block ahead can be hit: facing up, or on the same level or lower; $128A-$128C keep the levels and block type.
+func 83:C460 OpenToolRing        | Select in a dungeon: lists the tools the party has ($1499) and shows them in a ring around the leader to pick Maxim's tool ($0C1F).
+func 83:C5FE SetToolIconLook     | Tool ring: sets the look of tool icon Y from its item kind (tables $83:C63F).
+func 83:C652 IsInPartyLists      | A = value: returns C set when it is in one of the party members' 0x24-byte lists ($85:9EBA). (guess: spells or tools learned)
+func 83:C692 ItemKind            | A = the kind byte (+1) of item $0A06's record ($96:CF69).
+func 83:C6AA SetEffectObjectBits | For every effect object with id $54: sets the bits picked by $58/$59 (table $83:C6FB) in its fields. (guess)
+func 83:C729 MakeObjectRing      | Makes $00 event objects (kind $0A, id $01) around $08,$09, spaced evenly round the circle.
+func 83:C7C7 MarkActorsMoved     | Sets $0622 bit 6 on every actor (each is checked again after this move).
+func 83:C7F8 RunWalkScript       | Actor $A7: when its wait is over, runs its walking script ($7FE506; WalkScriptOps) until a command stops for the frame.
+func 83:C867 WalkScriptUp        | Walking script command 00: step up.
+func 83:C86B WalkScriptDown      | Walking script command 01: step down.
+func 83:C86F WalkScriptLeft      | Walking script command 02: step left.
+func 83:C873 WalkScriptRight     | Walking script command 03: step right.
+func 83:C88A WalkScriptStep      | A = walk action: starts it (StartActorAction) and moves the walking script on.
+func 83:C8C6 AdvanceWalkScript   | Stores Y + 1 as the actor's walking script place.
+func 83:CA68 StartObjectAnim32   | Unless $7FD0A1 bit 6: starts animation script 32 of table 2 ($91:8EC7) on event object $1724. (guess)
+
+# ---- actor actions and motion scripts ($91:8000 motion scripts, $91:A1D4 walking scripts)
+func 83:D350 StartActorAction    | A = action for actor $A7: walk actions 0-3 (up, down, left, right) only start when the map edge and the block ahead (types 0, 1, 7) allow; then its motion script ($91:8000 table) starts and the actor is busy ($0622 bit 7).
+func 83:D3A1 StartActionNoChecks | A = action for actor $A7: starts its motion script without checks and marks it busy.
+func 83:D3B7 WalkAreaUp          | StartActorAction, action 0: C set when the actor may step up (above row 0 and its walk area top $7FE61E).
+func 83:D3C5 WalkAreaDown        | StartActorAction, action 1: C set when the actor may step down (inside its walk area bottom $7FE66E).
+func 83:D3D7 WalkAreaLeft        | StartActorAction, action 2: C set when the actor may step left (its walk area left $7FE5F6).
+func 83:D3E5 WalkAreaRight       | StartActorAction, action 3: C set when the actor may step right (its walk area right $7FE646).
+func 83:D3F7 SetMotionScript     | A = action: actor's motion script pointer ($7FE3EE, bank $91) = $91:8000 table entry A.
+func 83:D416 StartWalkScript     | Actor $A7: walking script pointer ($7FE506, bank $91) from its walking script number $070A ($91:A1D4 table).
+func 83:D508 RunMotionScript     | Actor $A7: blinking ($0736 bit 7), idle animation of field monsters, then (while busy) runs its motion script: the high nibble of each command picks a handler (MotionOps).
+func 83:D5C3 NextMotionOp        | X = motion script place: runs the next command in the same frame.
+func 83:D5D4 MotionOpF           | Motion commands F0-FF: by the low nibble (MotionOpsF).
+func 83:D5E0 MotionOpE           | Motion commands E0-EF: by the low nibble (MotionOpsE).
+func 83:D5EC MotionOpD           | Motion commands D0-D7: by the low nibble (MotionOpsD).
+func 83:D5FD MotionEnd           | Motion 0x / 4x / D3: the action is over (not busy); a finished step of the leader sets $05B5 bit 4.
+func 83:D605 MotionYield         | 16-bit A = place: stores the motion script place and stops for this frame.
+func 83:D60D MotionReturn        | Restores the data bank and returns from the motion script.
+func 83:D60F MotionStop          | Motion FA: not busy, stops without ending the step.
+func 83:D615 MotionJump          | Motion FB w: goes on at w (+$8000).
+func 83:D626 MotionSetFrameBit   | Motion FC b: frame = (frame & 6) | b.
+func 83:D638 MotionMakeObject    | Motion FD o: makes event object o at the actor's place, facing its way.
+func 83:D63E MotionMakeObjectNudged | Motion D4 o: the same as FD, the object moved 8 pixels left for small sprites.
+func 83:D661 MakeObjectAtActor   | Makes event object (script byte +1) at actor $A7's pixel place, facing its way.
+func 83:D67A MakeObjectAtPlace   | Makes event object (script byte +1) at the pixel place $8F,$91, facing $94.
+func 83:D6A6 SkipTwo             | X = motion script place + 2.
+func 83:D6AD MotionPutMovable    | Motion D5: puts movable object $7FE5CE of this actor at $8F,$91.
+func 83:D6C7 MotionCopyPlace     | Motion D6: takes the pixel place of actor $7FE5A6 (one pixel lower).
+func 83:D6EF MotionSetHidden     | Motion D7 b: $0622 bit 1 cleared when b is odd, else set.
+func 83:D70C MotionMakeObjectHere | Motion Cx o: makes event object o at the actor's pixel place, linked to it.
+func 83:D760 MotionSound         | Motion FE s: plays sound s.
+func 83:D76E MotionCheckType9    | Motion FF: when the actor stands on block type 9 runs the room's event 03 ($80:E7DF).
+func 83:D78C MotionBlockAhead    | Motion E0: $8F,$91 = the block in front of the actor.
+func 83:D79C MotionActorBlock    | Motion E1: $8F,$91 = the actor's block.
+func 83:D7A5 ActorBlock          | $8F,$91 = actor $A7's block.
+func 83:D7B2 MotionLoopStart     | Motion E2 n: starts a loop of n turns ($7FDB4C, place $7FDB9C).
+func 83:D7CC MotionLoopEnd       | Motion E3: back to the loop start until its count runs out.
+func 83:D7EB MotionSetArc        | Motion E4 a b: sets the jump arc speed and change ($7FDBEC, $7FDC3C).
+func 83:D80E MotionArcStep       | Motion E5: one step of the jump arc on the draw offset y.
+func 83:D833 MotionSetSpeed      | Motion 1x s: walking speed $7FE4DE = s.
+func 83:D844 MotionSetFrame      | Motion 2x f: frame $066A = f (unless $0736 bit 1).
+func 83:D87D IsWayBlocked        | A = facing, Y = actor: tests the collision map of the block that way (both blocks for wide sprites); Z set when free.
+func 83:D89E IsWayBlockedFrom    | IsWayBlocked with the place already in $8F,$91.
+func 83:D8AB BlockedBelow        | IsWayBlocked, down.
+func 83:D8C7 BlockedLeft         | IsWayBlocked, left.
+func 83:D8DE BlockedAbove        | IsWayBlocked, up.
+func 83:D913 BlockedRight        | IsWayBlocked, right.
+func 83:D927 HasWallToward       | X = facing: Z clear when a wall (collision bit 4) lies between $8F,$91 and the next block that way.
+func 83:D932 WallBelow           | HasWallToward, down.
+func 83:D93E WallLeft            | HasWallToward, left.
+func 83:D948 WallAbove           | HasWallToward, up.
+func 83:D952 WallRight           | HasWallToward, right.
+func 83:D95E MotionOffsetYield   | Motion 3x dx dy: adds to the draw offset and stops for this frame.
+func 83:D969 MotionOffsetWords   | Motion E6 dx dy (words): adds to the draw offset.
+func 83:D992 MotionOffset        | Motion Bx dx dy: adds to the draw offset.
+func 83:D99F AddDrawOffset       | Adds the signed bytes +1, +2 of the motion command to the actor's draw offset ($7FDC8C, $7FDD1C).
+func 83:D9C6 BeginStep           | Start of a step: moves the actor's collision mark (bit 0, both blocks for wide sprites) to the block ahead and takes it as its block place; an actor with walking script 3 records its action in the follow queue $09A1-$09A5.
+func 83:DA5B ActorBlockAhead     | $8F,$91 = the block in front of actor $A7.
+func 83:DA71 LeaderStepDone      | When the leader's action ends (and it is not held): sets $05B5 bit 4 (step finished).
+func 83:DA8A ClearBusy           | Actor $A7: not busy ($0622 bit 7 off), step progress 0.
+func 83:DA9A MotionSetFacing     | Motion 5x d: facing = d, step progress 0.
+func 83:DAB3 MotionFacingFromFrame | Motion EF: facing = frame & 7.
+func 83:DAC3 MotionNop           | Motion D0: nothing.
+func 83:DAC9 MotionShow          | Motion D1 b: shows the actor (b = 0) or hides it ($7FE316 bit 7).
+func 83:DAE9 MotionReloadSprite  | Motion 6x: gives the actor the sprite $7FE5A6 again, keeping its walking script.
+func 83:DB54 MotionMoveYield     | Motion 7x dx dy: moves the actor (MoveActorBy) and stops for this frame.
+func 83:DB5A MotionMove          | Motion Ax dx dy: moves the actor.
+func 83:DB63 MotionMarkBlock     | Motion 8x: marks the actor on the collision map.
+func 83:DB6D MotionUnmarkBlock   | Motion E9: takes the actor's mark off the collision map.
+func 83:DB77 MotionLockFrame     | Motion EA b: $0736 bit 1 (keep the frame) on when b is 0.
+func 83:DB95 MotionMakeObjectAtSaved | Motion EB o: makes event object o at the saved block place ($7FDB4C).
+func 83:DBC2 MotionGoToSaved     | Motion EC: puts the actor on the saved block place ($7FDB4C).
+func 83:DBDC MotionBlink         | Motion ED n: blinking at speed n ($7FE35E, $0736 bit 7), 0 stops.
+func 83:DC04 MotionShowAtSaved   | Motion EE b: shows the actor on the saved place, or hides it at 0,0.
+func 83:DC45 MotionStep          | Motion F0: one frame of a step: starts it when the way is free (BeginStep), adds the speed to the progress, changes the walk frame at 4 and 12 pixels, moves 1-4 pixels, follows the jump arc, and ends at 16.
+func 83:DD20 StepPixelsUp        | MotionStep: moves the pixel place up.
+func 83:DD24 StepPixelsDown      | MotionStep: moves the pixel place down.
+func 83:DD32 StepPixelsLeft      | MotionStep: moves the pixel place left.
+func 83:DD36 StepPixelsRight     | MotionStep: moves the pixel place right.
+func 83:DD54 MotionAnimFrame     | Motion F1 f: animation frame $7FE2EE = f.
+func 83:DD6E MotionPlaceAtLeader | Motion F2 dx dy ox oy: the actor's place = the leader's plus dx, dy; draw offset ox, oy.
+func 83:DDC6 MotionTakeMovable   | Motion F3: takes the movable object on the actor's way into the actor (TakeMovableIntoActor).
+func 83:DDD0 MotionLandObject    | Motion E7: the thrown object lands (LandThrownObject).
+func 83:DDD9 MotionObjectArrives | Motion D2: the moved object is drawn where the actor is (ObjectArrives).
+func 83:DDE3 MotionObjectPlaced  | Motion F4: the moved object becomes a movable object again on the actor's block (MovablePlaced).
+func 83:DDEF MotionPutDownObject | Motion E8: the object the actor carries is put down on its block (MovableLands).
+func 83:DDFB MotionVanish        | Motion F5: takes the actor off the collision map, hides it and ends.
+func 83:DE11 MotionCircleOffset  | Motion F6 r a b: draw offset on a circle (sine / cosine of the angle).
+func 83:DE29 MotionCirclePlace   | Motion F7: moves the actor round a circle from its saved place.
+func 83:DE5D MotionCircleHeight  | Motion F8: draw offset y from the circle.
+func 83:DE76 CircleOffsets       | $54, $56 = radius times the sine and cosine of the motion command's angle ($80:8450, $80:8486).
+func 83:DE9F ScaleBySine         | Multiplies a signed sine value by the radius (mode 7 multiplier) and saves the actor's place and offset.
+func 83:DEBD MotionSavePlace     | Motion F9: saves the pixel place and draw offset ($7FDB4C-$7FDC3C).
+func 83:DEE9 MotionWait          | Motion 9n: waits n frames.
+table 83:DF17 MotionOps          | Motion script commands by high nibble 0-F (D, E, F go on to MotionOpsD / E / F).
+table 83:DF37 MotionOpsF         | Motion commands F0-FF.
+table 83:DF57 MotionOpsE         | Motion commands E0-EF.
+table 83:DF77 MotionOpsD         | Motion commands D0-D7.
+table 83:D467 WalkScriptOps      | Walking script commands 00-4F (00-03 steps; 04-07 and 14 unused; 1E = 0F).
+table 83:D3AF WalkAreaChecks     | Walk area checks of StartActorAction for actions 0-3.
+table 83:FB1A FacingSteps        | Steps $8F,$91 one block by a facing code (0 down, 2 left, 4 up, 6 right).
+table 83:BA54 LookByFacing       | FindActorFaced by facing.
+table 83:D8A3 BlockedByFacing    | IsWayBlocked by facing.
+table 83:D92A WallByFacing       | HasWallToward by facing.
+table 83:DD18 StepPixelsByFacing | MotionStep pixel moves by facing.
+table 83:A48A OamBySize          | OAM entries by sprite size (0: 16 x 16, 1: 16 x 32, 2: 32 x 16, 3: 32 x 32).
+table 83:A589 OamFourByFlip      | The four OAM entries of a 32 x 32 sprite by flip.
+table 83:BE33 LedgeByFacing      | TryJumpOffLedge by facing.
+
+# ---- event objects (32 slots: actor tables 40-71) and their scripts ($91:8EC7 table)
+func 83:DF87 MakeEventObject     | A = object script: takes a free event object slot of 32 ($064A bit 7 off) and starts it there (SetUpEventObject); $A7 = its slot.
+func 83:DFA5 SetUpEventObject    | X = slot, A = object script: clears the slot's state, facing as the leader, no graphics yet, and starts the script.
+func 83:DFFD StartObjectScript   | A = object script number: object $A7's script pointer ($7FDEEE, bank $91) from the table $91:8EC7.
+func 83:E018 SetObjectBlockPlace | Object $A9: pixel place ($7FDDFE, $7FDE8E) = $8F,$91 times 16.
+func 83:E033 SetAllObjectsDrawing | A = drawing byte: given to all 32 event objects ($7FE33E).
+func 83:E03E UpdateEventObjects  | Each field frame: for every event object in use: blinking, the dungeon idle frames, and its script when its wait ($7FDFAE) runs out.
+func 83:E0FC RunObjectScript     | Object $A7: runs its script from $7FDEEE; the high nibble of a command picks the handler (ObjectOps).
+func 83:E10F NextObjectOp        | Y = object script place: runs the next command.
+func 83:E13D ObjectOpEnd         | Object command 0x: frees the object (FreeEventObject).
+func 83:E150 ObjectOpFollowActor | Object command 2F: the object's pixel place = its actor's.
+func 83:E1C5 ObjectOpFrame       | Object command 3n: frame n.
+func 83:E1D3 ObjectOpFrameAdd    | Object command 2C b: frame = b + the current frame.
+func 83:E1E6 ObjectOpFrameFromValue | Object command 25: frame = the object's value $7FDA2C.
+func 83:E200 SetObjectFrame      | $54 = frame (bits 6-7 the flips): queues the object's frame tiles and sets its flip bits.
+func 83:E25E ObjectOpRoomEvent09 | Object command 2D: runs the room's event 09 at the leader's block.
+func 83:E270 ObjectOpDrawing     | Object command 2E b: drawing byte $7FE33E = b.
+func 83:E27D ObjectOpRingStep    | Object command 14: moves a ring object (spin speed, radius, growing or shrinking; $1579-$16D9 ring tables).
+func 83:E42D SignedHighNibble    | A = the high nibble of A as a signed number (SignExtendNibble).
+func 83:E487 ObjectOpLoadGraphics | Object command 10 g f: unpacks object graphics file g (with its colours, $83:F400/F408) to $7E:A000 when not already there.
+func 83:E505 ObjectOpCopyFrames  | Object command 11: copies frames of the unpacked object graphics to the object's tiles.
+func 83:E700 ObjectOpNop         | Object command 12: nothing.
+func 83:E703 RingObjectPlace     | A ring object's place from its angle and radius (sine table $80:84ED, cosine $80:852D, mode 7 multiplier).
+func 83:E810 ObjectOpRingAtScreenCentre | Object command 13: ring centre = the middle of the screen ($1220 + 80, $1228 + 70).
+func 83:E831 ObjectOpWait        | Object command 4n: waits n frames.
+func 83:E840 ObjectOpJumpByFacing | Object command 5x: goes on at the word picked by the object's facing.
+func 83:E854 ObjectOpMakeChild   | Object command 6x o dx dy: makes event object o at this object's place plus dx, dy.
+func 83:E8A6 MakeChildObject     | ObjectOpMakeChild: makes the new object and gives it this one's place, offset, facing and value.
+func 83:E99A ObjectOpRingPullIn  | Object command 20 n: moves the ring offsets ($7FDA6C, $7FDAAC) n nearer to 0.
+func 83:E9D4 ObjectOpTestAhead   | Object command 21 w: an arrow-like object tests the block ahead (level, block type, movable object flags $7FD376 bit 2) and goes to w when it is hit. (guess)
+func 83:EA7D ObjectOpLeaderFrame | Object command 22 b: the leader's frame = (frame & 6) | b.
+func 83:EA8C ObjectOpEndToolUse  | Object command 23: the leader's action state $7FD0A1 = 0 (the tool use is over).
+func 83:EAA3 ObjectOpRoomEvent05 | Object command 24: runs the room's event 05 at the object's block.
+func 83:EAB5 ObjectOpLoopStart   | Object command 7x n: starts a loop of n turns ($7FE08E, place $7FDFCE).
+func 83:EAD5 ObjectOpLoopEnd     | Object command 80: back to the loop start until its count runs out.
+func 83:EAFF ObjectOpGraphicsFromValue | Object command 26: graphics set = the object's value $7FDA4C (SetObjectGraphics).
+func 83:EB0C ObjectOpBlastHere   | Object command 27: at the object's block, on its level, a tile change with bit 5 (bomb) breaks (BreakTileChange).
+func 83:EB38 ObjectOpJumpByValue | Object command 28: goes on at the word picked by the object's value $7FDA2C.
+func 83:EB50 ObjectOpSetFlag04   | Object command 29 b: $064A bit 2 on (b not 0) or off.
+func 83:EB6D ObjectOpHitAhead    | Object command 2A: the object hits the block ahead: a hammer spot (map info +2A, category 0E), a movable object or a tile change by its flags, on the right level. (guess)
+func 83:EC4F HammerSpotAhead     | Starts the hammer spot script (map info +2A, category 0E) of the block ahead of the object.
+func 83:EC5F ObjectBlockAhead    | $8F,$91 = the block in front of event object $A7.
+func 83:EC6D ObjectOpSetFlag40   | Object command 2B b: $7FDB0C bit 6 on (b >= 80) or off.
+func 83:EC9C SetObjectGraphics   | A = graphics set ($83:F388: u24 tiles, size and frame flags) for object $A7, then gives it sprite tiles.
+func 83:ECDE GiveObjectSpriteTiles | Object $A7: takes sprite tile slots for its size and stores its tile number, attribute and VRAM address.
+func 83:ED32 ObjectOpJump        | Goes on at the script word after the command (+$8EC7) and runs it.
+func 83:ED38 ReadObjectJump      | Y = the word at Y + 1 plus $8EC7 (bank $91 object script place).
+func 83:ED45 ObjectOp8           | Object commands 8x: by the low nibble (Table_83_F368).
+func 83:ED4B ObjectOp1           | Object commands 1x: by the low nibble (Table_83_F348).
+func 83:ED51 ObjectOp2           | Object commands 2x: by the low nibble (Table_83_F328).
+func 83:ED63 ObjectLowNibble     | X = 2 * the low nibble of the object command; Y moves on.
+func 83:F205 FreeEventObject     | Object $A7: frees its sprite tiles and empties the slot.
+table 83:F2C8 ObjectOps          | Event object script commands by high nibble 0-8.
+table 83:F328 ObjectOps2         | Object commands 20-2F.
+table 83:F348 ObjectOps1         | Object commands 10-14.
+table 83:F368 ObjectOps8         | Object command 80.
+
+# ---- movable objects (blocks, pots), tile changes, the collision map
+func 83:F410 MovableKindByte     | When a movable object stands on $8F,$91: C clear and A = its kind's byte in $7FD7FC.
+func 83:F422 CopyDestFromCellBottom | TileCopyDest = $8F, $91 - height + 1 (a piece standing on the block).
+func 83:F435 CopyDestFromCell    | TileCopyDest = $8F,$91.
+func 83:F442 ClearPieceCollision | Clears the object bits (08, 40) of the collision map under the tile copy piece at TileCopyDest (up to 2 x 2).
+func 83:F49A SaveWorkCell        | Saves $8F,$91 in $7FD2A4.
+func 83:F4A7 RestoreWorkCell     | $8F,$91 = the place saved by SaveWorkCell.
+func 83:F4B4 BreakTileChange     | A = level, X = block type of a tile change: shows the change's effect object (+6 of map info +16, kind - 10) and draws its new look (+9) row by row; a movable object made from it is taken off.
+func 83:F559 OpenOrCloseDoor     | A = door | flags (bit 6 close) << 8: with the screen off draws it at once, else starts its animation in a free one of the 8 slots (not twice).
+func 83:F5B9 LandThrownObject    | Actor $A7's carried object lands: its tile copy is drawn at the actor's place, the place it left is cleared, and the actor shows it.
+func 83:F5EA ObjectArrives       | Actor $A7's moved object arrives: its tile copy and look at the actor's place.
+func 83:F611 CopyLayerIndex      | X = 2 when the tile copy is on layer 2 (TileCopyMode bit 1), else 0.
+func 83:F620 TakeMovableIntoActor | Takes the movable object on $8F,$91 off the map into actor $A7: clears its collision bits, puts back the blocks under it, takes it out of the list, and the actor shows it.
+func 83:F6B0 ClearDrawOffsetPiece | Actor $A9: draw offset 0, y = $58 (-16 for 2-high pieces).
+func 83:F6C6 ShowMovableLong     | Long entry of ShowAsMovable (event command BD).
+func 83:F6CA ShowAsMovable       | Actor $A7 is drawn as its movable object (sprite FE): size, tiles and colours from the object tables ($7FD78C, $7FD80C, $7FD88C).
+func 83:F731 CopyObjectColours   | Copies the 16 colours at $7FD0A4 to sprite colour row 7 ($0500) and asks the NMI to send them.
+func 83:F747 RestoreBlocksUnder  | Puts back the blocks that were under movable object $7FE5CE ($7FD5DC, two for 2-high pieces).
+func 83:F750 RestoreBlocksUnderLong | RestoreBlocksUnder for a given object (puzzle commands).
+func 83:F784 SetCellBlock        | 16-bit A = block: puts it in cell X, keeping the cell's flags.
+func 83:F795 MovableLands        | Actor $A7's object is put down: its tile copy drawn, redrawn, the room's event 0E at its block, nothing carried.
+func 83:F7B1 MovablePlaced       | Actor $A7's object becomes a movable object again where it stands (PlaceMovableObject), redrawn, room event 0E, nothing carried.
+func 83:F7D4 ClearCarried        | Nothing carried ($7FD0A2 = FF) and the room check asked ($7FD0A3 = FF).
+func 83:F7DF RoomEvent0EAtActor  | Runs the room's event 0E at actor $A7's block.
+func 83:F7F8 CopyDestForPiece    | $58 = -16 for 2-high pieces, then CopyDestFromCellBottom.
+func 83:F80D SetPieceCollision   | Sets the collision bits of a piece's cells (AND $54 / OR $55, the upper cell $56 / $57); returns the old byte.
+func 83:F85A UnderBlockIndexes   | X, Y = movable objects * 4 (+2 for the lower half) into the blocks-under table $7FD5DC.
+func 83:F86B PlaceMovableObject  | A = movable object: puts it on $8F,$91: marks the collision map, saves the blocks under it and draws its tile copy there.
+func 83:F91F CopyCellBlock       | Copies the block number of cell X into cell Y, keeping Y's flags.
+func 83:F933 RedrawCopyAndQueue  | Redraws the tile copy rectangle on its layer and queues it for the screen.
+func 83:F984 LevelAtLong         | Long entry of LevelAt (puzzle command 9C).
+func 83:F988 LevelAt             | A = the level bits (flags 80/40 >> 6) of the current layer's cell at $8F,$91.
+func 83:F9A5 CollisionIndexLong  | Long entry of CollisionIndex.
+func 83:F9A9 CollisionIndexFromALong | Long entry of CollisionIndexFromA.
+func 83:F9AD CollisionIndex      | X = $91 * MapWidth + $8F, the collision map ($7E:4000) index.
+func 83:F9B6 CollisionIndexFromA | A (high x, low y): X = y * MapWidth + x.
+func 83:F9D0 CellOffsetLong      | Long entry of CellOffset.
+func 83:F9D4 CellOffset          | X = the offset in $7F of the current layer's cell at $8F,$91.
+func 83:F9D9 CellOffsetFromA     | A (high x, low y): X = the current layer's cell offset.
+func 83:F9EE CellWordIndexLong   | Long entry of CellWordIndex.
+func 83:F9F2 CellWordIndexXY     | X = ($91 * MapWidth + $8F) * 2.
+func 83:F9F7 CellWordIndex       | A (high x, low y): X = (y * MapWidth + x) * 2; C = the bit shifted out.
+func 83:FA12 UnmarkActorBlock    | Takes actor $A7 off the collision map (bit 0; both blocks for wide sprites).
+func 83:FA3F MarkActorBlock      | Puts actor $A7 on the collision map (bit 0; both blocks for wide sprites but vehicles).
+func 83:FA81 MoveActorBy         | Motion command dx dy: adds them to actor $A7's pixel place and updates its block place.
+func 83:FAF4 ReadSignedScriptByte | 16-bit A = the signed byte at X + 1.
+func 83:FAFA SignExtend          | A = the signed byte in AL as 16 bits.
+func 83:FB05 SignExtendNibble    | AL with bit 3 set: A = the nibble as a negative 16-bit number.
+func 83:FB12 StepByFacing        | A = facing code (0 down, 2 left, 4 up, 6 right): moves $8F,$91 one block that way.
+func 83:FB22 StepDown            | $91 + 1.
+func 83:FB25 StepLeft            | $8F - 1.
+func 83:FB28 StepUp              | $91 - 1.
+func 83:FB2B StepRight           | $8F + 1.
+func 83:FB2E ObjectFlagsAt       | The flags of what stands on $8F,$91 (a tile change block type or a movable object): high byte $7FD376, low $7FD296; 0 when nothing.
+func 83:FB51 TileChangeFlagsAt   | A = the tile change flags ($7FD296) of the block type at $8F,$91 (types 10 up), else 0.
+func 83:FB71 BlockTypeAt         | A = the block type (block set attribute byte) of the current layer's cell at $8F,$91.
+func 83:FB7A BlockTypeOf         | 16-bit A = cell word: A = its block's type.
+func 83:FB8B MovableFlagsAhead   | A = the flags ($7FD296 by kind) of the movable object on $8F,$91 (bit 3 pushable, bit 2 liftable), X = it.
+func 83:FB9B FindMovableObjectLong | Long entry of FindMovableObject (puzzle command 5E).
+func 83:FB9F FindMovableObject   | X = the movable object (of 0x30) on $8F,$91 and C clear, else C set.
+func 83:FBBD IsWallAhead         | A = facing code: C set when a wall edge lies between $8F,$91 and the next block that way.
+func 83:FBCE WallEdgeDown        | IsWallAhead, down.
+func 83:FBD7 WallEdgeLeft        | IsWallAhead, left.
+func 83:FBDE WallEdgeUp          | IsWallAhead, up.
+func 83:FBE5 WallEdgeRight       | IsWallAhead, right.
+func 83:FBEC ZToCarry            | C = not Z.
+func 83:FBF1 CollisionAtCell     | A = the collision map byte at $8F,$91.
+func 83:FBFE ClearPieceObjectBit | Clears the object bit (08) of the collision cell at the bottom of the piece at TileCopyDest.
+func 83:FC1C StartToolSwing      | A = event object: the leader's swing action (20 + walk action), the object, and everyone checked again.
+func 83:FC3C FindFreeActor       | X = the first hidden actor with no sprite.
+func 83:FC56 IsDebugWalkThrough  | C set for the leader in debug mode with B held (walks through walls).
+func 83:FC69 DebugRunSpeed       | Debug mode: B held makes the leader's speed 10, else a speed of 10 goes back to 8 (docs/lufia2/settings.md).
+func 83:FC8B ObjectBlock         | $8F,$91 = event object $A9's pixel place / 16, rounded.
+func 83:FCB4 ObjectPlaceToPixels | Event object X: its block place ($7FDDFE, $7FDE8E) times 16.
+func 83:FCD1 QueueObjectFrameTiles | Queues the DMA of actor $A7's movable object frame (as QueueActorFrameTiles).
+table 83:FBC6 WallEdgeByFacing   | IsWallAhead by facing.
+
+# ---- RAM (field)
+ram 7E:0022 1 DpadWalkAction     | The walk action of the d-pad pressed (ReadDpad: 0 up, 1 down, 2 left, 3 right); scratch elsewhere.
+ram 7E:0023 1 DpadFacing         | The facing code of the d-pad pressed (0 down, 2 left, 4 up, 6 right); scratch elsewhere.
+ram 7E:0100 512 OamBuffer        | The OAM buffer the NMI sends (128 sprites x 4 bytes; DrawFieldSprites, ClearOam).
+ram 7E:0300 32 OamHighTable      | The OAM high table (size and x high bits, SetOamHighBits).
+ram 7E:05B4 1 PreviousMap        | The map an exit was taken from (TakeExit).
+ram 7E:05B7 1 BlockEffectFlags   | Bit 0 the tool ring is open ($84:836A runs), bits 1 and 2 the HP / MP recovery block sparkles.
+ram 7E:064A 32 ObjectState       | Event object slots: bit 7 in use, bit 5 frame changed, bits 0-1 flips, bit 2 (command 29), 04 = free.
+ram 7E:0732 1 FrameDmaCount      | Bytes used in the sprite frame DMA queue ($11D9-$11F9, $05C2).
+ram 7E:097B 32 VisitedMaps       | A bit per map that has been entered (MarkMapVisited).
+ram 7E:09A9 1 FieldAnimFlags     | Field animations: bit 0 the map's colour and tile animations, bits 1 and 2 screen effects of bank $84.
+ram 7E:0B63 2 SameMapWarps       | Counts map changes onto the same map (WarpWithinMap), stopping at FFFF.
+ram 7E:0B75 1 CaveDeepestFloor   | The deepest Ancient Cave floor reached.
+ram 7E:1291 40 ActorFrameFlags   | Per actor: the sprite's frame flags (bits 3-7 of its sprite table entry; 08 two frames, 10 six); low bits a wait.
+ram 7E:4000 2 CollisionMap       | The collision map, a byte per block of the current layer: 01 a character, 08 a movable object, 10 / 20 walls on the top / left edge, 02 / 80 from block types 8 / 9, 40 under a piece.
+ram 7E:F000 16 MapInfoBuffer     | The map info block copied here (u16 size, then the list offsets +02..+2A).
+ram 7F:0000 2 MapBuffer          | The unpacked map: layer headers and cells (u16 each: 10-bit block, flags 04 / 08 walls, 40 / 80 level); the block set follows.
+ram 7F:D049 1 DoorAnimFlags      | The door / chest animation being stepped: bit 6 closing, bit 0 not the first row.
+ram 7F:D04F 8 DoorAnimTarget     | Per door / chest animation slot: the door, or chest spot | 80.
+ram 7F:D057 8 DoorAnimSlots      | Per door / chest animation slot: bit 7 running, bit 6 closing, bits 3-4 frame count, bit 0 started.
+ram 7F:D060 1 DoorSound          | The door's +0E byte (1 = sound 1E).
+ram 7F:D0A1 1 LeaderActionState  | What the leader is doing: 01 carrying, 02 pushing or grabbing, 04 the hook out, 08 an arrow out, 20 the hammer; other bits hold the room check.
+ram 7F:D0A2 1 CarriedActor       | The actor showing the object the leader carries or moves (FF = none).
+ram 7F:D0A3 1 RoomCheckPending   | Not 0: run the room check (category 00 id 00) after this step.
+ram 7F:D0B0 1 OamSlotsUsed       | OAM entries used by the last DrawFieldSprites (FF = redo it).
+ram 7F:D0BF 1 CurrentRoom        | The doorway room the leader is in (bit 7 inside; FF = none).
+ram 7F:D0FE 1 LeaderVehicle      | The vehicle sprite the leader arrived in (71-73), else 0. (guess)
+ram 7F:D296 1 TypeFlags          | Indexed by block type / movable object kind (10-DF): 01 cut by the sword, 08 pushable, 04 liftable, 20 breaks in a bomb blast.
+ram 7F:D376 1 TypeFlags2         | Indexed by block type / movable object kind (10-DF): more flags (04 stops an arrow). (guess)
+ram 7F:D4F8 2 RedrawQueueCount   | Bytes used in the screen redraw queue ($7FD4FA, $7FD51A, $7FD53A).
+ram 7F:D5DC 192 BlocksUnderObjects | Per movable object (4 bytes): the two blocks it covers on the map.
+ram 7F:D78C 128 PieceTileNumber  | Per tile copy: the sprite tile its movable object shows.
+ram 7F:D80C 128 PieceSpriteSize  | Per tile copy: its sprite size.
+ram 7F:D88C 128 PieceColourRow   | Per tile copy: the colour row of its sprite.
+ram 7F:D9CC 32 ObjectFacing      | Per event object: its facing.
+ram 7F:DA2C 32 ObjectValue       | Per event object: a value from the one that made it (the level of a tool's hit, a frame).
+ram 7F:DA4C 32 ObjectValue2      | Per event object: a second value (its graphics set).
+ram 7F:DC8C 80 ActorDrawOffsetX  | Per actor (u16): draw offset x.
+ram 7F:DCDC 64 ObjectDrawOffsetX | Per event object (u16): draw offset x (the actor table's slots 40-71).
+ram 7F:DD1C 80 ActorDrawOffsetY  | Per actor (u16): draw offset y (F0 for most sprites).
+ram 7F:DD6C 64 ObjectDrawOffsetY | Per event object (u16): draw offset y.
+ram 7F:DDFE 64 ObjectPixelX      | Per event object (u16): pixel x (the actor table's slots 40-71).
+ram 7F:DE8E 64 ObjectPixelY      | Per event object (u16): pixel y.
+ram 7F:DEEE 96 ObjectScriptPtr   | Per event object (3 bytes): its script place.
+ram 7F:DFAE 32 ObjectWait        | Per event object: frames until its script goes on.
+ram 7F:E1CE 40 ActorColourRow    | Per actor: colour row * 2 (the OAM palette bits).
+ram 7F:E216 72 SpriteSize        | Per actor and event object: sprite size (0 16 x 16, 1 tall, 2 wide, 3 32 x 32).
+ram 7F:E25E 72 SpriteTileNumber  | Per actor and event object: the OAM tile number of its sprite tiles.
+ram 7F:E2A6 72 SpriteTileAttr    | Per actor and event object: the OAM attribute bits of its sprite tiles.
+ram 7F:E2EE 40 ActorAnimFrame    | Per actor: the animation frame added to its facing frame.
+ram 7F:E3C6 40 ActorWalkWait     | Per actor: frames until its walking script goes on.
+ram 7F:E3EE 120 ActorMotionPtr   | Per actor (3 bytes): its motion script place (bank $91).
+ram 7F:E466 40 ActorAction       | Per actor: the action it is doing (StartActorAction).
+ram 7F:E48E 40 ActorStepProgress | Per actor: step progress (speed added each frame); also wait counters of motion commands.
+ram 7F:E4B6 40 ActorStepPixels   | Per actor: pixels walked in this step (16 ends it).
+ram 7F:E4DE 40 ActorSpeed        | Per actor: walking speed in quarter pixels a frame (8 = 2 pixels).
+ram 7F:E506 120 ActorWalkScriptPtr | Per actor (3 bytes): its walking script place.
+ram 7F:E5F6 40 WalkAreaX1        | Per actor: walk area left (from the character start).
+ram 7F:E61E 40 WalkAreaY1        | Per actor: walk area top.
+ram 7F:E646 40 WalkAreaX2        | Per actor: walk area right.
+ram 7F:E66E 40 WalkAreaY2        | Per actor: walk area bottom.
+ram 7F:EA00 256 CaveRoomGrid     | Ancient Cave generator: the 16 x 16 room grid.
+ram 7F:F8A1 1 EncounterSide      | The side a field monster was met from (CheckFieldMonsterContact).
+ram 7F:F8A3 1 FieldMonsterActor  | The field monster's actor in a field battle (FF = none).
+
+
+# ---- notes
+note 83:BD96 | Walking speed of every step: 8 = 2 pixels a frame (docs/lufia2/settings.md; the continuing walk keeps the old speed).
+note 83:FC6C | Debug run: only in debug mode ($057C); the fast walking patch turns this branch off.
+note 83:D385 | Walk actions 0-3 (up, down, left, right) to facing codes ($83:C1B0: 4, 0, 2, 6).
+note 83:B5CC | The event block bank is $87 + the header byte, added in 8 bits (docs/lufia2/romsize.md).
+
+# ---- walking script commands ($91:A1D4 scripts, table $83:D467; actor variables at $7FE5A6 + 40 * n)
+func 83:C85A RunWalkOpAt2A       | Runs the walking script command at the place in $2A.
+func 83:C85C RunWalkOp           | Y = walking script place: runs the next command in the same frame.
+func 83:C877 WalkScriptOp4F_Action | 4F a: starts action a and goes on next frame.
+func 83:C87C WalkScriptOp4A_Action81 | 4A: starts action 81.
+func 83:C880 WalkScriptOp4B_Action82 | 4B: starts action 82.
+func 83:C884 WalkScriptOp4C_Action83 | 4C: starts action 83.
+func 83:C888 WalkScriptOp4D_Action84 | 4D: starts action 84.
+func 83:C891 WalkScriptOp08_Motion | 08 b: starts motion script 18 + b without checks (busy) and stops for this frame.
+func 83:C8AF WalkScriptOp09_WaitRandom | 09 a b: waits a random 0 to a - 1 plus b frames.
+func 83:C8C7 WalkScriptOp0A_Yield | 0A: stores the script place and stops for this frame (the end of most commands).
+func 83:C8D2 WalkScriptStop      | Ends the walking script run without storing the place.
+func 83:C8D4 WalkScriptOp0B_WaitRandomLong | 0B a b: waits (a + a random 0 to b - 1) * 8 frames.
+func 83:C8EE WalkScriptOp0C_Speed | 0C s: walking speed = s.
+func 83:C8FC WalkScriptOp0D_LockFrame | 0D: keeps the frame while moving ($0736 bit 1 on).
+func 83:C90A WalkScriptOp0E_UnlockFrame | 0E: walk frames again ($0736 bit 1 off).
+func 83:C918 WalkScriptOp0F_EndAndHold | 0F (also 1E): ends a scripted walk (FinishScriptedWalk) and holds the actor; in dungeons it gets movement 9, in towns speed 4.
+func 83:C947 FinishScriptedWalk  | Ends a scripted walk: marks the actor's block, clears its walking flags, speed 8 and starts its walking script again; for the leader the followers follow again.
+func 83:C98A WalkScriptOp10_StepToLeader | 10: one step toward the leader.
+func 83:C99A ActorBlockToWork    | $8F,$91 = actor $A7's block.
+func 83:C9A7 RectAroundWork      | WorkRect = the square of radius $54 around $8F,$91.
+func 83:C9C5 DirectionToward     | Actor $A7: A = the walk action toward $8F,$91 (x or y first, swapping each time by $7FE5A6); C set when not there yet.
+func 83:C9F9 DirectionTowardX    | A = walk action 2 / 3 toward $8F; C set when the x differs.
+func 83:CA08 DirectionTowardY    | A = walk action 0 / 1 toward $91; C set when the y differs.
+func 83:CA19 WalkScriptOp11_StepToTreasure | 11 r w: one step toward a treasure spot (map info +26) within r blocks, else goes to w.
+func 83:CA29 WalkScriptOp2E_WalkToTarget | 2E: steps toward the target block (actor variables 0, 1) when the way is free; blocked, it nudges object $1724.
+func 83:CA93 DirectionToTarget   | Actor $A7: A = the walk action toward its target block (variables 0, 1); C set when it is there.
+func 83:CAB9 WalkScriptOp47_GoToTarget | 47 t: waits t, steps toward the target block; once there goes on.
+func 83:CAD3 WalkScriptOp48_EndReleaseLeader | 48: ends the scripted walk, frees the leader ($0622 bit 0) and empties the follow queue.
+func 83:CAE1 WalkScriptOp49_RemoveSelf | 49: a character takes itself off; for the leader, when no party member is left on the map, puts the vehicle follower back and rebuilds the party. (guess)
+func 83:CB65 ClearFollowQueue    | Empties the follow queue $09A1-$09A5 (FF).
+func 83:CB71 WalkScriptOp4E_LeaveMap | 4E: a character takes itself off; the leader with no member left asks for a map change ($05B5 88) and starts action 85. (guess)
+func 83:CBB1 WalkScriptOp2F_End  | 2F: ends the scripted walk (FinishScriptedWalk).
+func 83:CBB7 WalkScriptOp30_StopOnMarkedCell | 30: on a cell with flags 30 marks the actor ($0736 bit 6) and stops, else goes on. (guess)
+func 83:CBE1 WalkScriptOp31_IfNearLeader | 31 r w: goes on when the leader is within r blocks, else goes to w.
+func 83:CC1B WalkScriptOp32_IfLeaderColumn | 32 w: goes to w when the leader has the same x.
+func 83:CC2E WalkScriptOp33_IfLeaderRow | 33 w: goes to w when the leader has the same y.
+func 83:CC41 WalkScriptOp34_StepToLeaderX | 34: one step toward the leader's x.
+func 83:CC4E DirectionToLeaderX  | A = walk action 2 / 3 toward the leader's x; C set when it differs.
+func 83:CC63 WalkScriptOp35_StepToLeaderY | 35: one step toward the leader's y.
+func 83:CC70 DirectionToLeaderY  | A = walk action 0 / 1 toward the leader's y; C set when it differs.
+func 83:CC85 WalkScriptOp36_IfLeaderNearX | 36 r w: goes to w when the leader's x is within r.
+func 83:CCA3 WalkScriptOp37_IfLeaderNearY | 37 r w: goes to w when the leader's y is within r.
+func 83:CCC1 IsOutsideRange      | C clear when A is within $55 of $56.
+func 83:CCD7 WalkScriptOp38_StepFromLeader | 38: one step away from the leader (the opposite action, $83:CD2A).
+func 83:CCF0 WalkScriptOp39_FleeLeaderX | 39: steps away from the leader along x, or a random up / down step when level with it.
+func 83:CD0D WalkScriptOp3A_FleeLeaderY | 3A: steps away from the leader along y, or a random left / right step.
+func 83:CD2E WalkScriptOp3B_Skip | 3B: skips a byte and stops for this frame.
+func 83:CD32 WalkScriptOp3C_Turn | 3C: turns a quarter (facing + 2) without walking.
+func 83:CD4F WalkScriptOp3D_IfLeaderAhead | 3D w: goes to w when the leader is ahead of the actor's facing.
+func 83:CD6E LeaderAheadDown     | WalkScriptOp3D, facing down: compares the leader's y with the actor's.
+func 83:CD77 LeaderAheadLeft     | WalkScriptOp3D, facing left: compares the actor's x with the leader's.
+func 83:CD80 LeaderAheadUp       | WalkScriptOp3D, facing up: compares the actor's y with the leader's.
+func 83:CD89 LeaderAheadRight    | WalkScriptOp3D, facing right: compares the leader's x with the actor's.
+func 83:CD92 WalkScriptOp3E_Dpad2 | 3E: steps the way the d-pad is held (table $83:D457).
+func 83:CDA5 WalkScriptOp3F_PlaceAheadOfLeader | 3F n w: when at least n free blocks lie ahead of the leader, the target is n blocks ahead; else goes to w.
+func 83:CDF6 CountFreeAhead      | $9D = free blocks from $8F,$91 the way $94, inside WorkRect and on the same level.
+func 83:CE3B StepWorkCellBy      | Moves $8F,$91 A blocks the way $94 (Table_83_CE48).
+func 83:CE50 WorkStepDown        | $91 + 1.
+func 83:CE53 WorkStepLeft        | $8F - 1.
+func 83:CE56 WorkStepUp          | $91 - 1.
+func 83:CE59 WorkStepRight       | $8F + 1.
+func 83:CE5C SaveWorkAsTarget    | The actor's saved place ($7FDB4C) = $8F,$91.
+func 83:CE73 WalkScriptOp40_Action60 | 40: starts action 60.
+func 83:CE7D WalkScriptOp43_PickPlaceNear | 43: picks a random place 2-16 blocks away inside the walk area as the saved place.
+func 83:CEA8 PickPlaceAlong      | A = 0 / 2: picks a random way of that pair and a free distance between $66 and $65 blocks along it inside the walk area; the place goes to $63,$64.
+func 83:CF11 WorkFromSaved63     | $8F,$91 = $63,$64.
+func 83:CF1A WalkScriptOp41_PickPlaceFromLeader | 41 a b w: picks a random place b-a blocks from the leader; inside the walk area it is saved and the script goes on, else goes to w.
+func 83:CF6E WalkScriptOp42_Action5F | 42: starts action 5F and saves the actor's block ($7FDB9C).
+func 83:CF8C WalkScriptOp12_StepToBlock | 12 x y: one step toward block x,y; there, goes on.
+func 83:CFB9 WalkScriptOp44_FindMonsterNear | 44 r w: saves the first other actor with a sprite 80 up within r blocks ($7FDB4C), else goes to w.
+func 83:D01E WalkScriptOp45_StepToSavedActor | 45: one step toward the actor saved by 44.
+func 83:D03F WalkScriptOp46_IfCanStep | 46 d w: goes on when the way d is free and inside the walk area, else goes to w.
+func 83:D09A WalkScriptOp13_StepToDoor | 13 r w: one step toward a door (map info +02) within r blocks, else goes to w.
+func 83:D0AA StepTowardRecordNear | X = map info list, A = record size: one step toward the first record within radius (script byte +1); C set when there is none.
+func 83:D112 WalkScriptOp15_Dpad | 15: steps the way the d-pad is held (table $83:D447).
+func 83:D125 WalkScriptOp16_RandomStep | 16: a step in a random direction.
+func 83:D132 WalkScriptOp17_Yield | 17: stops for this frame without moving on.
+func 83:D135 WalkScriptOp18_PutAt | 18 x y: puts the actor on block x,y.
+func 83:D14D WalkScriptOp19_FollowLeader | 19: a follower repeats the leader's queued action ($09A1 + its place) at the leader's speed.
+func 83:D176 WalkScriptOp1A_FrameWait | 1A n: the frame flags' low bits ($1291) = n.
+func 83:D188 WalkScriptOp1B_Wait | 1B n: waits n frames.
+func 83:D196 WalkScriptOp1C_Motion1C | 1C b: variable 0 = b and motion script 1C (busy).
+func 83:D1B5 WalkScriptOp1D_Sound | 1D s: plays sound s.
+func 83:D1C1 WalkScriptOp1F_ActionIfQueue | 1F a: starts action a while the follow queue's first entry is new (bit 7).
+func 83:D1D0 WalkScriptOp2A_JumpByLeaderFacing | 2A w0 w1 w2 w3: goes to the word picked by the leader's facing.
+func 83:D1E6 WalkScriptOp2B_FacingAction | 2B b: starts the actor's facing walk action + b.
+func 83:D1FE WalkScriptOp2C_DrawOffset | 2C dx dy: adds to the draw offset.
+func 83:D207 WalkScriptOp2D_Move | 2D dx dy: moves the actor (MoveActorBy).
+func 83:D210 WalkScriptOp20_IfVar | 20 v k n w: compares actor variable v with n by k (0-4 less / greater / equal kinds, else not equal) and goes to w or on.
+func 83:D27F ActorVarIndex       | X = (script byte +1) * 40 + actor: the index of an actor variable ($7FE5A6 + X).
+func 83:D293 WalkScriptOp21_IfFlags | 21 m w: goes on when one of the bits m is set in the actor's flags ($7FE57E), else goes to w.
+func 83:D2B4 WalkScriptOp22_Jump | 22 w: goes to w.
+func 83:D2C4 WalkScriptOp23_SetFlags | 23 m: actor flags $7FE57E |= m.
+func 83:D2D5 WalkScriptOp24_KeepFlags | 24 m: actor flags $7FE57E &= m.
+func 83:D2E6 WalkScriptOp25_SetVar | 25 v n: actor variable v = n.
+func 83:D2F6 WalkScriptOp26_AddVar | 26 v n: actor variable v += n.
+func 83:D30B WalkScriptOp27_SubVar | 27 v n: actor variable v -= n.
+func 83:D320 WalkScriptOp28_IfRandom | 28 n w: goes on when a random byte is below n, else goes to w.
+func 83:D340 WalkScriptOp29_JumpF000 | 29 w: goes to w + $F000. (guess: scripts kept in RAM)
+func 83:FACB AddDrawOffsetFromScript | Adds the signed bytes +1, +2 of the script to actor $A9's draw offset; A = Y + 3.
+table 83:CD66 LeaderAheadByFacing | WalkScriptOp3D's tests by facing.
+table 83:CE48 WorkStepByFacing   | StepWorkCellBy's one-block steps by facing.

@@ -1,0 +1,561 @@
+# Bank $80:8000-$80:BFFF: start-up, NMI, maths, menu text, saves, sound driver calls, the event script interpreter
+# and the event command handlers. Read from the code and docs/lufia2/*.md (events.md, music.md, graphics.md, settings.md).
+
+# ---- start-up
+func 80:8035 Boot                  | Start-up after Reset (and soft reset): FastROM, hardware and RAM set up, the save slots checked, the sound driver uploaded on a cold start (stopped and its samples reloaded when it already runs), the random numbers seeded.
+func 80:8084 BootCheckSramAndStart | Waits for the NMI hook to finish, turns soft reset on, checks that the 8 KB SRAM mirrors at $70:2000 (resets otherwise), clears the debug flag; Select+Start held opens screen 6 ($82:E746), then the game starts.
+func 80:80D3 ClearLowRam           | Clears WRAM $0002-$1DFF.
+func 80:80E1 InitSystemVariables   | Writes the JSL / RTS opcodes of the two NMI hooks ($67, $6C), the screen brightness (forced blank), the joypad repeat mask and other system bytes.
+func 80:8117 InitHardware          | Sets the PPU registers from the lists at $80:8212 / $80:825E, clears VRAM, OAM and CGRAM by DMA, fills the OAM buffer and clears WRAM $7E:2000-$3FFF and $7E:8000-$DFFF.
+func 80:8281 GoToFieldStart        | Jumps to $83:ACB7 (the game's main sequence after start-up).
+
+# ---- maths and random numbers
+func 80:8299 RandomRange           | Random number: A = n gives 0..n-1 (the next random byte times n, high byte). Uses the 55-byte table at $0521.
+func 80:82C7 RandomByte            | The next random byte (0-255) from the table at $0521.
+func 80:82E7 SeedRandom            | Fills the 55-byte random table at $0521 from the seed in $0558 (subtractive generator, step 21) and stirs it three times.
+func 80:832D StirRandomTable       | Mixes the 55-byte random table (each byte XORed with the one 31 / 24 places away); runs when the 55 numbers are used up.
+func 80:834C Multiply16x8          | Multiplies the u16 at $4E by the byte at $50; the 24-bit product goes to $51-$53.
+func 80:8378 Divide16              | Divides the u16 at $4E by the u16 at $51: quotient in $4E, remainder in A.
+func 80:8450 SineByAngle           | A = angle (0-$B3, 2 degrees a step) gives its sine from the table at $80:84BF, sign and size (bit 7 = negative).
+func 80:8486 CosineByAngle         | A = angle (0-$B3, 2 degrees a step) gives its cosine from the table at $80:84BF, sign and size (bit 7 = negative).
+
+# ---- NMI and video
+func 80:86B5 NmiReturn             | The end of the NMI (read with 16-bit A): reads RDNMI and returns from the interrupt.
+func 80:86C1 UpdateScreenFade      | NMI: steps a fade in or out of the screen brightness ($0583) as $0581 asks (bit 7 fading, bit 6 out, low bits speed); clears $0581 when done.
+func 80:8703 NmiDmaAndJoypads      | NMI: sends the OAM buffer ($0100) and the palette buffer ($0320) when asked ($72 / $73 bits 6-7), then reads both joypads into $46 (held) and $4A (newly pressed, with auto-repeat).
+func 80:87A7 NmiVramUpdates        | NMI (when $71 is set): writes the eight BG scroll registers from $0594, starts the up to four queued DMAs ($75-$78, VRAM or CGRAM address in $79-$80), uploads the BG tilemap buffers and sets HDMAEN from $81.
+func 80:87FC UploadBgMaps          | Uploads the tilemap buffers $7E:2000 / $2800 / $3000 to VRAM $0000 / $0400 / $0800 when $74 asks (bits C0, 30, 0C), then clears the requests.
+func 80:8285 UploadBgMapsNow       | UploadBgMaps with every register kept (for code that runs with the NMI off).
+func 80:882E DmaBgMapToVram        | DMA channel 6: $800 bytes from $7E:X to VRAM address Y.
+func 80:884F StartQueuedDma        | Starts one queued DMA: A = channel bits (bit 7 set and 6 clear: a CGRAM address, else VRAM), X = the address.
+
+# ---- menu text (window strings: bytes $10+ are letters, $00-$0F codes through Table_80_8E7C)
+func 80:8878 DrawMenuText          | Draws a menu text string: X = tilemap address (bank $7E), Y = the text (bank in $5F); lines wrap after 32 letters.
+func 80:888C DrawMenuTextAt        | Draws a menu text string at tilemap address X (bank $7E) from Y (bank $5F) with the current line width ($0565).
+func 80:88AA MenuTextContinue      | Menu text: goes on drawing from the cursor ($0575) with the next byte.
+func 80:88AD MenuTextNextByte      | Menu text: reads the next byte; letters are drawn, a code byte runs its handler (Table_80_8E7C).
+func 80:88C8 MenuTextLiteralCode   | Menu text: after code 04 a code byte is drawn as a letter instead.
+func 80:88DA MenuTextDrawLetter    | Menu text: draws a letter at the cursor and goes two rows down when the line is full.
+func 80:88E9 MenuText00_End        | Menu text code 00: end of the string.
+func 80:88EE MenuText01_Number     | Menu text code 01: format, digits, pointer: draws a 1-3 byte number (decimal or hex, leading zeros as spaces or kept, a minus sign, left-aligned).
+func 80:89AA FormatNumber          | Turns the 24-bit number at $0570 into the 8 digit characters at $0567 (decimal by the powers of ten at $80:8A57, or hex when format bit 08 is set).
+func 80:89D0 StoreHexDigit         | Stores digit A as a character at $0567 + X.
+func 80:8A6C MenuText02_String     | Menu text code 02 kind: draws another string inside this one; the kind byte picks how it is found (Table_80_8A81).
+func 80:8A99 MenuString00_Pointer  | Menu text 02 00: a string at a u16 address in the same bank.
+func 80:8AAD MenuString01_Indirect | Menu text 02 01: a string whose u16 address is stored at the given address.
+func 80:8AC5 MenuString02_Far      | Menu text 02 02: a string at a u24 address.
+func 80:8ADA MenuString03_IndirectFar | Menu text 02 03: a string whose u24 address is stored at the given address.
+func 80:8B09 MenuString04_HeroName | Menu text 02 04: the name of the party member whose number is at the given address.
+func 80:8B1B MenuString05_ItemName | Menu text 02 05: the name (with its icon) of the item whose number is at the given address.
+func 80:8B2D MenuString06_SpellName | Menu text 02 06: the name of the spell whose number is at the given address.
+func 80:8B12 MenuString07_HeroNameIndexed | Menu text 02 07: as 04, the address taken from a table plus an offset.
+func 80:8B24 MenuString08_ItemNameIndexed | Menu text 02 08: as 05, the address taken from a table plus an offset.
+func 80:8B36 MenuString09_SpellNameIndexed | Menu text 02 09: as 06, the address taken from a table plus an offset.
+func 80:8B3F DrawPartyMemberName   | Draws the name of party member [$56] (its record from the pointers at $0A80).
+func 80:8B57 DrawSpellName         | Draws the name of spell [$56] ($81:F414 writes it to $0B77).
+func 80:8B73 DrawItemName          | Draws the icon and name of item [$56] ($81:F1C5 writes the name to $0B77, the icon to $0B87).
+func 80:8BA7 MenuTextReadPointer   | Menu text: reads a u16 address from the string into $56.
+func 80:8BB2 MenuTextReadIndexedPointer | Menu text: reads a table address and an offset, $56 = the table's value + offset.
+func 80:8BCA DrawNestedMenuText    | Draws the string at $60-$62 at the cursor, then carries on with the outer string.
+func 80:8BFD MenuText03_Branch     | Menu text code 03: compares a value with a number and may go on at another string (Table_80_8C11 by the low 3 bits).
+func 80:8C19 MenuBranch00_IfEqual  | Menu text 03 x0: goes to the other string when the value equals the number (with flag 10: when the bits are set).
+func 80:8C3E MenuBranch01_IfAtLeast | Menu text 03 x1: goes to the other string when the value is at least the number.
+func 80:8C4E MenuBranch02_IfLess   | Menu text 03 x2: goes to the other string when the value is less than the number.
+func 80:8C5E MenuBranch03_GoTo     | Menu text 03 x3: goes on at the other string.
+func 80:8C6C ReadMenuNumber        | Reads the 1-3 byte number of code 01 into $0570 (filled with FF when negative and signed).
+func 80:8C9E ReadMenuBranchValues  | Reads the value (through pointers) and the number a code 03 compares.
+func 80:8CFC MenuText04_Literal    | Menu text code 04: the next byte is drawn as a letter even when it is a code.
+func 80:8D04 MenuText0A_NewLine    | Menu text code 0A: new line.
+func 80:8D0D MenuText0B_SetPosition | Menu text code 0B: the text goes on at the given tilemap address.
+func 80:8D22 MenuText0C_Palette    | Menu text code 0C: sets the palette of the letters.
+func 80:8D2B MenuText0D_PaletteFromTable | Menu text code 0D: the palette is the table byte picked by a variable.
+func 80:8D4B MenuText0E_PaletteFromVariable | Menu text code 0E: the palette is the byte at the given address.
+func 80:8D5D SetMenuTextPalette    | A = palette (0-7) into bits 2-4 of the tile attribute $0564.
+func 80:8D6C MenuText05_MarkPosition | Menu text code 05: remembers the cursor position.
+func 80:8D79 MenuText06_GoToMark   | Menu text code 06: the text goes on at the remembered position plus an offset.
+func 80:8D91 MenuText07_SavePalette | Menu text code 07: remembers the current palette.
+func 80:8D9E MenuText08_RestorePalette | Menu text code 08: goes back to the remembered palette.
+func 80:8DA7 MenuText09_SetAttribute | Menu text code 09: sets the whole tile attribute byte (palette, priority, flips).
+func 80:8DB0 MenuText0F_Nothing    | Menu text code 0F: does nothing.
+func 80:8DB3 PutMenuLetter         | Writes a letter and its attribute to the tilemap at X; letters $CC and up are two tiles tall (tables $80:8E16 / $80:8E49).
+func 80:8DF9 MenuTextNextRow       | Moves the menu text cursor to the start of the next tile row.
+func 80:8E0F ResetMenuLineWidth    | Starts a new line's letter count ($0566 = $0565).
+
+# ---- save slots (SRAM $70:0000 + slot * $800: +0 state, +1 key, +2 checksum, +4 data)
+func 80:9037 CheckSaveSlots        | At start-up: erases every save slot (0-3) whose checksum is wrong; $66 gets a bit for each one erased.
+func 80:905F IsSaveSlotEmpty       | A = slot: carry set when the slot is empty (high nibble of its first byte set).
+func 80:9099 LoadSaveSlot          | A = slot: decodes it into $7E:3800 and, when it holds a game, loads it ($8E:B993, $85:C60E); carry set when the slot is empty.
+func 80:90C9 SaveToSlot            | A = slot: gathers the game into $7E:3800 ($8E:BA0D, $85:C954) and writes it to the slot.
+func 80:90E5 IsSaveChecksumBad     | A = slot: carry set when the slot's stored checksum differs from its data.
+func 80:90FC SaveChecksum          | A = slot: the sum of the slot's words from +4 (starting at $6502), in $56.
+func 80:911C EraseSaveSlot         | A = slot: writes a cleared slot and marks it empty (first byte F0).
+func 80:914B DecodeSaveSlot        | A = slot: decodes the slot into $7E:3800 (each byte minus a random number seeded by the slot's key byte).
+func 80:9184 EncodeSaveSlot        | A = slot: writes $7E:3800 to the slot with a new random key (each byte plus a random number), the checksum and the state byte.
+func 80:91D3 SaveSlotOffset        | A = slot: X = slot * $800 (its offset in SRAM).
+
+# ---- boot screen
+func 80:91DF ShowLicenceScreen     | Unpacks file $3F (the Natsume / Taito licence screen) to $7E:4000, sets mode 1, copies its maps and palette to the buffers and starts the NMI hook at $80:92A4.
+
+# ---- sound driver (docs/lufia2/music.md)
+func 80:9383 UploadSoundDriver     | Sends the sound driver ($90:C000 block list) through the IPL, does the $AB/$CD handshake, sets the output mode (1 when Select+Start is held) and loads the shared samples.
+func 80:93D6 LoadSharedSamples     | Resets the sound state bytes and uploads the shared samples 00-1F.
+func 80:93FE PlaySong              | A = song: loads it (LoadSong) and starts it (driver command 02).
+func 80:941A LoadSong              | A = song (< $64): stops the music, unpacks the song file to $7E:2020, checks "S2", uploads its samples and sends it to sound RAM $4400; carry set when nothing was loaded.
+func 80:9528 StopMusic             | Driver command 03: stops the music.
+func 80:953B PlaySound             | A = sound effect (< $8F): driver command 04.
+func 80:95D2 SoundCommand05        | Driver command 05 (sent before a song is loaded and on a soft reset).
+func 80:95F0 ReadSoundStatus       | Driver command 0F: A = the driver's status byte (bit 1: a sound effect plays).
+func 80:9623 SetSoundOutputMode    | Driver command 0D with A (0 or 1; stereo or mono) (guess).
+func 80:9634 ReadSoundOutputMode   | Driver command 18: A = the value command 0D stored, stereo or mono (guess).
+func 80:9692 StartMusicFadeOut     | Driver command 06: starts fading the music out.
+func 80:969F ChangeSong            | A = song: loads it and starts it with driver command 07 (event 6F, the inn).
+func 80:96CC SetMusicFadeTime      | Driver command 0A with A = how long the fade takes.
+func 80:96F2 ReadMusicCue          | Driver command 08: A = the song's cue counter (event 4D).
+func 80:9703 UploadSharedSamples   | Sends the shared samples 00-1F to sound RAM $5800 and keeps the end address in $0584.
+func 80:97DA SoundUploadNextBank   | Moves the upload's source pointer into the next ROM bank.
+func 80:9886 UploadSample          | A = sample: driver command 14, its 8-byte header, then its BRR data.
+func 80:98A5 SendSampleHeader      | A = sample: finds it in the table at $98:8000 and sends its 8-byte header.
+func 80:9911 UploadSongData        | Sends the song image at $5D to sound RAM address $56 (driver command 01).
+func 80:9945 SendBlockToApu        | Streams X bytes from DB:Y to the sound driver two at a time.
+func 80:99B2 IsSoundDriverRunning  | Carry clear when the APU still waits in its IPL ($BBAA on ports 0-1: a cold start), set when the driver already runs.
+func 80:99C7 IsSoundDriverRunningEnd | The end of IsSoundDriverRunning read with 16-bit A.
+func 80:99FD SendSoundCommand      | A = driver command, written to APU ports 2 and 3.
+func 80:9A0A WaitSoundCommandDone  | Waits for the driver's $CD / $EF answer on ports 2 / 3, clears them and waits for the echo.
+func 80:9C0F IplUpload             | Sends the block list at $5D to the APU with the IPL protocol ($BBAA / $CC handshake).
+
+# ---- event and text script interpreter (docs/lufia2/events.md)
+func 80:9C72 UpdateEvents          | Every frame: $84:8000 and $80:C21A, then the text waits (button, auto page, sign message), then one frame of the running event script when $099B bit 7 is set.
+func 80:9CB8 RunEventScript        | Runs the event script at $09B7 for this frame (after the letter delay $7FD0FF), until a command waits.
+func 80:9CD9 EventScriptResume     | Loads the script pointer and data bank, returning from a text repeat (0A) when its letters are done, then the command loop.
+func 80:9DA6 EndEventCleanup       | Releases every held character, clears the event state and ends ($80:EF2F).
+func 80:9DDB TextNewLine           | Moves the text cursor to the next line of the box.
+func 80:9E54 StartDictionaryWord   | A = word number (high byte page): saves the script pointer in $1252 and runs the word's text at $8E:EA00.
+func 80:9EC0 Event0A_RepeatTextEnd | The end of text code 0A read with 16-bit A: the copied letters start in the same bank.
+func 80:9EFE PrintPunctuationLine  | Prints letter A (? ! , .), then a new line, and stops for this frame.
+func 80:9FE7 DrawQuestionCursor    | Draws the question cursor at answer $126A.
+func 80:A019 EraseQuestionCursor   | Erases the question cursor at answer $126A.
+func 80:A1CC ScriptHeroRecord      | Reads a hero from the script: X = its record ($0BAD + hero * $BE).
+func 80:A1E4 ScriptItemCount       | Reads a u16 item from the script: $54 = how many the party has ($82:FB1F).
+func 80:A350 ReturnFromSubScreen   | After a shop, the church, a capsule monster or a full bag: rebuilds the map screen ($83:85DC, $83:AFCD) and clears the event state.
+func 80:A368 ClearEventState       | Clears the word return, the text repeat and the event state ($099B).
+func 80:A42B GiveItemFromScript    | Reads item (low byte; $7FD4F0 the high bit) and count, gives them one at a time ($8E:C1C5, screen 4 when the bag is full) and returns to the map when that screen was shown.
+func 80:A4B1 TakeItemFromScript    | Reads item (low byte; $09D0 the high bit) and count and takes them ($82:FA57).
+func 80:A5B2 ReadScriptByteTimes2  | Reads a byte from the script: X = byte * 2.
+func 80:A74D PutActorOnTile        | Puts actor $00A7 on tile ($54, $56) at once, drawn and held still (a map character also stops moving).
+func 80:A986 ReadActorAndAction    | Reads who (FindShownActor) and an action ($54) from the script and lets the character go.
+func 80:A9E3 RingAroundActorPlace  | Ring commands: reads the ring and the character, the ring's centre = the character's pixel place ($02, $04).
+func 80:AA02 RingAroundPointPlace  | Ring commands: reads the ring and the preset point, the ring's centre = the point's pixel place ($02, $04).
+func 80:AA20 StartRing             | A = effect sprite: reads count, size, spin and the other byte and starts the ring ($83:C729).
+func 80:AA67 StartRingSizeChange   | Reads ring, stop value and rate and starts the ring's size change ($83:C6AA).
+func 80:AB33 FindRing              | $54 = ring id: X = its slot in $1559; carry set when found.
+func 80:AD39 PartyLooksAtActor     | A = actor: every shown hero turns to face it.
+func 80:AD57 ActorFacesActor       | Actor $56 turns to face actor $57 (the larger of the x and y distances picks the way).
+func 80:AE36 SetCheckResult        | Turns story flag FF on (the answer of commands 91, 92, AB).
+func 80:AE3C ClearCheckResult      | Turns story flag FF off.
+func 80:AEC3 SplitColourChannels   | Command 93: puts strength $55 (0-31) into the red, green and blue words ($56, $58, $5A) for the channel bits in $54.
+func 80:AF33 ReadBgr15Colour       | Reads a u16 BGR15 colour from the script: red part in $56, green in $58, blue in A.
+func 80:AF77 StartColourEffect     | Commands 94-96: A = colour maths mode; reads colour and start strength, end strength and frames, works out the step and starts the effect ($1261 bit 7).
+func 80:B0EB NudgeActor            | Reads who and signed x / y pixels and moves the character's picture by them.
+func 80:B374 CameraTargetTile      | The camera's target is tile ($120A, $120B), centred on the screen.
+func 80:B404 PartyWalksToTile      | Writes a walk-to-tile path (at $7E:E000) for each shown hero from slot Y to 4 to tile ($8F, $91) and starts them.
+func 80:B592 CameraScrollToTile    | Camera command forms 6 and 7: scrolls to tile ($56, $57) at speed $54 & 0F.
+func 80:B5E6 IsCameraAwayFromLeader | Carry set while the camera isn't centred on the leader (the camera keeps moving back); clears the camera speed when it is.
+func 80:B62A IsCameraAwayFromLeaderEnd | The end of IsCameraAwayFromLeader read with 16-bit A.
+func 80:B76A ReadTileCopyAreas     | Reads the "onto" and "from" areas of a tile copy (43, 87, B4) into $7FD046-$7FD04D.
+func 80:B7C9 StorePaletteColour    | Writes A to palette buffer colour X ($0320) and goes on with the next command.
+func 80:B7D5 ReadPaletteColourArgs | Reads colour number (X = number * 2) and a u16 BGR15 value ($54).
+func 80:B819 SetTextBoxPosition    | The next text box goes at row A, column $54 / 2 ($125D); its voice is turned off.
+func 80:B97E StopScreenEffects     | Ends every screen effect ($1261) and the quake.
+func 80:BC33 SetSpeakerAndOpenBox  | A = actor: it speaks the next text (voice from its sprite) and the text box opens.
+func 80:BC98 MakeMapCharacter      | Commands 68 / 7B: reads id and sprite into the next actor slot and places it at its character start.
+func 80:BCE4 PrintLetter           | Draws letter $09AF in the text box and stops for this frame (the letter delay is the message speed); the voice sounds every other letter.
+func 80:BD02 PrintLetterEnd        | The second half of PrintLetter: queues the letter, sets the delay and plays the voice.
+func 80:BD38 QueueLetterUpload     | Draws the letter into its tiles ($80:C7C2) and queues their DMA to VRAM.
+func 80:BE1A TestStoryFlagFar      | TestStoryFlag for the other banks.
+func 80:BE1E TestStoryFlag         | A = story flag: Z clear when it is on.
+func 80:BE30 StoryFlagBit          | A = story flag: $56 = its byte (flag >> 3), $57 = its bit (table $80:BE45).
+func 80:BE4D RunMapShownEvent      | Runs the map's event block +2 event 00 (when the map is shown), if it has one, in one go.
+func 80:BE61 RunMapBeforeLoadEvent | Runs the map's event block +2 event 02 (before the map loads), if it has one, in one go.
+func 80:BE75 RunMapEnterEvent      | Runs the map's event block +2 event 01 (on entering the map), if it has one, in one go.
+func 80:BE89 RunMapEvent           | A = id in the event block's +2 list: runs that event in one go when the map has it.
+func 80:BF0B WaitForNmi            | Waits until the NMI has counted another frame ($40).
+func 80:BF12 AddGoldCapped         | A = gold to add; the total is capped at 9,999,999.
+func 80:BF41 AddGoldCappedEnd      | The end of AddGoldCapped read with 16-bit A.
+func 80:BF43 TakeGoldIfEnough      | A = gold to take; nothing is taken when the party has less.
+func 80:BF6F FindShownActor        | A = actor id: $00A7 = the first actor slot with that id that isn't hidden; carry set when there is none.
+func 80:BF92 FindActor             | A = actor id: $00A7 = the first actor slot with that id; carry set when there is none.
+func 80:BFAA FindMapInfoRecord     | X = map info list (+02 doors .. +14 areas), A = id (high byte the record size): X = the record in $7E:F000; carry set when not found.
+func 80:BFD9 FindPath              | A = path id: X = its record in the map info's +12 list; carry set when not found.
+func 80:BFE7 FindTalkEvent         | $54 = actor id: the script pointer = its talk event (event block +6 list).
+func 80:BFFA PointTilesToPixels    | Turns the four tile bytes at $120A into pixel words at $1216 (x 16).
+
+# ---- event commands (docs/lufia2/events.md section 7; Core/Lufia2/L2EventCommands.cs)
+func 80:9D4C Event00_End           | Commands 00 and 42: end of the event (inside a dictionary word: back to the text). Waits for a button when a text box is open and for the camera to come back to the leader, then releases everyone.
+func 80:9DB3 Event01_WaitForButton | Text code 01: waits for a button, then back to commands (the one talked to becomes the speaker again).
+func 80:9DD5 Event03_NewLine       | Text code 03: new line.
+func 80:9DFA Event04_VoiceOrPause  | Text code 04 xx: xx < 80 sets the letters' sound (45 + xx); xx >= 80 pauses (xx & 7F) * 10 frames.
+func 80:9E45 Event05_Word          | Text code 05 xx: dictionary word xx.
+func 80:9E4E Event06_DictionaryWord | Text code 06 xx: dictionary word 100 + xx.
+func 80:9EC8 Event07_Letter300     | Text code 07 xx: letter 300 + xx.
+func 80:9D3E Event08_OpenTextBox   | Command 08: opens the text box for the current speaker (the one talked to) and goes on with the text.
+func 80:9ED6 Event09_HeroName      | Text code 09: prints the hero's name (the text at $00:0BAD).
+func 80:9E83 Event0A_RepeatText    | Text code 0A lo hi: prints again (hi >> 4) + 2 letters of the text lo + (hi & 0F) * 256 bytes back.
+func 80:9F37 Event0B_QuestionCursor | Text code 0B: the question cursor; up / down move it, A goes to the picked answer's step, B closes the box and goes on.
+func 80:9EF0 Event0C_QuestionMark  | Text code 0C: "?" and a new line.
+func 80:9EF4 Event0D_Exclamation   | Text code 0D: "!" and a new line.
+func 80:9EF8 Event0E_Comma         | Text code 0E: "," and a new line.
+func 80:9EFC Event0F_Period        | Text code 0F: "." and a new line.
+func 80:9F10 Event10_AskQuestion   | Command 10 n answers: opens the text box with a cursor on the last n lines; the answers' steps follow.
+func 80:A041 Event12_CountedChoice | Command 12 counter n steps: goes to the counter's step (the last repeats) and counts up.
+func 80:A06E Event13_CharacterSpeaks | Command 13 who: that character speaks the text that follows.
+func 80:A074 Event14_CheckConditions | Command 14: a list of checks up to FF (flags, counters, items, HP / MP, spells, levels, arrival, beaten field monster) with "if so / if not, go to".
+func 80:A288 Event15_IfFlagOnGoTo  | Command 15 flag step: goes to the step when the story flag is on.
+func 80:A2BA Event16_GoToMap       | Command 16 map scene point: changes to the map, arriving at the point, and plays its scene.
+func 80:A2E1 Event17_RestAtInn     | Command 17 price: inn music and fade, heals the party, plays the map's music again and takes the price.
+func 80:A32B Event18_OpenShop      | Command 18 shop: opens the shop; the event ends when it closes.
+func 80:A372 Event19_OpenChurch    | Command 19: opens the church menu; the event ends there.
+func 80:A392 Event1A_SetStoryFlag  | Command 1A flag: turns the story flag on.
+func 80:A3AC Event1B_ClearStoryFlag | Command 1B flag: turns the story flag off.
+func 80:A3C6 Event1C_GoTo          | Command 1C step: goes to a step (u16 offset from the event block).
+func 80:A3DF Event1D_SetCounter    | Command 1D counter value: sets the counter.
+func 80:A3ED Event1E_AddToCounter  | Command 1E counter value: adds to the counter.
+func 80:A3FF Event1F_TakeFromCounter | Command 1F counter value: takes from the counter.
+func 80:A414 Event20_GiveItem      | Command 20 item count: gives items 00-FF.
+func 80:A41F Event21_GiveItem100   | Command 21 item count: gives items 100-1FF.
+func 80:A480 Event22_GiveGold      | Command 22 u16 gold: gives gold.
+func 80:A489 Event23_LearnSpell    | Command 23 hero spell: the hero learns the spell when it can ($82:FD3D).
+func 80:A49D Event24_TakeItem      | Command 24 item count: takes items 00-FF.
+func 80:A4A6 Event25_TakeItem100   | Command 25 item count: takes items 100-1FF.
+func 80:A4CB Event26_TakeGold      | Command 26 u16 gold: takes gold when the party has enough.
+func 80:A4D4 Event27_Nothing       | Command 27: skips two bytes.
+func 80:A4DD Event28_RestoreParty  | Command 28: restores HP, MP and status of the party.
+func 80:A4F0 EventB9_FillIpGauge   | Command B9 hero: fills the hero's IP gauge (unless its record +0F bit 2 is set).
+func 80:A50B EventBA_RemoveEquipment | Command BA hero: takes off all of the hero's equipment ($82:FD15).
+func 80:A51D EventBB_ReportScreen  | Command BB: shows the report screen (screen 7) and goes back to the map.
+func 80:A54A Event29_RaiseStat     | Command 29 hero stat amount: adds base * amount / 256 to the hero's stat for good.
+func 80:A5BC Event2A_Nothing       | Command 2A: skips three bytes.
+func 80:A5C8 Event2B_JoinParty     | Command 2B hero: the hero joins the party ($81:F723) and the walking party ($0926).
+func 80:A5FF Event2C_LeaveParty    | Command 2C hero: the hero leaves the party and the walking party.
+func 80:A63A Event2D_ShowCharacter | Command 2D who: shows the character (a story character stays shown).
+func 80:A679 Event2E_HideCharacter | Command 2E who: hides the character (a story character stays hidden).
+func 80:A6AE Event77_HoldCharacter | Commands 77 and BE who: holds the character still.
+func 80:A6C2 Event78_EveryoneStandStill | Command 78: every map character (slots 5-27) stands still.
+func 80:A6E7 Event79_WaitForAllWalks | Command 79: waits until no shown character walks a path.
+func 80:A709 Event7A_ShowFrame     | Command 7A who frame: shows that sprite frame.
+func 80:A71B Event2F_PutOnTile     | Command 2F who x y: puts the character on the tile and holds it.
+func 80:A72E Event30_PutOnPoint    | Command 30 who point: puts the character on the preset point and holds it.
+func 80:A794 Event31_Turn          | Command 31 who direction: the character turns (1 up, 2 down, 3 left, 4 right; table $80:A7B6).
+func 80:A7BB Event32_MoveOnOwn     | Command 32 who mode: lets the character move by itself with that movement mode (FF: everyone held goes back to its own).
+func 80:A80F Event33_WalkPath      | Command 33 path who: the character walks the map's path; the event waits unless the path's flag 10 is set.
+func 80:A8F8 Event34_ChangeSprite  | Command 34 who sprite: the character gets another sprite.
+func 80:A936 Event86_ActTowardLeaderFacing | Command 86 who group: the character does the group's action for the way the leader faces.
+func 80:A94E EventA3_DoAction      | Command A3 who action: the character does an action (table $91:8000).
+func 80:A95C EventBF_RideAlong     | Command BF action carrier rider: the rider rides along with the carrier.
+func 80:A99D Event8C_ActionSettings | Command 8C who first second: the action settings of the character ($7FE5CE, $7FE5A6).
+func 80:A9B7 EventA0_SparkleRingAtCharacter | Command A0: a ring of sparkles (sprite 3C) around a character.
+func 80:A9BE Event8D_SparkleRingAtPoint | Command 8D: a ring of sparkles (sprite 3C) around a preset point.
+func 80:A9C5 EventC3_SparkleRing2AtCharacter | Command C3: a ring of sparkles of the second kind (sprite 4F) around a character.
+func 80:A9CC EventC2_SparkleRing2AtPoint | Command C2: a ring of sparkles of the second kind (sprite 4F) around a preset point.
+func 80:A9D3 EventC8_EffectRingAtPoint | Command C8: a ring of the given effect sprite around a preset point.
+func 80:A9DB EventC9_EffectRingAtCharacter | Command C9: a ring of the given effect sprite around a character.
+func 80:AA43 Event8E_RingSize      | Command 8E ring stop rate: the ring grows or shrinks.
+func 80:AA49 Event9F_RingSizeThenRemove | Command 9F ring stop rate: the ring grows or shrinks, then goes.
+func 80:AA83 Event8F_TiltRing      | Command 8F ring stop rate: the ring tilts.
+func 80:AAA1 Event90_TiltRingBack  | Command 90 ring stop rate: the ring tilts the other way.
+func 80:AABF Event9A_RemoveRing    | Command 9A ring: the ring's sprites fade away.
+func 80:AAE6 EventA1_WaitForRing   | Command A1 ring change: waits until the ring's size (0) or tilt (1, 2) stops changing.
+func 80:AB1D EventA2_WaitUntilRingGone | Command A2 ring: waits until the ring is gone.
+func 80:AB45 EventA5_GameOver      | Command A5: game over, back to the title ($83:ACEF).
+func 80:AB51 EventA6_PlaceCaveMonsters | Command A6: in the Ancient Cave places the floor's field monsters (list $7E:F600, sprites from $7F:F966 and $94:DDF6, their formations) and sets the floor's battle background ($80:ABCD).
+func 80:ABD0 EventA8_AncientCave   | Command A8 0 / 1: enters ($84:878A) or leaves ($84:890B) the Ancient Cave.
+func 80:ABF9 EventA9_EscapeTarget  | Command A9 map point: where the Escape spell leads (map < 2: a world map spot).
+func 80:AC18 EventAA_ClearPuzzleSwitches | Command AA: turns puzzle switches 00-1F off.
+func 80:AC28 EventAB_CheckDragonEggs | Command AB n: story flag FF on when the party has at least n Dragon eggs (item 2B).
+func 80:AC48 EventAC_ReloadPoint   | Command AC point facing: where the party appears when the map reloads after a battle or the menu.
+func 80:AC6A EventAD_RebuildTreasureList | Command AD: calls $8E:BCAD, which rebuilds a treasure list (guess).
+func 80:AC73 EventAE_SoundsOnOff   | Command AE FF / other: sounds on or off ($05B6 bit 1).
+func 80:AC8A EventB6_CharacterDrawing | Command B6 who setting: the character's drawing byte ($7FE316; 80 = not drawn).
+func 80:ACA7 EventB7_ReviveFieldMonster | Command B7 who: brings a beaten field monster back ($8E:BAF6, $8E:BAE7).
+func 80:ACBD EventAF_Blink         | Command AF who rate: the character blinks.
+func 80:ACE2 EventB0_StopBlinking  | Command B0 who: the character stops blinking and is drawn.
+func 80:AD02 EventB1_FaceCharacter | Command B1 who toward: the character turns to face the other.
+func 80:AD12 EventB2_FaceEachOther | Command B2 who and: the two characters face each other.
+func 80:AD2F EventB3_PartyLooksAt  | Command B3 who: the party turns to look at the character.
+func 80:ADD1 EventB5_ForgetCharacter4F | Command B5: story character 4F leaves every map.
+func 80:ADDC EventB8_SignMessage   | Command B8: the next message stays up while the player walks on; the event ends when it is shown.
+func 80:ADEC EventA7_Followers     | Command A7 00 / other: the followers stop following the leader's steps or follow again ($09A6 bit 0).
+func 80:AE03 Event91_CheckCasinoCoins | Command 91 u16: story flag FF on when the party has at least that many casino coins.
+func 80:AE24 Event92_CheckDoorOpen | Command 92 door: story flag FF on when the door is open ($83:8AC9).
+func 80:AE42 Event93_ColoursTowardWhite | Command 93 channels step frames: colours move toward white (or back) a step every n frames.
+func 80:AEF2 Event9B_CustomColourFade | Command 9B colour colour frames: fades the colours between two BGR15 values.
+func 80:AF53 Event95_FlashColour   | Command 95: adds a colour over the screen.
+func 80:AF5B Event94_DarkenColour  | Command 94: takes a colour from the screen.
+func 80:AF63 Event96_DarkenColourHalf | Command 96: takes half a colour from the screen.
+func 80:AF6B Event97_EndColour     | Command 97: ends the colour effect.
+func 80:AFC0 Event9C_ScatterAnimations | Command 9C area count animation: animations scattered over the area ($80:D533).
+func 80:AFE7 Event89_WaitForAction | Command 89 who: waits until the character's action ends, then holds it.
+func 80:B005 Event36_WaitForWalk   | Command 36 who: waits until the character is done walking.
+func 80:B021 Event98_AppearOnPoint | Command 98 who point: the character appears in a flash on the point (action 62).
+func 80:B054 Event99_Vanish        | Command 99 who: the character vanishes in a flash (action 61).
+func 80:B066 Event9D_FlickerAway   | Command 9D who: the character flickers and vanishes (action 63).
+func 80:B078 Event6C_DrawShifted   | Command 6C who x y: draws the character shifted by signed pixels.
+func 80:B0BD Event8B_NudgeCharacter | Command 8B who x y: moves the character by signed pixels.
+func 80:B0C3 EventC0_NudgeOntoTile | Command C0 who x y: moves the character by signed pixels and settles it on the tile it ends on.
+func 80:B117 EventC1_EffectSettings | Command C1 a b: stores two effect values ($7FD4F3 / $7FD4F4).
+func 80:B128 Event6D_CreditsText   | Command 6D u16 text 00: clears the tilemap buffer $7E:3000 and writes credits letters (table $80:B13E) from the screen offset.
+func 80:B1BE Event6E_CreditsTextTall | Command 6E u16 text 00: writes two-tile tall credits letters (table $80:B1D7).
+func 80:B257 Event73_AnimationOnPoint | Command 73 animation point: plays the animation on the preset point.
+func 80:B269 EventC6_AnimationOnCharacter | Command C6 animation who: plays the animation on the character.
+func 80:B2A7 Event74_BattleBackground | Command 74 background: battles on this map use that background ($7FF8A0).
+func 80:B2B1 Event35_SendStoryCharacter | Command 35 who map start: the story character stands on that map at that start from now on (hidden here at once).
+func 80:B2EB Event37_WaitFrames    | Command 37 frames: waits.
+func 80:B30C Event38_WaitSeconds   | Command 38 seconds: waits.
+func 80:B33E Event39_Nothing       | Command 39: does nothing.
+func 80:B341 Event3A_CameraJumpToTile | Command 3A x y: the camera jumps to the tile and the map is drawn again.
+func 80:B34F Event3B_CameraJumpToPoint | Command 3B point: the camera jumps to the preset point and the map is drawn again.
+func 80:B397 Event3C_GatherParty   | Command 3C: the followers walk onto the leader; waits until they are there.
+func 80:B46B Event3D_LineUpParty   | Command 3D x: rebuilds the walking party behind the leader ($84:8204).
+func 80:B484 Event3E_ScreenOff     | Command 3E: the screen goes black at once.
+func 80:B48C Event3F_ScreenOn      | Command 3F: full brightness at once.
+func 80:B494 Event40_RedrawMap     | Command 40: draws the whole map again ($83:8E4C).
+func 80:B49B Event75_CameraToLeader | Command 75: the camera's target is the leader.
+func 80:B4AD EventC4_CameraScrollToTile | Command C4 x y: the camera scrolls to the tile, centred.
+func 80:B4C4 Event41_Camera        | Command 41: camera back to the leader, move n tiles, scroll to a point or a tile, or wait until it stops.
+func 80:B62B Event87_CopyTilesQuick | Command 87 onto from: copies the area's map tiles (no walkability update).
+func 80:B646 EventBC_RedrawMapAndEnd | Command BC: draws the map again ($83:8C8A) and ends the event.
+func 80:B659 EventC7_RedrawMapDark | Command C7: draws both map layers again with the NMI off.
+func 80:B67D EventCA_LayerScrolling | Command CA layer mode setting: how the BG layer scrolls ($7FD020 + layer).
+func 80:B696 EventCB_MessageSpeed  | Command CB speed: the message speed ($0B52).
+func 80:B69F EventCC_RememberLevel | Command CC: when $0B62 is 0, keeps in it the level Maxim had at the last story battle (saved by command 53 in $7FD4F7).
+func 80:B6B3 EventBD_AddEffectCharacter | Command BD id type: makes an effect character in actor slot id - 48 ($83:F6C6).
+func 80:B6F4 EventB4_CopyTilesOnLayers | Command B4 onto from layers: copies the area's map tiles on the chosen layers.
+func 80:B721 Event88_UpdateWalkability | Command 88: updates where the party can walk.
+func 80:B72D Event43_CopyTiles     | Command 43 onto from: copies the area's map tiles (both layers), redraws and updates where the party can walk.
+func 80:B7A6 Event44_AddToColour   | Command 44 colour value: adds to a palette colour.
+func 80:B7B4 Event45_TakeFromColour | Command 45 colour value: takes from a palette colour.
+func 80:B7C2 Event46_SetColour     | Command 46 colour value: sets a palette colour.
+func 80:B7E6 Event47_TextBoxStyle  | Command 47 style: text box style (00 normal, 10 thought box), $1255.
+func 80:B7EF Event48_TextBoxPosition | Command 48 column row: the next text box goes there.
+func 80:B7FE Event9E_Narration     | Command 9E row: a narration box centred on its text at that row.
+func 80:B837 Event49_AutoPage      | Command 49 frames: text pages turn by themselves after that many frames (0: wait for a button).
+func 80:B840 Event4A_TextBackground | Command 4A 0 / 1: text background normal or see-through ($09AD).
+func 80:B849 Event4B_SetMapMusic   | Command 4B song: the map's music (nothing when it already plays).
+func 80:B871 Event70_FadeMusic     | Command 70: fades the music out over 60 frames.
+func 80:B887 Event6F_PlaySongNow   | Command 6F song: plays the song now (ChangeSong).
+func 80:B89D Event71_WaitForMusicFade | Command 71: waits for the music fade (60 frames).
+func 80:B8B1 Event72_StopMusic     | Command 72: stops the music.
+func 80:B8BD Event4C_PlaySound     | Command 4C sound: plays a sound effect ($84:8775).
+func 80:B8C7 Event4D_WaitForMusicCue | Command 4D cue: waits until the song's cue counter reaches it.
+func 80:B8DC Event4E_WaitForSound  | Command 4E: waits while a sound effect plays (driver status bit 1).
+func 80:B8ED Event4F_Nothing       | Command 4F: skips a byte.
+func 80:B8F3 Event50_VoiceOff      | Command 50: the text has no voice.
+func 80:B8F9 Event51_SpeakerVoice  | Command 51: the text voice is the speaker's.
+func 80:B900 Event52_VoiceSound    | Command 52 sound: the text voice is that sound.
+func 80:B909 Event53_StoryBattle   | Command 53 battle: starts a story battle ($83:845B); story flag FF is on afterwards when the party did not win.
+func 80:B92C Event54_OpenDoor      | Command 54 door: opens the door ($83:F559).
+func 80:B93D Event55_CloseDoor     | Command 55 door: closes the door ($83:F559).
+func 80:B94E Event56_StopScreenEffects | Command 56: stops all screen effects.
+func 80:B955 EventC5_KeepColour    | Command C5: the colour effect stops where it is ($1261 bit 7, $1262 bit 0).
+func 80:B962 Event8A_StopQuake     | Command 8A: the screen stops shaking.
+func 80:B98F Event57_WaitForScreenEffects | Command 57: waits until every screen effect stops.
+func 80:B99D Event76_WaitForFade   | Command 76: waits until the fade is done.
+func 80:B9B2 Event58_FadeOut       | Command 58 step/frames: fades the screen out.
+func 80:B9DA Event59_FadeIn        | Command 59 step/frames: fades the screen in.
+func 80:BA00 EventA4_QuickFadeIn   | Command A4: fades in quickly.
+func 80:BA1C Event5A_Quake         | Command 5A x strength rate: the screen shakes until stopped.
+func 80:BA39 Event5B_SpecialScene  | Command 5B what (value): a special scene through Table_80_BA55 (screen bars, title, cinema bars, reset, ferry, staff roll, hang, fonts).
+func 80:BB70 Special00_ScreenBars  | Command 5B 00 y: darkens (y > 0) or brightens the screen bars.
+func 80:BB94 Special01_TitleSequence | Command 5B 01 y: plays the title sequence ($86:8000; y = 2: $86:92DF) and comes back to the map.
+func 80:BAF1 Special02_CinemaBars  | Command 5B 02 y: cinema bars on (HDMA channels 4 and 5 from $80:BB5F / $80:BB67) or off.
+func 80:BAED Special03_Reset       | Command 5B 03: resets the game.
+func 80:BA69 Special04_FerryCrossing | Command 5B 04 route: the ferry crossing scene ($86:AEB1), then loads the map again.
+func 80:BAC9 Special05_StaffRoll   | Command 5B 05: the staff roll ($8E:B2EE), then the map again.
+func 80:BA67 Special06_Hang        | Command 5B 06: loops forever.
+func 80:BA97 Special07_BigFont     | Command 5B 07: loads the big font ($84:82E7).
+func 80:BAA2 Special08_NormalFont  | Command 5B 08: loads the normal font again ($83:B007) with the screen off.
+func 80:BBEB Event5E_LeaveThroughExit | Command 5E exit: the party leaves as if it walked through the exit.
+func 80:BC05 Event5F_Nothing       | Command 5F: skips a byte.
+func 80:BC0B Event60_WriteScreenRegister | Command 60 register value: writes $21xx.
+func 80:BC19 Event61_MaximSpeaks   | Command 61: Maxim (actor 0) speaks.
+func 80:BC1D Event62_SelanSpeaks   | Command 62: Selan (actor 1) speaks.
+func 80:BC21 Event63_GuySpeaks     | Command 63: Guy (actor 2) speaks.
+func 80:BC25 Event64_ArteaSpeaks   | Command 64: Artea (actor 3) speaks.
+func 80:BC29 Event65_DekarSpeaks   | Command 65: Dekar (actor 5) speaks.
+func 80:BC2D Event66_TiaSpeaks     | Command 66: Tia (actor 4) speaks.
+func 80:BC31 Event67_LexisSpeaks   | Command 67: Lexis (actor 6) speaks.
+func 80:BC3D Event68_AddMapCharacter | Command 68 id sprite: makes a map character (start-up script).
+func 80:BC55 Event7B_AddFieldMonster | Command 7B id sprite: makes a field monster with its formation (start-up script).
+func 80:BCBC Event69_MapSettings   | Command 69 bits: the map settings ($09A7); bit 02 also loads the special palette ($A6:BFE0).
+func 80:BD6C Event7C_ShipAbilities | Command 7C n: what the ship can do ($09DF): 0 sail, 1 dive, 2 fly (guess).
+func 80:BD75 Event7D_ShipParkingPoint | Command 7D point: the world map point the ship is parked at ($09EE).
+func 80:BD7E Event7E_ShipState     | Command 7E state: where the ship is ($09E0).
+func 80:BD87 Event7F_PartyAboardShip | Command 7F 0 / FF: the party on foot or aboard ($09E1).
+func 80:BD90 Event80_ShipFacing    | Command 80 facing: the ship's facing ($09E2) (guess).
+func 80:BD99 Event81_CapsuleJoins  | Command 81 monster: the capsule monster joins (screen 3).
+func 80:BDBB Event82_RefreshAroundHero | Command 82: $80:F821, then the map is drawn again; refreshes around the hero (guess).
+func 80:BDCA Event83_SendElsewhere | Command 83 exit: before the map loads, the party goes through that exit instead.
+func 80:BDF1 Event85_ChooseArrival | Command 85 point facing: before the map loads, the party arrives at that point facing that way.
+func 80:9DB0 Event84_Yield         | Command 84 (stop here forever) and the exit of every waiting command: returns for this frame without saving the script pointer, so the same command runs again.
+func 80:A29C Event6A_IfFlagOffGoTo | Command 6A flag step: goes to the step when the story flag is off.
+func 80:A2B0 Event6B_UpdateWalkability | Command 6B: updates where the party can walk after map tiles changed ($80:ED9C).
+
+# ---- RAM: system, NMI, joypads
+ram 7E:0030 1 SubScreen           | Which screen $82:E746 shows: 2 church, 3 a capsule monster joins, 4 item received, 7 the report screen (command 18 puts the shop number here for $82:D69C).
+ram 7E:0031 1 SubScreenArg        | The value for that screen (the capsule monster of command 81).
+ram 7E:0040 2 FrameCounter        | Counts frames (the NMI adds 1).
+ram 7E:0042 2 WaitTimer           | Also counted by the NMI; commands 37 / 38 set it to 0 and wait on it.
+ram 7E:0046 4 JoypadHeld          | Buttons held, joypad 1 and 2 (u16 each: $4218/$4219 bits).
+ram 7E:004A 4 JoypadPressLatch    | Joypad 1 and 2: a bit is armed when its button is let go (and again by auto-repeat); a new press is held and armed, and the code that takes it clears the bit.
+ram 7E:004E 2 MathOperand         | Multiply16x8 / Divide16: the u16 multiplied or divided (Divide16 leaves the quotient here).
+ram 7E:0050 1 MathFactor          | Multiply16x8: the byte it multiplies by.
+ram 7E:0051 3 MathResult          | Multiply16x8: the 24-bit product; Divide16: the divisor (u16).
+ram 7E:005D 3 SourcePtr           | A 24-bit source pointer: the packed data Decompress reads, the menu text drawn, the data sent to the sound driver.
+ram 7E:0067 5 NmiHook             | JSL addr / RTS called by the NMI while the bank byte ($6A) is not 0.
+ram 7E:006C 5 NmiHook2            | A second JSL addr / RTS hook, called while $6F is not 0.
+ram 7E:0071 1 NmiVramUpdatesOn    | Not 0: the NMI writes the scroll registers and runs the queued DMAs (NmiVramUpdates).
+ram 7E:0072 1 OamUploadRequest    | Bits 6-7: the NMI sends the OAM buffer $0100 (bit 7 is cleared).
+ram 7E:0073 1 CgramUploadRequest  | Bits 6-7: the NMI sends the palette buffer $0320-$051F (bit 7 is cleared).
+ram 7E:0074 1 BgMapUploadRequest  | Bits C0 / 30 / 0C: upload the tilemap buffer $7E:2000 / $2800 / $3000 to VRAM $0000 / $0400 / $0800.
+ram 7E:0075 4 DmaQueue            | Four queued DMAs for the NMI: channel bits (bit 7 set, 6 clear: CGRAM), 0 = none.
+ram 7E:0079 8 DmaQueueAddress     | The VRAM (or CGRAM) address of each queued DMA.
+ram 7E:0081 1 HdmaChannels        | HDMA channels the NMI turns on (HDMAEN).
+ram 7E:00A7 2 ActorSlot           | The actor slot an actor command works on (FindActor); also the next free slot while the start-up script makes characters (from 8).
+ram 7E:00A9 2 ActorSlot2          | ActorSlot * 2 (index of the word arrays).
+ram 7E:00AB 2 ActorSlot3          | ActorSlot * 3 (index of the 24-bit pointer arrays).
+ram 7E:0520 1 SoftResetEnabled    | Not 0: L + R + Select + Start resets the game (checked by the NMI).
+ram 7E:0521 55 RandomTable        | The random number generator's 55 bytes (SeedRandom puts the seed in the last one, $0557).
+ram 7E:0558 1 RandomSeed          | Seed for SeedRandom (a save slot's key byte, $96 at start-up).
+ram 7E:0559 1 RandomIndex         | The last random table byte used (0-36).
+ram 7E:055A 4 JoypadRepeatTimer   | Frames until the next auto-repeat, joypad 1 and 2 (16 first, then 4).
+ram 7E:055E 4 JoypadLastHeld      | Buttons held the frame before, joypad 1 and 2.
+ram 7E:0562 2 JoypadRepeatMask    | Buttons that auto-repeat ($0F30: the d-pad, L and R).
+ram 7E:057C 1 DebugMode           | Debug mode flag; only ever cleared (docs/lufia2/settings.md).
+ram 7E:0581 1 FadeControl         | Screen fade: bit 7 fading, bit 6 out (else in), bits 0-5 speed; 0 when done.
+ram 7E:0582 1 FadeStep            | The fade's step counter.
+ram 7E:0583 1 Brightness          | INIDISP shadow written by the NMI (80 = forced blank, 0F = full).
+ram 7E:0584 2 SharedSamplesEnd    | Sound RAM address after the shared samples (where a song's samples go).
+ram 7E:0586 2 SongSamplesEnd      | Sound RAM address after the current song's samples (driver command 12).
+ram 7E:0588 1 SharedSamplesReplaced | Not 0 when the last song's samples went over the shared ones (they are sent again before the next song).
+ram 7E:0594 16 BgScroll           | BG1-BG4 horizontal and vertical scroll (u16 each), written by the NMI.
+
+# ---- RAM: menu text
+ram 7E:0564 1 MenuTextAttribute   | Tile attribute byte of the menu letters (palette in bits 2-4).
+ram 7E:0565 1 MenuLineWidth       | Letters on a menu text line before it wraps.
+ram 7E:0566 1 MenuLettersLeft     | Letters left on the current line.
+ram 7E:0567 8 NumberDigits        | The digits of a number being drawn (characters).
+ram 7E:0570 3 NumberValue         | The number being drawn (24-bit).
+ram 7E:0573 2 MenuLineStart       | Tilemap address of the current menu text line.
+ram 7E:0575 2 MenuTextCursor      | Tilemap address of the next menu letter.
+ram 7E:0577 1 SavedMenuPalette    | The palette remembered by code 07.
+ram 7E:0578 1 MenuLiteralNext     | Not 0: the next byte is drawn as a letter (code 04).
+ram 7E:0579 2 MenuTextMark        | The position remembered by code 05.
+ram 7E:057B 1 MenuTextFormat      | Format byte of the code being run (number format, string kind, branch kind).
+
+# ---- RAM: maps, the party, the game
+ram 7E:05A8 1 CameraSpeed         | Pixels a frame the camera moves (0: at once).
+ram 7E:05AE 1 NextMap             | The map to change to (command 16).
+ram 7E:05B0 2 ArrivalPoint        | Where the party arrives: a preset point (16) or tile x, y (85).
+ram 7E:05B2 1 ArrivalFacing       | The arrival's facing (high nibble) and transition.
+ram 7E:05B3 1 MapLoadFlags        | Map change state: bit 0 a map change asked (16), bit 5 changed before loading (83), bit 4 tested by 68 / 7B.
+ram 7E:05B5 1 MapChangeFlags      | Bits 88: change map (16); bit 3: leave through an exit (5E); bit 6: a special scene ended the event.
+ram 7E:05B6 1 GameModeFlags       | Bit 0: in the Ancient Cave; bit 1: sounds off (AE).
+ram 7E:05B8 1 NextScene           | The scene (event block +4 list) to play on arrival.
+ram 7E:05BD 3 ReloadPlace         | Tile x, y and facing where the party appears when the map reloads (AC).
+ram 7E:05C0 1 EscapeMap           | The map the Escape spell leads to (A9).
+ram 7E:05C1 1 EscapePoint         | The preset point there (A9).
+ram 7E:05D2 40 ActorSprite        | Each actor's sprite.
+ram 7E:05FA 40 ActorId            | Each actor's id (0-6 heroes, 10-4F story characters, 50+ map characters).
+ram 7E:0622 40 ActorFlags         | Each actor's flags: 01 held by the event, 02 walks through things, 04 hidden, 08 walking a path, 80 an action runs.
+ram 7E:066A 40 ActorFrame         | Each actor's sprite frame.
+ram 7E:06BA 40 ActorTileX         | Each actor's tile x.
+ram 7E:06E2 40 ActorTileY         | Each actor's tile y.
+ram 7E:070A 40 ActorMoveMode      | Each actor's movement mode (command 32's values).
+ram 7E:0736 40 ActorFlags2        | More actor flags: 20 a beaten field monster, 80 blinking.
+ram 7E:077E 32 StoryFlags         | Story flags 00-FF, one bit each (flag n: byte n >> 3, bit n & 7).
+ram 7E:079E 32 EventCounters      | Event counters (commands 1D-1F, 12, 14); the game uses 01-0E.
+ram 7E:081E 64 StoryCharHidden    | Story characters 10-4F: bit 7 hidden.
+ram 7E:085E 64 StoryCharMap       | Story characters 10-4F: the map each stands on.
+ram 7E:089E 64 StoryCharStart     | Story characters 10-4F: the character start each uses there.
+ram 7E:0926 5 WalkingParty        | The heroes walking on the map, in order (FF = none).
+ram 7E:099B 1 EventState          | Bit 0 text mode, bit 1 waiting for a button, bit 3 the event ends after that button, bit 4 the hero's name, bit 5 a wait runs, bit 7 an event runs.
+ram 7E:099C 1 TextFlags           | Text box state: bit 0 open, bit 1 question cursor, bit 2 question asked, bit 3 pause, bit 4 a line to start, bit 6 a map script runs in one go, bit 7 sign message shown.
+ram 7E:099D 1 CurrentSong         | The map's song (FF = none).
+ram 7E:09A6 1 FollowerFlags       | Bit 0: the followers don't follow the leader's steps (A7).
+ram 7E:09A7 1 MapSettings         | Command 69's bits: 01 dungeon controls, 02 special palette, 08 no Escape, 10 no Warp, 20 can step down slopes, 40 no field tools, 80 no Reset spell.
+ram 7E:09AB 1 Speaker             | The actor the next text box goes over (FF none).
+ram 7E:09AC 1 TalkedTo            | The actor the player talked to (FF outside a talk).
+ram 7E:09AD 1 TextBackground      | Command 4A: 1 = no box behind the letters.
+ram 7E:09AF 2 Letter              | The letter being printed (0-3FF) or the dictionary word.
+ram 7E:09CD 2 GiveTakeItemCount   | How many items a give or take moves.
+ram 7E:09CF 2 GiveTakeItemId      | The item a give or take moves.
+ram 7E:09DF 1 ShipAbilities       | What the ship can do (7C): 0 sail, 1 dive, 2 fly (guess).
+ram 7E:09E0 1 ShipState           | Where the ship is: 00 sea, 01 under the sea, 02 air, FF none (7E).
+ram 7E:09E1 1 PartyAboardShip     | 0 on foot, FF aboard (7F).
+ram 7E:09E2 1 ShipFacing          | The ship's facing, set by command 80 (guess).
+ram 7E:09E6 2 EscapeWorldSpot     | The world map spot Escape leads to (A9 with a map below 2).
+ram 7E:09EE 1 ShipParkingPoint    | The world map point the ship is parked at (7D).
+ram 7E:0A80 8 PartyRecordPtrs     | The record address of each party member.
+ram 7E:0A8A 3 Gold                | The party's gold (u24, at most 9,999,999).
+ram 7E:0B4D 4 PlayTime            | Play time: hours, minutes, seconds, frames (the NMI counts; frames >= 80 stops it).
+ram 7E:0B52 1 MessageSpeed        | Frames between letters (CB).
+ram 7E:0B55 3 CasinoCoins         | Casino coins (91).
+ram 7E:0BAD 1330 HeroRecords      | The seven heroes' records, $BE bytes each (name first, +0E level, +11 HP, +13 MP, +96 spells).
+
+# ---- RAM: event and text state
+ram 7E:1252 3 WordReturn          | Where the text goes on after a dictionary word or the hero's name (bank 0 = not in a word).
+ram 7E:1255 1 TextBoxStyle        | Command 47: 00 normal, 10 thought box.
+ram 7E:1257 3 RepeatReturn        | Where the text goes on after a repeat (0A); bank 0 = none.
+ram 7E:125A 1 RepeatLetters       | Letters of the repeat still to print.
+ram 7E:125D 2 TextBoxPosition     | Fixed tilemap place of the next text box (48, 9E); 0 = over the speaker.
+ram 7E:125F 1 WaitSeconds         | Seconds counted by command 38.
+ram 7E:1260 1 TextVoice           | The sound played every other letter (0 = none).
+ram 7E:1261 1 ScreenEffects       | Running screen effects: 01 fade out, 02 fade in, 04 quake, 08 camera moving, 10 / 20 screen bars, 80 colour effect.
+ram 7E:1265 1 AutoPageFrames      | Command 49: frames before a text page turns by itself (0 = wait for a button).
+ram 7E:1266 1 AutoPageTimer       | Frames the page has been shown.
+ram 7E:1267 1 ConditionResult     | Command 14's result so far (FF true).
+ram 7E:1269 1 WaitingWalker       | The actor slot whose path walk the event waits for (FF none).
+ram 7E:126A 1 QuestionCursor      | The answer the question cursor is on.
+ram 7E:126B 3 QuestionAnswers     | Where the question's answer steps are.
+ram 7E:126E 1 QuestionAnswerCount | How many answers the question has.
+ram 7E:126F 1 PauseTimer          | Frames counted by a text pause (04 80+).
+ram 7E:1559 32 RingIds            | The id of each sprite ring (8D family).
+ram 7E:120A 4 PointTile           | A preset point's tile x, y (and a second x, y: an area's corner) found by the map info lookups.
+ram 7E:1216 8 PointPixels         | The PointTile values in pixels.
+ram 7F:D08B 2 CameraTargetX       | The pixel x the camera moves to.
+ram 7F:D08D 2 CameraTargetY       | The pixel y the camera moves to.
+ram 7F:D0FC 1 MusicFadeTimer      | Frames left of the music fade (70 / 71).
+ram 7F:D0FD 1 MapSong             | A copy of the map's song.
+ram 7F:D0FF 1 LetterDelay         | Frames until the next letter is printed.
+ram 7F:DDAE 80 ActorPixelX        | Each actor's pixel x (u16).
+ram 7F:DE3E 80 ActorPixelY        | Each actor's pixel y (u16).
+ram 7F:E316 40 ActorDrawing       | Each actor's drawing byte (80 = not drawn).
+ram 7F:F8A0 1 BattleBackground    | The background of the next battle (74).
+ram 7F:F8A4 1 StoryBattleId       | The story battle command 53 starts.
+
+# ---- tables
+table 80:8E7C MenuTextCodes       | Menu text codes 00-0F (bytes below $10 in a menu string).
+table 80:8A81 MenuStringKinds     | Menu text code 02: how the inner string is found (00-03 pointers, 04-09 hero / item / spell names, 0A-0B party member name).
+table 80:8C11 MenuBranchKinds     | Menu text code 03: equal (or bits set), at least, less, always.
+table 80:BA55 SpecialScenes       | Command 5B's scenes 00-08 (screen bars, title, cinema bars, reset, ferry, staff roll, hang, big font, normal font).
+
+# ---- notes: places where the C# is known to be wrong
+note 80:B579 | JSR ($B5BC,X): X = direction * 2 (1 up, 2 down, 3 left, 4 right) picks the handler that adds or takes $63 from $58 / $5A; back here the camera target is set.
+note 80:BA42 | JSR ($BA55,X) runs the scene; back here, when $05B5 bit 6 is set the event ends ($099B = 0), else the next command.
+
+# ---- licence screen NMI hook ($50 = step, $4E = frame counter while it runs)
+table 80:92B7 LicenceScreenSteps  | The licence screen's steps 0-9: tiles, first screen, fade in, hold, fade out, second screen, fade in, hold, fade out, stop.
+func 80:92A4 LicenceScreenNmi     | NMI hook of the licence screen: runs step $50 of LicenceScreenSteps each frame.
+func 80:92CB LicenceUploadTiles   | Licence step 0: DMAs the screen's tiles (offset and size from the file header at $7E:4004 / $4006) to VRAM $4000.
+func 80:92FE LicenceShowFirstMap  | Licence step 1: DMAs the first tilemap ($7E:2000, $700 bytes) to VRAM $0000.
+func 80:930C LicenceFadeIn        | Licence steps 2 and 6: brightens the screen over 32 frames (brightness = counter / 2).
+func 80:9320 LicenceHold          | Licence steps 3 and 7: holds the screen 120 frames.
+func 80:9330 LicenceFadeOut       | Licence steps 4 and 8: darkens the screen over 32 frames, then forced blank.
+func 80:9346 LicenceShowSecondMap | Licence step 5: DMAs the second tilemap ($7E:2800, $700 bytes) to VRAM $0000.
+func 80:9354 LicenceScreenDone    | Licence step 9: turns the NMI hook off ($6A = 0), which lets the start-up go on.
+func 80:9357 DmaLicenceMap        | DMA channel 6: $700 bytes from $7E:X to VRAM address Y.
+
+# ---- camera command 41, "move n tiles" (A = $63 = tiles * 16 pixels)
+func 80:B5C6 CameraMoveUp         | Command 41 direction 1: the camera target's y ($5A) minus the distance $63.
+func 80:B5CE CameraMoveDown       | Command 41 direction 2: the camera target's y ($5A) plus the distance $63.
+func 80:B5D6 CameraMoveLeft       | Command 41 direction 3: the camera target's x ($58) minus the distance $63.
+func 80:B5DE CameraMoveRight      | Command 41 direction 4: the camera target's x ($58) plus the distance $63.

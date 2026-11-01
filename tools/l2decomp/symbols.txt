@@ -1,0 +1,62 @@
+# Names for the Lufia II (US) decompilation. See syms.py for the format.
+# func <bank:addr> <Name> | summary         ram <bank:addr> <size> <Name> | summary
+# table <bank:addr> <Name> | summary         note <bank:addr> | comment
+
+# ---- start-up and interrupts
+func 80:8000 Reset              | Power-on / reset: native mode, hardware cleared, then the game's main loop.
+func 80:862D Nmi                | Vertical blank (NMI): DMA queues, PPU registers, joypads.
+func 80:86C0 Irq                | IRQ handler.
+
+# ---- packed files, maps
+func 80:8E9D Decompress         | Unpack a packed file: file index in $54 (table $A7:8000), destination pointer in $60-$62.
+func 80:EAE7 LoadMap            | Map loader: A = map. Clears $7F:D000.., unpacks file $3F + map to $7F:0000, reads the block set and animation lists.
+func 80:EF8E LoadMapGraphics    | Graphics of map $05AC: tile sets, animations, palettes, extra files.
+func 83:AD23 EnterMap           | Map entry sequence: event block, map info, map characters, start-up script, map load.
+func 83:B53B LoadCurrentMap     | Loads map $05AC (LoadMap) and copies its rows.
+func 83:B5AD ReadEventBlockPointer | Map header +0: event block pointer to $099E/$09A0 (lo16 + $8000, bank $87 + hi).
+func 83:B5D3 ReadMapInfo        | Map info reader ($CF:FCBC pointers).
+func 83:A82E PlaceMapCharacters | Places the map's characters (sprite table $CF:F000).
+func 80:BEAF RunStartupScript   | Runs the map's start-up script: map header +3 to $09B7/$09B9.
+
+# ---- event / text script
+func 80:9D00 EventScriptLoop    | Event and text script loop: byte < $10 command, $10-$7F character, $80+ dictionary word.
+func 80:9D32 EventCommandDispatch | Reads the command byte and jumps through EventCommands.
+func 80:C0B7 ReadScriptByte     | Next byte of the running script (LDA $0000,Y / INY with DB = script bank).
+func 80:C652 PrintWithDictionary | Text output that expands dictionary words ($8E:EA00).
+func 80:C9C0 CopyMapName        | Copies a map name from $87:8000+ to RAM at Y, expanding 0A back-references.
+table 80:CA14 EventCommands     | Event commands 00-CC (docs/lufia2/events.md).
+
+# ---- puzzle scripts (third interpreter)
+table 80:E59E PuzzleCalls       | Puzzle commands called with JSR (slot n = command n - 3; docs/lufia2/scripts3.md).
+table 80:E5A4 PuzzleCommands    | Puzzle commands (docs/lufia2/scripts3.md).
+
+# ---- battle
+table 85:B483 BattleOps         | Battle script opcodes 01-5C (docs/lufia2/battlescript.md).
+func 85:9532 EnemyAttackName    | Enemy attack name lookup ($85:F2D7).
+
+# ---- tables and helpers
+func 82:8000 Multiply16         | 16 x 16 multiply: $1570 x $1572 -> $1574/$1576 (shift and add).
+func 82:8028 InlineJumpTable    | JSR here is followed by a table of handlers: jumps to handler A (the handler returns to the caller's caller).
+func 81:8351 SetUpEncounters    | Random encounter set-up (per-map lists $97:B9AC).
+func 81:F291 ItemRecord         | Item table lookup ($96:CF69).
+func 81:F2A9 ItemName           | Item name lookup ($9E:C7E8).
+func 81:F446 SpellRecord        | Spell table lookup ($95:FA5B).
+func 81:F45E IpAttackRecord     | IP attack lookup ($84:8F10).
+func 81:FB1A MonsterRecord      | Monster record reader ($96:85C0).
+func 81:FB8E MonsterSpriteSize  | A = monster sprite (1-based) -> tiles across / down ($97:CA64).
+func 81:FBC6 MonsterTableLookup | Monster table lookup helper ($96:85C0).
+func 82:E729 ShopMenu           | Shop menu (pointer $97:EE9F).
+
+# ---- RAM
+ram 7E:0054 1 FileIndex         | Packed file to unpack (Decompress).
+ram 7E:0060 3 UnpackTo          | Where Decompress writes (24-bit pointer).
+ram 7E:05AC 2 MapId             | The map being played.
+ram 7E:0692 1 LeaderFacing      | Which way the party leader faces.
+ram 7E:099E 3 EventBlockPtr     | The map's event block (24-bit pointer).
+ram 7E:09B7 3 ScriptPtr         | The running event script (24-bit pointer; the start-up script is run through it too).
+ram 7E:1570 2 MulA              | Multiply16 input.
+ram 7E:1572 2 MulB              | Multiply16 input.
+ram 7E:1574 4 MulResult         | Multiply16 result.
+ram 7F:D100 4 PuzzleSwitches    | Puzzle switches 00-1F (saved).
+ram 7F:D114 32 PuzzleVariables  | Puzzle variables A0-BF.
+ram 7F:D095 4 DoorStates        | Door open bits.

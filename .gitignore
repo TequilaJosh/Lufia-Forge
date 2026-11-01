@@ -58,3 +58,7 @@ BizHawk/Lua/LufiaForge_SpellOrder.log
 *.lfproj
 *.lfproj.bak
 *.lfproj.tmp
+
+# Decompiled game code (copyrighted): never commit
+Decomp/
+__pycache__/
