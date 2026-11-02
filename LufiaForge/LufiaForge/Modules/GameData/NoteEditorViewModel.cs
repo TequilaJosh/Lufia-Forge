@@ -42,16 +42,42 @@ public partial class ChannelTab : ObservableObject
 /// <summary>A row of the channel-events list.</summary>
 public sealed record OtherRow(SongCodec.Event Event, string When, string What);
 
+/// <summary>What the note editor needs from the page it sits on: the game's song format, playing, writing.</summary>
+public interface ISongEditorHost
+{
+    string Status { get; set; }
+    /// <summary>The song data (2-byte length, then the sound RAM image) as events.</summary>
+    SongCodec.Song DecodeSong(byte[] songData);
+    /// <summary>Song data for the selected song from the edited events.</summary>
+    byte[] BuildSongData(SongCodec.Song song, out List<string> warnings);
+    /// <summary>The most bytes a song may have.</summary>
+    int MaxSongSize { get; }
+    /// <summary>Added to a note number for its name: Lufia II plays note n as MIDI note n + 12.</summary>
+    int NoteNameOffset { get; }
+    /// <summary>The instrument a channel that had nothing starts with.</summary>
+    int DefaultInstrument();
+    /// <summary>A note for the status when an instrument is added, or null.</summary>
+    string? InstrumentNote(int instrument);
+    /// <summary>A command's description in the channel-events list, or null for the shared wording.</summary>
+    string? DescribeRaw(byte[] raw);
+    void PlayEdited(int fromTick);
+    void PreviewNote(int channel, int pitch, int tick);
+    void StopEdited();
+    void ApplyNotes();
+    void ReloadNotes();
+}
+
 /// <summary>
 /// The Music tab's note editor: the song decoded into notes per channel (<see cref="SongCodec"/>), edited on a piano
-/// roll (<see cref="Views.PianoRoll"/>), encoded again when written to the ROM.
+/// roll (<see cref="Views.PianoRoll"/>), encoded again when written to the ROM. Lufia 1's and Lufia II's Music pages
+/// both use it (<see cref="ISongEditorHost"/>).
 /// </summary>
 public partial class NoteEditorViewModel : ObservableObject
 {
     public const int TicksPerBeat = SongCodec.TicksPerQuarter, TicksPerBar = TicksPerBeat * 4;
 
-    private readonly MusicEditorViewModel _owner;
-    public NoteEditorViewModel(MusicEditorViewModel owner)
+    private readonly ISongEditorHost _owner;
+    public NoteEditorViewModel(ISongEditorHost owner)
     {
         _owner = owner;
         _sizeTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
@@ -101,7 +127,7 @@ public partial class NoteEditorViewModel : ObservableObject
 
     public void Load(byte[] songData)
     {
-        var song = SongCodec.Decode(songData);
+        var song = _owner.DecodeSong(songData);
         Loaded = false;
         Tempo = song.Tempo;
         for (int c = 0; c < 8; c++) Channels[c] = FromEvents(song.Channels[c], song.Drum[c]);
@@ -256,7 +282,7 @@ public partial class NoteEditorViewModel : ObservableObject
         try
         {
             var data = _owner.BuildSongData(ToSong(), out _);
-            SizeText = $"{data.Length - 2:N0} of {SongCodec.MaxSize:N0} bytes";
+            SizeText = $"{data.Length - 2:N0} of {_owner.MaxSongSize:N0} bytes";
         }
         catch (Exception ex) { SizeText = "Too big: " + ex.Message; }
     }
@@ -316,7 +342,7 @@ public partial class NoteEditorViewModel : ObservableObject
     /// <summary>A channel that had nothing gets an instrument, volume and pan, and the other channels' loop.</summary>
     private void StartChannel(EditChannel ch)
     {
-        int ins = _owner.LoadedInstruments().FirstOrDefault(0x01);
+        int ins = _owner.DefaultInstrument();
         ch.Others.Add(new SongCodec.Event(0, SongCodec.Kind.Program, ins));
         ch.Others.Add(new SongCodec.Event(0, SongCodec.Kind.Volume, 100));
         ch.Others.Add(new SongCodec.Event(0, SongCodec.Kind.Pan, 64));
@@ -424,7 +450,7 @@ public partial class NoteEditorViewModel : ObservableObject
         else
         {
             string Same(Func<NoteItem, string> f) { var v = Selected.Select(f).Distinct().ToList(); return v.Count == 1 ? v[0] : ""; }
-            SelPitch = Same(n => NoteName(n.Pitch));
+            SelPitch = Same(n => Name(n.Pitch));
             SelStart = Same(n => TimeText(n.Tick));
             SelLength = Same(n => n.Length.ToString(CultureInfo.InvariantCulture));
             SelVelocity = Same(n => n.Velocity.ToString(CultureInfo.InvariantCulture));
@@ -435,7 +461,7 @@ public partial class NoteEditorViewModel : ObservableObject
 
     partial void OnSelPitchChanged(string value)
     {
-        if (_fillingFields || Selected.Count == 0 || ParseNote(value) is not int p) return;
+        if (_fillingFields || Selected.Count == 0 || Parse(value) is not int p) return;
         Checkpoint(); foreach (var n in Selected) n.Pitch = p; Touch();
     }
     partial void OnSelStartChanged(string value)
@@ -472,7 +498,7 @@ public partial class NoteEditorViewModel : ObservableObject
         var keep = SelectedOther?.Event;
         Others.Clear();
         foreach (var e in Current.Others.OrderBy(e => e.Tick))
-            Others.Add(new OtherRow(e, TimeText(e.Tick), Describe(e)));
+            Others.Add(new OtherRow(e, TimeText(e.Tick), e.Kind == SongCodec.Kind.Raw && _owner.DescribeRaw(e.Raw!) is { } d ? d : Describe(e)));
         SelectedOther = Others.FirstOrDefault(r => ReferenceEquals(r.Event, keep));
     }
 
@@ -527,8 +553,7 @@ public partial class NoteEditorViewModel : ObservableObject
         Current.Others.Add(e);
         Touch();
         SelectedOther = Others.FirstOrDefault(r => ReferenceEquals(r.Event, e));
-        if (e.Kind == SongCodec.Kind.Program && e.A is >= 0x10 and < 0x30 && !_owner.LoadedInstruments().Contains(e.A))
-            _owner.Status = $"Instrument {e.A:X2} is added to the song's load list when you write the notes to the ROM.";
+        if (e.Kind == SongCodec.Kind.Program && _owner.InstrumentNote(e.A) is { } note) _owner.Status = note;
     }
 
     [RelayCommand]
@@ -617,7 +642,7 @@ public partial class NoteEditorViewModel : ObservableObject
 
     [RelayCommand] private void PlayFromStart() => _owner.PlayEdited(0);
     [RelayCommand] private void PlayFromCursor() => _owner.PlayEdited(CursorTick);
-    [RelayCommand] private void StopPlaying() => _owner.StopCommand.Execute(null);
+    [RelayCommand] private void StopPlaying() => _owner.StopEdited();
     [RelayCommand] private void WriteToRom() => _owner.ApplyNotes();
     [RelayCommand] private void RevertNotes() => _owner.ReloadNotes();
 
@@ -630,6 +655,10 @@ public partial class NoteEditorViewModel : ObservableObject
 
     private static readonly string[] Names = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
     public static string NoteName(int n) => $"{Names[(n % 12 + 12) % 12]}{n / 12 - 1}";
+    /// <summary>The name of the note the game plays for note number <paramref name="n"/> (<see cref="ISongEditorHost.NoteNameOffset"/>).</summary>
+    public string Name(int n) => NoteName(n + _owner.NoteNameOffset);
+    /// <summary>A typed note name (or number) as the game's note number.</summary>
+    public int? Parse(string s) => ParseNote(s) is int n && (s.Trim().All(char.IsDigit) ? n : n - _owner.NoteNameOffset) is int g && g is >= 0 and <= 127 ? g : null;
     public static int? ParseNote(string s)
     {
         s = s.Trim().ToUpperInvariant();

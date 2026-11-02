@@ -220,7 +220,7 @@ public static class L2Songs
     {
         var own = SampleList(file).TakeWhile(x => x < 0x80).ToList();
         int Program(int slot) => GmProgram(slot < 0x20 ? slot : slot - 0x20 < own.Count ? own[slot - 0x20] : -1);
-        return SongCodec.ToMidi(Decode(file), Name(file), MidiTranspose, Program);
+        return SongCodec.ToMidi(Decode(file), Name(file), MidiTranspose, Program, fullLevel: true);
     }
 
     // ── encode ──
@@ -449,10 +449,21 @@ public static class L2Songs
     {
         var song = SongCodec.FromMidi(midi, out warnings, MidiTranspose);
         if (!song.Channels.Any(c => c.Any(e => e.Kind == SongCodec.Kind.Note))) throw new System.IO.InvalidDataException("the MIDI has no notes");
+        if (!HasTempo(midi)) song.Tempo = current.Length > 5 ? current[2 + 3] : song.Tempo;
+        return Build(song, current, warnings);
+    }
+
+    /// <summary>
+    /// The song file for <paramref name="song"/> in the place of <paramref name="current"/> (MIDI import, the note
+    /// editor): keeps its header (name, sample list, +18, +19) and channel voices with the song's tempo; leaves out
+    /// commands that aren't Lufia II's, gives a channel that never picks a sample the one it started with, adds drum
+    /// samples a song with its own samples needs, and notes in <paramref name="warnings"/> what may not sound as meant.
+    /// </summary>
+    public static byte[] Build(SongCodec.Song song, byte[] current, List<string> warnings, bool checkSize = true)
+    {
         var header = new byte[HeaderSize];
         Array.Fill(header, (byte)0xFF);
         Array.Copy(current, 2, header, 0, Math.Min(HeaderSize, current.Length - 2));
-        if (!HasTempo(midi)) song.Tempo = header[3];
 
         // commands from a Lufia 1 export (F6 with 4 bytes, ...) mean something else here
         int dropped = 0;
@@ -507,7 +518,7 @@ public static class L2Songs
         if (empty.Count > 0)
             warnings.Add($"Sample slots {string.Join(" ", empty.Select(a => a.ToString("X2")))} aren't loaded for this song (shared 00-1F, then its own from 20: {own} of them); those notes play with whatever is there.");
 
-        return Encode(song, header);
+        return Encode(song, header, checkSize);
     }
 
     /// <summary>

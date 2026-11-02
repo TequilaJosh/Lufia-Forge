@@ -1,6 +1,7 @@
 <UserControl x:Class="LufiaForge.Modules.Lufia2.L2MusicView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:gv="clr-namespace:LufiaForge.Modules.GameData.Views"
              xmlns:common="clr-namespace:LufiaForge.Modules.Common">
     <UserControl.Resources>
         <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
@@ -16,28 +17,49 @@
         </common:PopOutHost>
         <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch"/>
         <common:PopOutHost Grid.Column="2" Title="Song" Key="l2music.detail" ButtonMargin="0,2,22,0">
-        <ScrollViewer VerticalScrollBarVisibility="Auto">
-            <StackPanel Margin="4,12,12,0">
-                <Border Style="{StaticResource GdCard}" HorizontalAlignment="Left" MaxWidth="680">
-                    <StackPanel>
-                        <TextBlock Text="LISTEN" Style="{StaticResource GdSection}"/>
-                        <StackPanel Orientation="Horizontal">
-                            <Button Content="Play" Style="{StaticResource LufiaButtonGold}" Command="{Binding PlayCommand}" Margin="0,0,8,0"/>
-                            <Button Content="Stop" Style="{StaticResource LufiaButton}" Command="{Binding StopCommand}" Margin="0,0,8,0"/>
-                            <Button Content="Export MIDI..." Style="{StaticResource LufiaButton}" Command="{Binding ExportMidiCommand}" Margin="0,0,8,0"/>
-                            <Button Content="Import MIDI..." Style="{StaticResource LufiaButton}" Command="{Binding ImportMidiCommand}"/>
-                        </StackPanel>
-                        <TextBlock Text="{Binding Status}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,8,0,0"/>
+        <TabControl Margin="0,8,8,0" Style="{StaticResource LufiaTabControl}">
+            <TabItem Header="Song" Style="{StaticResource LufiaTabItem}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="4,12,12,0">
+                        <Border Style="{StaticResource GdCard}" HorizontalAlignment="Left" MaxWidth="680">
+                            <StackPanel>
+                                <TextBlock Text="LISTEN" Style="{StaticResource GdSection}"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="▶ Play" Style="{StaticResource LufiaButtonGold}" Command="{Binding PlayCommand}" Margin="0,0,8,0"/>
+                                    <Button Content="■ Stop" Style="{StaticResource LufiaButton}" Command="{Binding StopCommand}" Margin="0,0,8,0"/>
+                                    <Button Content="Save as WAV…" Style="{StaticResource LufiaButton}" Command="{Binding SaveWavCommand}"
+                                            ToolTip="90 seconds of the song as the game plays it (its own sound driver on an emulated sound chip)"/>
+                                </StackPanel>
+                                <TextBlock Text="{Binding Status}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,8,0,0"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource GdCard}" HorizontalAlignment="Left" MaxWidth="680">
+                            <StackPanel>
+                                <TextBlock Text="MIDI" Style="{StaticResource GdSection}"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="Export MIDI…" Style="{StaticResource LufiaButton}" Command="{Binding ExportMidiCommand}" Margin="0,0,8,0"/>
+                                    <Button Content="Import MIDI…" Style="{StaticResource LufiaButtonGold}" Command="{Binding ImportMidiCommand}"/>
+                                </StackPanel>
+                                <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,8,0,0"
+                                           Text="A MIDI file can't hold the game's own instruments: each gets a General MIDI one that is near it, so a MIDI player gives an idea of the song. Save as WAV keeps the real sound. To change the notes in Lufia Forge, use the Notes tab."/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource GdCard}" HorizontalAlignment="Left" MaxWidth="680">
+                            <StackPanel>
+                                <TextBlock Text="SONG" Style="{StaticResource GdSection}"/>
+                                <TextBlock Text="{Binding Info}" Style="{StaticResource GdHint}" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
-                </Border>
-                <Border Style="{StaticResource GdCard}" HorizontalAlignment="Left" MaxWidth="680">
-                    <StackPanel>
-                        <TextBlock Text="SONG" Style="{StaticResource GdSection}"/>
-                        <TextBlock Text="{Binding Info}" Style="{StaticResource GdHint}" TextWrapping="Wrap"/>
-                    </StackPanel>
-                </Border>
-            </StackPanel>
-        </ScrollViewer>
+                </ScrollViewer>
+            </TabItem>
+            <TabItem Header="Notes" Style="{StaticResource LufiaTabItem}">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Bottom" Text="{Binding Status}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="4,4,4,2"/>
+                    <gv:NoteEditorPanel DataContext="{Binding Notes}" Margin="0,6,0,0"/>
+                </DockPanel>
+            </TabItem>
+        </TabControl>
         </common:PopOutHost>
     </Grid>
 </UserControl>
