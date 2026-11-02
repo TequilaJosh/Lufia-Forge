@@ -41,24 +41,32 @@ public partial class ItemEditorViewModel
     [RelayCommand]
     private void ApplyStatus()
     {
-        if (Ctx == null || SelectedIndex < 0) return;
+        if (TryApplyStatus() is string why) Status = why;
+    }
+
+    /// <summary>Writes the status effects shown; null, or why they can't be written.</summary>
+    private string? TryApplyStatus()
+    {
+        if (Ctx == null || SelectedIndex < 0) return null;
         var props = ItemTable.Properties(Ctx.Rom, SelectedIndex);
-        if (props == null) { Status = "This item has no property list (it's used, not equipped)."; return; }
-        if (StatusNow() == _loadedStatus) return;   // unchanged (writing the list again would reorder it)
+        if (props == null) return "This item has no property list (it's used, not equipped).";
+        if (StatusNow() == _loadedStatus) return null;   // unchanged (writing the list again would reorder it)
         int bits = InflictFlags.Where(f => f.IsSet).Sum(f => f.Bit);
-        if (bits != 0 && (InflictChance < 1 || InflictChance > 100)) { Status = "Chance on hit: 1-100%."; return; }
-        if (ResistAilment != 0 && (ResistPercent < 0 || ResistPercent > 1500)) { Status = "Resist: 0 (immune) to 1500%."; return; }
+        if (bits != 0 && (InflictChance < 1 || InflictChance > 100)) return "Chance on hit: 1-100%.";
+        if (ResistAilment != 0 && (ResistPercent < 0 || ResistPercent > 1500)) return "Resist: 0 (immune) to 1500%.";
         var list = props.Where(p => p.Id != ItemStatusPatch.OnHitProperty && p.Id != ItemStatusPatch.ResistProperty).ToList();
         if (bits != 0) list.Add((ItemStatusPatch.OnHitProperty, bits, Math.Clamp((int)Math.Round(InflictChance * 255 / 100.0), 1, 255)));
         if (ResistAilment != 0) list.Add((ItemStatusPatch.ResistProperty, ResistAilment, ResistPercent == 0 ? 0xFF : Math.Clamp(ResistPercent * 16 / 100, 1, 0xFE)));
         int id = SelectedIndex;
         bool needPatch = bits != 0 || ResistAilment != 0;
-        Commit($"Item {id:X2} status effects", () =>
-        {
-            if (needPatch) ItemStatusPatch.Apply(Ctx.Rom);
-            ItemTable.SetProperties(Ctx.Rom, id, list);
-        });
+        if (!Commit($"Item {id:X2} status effects", () =>
+            {
+                if (needPatch) ItemStatusPatch.Apply(Ctx.Rom);
+                ItemTable.SetProperties(Ctx.Rom, id, list);
+            }))
+            return Status;
         LoadSelected();
+        return null;
     }
 
     public override string? WritePendingEdits()
@@ -67,14 +75,15 @@ public partial class ItemEditorViewModel
         var status = StatusNow();
         var flags = InflictFlags.Select(f => f.IsSet).ToArray();
         string? error = base.WritePendingEdits();
+        if (error != null) return error;   // (nothing was reloaded: the status edits are still shown, and pending)
         if (status != _loadedStatus && Ctx != null)
         {
             // writing the record reloaded the panel: put the edits back and write them
             for (int i = 0; i < flags.Length; i++) InflictFlags[i].IsSet = flags[i];
             InflictChance = status.Chance; ResistAilment = status.Resist; ResistPercent = status.Percent;
-            ApplyStatus();
+            if (TryApplyStatus() is string why) { Status = why; Edited = true; return $"{PageName}: {why}"; }
             Edited = false;
         }
-        return error;
+        return null;
     }
 }

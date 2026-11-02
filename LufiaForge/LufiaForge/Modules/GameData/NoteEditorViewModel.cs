@@ -189,6 +189,9 @@ public partial class NoteEditorViewModel : ObservableObject
         return song;
     }
 
+    /// <summary>Notes <see cref="ToSong"/> leaves out: they start at or after their channel's loop end or song end.</summary>
+    public int NotesPastEnd() => Channels.Where(c => c.Used).Sum(c => c.Notes.Count(n => n.Tick >= (c.EndTick ?? c.LoopEnd ?? int.MaxValue)));
+
     /// <summary>
     /// The song from <paramref name="from"/> on (for playing from the cursor): what each channel had set by then
     /// (instrument, volume, pan, effects) moves to the start.
@@ -423,10 +426,11 @@ public partial class NoteEditorViewModel : ObservableObject
     {
         if (Selected.Count == 0 || Snap <= 1) return;
         Checkpoint();
+        int longest = 255 / Snap * Snap;   // (a note is at most 255 ticks: the longest length on the grid)
         foreach (var n in Selected)
         {
             n.Tick = (int)Math.Round(n.Tick / (double)Snap) * Snap;
-            n.Length = Math.Max(Snap, (int)Math.Round(n.Length / (double)Snap) * Snap);
+            n.Length = Math.Clamp((int)Math.Round(n.Length / (double)Snap) * Snap, Snap, longest);
         }
         Touch();
     }

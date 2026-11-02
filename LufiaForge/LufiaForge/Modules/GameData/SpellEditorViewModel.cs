@@ -191,10 +191,10 @@ public partial class SpellEditorViewModel : GameDataEditorBase
         if (Ctx == null || !IsEditable) return;
         var rom = Ctx.Rom;
         int o   = _recordOffset;
-        if (Core.DutchLetters.Unwritable(Ctx.Rom, Name) is string badName) { Status = "Name: " + badName + "."; return; }
+        if (Core.DutchLetters.Unwritable(Ctx.Rom, Name) is string badName) { Refuse("Name: " + badName + "."); return; }
         bool renamed = Name != Ctx.ReadName(o, GameDataOffsets.SpellNameLen);
 
-        Commit($"Spell {SelectedIndex:X2}", () =>
+        bool written = Commit($"Spell {SelectedIndex:X2}", () =>
         {
             if (renamed) Ctx.WriteName(o, GameDataOffsets.SpellNameLen, Name);
             rom.WriteByte(o + 8,  (byte)Usage);
@@ -223,6 +223,6 @@ public partial class SpellEditorViewModel : GameDataEditorBase
             }
         }, namesChanged: renamed);
 
-        if (!renamed) LoadSelected();
+        if (written && !renamed) LoadSelected();
     }
 }

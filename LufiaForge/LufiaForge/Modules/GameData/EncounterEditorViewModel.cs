@@ -188,6 +188,7 @@ public partial class EncounterEditorViewModel : GameDataEditorBase
 
     partial void OnSelectedIndexChanged(int value)
     {
+        if (Holding) return;   // (the group's edits couldn't be written: it stays picked, with them)
         _pending.Clear();
         LoadSelected();
         OnPropertyChanged(nameof(SelectedGroup));
@@ -426,23 +427,24 @@ public partial class EncounterEditorViewModel : GameDataEditorBase
         int n = _entryNumbers[SelectedIndex];
         if (IsGroup && ParseSubgroups(SubgroupsText) == null)
         {
-            Status = $"Subgroups: hex numbers 01-{Encounters.SubgroupCount(Ctx!.Rom):X2} separated by spaces.";
+            Refuse($"Subgroups: hex numbers 01-{Encounters.SubgroupCount(Ctx!.Rom):X2} separated by spaces.");
             return;
         }
         StashRows();
         foreach (var r in Rows)
             if (!Encounters.HasMonster(RowMonsters(r)))
-            { Status = $"{r.Title} has no monsters: the game would hang looking for one. Pick at least one."; return; }
+            { Refuse($"{r.Title} has no monsters: the game would hang looking for one. Pick at least one."); return; }
         var mapEdits = new List<(int Offset, int Group)>();
         foreach (var r in MapGroups)
         {
             if (!int.TryParse(r.Group, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int g) || g < 1 || g > Count)
-            { Status = $"{r.Map}: the group must be 01-{Count:X2}."; return; }
+            { Refuse($"{r.Map}: the group must be 01-{Count:X2}."); return; }
             mapEdits.Add((r.Offset, g));
         }
+        bool written;
         try
         {
-            Commit(IsGroup ? $"Encounter group {n:X2}" : $"Boss formation {n:X2}", () =>
+            written = Commit(IsGroup ? $"Encounter group {n:X2}" : $"Boss formation {n:X2}", () =>
             {
                 if (IsGroup)
                 {
@@ -458,7 +460,8 @@ public partial class EncounterEditorViewModel : GameDataEditorBase
                 foreach (var (o, g) in mapEdits) rom.WriteByte(o, (byte)g);
             });
         }
-        catch (InvalidOperationException ex) { Status = ex.Message; return; }
+        catch (InvalidOperationException ex) { Refuse(ex.Message); return; }
+        if (!written) return;   // (the edits stay, with the error)
         int keep = SelectedIndex;
         _pending.Clear();
         BuildEntries();

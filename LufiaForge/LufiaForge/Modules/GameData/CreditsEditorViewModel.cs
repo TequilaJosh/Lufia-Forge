@@ -28,15 +28,24 @@ public partial class CreditsEditorViewModel : GameDataEditorBase
     [ObservableProperty] private string _warning = "";
     [ObservableProperty] private bool _busy;
 
-    protected override void OnRomLoaded() => _ = Reload(null);
+    // (after Undo the card shown stays shown)
+    protected override void OnRomLoaded() => _ = Reload(Selected?.Card);
 
+    /// <summary>Finds the cards again (in the background); then the card picked by then is shown, else
+    /// <paramref name="keep"/>.</summary>
     private async Task Reload(CreditsRoll.Card? keep)
     {
         if (Ctx == null) return;
         var rom = Ctx.Rom;
         Busy = true;
+        string status = Status;
         Status = "Finding the credits...";
         var (cards, names) = await Task.Run(() => (CreditsRoll.Find(rom), MapCatalog.ScanNamed(rom).ToDictionary(m => m.MapId, m => m.Label)));
+        if (!ReferenceEquals(rom, Ctx?.Rom)) return;   // (another ROM meanwhile: its own reload fills the list)
+        // a card typed in meanwhile goes in first (refilling the list would drop the typing); when it can't be
+        // written the list stays as it is
+        if (HasPendingEdits && WritePendingEdits() != null) { Busy = false; return; }
+        keep = Selected?.Card ?? keep;
         Cards.Clear();
         foreach (var c in cards)
             Cards.Add(new CreditCardRow
@@ -46,10 +55,14 @@ public partial class CreditsEditorViewModel : GameDataEditorBase
             });
         Selected = Cards.FirstOrDefault(r => keep != null && r.Card.Map == keep.Map && r.Card.Event == keep.Event && r.Card.Op == keep.Op) ?? Cards.FirstOrDefault();
         Busy = false;
-        if (keep == null) Status = $"{Cards.Count} credit cards in the ending.";
+        Status = keep == null ? $"{Cards.Count} credit cards in the ending." : status;
     }
 
     partial void OnSelectedChanged(CreditCardRow? value) => LoadSelected();
+
+    // (a card is the same card again in a list read anew: same map, event and text command)
+    protected override object? SelectionKey(object entry) =>
+        entry is CreditCardRow r ? (r.Card.Map, r.Card.Event, r.Card.Op) : base.SelectionKey(entry);
 
     protected override void LoadRecord()
     {
@@ -79,7 +92,7 @@ public partial class CreditsEditorViewModel : GameDataEditorBase
         var rom = Ctx.Rom;
         var c = Selected.Card;
         var s = EventScript.Load(rom, c.Map, c.Event);
-        if (s == null || c.Op >= s.Ops.Count || !s.Ops[c.Op].IsText) { Status = "This card can't be found any more; reload the ROM."; return; }
+        if (s == null || c.Op >= s.Ops.Count || !s.Ops[c.Op].IsText) { Refuse("This card can't be found any more; reload the ROM."); return; }
         s.Ops[c.Op].Text = EditText.Replace("\r", "");
         if (!s.IsModified) { Status = "Nothing changed."; return; }
         bool expand = rom.Length >= MapWriter.ExpandedSize;
@@ -87,11 +100,11 @@ public partial class CreditsEditorViewModel : GameDataEditorBase
         {
             if (!AutoWriting && MessageBox.Show("The new text is a different length, so its event has to be moved. To store it, Lufia Forge needs to expand " +
                     "the ROM from 1 MB to 2 MB. Continue?", "Expand ROM?", MessageBoxButton.YesNo) != MessageBoxResult.Yes)
-            { Status = "Not applied."; return; }
+            { Refuse("Not applied: the ROM wasn't expanded."); return; }
             expand = true;
         }
         string result = "";
-        Commit($"Credits: {Selected.Label}", () => result = s.Save(expand));
+        if (!Commit($"Credits: {Selected.Label}", () => result = s.Save(expand))) return;
         if (result.Length > 0) Status = $"Credits written: {result} (Save Project keeps it).";
         _ = Reload(c);
     }

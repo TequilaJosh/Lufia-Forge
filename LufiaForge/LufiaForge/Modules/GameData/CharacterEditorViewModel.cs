@@ -88,7 +88,7 @@ public partial class CharacterEditorViewModel : GameDataEditorBase
         var rom = Ctx.Rom;
         int o   = RecordOffset;
         bool renamed = false;
-        if (CanRename && Core.DutchLetters.Unwritable(Ctx.Rom, Name) is string badName) { Status = "Name: " + badName + "."; return; }
+        if (CanRename && Core.DutchLetters.Unwritable(Ctx.Rom, Name) is string badName) { Refuse("Name: " + badName + "."); return; }
 
         Commit(GameDataLabels.CharacterSlots[SelectedIndex], () =>
         {

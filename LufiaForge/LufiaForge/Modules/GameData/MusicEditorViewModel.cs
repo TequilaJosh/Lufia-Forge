@@ -210,18 +210,24 @@ public partial class MusicEditorViewModel : GameDataEditorBase, ISongEditorHost
     public override bool HasPendingEdits => base.HasPendingEdits || Notes.Dirty && Ctx != null;
 
     /// <summary>Writes the note editor's song to the selected slot.</summary>
-    public void ApplyNotes()
+    public void ApplyNotes() => TryApplyNotes();
+
+    /// <summary>Writes the note editor's song; false when it couldn't be (the notes stay as edited, Status says why).</summary>
+    private bool TryApplyNotes()
     {
-        if (Ctx == null || SelectedIndex < 0) return;
+        if (Ctx == null || SelectedIndex < 0) return false;
         byte[] data; List<string> warnings;
         try { data = BuildSongData(Notes.ToSong(), out warnings); }
-        catch (Exception ex) { Status = "Not written: " + ex.Message; return; }
+        catch (Exception ex) { Refuse("Not written: " + ex.Message); return false; }
+        int left = Notes.NotesPastEnd();
+        if (left > 0) warnings.Add($"{left} note{(left == 1 ? " starts" : "s start")} after the loop end or song end and {(left == 1 ? "was" : "were")} left out (move the end mark to keep {(left == 1 ? "it" : "them")}).");
         if (!AutoWriting) StopPlaying();
-        Notes.Dirty = false;
+        Notes.Dirty = false;   // (not pending while the list of songs is refilled)
         var history = Notes.SaveHistory();
-        Write(data, $"Song {SelectedIndex:X2} notes");
+        if (!Write(data, $"Song {SelectedIndex:X2} notes")) { Notes.Dirty = true; return false; }
         Notes.RestoreHistory(history);
         Status = $"Song {SelectedIndex:X2} written ({data.Length - 2:N0} bytes)." + (warnings.Count > 0 ? " " + string.Join(" ", warnings) : "");
+        return true;
     }
 
     /// <summary>Throws away the note editor's changes.</summary>
@@ -238,27 +244,37 @@ public partial class MusicEditorViewModel : GameDataEditorBase, ISongEditorHost
     [RelayCommand]
     private void Apply()
     {
-        if (Notes.Dirty) ApplyNotes();
         if (Ctx == null || SelectedIndex < 0) return;
+        // the notes first; writing them reads the song back, so the instruments typed are put back after
+        string typed = InstrumentsText;
+        if (Notes.Dirty)
+        {
+            if (!TryApplyNotes()) return;
+            Quietly(() => InstrumentsText = typed);
+        }
+        var d = LufiaCompression.DecompressResource(Ctx.Rom, SelectedIndex, out _);
+        // (the list as the song has it isn't checked: some of the game's songs load numbers outside 10-37)
+        if (InstrumentsText.Trim() == string.Join(" ", d.Skip(0x32).Take(8).TakeWhile(b => b != 0).Select(b => b.ToString("X2")))) return;
         var ids = new List<int>();
         foreach (var part in InstrumentsText.Split(new[] { ' ', ',' }, StringSplitOptions.RemoveEmptyEntries))
         {
             if (!int.TryParse(part, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int v) || v is < 0x10 or >= 0x38)
-            { Status = "Instruments: hex numbers 10-37 separated by spaces (00-0F and 30-37 are always loaded)."; return; }
+            { Refuse("Instruments: hex numbers 10-37 separated by spaces (00-0F and 30-37 are always loaded)."); return; }
             ids.Add(v);
         }
-        if (ids.Count > 8) { Status = "A song can load at most 8 instruments."; return; }
-        var d = LufiaCompression.DecompressResource(Ctx.Rom, SelectedIndex, out _);
+        if (ids.Count > 8) { Refuse("A song can load at most 8 instruments."); return; }
         var want = Enumerable.Range(0, 8).Select(i => (byte)(i < ids.Count ? ids[i] : 0)).ToArray();
         if (d.AsSpan(0x32, 8).SequenceEqual(want)) return;   // the same instruments (packing the song again would move bytes)
         for (int i = 0; i < 8; i++) d[0x32 + i] = want[i];
         Write(d, $"Song {SelectedIndex:X2} instruments");
     }
 
-    private void Write(byte[] data, string what)
+    /// <summary>Writes song data to the selected slot and shows it again; false (nothing changed, Status says why)
+    /// when it couldn't be written.</summary>
+    private bool Write(byte[] data, string what)
     {
         int song = SelectedIndex;
-        Commit(what, () =>
+        bool written = Commit(what, () =>
         {
             bool needs = LufiaCompression.Compress(data).Length > SlotSize(song);
             if (needs && Ctx!.Rom.Length < Core.Maps.MapWriter.ExpandedSize && !AutoWriting &&
@@ -267,8 +283,10 @@ public partial class MusicEditorViewModel : GameDataEditorBase, ISongEditorHost
                 throw new InvalidOperationException("Not written: the ROM wasn't expanded.");
             ResourceWriter.Save(Ctx!.Rom, song, data, allowExpand: true);
         });
-        Fill();
+        if (!written) return false;
+        Quietly(Fill);   // (the list dropping its selection while it refills isn't a pick)
         LoadSelected();
+        return true;
     }
 
     private int SlotSize(int song)
@@ -343,8 +361,8 @@ public partial class MusicEditorViewModel : GameDataEditorBase, ISongEditorHost
         string notes = warnings.Count == 0 ? "" : "\n\n" + string.Join("\n", warnings.Select(w => "• " + w));
         if (MessageBox.Show($"Replace song {Songs[SelectedIndex]} with {Path.GetFileName(dlg.FileName)} ({data.Length:N0} bytes)?{notes}",
                 "Import MIDI", MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;
-        Write(data, $"Song {SelectedIndex:X2} from MIDI");
-        Status = $"Imported {Path.GetFileName(dlg.FileName)} into song {SelectedIndex:X2}." + (warnings.Count > 0 ? " " + string.Join(" ", warnings) : "");
+        if (!Write(data, $"Song {SelectedIndex:X2} from MIDI")) return;
+        Status =$"Imported {Path.GetFileName(dlg.FileName)} into song {SelectedIndex:X2}." + (warnings.Count > 0 ? " " + string.Join(" ", warnings) : "");
     }
 
     /// <summary>

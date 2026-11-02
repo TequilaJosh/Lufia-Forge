@@ -139,9 +139,9 @@ public partial class GameSettingsViewModel : GameDataEditorBase
         if ((patchWanted && !patched || fixWanted && !fixed_ || lettersWanted && !letters) && rom.Length < Core.Maps.MapWriter.ExpandedSize && !AutoWriting &&
             System.Windows.MessageBox.Show("The patches you ticked add small routines to the expanded part of the ROM. Expand the ROM to 2 MB?",
                 "Expand ROM?", System.Windows.MessageBoxButton.YesNo) != System.Windows.MessageBoxResult.Yes)
-        { Status = "Not applied: the ROM was not expanded."; return; }
+        { Refuse("Not applied: the ROM was not expanded."); return; }
 
-        Commit("Game settings", () =>
+        bool written = Commit("Game settings", () =>
         {
             if (patchWanted && !patched) LufiaForge.Core.Battle.EncounterPatch.Apply(rom);
             if (!patchWanted && patched) LufiaForge.Core.Battle.EncounterPatch.Remove(rom);
@@ -170,6 +170,6 @@ public partial class GameSettingsViewModel : GameDataEditorBase
             rom.WriteBytes(GameDataOffsets.InternalTitle, title);
         });
 
-        LoadSelected();
+        if (written) LoadSelected();
     }
 }

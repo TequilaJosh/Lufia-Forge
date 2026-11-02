@@ -346,7 +346,7 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
         foreach (var w in Watches)
         {
             int offset = w.SnesAddr - 0x7E0000;
-            if (offset < 0 || offset >= WramSize) continue;
+            if (offset < 0 || offset + SizeBytes(w.Size) > WramSize) continue;   // (a 2- or 4-byte value must end inside WRAM)
 
             long cur = ReadTyped(wram, offset, w.Size);
             long prv = prev != null ? ReadTyped(prev, offset, w.Size) : cur;

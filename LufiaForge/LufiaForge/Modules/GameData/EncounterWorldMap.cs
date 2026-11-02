@@ -286,9 +286,19 @@ public partial class EncounterEditorViewModel
     {
         bool zones = ZonesDirty;
         string? error = base.HasPendingEdits ? base.WritePendingEdits() : null;
-        if (zones && ZonesDirty) WriteZones();
-        return error;
+        if (error != null) return error;
+        if (zones && ZonesDirty)
+        {
+            _autoZones = true;
+            try { WriteZones(); }
+            finally { _autoZones = false; }
+            if (ZonesDirty) return $"{PageName}: {Status}";   // (still to write: Status says why)
+        }
+        return null;
     }
+
+    /// <summary>The zones are written by the app (with the other edits): no questions then.</summary>
+    private bool _autoZones;
 
     [RelayCommand]
     private void WriteZones()
@@ -297,7 +307,7 @@ public partial class EncounterEditorViewModel
         var rom = Ctx.Rom;
         int size = LufiaCompression.Compress(_zones).Length;
         int slot = ResourceWriter.SlotSize(rom, Encounters.ZoneResource);
-        if (size > slot && rom.Length < MapWriter.ExpandedSize && !AutoWriting &&
+        if (size > slot && rom.Length < MapWriter.ExpandedSize && !AutoWriting && !_autoZones &&
             MessageBox.Show("The edited zones don't fit in their original space. Expand the ROM to 2 MB?", "Expand ROM?", MessageBoxButton.YesNo) != MessageBoxResult.Yes)
         { Status = "Zones not written: the ROM was not expanded."; return; }
         var zones = _zones.ToArray();
