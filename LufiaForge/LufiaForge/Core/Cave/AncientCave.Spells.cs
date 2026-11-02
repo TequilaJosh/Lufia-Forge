@@ -54,9 +54,12 @@ public static partial class AncientCave
 
         ; (Lufia Forge) PickSpell: A(8) = the event of a spell to learn (FirstSpellEvent + k), 0 = none. Candidates:
         ; SpellPool entries whose first floor is reached, whose hero is in the party and doesn't know the spell yet
-        ; (the spell list op 45 checks: $158F + 32 x min(hero, 2)); one of them at random.
+        ; (what op 45 checks: the game's lists, $158F + 32 x min(hero, 2); with the "Up to 128 spells" patch, once
+        ; $15EE = B1, one bit per spell, $158F + 16 x hero + spell / 8, bit spell % 8); one of them at random.
         !CANDN = $7FFF73
         !SPID  = $7FFF74
+        !SPBIT = $7FFF75
+        !SPBYTE = $7FFF76
         !CAND  = $7FFF80            ; up to 64 candidates (pool numbers)
         PickSpell:
             PHP
@@ -91,22 +94,8 @@ public static partial class AncientCave
             PHY
             LDA.l SpellPool+1,x
             STA !SPID
-            LDA.l SpellPool,x
-            CMP.b #$03
-            BCC +
-            LDA.b #$02
-        +   REP #$20
-            AND.w #$0003
-            ASL #5
-            TAX
-            SEP #$20
-            LDY.w #32
-        -   LDA.l $7E158F,x
-            CMP !SPID
-            BEQ .known
-            INX
-            DEY
-            BNE -
+            JSR KnownSpell
+            BNE .known
             PLY                     ; not known: a candidate
             PLX
             PHX
@@ -150,6 +139,58 @@ public static partial class AncientCave
             PLP
             CMP.b #$00
             RTS
+
+        KnownSpell:                 ; M = 8, X = 16, X = 3 x k: A not 0 = pool entry k's hero knows spell !SPID (X, Y changed)
+            LDA $7E15EE
+            CMP.b #$B1
+            BEQ .bits
+            LDA.l SpellPool,x       ; the game's lists
+            CMP.b #$03
+            BCC +
+            LDA.b #$02
+        +   REP #$20
+            AND.w #$0003
+            ASL #5
+            TAX
+            SEP #$20
+            LDY.w #32
+        -   LDA.l $7E158F,x
+            CMP !SPID
+            BEQ .yes
+            INX
+            DEY
+            BNE -
+            LDA.b #$00
+            RTS
+        .yes
+            LDA.b #$01
+            RTS
+        .bits
+            LDA.l SpellPool,x       ; (Lufia Forge) bits: byte 16 x hero + spell / 8, bit spell % 8
+            AND.b #$03
+            ASL #4
+            STA !SPBYTE
+            LDA !SPID
+            AND.b #$07
+            REP #$20
+            AND.w #$00FF
+            TAX
+            SEP #$20
+            LDA.l SpellBit,x
+            STA !SPBIT
+            LDA !SPID
+            LSR #3
+            CLC
+            ADC !SPBYTE
+            REP #$20
+            AND.w #$00FF
+            TAX
+            SEP #$20
+            LDA.l $7E158F,x
+            AND !SPBIT
+            RTS
+        SpellBit:
+            db $01, $02, $04, $08, $10, $20, $40, $80
 
         MsgHook:                    ; A = map 63's message event
             STA $16

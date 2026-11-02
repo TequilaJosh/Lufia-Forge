@@ -122,6 +122,56 @@ public static partial class AncientCave
         return ids;
     }
 
+    /// <summary>
+    /// Takes the floor 100 monsters out again (Remove), last first, and then their pictures (and those pictures'
+    /// resource ids): each only while it is the last of its kind and nothing else uses it (an encounter, a boss
+    /// formation, another monster's picture). What stays is found and used again by the next Apply (<see cref="LeftBosses"/>).
+    /// </summary>
+    private static void RemoveBosses(RomBuffer rom, int[] bosses)
+    {
+        var graphics = new List<int>();
+        bool Used(int m) =>
+            Enumerable.Range(1, Encounters.SubgroupCount(rom)).Any(s => Encounters.SubgroupMonsters(rom, s).Contains(m)) ||
+            Enumerable.Range(Encounters.FirstBoss, Encounters.LastBoss - Encounters.FirstBoss + 1).Any(f => Encounters.BossMonsters(rom, f).Contains(m));
+        foreach (int m in bosses.OrderByDescending(m => m))
+        {
+            if (m < MonsterTable.OriginalCount || m != MonsterTable.Count(rom) - 1 || Used(m)) break;
+            graphics.Add(rom.ReadByte(MonsterTable.RecordOffset(rom, m) + 14));
+            MonsterTable.RemoveLast(rom, m);
+        }
+        foreach (int g in graphics.OrderByDescending(g => g))
+        {
+            bool shown = Enumerable.Range(0, MonsterTable.Count(rom)).Any(m => rom.ReadByte(MonsterTable.RecordOffset(rom, m) + 14) == g);
+            if (shown || !MonsterTable.RemoveLastPicture(rom, g)) break;
+        }
+    }
+
+    /// <summary>The floor 100 monsters a cave taken out earlier left in the ROM (when monsters were added after them):
+    /// new monsters that are copies of the Sinistrals (all but the picture and the script's place) with a 48-pixel
+    /// picture of their own. Null unless all four are there.</summary>
+    private static int[]? LeftBosses(RomBuffer rom)
+    {
+        var ids = new int[4];
+        for (int i = 0; i < 4; i++)
+        {
+            int src = MonsterTable.RecordOffset(rom, Sinistrals[i]);
+            var want = rom.ReadBytes(src, MonsterTable.RecordLength(rom, src));
+            ids[i] = -1;
+            for (int m = MonsterTable.Count(rom) - 1; m >= MonsterTable.OriginalCount && ids[i] < 0; m--)
+            {
+                int r = MonsterTable.RecordOffset(rom, m);
+                var rec = rom.ReadBytes(r, MonsterTable.RecordLength(rom, r));
+                int g = rec[14];
+                if (rec.Length != want.Length || g < MonsterTable.OriginalPictures || g == want[14] || ids.Take(i).Contains(m)) continue;
+                if (Enumerable.Range(0, rec.Length).Any(k => k is not (14 or 0x22 or 0x23) && rec[k] != want[k])) continue;
+                try { if (MonsterGraphics.Load(rom, g).PixelWidth != ShrunkWidth) continue; } catch (Exception) { continue; }
+                ids[i] = m;
+            }
+            if (ids[i] < 0) return null;
+        }
+        return ids;
+    }
+
     /// <summary>A picture cropped to what's drawn and shrunk to 48 pixels wide (box filter), bottom-aligned on a
     /// height that's a multiple of 16. Pixels: ARGB, alpha 0 = see-through.</summary>
     private static (int W, int H, uint[] Pixels) Shrink(MonsterGraphics.Picture p)

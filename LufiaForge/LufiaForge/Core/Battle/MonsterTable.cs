@@ -176,6 +176,19 @@ public static class MonsterTable
         return n;
     }
 
+    /// <summary>Takes out monster <paramref name="id"/> when it is the last one and a new one: its id is free again, and
+    /// so are the bank 0 bytes of its record and script (only live records count as used). False when it isn't.</summary>
+    public static bool RemoveLast(RomBuffer rom, int id)
+    {
+        int b = TableBlock(rom);
+        if (b == 0 || id < OriginalCount || id != Count(rom) - 1) return false;
+        AiFarScripts.Remove(rom, id);
+        rom.WriteUInt16Le(b + Header + id * 2, 0);
+        rom.WriteByte(b + 4, (byte)id);
+        rom.FixChecksum();
+        return true;
+    }
+
     /// <summary>
     /// Writes a monster's whole record (fixed part and variable tail). In place when it isn't longer than the old one;
     /// otherwise the record moves to bank 0's free space (the offset table moves first) with its own copy of the AI.
@@ -314,6 +327,19 @@ public static class MonsterTable
         rom.WriteUInt16Le(b + 4, (ushort)(n + 1));
         rom.FixChecksum();
         return n;
+    }
+
+    /// <summary>Takes out picture <paramref name="graphic"/> when it is the last one and a new one (with its resource id
+    /// when that is the last too). The caller checks that no monster shows it. False when it isn't the last.</summary>
+    public static bool RemoveLastPicture(RomBuffer rom, int graphic)
+    {
+        int b = PictureBlock(rom);
+        if (b == 0 || graphic < OriginalPictures || graphic != PictureCount(rom) - 1) return false;
+        ResourceIds.RemoveLast(rom, PictureResource(rom, graphic));   // (when a later id is in use, this one stays as it is)
+        rom.WriteUInt16Le(b + Header + graphic * 2, 0);
+        rom.WriteUInt16Le(b + 4, (ushort)graphic);
+        rom.FixChecksum();
+        return true;
     }
 
     private static void HookPictures(RomBuffer rom)

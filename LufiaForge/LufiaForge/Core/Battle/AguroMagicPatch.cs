@@ -90,6 +90,7 @@ public static class AguroMagicPatch
         var lists = ReadLists(rom);
         if (lists[2].Count > 0) { lists[2].Clear(); WriteLists(rom, lists); }
         TakeGuySpells(rom);
+        Cave.AncientCave.Refresh(rom);   // (its spell chests teach from the learn lists)
         rom.FixChecksum();
     }
 

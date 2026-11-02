@@ -185,7 +185,7 @@ public partial class BuiltInPatch : ObservableObject
         new()
         {
             Name = "Ancient Cave demo", Category = "Maps", Icon = "🕳", Summary = "The Ancient Cave demo in one click: start at the Old Cave elevator, faster walking, party retargeting.",
-            Description = "Everything the Ancient Cave demo has, added at once: the Ancient Cave with New Game starting by the Old Cave's elevator man (see \"Ancient Cave (start at the elevator)\") with its priest and merchants, faster walking on the world map and in dungeons (the Game Data setting), and party members retargeting instead of missing (see \"Party members retarget instead of missing\"). Removing it takes all three out again.",
+            Description = "Everything the Ancient Cave demo has, added at once: the Ancient Cave with New Game starting by the Old Cave's elevator man (see \"Ancient Cave (start at the elevator)\") with its priest and merchants, faster walking on the world map and in dungeons (the Game Data setting), and party members retargeting instead of missing (see \"Party members retarget instead of missing\"). Removing it takes all three out again, except the retarget fix and faster walking when they were in before the demo.",
             IsApplied = AncientCave.IsDemo, IsOriginal = AncientCave.CanApplyDemo, Apply = AncientCave.ApplyDemo, Remove = AncientCave.RemoveDemo,
         },
         new()

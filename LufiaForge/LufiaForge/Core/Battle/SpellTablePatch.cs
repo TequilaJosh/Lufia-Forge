@@ -242,16 +242,33 @@ public static class SpellTablePatch
         return FirstNew + n;
     }
 
-    /// <summary>Takes out the last added spell, and every character's and monster's use of it.</summary>
+    /// <summary>Takes out the last added spell, and every character's, event's and monster's use of it (the Ancient
+    /// Cave's spell chests too). When that fails the ROM is left as it was.</summary>
     public static void RemoveLastSpell(RomBuffer rom)
     {
         int b = BlockOffset(rom), n = NewCount(rom);
         if (b == 0 || n == 0) return;
         int id = FirstNew + n - 1;
-        ForgetSpells(rom, s => s == id);
-        rom.WriteBytes(b + Records + (n - 1) * SlotSize, new byte[SlotSize]);
-        rom.WriteByte(b + Lengths + n - 1, 0);
-        rom.WriteByte(b + Count, (byte)(n - 1));
+        Atomic(rom, () =>
+        {
+            ForgetSpells(rom, s => s == id);
+            rom.WriteBytes(b + Records + (n - 1) * SlotSize, new byte[SlotSize]);
+            rom.WriteByte(b + Lengths + n - 1, 0);
+            rom.WriteByte(b + Count, (byte)(n - 1));
+            Cave.AncientCave.Refresh(rom);
+        });
+    }
+
+    /// <summary>Runs <paramref name="edit"/>; if it throws, the ROM gets its bytes back from before.</summary>
+    private static void Atomic(RomBuffer rom, Action edit)
+    {
+        var before = rom.ToArray();
+        try { edit(); }
+        catch (Exception)
+        {
+            rom.ReplaceAll(before);
+            throw;
+        }
     }
 
     /// <summary>
@@ -296,40 +313,83 @@ public static class SpellTablePatch
         return id;
     }
 
+    /// <summary>Takes the patch out (the spells 38 and up with it, see <see cref="ForgetSpells"/>). When that fails the
+    /// ROM is left as it was.</summary>
     public static void Remove(RomBuffer rom)
     {
         int b = BlockOffset(rom);
         if (b == 0 && !SpellMemory.Installed(rom)) return;
-        if (AguroMagicPatch.IsApplied(rom)) AguroMagicPatch.Remove(rom);
-        ForgetSpells(rom, s => s >= FirstNew);
-        SpellMemory.Remove(rom);   // the game's own lists come back (as they are in the ROM)
-        if (b > 0)
+        Atomic(rom, () =>
         {
-            rom.WriteBytes(LookupSite, LookupOriginal);
-            var space = ExpansionSpace.Load(rom);
-            space.Free(b);
-            space.Save();
-        }
-        rom.FixChecksum();
+            if (AguroMagicPatch.IsApplied(rom)) AguroMagicPatch.Remove(rom);
+            ForgetSpells(rom, s => s >= FirstNew);
+            SpellMemory.Remove(rom);   // the game's own lists come back (as they are in the ROM)
+            if (b > 0)
+            {
+                rom.WriteBytes(LookupSite, LookupOriginal);
+                var space = ExpansionSpace.Load(rom);
+                space.Free(b);
+                space.Save();
+            }
+            // the Ancient Cave's spell chests teach from the learn lists: built again from the game's own
+            Cave.AncientCave.Refresh(rom);
+            rom.FixChecksum();
+        });
     }
 
     /// <summary>Nobody may keep learning or casting a spell that no longer exists: spell lists (with the Guy /
-    /// Aguro patch), the prologue party's spells, and monsters' "cast spell" steps (which become "attack").</summary>
+    /// Aguro patch), events that teach it (3D cc ss, the prologue party's spells among them: the line is taken out,
+    /// jumps to it go to the next line), and monsters' "cast spell" steps (which become "attack"). The Ancient Cave's
+    /// own events are left to <see cref="Cave.AncientCave.Refresh"/>. Throws, before changing anything, when a line
+    /// can't be taken out.</summary>
     private static void ForgetSpells(RomBuffer rom, Func<int, bool> gone)
     {
+        var teaching = TeachingEvents(rom, gone);
         if (SpellMemory.Installed(rom))
         {
             var lists = SpellMemory.ReadLists(rom);
             if (lists.Sum(l => l.RemoveAll(e => gone(e.Spell))) > 0) SpellMemory.WriteLists(rom, lists);
         }
-        try
+        foreach (var (map, ev) in teaching)
         {
-            var ev = EventScript.Load(rom, 0x93, 2);   // the prologue party's spells
-            if (ev != null && ev.Ops.RemoveAll(o => !o.IsText && o.Bytes.Length == 3 && o.Bytes[0] == 0x3D && gone(o.Bytes[2])) > 0) ev.Save(true);
+            EventScript? s;
+            try { s = EventScript.Load(rom, map, ev); } catch (Exception) { continue; }
+            var lines = s?.Ops.Where(o => Teaches(o, gone)).ToList();
+            if (s == null || lines!.Count == 0) continue;   // (a slot sharing an event saved before)
+            foreach (var o in lines) s.Remove(o);
+            s.Save(true);
         }
-        catch (Exception) { }
         foreach (var (record, cmd) in MonsterAi.AllCommands(rom))
             if (cmd.Op == 0x07 && gone(cmd.Args[0])) { rom.WriteByte(MonsterAi.ByteAt(rom, record, cmd.Offset), 0x05); rom.WriteByte(MonsterAi.ByteAt(rom, record, cmd.Offset + 1), 0x00); }
+    }
+
+    /// <summary>A "learn spell" line (3D cc ss) for a spell that is going.</summary>
+    private static bool Teaches(ScriptOp o, Func<int, bool> gone) => !o.IsText && o.Bytes.Length == 3 && o.Bytes[0] == 0x3D && gone(o.Bytes[2]);
+
+    /// <summary>The events (map, event) with a line teaching a spell that is going, outside the Ancient Cave's maps.
+    /// Throws when one of those lines can't be taken out (nothing changed yet).</summary>
+    private static List<(int Map, int Event)> TeachingEvents(RomBuffer rom, Func<int, bool> gone)
+    {
+        var list = new List<(int, int)>();
+        var cave = Cave.AncientCave.Read(rom);
+        foreach (var m in MapCatalog.Scan(rom))
+        {
+            if (cave != null && (m.MapId == cave.Map1 || m.MapId == cave.Map2)) continue;
+            for (int ev = 0, n = EventScript.SlotCount(rom, m.MapId); ev < n; ev++)
+            {
+                EventScript? s;
+                try { s = EventScript.Load(rom, m.MapId, ev); } catch (Exception) { continue; }
+                if (s == null) continue;
+                var lines = s.Ops.Where(o => Teaches(o, gone)).ToList();
+                if (lines.Count == 0) continue;
+                // (tried on this copy: the one saved later is loaded again)
+                foreach (var o in lines)
+                    if (s.Remove(o) is string why)
+                        throw new InvalidOperationException($"Map {m.MapId:X2} event {ev} teaches spell {o.Bytes[2]:X2}, and that line can't be taken out by itself ({why}). Change the event in the Events editor first.");
+                list.Add((m.MapId, ev));
+            }
+        }
+        return list;
     }
 }
 
