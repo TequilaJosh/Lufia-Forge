@@ -50,7 +50,19 @@ public partial class L2MusicPage : L2Page, ISongEditorHost, IPendingEdits
     protected override void Load(int index)
     {
         // notes edited on the song shown before go into the ROM first, as the other pages write when left
-        if (Notes.Dirty && _notesSong >= 0 && _notesSong != index && WriteNotes(_notesSong) is { } why) Status = "The edited notes weren't written: " + why;
+        if (Notes.Dirty && _notesSong >= 0)
+        {
+            // back on the song being edited (after a write that failed): its notes stay as they are
+            if (_notesSong == index) { ShowInfo(index, L2Songs.Read(Rom!, index)); return; }
+            if (WriteNotes(_notesSong) is { } why)
+            {
+                // they can't go in (too big, no room): they stay in the note editor, on their own song
+                int back = _notesSong;
+                Status = $"The edited notes of song {back:X2} weren't written ({why.TrimEnd('.')}), so they stay in the note editor: make the song fit and apply, or Reload notes to drop them.";
+                System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(() => { if (_notesSong == back) SelectedIndex = back; });
+                return;
+            }
+        }
         var f = L2Songs.Read(Rom!, index);
         if (f.Length < 0x52) { Info = "This file is too short to be a song."; _notesSong = -1; return; }
         ShowInfo(index, f);
@@ -271,6 +283,7 @@ public partial class L2MusicPage : L2Page, ISongEditorHost, IPendingEdits
             int before = Rom.Length;
             L2Rom.WriteFile(Rom, index, data);
             Main.NotifyRomModified($"Lufia II: song {index:X2} notes");
+            MarkRead();
             Notes.Dirty = false;
             if (index == SelectedIndex) ShowInfo(index, data);
             Status = $"Song {index:X2} written ({data.Length - 2:N0} of {L2Songs.MaxSize:N0} bytes)." +
@@ -332,6 +345,7 @@ public partial class L2MusicPage : L2Page, ISongEditorHost, IPendingEdits
             int before = Rom.Length;
             L2Rom.WriteFile(Rom, index, data);
             Main.NotifyRomModified($"Lufia II: song {index:X2} from MIDI");
+            MarkRead();
             Notes.Dirty = false;   // the imported song replaces any edits
             Load(index);
             Status = $"Imported {Path.GetFileName(dlg.FileName)} into song {index:X2}." +

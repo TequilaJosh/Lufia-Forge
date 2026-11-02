@@ -94,6 +94,7 @@ public partial class L2CutscenesPage : ObservableObject
     private void Read()
     {
         var rom = _rom!;
+        _readVersion = rom.Version;
         _all = new List<L2CutsceneItem>();
         for (int map = 0; map < L2Maps.Count; map++)
         {
@@ -207,6 +208,19 @@ public partial class L2CutscenesPage : ObservableObject
     {
         if (_rom == null) return;
         Read();   // (the filter keeps the picked cutscene, by its map and entry, without opening it again)
+    }
+
+    /// <summary>The ROM's version when the list was read.</summary>
+    private int _readVersion = -1;
+
+    /// <summary>The page is shown: when the ROM changed since the list was read (another page, Undo), the cutscene open
+    /// (unless it has unwritten steps) and the list are read again.</summary>
+    public void Shown()
+    {
+        if (_rom == null || _rom.Version == _readVersion) return;
+        _sprites.Clear();
+        Editor.Shown();
+        Read();
     }
 
     /// <summary>A cutscene was made (the New cutscene window): the list shows it, the editor opens it.</summary>

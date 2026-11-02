@@ -114,6 +114,12 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
 
     public void SetRom(RomBuffer rom, MainViewModel main)
     {
+        // the same ROM read again (Undo, a patch, a tidy): the map shown stays. Edits not written by now (the operations
+        // that read every page again write them first) belong to the bytes before, so they go, with what the world
+        // map and its zones hold
+        bool same = ReferenceEquals(rom, _rom);
+        int keep = same && SelectedIndex >= 0 ? SelectedIndex : 3;
+        bool dropped = HasPendingEdits;
         _rom = rom; _main = main;
         main.Register(this);
         _names = Enumerable.Range(0, L2Maps.Count).Select(id => RomName(rom, id)).ToList();
@@ -121,10 +127,16 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
         _gameLooks = null;
         _stats.Clear();
         _edit = null; _history.Clear(); _redo.Clear();
+        _world = null; _worldHistory.Clear(); _worldRedo.Clear();
+        ItemChoices.Clear(); SpriteChoices.Clear(); DestinationChoices.Clear();
         FillList();
         SelectedIndex = -1;
-        SelectedIndex = 3;
+        SelectedIndex = keep;
+        if (same && dropped) Status = "Map edits that couldn't be written before the ROM was read again were dropped. " + Status;
     }
+
+    /// <summary>The ROM's version when the map shown was read (or written here).</summary>
+    private int _readVersion = -1;
 
     private static string RomName(RomBuffer rom, int id)
     {
@@ -193,6 +205,7 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
             : "The sea floor: paint, pick and copy its big blocks.";
         else if (_rom != null && TableGuard.LockReason(_rom, "Maps") is { } locked) Status = locked;
         else if (_edit != null) Status = $"{NameOf(value)}. Pick a tool above; Ctrl+Z takes back each change.";
+        _readVersion = _rom?.Version ?? -1;
     }
 
     // ---------------------------------------------------------------- the story so far
@@ -295,6 +308,7 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
             var keep = Selection;
             // read it back as the ROM has it now (the edit's "before" becomes this)
             _edit = new L2MapEdit(_rom, id);
+            _readVersion = _rom.Version;
             _history.Clear(); _redo.Clear();
             if (keep != null) Selection = Find(keep.Kind, keep.Index);
             UpdateUndoState();
@@ -330,7 +344,20 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
     /// treasure not changed here, also in the Undo steps), so the inspector shows it and Apply keeps it.</summary>
     public void Shown()
     {
-        if (_rom == null || _edit == null || _world != null) return;
+        if (_rom == null) return;
+        // nothing unwritten here and the ROM changed since the map was read (another page, Undo): read it again
+        if (_rom.Version != _readVersion && !HasPendingEdits && SelectedIndex >= 0)
+        {
+            var keep = Selection;
+            _itemNames = null; _gameLooks = null; _stats.Clear();
+            ItemChoices.Clear(); SpriteChoices.Clear();
+            int id = SelectedIndex;
+            SelectedIndex = -1;
+            SelectedIndex = id;
+            if (keep != null) Selection = Find(keep.Kind, keep.Index);
+            return;
+        }
+        if (_edit == null || _world != null) return;
         if (_edit.RebaseChests(_rom) is not var (old, now)) return;
         for (int i = 0; i < _history.Count; i++) _history[i] = (_history[i].State with { Chests = L2MapEdit.Merge(old, _history[i].State.Chests, now) }, _history[i].What);
         for (int i = 0; i < _redo.Count; i++) _redo[i] = (_redo[i].State with { Chests = L2MapEdit.Merge(old, _redo[i].State.Chests, now) }, _redo[i].What);

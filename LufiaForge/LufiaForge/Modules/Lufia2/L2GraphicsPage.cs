@@ -34,7 +34,7 @@ public sealed partial class L2Swatch : ObservableObject
 /// <summary>Graphics: battle backgrounds, capsule monsters, hero battle sprites, the title screen, fonts, menu graphics
 /// and map sprites (<see cref="L2Gfx"/>), shown, painted pixel by pixel, saved as PNG and brought back from a PNG; new
 /// map sprites and new map sprite palettes (<see cref="L2Sprites"/>).</summary>
-public partial class L2GraphicsPage : L2Page
+public partial class L2GraphicsPage : L2Page, LufiaForge.ViewModels.IPendingEdits
 {
     private List<L2Gfx.Asset> _assets = new();
     private L2Gfx.Asset? _asset;
@@ -86,6 +86,13 @@ public partial class L2GraphicsPage : L2Page
     // monster battle sprites
     [ObservableProperty] private bool _isMonsterSprite;
     [ObservableProperty] private string _monsterInfo = "";
+
+    // a painting not yet written goes in by itself (leaving the page, saving the project, Apply to ROM), as the Maps
+    // page's edits do
+    protected override void OnListRead() => Main?.Register(this);
+
+    public bool HasPendingEdits => Rom != null && _asset != null && IsPainted;
+    public string? WritePendingEdits() => HasPendingEdits ? WritePaintingNow() : null;
 
     protected override IEnumerable<string> ReadNames()
     {
@@ -290,6 +297,7 @@ public partial class L2GraphicsPage : L2Page
             catch (Exception ex) { if (!Rom.SameAs(before)) Rom.ReplaceAll(before); Status = "Not written: " + ex.Message; return; }
             if (!changed) { Status = "Nothing changed: the colour is the same."; return; }
             Main.NotifyRomModified($"Lufia II: colour {_colour} of palette {PaletteChoice} of monster sprite {_asset.Id:X2}");
+            MarkRead();
             Draw(keep: true);
             Status = $"Colour {_colour} of palette {PaletteChoice} written. Monsters using this palette of the sprite change too. Edit, Undo takes it back.";
             MonsterSpritesEdited();
@@ -298,6 +306,7 @@ public partial class L2GraphicsPage : L2Page
         if (off < 0) { Status = "Pick a colour first."; return; }
         if (!L2Gfx.SetColour(Rom, off, EditedValue)) { Status = "Nothing changed: the colour is the same."; return; }
         Main.NotifyRomModified($"Lufia II: colour {EditedValue:X4} at {off:X6} ({_asset.Name})");
+        MarkRead();
         Draw(keep: true);
         Status = $"Colour written at {off:X6}. Every picture using it changes too. Edit, Undo takes it back.";
     }
@@ -485,9 +494,12 @@ public partial class L2GraphicsPage : L2Page
     /// <summary>Writes the painting into the ROM the way Import PNG does (packed files are packed again and move to the
     /// added space when they grow); one step for Edit, Undo.</summary>
     [RelayCommand(CanExecute = nameof(CanWritePainting))]
-    private void WritePainting()
+    private void WritePainting() => WritePaintingNow();
+
+    /// <summary>Writes the painting now (also for tests); null, or why it couldn't be (it is kept then).</summary>
+    public string? WritePaintingNow()
     {
-        if (Rom == null || Main == null || _asset == null || _work == null || !IsPainted) return;
+        if (Rom == null || Main == null || _asset == null || _work == null || !IsPainted) return null;
         var before = Rom.ToArray();
         string what;
         try { what = L2Gfx.Import(Rom, _asset, PaletteChoice, _work, null); }
@@ -495,20 +507,19 @@ public partial class L2GraphicsPage : L2Page
         {
             if (!Rom.SameAs(before)) Rom.ReplaceAll(before);
             Status = "Not written: " + ex.Message + " The painting is kept.";
-            return;
+            return $"painting of {_asset.Name}: {ex.Message}";
         }
-        if (Rom.SameAs(before)) { Status = "Nothing changed: the painting is the same as the game's picture."; Draw(); return; }
+        if (Rom.SameAs(before)) { Status = "Nothing changed: the painting is the same as the game's picture."; Draw(); return null; }
         bool grew = Rom.Length > before.Length;
         Main.NotifyRomModified($"Lufia II: painted {_asset.Group.ToLowerInvariant()} {_asset.Name}");
+        MarkRead();
         Draw();
         Status = $"Painting written: {what}." + (grew ? " The ROM grew to make room." : "") +
                  (_asset.Kind == L2Gfx.Kind.BattleBackground && _asset.Note.Contains("Shares") ? " Backgrounds that share its layout or tiles changed with it." : "") +
                  SharingNote() + " Edit, Undo takes it back.";
         if (_asset.Kind == L2Gfx.Kind.MonsterSprite) MonsterSpritesEdited();
+        return null;
     }
-
-    /// <summary>Writes the painting now (for tests).</summary>
-    public void WritePaintingNow() => WritePainting();
 
     [RelayCommand(CanExecute = nameof(CanWritePainting))]
     private void DiscardPainting()
@@ -588,6 +599,7 @@ public partial class L2GraphicsPage : L2Page
         catch (Exception ex) { Status = "Not changed: " + ex.Message; return; }
         if (!changed) { Draw(keep: true); return; }
         Main.NotifyRomModified($"Lufia II: map sprite {L2Sprites.Name(id)} uses {what}");
+        MarkRead();
         var shared = choice < 8 ? L2Sprites.SharingEntry(Rom, id) : new List<int>();
         int at = SelectedIndex;
         Refresh(() => at, keep: true);
@@ -614,6 +626,7 @@ public partial class L2GraphicsPage : L2Page
         }
         bool grew = Rom.Length > before.Length;
         Main.NotifyRomModified($"Lufia II: new map sprite palette {p} ({(copy ? "a copy of the colours of" : "black, for")} sprite {L2Sprites.Name(id)})");
+        MarkRead();
         Refresh(() => IndexOfSprite(id), keep: false);
         Status = $"New palette {p} made ({(copy ? "a copy of the colours shown" : "all black")}) and given to sprite {L2Sprites.Name(id)}. Click a colour above to change it." +
                  (grew ? " The ROM grew to make room." : "") + " Edit, Undo takes it back.";
@@ -636,6 +649,7 @@ public partial class L2GraphicsPage : L2Page
         }
         bool grew = Rom.Length > before.Length;
         Main.NotifyRomModified($"Lufia II: new map sprite {L2Sprites.Name(id)} ({(empty ? "empty, the size of" : "a copy of")} sprite {L2Sprites.Name(from)})");
+        MarkRead();
         Refresh(() => IndexOfSprite(id), keep: false);
         Status = $"Map sprite {L2Sprites.Name(id)} made ({(empty ? $"empty, with the size, frames and colours of {L2Sprites.Name(from)}" : $"a copy of {L2Sprites.Name(from)}")}); paint it below. " +
                  "Give it to a character in the Maps tab: on that map it becomes FB, FC or FD (3 new sprites a map)." +
@@ -682,6 +696,7 @@ public partial class L2GraphicsPage : L2Page
         int id = _asset.Id, moves = MoveFlags.Where(f => f.IsChecked).Sum(f => f.Bit);
         if (!L2MonsterSprites.SetMoves(Rom, id, moves)) return;
         Main.NotifyRomModified($"Lufia II: monster sprite {id:X2} {L2MonsterSprites.MovesText(moves)} in battle");
+        MarkRead();
         MoveNote = MoveNoteFor(moves);
         Status = $"Sprite {id:X2} now {L2MonsterSprites.MovesText(moves)} in battle (movement flags {moves:X2}). Edit, Undo takes it back.";
         MonsterSpritesEdited();
@@ -734,6 +749,7 @@ public partial class L2GraphicsPage : L2Page
         catch (Exception ex) { if (!Rom.SameAs(before)) Rom.ReplaceAll(before); Status = "Not added: " + ex.Message; return; }
         bool grew = Rom.Length > before.Length;
         Main.NotifyRomModified($"Lufia II: palette {p} of monster sprite {id:X2} ({(copy ? "a copy" : "black")})");
+        MarkRead();
         Refresh(() => IndexOfMonsterSprite(id), keep: false);
         PaletteChoice = p;
         Status = $"Palette {p} added to sprite {id:X2} ({(copy ? "a copy of the colours shown" : "all black")}). Click its colours above to change them; give it to a monster below or with the Palette field on the Monsters page." +
@@ -800,6 +816,7 @@ public partial class L2GraphicsPage : L2Page
         catch (Exception ex) { if (!Rom.SameAs(before)) Rom.ReplaceAll(before); Status = "Not added: " + ex.Message; return; }
         bool grew = Rom.Length > before.Length;
         Main.NotifyRomModified($"Lufia II: new monster sprite {id:X2} ({what})");
+        MarkRead();
         Refresh(() => IndexOfMonsterSprite(id), keep: false);
         Status = $"Monster sprite {id:X2} ({id}) made ({what}); paint it below, and give it to a monster below or with its Battle sprite field on the Monsters page." +
                  (grew ? " The ROM grew to make room." : "") + " Edit, Undo takes it back.";
@@ -817,6 +834,7 @@ public partial class L2GraphicsPage : L2Page
         m.Sprite = (byte)id; m.Palette = (byte)p;
         L2Battle.WriteMonster(Rom, m);
         Main.NotifyRomModified($"Lufia II: monster {m.Index:X2} {m.Name} shows sprite {id:X2}, palette {p}");
+        MarkRead();
         int at = SelectedIndex;
         Refresh(() => at, keep: true);
         PaletteChoice = p;
@@ -909,6 +927,7 @@ public partial class L2GraphicsPage : L2Page
         if (Rom.SameAs(before)) { Status = $"Nothing changed: the picture is the same as the game's ({how})."; return; }
         bool grew = Rom.Length > before.Length;
         Main.NotifyRomModified($"Lufia II: graphics, {_asset.Name}");
+        MarkRead();
         Draw();
         Status = $"Imported ({how}): {what}." + (grew ? " The ROM grew to 3 MB to make room." : "") +
                  (_asset.Kind == L2Gfx.Kind.BattleBackground && _asset.Note.Contains("Shares") ? " Backgrounds that share its layout or colours changed with it." : "") +

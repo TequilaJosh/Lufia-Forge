@@ -418,6 +418,7 @@ public partial class L2MapsPage
             var keep = Selection;
             LoadWorld(w.Map);
             _edit = new L2MapEdit(_rom!, w.Map);
+            _readVersion = _rom!.Version;
             if (keep != null) Selection = Find(keep.Kind, keep.Index);
             Status = "Written." + what;
             return null;

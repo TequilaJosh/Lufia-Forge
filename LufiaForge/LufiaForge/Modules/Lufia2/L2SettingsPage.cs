@@ -30,6 +30,18 @@ public partial class L2SettingsPage : ObservableObject
         CheckRoom();
     }
 
+    /// <summary>The page is shown: the settings as the ROM has them now (a patch or Undo may have changed them).</summary>
+    public void Shown()
+    {
+        if (_rom == null || _rom.Version == _readVersion) return;
+        string status = Status;
+        Reload();
+        CheckRoom();
+        if (Status.Length == 0) Status = status;
+    }
+
+    private int _readVersion = -1;
+
     // ---------------------------------------------------------------- tidy the hack's data
 
     [ObservableProperty] private string _tidyText = "";
@@ -57,6 +69,9 @@ public partial class L2SettingsPage : ObservableObject
     private void Tidy()
     {
         if (_rom == null || _main == null) return;
+        // worked out on a copy of the whole ROM and put in over it, then every page reads again: the pages' edits not
+        // yet in the ROM go in first
+        _main.WritePendingEdits();
         var mouse = System.Windows.Input.Mouse.OverrideCursor;
         System.Windows.Input.Mouse.OverrideCursor = System.Windows.Input.Cursors.Wait;
         L2Tidy.Result r;
@@ -105,6 +120,9 @@ public partial class L2SettingsPage : ObservableObject
     private void MakeRoom()
     {
         if (_rom == null || _main == null) return;
+        // worked out on a copy of the whole ROM and put in over it, then every page reads again: the pages' edits not
+        // yet in the ROM go in first
+        _main.WritePendingEdits();
         var mouse = System.Windows.Input.Mouse.OverrideCursor;
         System.Windows.Input.Mouse.OverrideCursor = System.Windows.Input.Cursors.Wait;
         L2NewMonsters.RoomResult r;
@@ -133,6 +151,7 @@ public partial class L2SettingsPage : ObservableObject
     private void Reload()
     {
         var rom = _rom!;
+        _readVersion = rom.Version;
         _loading = true;
         CanEncounter = L2Settings.CanSetEncounters(rom); Encounter = L2Settings.EncounterThreshold(rom);
         WorldSpeed = L2Settings.WorldSpeed(rom); CanWorld = WorldSpeed > 0;

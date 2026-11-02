@@ -90,6 +90,7 @@ public partial class L2MapsPage
             string done = L2PuzzleBuild.AddTileChange(_rom, map, kind, sx, sy, t.X1, t.Y1, t.X2 - t.X1, t.Y2 - t.Y1, _puzzleFrom.X, _puzzleFrom.Y);
             _main.NotifyRomModified($"Lufia II: puzzle on map {map:X2}");
             _edit = new L2MapEdit(_rom, map);
+            _readVersion = _rom.Version;
             _history.Clear(); _redo.Clear();
             UpdateUndoState();
             ResetPuzzle();
@@ -367,6 +368,7 @@ public partial class L2MapsPage
             L2FlagUses.Invalidate();
             _main?.NotifyRomModified($"Lufia II: puzzle on map {map:X2}");
             _edit = new L2MapEdit(_rom, map);
+            _readVersion = _rom.Version;
             _history.Clear(); _redo.Clear();
             UpdateUndoState();
             ResetPreset();

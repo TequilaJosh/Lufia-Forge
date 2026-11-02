@@ -123,12 +123,12 @@ public partial class L2CapsulesPage
     }
 
     /// <summary>The lists shown: the game's, or the picked capsule's own (16 empty lists when it has none).</summary>
-    private List<int>[] Shown => WishOwner < 0 ? _lists : _own ??= Enumerable.Range(0, L2CapsuleFeed.Tiers).Select(_ => new List<int>()).ToArray();
+    private List<int>[] ShownLists => WishOwner < 0 ? _lists : _own ??= Enumerable.Range(0, L2CapsuleFeed.Tiers).Select(_ => new List<int>()).ToArray();
 
     private L2Option TierLabel(int t)
     {
         var (lo, hi) = L2CapsuleFeed.TierPrices(Rom!, t);
-        int n = Shown[t].Count;
+        int n = ShownLists[t].Count;
         string what = n > 0 ? $"{n} item{(n == 1 ? "" : "s")}" : WishOwner < 0 ? "empty" : "the game's list";
         return new L2Option(t, $"Tier {t}  ({lo}-{hi} G):  " + what);
     }
@@ -168,7 +168,7 @@ public partial class L2CapsulesPage
     private void ShowWishList()
     {
         int t = Math.Clamp(WishTier, 0, L2CapsuleFeed.Tiers - 1);
-        var shown = Shown;
+        var shown = ShownLists;
         WishItems.Clear();
         for (int i = 0; i < shown[t].Count; i++)
             WishItems.Add(new L2Slot { Label = $"{i + 1}", Options = ItemOptions, Value = shown[t][i], Changed = WishEdited });
@@ -329,7 +329,7 @@ public partial class L2CapsulesPage
         try
         {
             if (WishOwner < 0) L2CapsuleFeed.WriteLists(Rom!, _lists);
-            else L2CapsuleWishes.Write(Rom!, WishOwner, WishForm, Shown);
+            else L2CapsuleWishes.Write(Rom!, WishOwner, WishForm, ShownLists);
         }
         catch (Exception e)
         {
@@ -345,7 +345,7 @@ public partial class L2CapsulesPage
     {
         if (!CanEditWishes) return;
         int t = WishTier;
-        Shown[t] = WishItems.Select(s => s.Value).ToList();
+        ShownLists[t] = WishItems.Select(s => s.Value).ToList();
         WriteWishLists($"{WishWhose}tier {t} wish list");
     }
 
@@ -354,8 +354,8 @@ public partial class L2CapsulesPage
     {
         if (!CanEditWishes) return;
         int t = WishTier;
-        if (Shown[t].Count >= 255) { WishNote = "A list holds up to 255 items."; return; }
-        Shown[t].Add(NewWishItem);
+        if (ShownLists[t].Count >= 255) { WishNote = "A list holds up to 255 items."; return; }
+        ShownLists[t].Add(NewWishItem);
         WriteWishLists($"{WishWhose}tier {t} wish list");
     }
 
@@ -365,7 +365,7 @@ public partial class L2CapsulesPage
         if (!CanEditWishes || slot == null) return;
         int i = WishItems.IndexOf(slot), t = WishTier;
         if (i < 0) return;
-        Shown[t].RemoveAt(i);
+        ShownLists[t].RemoveAt(i);
         WriteWishLists($"{WishWhose}tier {t} wish list");
     }
 
