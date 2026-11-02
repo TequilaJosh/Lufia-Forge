@@ -102,7 +102,11 @@ is written), `Modules/Lufia2/L2MapWindows.cs` (pick a place, pieces and presets,
   first): a tile copy of the look (map info +16, layers 33: both layers' blocks and their wall flags), a spot where it
   goes (+22), the trigger spot (+1A bomb, +1C sword, +1E arrow, +20 action button, +2A hammer), a puzzle switch from
   00-1F (the ones a save keeps), the trigger's puzzle script (once: change the tiles, switch on) and a step in the map's
-  set-up that redraws it when the party comes back. A map without puzzles gets a puzzle block. The game runs puzzles
+  set-up that redraws it when the party comes back. A map without puzzles gets a puzzle block. The block is written
+  into the event space (banks `$A8-$BF`, or `$01-$3F` on an 8 MB ROM): the puzzle commands run with the data bank set
+  to the block's bank and reach RAM and registers through it (`$0583`, `$0692`, `$1273`, `$4216`), which banks
+  `$C0-$FF` don't have. Blocks written before 2026-11-01 went past 2.5 MB (`$D0+`) and are moved there when the project
+  is opened (`L2PuzzleBlock.MoveIntoReach`, see romsize.md section 5). The game runs puzzles
   only with dungeon controls (Map settings 69 bit 01 in the start-up script; every one of the game's 146 puzzle maps has
   it) and field tools need bit 40 off, so the start-up script's Map settings are turned that way (the status says so).
   Walls are flags of the upper layer (40 walkable, 80 blocked, 04 / 08 a wall on the cell's top / bottom edge), so the
