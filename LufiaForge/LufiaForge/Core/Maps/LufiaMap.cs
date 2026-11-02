@@ -744,10 +744,15 @@ public sealed class LufiaMap
         Tileset = tileset; PaletteIndex = palette;
     }
 
-    /// <summary>Adds an NPC at the end (NPC n runs event n of the map's script).</summary>
-    public MapNpc AddNpc(int sprite, int x, int y)
+    /// <summary>Adds an NPC at the end (NPC n runs event n of the map's script), or with number <paramref name="index"/>:
+    /// the numbers before it are kept as hidden characters (sprite FF), so it gets the event it should.</summary>
+    public MapNpc AddNpc(int sprite, int x, int y, int index = -1)
     {
-        if (Npcs.Count >= 32) throw new InvalidOperationException("A map can have at most 32 NPCs.");
+        if (index < 0) index = Npcs.Count;
+        if (index >= 32) throw new InvalidOperationException("A map can have at most 32 NPCs.");
+        if (index < Npcs.Count) throw new InvalidOperationException($"Character {index + 1} is already there.");
+        while (Npcs.Count < index)
+            Npcs.Add(new MapNpc { Index = Npcs.Count, Sprite = 0xFF, X = 0, Y = 0, BoxX1 = 0, BoxY1 = 0, BoxX2 = 1, BoxY2 = 1 });
         var n = new MapNpc { Index = Npcs.Count, Sprite = sprite, Flags = 0x20, X = x, Y = y, BoxX1 = Math.Max(0, x - 2), BoxY1 = Math.Max(0, y - 2), BoxX2 = Math.Min(Width, x + 3), BoxY2 = Math.Min(Height, y + 3) };
         Npcs.Add(n);
         return n;

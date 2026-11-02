@@ -459,6 +459,30 @@ public sealed class EventScript
             foreach (var t in op.Targets)
                 if (byOffset.TryGetValue(t.Absolute, out var target)) t.Op = target;
         _original.AddRange(Ops);
+        _regionBytes = Regions.Select(r => _rom.ReadBytes(r.From, Math.Min(r.To, _rom.Length) - r.From)).ToList();
+        _readVersion = _rom.Version;
+    }
+
+    private List<byte[]> _regionBytes = new();
+    private int _readVersion;
+
+    /// <summary>
+    /// True while the ROM still holds what this script was decoded from: the map's block and the event's start where
+    /// they were, and the same bytes in every decoded region. False once something else wrote them (another tab, Undo, a
+    /// patch): saving then would put old lines back, or write at offsets the map no longer uses.
+    /// </summary>
+    public bool MatchesRom()
+    {
+        if (_rom.Version == _readVersion) return true;
+        if (BlockOffset(_rom, MapId) != BlockBase || LufiaMap.EventScriptOffset(_rom, MapId, Event) != JumpBase) return false;
+        for (int i = 0; i < Regions.Count; i++)
+        {
+            var (from, to) = Regions[i];
+            if (Math.Min(to, _rom.Length) - from != _regionBytes[i].Length ||
+                !_rom.ReadBytes(from, _regionBytes[i].Length).AsSpan().SequenceEqual(_regionBytes[i])) return false;
+        }
+        _readVersion = _rom.Version;   // (other bytes changed: this event is still as it was read)
+        return true;
     }
 
     private void DecodeRegion(int from, SortedSet<int> targets)
@@ -781,6 +805,10 @@ public sealed class EventScript
     /// <summary>Write the edited event to the ROM. Returns a description of what was done and where.</summary>
     public string Save(bool allowExpand)
     {
+        if (!MatchesRom())
+            throw new InvalidOperationException($"{(IsCodeView ? "This code" : $"Event {Event} of map {MapId:X2}")} was changed somewhere else since it was " +
+                                                "opened here (another tab, Undo or a patch), so these lines would write over the newer version. " +
+                                                "Revert to read it again, then make the changes again.");
         foreach (var o in Ops.Where(o => o.IsText && (o.IsNew || o.TextChanged)))
             if (DutchLetters.Unwritable(_rom, o.Text) is string bad)
                 throw new InvalidOperationException(bad + ".");

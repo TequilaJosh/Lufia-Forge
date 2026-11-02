@@ -28,6 +28,8 @@ public partial class MapEditorView : UserControl, LufiaForge.Modules.Common.ILoc
             if (fit >= 1) Vm.PaletteZoom = Math.Min(4, fit);
         };
         DataContextChanged += (_, _) => HookVm();
+        // shown again: the map is read again when another tab, Undo or a patch changed it meanwhile
+        IsVisibleChanged += (_, e) => { if (e.NewValue is true) Vm?.RefreshIfStale(); };
         // after working in the map, Ctrl+Z / Ctrl+Y come here first even when a tab or button has the focus
         PreviewMouseDown += (_, _) => LufiaForge.Modules.Common.LocalUndoTarget.Set(this);
         // Alt + mouse wheel anywhere in the editor turns the brush block; letting go of Alt then doesn't open the menu bar

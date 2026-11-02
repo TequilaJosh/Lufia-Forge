@@ -376,6 +376,8 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost, LufiaFor
     {
         // the same ROM again (undo / redo): stay on the map that was open
         int? keepMap = ReferenceEquals(rom, _rom) ? SelectedMap?.MapId : null;
+        // edits of another ROM's map are never written into this one
+        if (!ReferenceEquals(rom, _rom)) HasUnappliedChanges = false;
         _rom = rom;
         _mainVm = mainVm;
         Maps.Clear();
@@ -388,14 +390,29 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost, LufiaFor
         for (int i = 0; i < 256; i++)
             ItemChoices.Add(i == 0 ? "00 (empty)" : $"{i:X2} {MapSetupScript.ItemName(rom, i)}");
         Status = $"{Maps.Count} maps found. Pick one on the left.";
-        SelectedMap = Maps.FirstOrDefault(m => m.MapId == (keepMap ?? 0x04)) ?? Maps.FirstOrDefault();
+        _rereading = keepMap != null;
+        try { SelectedMap = Maps.FirstOrDefault(m => m.MapId == (keepMap ?? 0x04)) ?? Maps.FirstOrDefault(); }
+        finally { _rereading = false; }
     }
 
     private bool _revertingSelection;
+    /// <summary>The tabs read the ROM again (after Undo / Redo, a patch): the open map isn't written from here.</summary>
+    private bool _rereading;
 
     partial void OnSelectedMapChanged(MapInfo? oldValue, MapInfo? newValue)
     {
         if (_revertingSelection || newValue == null || _rom == null) return;
+        if (_rereading && _map != null && newValue.MapId == _map.MapId)
+        {
+            // Undo writes the tabs' edits first; edits still unwritten here (they couldn't be) stay, never written over
+            // the ROM as it is now from a map read before it (Apply refuses once the map changed underneath them)
+            if (!HasUnappliedChanges) LoadMap(newValue.MapId);
+            else if (ChangedElsewhere()) Status = $"Map {_map.MapId:X2} was changed (Undo, a patch) while its edits here weren't written: Revert to read it again.";
+            _populatingName = true;
+            MapNameText = newValue.Name;
+            _populatingName = false;
+            return;
+        }
         // the map's edits go into the project on their own; only when they can't be written, ask
         if (HasUnappliedChanges && !FlushPendingEdits(out var flushError) &&
             MessageBox.Show($"This map's edits couldn't be written ({flushError}). Discard them?", "Unsaved map edits",
@@ -414,6 +431,48 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost, LufiaFor
         _populatingName = true;
         MapNameText = newValue.Name;
         _populatingName = false;
+    }
+
+    /// <summary>The open map's data as it was read and where it was, to tell when something else wrote it since
+    /// (another tab, Undo, a patch): its edits here would put the older map back over that.</summary>
+    private byte[]? _loadedData;
+    private int _loadedOffset = -1, _loadedVersion = -1;
+
+    private void RememberLoaded()
+    {
+        if (_rom == null || _map == null) return;
+        _loadedData = (byte[])_map.Original.Clone();
+        _loadedOffset = _map.CompressedOffset;
+        _loadedVersion = _rom.Version;
+    }
+
+    /// <summary>True when the ROM's copy of the open map differs from the one it was read from.</summary>
+    private bool ChangedElsewhere()
+    {
+        if (_rom == null || _map == null || _loadedData == null || _rom.Version == _loadedVersion) return false;
+        try
+        {
+            var now = LufiaMap.Load(_rom, _map.MapId);
+            bool changed = now.CompressedOffset != _loadedOffset || !now.Original.AsSpan().SequenceEqual(_loadedData);
+            if (!changed) _loadedVersion = _rom.Version;   // (other bytes changed)
+            return changed;
+        }
+        catch { return true; }
+    }
+
+    private const string ChangedElsewhereText = "this map was changed somewhere else since it was opened here (another tab, Undo or a patch), " +
+                                                "so these edits would put the older map back over it. Revert to read it again, then make them again";
+
+    /// <summary>The tab is shown again: when another tab, Undo or a patch changed the open map meanwhile, it is read
+    /// again (with edits not written yet it stays, and Apply refuses to write them over the newer map).</summary>
+    public void RefreshIfStale()
+    {
+        if (_map == null || !ChangedElsewhere()) return;
+        if (HasUnappliedChanges) { Status = "Not applied: " + ChangedElsewhereText + "."; return; }
+        var sel = _selection;
+        LoadMap(_map.MapId);
+        Reselect(sel);
+        Status = $"Map {_map?.MapId:X2} was read again: it was changed somewhere else meanwhile.";
     }
 
     private void LoadMap(int mapId)
@@ -448,6 +507,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost, LufiaFor
             RebuildOverlays();
             RefreshMapSettings();
             StartHistory();
+            RememberLoaded();
             Status = "Loaded. Select tool: click objects. Paint tool: paint the chosen block. Pick tool: copy a block from the map.";
         }
         catch (Exception ex)
@@ -1388,6 +1448,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost, LufiaFor
     private void ApplyToRom()
     {
         if (_rom == null || _map == null) return;
+        if (ChangedElsewhere()) { Status = "Not applied: " + ChangedElsewhereText + "."; return; }
         try
         {
             bool expand = false;

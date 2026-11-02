@@ -8,7 +8,7 @@ namespace LufiaForge.Core.Maps;
 /// start, so the table can grow (the block is copied with a longer table and every offset moved by the same amount).</para>
 /// <para>Deleting never leaves an empty slot behind something that starts it (talking to a character with no
 /// event, an enabled area or a "run event" pointing at FFFF runs garbage): the event becomes a one-command event
-/// (end), its step-on areas are switched off and "run event" commands leading to it are removed.</para>
+/// (end), its step-on areas are switched off and "run event" commands leading to it become an end.</para>
 /// </summary>
 public static class MapEvents
 {
@@ -144,16 +144,22 @@ public static class MapEvents
     }
 
     /// <summary>Deletes an event: it becomes empty (end), its step-on areas are switched off, and the "run event"
-    /// commands leading to it are removed from their events.</summary>
+    /// commands leading to it become an end in their events.</summary>
     public static void Delete(RomBuffer rom, int mapId, int ev, Starters starters)
     {
-        // "run event" commands leading here
+        // "run event" commands leading here become an end: "run event" never returns, so the event ended there (taken
+        // out, it would go on into whatever bytes follow it: the next event's code, or data)
         foreach (var grp in starters.Chains.GroupBy(c => (c.Map, c.Event)))
         {
             var s = EventScript.Load(rom, grp.Key.Map, grp.Key.Event);
             if (s == null) continue;
-            s.Ops.RemoveAll(o => !o.IsText && o.Bytes.Length >= 3 && o.Bytes[0] == 0x51 && o.Bytes[1] == mapId && Chained(rom, o.Bytes) == ev);
-            s.Save(true);
+            int n = 0;
+            foreach (var o in s.Ops.Where(o => !o.IsText && o.Bytes.Length >= 3 && o.Bytes[0] == 0x51 && o.Bytes[1] == mapId && Chained(rom, o.Bytes) == ev))
+            {
+                o.Bytes = new byte[] { 0x00 };
+                n++;
+            }
+            if (n > 0) s.Save(true);
         }
         foreach (int area in starters.Areas) SetAreaEnabled(rom, mapId, area, false);
         if (HasEvent(rom, mapId, ev))
@@ -196,6 +202,21 @@ public static class MapEvents
         s.Ops.Insert(0, new ScriptOp { Bytes = new byte[] { 0x06, (byte)flag } });
         s.Ops.Insert(0, check);
         s.Save(true);
+    }
+
+    // ── Characters ─────────────────────────────────────────────────────────
+
+    /// <summary>The number a new character gets (talking to character n runs event n): the first one from the map's
+    /// count whose event slot nothing uses. Skipped: numbers with an event (a cutscene, a step-on area's, a chained
+    /// one), the event base (the empty entry the step-on area events count from) and the events of the map's areas
+    /// that have none yet. -1 when none is left below 32. A number past the event table grows it when the map is written.</summary>
+    public static int FreeCharacterNumber(RomBuffer rom, LufiaMap map)
+    {
+        int baseEv = LufiaMap.EventBase(rom, map.MapId);
+        var areas = map.Triggers.Select(t => AreaEvent(rom, map.MapId, t.Index)).ToHashSet();
+        for (int n = map.Npcs.Count; n < 32; n++)
+            if (n != baseEv && !areas.Contains(n) && !HasEvent(rom, map.MapId, n)) return n;
+        return -1;
     }
 
     // ── Step-on areas ──────────────────────────────────────────────────────
