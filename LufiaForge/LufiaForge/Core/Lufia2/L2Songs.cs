@@ -195,8 +195,33 @@ public static class L2Songs
         }
     }
 
-    /// <summary>The song as a MIDI file (48 ticks per quarter note, one track per channel, drums on MIDI channel 10).</summary>
-    public static byte[] ToMidi(byte[] file) => SongCodec.ToMidi(Decode(file), Name(file));
+    /// <summary>The game plays note n an octave up: the samples' pitch multipliers are their loop length / 16 (one cycle
+    /// per loop), so note n sounds as MIDI note n + 12 (measured 2026-11-01 on every looping sample: the driver's pitch
+    /// table at $4366, 0x217D-0x3F38, against each sample's period).</summary>
+    public const int MidiTranspose = 12;
+
+    /// <summary>A General MIDI program like each sample (00-38), so an exported song sounds near the game in a MIDI
+    /// player. Guessed from the samples' overtones, range and the songs that use them (2026-11-01); -1 = no guess
+    /// (piano). Samples 00-06 are the drum kit, 07-0C, 17, 18, 1A, 1B and 25 empty.</summary>
+    private static readonly int[] GmPrograms =
+    {
+        116, 118, 117, 115, 0, 47, 80, -1, -1, -1, -1, -1, -1, 0,      // 00-0D: drum kit (taiko, synth drum...), 06 square lead
+        80, 73, 73, 68, 33, 46, 80, 56, 43, -1, -1, 56, -1, -1, 61, 11, 48, 52,   // 0E-1F
+        115, 75, 21, 4, 40, -1, 71, 77, 0, 43, 10, 46, 46, 73, 34, 24, 55, 47, 60, 9, 42, 14, 73, 89, 72,   // 20-38
+    };
+
+    /// <summary>The General MIDI program for sample <paramref name="sample"/>.</summary>
+    public static int GmProgram(int sample) => sample >= 0 && sample < GmPrograms.Length && GmPrograms[sample] >= 0 ? GmPrograms[sample] : 0;
+
+    /// <summary>The song as a MIDI file (48 ticks per quarter note, one track per channel, drums on MIDI channel 10): the
+    /// notes where the game sounds them (<see cref="MidiTranspose"/>) and a General MIDI program like each instrument's
+    /// sample (<see cref="GmProgram"/>; slots 00-1F are samples 00-1F, slots 20+ the song's own list).</summary>
+    public static byte[] ToMidi(byte[] file)
+    {
+        var own = SampleList(file).TakeWhile(x => x < 0x80).ToList();
+        int Program(int slot) => GmProgram(slot < 0x20 ? slot : slot - 0x20 < own.Count ? own[slot - 0x20] : -1);
+        return SongCodec.ToMidi(Decode(file), Name(file), MidiTranspose, Program);
+    }
 
     // ── encode ──
 
@@ -422,7 +447,7 @@ public static class L2Songs
     /// </summary>
     public static byte[] FromMidi(byte[] midi, byte[] current, out List<string> warnings)
     {
-        var song = SongCodec.FromMidi(midi, out warnings);
+        var song = SongCodec.FromMidi(midi, out warnings, MidiTranspose);
         if (!song.Channels.Any(c => c.Any(e => e.Kind == SongCodec.Kind.Note))) throw new System.IO.InvalidDataException("the MIDI has no notes");
         var header = new byte[HeaderSize];
         Array.Fill(header, (byte)0xFF);

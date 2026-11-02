@@ -340,7 +340,11 @@ public static class SongCodec
 
     // ── MIDI ──
 
-    public static byte[] ToMidi(Song song, string name)
+    /// <summary>The song as a MIDI file. <paramref name="transpose"/>: added to the notes of every channel but the drums,
+    /// so they sound where the game plays them (Lufia II: note n sounds as MIDI n + 12); written as "lufia: transpose"
+    /// so <see cref="FromMidi"/> takes it off again. <paramref name="program"/>: the General MIDI program for an
+    /// instrument slot (the slot itself travels as "lufia: instrument"); without it the program is the slot.</summary>
+    public static byte[] ToMidi(Song song, string name, int transpose = 0, Func<int, int>? program = null)
     {
         var tracks = new List<byte[]>();
         // track 0: tempo and name
@@ -349,6 +353,7 @@ public static class SongCodec
         int us = song.MicrosPerQuarter;
         Meta(t0, 0, 0x51, new[] { (byte)(us >> 16), (byte)(us >> 8), (byte)us });
         Meta(t0, 0, 0x01, Encoding.ASCII.GetBytes($"lufia: tempo {song.Tempo}"));
+        if (transpose != 0) Meta(t0, 0, 0x01, Encoding.ASCII.GetBytes($"lufia: transpose {transpose}"));
         EndTrack(t0, 0);
         tracks.Add(t0.ToArray());
         for (int ch = 0; ch < 8; ch++)
@@ -374,14 +379,15 @@ public static class SongCodec
                         if (len < e.B) msgs.Add((e.Tick, 2, Encoding.ASCII.GetBytes($"lufia: gate {e.B}"), true));
                         if (e.C <= 0) msgs.Add((e.Tick, 2, Encoding.ASCII.GetBytes("lufia: velocity 0"), true));   // MIDI's velocity 0 = note off
                         if (len <= 0) break;
-                        msgs.Add((e.Tick, 2, new[] { (byte)(0x90 | mc), (byte)e.A, (byte)Math.Clamp(e.C, 1, 127) }, false));
-                        msgs.Add((e.Tick + len, 1, new[] { (byte)(0x80 | mc), (byte)e.A, (byte)0 }, false));
+                        byte key = (byte)(song.Drum[ch] ? e.A : Math.Clamp(e.A + transpose, 0, 127));
+                        msgs.Add((e.Tick, 2, new[] { (byte)(0x90 | mc), key, (byte)Math.Clamp(e.C, 1, 127) }, false));
+                        msgs.Add((e.Tick + len, 1, new[] { (byte)(0x80 | mc), key, (byte)0 }, false));
                         break;
                     }
                     case Kind.Volume: msgs.Add((e.Tick, 2, new[] { (byte)(0xB0 | mc), (byte)7, (byte)Math.Clamp(e.A, 0, 127) }, false)); break;
                     case Kind.Pan: msgs.Add((e.Tick, 2, new[] { (byte)(0xB0 | mc), (byte)10, (byte)Math.Clamp(e.A, 0, 127) }, false)); break;
-                    case Kind.Program: msgs.Add((e.Tick, 2, new[] { (byte)(0xC0 | mc), (byte)(e.A & 0x7F) }, false));
-                        if (e.A > 0x7F) msgs.Add((e.Tick, 2, Encoding.ASCII.GetBytes($"lufia: instrument {e.A:X2}"), true));
+                    case Kind.Program: msgs.Add((e.Tick, 2, new[] { (byte)(0xC0 | mc), (byte)((program?.Invoke(e.A) ?? e.A) & 0x7F) }, false));
+                        if (e.A > 0x7F || program != null) msgs.Add((e.Tick, 2, Encoding.ASCII.GetBytes($"lufia: instrument {e.A:X2}"), true));
                         break;
                     case Kind.Raw: msgs.Add((e.Tick, 2, Encoding.ASCII.GetBytes("lufia: " + Convert.ToHexString(e.Raw!)), true)); break;
                     case Kind.LoopStart:
@@ -414,9 +420,36 @@ public static class SongCodec
     /// <summary>
     /// A song from a MIDI file: each track (and MIDI channel within it) becomes a game channel - the one named by a
     /// "lufia: channel N" text, else the next free one (at most 8; MIDI channel 10 = drums). A game channel plays
-    /// one note at a time; times are scaled to 48 per quarter note.
+    /// one note at a time; times are scaled to 48 per quarter note. The notes of every channel but the drums lose the
+    /// "lufia: transpose" of an export; a MIDI made elsewhere (no "lufia: tempo") loses <paramref name="foreignTranspose"/>,
+    /// so it sounds at the pitch it was written in (Lufia II: 12).
     /// </summary>
-    public static Song FromMidi(byte[] midi, out List<string> warnings)
+    public static Song FromMidi(byte[] midi, out List<string> warnings, int foreignTranspose = 0)
+    {
+        var song = FromMidiAsWritten(midi, out warnings);
+        var (_, all) = ReadMidi(midi);
+        var texts = all.Where(e => e.Type == 0x01).Select(e => Encoding.ASCII.GetString(e.Data!).Trim()).ToList();
+        string? mark = texts.FirstOrDefault(x => x.StartsWith("lufia: transpose "));
+        int shift = mark != null && int.TryParse(mark[17..], out int v) ? v : texts.Any(x => x.StartsWith("lufia: tempo ")) ? 0 : foreignTranspose;
+        if (shift == 0) return song;
+        int clipped = 0;
+        for (int ch = 0; ch < 8; ch++)
+        {
+            if (song.Drum[ch]) continue;
+            var list = song.Channels[ch];
+            for (int k = 0; k < list.Count; k++)
+                if (list[k].Kind == Kind.Note)
+                {
+                    int n = list[k].A - shift;
+                    if (n is < 0 or > 0x7F) clipped++;
+                    list[k] = list[k] with { A = Math.Clamp(n, 0, 0x7F) };
+                }
+        }
+        if (clipped > 0) warnings.Add($"{clipped} notes are out of the game's range after taking {shift} semitones off (the game plays them {shift} higher than their number) and were kept at its edge.");
+        return song;
+    }
+
+    private static Song FromMidiAsWritten(byte[] midi, out List<string> warnings)
     {
         warnings = new List<string>();
         var song = new Song { Tempo = 83 };
