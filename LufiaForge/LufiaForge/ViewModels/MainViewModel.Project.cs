@@ -224,7 +224,9 @@ public partial class MainViewModel
 
     /// <summary>Mistakes in the game Lufia Forge puts right as a ROM is opened (each one Edit, Undo step): Lufia II's
     /// shrine maps CF and F1, drawn wrong in the US game (<see cref="Core.Lufia2.L2ShrineFix"/>), and on an 8 MB Lufia II
-    /// ROM made before 2026-11-01 the battle window frame read from the upper 4 MB (<see cref="Core.Lufia2.L2Rom.FixLowBankReads"/>).</summary>
+    /// ROM made before 2026-11-01 the battle window frame read from the upper 4 MB (<see cref="Core.Lufia2.L2Rom.FixLowBankReads"/>),
+    /// and puzzle blocks Lufia Forge wrote before then past 2.5 MB, where their commands can't reach RAM
+    /// (<see cref="Core.Lufia2.L2PuzzleBlock.MoveIntoReach"/>).</summary>
     private string _openNote = "";
 
     private void FixKnownBugs(RomBuffer rom)
@@ -236,6 +238,18 @@ public partial class MainViewModel
             NotifyRomModified("Lufia II: battle window border fixed for the 8 MB ROM (read from bank $81, not the upper 4 MB)");
             OnPropertyChanged(nameof(RomBuffer));
             _openNote = " The hero's battle window border, broken on 8 MB ROMs, was fixed (Edit, Undo takes it back).";
+        }
+        if (rom.IsLufia2 && Core.Lufia2.L2PuzzleBlock.OutOfReach(rom).Count > 0)
+        {
+            var (moved, problem) = Core.Lufia2.L2PuzzleBlock.MoveIntoReach(rom);
+            if (moved.Count > 0)
+            {
+                string maps = moved.Count > 8 ? $"{moved.Count} maps" : (moved.Count > 1 ? "maps " : "map ") + string.Join(", ", moved.Select(m => m.ToString("X2")));
+                NotifyRomModified($"Lufia II: puzzle blocks of {maps} moved where their commands reach RAM (the event space)");
+                OnPropertyChanged(nameof(RomBuffer));
+                _openNote += $" The puzzles Lufia Forge wrote on {moved.Count} map{(moved.Count > 1 ? "s" : "")} sat where the game can't reach RAM from them and were moved (Edit, Undo takes it back).";
+            }
+            if (problem != null) _openNote += " A puzzle block couldn't be moved where the game reaches RAM from it: " + problem;
         }
         if (!Core.Lufia2.L2ShrineFix.Needed(rom)) return;
         try

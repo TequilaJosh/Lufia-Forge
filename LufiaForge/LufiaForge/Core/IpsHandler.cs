@@ -18,6 +18,7 @@ public static class IpsHandler
 {
     private static readonly byte[] IpsMagic = "PATCH"u8.ToArray();
     private static readonly byte[] IpsEof   = "EOF"u8.ToArray();
+    private const int EofOffset = 0x454F46;   // "EOF" read as a record's offset
 
     // -------------------------------------------------------------------------
     // Apply
@@ -98,7 +99,10 @@ public static class IpsHandler
         if (original.Length % 1024 == Lufia1Constants.SmcHeaderSize)
             original = original[Lufia1Constants.SmcHeaderSize..];
 
-        byte[] modified = modifiedRom.ToArray();
+        // as a save writes it: the checksum fixed and, on an 8 MB ROM, the copy of the first bank renewed
+        var fixedRom = new RomBuffer(modifiedRom.ToArray(), modifiedRom.FilePath);
+        fixedRom.FixChecksum();
+        byte[] modified = fixedRom.ToArray();
 
         using var stream = new FileStream(outputPatchPath, FileMode.Create, FileAccess.Write);
         using var writer = new BinaryWriter(stream);
@@ -108,14 +112,26 @@ public static class IpsHandler
         // Walk both arrays and collect changed regions
         int i = 0;
         int len = Math.Min(original.Length, modified.Length);
+        // A record can't start at 0x454F46: its offset bytes read "EOF", and patchers stop there (an 8 MB ROM reaches
+        // it). The record starts a byte earlier instead: those two bytes as data, then the rest from 0x454F47.
+        bool SkipEof(ref int start, ref int count)
+        {
+            if (start != EofOffset) return false;
+            writer.Write(new byte[] { 0x45, 0x4F, 0x45, 0x00, 0x02 });   // offset 0x454F45, 2 bytes
+            writer.Write(modified, EofOffset - 1, 2);
+            start++; count--;
+            return count == 0;
+        }
         void Record(int start, int count)
         {
+            if (SkipEof(ref start, ref count)) return;
             writer.Write((byte)(start >> 16)); writer.Write((byte)(start >> 8)); writer.Write((byte)start);
             writer.Write((byte)(count >> 8)); writer.Write((byte)count);
             writer.Write(modified, start, count);
         }
         void Rle(int start, int count, byte value)
         {
+            if (SkipEof(ref start, ref count)) return;
             writer.Write((byte)(start >> 16)); writer.Write((byte)(start >> 8)); writer.Write((byte)start);
             writer.Write((byte)0); writer.Write((byte)0);
             writer.Write((byte)(count >> 8)); writer.Write((byte)count);

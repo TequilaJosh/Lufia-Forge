@@ -5,7 +5,7 @@ namespace LufiaForge.Core.Lufia2;
 /// the 16 categories (category 0A: object groups, byte lists), and every command the entries reach, in their order in
 /// the ROM (a command that doesn't end or jump away goes on into the next one, so the order is kept), each jump pointing
 /// at the command it goes to. Written back, the block is laid out again (header of 16 list offsets, the lists, the
-/// groups, the commands; every offset counts from the block start) in added space, and the map's entry of the table at
+/// groups, the commands; every offset counts from the block start) in the event space (<see cref="SeesRam"/>), and the map's entry of the table at
 /// $8F:8000 (u16 lo, u8 hi: bank $8F + hi, address $8000 + lo) points at it. Bytes no entry reaches are left out.
 /// </summary>
 public sealed class L2PuzzleBlock
@@ -147,13 +147,41 @@ public sealed class L2PuzzleBlock
         return null;
     }
 
-    /// <summary>Writes the block in added space and points the map at it. Returns its file offset.</summary>
+    /// <summary>Whether a block at file offset <paramref name="at"/> works. The puzzle commands run with the data bank set
+    /// to the block's own bank and reach RAM and registers through it ($0583, $0692, $1273, the multiplier's $4216...), so
+    /// a block only works in banks $80-$BF (below 2 MB) or, on an 8 MB ROM, $01-$3F: banks $C0-$FF and $40-$7D have
+    /// neither at $0000-$7FFF (measured in BizHawk 2026-11-01: a block moved to $D8 read $D8:1273, $D8:0583, $D8:4216).
+    /// The table's bank is $8F + a byte added in 8 bits ($80:E891), so it reaches $01-$3F by coming round.</summary>
+    public static bool SeesRam(int at) => at < 0x200000 || at >= L2Rom.UpperStart + 0x8000 && at < L2Rom.UpperStart + 0x200000;
+
+    /// <summary>Maps whose block sits where its commands can't reach RAM (<see cref="SeesRam"/>): written into the space
+    /// added after 2.5 MB by Lufia Forge before 2026-11-01.</summary>
+    public static List<int> OutOfReach(RomBuffer rom) =>
+        Enumerable.Range(0, L2Maps.Count).Where(m => L2Puzzles.Block(rom, m) is var b && b >= 0 && !SeesRam(b)).ToList();
+
+    /// <summary>Lays the blocks of <see cref="OutOfReach"/> out again in the event space. Returns the maps moved and why
+    /// any couldn't be.</summary>
+    public static (List<int> Moved, string? Problem) MoveIntoReach(RomBuffer rom)
+    {
+        var moved = new List<int>();
+        foreach (int m in OutOfReach(rom))
+        {
+            var pb = Read(rom, m);
+            if (pb.Problem != null || pb.Check() != null) return (moved, $"map {m:X2}'s puzzle block can't be laid out again ({pb.Problem ?? pb.Check()})");
+            try { pb.Write(rom); moved.Add(m); }
+            catch (InvalidOperationException e) { return (moved, e.Message); }
+        }
+        return (moved, null);
+    }
+
+    /// <summary>Writes the block in the event space (<see cref="SeesRam"/>) and points the map at it. Returns its file
+    /// offset.</summary>
     public int Write(RomBuffer rom)
     {
         if (Check() is { } why) throw new InvalidOperationException("The puzzle block can't be written: " + why);
         var data = Layout();
-        if (data.Length > 0x8000) throw new InvalidOperationException("The puzzle block would be bigger than a 32 KB bank.");
-        int at = L2Rom.Allocate(rom, data.Length);
+        if (data.Length > L2EventSpace.Mark) throw new InvalidOperationException("The puzzle block would be bigger than a 32 KB bank.");
+        int at = L2EventSpace.Allocate(rom, data.Length);
         if (at < L2Puzzles.Table) throw new InvalidOperationException("The added space is below bank $8F, where puzzle blocks can't be.");
         rom.WriteBytes(at, data);
         int hi = (at - L2Puzzles.Table) / 0x8000, lo = (at - L2Puzzles.Table) % 0x8000;
