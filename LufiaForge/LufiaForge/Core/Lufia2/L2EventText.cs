@@ -108,7 +108,8 @@ public static class L2EventText
                 else if (Pause(t) is int f) sb.Append($"[PAUSE {0x80 | Math.Clamp((f + 5) / 10, 0, 25):X2}]");
                 else if (t.StartsWith("Voice ") && int.TryParse(t[6..], out int v)) sb.Append($"[PAUSE {v & 0x7F:X2}]");
                 else if (t.StartsWith("Glyph ")) sb.Append($"[GLYPH {t[6..]}]");
-                else sb.Append('[').Append(t).Append(']');
+                else if (t.Length == 2 && IsHex(t)) sb.Append('[').Append(t).Append(']');
+                else throw new InvalidOperationException(Check($"[{t}]") ?? $"[{t}] isn't a known code. Use [Name], [Pause 20], [Voice 3] or [Glyph 41].");
                 i = close + 1;
                 continue;
             }

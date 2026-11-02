@@ -234,6 +234,20 @@ public static class L2Rom
         rom.WriteBytes(FileTable + id * 3, new[] { (byte)rel, (byte)(rel >> 8), (byte)(rel >> 16) });
     }
 
+    /// <summary>Runs an edit that writes in several steps (an info block, then a start-up script, then events...): when
+    /// it throws, the ROM gets back the bytes and the size it had before, so a failure part-way leaves nothing half
+    /// written (a character start without its create, a trigger area without its event).</summary>
+    public static T AllOrNothing<T>(RomBuffer rom, Func<T> edit)
+    {
+        var before = rom.ToArray();
+        try { return edit(); }
+        catch
+        {
+            if (!rom.SameAs(before)) rom.ReplaceAll(before);
+            throw;
+        }
+    }
+
     /// <summary>Text the game shows for fixed-width names (monsters, items, spells): plain ASCII for the US game;
     /// 00 ends it.</summary>
     public static string Name(RomBuffer rom, int offset, int length)

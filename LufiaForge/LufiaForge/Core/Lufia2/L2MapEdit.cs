@@ -491,8 +491,12 @@ public sealed class L2MapEdit
 
     // ---------------------------------------------------------------- writing
 
-    /// <summary>Writes every change to the ROM. Returns what was done.</summary>
-    public string Apply(RomBuffer rom)
+    /// <summary>Writes every change to the ROM. Returns what was done. A change that fails (a start-up script that
+    /// can't be changed, too many characters, no room) leaves the ROM as it was, the info block too
+    /// (<see cref="L2Rom.AllOrNothing"/>).</summary>
+    public string Apply(RomBuffer rom) => L2Rom.AllOrNothing(rom, () => ApplyCore(rom));
+
+    private string ApplyCore(RomBuffer rom)
     {
         var done = new List<string>();
         int block = L2Events.Block(rom, MapId);
