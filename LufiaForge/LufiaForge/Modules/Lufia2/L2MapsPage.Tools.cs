@@ -402,6 +402,7 @@ public partial class L2MapsPage
         DrawWorld(); WorldUndoState();
     }
 
+    [RelayCommand]
     private void DeleteArea()
     {
         if (_world != null) return;

@@ -314,7 +314,7 @@ public static class SongCodec
                 {
                     int gate = Math.Clamp(e.B, 0, 255), vel = Math.Clamp(e.C, 0, 127), n = e.A & 0x7F;
                     notes.Add(o.Count);
-                    if (d == lastDelay && gate == lastGate && vel == lastVel) o.Add((byte)(0x80 | n));
+                    if (n < 0x70 && d == lastDelay && gate == lastGate && vel == lastVel) o.Add((byte)(0x80 | n));   // (80-EF only: F0 up are commands)
                     else { o.AddRange(new[] { (byte)n, (byte)d, (byte)gate, (byte)vel }); lastDelay = d; lastGate = gate; lastVel = vel; }
                     break;
                 }

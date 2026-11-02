@@ -63,7 +63,8 @@
         <Grid Grid.Column="2">
             <TextBlock Text="Pick a cutscene on the left, or make a new one." Style="{StaticResource GdHint}" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center"
                        Visibility="{Binding HasSelection, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
-            <local:L2EventEditorPanel x:Name="Editor" Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibilityConverter}}"/>
+            <!-- the panel's own DataContext is the script editor (Bind), so the selection comes from the page -->
+            <local:L2EventEditorPanel x:Name="Editor" Visibility="{Binding DataContext.HasSelection, RelativeSource={RelativeSource AncestorType=local:L2CutscenesView}, Converter={StaticResource BoolToVisibilityConverter}}"/>
         </Grid>
     </Grid>
 </UserControl>
