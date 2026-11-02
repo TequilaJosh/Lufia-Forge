@@ -192,12 +192,16 @@ The game's built-in scripts run with base 0 and offsets like `$EF20`/`$EF24` (ba
 The item loader clears `$0B77-$0BAC`, copies the 9-byte head, the 4 bytes of property bits (`$09FC-$09FF`), then for each of
 the 32 bits stores the next word at `$0B84` + 9 + 2 x bit when the bit is set (so absent words are 0).
 
-**Lufia Forge's effect hooks** (version 2 of the `LF2AI` block, Core/Lufia2/L2AiScripts.cs; a version 1 block is upgraded
-in place, its first routines keep their addresses):
+**Lufia Forge's effect hooks** (version 3 of the `LF2AI` block, Core/Lufia2/L2AiScripts.cs; a version 1 or 2 block is
+upgraded in place, its first routines keep their addresses; a version 2 block is updated as the ROM is opened):
 
-* `JML` at `$81:FAC9` (in place of `PHP PHB REP #$30`): an offset with bit 15 set and a base other than 0 is an item marker
-  `$8000 | key`; any other script is looked up by its address (bank, base + offset). Found: base = Lufia Forge's script,
-  Y = 1. A marker that isn't in the table becomes offset 0 (no script).
+* `JML` at `$81:FAC9` (in place of `PHP PHB REP #$30`): an offset with bit 15 set, a base other than 0, bank `$96` (every
+  item path sets `$0A44 = $96`: `$81:A8F2`, `A953`, `AA5D`, `EFBB`, `F009`, `$85:BD99`) and a table entry of kind `FD` for
+  `offset & $7FFF` is an item marker `$8000 | key`; any other script is looked up by its address (bank, base + offset)
+  and else runs as the game has it. Found: base = Lufia Forge's script, Y = 1. Version 2 took every offset with bit 15 set
+  and a base for a marker and ran nothing when the table had none: the fan hacks' monster records in bank `$D0` use
+  offsets that wrap round the bank (Spekkio Lufia 16 scripts, Daos `F780`, Gades `C15B`/`F23F`; Kureji Lufia 15), and
+  those didn't run.
 * `JML` at `$81:F1C5`: runs the game's loader (`PHK / PEA` return), then for every table entry of the item (`$0A06` & $1FF):
   kind `FD`, key = item | property << 9: the marker `$8000 | key` goes to `$0B8D` + 2 x property, so an item without that
   script gets one; kind `FC`, key = item | bit << 9: the value (the entry's script field) goes to `$0B8D` + 2 x bit, so an

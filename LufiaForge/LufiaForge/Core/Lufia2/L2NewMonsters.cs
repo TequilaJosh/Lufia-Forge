@@ -603,6 +603,8 @@ public static class L2NewMonsters
 
             // every byte that changed is the new bank, a code place, the script hook or the added space's mark
             var allowed = new HashSet<int>(HackSites());
+            // (a version 2 script block gets the newest hooks as its monster bank changes)
+            if (L2AiScripts.NeedsHookUpdate(before)) allowed.UnionWith(L2AiScripts.HookSiteBytes());
             if (L2AiScripts.BlockRange(before) is { } ai) for (int k = 0; k < ai.Length; k++) allowed.Add(ai.At + k);
             var after = w.ToArray();
             bool Mark(byte[] d, int p) => p + 4 <= d.Length && d[p] == 'L' && d[p + 1] == 'F' && d[p + 2] == '2' && d[p + 3] == 'X';

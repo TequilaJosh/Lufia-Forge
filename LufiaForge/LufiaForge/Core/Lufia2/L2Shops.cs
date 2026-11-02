@@ -98,7 +98,38 @@ public static class L2Shops
     /// first shop's data starts (0xB0 and 0xA6 entries there, the ids past the used ones still 0000).</summary>
     public static int CountIn(RomBuffer rom)
     {
-        int table = TableAt(rom), end = Count * 2;
+        int table = TableAt(rom), n = Scan(rom, table);
+        int block = Block(rom);
+        if (block < 0) return n;
+        // In Lufia Forge's bank the table can't end where the first shop's data starts: a shop that grew or was
+        // rewritten moves to the bank's first part, and the bytes it leaves behind (right after the table in Spekkio
+        // and Kureji Lufia) would read as more entries. The count is the game's own table's (bank $97 is left as it
+        // was), and further only up to the last id that names a shop Lufia Forge put in its part of the bank.
+        int game = Scan(rom, Table), last = game - 1;
+        for (int i = game; i < n; i++) if (IsOwn(rom, block, table, i)) last = i;
+        return Math.Min(n, last + 1);
+    }
+
+    /// <summary>Whether entry <paramref name="i"/> names a shop in Lufia Forge's part of its bank: an address from
+    /// $xx:8010 up to the free part (left-behind bytes like 2800 come round the bank to below $8000).</summary>
+    private static bool IsOwn(RomBuffer rom, int block, int table, int i)
+    {
+        int off = rom.ReadUInt16Le(table + i * 2), addr = (L2Rom.FileToSnes(table) + off) & 0xFFFF;
+        return off != 0 && addr >= 0x8000 + DataStart && addr < rom.ReadUInt16Le(block + NextAt);
+    }
+
+    /// <summary>Whether entry <paramref name="id"/> is no shop although it isn't 0000: past the game's own table in
+    /// Lufia Forge's bank and naming no shop of Lufia Forge's (bytes a moved shop left behind).</summary>
+    private static bool Stale(RomBuffer rom, int id)
+    {
+        int block = Block(rom);
+        return block >= 0 && id >= Scan(rom, Table) && !IsOwn(rom, block, TableAt(rom), id);
+    }
+
+    /// <summary>The ids of a table whose entries end where the first shop's data starts.</summary>
+    private static int Scan(RomBuffer rom, int table)
+    {
+        int end = Count * 2;
         for (int i = 0; i * 2 < end; i++)
         {
             int off = rom.ReadUInt16Le(table + i * 2);
@@ -114,7 +145,7 @@ public static class L2Shops
         if (id < 0 || id >= CountIn(rom)) return null;
         int table = TableAt(rom);
         int off = rom.ReadUInt16Le(table + id * 2);
-        if (off == 0) return null;
+        if (off == 0 || Stale(rom, id)) return null;
         int at = L2Rom.InBank(table, off);
         if (at < 0) return null;
         int mask = rom.ReadUInt16Le(at + 1);
@@ -202,7 +233,7 @@ public static class L2Shops
     public static int NextId(RomBuffer rom)
     {
         int n = CountIn(rom), table = TableAt(rom);
-        bool Free(int i) => rom.ReadUInt16Le(table + i * 2) == 0;
+        bool Free(int i) => rom.ReadUInt16Le(table + i * 2) == 0 || Stale(rom, i);
         int last = Enumerable.Range(1, n - 1).LastOrDefault(i => !Free(i));
         for (int i = last + 1; i < n; i++) if (Free(i)) return i;
         for (int i = 1; i < n; i++) if (Free(i)) return i;
