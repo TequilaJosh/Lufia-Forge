@@ -89,17 +89,42 @@ public partial class L2AnimationsPage : ObservableObject
     public void SetRom(RomBuffer rom, MainViewModel main)
     {
         _rom = rom; _main = main;
-        var mons = L2Battle.Monsters(rom).Where(m => m.Sprite > 0).GroupBy(m => ((int)m.Sprite, (int)m.Palette)).Select(g => g.First()).ToList();
-        _monsters = new List<(int, int)> { (-1, 0) }.Concat(mons.Select(m => ((int)m.Sprite, (int)m.Palette))).ToList();
-        MonsterNames = new List<string> { "(none)" }.Concat(mons.Select(m => $"{m.Name.Trim()}")).ToList();
+        var mons = ReadMonsters();
         int gob = mons.FindIndex(m => m.Name.Trim() == "Goblin");
         Monster = gob >= 0 ? gob + 1 : Math.Min(1, MonsterNames.Count - 1);
         RefreshList(-1);
     }
 
+    /// <summary>The monsters the preview can show (one per sprite and palette).</summary>
+    private List<L2Battle.Monster> ReadMonsters()
+    {
+        var mons = L2Battle.Monsters(_rom!).Where(m => m.Sprite > 0).GroupBy(m => ((int)m.Sprite, (int)m.Palette)).Select(g => g.First()).ToList();
+        _monsters = new List<(int, int)> { (-1, 0) }.Concat(mons.Select(m => ((int)m.Sprite, (int)m.Palette))).ToList();
+        MonsterNames = new List<string> { "(none)" }.Concat(mons.Select(m => $"{m.Name.Trim()}")).ToList();
+        return mons;
+    }
+
+    /// <summary>The ROM's version when the page read it (or wrote it itself).</summary>
+    private int _readVersion = -1;
+
+    /// <summary>The page is shown: when the ROM changed since it read it (spells, IP attacks, items or monsters changed on
+    /// their pages, Undo), the lists and the animation shown are read again, keeping the picks.</summary>
+    public void Shown()
+    {
+        if (_rom == null || _rom.Version == _readVersion) return;
+        var (sprite, pal) = Monster >= 0 && Monster < _monsters.Count ? _monsters[Monster] : (-1, 0);
+        int spell = SpellChoice, ipc = IpChoice, item = ItemChoice;
+        ReadMonsters();
+        int m = _monsters.IndexOf((sprite, pal));
+        Monster = m >= 0 ? m : Math.Min(1, MonsterNames.Count - 1);
+        RefreshList(-1);
+        SpellChoice = spell; IpChoice = ipc; ItemChoice = item;
+    }
+
     private void RefreshList(int select)
     {
         if (_rom == null) return;
+        _readVersion = _rom.Version;
         int keep = select >= 0 ? select : SelectedIndex >= 0 && SelectedIndex < _ids.Count ? _ids[SelectedIndex] : 0x12;
         _ids.Clear(); Names.Clear();
         foreach (var (v, name) in L2Magic.Animations(_rom)) { _ids.Add(v); Names.Add($"{v:X2}  {name}"); }
@@ -271,6 +296,7 @@ public partial class L2AnimationsPage : ObservableObject
         {
             L2SpellAnims.WriteGraphics(_rom, GfxIndex, L2SpellAnims.SheetTiles(_sheetW, _sheetH, _sheetPx, _tiles.Length));
             _main.NotifyRomModified($"Lufia II: animation {Id:X2} graphics painted");
+            _readVersion = _rom.Version;
             _tiles = L2SpellAnims.ReadGraphics(_rom, GfxIndex);
             Status = "Painted. Play shows it.";
         }
@@ -288,6 +314,7 @@ public partial class L2AnimationsPage : ObservableObject
         else if (!int.TryParse(t, System.Globalization.NumberStyles.HexNumber, null, out v)) { Status = "A colour is 4 hex digits (BGR555, as the game keeps it) or 6 (#RRGGBB)."; return; }
         L2SpellAnims.SetColour(_rom, PalIndex, Colour, v);
         _main.NotifyRomModified($"Lufia II: animation colours {PalIndex:X}, colour {Colour}");
+        _readVersion = _rom.Version;
         var users = L2SpellAnims.PaletteUsers(_rom, PalIndex, Id);
         Status = "Colour set." + (users.Count > 0 ? $" Animations {string.Join(", ", users.Select(u => u.ToString("X2")))} use these colours too." : "");
         Swatch(); DrawSheet();
@@ -348,6 +375,7 @@ public partial class L2AnimationsPage : ObservableObject
             _sheetPx = idx.Select(v => (byte)(v & 15)).ToArray();
             L2SpellAnims.WriteGraphics(_rom, GfxIndex, L2SpellAnims.SheetTiles(_sheetW, _sheetH, _sheetPx, _tiles.Length));
             _main.NotifyRomModified($"Lufia II: animation {Id:X2} graphics imported");
+            _readVersion = _rom.Version;
             LoadSheet();
             Status = $"Imported {System.IO.Path.GetFileName(path)}. Play shows it.";
         }

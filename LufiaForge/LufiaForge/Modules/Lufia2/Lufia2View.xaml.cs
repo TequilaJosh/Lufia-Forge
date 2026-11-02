@@ -12,11 +12,16 @@ public partial class Lufia2View : UserControl
             if (e.OldValue is Lufia2ViewModel old) { old.ShowPage -= Show; old.OpenEditor -= OpenEditor; }
             if (e.NewValue is Lufia2ViewModel vm) { vm.ShowPage += Show; vm.OpenEditor += OpenEditor; }
         };
-        // the Game start page shows the start as it is now (Test in the game on the Cutscenes page changes it)
-        Pages.SelectionChanged += (_, e) =>
-        {
-            if (e.OriginalSource == Pages && Pages.SelectedItem is TabItem { Header: "Game start" } && DataContext is Lufia2ViewModel vm) vm.GameStart.Refresh();
-        };
+        // a page switched to: the other pages' edits go into the ROM, and the page reads what changed meanwhile (the Game
+        // start page shows the start as it is now: Test in the game on the Cutscenes page changes it)
+        Pages.SelectionChanged += (_, e) => { if (e.OriginalSource == Pages) PageShown(); };
+        // back from another tab of the app (its edits were written when it was left)
+        IsVisibleChanged += (_, e) => { if (e.NewValue is true) PageShown(); };
+    }
+
+    private void PageShown()
+    {
+        if (Pages.SelectedItem is TabItem { Header: string header } && DataContext is Lufia2ViewModel vm) vm.PageShown(header);
     }
 
     /// <summary>The pop-up event editor on an event of a map (as Lufia 1's map editor opens its events). When it closes,

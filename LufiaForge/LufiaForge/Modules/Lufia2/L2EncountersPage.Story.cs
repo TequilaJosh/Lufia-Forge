@@ -76,6 +76,7 @@ public partial class L2EncountersPage
             int from = Math.Max(0, SelectedStory);
             int b = L2Encounters.AddStoryBattle(_rom, from);
             _main.NotifyRomModified($"Lufia II: new story battle {b:X2}");
+            _readVersion = _rom.Version;
             _storyLoading = true;
             StoryNames.Add(StoryLabel(b));
             _storyLoading = false;
@@ -91,6 +92,7 @@ public partial class L2EncountersPage
         if (_rom == null || _main == null || SelectedStory < 0) return;
         L2Encounters.WriteStoryBattle(_rom, SelectedStory, StorySlots.Select(s => (s.Monster, Math.Clamp(s.X, 0, 255), Math.Clamp(s.Y, 0, 255))).ToList());
         _main.NotifyRomModified($"Lufia II: story battle {SelectedStory:X2}");
+        _readVersion = _rom.Version;
         int keep = SelectedStory;
         _storyLoading = true;
         foreach (int b in L2Encounters.StorySharing(_rom, keep).Append(keep)) StoryNames[b] = StoryLabel(b);

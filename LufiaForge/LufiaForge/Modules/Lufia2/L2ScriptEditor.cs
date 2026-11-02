@@ -398,7 +398,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
     public void Load(RomBuffer rom, MainViewModel main, int map, L2EventItem item, string title)
     {
         Stop();
-        if (!ReferenceEquals(rom, _rom) || _maps.Length == 0) ReadRomNames(rom);
+        if (NamesStale(rom)) ReadRomNames(rom);
         _rom = rom; _main = main;
         _map = map;
         _event = item;
@@ -414,6 +414,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         _partyByHand = false;
         FillTestParty();
         TestNote = NewGameNote();
+        MarkRead();
     }
 
     // ------------------------------------------------------------------ the party in the test
@@ -479,9 +480,55 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
     {
         var item = head < 0 ? ItemsOf(rom, map).FirstOrDefault(e => e.IsInit) : ItemsOf(rom, map).FirstOrDefault(e => e.Entry?.Head == head && e.Entry?.Id == id);
         if (item == null) return false;
-        if (!ReferenceEquals(rom, _rom) || _maps.Length == 0) ReadRomNames(rom);
+        if (NamesStale(rom)) ReadRomNames(rom);
         Load(rom, main, map, item, TitleOf(rom, map, item));
         return true;
+    }
+
+    /// <summary>The ROM's version when the event shown was read (or written here), and when the names were read.</summary>
+    private int _readVersion = -1, _namesVersion = -1;
+    /// <summary>The event's steps as they were read (place and bytes), to tell whether another page changed them since.</summary>
+    private List<(int At, byte[] Bytes)> _readSteps = new();
+    private int _readBlock = -1;
+
+    /// <summary>The item, spell, song and map names are of another ROM or an older version of this one (renamed on
+    /// another page, or Undo).</summary>
+    private bool NamesStale(RomBuffer rom) => !ReferenceEquals(rom, _rom) || _maps.Length == 0 || _namesVersion != rom.Version;
+
+    /// <summary>Remembers the ROM as the event was read: <see cref="ChangedElsewhere"/> compares with it.</summary>
+    private void MarkRead()
+    {
+        if (_rom == null) return;
+        _readVersion = _rom.Version;
+        _readBlock = _map >= 0 ? L2Events.Block(_rom, _map) : -1;
+        _readSteps = _script == null ? new() : _script.Steps.Where(s => !s.IsNew).Select(s => (s.At, _rom.ReadBytes(s.At, s.OriginalLength))).ToList();
+    }
+
+    /// <summary>The event was written by another page (or moved with its map's events) since it was read here.</summary>
+    private bool ChangedElsewhere()
+    {
+        if (_rom == null || _rom.Version == _readVersion) return false;
+        if (_map >= 0 && L2Events.Block(_rom, _map) != _readBlock) return true;
+        return _readSteps.Any(s => s.At + s.Bytes.Length > _rom.Length || !_rom.ReadBytes(s.At, s.Bytes.Length).AsSpan().SequenceEqual(s.Bytes));
+    }
+
+    /// <summary>The page showing the editor is shown again: when the ROM changed since the event was read and nothing
+    /// is unwritten here, the event (and the map's names and stage) is read again, keeping the step picked.</summary>
+    public void Shown()
+    {
+        if (_rom == null || _main == null || _event == null || _rom.Version == _readVersion || HasPendingEdits) return;
+        int keep = SelectedLine;
+        if (FindAgain() is not { } item) { Unload(); Status = "The event shown isn't on its map any more (changed on another page)."; return; }
+        Load(_rom, _main, _map, item, TitleOf(_rom, _map, item));
+        if (keep >= 0 && keep < Lines.Count) SelectedLine = keep;
+    }
+
+    /// <summary>The event shown, as the map's lists have it now (its place may have moved), or null.</summary>
+    private L2EventItem? FindAgain()
+    {
+        if (_rom == null || _event is not { } e || _map < 0) return null;
+        return ItemsOf(_rom, _map).FirstOrDefault(x => x.IsInit == e.IsInit && (x.PuzzleOps == null) == (e.PuzzleOps == null) && (x.Entry == null) == (e.Entry == null)
+            && (e.Entry == null ? x.Title == e.Title : x.Entry!.Head == e.Entry.Head && x.Entry.Id == e.Entry.Id));
     }
 
     /// <summary>Nothing open.</summary>
@@ -502,7 +549,8 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
 
     private void ReadRomNames(RomBuffer rom)
     {
-        _items = L2Battle.Items(rom).Select(i => i.Name.Trim()).ToArray();
+        _namesVersion = rom.Version;
+        _items =L2Battle.Items(rom).Select(i => i.Name.Trim()).ToArray();
         _spells = L2Battle.Spells(rom).Select(s => s.Name.Trim()).ToArray();
         _songs = Enumerable.Range(0, L2Script.SongCount).Select(i => L2Script.SongName(rom, i)).ToArray();
         _maps = Enumerable.Range(0, L2Maps.Count).Select(m => MapNameOf(rom, m)).ToArray();
@@ -1260,7 +1308,10 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         if (_event == null) return;
         int keep = SelectedLine;
         _undo.Clear(); _redo.Clear(); UpdateUndo();
+        // (as the ROM has it now: another page may have moved the map's events)
+        if (_rom != null && _map >= 0) { ReadMap(); if (FindAgain() is { } again) _event = again; }
         ReadScript(keep);
+        MarkRead();
         Status = "Put back as the project has it.";
     }
 
@@ -1277,6 +1328,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         _rom.WriteBytes(op.At, bytes);
         if (L2Puzzles.Length(_rom, op.At) != op.Length) { _rom.WriteBytes(op.At, old); Status = $"Not written: as a command that would be {L2Puzzles.Length(_rom, op.At)} bytes, not {op.Length}."; return; }
         _main.NotifyRomModified($"Lufia II: puzzle command at {op.At:X6}");
+        MarkRead();
         Status = "Written.";
         Saved?.Invoke("puzzle command");
     }
@@ -1339,6 +1391,9 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
     {
         if (_rom == null || _main == null || _script == null || _event == null || !CanEdit) return false;
         if (!IsDirty) { Status = "Nothing changed."; return true; }
+        // the steps here were read before another page wrote this event (or moved its map's events): writing them
+        // would put back what that page changed
+        if (ChangedElsewhere()) { Status = "Not saved: this event was changed on another page after it was opened here. Revert reads it again; then make your changes again."; return false; }
         // every text must be text the game can show (texts not changed are written as they are: the game's own can hold
         // codes typed text can't)
         for (int i = 0; i < _script.Steps.Count; i++)
@@ -1360,6 +1415,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
             var items = ItemsOf(_rom, _map);
             _event = init ? items[0] : items.FirstOrDefault(x => x.Entry?.Head == entry!.Head && x.Entry?.Id == entry.Id) ?? _event;
             ReadScript(keep);
+            MarkRead();
             Status = "Saved in the project. " + result + (added ? " An End step was added at the bottom." : "");
             Saved?.Invoke(result);
             return true;
@@ -1835,6 +1891,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
             var items = ItemsOf(_rom, _map);
             if (_event != null) _event = _event.IsInit ? items[0] : items.FirstOrDefault(x2 => x2.Entry?.Head == _event.Entry?.Head && x2.Entry?.Id == _event.Entry?.Id) ?? _event;
             ReadScript(keep);
+            MarkRead();
             StageInfo = $"Cutscene character {id - 0x4F} ({L2Sprites.Name(sprite)}) is made with the map, hidden until a step makes it appear" +
                         (guard >= 0 ? $", and no longer once story flag {guard:X2} is on (the event has played)." : ".") + " Click a tile and pick \"appears here\" to show it.";
             Saved?.Invoke("cutscene character");

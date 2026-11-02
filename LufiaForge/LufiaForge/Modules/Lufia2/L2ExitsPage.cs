@@ -41,13 +41,25 @@ public partial class L2ExitsPage : L2Page
 
     protected override bool IsField(string p) => false;
 
+    /// <summary>Writes the rows changed here only, each to its exit as the ROM has it now (the Maps tab edits the same
+    /// list and may have moved it), so an exit changed there keeps its change.</summary>
     protected override string? Write()
     {
+        int map = _maps[SelectedIndex];
+        var now = L2MapInfo.Read(Rom!, map).Where(e => e.Kind == "Exit").ToList();
+        bool any = false;
         for (int i = 0; i < _exits.Count && i < Rows.Count; i++)
         {
             var r = Rows[i];
-            L2MapInfo.WriteExit(Rom!, _exits[i], Math.Clamp(r.Map, 0, 255), Math.Clamp(r.X, 0, 255), Math.Clamp(r.Y, 0, 255));
+            var (m, x, y) = (Math.Clamp(r.Map, 0, 255), Math.Clamp(r.X, 0, 255), Math.Clamp(r.Y, 0, 255));
+            var was = _exits[i];
+            if (m == was.DestMap && x == was.DestX && y == was.DestY) continue;
+            var exit = now.FirstOrDefault(e => e.Id == was.Id);
+            if (exit == null) continue;   // taken out on the Maps tab meanwhile
+            L2MapInfo.WriteExit(Rom!, exit, m, x, y);
+            _exits[i] = exit with { DestMap = m, DestX = x, DestY = y };
+            any = true;
         }
-        return $"exits of map {_maps[SelectedIndex]:X2}";
+        return any ? $"exits of map {map:X2}" : null;
     }
 }

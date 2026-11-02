@@ -37,7 +37,7 @@ public partial class L2EventsPage : L2Page
 
     public L2EventsPage()
     {
-        Editor.Saved += _ => { Flags.Clear(); LoadFlags(); FillEvents(Editor.Event?.Entry, Editor.Event?.IsInit == true, keepEditor: true); };
+        Editor.Saved += _ => { Flags.Clear(); LoadFlags(); FillEvents(Editor.Event?.Entry, Editor.Event?.IsInit == true, keepEditor: true); MarkRead(); };
         Editor.FlagRequested += f => { SelectedFlag = f; FlagRequested?.Invoke(f); };
         Editor.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(L2ScriptEditor.Status)) Status = Editor.Status; };
     }
@@ -97,6 +97,18 @@ public partial class L2EventsPage : L2Page
         if (item != null) SelectedEvent = item;
     }
 
+    /// <summary>The page is shown: when the ROM changed since it read it (another page, Undo), the story flags, the
+    /// event open (unless it has unwritten steps) and the map's list are read again.</summary>
+    public override void Shown()
+    {
+        if (!ChangedSinceRead || _map < 0) return;
+        L2FlagUses.Invalidate();
+        Flags.Clear(); LoadFlags();
+        Editor.Shown();
+        FillEvents(Editor.Event?.Entry, Editor.Event?.IsInit == true, keepEditor: true);
+        MarkRead();
+    }
+
     /// <summary>Reads the map's list again (another page wrote the map's events).</summary>
     public void Reload()
     {
@@ -116,6 +128,7 @@ public partial class L2EventsPage : L2Page
         Flags.Clear(); LoadFlags();
         FillEvents(entry, false, keepEditor: false);
         Status = what;
+        MarkRead();
     }
 
     /// <summary>Takes the picked event out of its list.</summary>
@@ -132,6 +145,7 @@ public partial class L2EventsPage : L2Page
         L2FlagUses.Invalidate();
         FillEvents(null, false, keepEditor: false);
         Status = "Removed.";
+        MarkRead();
     }
 
     /// <summary>Adds steps at the end of an event (the "continue another event" choice of a new event).</summary>

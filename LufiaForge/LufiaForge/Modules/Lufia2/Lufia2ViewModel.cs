@@ -52,8 +52,40 @@ public partial class Lufia2ViewModel : ObservableObject
         Chests.BeforeRead = () => Maps.WritePendingEdits();
     }
 
+    /// <summary>A page was switched to (or the tab shown again): the edits not yet in the ROM go in first (from every
+    /// page), then the page reads the ROM again when it changed since it last read it.</summary>
+    public void PageShown(string header)
+    {
+        _main?.WritePendingEdits();
+        switch (header)
+        {
+            case "Maps": Maps.Shown(); break;
+            case "Text": Text.Shown(); break;
+            case "Events": Events.Shown(); break;
+            case "Cutscenes": Cutscenes.Shown(); break;
+            case "Game start": GameStart.Refresh(); break;
+            case "Treasure": Chests.Shown(); break;
+            case "Exits": Exits.Shown(); break;
+            case "Music": Music.Shown(); break;
+            case "Monsters": Monsters.Shown(); break;
+            case "Encounters": Encounters.Shown(); break;
+            case "Items": Items.Shown(); break;
+            case "Spells": Spells.Shown(); break;
+            case "IP attacks": IpAttacks.Shown(); break;
+            case "Animations": Animations.Shown(); break;
+            case "Shops": Shops.Shown(); break;
+            case "Characters": Characters.Shown(); break;
+            case "Capsule monsters": Capsules.Shown(); break;
+            case "Graphics": Graphics.Shown(); break;
+            case "Settings": Settings.Shown(); break;
+        }
+    }
+
+    private MainViewModel? _main;
+
     public void SetRom(RomBuffer rom, MainViewModel main)
     {
+        _main = main;
         Overview = $"{GameDetect.Name(rom.Game)}, {rom.Length / 1024} KB, title \"{rom.ReadAscii(GameDetect.HeaderTitle, GameDetect.TitleLength).TrimEnd()}\".\n\n" +
                    "Maps: every map drawn and edited as in Lufia 1's map editor: blocks on either layer (brushes, copy and paste, pieces of other maps, presets), collision, exits, step-on areas, characters, preset points and treasure, the block editor, graphics and size, a test start, and the world map with its battle zones. Text: the lines of the maps' scenes. Events: every event in plain words, edited step by step, and new events (talking to a character, stepping on an area, after another event). Cutscenes: a map as a stage with its characters, cutscenes made from steps in plain words (appear, walk, face, act, speak, camera, fades, music, flags, go to another map), played back, and tested from a new game. Game start: the map, cutscene, point and story flags a new game starts with. " +
                    "Graphics: every picture, painted pixel by pixel or through PNG, new palettes, new map sprites and new monster battle sprites. Battles: monsters, items, spells and IP attacks, with their effects edited step by step (weapons, armor, spells, IP attacks, monster and capsule AI), new spells and new IP attacks, battle animations played as the game plays them, painted, recoloured and copied into new ones. " +

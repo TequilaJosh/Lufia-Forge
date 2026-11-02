@@ -139,9 +139,26 @@ public partial class L2EncountersPage : ObservableObject
         SelectedGroup = -1; SelectedGroup = 0;
         SelectedZone = -1; SelectedZone = 1;
         InitStory();
+        _readVersion = rom.Version;
     }
 
     private bool _keepWorld;
+    /// <summary>The ROM's version when the page read it (or wrote it itself).</summary>
+    private int _readVersion = -1;
+
+    /// <summary>The page is shown: when the ROM changed since it read it (monsters renamed or added, zones painted on the
+    /// Maps tab, Undo), everything is read again, keeping the picks.</summary>
+    public void Shown()
+    {
+        if (_rom == null || _main == null || _rom.Version == _readVersion) return;
+        int g = SelectedGroup, z = SelectedZone, st = SelectedStory, row = SelectedMapRow, mode = MiddleMode;
+        SetRom(_rom, _main);
+        // (a zone picks its first group: the zone or map first, then the group that was shown)
+        SelectedZone = -1; SelectedZone = z;
+        if (mode == 1 && row >= 0) { SelectedMapRow = -1; SelectedMapRow = row; }
+        SelectedGroup = -1; SelectedGroup = g;
+        SelectedStory = -1; SelectedStory = st;
+    }
 
     /// <summary>After monsters were added or renamed on the Monsters page, or their sprites changed (Monsters or
     /// Graphics page): the lists offer them, with their pictures and sprite room (the picks are kept).</summary>
@@ -314,6 +331,7 @@ public partial class L2EncountersPage : ObservableObject
         var slots = _allSlots.Select(s => new L2Encounters.ZoneSlot(s.Group, s.Weight)).ToList();
         L2Encounters.WriteZone(_rom, SelectedZone, slots);
         _main.NotifyRomModified($"Lufia II: battle zone {SelectedZone:X2}");
+        _readVersion = _rom.Version;
         int z = SelectedZone;
         Status = $"Zone {z:X2} written.";
         System.Windows.Application.Current?.Dispatcher.BeginInvoke(() => { RefreshLists(); ShowZoneDetails(z); });
@@ -328,6 +346,7 @@ public partial class L2EncountersPage : ObservableObject
         {
             int z = L2Encounters.AddZone(_rom);
             _main.NotifyRomModified($"Lufia II: battle zone {z:X2} added");
+            _readVersion = _rom.Version;
             RefreshLists();
             ListTab = 0; SelectedZone = -1; SelectedZone = z;
             Status = $"Zone {z:X2} added: give it groups here (Add group), then paint it on the world map (Maps > World map > Battle zones).";
@@ -383,6 +402,7 @@ public partial class L2EncountersPage : ObservableObject
         var (at, _) = L2Encounters.MapList(_rom, map);
         _rom.WriteByte(at + f.Index, (byte)f.Group);
         _main.NotifyRomModified($"Lufia II: monsters of map {map:X2}");
+        _readVersion = _rom.Version;
         f.Monsters = GroupPictures(f.Group);
         SelectedGroup = f.Group;
     }
@@ -431,6 +451,7 @@ public partial class L2EncountersPage : ObservableObject
         if (Locked()) return;
         L2Encounters.WriteGroup(_rom, SelectedGroup, ms);
         _main.NotifyRomModified($"Lufia II: monster group {SelectedGroup:X2}");
+        _readVersion = _rom.Version;
         int g = SelectedGroup;
         Status = what;
         System.Windows.Application.Current?.Dispatcher.BeginInvoke(() =>

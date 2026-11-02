@@ -38,11 +38,13 @@ public partial class L2ChestsPage : L2Page
     /// <summary>Called before the page reads the ROM (the Maps tab writes what it hasn't written yet).</summary>
     public Func<string?>? BeforeRead { get; set; }
 
-    /// <summary>The page is shown: the Maps tab's edits go in first, then the list and the picked map are read again.</summary>
-    public void Shown()
+    /// <summary>The page is shown: the Maps tab's edits go in first, then (when the ROM changed since the page read it)
+    /// the list and the picked map are read again.</summary>
+    public override void Shown()
     {
         if (Rom == null) return;
         BeforeRead?.Invoke();
+        if (!ChangedSinceRead) return;
         int map = _map;
         Loading = true;
         try { Names.Clear(); foreach (var n in ReadNames()) Names.Add(n); }

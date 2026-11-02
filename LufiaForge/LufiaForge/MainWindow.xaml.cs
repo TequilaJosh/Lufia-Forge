@@ -199,6 +199,7 @@ public partial class MainWindow : Window
     {
         var vm = (MainViewModel)DataContext;
         if (vm.RomBuffer is not { } rom) return;
+        vm.WritePendingEdits();   // (every tab reads the ROM again after: what isn't in it yet goes in first)
         var d = new Modules.Common.ClearStoryWindow(rom) { Owner = this };
         if (d.ShowDialog() != true) return;
         var before = rom.ToArray();
