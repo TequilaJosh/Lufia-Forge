@@ -353,6 +353,8 @@ public partial class EventEditorPanel : UserControl, LufiaForge.ViewModels.IPend
         TimelineSplitter.MouseDoubleClick += (_, _) => { Common.LayoutMemory.Set("eventeditor.timeline", null); TimelineRow.Height = new GridLength(240); };
         // while it's on screen its edits are written by themselves (saving the project, Apply to ROM in the top bar)
         Loaded += (_, _) => (Application.Current?.MainWindow?.DataContext as LufiaForge.ViewModels.MainViewModel)?.Register(this);
+        // shown again: what another tab, Undo or a patch changed meanwhile is read again
+        IsVisibleChanged += (_, e) => { if (e.NewValue is true) Dispatcher.BeginInvoke(RefreshIfStale); };
         Unloaded += (_, _) =>
         {
             if (HasPendingEdits) WritePendingEdits();
@@ -369,6 +371,38 @@ public partial class EventEditorPanel : UserControl, LufiaForge.ViewModels.IPend
     {
         if (!HasPendingEdits) return null;
         return Write(quiet: true) ? null : $"Event {_event} of map {_mapId:X2}: {StatusText.Text}";
+    }
+
+    /// <summary>
+    /// When the ROM no longer holds the event as it was read (another tab, Undo or a patch wrote it), it is read again,
+    /// so its old lines are never written back over the newer ones. With edits not written yet it stays as it is and
+    /// says so (saving refuses then: <see cref="EventScript.Save"/>).
+    /// </summary>
+    public void RefreshIfStale()
+    {
+        if (Script == null || _rom == null) return;
+        if (Script.MatchesRom())
+        {
+            if (Stage.Visibility == Visibility.Visible) Stage.Bind(_rom, this);   // (its map may have changed)
+            return;
+        }
+        if (Script.IsModified)
+        {
+            StatusText.Text = "This event was changed somewhere else since it was opened here (another tab, Undo or a patch), so these edits " +
+                              "can't be written over it. Revert to read it again, then make them again.";
+            return;
+        }
+        // code an event jumps to is only found again from its event, which may have moved
+        var fresh = Script.IsCodeView && LufiaMap.EventScriptOffset(_rom, Script.MapId, Script.Event) != Script.JumpBase ? null : EventScript.Reload(_rom, Script);
+        if (fresh == null)
+        {
+            StatusText.Text = "This event was changed somewhere else and can't be shown as it is now here: open it again from the list.";
+            return;
+        }
+        int line = _selectedLine;
+        Show(_rom, fresh, _title, _owner);
+        if (line >= 0 && _lines.Count > 0) SelectLine(Math.Min(line, _lines.Count - 1));
+        StatusText.Text = "Read again: the event was changed somewhere else meanwhile.";
     }
 
     private readonly Stack<(EventScript Script, string Title)> _history = new();
@@ -1033,6 +1067,7 @@ public partial class EventEditorPanel : UserControl, LufiaForge.ViewModels.IPend
     {
         Script = EventScript.Reload(_rom, Script) ?? Script;
         Fill();
+        if (Stage.Visibility == Visibility.Visible) Stage.Bind(_rom, this);
         StatusText.Text = "Put back as the project has it.";
     }
 

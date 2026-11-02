@@ -15,6 +15,8 @@ public partial class EventEditorWindow : Window
         Panel.Load(rom, script, title, owner);
         Panel.ShowCloseButton = true;
         Panel.CloseRequested += () => { _confirmed = true; Close(); };
+        // back from the main window (it stays open beside it): what was changed there meanwhile is read again
+        Activated += (_, _) => Panel.RefreshIfStale();
     }
 
     private bool _confirmed;

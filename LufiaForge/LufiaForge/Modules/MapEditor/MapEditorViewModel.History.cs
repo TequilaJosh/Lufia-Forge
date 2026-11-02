@@ -123,12 +123,14 @@ public partial class MapEditorViewModel
         error = null;
         if (_rom == null || _map == null || !HasUnappliedChanges) return true;
         if (_inGesture) { error = "a map edit is in progress"; return false; }
+        if (ChangedElsewhere()) { error = ChangedElsewhereText; return false; }
         try
         {
             var result = MapWriter.Save(_rom, _map, allowExpand: true);
             int id = _map.MapId;
             var sel = _selection;
             _map = LufiaMap.Load(_rom, id);
+            RememberLoaded();
             _spotContents = MapSetupScript.ReadSpots(_rom, id);
             _tileset = MapTileset.ForMap(_rom, _map);
             _baseline = _current = _map.Capture();

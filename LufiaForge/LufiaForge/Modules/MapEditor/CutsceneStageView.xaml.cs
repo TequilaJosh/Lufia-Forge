@@ -98,7 +98,10 @@ public partial class CutsceneStageView : UserControl
         _rom = rom; _panel = panel;
         MusicSync.UseRom(rom);   // unmeasured songs' sync points come from the game's sound driver
         var script = panel.Script;
-        if (script.MapId != _mapId || _map == null)
+        // the same map, changed meanwhile by another tab, Undo or a patch: read again (walks not written yet are put
+        // into the newer map when they are written, see MapToWrite)
+        bool stale = script.MapId == _mapId && _map != null && !_pathsDirty && MapIsStale();
+        if (script.MapId != _mapId || _map == null || stale)
         {
             if (_pathsDirty && _map != null) SavePaths(quiet: true);   // the previous map's paths are written by themselves
             _pathsDirty = false;
@@ -106,6 +109,7 @@ public partial class CutsceneStageView : UserControl
             try
             {
                 _map = LufiaMap.Load(rom, _mapId);
+                RememberMap();
                 // the intro shows its map in another palette than the map's own (set by the intro's setup code)
                 var tiles = MapTileset.ForMap(rom, _map, IntroScene.PaletteFor(rom, _map));
                 var px = tiles.RenderMap(_map);
@@ -130,6 +134,51 @@ public partial class CutsceneStageView : UserControl
         if (!_startSet) (_startX, _startY) = CutsceneStage.DefaultStart(_map!, script.Event);
         if (!ReferenceEquals(script, _boundScript)) { _line = -1; _boundScript = script; }
         Resimulate();
+    }
+
+    // the stage's map as it was read: its data, where it was, its walks (to tell when something else wrote it since)
+    private byte[]? _mapData;
+    private int _mapOffset = -1, _mapVersion = -1;
+    private string _mapPaths = "";
+
+    private static string PathsKey(LufiaMap m) => string.Join("|", m.Paths.Select(LufiaMap.State.Key));
+
+    private void RememberMap()
+    {
+        if (_map == null || _rom == null) return;
+        _mapData = (byte[])_map.Original.Clone();
+        _mapOffset = _map.CompressedOffset;
+        _mapVersion = _rom.Version;
+        _mapPaths = PathsKey(_map);
+    }
+
+    /// <summary>True when the ROM's copy of the stage's map differs from the one it read (another tab, Undo, a patch).</summary>
+    private bool MapIsStale()
+    {
+        if (_map == null || _rom == null || _mapData == null || _rom.Version == _mapVersion) return false;
+        try
+        {
+            var now = LufiaMap.Load(_rom, _map.MapId);
+            bool stale = now.CompressedOffset != _mapOffset || !now.Original.AsSpan().SequenceEqual(_mapData);
+            if (!stale) _mapVersion = _rom.Version;
+            return stale;
+        }
+        catch { return true; }
+    }
+
+    /// <summary>The map the walks are written with: the stage's copy, or when the ROM's map changed since it was read
+    /// (blocks, characters... in the Map Editor), the ROM's map with the stage's walks put in, so writing them doesn't
+    /// put the older map back. Throws when the walks themselves were changed somewhere else too.</summary>
+    private LufiaMap MapToWrite()
+    {
+        if (!MapIsStale()) return _map!;
+        var now = LufiaMap.Load(_rom!, _map!.MapId);
+        if (PathsKey(now) != _mapPaths)
+            throw new InvalidOperationException($"The walks of map {_map.MapId:X2} were changed somewhere else since this cutscene was opened, " +
+                                                "so these would write over them. Open the cutscene again to see them, then change them again.");
+        now.Paths.Clear();
+        now.Paths.AddRange(_map.Paths);
+        return now;
     }
 
     private StageParty Party => CutsceneStage.Parties[Math.Max(0, PartyBox.SelectedIndex)];
@@ -545,15 +594,17 @@ public partial class CutsceneStageView : UserControl
     {
         if (!HasPathChanges || _rom == null || _map == null || _panel == null) return null;
         bool expand = _rom.Length >= MapWriter.ExpandedSize;
-        if (MapWriter.NeedsMoreSpace(_map, out _) && !expand)
+        var map = MapToWrite();
+        if (MapWriter.NeedsMoreSpace(map, out _) && !expand)
         {
             if (!_panel.Host.ConfirmExpand("The map's walks no longer fit where its data was.")) throw new InvalidOperationException("The walks weren't written.");
             expand = true;
         }
-        var result = MapWriter.Save(_rom, _map, allowExpand: expand);
+        var result = MapWriter.Save(_rom, map, allowExpand: expand);
         _pathsDirty = false;
         _panel.Host.EventSaved($"Map {_map.MapId:X2}: movement paths");
         _map = LufiaMap.Load(_rom, _map.MapId);
+        RememberMap();
         return "Walks: " + result.Describe();
     }
 
@@ -717,17 +768,19 @@ public partial class CutsceneStageView : UserControl
         try
         {
             bool expand = _rom.Length >= MapWriter.ExpandedSize || quiet;
-            if (MapWriter.NeedsMoreSpace(_map, out _) && !expand)
+            var map = MapToWrite();
+            if (MapWriter.NeedsMoreSpace(map, out _) && !expand)
             {
                 if (!_panel.Host.ConfirmExpand("The map's data no longer fits where it was.")) { PathStatus.Text = "Not written."; return; }
                 expand = true;
             }
-            var result = MapWriter.Save(_rom, _map, allowExpand: expand);
+            var result = MapWriter.Save(_rom, map, allowExpand: expand);
             _pathsDirty = false;
             _panel.Host.EventSaved($"Map {_map.MapId:X2}: movement paths");
             PathStatus.Text = "✔ Paths saved in the project.";
             if (!quiet) _panel.Host.ConfirmWritten($"Paths of map {_map.MapId:X2} saved in the project", result.Describe());
             _map = LufiaMap.Load(_rom, _map.MapId);
+            RememberMap();
             Resimulate();
         }
         catch (Exception ex) { PathStatus.Text = "Not written: " + ex.Message; }

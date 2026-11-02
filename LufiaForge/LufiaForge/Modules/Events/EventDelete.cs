@@ -15,7 +15,7 @@ public static class EventDelete
         foreach (int c in st.Characters) lines.Add($"• Talking to character {c + 1} will do nothing (the character stays).");
         foreach (int a in st.Areas) lines.Add($"• Step-on area T{a} is switched off.");
         foreach (var grp in st.Chains.GroupBy(c => (c.Map, c.Event)))
-            lines.Add($"• Event {grp.Key.Event} of {otherMapLabel(grp.Key.Map)} no longer continues with this event ({grp.Count()} \"run event\" command{(grp.Count() == 1 ? "" : "s")} removed).");
+            lines.Add($"• Event {grp.Key.Event} of {otherMapLabel(grp.Key.Map)} no longer continues with this event: it ends there instead ({grp.Count()} \"run event\" command{(grp.Count() == 1 ? "" : "s")} made an end).");
         if (lines.Count == 0) lines.Add("• Nothing on the map or in other events starts it.");
         string text = $"Delete event {ev} of {mapLabel}?\n\nIts lines are removed (it becomes an empty event, so nothing that still points at it can crash the game).\n\n" +
                       string.Join("\n", lines) + "\n\nEdit > Undo takes it all back.";
@@ -24,6 +24,6 @@ public static class EventDelete
             : MessageBox.Show(text, "Delete event", MessageBoxButton.OKCancel, MessageBoxImage.Warning, MessageBoxResult.Cancel);
         if (r != MessageBoxResult.OK) return null;
         MapEvents.Delete(rom, mapId, ev, st);
-        return $"Deleted event {ev} of {mapLabel}" + (st.Any ? $" ({st.Areas.Count} area(s) switched off, {st.Chains.Count} run-event command(s) removed)" : "");
+        return $"Deleted event {ev} of {mapLabel}" + (st.Any ? $" ({st.Areas.Count} area(s) switched off, {st.Chains.Count} run-event command(s) made an end)" : "");
     }
 }

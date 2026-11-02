@@ -278,15 +278,21 @@ public partial class MapEditorViewModel
         {
             int x = _map.Width / 2, y = _map.Height / 2;
             if (_map.Arrivals.Count > 0) { x = Math.Min(_map.Width - 1, _map.Arrivals[0].X + 1); y = _map.Arrivals[0].Y; }
-            int slots = EventScript.SlotCount(_rom, _map.MapId);
-            if (_map.Npcs.Count >= slots)
+            // talking to character n runs event n: numbers whose event is in use (a cutscene, a step-on area's) are
+            // skipped, kept as hidden characters, so the new one doesn't start someone else's event
+            int index = MapEvents.FreeCharacterNumber(_rom, _map);
+            if (index < 0)
             {
-                // talking to it would run event n, past the map's event table: the game would read code as a pointer
-                Status = $"This map's events have {slots} slots, so it can have at most {slots} characters (talking to character n runs event n).";
+                Status = "This map has no character number left below 32 whose event is free (talking to character n runs event n).";
                 return;
             }
-            var n = _map.AddNpc(NpcSprite >= 0 ? NpcSprite : 0x0C, x, y);
-            Status = $"Character {n.Index + 1} added (talking runs event {n.Index}; an empty one is made when the map is written). Drag it into place; it's written by itself (or click Apply in the top bar).";
+            int first = _map.Npcs.Count;
+            var n = _map.AddNpc(NpcSprite >= 0 ? NpcSprite : 0x0C, x, y, index);
+            string skipped = index == first ? ""
+                : index == first + 1 ? $" Number {first + 1}'s event is taken (by another event or the step-on areas), so it stays a hidden character."
+                : $" Numbers {first + 1}-{index} have their events taken (by other events or the step-on areas), so they stay hidden characters.";
+            Status = $"Character {n.Index + 1} added (talking runs event {n.Index}, an empty one made when the map is written).{skipped} " +
+                     "Drag it into place; it's written by itself (or click Apply in the top bar).";
             MarkEdited();
             RebuildOverlays();
             SelectNpc(n);
