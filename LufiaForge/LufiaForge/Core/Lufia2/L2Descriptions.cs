@@ -199,9 +199,17 @@ public static class L2Descriptions
     public static string? Write(RomBuffer rom, int entry, string text)
     {
         if (entry < 0 || entry >= EntryCount(rom)) return "This entry has no description in this ROM.";
-        // the others keep their bytes; if that doesn't fit, they're all encoded again (that saves about 100 bytes)
+        if (Read(rom, entry) == text.Replace("\r\n", "\n")) return null;
         var mine = Encode(rom, text);
         int n = EntryCount(rom);
+        // over its own bytes when it isn't longer and no other entry reads them (the others stay where they are)
+        int at = At(rom, entry), oldLength = RawAt(rom, at).Length;
+        if (mine.Length <= oldLength && Enumerable.Range(0, n).All(e => e == entry || At(rom, e) is var o && (o < at || o >= at + oldLength)))
+        {
+            rom.WriteBytes(at, mine);
+            return null;
+        }
+        // the others keep their bytes; if that doesn't fit, they're all encoded again (that saves about 100 bytes)
         if (Pack(rom, Enumerable.Range(0, n).Select(e => e == entry ? mine : Raw(rom, e)).ToList()) == null) return null;
         if (!IsMoved(rom) && CanMove(rom))
         {

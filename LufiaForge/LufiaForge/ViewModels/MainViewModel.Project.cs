@@ -226,7 +226,8 @@ public partial class MainViewModel
     /// shrine maps CF and F1, drawn wrong in the US game (<see cref="Core.Lufia2.L2ShrineFix"/>), and on an 8 MB Lufia II
     /// ROM made before 2026-11-01 the battle window frame read from the upper 4 MB (<see cref="Core.Lufia2.L2Rom.FixLowBankReads"/>),
     /// and puzzle blocks Lufia Forge wrote before then past 2.5 MB, where their commands can't reach RAM
-    /// (<see cref="Core.Lufia2.L2PuzzleBlock.MoveIntoReach"/>).</summary>
+    /// (<see cref="Core.Lufia2.L2PuzzleBlock.MoveIntoReach"/>), and a version 2 battle script block, whose runner hook
+    /// skipped the fan hacks' monster scripts with offsets that wrap round their bank (<see cref="Core.Lufia2.L2AiScripts.UpdateHooks"/>).</summary>
     private string _openNote = "";
 
     private void FixKnownBugs(RomBuffer rom)
@@ -238,6 +239,12 @@ public partial class MainViewModel
             NotifyRomModified("Lufia II: battle window border fixed for the 8 MB ROM (read from bank $81, not the upper 4 MB)");
             OnPropertyChanged(nameof(RomBuffer));
             _openNote = " The hero's battle window border, broken on 8 MB ROMs, was fixed (Edit, Undo takes it back).";
+        }
+        if (rom.IsLufia2 && Core.Lufia2.L2AiScripts.UpdateHooks(rom))
+        {
+            NotifyRomModified("Lufia II: battle script hooks updated (monster scripts that wrap round their bank run again)");
+            OnPropertyChanged(nameof(RomBuffer));
+            _openNote += " Lufia Forge's battle script hooks were updated: in fan hacks some monsters' scripts didn't run with the old ones (Edit, Undo takes it back).";
         }
         if (rom.IsLufia2 && Core.Lufia2.L2PuzzleBlock.OutOfReach(rom).Count > 0)
         {

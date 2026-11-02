@@ -153,9 +153,26 @@ public static class L2Battle
 
     public static void WriteSpell(RomBuffer rom, Spell s)
     {
-        L2Rom.WriteName(rom, s.Offset, SpellNameLength, s.Name);
+        WriteSpellName(rom, s);
         rom.WriteByte(s.Offset + 8, s.Flags); rom.WriteByte(s.Offset + 0x0A, s.LearnBy); rom.WriteByte(s.Offset + 0x0B, s.Target);
         rom.WriteUInt16Le(s.Offset + 0x0C, s.Mp); rom.WriteUInt16Le(s.Offset + 0x0F, s.Price);
+    }
+
+    /// <summary>Writes a spell name the way the ROM has them: space padded (the US game) or ended by 00 (the fan hacks
+    /// pad their names with 00; an 8-letter name has none, so the other spells say which); an unchanged name is left
+    /// as it is.</summary>
+    private static void WriteSpellName(RomBuffer rom, Spell s)
+    {
+        if (L2Rom.Name(rom, s.Offset, SpellNameLength) == s.Name) return;
+        bool HasZero(int o) => Array.IndexOf(rom.ReadBytes(o, SpellNameLength), (byte)0) >= 0;
+        if (!HasZero(s.Offset) && !Enumerable.Range(0, SpellCount(rom)).Any(i => HasZero(SpellOffset(rom, i))))
+        {
+            L2Rom.WriteName(rom, s.Offset, SpellNameLength, s.Name);
+            return;
+        }
+        var bytes = new byte[SpellNameLength];
+        for (int i = 0; i < SpellNameLength && i < s.Name.Length; i++) bytes[i] = L2Charset.ToByte(rom, s.Name[i]) ?? (byte)' ';
+        rom.WriteBytes(s.Offset, bytes);
     }
 
     // ---------------------------------------------------------------- monsters

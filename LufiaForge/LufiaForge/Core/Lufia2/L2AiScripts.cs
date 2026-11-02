@@ -583,7 +583,8 @@ public static class L2AiScripts
     private const int RunnerSite = 0xFAC9, ItemLoaderSite = 0xF1C5;
     private static readonly byte[] RunnerOriginal = Hex("08 8b c2 30 48 da 5a e2 20 4b ab c0 00 00");
     private static readonly byte[] ItemLoaderOriginal = Hex("08 8b e2 20 c2 10 a2 ad 0b");
-    private const int CurrentVersion = 2;
+    // version 3 (2026-11-01): the runner hook E tells item markers from offsets that wrap round the bank (see Assemble)
+    private const int CurrentVersion = 3;
     private static readonly byte[] AttackOriginal = Hex("bc 4a 00 f0 0e bd 50 00 22 e2 fc 81 8e 42 0a a9 96 80 08 8c 42 0a a0 20 ef a9 85 8d 44 0a 22 c9 fa 81 6b");
     private static readonly byte[] CapsuleOriginal = Hex("ac 29 11 f0 0e ae 24 11 8e 42 0a ad 26 11 8d 44 0a 80 0e a2 00 00 a0 20 ef 8e 42 0a a9 85 8d 44 0a 22 c9 fa 81 6b");
     private static readonly byte[] DefenseOriginal = Hex("bd 47 00 8d 44 0a bc 4c 00 22 c9 fa 81");
@@ -698,22 +699,24 @@ public static class L2AiScripts
 
         // (version 2, after the routines above so a version 1 block keeps their places)
         // E: the script runner (JML from $81:FAC9, in place of PHP / PHB / REP #$30). Y = offset, $0A42/$0A44 = base.
-        // An item's marker offset ($8000 | key, from F) runs its script from the table (none: offset 0, nothing runs);
-        // any other script is looked up by its address (spells, IP attacks).
+        // An item's marker offset ($8000 | key, from F) runs its script from the table; any other script is looked up
+        // by its address (spells, IP attacks) and else runs as the game has it.
         a.Label("hookE");
         a.B(0x08, 0x8B, 0xC2, 0x30, 0x48, 0xDA, 0x5A);   // PHP PHB REP #$30 PHA PHX PHY (as the game)
         a.B(0xC0, 0x00, 0x00); a.Br(0xF0, "outE");        // CPY #0 / BEQ
-        // a marker has bit 15 set and a base (the game's built-in scripts run with base 0 and offsets like $EF24)
+        // a marker has bit 15 set, a base (the game's built-in scripts run with base 0 and offsets like $EF24), the item
+        // records' bank (every item path of the game sets $0A44 = $96: $81:A8F2, A953, AA5D, EFBB, F009, $85:BD99) and a
+        // table entry. Anything else is a real offset: the fan hacks' monster records in bank $D0 use offsets like $F780
+        // that wrap round the bank (version 2 took those for markers, so those scripts didn't run).
         a.B(0x98); a.Br(0x10, "absE");                    // TYA / BPL
-        a.B(0xAD, 0x42, 0x0A); a.Br(0xD0, "markE");       // LDA $0A42 / BNE
+        a.B(0xAD, 0x42, 0x0A); a.Br(0xF0, "absE");        // LDA $0A42 / BEQ
+        a.B(0xAD, 0x44, 0x0A, 0x29, 0xFF, 0x00, 0xC9, ItemBank, 0x00); a.Br(0xD0, "absE");   // LDA $0A44 / AND #$FF / CMP #$96 / BNE
+        a.B(0x98, 0x29, 0xFF, 0x7F, 0xAA, 0xE2, 0x20, 0xA9, ItemMarker); a.Jsr("find");   // TYA / AND #$7FFF / TAX / SEP / LDA #FD
+        a.Br(0xB0, "outE");                               // (found: Y = 1, base and bank set)
+        a.B(0xC2, 0x20);                                  // REP #$20 (not a marker: Y is the offset again)
         a.Label("absE");
         a.B(0x98, 0x18, 0x6D, 0x42, 0x0A, 0xAA);          // TYA / CLC / ADC $0A42 / TAX (the script's address)
         a.B(0xE2, 0x20, 0xAD, 0x44, 0x0A); a.Jsr("find"); // SEP #$20 / LDA $0A44 (its bank as the kind)
-        a.Br(0x80, "outE");
-        a.Label("markE");
-        a.B(0x98, 0x29, 0xFF, 0x7F, 0xAA, 0xE2, 0x20, 0xA9, ItemMarker); a.Jsr("find");   // TYA / AND #$7FFF / TAX / SEP / LDA #FD
-        a.Br(0xB0, "outE");
-        a.B(0xA0, 0x00, 0x00);                            // LDY #0 (not in the table: no script)
         a.Label("outE"); Long(0x5C, 0x81FAD0);            // JML back (SEP #$20 / PHK / PLB / CPY #0...)
 
         // F: the item loader ($81:F1C5, JML in place of PHP / PHB / SEP #$20): runs the game's loader, then gives each
@@ -817,18 +820,42 @@ public static class L2AiScripts
         int block = Block(rom);
         if (block < 0) return;
         rom.WriteByte(block + Magic.Length + 1, (byte)bank);
+        if (Version(rom, block) >= 2) { Upgrade(rom, block); return; }   // (the code again, the newest version's)
         int code = L2Rom.FileToSnes(block + CodeAt), table = L2Rom.FileToSnes(block + TableAt);
-        var bytes = Assemble(code, table, bank);
-        if (Version(rom, block) < CurrentVersion) bytes = bytes.Take(HookEOffset).ToArray();   // (a version 1 block has only A-D)
+        var bytes = Assemble(code, table, bank).Take(HookEOffset).ToArray();   // (a version 1 block has only A-D)
         rom.WriteBytes(block + CodeAt, bytes);
     }
 
-    /// <summary>A version 1 block (monster and capsule scripts only) gets the effect hooks: the code is assembled again
-    /// (the first routines keep their places) and the runner and item loader jump to it.</summary>
+    /// <summary>Whether the ROM has a version 2 block, whose runner hook doesn't run the fan hacks' monster scripts
+    /// with offsets that wrap round their bank (<see cref="UpdateHooks"/>).</summary>
+    public static bool NeedsHookUpdate(RomBuffer rom) => Block(rom) is var b && b >= 0 && Version(rom, b) == 2 && OwnSites(rom, b);
+
+    /// <summary>Puts the newest hook code in a version 2 block (<see cref="NeedsHookUpdate"/>). True when it changed.</summary>
+    public static bool UpdateHooks(RomBuffer rom)
+    {
+        if (!NeedsHookUpdate(rom)) return false;
+        Upgrade(rom, Block(rom));
+        return true;
+    }
+
+    /// <summary>Whether the runner and the item loader jump into the block (a version 2 block's hooks).</summary>
+    private static bool OwnSites(RomBuffer rom, int block)
+    {
+        bool Ours(int site) => rom.ReadByte(site) == 0x5C && L2Rom.SnesToFile((int)rom.ReadUInt24Le(site + 1)) is var to && to >= block + CodeAt && to < block + TableAt;
+        return Ours(RunnerSite) && Ours(ItemLoaderSite);
+    }
+
+    /// <summary>The bytes of the game's code an update of the block's hooks may change (the runner's and the item
+    /// loader's jumps).</summary>
+    internal static IEnumerable<int> HookSiteBytes() => Enumerable.Range(0, 4).SelectMany(k => new[] { RunnerSite + k, ItemLoaderSite + k });
+
+    /// <summary>An older block gets the newest code: a version 1 block (monster and capsule scripts only) the effect
+    /// hooks, a version 2 block the corrected runner hook. The code is assembled again (the first routines keep their
+    /// places) and the runner and item loader jump to it.</summary>
     private static int Upgrade(RomBuffer rom, int block)
     {
         bool Same(int at, byte[] b) => at + b.Length <= rom.Length && rom.ReadBytes(at, b.Length).SequenceEqual(b);
-        if (!Same(RunnerSite, RunnerOriginal) || !Same(ItemLoaderSite, ItemLoaderOriginal))
+        if (Version(rom, block) < 2 ? !Same(RunnerSite, RunnerOriginal) || !Same(ItemLoaderSite, ItemLoaderOriginal) : !OwnSites(rom, block))
             throw new InvalidOperationException("This ROM's battle code isn't the US game's where the effect hooks go (another patch changed it), so item, spell and IP effects can't be edited.");
         int code = L2Rom.FileToSnes(block + CodeAt), table = L2Rom.FileToSnes(block + TableAt);
         var bytes = Assemble(code, table, rom.ReadByte(block + Magic.Length + 1));
@@ -856,6 +883,8 @@ public static class L2AiScripts
     }
 
     private const byte ItemMarker = 0xFD, ItemWordKind = 0xFC;
+    /// <summary>The bank the game gives every item script ($0A44 = $96, the item records' bank).</summary>
+    private const byte ItemBank = 0x96;
 
     // ── property words an item record doesn't have (stat bonuses, IP attack, battle animation) ───────────────
 
