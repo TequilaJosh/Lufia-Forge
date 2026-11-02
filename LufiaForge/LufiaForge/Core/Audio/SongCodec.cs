@@ -611,40 +611,50 @@ public static class SongCodec
         if ((div & 0x8000) != 0) throw new InvalidDataException("MIDI files timed in SMPTE frames aren't supported.");
         var list = new List<MidiEv>();
         int p = 8 + (f[4] << 24 | f[5] << 16 | f[6] << 8 | f[7]);
-        for (int t = 0; t < ntr && p + 8 <= f.Length; t++)
+        // chunks other than MTrk (a sequencer's own, e.g. Yamaha's XF "XFIH") are skipped and don't count as tracks
+        for (int t = 0; t < ntr && p + 8 <= f.Length; p += 8 + (f[p + 4] << 24 | f[p + 5] << 16 | f[p + 6] << 8 | f[p + 7]))
         {
             int len = f[p + 4] << 24 | f[p + 5] << 16 | f[p + 6] << 8 | f[p + 7];
-            int q = p + 8, end = Math.Min(f.Length, q + len);
+            if (len < 0 || (long)p + 8 + len > int.MaxValue) break;
+            if (Encoding.ASCII.GetString(f, p, 4) != "MTrk") continue;
+            int q = p + 8, end = (int)Math.Min(f.Length, (long)q + len);
+            // running status: the last channel message's status byte; meta events and sysex don't take its place
             long tick = 0; int status = 0;
             while (q < end)
             {
                 long dv = 0; byte b;
                 do { b = f[q++]; dv = dv << 7 | (uint)(b & 0x7F); } while ((b & 0x80) != 0 && q < end);
                 tick += dv;
+                if (q >= end) break;
                 int s = f[q];
-                if (s >= 0x80) { status = s; q++; }
-                if (status == 0xFF)
+                if (s == 0xFF)
                 {
+                    q++;
+                    if (q + 2 > end) break;
                     int type = f[q++]; int l = 0;
-                    do { b = f[q++]; l = l << 7 | (b & 0x7F); } while ((b & 0x80) != 0);
-                    list.Add(new MidiEv(t, tick, 0xFF, 0, 0, type, f.AsSpan(q, Math.Min(l, end - q)).ToArray()));
+                    do { b = f[q++]; l = l << 7 | (b & 0x7F); } while ((b & 0x80) != 0 && q < end);
+                    list.Add(new MidiEv(t, tick, 0xFF, 0, 0, type, f.AsSpan(q, Math.Clamp(l, 0, end - q)).ToArray()));
                     q += l;
                     if (type == 0x2F) break;
+                    continue;
                 }
-                else if (status is 0xF0 or 0xF7)
+                if (s is 0xF0 or 0xF7)
                 {
+                    q++;
+                    if (q >= end) break;
                     int l = 0;
-                    do { b = f[q++]; l = l << 7 | (b & 0x7F); } while ((b & 0x80) != 0);
+                    do { b = f[q++]; l = l << 7 | (b & 0x7F); } while ((b & 0x80) != 0 && q < end);
                     q += l;
+                    continue;
                 }
-                else
-                {
-                    int hi = status & 0xF0;
-                    int a = f[q++], bb = hi is 0xC0 or 0xD0 ? 0 : f[q++];
-                    list.Add(new MidiEv(t, tick, status, a, bb, -1, null));
-                }
+                if (s >= 0x80) { status = s; q++; }
+                else if (status == 0) break;   // a data byte with no status before it: the rest of the track can't be read
+                int hi = status & 0xF0;
+                if (q + (hi is 0xC0 or 0xD0 ? 1 : 2) > end) break;
+                int a = f[q++], bb = hi is 0xC0 or 0xD0 ? 0 : f[q++];
+                list.Add(new MidiEv(t, tick, status, a, bb, -1, null));
             }
-            p = 8 + len + p;
+            t++;
         }
         return (div, list.OrderBy(e => e.Tick).ToList());
     }

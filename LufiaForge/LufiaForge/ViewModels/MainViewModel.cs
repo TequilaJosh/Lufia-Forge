@@ -66,7 +66,11 @@ public partial class MainViewModel : ObservableObject
     {
         History.Changed += HistoryChanged;
         if (Application.Current != null) StartProjectSupport();
+        Instance = this;
     }
+
+    /// <summary>The main window's view model (the app's error handlers keep a copy of the project through it).</summary>
+    public static MainViewModel? Instance { get; private set; }
 
     private bool CanUndo() => History.CanUndo;
     private bool CanRedo() => History.CanRedo;

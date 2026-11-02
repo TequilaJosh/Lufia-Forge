@@ -28,8 +28,10 @@ public static class UpdateService
     /// <summary>
     /// Checks for an update and, if the user agrees, downloads it and restarts into the new version.
     /// When <paramref name="silentIfNone"/> is true (startup check), nothing is shown unless an update exists.
+    /// The restart closes the app without the question about saving, so <paramref name="saveBeforeRestart"/> saves the
+    /// project first (after the download: edits made meanwhile are kept too); when it can't, there is no restart.
     /// </summary>
-    public static async Task CheckAsync(bool silentIfNone, Func<bool>? hasUnsavedChanges = null)
+    public static async Task CheckAsync(bool silentIfNone, Func<bool>? hasUnsavedChanges = null, Func<Task<bool>>? saveBeforeRestart = null)
     {
         try
         {
@@ -56,13 +58,20 @@ public static class UpdateService
             string prompt = $"Lufia Forge {newVersion} is available (you have {mgr.CurrentVersion}).\n\n" +
                             "Download and install it now? Lufia Forge will restart.";
             if (hasUnsavedChanges?.Invoke() == true)
-                prompt += "\n\nWarning: you have unsaved ROM changes. Save first, or they will be lost.";
+                prompt += "\n\nThe project has unsaved changes: it is saved before Lufia Forge restarts.";
 
             if (MessageBox.Show(prompt, "Update Available", MessageBoxButton.YesNo,
                                 MessageBoxImage.Information) != MessageBoxResult.Yes)
                 return;
 
             await mgr.DownloadUpdatesAsync(update);
+            if (saveBeforeRestart != null && !await saveBeforeRestart())
+            {
+                MessageBox.Show($"Lufia Forge {newVersion} is downloaded, but the project couldn't be saved, so Lufia Forge didn't restart " +
+                                "(the changes would have been lost).\n\nSave the project (or use Save Project As), then use Check for Updates " +
+                                "again to install it.", "Update Available", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
             mgr.ApplyUpdatesAndRestart(update);
         }
         catch (Exception ex)

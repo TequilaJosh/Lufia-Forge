@@ -31,7 +31,9 @@ public static class IpsHandler
     /// </summary>
     public static byte[] ApplyPatch(RomBuffer rom, string patchPath) => ApplyPatch(rom.ToArray(), File.ReadAllBytes(patchPath));
 
-    /// <summary>Apply IPS patch bytes to a ROM image; returns the patched copy (the image passed in is not changed).</summary>
+    /// <summary>Apply IPS patch bytes to a ROM image; returns the patched copy (the image passed in is not changed).
+    /// A patch that is cut off (a record running past its end, or no "EOF" at the end) throws and changes nothing: half
+    /// a patch would leave the game broken.</summary>
     public static byte[] ApplyPatch(byte[] rom, byte[] patchData)
     {
         byte[] romCopy   = (byte[])rom.Clone();
@@ -39,6 +41,7 @@ public static class IpsHandler
         ValidateMagic(patchData);
 
         int pos = 5; // skip "PATCH"
+        bool ended = false;
         while (pos + 3 <= patchData.Length)
         {
             // Check for EOF marker (and the optional final-size extension after it)
@@ -49,11 +52,12 @@ public static class IpsHandler
                     int finalSize = (patchData[pos + 3] << 16) | (patchData[pos + 4] << 8) | patchData[pos + 5];
                     if (finalSize > 0) Array.Resize(ref romCopy, finalSize);
                 }
+                ended = true;
                 break;
             }
 
             // Need 5 bytes minimum: 3 for offset + 2 for size
-            if (pos + 5 > patchData.Length) break;
+            if (pos + 5 > patchData.Length) throw CutOff(pos);
 
             int offset = (patchData[pos] << 16) | (patchData[pos + 1] << 8) | patchData[pos + 2];
             pos += 3;
@@ -64,7 +68,7 @@ public static class IpsHandler
             if (size == 0)
             {
                 // RLE record: needs 2 bytes for run length + 1 byte for fill value
-                if (pos + 3 > patchData.Length) break;
+                if (pos + 3 > patchData.Length) throw CutOff(pos - 5);
                 int runLength = (patchData[pos] << 8) | patchData[pos + 1];
                 pos += 2;
                 byte fillByte = patchData[pos++];
@@ -75,15 +79,20 @@ public static class IpsHandler
             else
             {
                 // Normal record: needs 'size' bytes of patch data
-                if (pos + size > patchData.Length) break;
+                if (pos + size > patchData.Length) throw CutOff(pos - 5);
                 EnsureCapacity(ref romCopy, offset + size);
                 Array.Copy(patchData, pos, romCopy, offset, size);
                 pos += size;
             }
         }
+        if (!ended) throw CutOff(pos);
 
         return romCopy;
     }
+
+    private static InvalidDataException CutOff(int at) =>
+        new($"The patch file is cut off (it ends inside its data at byte {at:N0}, or without the \"EOF\" that closes an IPS patch), " +
+            "so it wasn't applied. Download it again.");
 
     // -------------------------------------------------------------------------
     // Export
