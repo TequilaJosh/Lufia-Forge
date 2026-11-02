@@ -19,7 +19,7 @@ namespace LufiaForge.Modules.GameData;
 /// table, 8 channel pointers at 0x22 (sound RAM, the song is loaded at $2800), the instruments to load at 0x32
 /// (8 bytes, 0 = end, below $38), then order lists and phrases. The driver gives songs $2800-$3FFF.
 /// </summary>
-public partial class MusicEditorViewModel : GameDataEditorBase
+public partial class MusicEditorViewModel : GameDataEditorBase, ISongEditorHost
 {
     public const int MaxSongBytes = 0x1800;
 
@@ -189,6 +189,16 @@ public partial class MusicEditorViewModel : GameDataEditorBase
         catch (Exception ex) { Status = "Can't preview: " + ex.Message; }
     }
 
+    // the note editor's host (ISongEditorHost)
+    public SongCodec.Song DecodeSong(byte[] songData) => SongCodec.Decode(songData);
+    public int MaxSongSize => SongCodec.MaxSize;
+    public int NoteNameOffset => SongCodec.Lufia1Transpose;
+    public int DefaultInstrument() => LoadedInstruments().FirstOrDefault(0x01);
+    public string? InstrumentNote(int instrument) => instrument is >= 0x10 and < 0x30 && !LoadedInstruments().Contains(instrument)
+        ? $"Instrument {instrument:X2} is added to the song's load list when you write the notes to the ROM." : null;
+    public string? DescribeRaw(byte[] raw) => null;
+    public void StopEdited() => StopCommand.Execute(null);
+
     /// <summary>Instruments the selected song loads (10-37), in order.</summary>
     public List<int> LoadedInstruments()
     {
@@ -315,10 +325,10 @@ public partial class MusicEditorViewModel : GameDataEditorBase
     {
         var d = LufiaCompression.DecompressResource(Ctx!.Rom, SelectedIndex, out _);
         var song = SongCodec.Decode(d);
-        File.WriteAllBytes(path, SongCodec.ToMidi(song, Songs[SelectedIndex][4..].Trim()));
+        File.WriteAllBytes(path, SongCodec.ToMidi(song, Songs[SelectedIndex][4..].Trim(), SongCodec.Lufia1Transpose, SongCodec.Lufia1GmProgram, fullLevel: true));
         int used = song.Channels.Count(c => c.Any(e => e.Kind == SongCodec.Kind.Note && e.B > 0));
         return $"Saved {Path.GetFileName(path)}: {used} channels (one track each), tempo {60_000_000.0 / song.MicrosPerQuarter:0.#} BPM. " +
-               "Program numbers are the game's instrument numbers; the loop is marked with loopStart/loopEnd markers.";
+               "Notes sound where the game plays them (an octave above the game's note numbers), each instrument gets a General MIDI program like it (the game's instrument is kept in a text, so the file imports back the same); the loop is marked with loopStart/loopEnd markers.";
     }
 
     [RelayCommand]
@@ -343,7 +353,7 @@ public partial class MusicEditorViewModel : GameDataEditorBase
     /// </summary>
     public (byte[] Data, List<string> Warnings) SongFromMidi(byte[] midi)
     {
-        var song = SongCodec.FromMidi(midi, out var warnings);
+        var song = SongCodec.FromMidi(midi, out var warnings, SongCodec.Lufia1Transpose);
         if (!song.Channels.Any(c => c.Any(e => e.Kind == SongCodec.Kind.Note))) throw new InvalidDataException("the MIDI has no notes");
         var data = BuildSongData(song, out var more);
         warnings.AddRange(more);

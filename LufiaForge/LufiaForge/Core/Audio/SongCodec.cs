@@ -340,12 +340,40 @@ public static class SongCodec
 
     // ── MIDI ──
 
+    /// <summary>Lufia 1 plays note n an octave up, as Lufia II does: its instruments' pitch multipliers are their loop
+    /// length / 16 (some a little under, 11.4-12 semitones), with the same pitch table (file 0x12F4E, 0x217D-0x3F38).
+    /// Measured 2026-11-01 on every looping instrument.</summary>
+    public const int Lufia1Transpose = 12;
+
+    /// <summary>A General MIDI program like each Lufia 1 instrument (00-3F; 30-3F are the drum sounds), guessed from
+    /// its overtones, range and the songs that use it (0B, the flute of Flower and the field, is near a pure tone).</summary>
+    private static readonly int[] Lufia1Gm =
+    {
+        49, 49, 45, 61, 43, 19, 48, 56, 74, 60, 68, 73, 71, 0, 0, 0,        // 00-0F
+        72, 33, 47, 70, 6, 40, 75, 20, 46, 24, 55, 0, 0, 0, 0, 0,           // 10-1F
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,                     // 20-2F
+        118, 118, 117, 115, 118, 119, 89, 0, 89, 89, 89, 89, 118, 118, 0, 0, // 30-3F
+    };
+
+    public static int Lufia1GmProgram(int instrument) => instrument is >= 0 and < 0x40 ? Lufia1Gm[instrument] : 0;
+
     /// <summary>The song as a MIDI file. <paramref name="transpose"/>: added to the notes of every channel but the drums,
     /// so they sound where the game plays them (Lufia II: note n sounds as MIDI n + 12); written as "lufia: transpose"
     /// so <see cref="FromMidi"/> takes it off again. <paramref name="program"/>: the General MIDI program for an
-    /// instrument slot (the slot itself travels as "lufia: instrument"); without it the program is the slot.</summary>
-    public static byte[] ToMidi(Song song, string name, int transpose = 0, Func<int, int>? program = null)
+    /// instrument slot (the slot itself travels as "lufia: instrument"); without it the program is the slot.
+    /// <para><paramref name="fullLevel"/>: the loudest channel volume and the loudest note of the song are brought up to
+    /// 127 (each scaled by the same factor, so the parts keep their balance): the game's own levels (volumes 48-96,
+    /// notes near 55) sound faint in a MIDI player. "lufia: levels V N" keeps the song's own loudest volume and note,
+    /// so <see cref="FromMidi"/> scales them back exactly.</para></summary>
+    public static byte[] ToMidi(Song song, string name, int transpose = 0, Func<int, int>? program = null, bool fullLevel = false)
     {
+        int maxVol = song.Channels.SelectMany(c => c).Where(e => e.Kind == Kind.Volume).Select(e => e.A).DefaultIfEmpty(0).Max();
+        int maxVel = song.Channels.SelectMany(c => c).Where(e => e.Kind == Kind.Note && e.B > 0).Select(e => e.C).DefaultIfEmpty(0).Max();
+        bool scale = fullLevel && maxVol is > 0 and < 127 || fullLevel && maxVel is > 0 and < 127;
+        if (!scale) { maxVol = 127; maxVel = 127; }
+        maxVol = Math.Clamp(maxVol, 1, 127); maxVel = Math.Clamp(maxVel, 1, 127);
+        int Vol(int v) => Math.Clamp((int)Math.Round(v * 127.0 / maxVol), 0, 127);
+        int Vel(int v) => Math.Clamp((int)Math.Round(v * 127.0 / maxVel), 1, 127);
         var tracks = new List<byte[]>();
         // track 0: tempo and name
         var t0 = new List<byte>();
@@ -354,6 +382,7 @@ public static class SongCodec
         Meta(t0, 0, 0x51, new[] { (byte)(us >> 16), (byte)(us >> 8), (byte)us });
         Meta(t0, 0, 0x01, Encoding.ASCII.GetBytes($"lufia: tempo {song.Tempo}"));
         if (transpose != 0) Meta(t0, 0, 0x01, Encoding.ASCII.GetBytes($"lufia: transpose {transpose}"));
+        if (scale) Meta(t0, 0, 0x01, Encoding.ASCII.GetBytes($"lufia: levels {maxVol} {maxVel}"));
         EndTrack(t0, 0);
         tracks.Add(t0.ToArray());
         for (int ch = 0; ch < 8; ch++)
@@ -380,11 +409,11 @@ public static class SongCodec
                         if (e.C <= 0) msgs.Add((e.Tick, 2, Encoding.ASCII.GetBytes("lufia: velocity 0"), true));   // MIDI's velocity 0 = note off
                         if (len <= 0) break;
                         byte key = (byte)(song.Drum[ch] ? e.A : Math.Clamp(e.A + transpose, 0, 127));
-                        msgs.Add((e.Tick, 2, new[] { (byte)(0x90 | mc), key, (byte)Math.Clamp(e.C, 1, 127) }, false));
+                        msgs.Add((e.Tick, 2, new[] { (byte)(0x90 | mc), key, (byte)Vel(e.C) }, false));
                         msgs.Add((e.Tick + len, 1, new[] { (byte)(0x80 | mc), key, (byte)0 }, false));
                         break;
                     }
-                    case Kind.Volume: msgs.Add((e.Tick, 2, new[] { (byte)(0xB0 | mc), (byte)7, (byte)Math.Clamp(e.A, 0, 127) }, false)); break;
+                    case Kind.Volume: msgs.Add((e.Tick, 2, new[] { (byte)(0xB0 | mc), (byte)7, (byte)Vol(e.A) }, false)); break;
                     case Kind.Pan: msgs.Add((e.Tick, 2, new[] { (byte)(0xB0 | mc), (byte)10, (byte)Math.Clamp(e.A, 0, 127) }, false)); break;
                     case Kind.Program: msgs.Add((e.Tick, 2, new[] { (byte)(0xC0 | mc), (byte)((program?.Invoke(e.A) ?? e.A) & 0x7F) }, false));
                         if (e.A > 0x7F || program != null) msgs.Add((e.Tick, 2, Encoding.ASCII.GetBytes($"lufia: instrument {e.A:X2}"), true));
@@ -429,6 +458,15 @@ public static class SongCodec
         var song = FromMidiAsWritten(midi, out warnings);
         var (_, all) = ReadMidi(midi);
         var texts = all.Where(e => e.Type == 0x01).Select(e => Encoding.ASCII.GetString(e.Data!).Trim()).ToList();
+        // levels brought up by the export: back to the song's own
+        if (texts.FirstOrDefault(x => x.StartsWith("lufia: levels ")) is { } lv && lv[14..].Split(' ') is [var a, var b] &&
+            int.TryParse(a, out int maxVol) && int.TryParse(b, out int maxVel) && maxVol is >= 1 and <= 127 && maxVel is >= 1 and <= 127)
+            foreach (var list in song.Channels)
+                for (int k = 0; k < list.Count; k++)
+                {
+                    if (list[k].Kind == Kind.Volume) list[k] = list[k] with { A = (int)Math.Round(list[k].A * maxVol / 127.0) };
+                    else if (list[k].Kind == Kind.Note && list[k].C > 0) list[k] = list[k] with { C = Math.Max(1, (int)Math.Round(list[k].C * maxVel / 127.0)) };
+                }
         string? mark = texts.FirstOrDefault(x => x.StartsWith("lufia: transpose "));
         int shift = mark != null && int.TryParse(mark[17..], out int v) ? v : texts.Any(x => x.StartsWith("lufia: tempo ")) ? 0 : foreignTranspose;
         if (shift == 0) return song;

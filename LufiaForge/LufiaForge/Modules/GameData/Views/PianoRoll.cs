@@ -203,7 +203,7 @@ public sealed class PianoRoll : FrameworkElement
             var fill = new SolidColorBrush(Color.FromArgb(a, c0.R, c0.G, c0.B));
             var r = new Rect(X(n.Tick), Y(n.Pitch) + 0.5, Math.Max(3, n.Length * Zoom), RowH - 1);
             dc.DrawRoundedRectangle(fill, m.Selected.Contains(n) ? SelPen : NotePen, r, 2, 2);
-            if (r.Width > 26 && RowH >= 10) dc.DrawText(Text(NoteEditorViewModel.NoteName(n.Pitch), 8.5, Brushes.Black), new Point(r.X + 2, r.Y));
+            if (r.Width > 26 && RowH >= 10) dc.DrawText(Text(m.Name(n.Pitch), 8.5, Brushes.Black), new Point(r.X + 2, r.Y));
         }
         if (_mode == Mode.Box) dc.DrawRectangle(SelBox, SelBoxPen, _box);
         dc.Pop();
@@ -253,7 +253,7 @@ public sealed class PianoRoll : FrameworkElement
             if (black) dc.DrawRectangle(KeyWhite, null, new Rect(0, Y(p), KeyW, RowH));
             dc.DrawRectangle(black ? KeyBlack : KeyWhite, RowLine, r);
             if (p % 12 == 0 || RowH >= 13 && !black)
-                dc.DrawText(Text(NoteEditorViewModel.NoteName(p), 8.5, Brushes.Black), new Point(KeyW - 26, Y(p) + (RowH - 11) / 2));
+                dc.DrawText(Text(m.Name(p), 8.5, Brushes.Black), new Point(KeyW - 26, Y(p) + (RowH - 11) / 2));
         }
         dc.Pop();
         dc.DrawRectangle(RulerBg, null, new Rect(w - Bar, 0, Bar, Top));
