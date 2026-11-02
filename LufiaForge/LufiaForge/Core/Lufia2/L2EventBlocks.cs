@@ -134,7 +134,8 @@ public static class L2EventBlocks
             if (changes!.Count == 0) return "Nothing changed.";
             var owners = StepOwners(rom, block);
             bool shared = changes.Any(c => owners.TryGetValue(c.Step.At, out var l) && l.Any(o => o != entry));
-            if (!shared)
+            // text that other text repeats (0A) keeps its bytes: the event is laid out again instead
+            if (!shared && L2Events.CopiedFrom(rom, changes.Select(c => (c.Step.At, c.Bytes))) < 0)
             {
                 foreach (var (step, bytes) in changes) rom.WriteBytes(step.At, bytes);
                 return $"Written over the old bytes ({changes.Count} step{(changes.Count == 1 ? "" : "s")}).";
@@ -206,6 +207,9 @@ public static class L2EventBlocks
         }
         foreach (var (e, s) in items)
             if (s?.Problem != null && s.Start >= 0) throw new InvalidOperationException($"Event {e.Id:X2} can't be laid out again: {s.Problem}");
+        // nothing here is filled up to an old size (a script that fit in place but shares steps still has PadTo set:
+        // laid out at its old address it would be padded, at the trial address not)
+        foreach (var (_, s) in items) if (s != null) foreach (var st in s.Steps) st.PadTo = 0;
 
         // where things go, relative to the PH: lists first, then scripts
         int p = copied;
@@ -230,7 +234,7 @@ public static class L2EventBlocks
             return outp.ToArray();
         }
 
-        // first pass at a bank start to learn the size (sizes don't depend on the address)
+        // first pass at a bank start to learn the size (with nothing padded the size doesn't depend on the address)
         var scripts = Lay(0x1F8000, out _);
         int total = scriptsFrom + scripts.Length;
         int phNew = block;
@@ -259,9 +263,11 @@ public static class L2EventBlocks
                 rom.WriteBytes(block - 8, new byte[8 + chunk.Value.Room]);
                 L2EventSpace.Release(rom, block - 8, 8 + chunk.Value.Room);
             }
-            scripts = Lay(phNew, out _);
         }
-        Lay(phNew, out var placedAt);
+        // the bytes written are those of the layout the lists point into (a text kept with its 0A at its own address
+        // can come out shorter than in the trial, never longer)
+        scripts = Lay(phNew, out var placedAt);
+        if (scriptsFrom + scripts.Length > Chunk(rom, phNew)!.Value.Room) throw new InvalidOperationException("The map's events came out bigger than their room.");
         // lists
         foreach (int head in Heads)
         {
@@ -277,7 +283,7 @@ public static class L2EventBlocks
         }
         rom.WriteBytes(phNew + scriptsFrom, scripts);
         return phNew == block
-            ? $"Written in the map's added event space ({total} of {Chunk(rom, phNew)!.Value.Room} bytes used)."
+            ? $"Written in the map's added event space ({scriptsFrom + scripts.Length} of {Chunk(rom, phNew)!.Value.Room} bytes used)."
             : $"The map's events moved to {L2Rom.FileToSnes(phNew):X6} in the event space (bank {L2Rom.FileToSnes(phNew) >> 16:X2}) to make room.";
     }
 
@@ -368,12 +374,14 @@ public static class L2EventBlocks
         }
         var home = size.Keys.OrderBy(b => b).ToList();
         if (home.Count == 0) return 0;
-        // the room: the old blocks, joined where only 00 lies between them, cut at the banks' ends
+        // the room: the old blocks, joined where they overlap (a block's scripts can lie past the next block's start, or
+        // be shared with it) or where only 00 lies between them, cut at the banks' ends. Joined, no two pieces of room
+        // overlap, so no two blocks are put over each other.
         var spans = home.Select(b => (Start: b, End: b + Extent(rom, b))).ToList();
         var runs = new List<(int Start, int End)>();
         foreach (var sp in spans)
         {
-            if (runs.Count > 0 && sp.Start >= runs[^1].End && Enumerable.Range(runs[^1].End, sp.Start - runs[^1].End).All(p => rom.ReadByte(p) == 0))
+            if (runs.Count > 0 && (sp.Start <= runs[^1].End || Enumerable.Range(runs[^1].End, sp.Start - runs[^1].End).All(p => rom.ReadByte(p) == 0)))
                 runs[^1] = (runs[^1].Start, Math.Max(runs[^1].End, sp.End));
             else runs.Add(sp);
         }
@@ -425,8 +433,9 @@ public static class L2EventBlocks
     /// <summary>A script read from the ROM keeps its jumps to its own steps; laid out elsewhere its jumps stay right.</summary>
     private static L2EventScript Relocated(L2EventScript s, int phAt) => s.JumpBase == phAt ? s : s.WithJumpBase(phAt);
 
-    /// <summary>Writes a map's start-up script: over its old bytes when it fits, else into the event space (its jumps are
-    /// offsets from the start of its own bank, so it is written whole within one bank).</summary>
+    /// <summary>Writes a map's start-up script: over its old bytes when it fits (and no other text repeats bytes it
+    /// changes, <see cref="L2Events.CopiedFrom"/>), else into the event space (its jumps are offsets from the start of
+    /// its own bank, so it is written whole within one bank).</summary>
     public static string SaveInit(RomBuffer rom, int map, L2EventScript script)
     {
         int init = InitScript(rom, map);
@@ -435,9 +444,13 @@ public static class L2EventBlocks
             var (changes, error) = script.InPlaceChanges(rom);
             if (error != null) throw new InvalidOperationException(error);
             if (changes!.Count == 0) return "Nothing changed.";
-            foreach (var (step, bytes) in changes) rom.WriteBytes(step.At, bytes);
-            return $"Written over the old bytes ({changes.Count} step{(changes.Count == 1 ? "" : "s")}).";
+            if (L2Events.CopiedFrom(rom, changes.Select(c => (c.Step.At, c.Bytes))) < 0)
+            {
+                foreach (var (step, bytes) in changes) rom.WriteBytes(step.At, bytes);
+                return $"Written over the old bytes ({changes.Count} step{(changes.Count == 1 ? "" : "s")}).";
+            }
         }
+        foreach (var s in script.Steps) s.PadTo = 0;   // (written elsewhere, nothing is filled up to an old size)
         // the size first (any bank start gives the same sizes)
         var (probe, err) = script.WithJumpBase(0x200000 - 0x8000).Build(rom, 0x200000 - 0x8000);
         if (err != null) throw new InvalidOperationException(err);
@@ -497,8 +510,11 @@ public static class L2EventBlocks
     }
 
     /// <summary>A new event run by stepping onto tiles (x1, y1)-(x2, y2) (inclusive): a record in the map info's trigger
-    /// list and the script in the +8 list. Returns the id.</summary>
-    public static int AddTrigger(RomBuffer rom, int map, int x1, int y1, int x2, int y2, L2EventScript script)
+    /// list and the script in the +8 list (both or neither, <see cref="L2Rom.AllOrNothing"/>). Returns the id.</summary>
+    public static int AddTrigger(RomBuffer rom, int map, int x1, int y1, int x2, int y2, L2EventScript script) =>
+        L2Rom.AllOrNothing(rom, () => AddTriggerCore(rom, map, x1, y1, x2, y2, script));
+
+    private static int AddTriggerCore(RomBuffer rom, int map, int x1, int y1, int x2, int y2, L2EventScript script)
     {
         int id = NextTriggerId(rom, map);
         if (id > 0xFE) throw new InvalidOperationException("The map has no free trigger number.");
@@ -521,8 +537,11 @@ public static class L2EventBlocks
     }
 
     /// <summary>Adds a character to a map: a character start (where it stands, the area it may walk in, how it moves) and
-    /// "Add a map character" at the top of the start-up script. Returns its actor id.</summary>
-    public static int AddCharacter(RomBuffer rom, int map, int x, int y, int sprite, int mode)
+    /// "Add a map character" at the top of the start-up script (both or neither). Returns its actor id.</summary>
+    public static int AddCharacter(RomBuffer rom, int map, int x, int y, int sprite, int mode) =>
+        L2Rom.AllOrNothing(rom, () => AddCharacterCore(rom, map, x, y, sprite, mode));
+
+    private static int AddCharacterCore(RomBuffer rom, int map, int x, int y, int sprite, int mode)
     {
         var used = CharacterIds(rom, map);
         int id = 0x50;

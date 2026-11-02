@@ -819,7 +819,10 @@ public static class L2Cutscene
     public sealed record Made(int Head, int Id, int Flag, string What);
 
     /// <summary>Makes a new cutscene on a map: its event (a first line of text to start from) and the way it starts.</summary>
-    public static Made Create(RomBuffer rom, int map, NewOptions o)
+    public static Made Create(RomBuffer rom, int map, NewOptions o) => L2Rom.AllOrNothing(rom, () => CreateCore(rom, map, o));
+
+    /// <summary><see cref="Create"/>: the event and what starts it are written all or none.</summary>
+    private static Made CreateCore(RomBuffer rom, int map, NewOptions o)
     {
         int block = L2Events.Block(rom, map);
         if (block < 0) throw new InvalidOperationException("This map has no event block.");
@@ -984,7 +987,11 @@ public static class L2Cutscene
     /// put it on a tile and show it. Not <paramref name="hidden"/>: a character that stands on its tile from the start
     /// (one to talk to). Returns its actor id.
     /// </summary>
-    public static int AddCast(RomBuffer rom, int map, int sprite, int flag, int x = 0, int y = 0, bool hidden = true)
+    public static int AddCast(RomBuffer rom, int map, int sprite, int flag, int x = 0, int y = 0, bool hidden = true) =>
+        L2Rom.AllOrNothing(rom, () => AddCastCore(rom, map, sprite, flag, x, y, hidden));
+
+    /// <summary><see cref="AddCast"/>: its character start, create and hide are written all or none.</summary>
+    private static int AddCastCore(RomBuffer rom, int map, int sprite, int flag, int x, int y, bool hidden)
     {
         var used = L2EventBlocks.CharacterIds(rom, map);
         int id = 0x50;

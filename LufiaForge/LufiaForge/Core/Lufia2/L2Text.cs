@@ -74,7 +74,9 @@ public static class L2Text
     }
 
     /// <summary>Encodes text written as <see cref="Decode"/> shows it (the words in the dictionary become their
-    /// codes, longest first).</summary>
+    /// codes, longest first). A tag in brackets that isn't one of <see cref="Decode"/>'s ([END], [WAIT], [CHOICE],
+    /// [NAME], [GLYPH xx], [PAUSE xx], [xx]) throws with what is wrong (it used to be left out without a word, so
+    /// "[Name]" typed the event editor's way lost the hero's name).</summary>
     public static byte[] Encode(RomBuffer rom, string text)
     {
         var words = Words(rom);
@@ -94,9 +96,11 @@ public static class L2Text
                     else if (tag == "WAIT") outp.Add(1);
                     else if (tag == "NAME") outp.Add(9);
                     else if (tag == "CHOICE") outp.Add(0x0B);
-                    else if (tag.StartsWith("GLYPH ")) { outp.Add(7); outp.Add(Convert.ToByte(tag[6..], 16)); }
-                    else if (tag.StartsWith("PAUSE ")) { outp.Add(4); outp.Add(Convert.ToByte(tag[6..], 16)); }
-                    else if (tag.Length == 2) outp.Add(Convert.ToByte(tag, 16));
+                    else if (tag.StartsWith("GLYPH ") && Hex(tag[6..], 1) is byte g) { outp.Add(7); outp.Add(g); }
+                    else if (tag.StartsWith("PAUSE ") && Hex(tag[6..], 1) is byte v) { outp.Add(4); outp.Add(v); }
+                    else if (Hex(tag) is byte x) outp.Add(x);
+                    else throw new InvalidOperationException($"[{tag}] isn't a code the text knows. Use [NAME], [PAUSE xx], [GLYPH xx], a code like [0C], "
+                        + "and end with [WAIT], [END] or [CHOICE] (xx: two hex digits).");
                     i = close + 1;
                     continue;
                 }
@@ -118,4 +122,7 @@ public static class L2Text
         }
         return outp.ToArray();
     }
+
+    /// <summary>Two hex digits (or as few as <paramref name="least"/>) as a byte, or null.</summary>
+    private static byte? Hex(string s, int least = 2) => s.Length >= least && s.Length <= 2 && s.All(Uri.IsHexDigit) ? Convert.ToByte(s, 16) : null;
 }

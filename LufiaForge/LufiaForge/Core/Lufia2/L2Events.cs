@@ -214,7 +214,8 @@ public static class L2Events
 
     /// <summary>Replaces a line's text in place: the new text must not be longer once encoded; a shorter one is
     /// filled up with 04 80 (a pause of no time, as the event editor fills; 04 00 would set the letters' voice) and a
-    /// space. Returns false when it doesn't fit.</summary>
+    /// space. Returns false when it doesn't fit, or when other text repeats bytes of it (<see cref="CopiedFrom"/>):
+    /// then the events showing it are laid out again and its old bytes stay for the text that copies them.</summary>
     public static bool WriteLine(RomBuffer rom, Line line, string text)
     {
         var bytes = L2Text.Encode(rom, text).ToList();
@@ -226,7 +227,50 @@ public static class L2Events
         if (fill % 2 == 1) { bytes.Add((byte)' '); fill--; }
         for (; fill > 0; fill -= 2) { bytes.Add(4); bytes.Add(0x80); }
         bytes.Add(last);
+        if (CopiedFrom(rom, new[] { (line.Offset, bytes.ToArray()) }) >= 0) return false;
         rom.WriteBytes(line.Offset, bytes.ToArray());
         return true;
+    }
+
+    /// <summary>
+    /// Where some text of the maps' scripts repeats a byte that <paramref name="writes"/> would change: the file offset
+    /// of the first such 0A (n bytes of the text d bytes back), or -1. The game's texts use 0A for words said before
+    /// (256 of the US game's 285 repeat another line, mostly a speaker's name), so a line written over its old bytes
+    /// would change those lines too (map 02: "Erim:  Master." written as "Kirk: Hi" made "Erirk:  Yes, sir.").
+    /// A 0A that the writes themselves change doesn't count (its text is written again). The scripts looked at are
+    /// those of the maps whose event block or start-up script lies within reach (offsets go 64 KB on, 0A 4 KB back).
+    /// </summary>
+    public static int CopiedFrom(RomBuffer rom, IEnumerable<(int At, byte[] Bytes)> writes)
+    {
+        var changed = new HashSet<int>();
+        foreach (var (at, bytes) in writes)
+            for (int i = 0; i < bytes.Length; i++)
+                if (at + i < rom.Length && rom.ReadByte(at + i) != bytes[i]) changed.Add(at + i);
+        if (changed.Count == 0) return -1;
+        int lo = changed.Min(), hi = changed.Max();
+        bool Near(int p) => p >= 0 && p <= hi + 0x1000 && p + 0x10000 > lo;
+        var seen = new HashSet<int>();
+        for (int m = 0; m < L2Maps.Count; m++)
+        {
+            if (!Near(Block(rom, m)) && !Near(L2EventBlocks.InitScript(rom, m))) continue;
+            List<(string, List<L2Script.Op>)> scripts;
+            try { scripts = L2Script.MapScripts(rom, m); } catch (Exception) { continue; }
+            foreach (var (_, ops) in scripts)
+                foreach (var t in ops.Where(o => o.IsText && seen.Add(o.At)))
+                    for (int p = t.At; p < t.At + t.Length && p + 2 < rom.Length; p++)
+                    {
+                        byte b = rom.ReadByte(p);
+                        if (b == 0x0A)
+                        {
+                            byte l = rom.ReadByte(p + 1), h = rom.ReadByte(p + 2);
+                            int src = p + 1 - (l | (h & 0x0F) << 8), n = (h >> 4) + 2;
+                            bool rewritten = changed.Contains(p) || changed.Contains(p + 1) || changed.Contains(p + 2);
+                            if (!rewritten && Enumerable.Range(src, n).Any(changed.Contains)) return p;
+                            p += 2;
+                        }
+                        else if (b is 4 or 5 or 6 or 7) p++;
+                    }
+        }
+        return -1;
     }
 }
