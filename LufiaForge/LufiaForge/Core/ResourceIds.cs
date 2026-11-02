@@ -82,6 +82,22 @@ public static class ResourceIds
         rom.FixChecksum();
     }
 
+    /// <summary>Takes out resource <paramref name="id"/> when it is the last one and a new one (added with
+    /// <see cref="Add"/>): its stream in the added space is freed and the id can be given out again. False when it
+    /// isn't the last.</summary>
+    public static bool RemoveLast(RomBuffer rom, int id)
+    {
+        if (!IsMoved(rom) || id < OriginalCount || id != Count(rom) - 1) return false;
+        int stream = LufiaCompression.ResourceOffset(rom, id);
+        var space = ExpansionSpace.Load(rom);
+        if (space.At(stream) is { } e && e.Start == stream && e.Kind is ExpansionSpace.Kind.Resource or ExpansionSpace.Kind.MapData) space.Free(stream);
+        space.Save();
+        rom.WriteBytes(Entry(rom, id), new byte[3]);
+        rom.WriteUInt16Le(TableOffset(rom) - Header + 6, (ushort)id);
+        rom.FixChecksum();
+        return true;
+    }
+
     /// <summary>A new resource id holding <paramref name="data"/> (compressed into the added space). Moves the table
     /// first when needed. Returns the id.</summary>
     public static int Add(RomBuffer rom, byte[] data)

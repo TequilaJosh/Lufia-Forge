@@ -45,10 +45,13 @@ public static partial class AncientCave
     private static readonly byte[] GameOverOriginal = { 0xAD, 0x49, 0x13, 0xD0, 0x24 };
     private static readonly byte[] SaveNameOriginal = { 0xA0, 0x00, 0x00, 0xA5, 0x00 };
     private static readonly byte[] Magic = "LFAC"u8.ToArray();
-    private const byte Version = 22;   // 22: the floor 100 battle counts its 4th group (beating three no longer ends it)
-    // block: magic, version, map 1, map 2, options (bit 0 = cave-only New Game, bit 1 = elevator start), save flag, floor 100 flag, 2 spare,
-    // the 4 floor 100 monsters, the boss formation as it was (4); then the code
-    private const int Header = 24;   // (+ 20-22: the merchants' story flags, 23 spare; version 21 on)
+    private const byte Version = 23;   // 23: the bytes the cave's map numbers had before (Remove puts them back); 22: the floor 100 battle counts its 4th group
+    // block: magic, version, map 1, map 2, options (bit 0 = cave-only New Game, bit 1 = elevator start), save flag, floor 100 flag,
+    // the demo's record (+10, see AncientCave.Demo.cs), 1 spare, the 4 floor 100 monsters, the boss formation as it was (4); then the code
+    // (+ 20-22: the merchants' story flags, 23 spare; version 21 on. + 24-29: the map numbers' area bytes and the last two bytes of
+    // their script table entries before the cave took them (map 1, map 2); version 23 on)
+    private const int Header = 32;
+    private const int DemoRecord = 10, MapsBefore = 24;
 
     private static int FileOffset(int snes) => (snes >> 16 & 0x7F) * 0x8000 + (snes & 0x7FFF);
     private static int SnesAddress(int file) => (file / 0x8000 | 0x80) << 16 | (file % 0x8000 | 0x8000);
@@ -113,15 +116,37 @@ public static partial class AncientCave
     public static void Apply(RomBuffer rom, CaveMode mode) => Apply(rom, mode, null);
 
     /// <summary>Adds the cave in the given mode; <paramref name="people"/>: the priest and the merchants (null = as
-    /// they are, none for a new cave).</summary>
-    public static void Apply(RomBuffer rom, CaveMode mode, bool? people)
+    /// they are, none for a new cave). When it fails the ROM is left as it was.</summary>
+    public static void Apply(RomBuffer rom, CaveMode mode, bool? people) => Atomic(rom, () => ApplyCore(rom, mode, people, force: false));
+
+    /// <summary>Builds the cave's code and events again from the ROM as it is now (its spell chests follow the learn
+    /// lists, its chests the items...). Nothing happens when the cave isn't in.</summary>
+    public static void Refresh(RomBuffer rom)
+    {
+        if (Read(rom) is { } info) Atomic(rom, () => ApplyCore(rom, info.Mode, info.People, force: true));
+    }
+
+    /// <summary>Runs <paramref name="edit"/>; if it throws, the ROM gets its bytes back from before (a cave half added
+    /// or half taken out would leave hooks pointing at nothing).</summary>
+    private static void Atomic(RomBuffer rom, Action edit)
+    {
+        var before = rom.ToArray();
+        try { edit(); }
+        catch (Exception)
+        {
+            rom.ReplaceAll(before);
+            throw;
+        }
+    }
+
+    private static void ApplyCore(RomBuffer rom, CaveMode mode, bool? people, bool force)
     {
         bool caveOnly = mode == CaveMode.CaveOnly, locked = mode == CaveMode.ElevatorStart;
         var old = Read(rom);
         bool withPeople = people ?? old?.People ?? false;
         if (old == null && !IsOriginal(rom))
             throw new InvalidOperationException("The game's map loading or New Game code ($01:BDA5, $01:9969, $01:C0D4) isn't the original, so the Ancient Cave can't be added safely.");
-        if (old != null && old.Mode == mode && old.People == withPeople && rom.ReadByte(old.Block + 4) == Version) return;
+        if (!force && old != null && old.Mode == mode && old.People == withPeople && rom.ReadByte(old.Block + 4) == Version) return;
         CheckChestFlags(rom, old);
         if (!caveOnly && (!Matches(rom, SaveSite, SaveOriginal) && rom.ReadByte(SaveSite) != 0x22 || !Matches(rom, LoadSite, LoadOriginal) && rom.ReadByte(LoadSite) != 0x22))
             throw new InvalidOperationException("The game's save / load code ($00:922B, $00:931D) isn't the original, so the cave's party backup can't be added safely.");
@@ -132,10 +157,14 @@ public static partial class AncientCave
         int saveFlag = old?.SaveFlag ?? FreeFlag(rom, -1);
         int finalFlag = old != null && old.FinalFlag != 0 && old.FinalFlag != old.SaveFlag ? old.FinalFlag : FreeFlag(rom, saveFlag);
         // floor 100: the four Sinistrals (made once), the boss formation as it was (kept to put back)
-        int[] bosses = old != null && old.Bosses.Any(b => b != 0) ? old.Bosses : MakeBosses(rom);
+        // (a cave taken out while monsters were added after its own could leave them in: they are used again)
+        int[] bosses = old != null && old.Bosses.Any(b => b != 0) ? old.Bosses : LeftBosses(rom) ?? MakeBosses(rom);
         int[] oldFormation = old != null && old.Bosses.Any(b => b != 0) ? old.OldFormation : Encounters.BossMonsters(rom, BossFormation);
         Encounters.SetBossMonsters(rom, BossFormation, bosses);
         int[] shopFlags = ShopFlags(rom, saveFlag, finalFlag);
+        // what the two map numbers had in the area table and their script table entries' last two bytes (put back by Remove)
+        byte[] mapsBefore = old != null && rom.ReadByte(old.Block + 4) >= 23 ? rom.ReadBytes(old.Block + MapsBefore, 6) : new byte[6];
+        byte demo = old != null ? rom.ReadByte(old.Block + DemoRecord) : (byte)0;
         if (old != null)
         {
             map1 = old.Map1; map2 = old.Map2;
@@ -152,6 +181,9 @@ public static partial class AncientCave
             if (free.Count < 2) throw new InvalidOperationException("The Ancient Cave needs two free map numbers and this ROM has fewer left (each New map takes one).");
             // the project's numbers when they're free, else the first free ones
             (map1, map2) = free.Contains(0x85) && free.Contains(0x86) ? (0x85, 0x86) : (free[0], free[1]);
+            mapsBefore = new[] { rom.ReadByte(MapFactory.AreaTable + map1), rom.ReadByte(MapFactory.AreaTable + map2),
+                                 rom.ReadByte(MapFactory.ScriptTable + map1 * 5 + 3), rom.ReadByte(MapFactory.ScriptTable + map1 * 5 + 4),
+                                 rom.ReadByte(MapFactory.ScriptTable + map2 * 5 + 3), rom.ReadByte(MapFactory.ScriptTable + map2 * 5 + 4) };
             int res = ResourceIds.Add(rom, template);
             foreach (var (m, other) in new[] { (map1, map2), (map2, map1) })
             {
@@ -170,9 +202,10 @@ public static partial class AncientCave
         int snes = SnesAddress(at);
         var asm = Assemble(rom, map1, map2, saveFlag, finalFlag, caveOnly, locked, shopFlags);
         rom.WriteBytes(at, Magic);
-        rom.WriteBytes(at + 4, new[] { Version, (byte)map1, (byte)map2, (byte)((caveOnly ? 1 : 0) | (locked ? 2 : 0) | (withPeople ? 4 : 0)), (byte)saveFlag, (byte)finalFlag, (byte)0, (byte)0 });
+        rom.WriteBytes(at + 4, new[] { Version, (byte)map1, (byte)map2, (byte)((caveOnly ? 1 : 0) | (locked ? 2 : 0) | (withPeople ? 4 : 0)), (byte)saveFlag, (byte)finalFlag, demo, (byte)0 });
         rom.WriteBytes(at + 12, bosses.Select(b => (byte)b).Concat(oldFormation.Select(b => (byte)b)).ToArray());
         rom.WriteBytes(at + 20, shopFlags.Select(f => (byte)f).Append((byte)0).ToArray());
+        rom.WriteBytes(at + MapsBefore, mapsBefore.Concat(new byte[Header - MapsBefore - 6]).ToArray());
         rom.WriteBytes(at + Header, asm.Build(snes + Header));
         byte[] Jsl(string label) { int a = snes + Header + asm.Offset(label); return new byte[] { 0x22, (byte)a, (byte)(a >> 8), (byte)(a >> 16) }; }
         rom.WriteBytes(MapLoadSite, Jsl("MapLoadHook"));
@@ -208,11 +241,17 @@ public static partial class AncientCave
         rom.FixChecksum();
     }
 
-    /// <summary>Takes the cave out: hooks back, its code, maps (data copy, scripts) and numbers freed.</summary>
-    public static void Remove(RomBuffer rom)
+    /// <summary>Takes the cave out: hooks back, its code, maps (data copy, scripts) and numbers freed, and the floor 100
+    /// monsters, their pictures and the map copy's resource id taken out again (when nothing was added after them).
+    /// When it fails the ROM is left as it was.</summary>
+    public static void Remove(RomBuffer rom) => Atomic(rom, () => RemoveCore(rom));
+
+    private static void RemoveCore(RomBuffer rom)
     {
         var info = Read(rom);
         if (info == null) return;
+        byte[] mapsBefore = rom.ReadByte(info.Block + 4) >= 23 ? rom.ReadBytes(info.Block + MapsBefore, 6) : new byte[6];
+        int mapResource = LufiaMap.MapDataResource(rom, info.Map1);
         rom.WriteBytes(MapLoadSite, MapLoadOriginal);
         rom.WriteBytes(PostHeaderSite, PostHeaderOriginal);
         rom.WriteBytes(NewGameSite, NewGameOriginal);
@@ -235,21 +274,27 @@ public static partial class AncientCave
         if (info.Bosses.Any(b => b != 0)) Encounters.SetBossMonsters(rom, BossFormation, info.OldFormation);
         var space = ExpansionSpace.Load(rom);
         space.Free(info.Block);
-        int data = LufiaCompression.ResourceOffset(rom, LufiaMap.MapDataResource(rom, info.Map1));
-        if (space.At(data) is { } d && d.Start == data && d.Kind is ExpansionSpace.Kind.Resource or ExpansionSpace.Kind.MapData) space.Free(data);
+        // the map copy's resource id goes when it is the last one (its stream is freed either way)
+        if (!ResourceIds.RemoveLast(rom, mapResource))
+        {
+            int data = LufiaCompression.ResourceOffset(rom, mapResource);
+            if (space.At(data) is { } d && d.Start == data && d.Kind is ExpansionSpace.Kind.Resource or ExpansionSpace.Kind.MapData) space.Free(data);
+        }
         foreach (int m in new[] { info.Map1, info.Map2 })
         {
             int block = EventScript.BlockOffset(rom, m);
             if (space.At(block) is { Kind: ExpansionSpace.Kind.ScriptBlock } b && b.Start == block) space.Free(block);
         }
         space.Save();
-        foreach (int m in new[] { info.Map1, info.Map2 })
+        foreach (var (m, k) in new[] { (info.Map1, 0), (info.Map2, 1) })
         {
             SetupScripts.Forget(rom, m);
             rom.WriteByte(MapFactory.SelectTable + m, 0);
             rom.WriteUInt16Le(MapFactory.SetupTable + m * 2, 0xFFFF);
-            rom.WriteBytes(MapFactory.ScriptTable + m * 5, new byte[] { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF });
+            rom.WriteBytes(MapFactory.ScriptTable + m * 5, new byte[] { 0xFF, 0xFF, 0xFF, mapsBefore[2 + 2 * k], mapsBefore[3 + 2 * k] });
+            rom.WriteByte(MapFactory.AreaTable + m, mapsBefore[k]);
         }
+        if (info.Bosses.Any(b => b != 0)) RemoveBosses(rom, info.Bosses);
         rom.FixChecksum();
     }
 

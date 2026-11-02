@@ -15,6 +15,11 @@ namespace LufiaForge.Core.Battle;
 /// other read of the shop goes through that pointer ($1F-$21), so nothing else changes. Lufia Forge's shops have
 /// room for the full 11 items.
 /// </para>
+/// <para>
+/// The builder doubles the id with an 8-bit ASL before the hook ($00:D1CF), so X has lost bit 7 for shops 80-FF (and
+/// the game's own table read aliases them onto 00-7F). The hook reads the id from $1954 itself (version 2; the first
+/// version used X, so Lufia Forge's shops 80-FF opened another shop); Install brings a version 1 block up to date.
+/// </para>
 /// </summary>
 public static class ShopTable
 {
@@ -82,24 +87,54 @@ public static class ShopTable
     public static List<int> Ids(RomBuffer rom) =>
         Enumerable.Range(0, 0x100).Where(i => i < GameShops || IsOwn(rom, i)).ToList();
 
-    /// <summary>Puts the hook and the empty table in (once). Returns the block's file offset.</summary>
+    /// <summary>The block's hook is the first version's (it took the shop from X, which has lost bit 7 of the id).</summary>
+    public static bool NeedsUpdate(RomBuffer rom) => Block(rom) is int b && b >= 0 && rom.ReadByte(b + 4) < Version;
+
+    private const byte Version = 2;
+
+    /// <summary>Puts the hook and the empty table in (once; a first-version block gets the current hook). Returns the
+    /// block's file offset.</summary>
     public static int Install(RomBuffer rom)
     {
         int have = Block(rom);
-        if (have >= 0) return have;
+        if (have >= 0)
+        {
+            if (rom.ReadByte(have + 4) < Version)
+            {
+                rom.WriteBytes(have + CodeAt, Code(SnesAddress(have + TableAt)));
+                rom.WriteByte(have + 4, Version);
+                rom.FixChecksum();
+            }
+            return have;
+        }
         if (!CanInstall(rom, out var why)) throw new InvalidOperationException(why);
         if (rom.Length < MapWriter.ExpandedSize) rom.Expand(MapWriter.ExpandedSize);
         var space = ExpansionSpace.Load(rom);
         int at = space.AllocateInOneBank(BlockSize, ExpansionSpace.Kind.Patch, PatchId);
         space.Save();
-        int table = SnesAddress(at + TableAt);
         var block = new byte[BlockSize];
         Magic.CopyTo(block, 0);
-        block[4] = 1;
+        block[4] = Version;
+        Code(SnesAddress(at + TableAt)).CopyTo(block, CodeAt);
+        rom.WriteBytes(at, block);
+        int c = SnesAddress(at + CodeAt);
+        var site = new byte[HookOriginal.Length];
+        new byte[] { 0x22, (byte)c, (byte)(c >> 8), (byte)(c >> 16), 0x80, (byte)(HookOriginal.Length - 6) }.CopyTo(site, 0);
+        for (int i = 6; i < site.Length; i++) site[i] = 0xEA;
+        rom.WriteBytes(HookAt, site);
+        rom.FixChecksum();
+        return at;
+    }
+
+    /// <summary>The hook, for the table at SNES address <paramref name="table"/>. Entered with M = 8, X = 16, X = the
+    /// game's (shop id x 2) &amp; FF, which the game's path keeps.</summary>
+    private static byte[] Code(int table)
+    {
         byte T(int k, int shift) => (byte)(table + k >> shift);
         var code = new List<byte>
         {
-            0xC2, 0x20, 0xDA, 0x8A, 0x0A, 0xAA,                              // REP #$20; PHX; TXA; ASL; TAX (id * 4)
+            0xC2, 0x20, 0xDA,                                                // REP #$20; PHX
+            0xAD, 0x54, 0x19, 0x29, 0xFF, 0x00, 0x0A, 0x0A, 0xAA,            // LDA $1954; AND #$00FF; ASL; ASL; TAX (id * 4)
             0xBF, T(2, 0), T(2, 8), T(2, 16),                                // LDA table+2,X (bank, flag)
             0xF0, 0x0B,                                                      // BEQ game
             0x85, 0x21,                                                      // STA $21
@@ -113,15 +148,7 @@ public static class ShopTable
             0xE2, 0x20, 0x6B,                                                // SEP #$20; RTL
         };
         if (CodeAt + code.Count > TableAt) throw new InvalidOperationException("The shop hook doesn't fit.");
-        code.CopyTo(block, CodeAt);
-        rom.WriteBytes(at, block);
-        int c = SnesAddress(at + CodeAt);
-        var site = new byte[HookOriginal.Length];
-        new byte[] { 0x22, (byte)c, (byte)(c >> 8), (byte)(c >> 16), 0x80, (byte)(HookOriginal.Length - 6) }.CopyTo(site, 0);
-        for (int i = 6; i < site.Length; i++) site[i] = 0xEA;
-        rom.WriteBytes(HookAt, site);
-        rom.FixChecksum();
-        return at;
+        return code.ToArray();
     }
 
     /// <summary>Writes shop <paramref name="id"/> as Lufia Forge's (type and up to 11 items): a new shop, or a game shop
