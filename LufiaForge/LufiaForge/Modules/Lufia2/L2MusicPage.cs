@@ -97,10 +97,10 @@ public partial class L2MusicPage : L2Page
         {
             var f = L2Songs.Read(Rom, SelectedIndex);
             var song = L2Songs.Decode(f);
-            File.WriteAllBytes(dlg.FileName, SongCodec.ToMidi(song, name));
+            File.WriteAllBytes(dlg.FileName, L2Songs.ToMidi(f));
             int used = song.Channels.Count(c => c.Any(e => e.Kind == SongCodec.Kind.Note && e.B > 0));
             Status = $"Saved {Path.GetFileName(dlg.FileName)}: {used} channels (one track each), tempo {60_000_000.0 / song.MicrosPerQuarter:0.#} BPM. " +
-                     "Program numbers are the game's sample slots; drums are on MIDI channel 10; the loop is marked with loopStart/loopEnd markers.";
+                     "Notes sound where the game plays them (an octave above the game's note numbers), each instrument gets a General MIDI program like its sample (the game's slot is kept in a text, so the file imports back the same); drums are on MIDI channel 10; the loop is marked with loopStart/loopEnd markers.";
         }
         catch (Exception ex) { Status = "Not exported: " + ex.Message; }
     }
