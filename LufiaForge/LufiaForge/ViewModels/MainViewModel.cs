@@ -71,9 +71,28 @@ public partial class MainViewModel : ObservableObject
     private bool CanUndo() => History.CanUndo;
     private bool CanRedo() => History.CanRedo;
 
+    /// <summary>Leaving a tab writes its edits (and any other tab's) into the ROM, so the tab shown next reads them;
+    /// a tab or page shown reads the ROM again when <see cref="RomBuffer.Version"/> moved since it last read it.</summary>
+    partial void OnSelectedTabIndexChanged(int oldValue, int newValue) { if (RomBuffer != null) Flush(quiet: true); }
+
+    /// <summary>Writes every tab's edits that aren't in the ROM yet (quietly: problems go to the status bar). For a page
+    /// switch inside a tab, before an operation that reloads the tabs (a patch), and the like.</summary>
+    public void WritePendingEdits() { if (RomBuffer != null) Flush(quiet: true); }
+
+    /// <summary>Writes the tabs' edits that aren't in the ROM yet, so a move in the history starts from everything the
+    /// user did (otherwise reloading the tabs afterwards drops them, or writes them over the undone ROM). Returns
+    /// whether that added a step.</summary>
+    private bool WritePendingBeforeHistory()
+    {
+        int before = History.UndoSteps.Count;
+        Flush(quiet: true);
+        return History.UndoSteps.Count != before;
+    }
+
     [RelayCommand(CanExecute = nameof(CanUndo))]
     private void Undo()
     {
+        WritePendingBeforeHistory();   // the edits just made are what Undo takes back first
         var step = History.Undo();
         if (step == null) return;
         AfterHistoryMove("Undone: " + step.What);
@@ -82,6 +101,7 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanRedo))]
     private void Redo()
     {
+        if (WritePendingBeforeHistory()) { StatusMessage = "Your latest edits were written first, so there is nothing to redo after them."; return; }
         var step = History.Redo();
         if (step == null) return;
         AfterHistoryMove("Redone: " + step.What);
@@ -92,6 +112,7 @@ public partial class MainViewModel : ObservableObject
     private void GoToHistory(HistoryEntry? entry)
     {
         if (entry == null) return;
+        if (WritePendingBeforeHistory()) { StatusMessage = "Your latest edits were written first; pick the step again in Edit > History."; return; }
         int n = entry.IsDone ? History.UndoTo(entry.Step) : History.RedoTo(entry.Step);
         if (n > 0) AfterHistoryMove($"{(entry.IsDone ? "Undone" : "Redone")} {n} step{(n == 1 ? "" : "s")}, back to: {entry.Step.What}");
     }

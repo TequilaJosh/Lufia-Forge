@@ -21,7 +21,7 @@ public static class L2Capsules
 {
     public const int Table = 0xBDCB8, Monsters = 7, Forms = 5, Count = Monsters * Forms;
     public const int Names = 0x75558, NameLength = 5;
-    public const int Curves = 0x137420, CurveCount = 0x1E;
+    public const int Curves = 0x137420, CurveCount = 0x1F;
     public const int AttackNames = 0x12DF00, AttackNameCount = 0x4E;
     public const int Attacks = 0xBF63B, AttackCount = 0x54;
     public static readonly string[] Types = { "Neutral", "Light", "Wind", "Water", "Dark", "Soil", "Fire" };

@@ -13,6 +13,10 @@ public class RomBuffer
 
     public int Length => _data.Length;
     public bool IsDirty => _isDirty;
+
+    /// <summary>Goes up with every change to the bytes: a page that read the ROM at one version reads it again when it
+    /// is shown at another (another page, Undo or a patch changed it meanwhile).</summary>
+    public int Version { get; private set; }
     public string FilePath { get; private set; }
 
     public RomBuffer(byte[] data, string filePath)
@@ -97,7 +101,7 @@ public class RomBuffer
         ValidateOffset(offset, 1);
         Guard(offset, 1);
         _data[offset] = value;
-        _isDirty = true;
+        _isDirty = true; Version++;
     }
 
     public void WriteUInt16Le(int offset, ushort value)
@@ -106,7 +110,7 @@ public class RomBuffer
         Guard(offset, 2);
         _data[offset]     = (byte)(value & 0xFF);
         _data[offset + 1] = (byte)(value >> 8);
-        _isDirty = true;
+        _isDirty = true; Version++;
     }
 
     public void WriteBytes(int offset, byte[] bytes)
@@ -114,7 +118,7 @@ public class RomBuffer
         ValidateOffset(offset, bytes.Length);
         Guard(offset, bytes.Length);
         Array.Copy(bytes, 0, _data, offset, bytes.Length);
-        _isDirty = true;
+        _isDirty = true; Version++;
     }
 
     // -------------------------------------------------------------------------
@@ -148,12 +152,14 @@ public class RomBuffer
     }
 
     /// <summary>Writes the ROM (with its checksum fixed: some edits write in place without it) to a temporary file
-    /// first, then puts it in place, so a failed write never leaves a cut-off ROM.</summary>
+    /// first, then puts it in place, so a failed write never leaves a cut-off ROM. The checksum is fixed in the copy
+    /// written, not in the ROM being edited (that would count as an edit: the project unsaved, an Undo step).</summary>
     private void WriteSafely(string path)
     {
-        FixChecksum();
+        var written = new RomBuffer((byte[])_data.Clone(), FilePath);
+        written.FixChecksum();
         string tmp = path + ".tmp";
-        File.WriteAllBytes(tmp, _data);
+        File.WriteAllBytes(tmp, written._data);
         if (File.Exists(path)) File.Replace(tmp, path, null);
         else File.Move(tmp, path);
     }
@@ -187,7 +193,7 @@ public class RomBuffer
         // a patch may expand (or shrink) the ROM: take its size
         if (newData.Length != _data.Length) _data = new byte[newData.Length];
         Array.Copy(newData, _data, newData.Length);
-        _isDirty = true;
+        _isDirty = true; Version++;
         Maps.ExpansionSpace.Forget(this);
     }
 
@@ -212,7 +218,7 @@ public class RomBuffer
         int kb = newSize / 1024, n = 0;
         while ((1 << n) < kb) n++;
         _data[Lufia1Constants.SnesRomSizeOffset] = (byte)n;
-        _isDirty = true;
+        _isDirty = true; Version++;
     }
 
     /// <summary>Recompute the SNES header checksum and complement for the current data.</summary>
@@ -226,7 +232,7 @@ public class RomBuffer
         Put16(Lufia1Constants.SnesChecksumOffset, checksum);
         Put16(Lufia1Constants.SnesComplementOffset, (ushort)(checksum ^ 0xFFFF));
         if (ex) CopyFirstBank();
-        _isDirty = true;
+        _isDirty = true; Version++;
     }
 
     /// <summary>An 8 MB "ExLoROM" (Lufia II made 8 MB by Lufia Forge): banks 00-7D read the upper 4 MB, so the console
