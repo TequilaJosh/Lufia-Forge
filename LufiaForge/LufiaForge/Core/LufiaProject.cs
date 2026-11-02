@@ -90,7 +90,43 @@ public sealed class LufiaProject
     {
         Saved = DateTime.Now;
         string tmp = Path + ".tmp";
-        using (var fs = File.Create(tmp))
+        WriteFile(tmp, rom);
+        try
+        {
+            if (File.Exists(Path)) File.Replace(tmp, Path, Path + ".bak");
+            else File.Move(tmp, Path);
+        }
+        catch
+        {
+            try { File.Delete(tmp); } catch { }
+            throw;
+        }
+        MapNamesChanged = false;
+    }
+
+    /// <summary>Saves the project with this ROM as another file, leaving the project itself as it is (its path, its
+    /// unsaved state): the copy kept when Lufia Forge has to close after an error.</summary>
+    public void SaveCopy(string path, byte[] rom)
+    {
+        string tmp = path + ".tmp";
+        WriteFile(tmp, rom);
+        File.Move(tmp, path, overwrite: true);
+    }
+
+    /// <summary>Writes the project file (a failed write leaves nothing behind).</summary>
+    private void WriteFile(string file, byte[] rom)
+    {
+        try { WriteZip(file, rom); }
+        catch
+        {
+            try { File.Delete(file); } catch { }
+            throw;
+        }
+    }
+
+    private void WriteZip(string file, byte[] rom)
+    {
+        using (var fs = File.Create(file))
         using (var zip = new ZipArchive(fs, ZipArchiveMode.Create))
         {
             var json = JsonSerializer.SerializeToUtf8Bytes(new
@@ -109,16 +145,15 @@ public sealed class LufiaProject
             Write(zip, "base.sfc", _base);
             Write(zip, "changes.bin", MakeDiff(_base, rom));
         }
-        if (File.Exists(Path)) File.Replace(tmp, Path, Path + ".bak");
-        else File.Move(tmp, Path);
-        MapNamesChanged = false;
     }
 
-    /// <summary>Saves the project under another file (Save Project As).</summary>
+    /// <summary>Saves the project under another file (Save Project As). When that fails the project stays where it was.</summary>
     public void SaveAs(string path, byte[] rom)
     {
+        string old = Path;
         Path = path;
-        Save(rom);
+        try { Save(rom); }
+        catch { Path = old; throw; }
     }
 
     /// <summary>How many bytes differ from the starting ROM.</summary>

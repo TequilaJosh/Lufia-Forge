@@ -24,7 +24,10 @@ public sealed class AudioOut : IDisposable
         _rate = sampleRate; _fill = fill;
     }
 
-    /// <summary>Opens the device and starts playing; false when there's no sound device.</summary>
+    /// <summary>What stopped the sound: the callback failed (the sound stops then, the app carries on). Null while fine.</summary>
+    public Exception? Error { get; private set; }
+
+    /// <summary>Opens the device and starts playing; false when there's no sound device (or the callback failed at once).</summary>
     public bool Start()
     {
         var fmt = new WaveFormat { wFormatTag = 1, nChannels = 2, nSamplesPerSec = (uint)_rate, wBitsPerSample = 16, nBlockAlign = 4, nAvgBytesPerSec = (uint)_rate * 4 };
@@ -36,8 +39,9 @@ public sealed class AudioOut : IDisposable
             _headers[i] = Marshal.AllocHGlobal(size);
             Marshal.StructureToPtr(new WaveHdr { lpData = _data[i], dwBufferLength = PairsPerBuffer * 4 }, _headers[i], false);
             waveOutPrepareHeader(_wave, _headers[i], size);
-            Queue(i);
         }
+        try { for (int i = 0; i < Buffers; i++) Queue(i); }
+        catch (Exception ex) { Error = ex; Dispose(); return false; }
         _thread = new Thread(Pump) { IsBackground = true, Name = "Cutscene audio", Priority = ThreadPriority.AboveNormal };
         _thread.Start();
         return true;
@@ -59,11 +63,21 @@ public sealed class AudioOut : IDisposable
 
     private void Pump()
     {
-        while (!_stop)
+        try
         {
-            for (int i = 0; i < Buffers && !_stop; i++)
-                if ((Marshal.ReadInt32(_headers[i], FlagsOffset) & WhdrDone) != 0) Queue(i);
-            Thread.Sleep(4);
+            while (!_stop)
+            {
+                for (int i = 0; i < Buffers && !_stop; i++)
+                    if ((Marshal.ReadInt32(_headers[i], FlagsOffset) & WhdrDone) != 0) Queue(i);
+                Thread.Sleep(4);
+            }
+        }
+        catch (Exception ex)
+        {
+            // the callback failed (the sound driver stopped answering, data it read was bad...): no more buffers are
+            // queued, so the sound stops after the ones playing; an error on this thread would close the whole app
+            Error = ex;
+            _stop = true;
         }
     }
 

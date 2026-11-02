@@ -46,7 +46,7 @@ public partial class MainWindow : Window
         KeyDown += appKeys;
 
         // Quietly check GitHub for a newer release once the window is up.
-        Loaded += async (_, _) => await UpdateService.CheckAsync(silentIfNone: true, HasUnsavedChanges);
+        Loaded += async (_, _) => await UpdateService.CheckAsync(silentIfNone: true, HasUnsavedChanges, vm.SaveBeforeRestartAsync);
 
         // tabs whose edits are written by themselves (saving the project, Apply to ROM in the top bar...)
         if (MapEditorView.DataContext is IPendingEdits mapEdit) vm.Register(mapEdit);
@@ -193,7 +193,7 @@ public partial class MainWindow : Window
     private bool HasUnsavedChanges() => ((MainViewModel)DataContext).HasUnsavedProjectChanges();
 
     private async void CheckUpdatesMenuItem_Click(object sender, RoutedEventArgs e) =>
-        await UpdateService.CheckAsync(silentIfNone: false, HasUnsavedChanges);
+        await UpdateService.CheckAsync(silentIfNone: false, HasUnsavedChanges, ((MainViewModel)DataContext).SaveBeforeRestartAsync);
 
     private void ClearStoryMenuItem_Click(object sender, RoutedEventArgs e)
     {

@@ -56,6 +56,34 @@ public partial class MainViewModel
     private static bool IsModal(Window w) =>
         (bool)(typeof(Window).GetField("_showingAsDialog", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)?.GetValue(w) ?? false);
 
+    /// <summary>
+    /// A dialog is open on the UI thread: a window shown with ShowDialog, a message box or a file picker. The timers
+    /// still tick inside its loop, so nothing may write the ROM or save the project behind it (an editor halfway
+    /// through Apply may be asking a question in it). Message boxes and file pickers aren't WPF windows: they are the
+    /// thread's visible windows of the dialog class (#32770).
+    /// </summary>
+    public static bool IsDialogOpen()
+    {
+        if (System.Windows.Interop.ComponentDispatcher.IsThreadModal) return true;
+        if (Application.Current?.Windows.OfType<Window>().Any(w => w.IsVisible && IsModal(w)) == true) return true;
+        bool found = false;
+        var name = new System.Text.StringBuilder(16);
+        EnumThreadWindows(GetCurrentThreadId(), (hwnd, _) =>
+        {
+            name.Clear();
+            if (IsWindowVisible(hwnd) && GetClassName(hwnd, name, 16) > 0 && name.ToString() == "#32770") { found = true; return false; }
+            return true;
+        }, IntPtr.Zero);
+        return found;
+    }
+
+    private delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr param);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool EnumThreadWindows(uint thread, EnumWindowsProc callback, IntPtr param);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hwnd);
+    [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    private static extern int GetClassName(IntPtr hwnd, System.Text.StringBuilder name, int max);
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
+
     /// <summary>Writes every tab's pending edits; returns the problems.</summary>
     private List<string> WriteAllPending()
     {
@@ -314,18 +342,22 @@ public partial class MainViewModel
         return true;
     }
 
-    /// <summary>The ROM file next to the project (what Export ROM and BizHawk use): "&lt;project&gt;.sfc".</summary>
+    /// <summary>The ROM file next to the project (what Export ROM names its copies after, and where the bookmarks and
+    /// flag names are kept): "&lt;project&gt;.sfc". BizHawk plays it too, unless another file is there
+    /// (<see cref="PlayCopies"/>).</summary>
     private static string PlayRomPath(LufiaProject p) => Path.ChangeExtension(p.Path, ".sfc");
 
-    /// <summary>Bookmarks and story flag names kept next to the ROM go with the project.</summary>
-    private static void CarryOverNotes(string romPath, string projectRom)
+    /// <summary>Bookmarks and story flag names kept next to the ROM go with the project (with <paramref name="replace"/>,
+    /// also over the notes already at the new place: Save Project As over another project).</summary>
+    private static void CarryOverNotes(string romPath, string projectRom, bool replace = false)
     {
         foreach (var ext in new[] { ".lfbookmarks.json", ".lfflags.json" })
         {
             try
             {
                 string from = Path.ChangeExtension(romPath, null) + ext, to = Path.ChangeExtension(projectRom, null) + ext;
-                if (File.Exists(from) && !File.Exists(to)) File.Copy(from, to);
+                if (string.Equals(Path.GetFullPath(from), Path.GetFullPath(to), StringComparison.OrdinalIgnoreCase)) continue;
+                if (File.Exists(from) && (replace || !File.Exists(to))) File.Copy(from, to, overwrite: true);
             }
             catch { }
         }
@@ -361,20 +393,24 @@ public partial class MainViewModel
         return "BizHawk is opening the ROM: start a new game." + (warn != null ? " " + warn : "");
     }
 
-    /// <summary>Writes the project's ROM as it is now next to the project (for BizHawk) and returns its path.</summary>
+    /// <summary>Writes the project's ROM as it is now next to the project (for BizHawk) and returns its path. A file
+    /// there that Lufia Forge didn't write (the ROM the project started from, say) is never overwritten: the copy goes
+    /// to "&lt;project&gt;.play.sfc" then (<see cref="PlayCopies"/>).</summary>
     public string? WritePlayRom()
     {
-        if (RomBuffer == null) return null;
+        if (RomBuffer == null || Project == null) return null;
+        string target = PlayCopies.Target(RomBuffer.FilePath, Project.BaseRom, Project.Created);
         try
         {
             Flush(quiet: true);
-            RomBuffer.WriteCopy(RomBuffer.FilePath);
-            return RomBuffer.FilePath;
+            RomBuffer.WriteCopy(target);
+            PlayCopies.Remember(target);
+            return target;
         }
         catch (Exception ex)
         {
             StatusMessage = "The ROM for BizHawk couldn't be written: " + ex.Message;
-            return File.Exists(RomBuffer.FilePath) ? RomBuffer.FilePath : null;
+            return File.Exists(target) ? target : null;
         }
     }
 
@@ -396,22 +432,32 @@ public partial class MainViewModel
         };
         if (d.ShowDialog() != true) return;
         Flush(quiet: false);
-        try
-        {
-            var rom = RomBuffer.ToArray();
-            Project.Name = Path.GetFileNameWithoutExtension(d.FileName);
-            Project.SaveAs(d.FileName, rom);
-            _savedRom = rom;
-            RomBuffer.SetFilePath(PlayRomPath(Project));
-            RecentProjects.Add(Project.Path, Project.Name);
-            RefreshRecent();
-            OnPropertyChanged(nameof(Project));
-            OnPropertyChanged(nameof(WindowTitle));
-            OnPropertyChanged(nameof(ProjectText));
-            StatusMessage = $"Project saved as \"{Project.Name}\".";
-            StatusDetail = Project.Path;
-        }
+        try { SaveProjectTo(d.FileName); }
         catch (Exception ex) { MessageBox.Show($"The project couldn't be saved: {ex.Message}", "Save project", MessageBoxButton.OK, MessageBoxImage.Error); }
+    }
+
+    /// <summary>Save Project As, once the file is picked: when the save fails the project keeps its old file and name
+    /// (later saves go there, not to the file that couldn't be written). The bookmarks and flag names go along.</summary>
+    public void SaveProjectTo(string path)
+    {
+        if (Project == null || RomBuffer == null) return;
+        var rom = RomBuffer.ToArray();
+        string oldName = Project.Name, oldRom = RomBuffer.FilePath;
+        Project.Name = Path.GetFileNameWithoutExtension(path);
+        try { Project.SaveAs(path, rom); }
+        catch { Project.Name = oldName; throw; }
+        _savedRom = rom;
+        CarryOverNotes(oldRom, PlayRomPath(Project), replace: true);
+        RomBuffer.SetFilePath(PlayRomPath(Project));
+        RecentProjects.Add(Project.Path, Project.Name);
+        RefreshRecent();
+        OnPropertyChanged(nameof(Project));
+        OnPropertyChanged(nameof(WindowTitle));
+        OnPropertyChanged(nameof(ProjectText));
+        // the bookmarks and flag names are kept next to the project's ROM file: the pages open them at the new place
+        if (!string.Equals(oldRom, RomBuffer.FilePath, StringComparison.OrdinalIgnoreCase)) ReloadModules();
+        StatusMessage = $"Project saved as \"{Project.Name}\".";
+        StatusDetail = Project.Path;
     }
 
     /// <summary>Writes the tabs' pending edits to the ROM; with quiet, problems only go to the status bar.</summary>
@@ -454,13 +500,45 @@ public partial class MainViewModel
     {
         if (Project == null || _autosave == null) return;
         // not in the middle of something (typing, a drag, a dialog): try again a little later
-        bool busy = (DateTime.Now - _lastInput).TotalSeconds < 4 || System.Windows.Input.Mouse.Captured != null ||
-                    Application.Current?.Windows.OfType<Window>().Any(w => w.IsVisible && w != Application.Current.MainWindow && w.Owner != null && IsModal(w)) == true;
+        bool busy = (DateTime.Now - _lastInput).TotalSeconds < 4 || System.Windows.Input.Mouse.Captured != null || IsDialogOpen();
         if (busy) { _autosave.Interval = TimeSpan.FromSeconds(20); return; }
         _autosave.Interval = AutosaveEvery;
         Flush(quiet: true);
         if (!HasUnsavedProjectChanges()) return;
         SaveProjectNow(quiet: true);
+    }
+
+    /// <summary>Before an update restarts Lufia Forge (the restart skips the question on closing): waits until no dialog
+    /// is open, then writes the tabs' edits and saves the project. False when something couldn't be kept (the restart
+    /// must not happen then).</summary>
+    public async Task<bool> SaveBeforeRestartAsync()
+    {
+        while (IsDialogOpen()) await Task.Delay(500);
+        if (Project == null || RomBuffer == null) return true;
+        if (!HasUnsavedProjectChanges()) return true;
+        if (!SaveProjectNow(quiet: false)) return false;
+        return !HasPendingEdits;   // edits a tab couldn't write would be lost
+    }
+
+    /// <summary>
+    /// Lufia Forge has to close after an error on another thread (the app's own error handler can't keep it open):
+    /// when the project has changes that aren't saved, a copy of it as it is now goes next to it, "&lt;name&gt; (recovered
+    /// &lt;date&gt;).lfproj", leaving the project file itself alone. Edits still in a tab aren't in it. Returns the
+    /// copy's path, or null.
+    /// </summary>
+    public string? SaveRecoveryCopy()
+    {
+        try
+        {
+            if (Project is not { } project || RomBuffer is not { } buffer) return null;
+            var rom = buffer.ToArray();
+            if (!project.MapNamesChanged && _savedRom != null && rom.AsSpan().SequenceEqual(_savedRom)) return null;
+            string path = Path.Combine(Path.GetDirectoryName(project.Path) ?? "",
+                $"{Path.GetFileNameWithoutExtension(project.Path)} (recovered {DateTime.Now:yyyy-MM-dd HH-mm-ss}){LufiaProject.Extension}");
+            project.SaveCopy(path, rom);
+            return path;
+        }
+        catch { return null; }
     }
 
     /// <summary>Before leaving the project (closing the app, opening another): asks to save it when something isn't
