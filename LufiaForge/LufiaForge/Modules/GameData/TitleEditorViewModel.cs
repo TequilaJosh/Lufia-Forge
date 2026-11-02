@@ -614,12 +614,12 @@ public partial class TitleEditorViewModel : GameDataEditorBase
         var rom = Ctx.Rom;
         string built;
         try { built = _title.Rebuild(_front, _back); }
-        catch (InvalidOperationException ex) { Status = "Not applied: " + ex.Message; return; }
+        catch (InvalidOperationException ex) { Refuse("Not applied: " + ex.Message); return; }
         bool expand = rom.Length >= Core.Maps.MapWriter.ExpandedSize;
         if (_title.NeedsMoreSpace(rom) && !expand)
         {
             if (!AutoWriting && MessageBox.Show("The new title doesn't fit in the original space. Expand the ROM to 2 MB?", "Expand ROM?", MessageBoxButton.YesNo) != MessageBoxResult.Yes)
-            { Status = "Not applied."; return; }
+            { Refuse("Not applied: the ROM wasn't expanded."); return; }
             expand = true;
         }
         string result = "";

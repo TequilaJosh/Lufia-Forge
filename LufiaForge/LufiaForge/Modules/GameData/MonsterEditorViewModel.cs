@@ -231,7 +231,7 @@ public partial class MonsterEditorViewModel : GameDataEditorBase
     private void EditAiScript()
     {
         if (Ctx == null || SelectedIndex < 0) return;
-        WritePendingEdits();   // the monster's other edits first (they share the record)
+        if (WritePendingEdits() != null) return;   // the monster's other edits first (they share the record); Status says why not
         int id = SelectedIndex;
         var w = new AiScriptWindow(Ctx.Rom, id, Name.Replace('@', ' ').Trim(), SpellNames, ItemNames) { Owner = System.Windows.Application.Current?.MainWindow };
         if (w.ShowDialog() != true || w.Result is not { } steps) return;
@@ -253,30 +253,30 @@ public partial class MonsterEditorViewModel : GameDataEditorBase
         if (Ctx == null || SelectedIndex < 0) return;
         if (!ItemEditorViewModel.TryParseHex(UnknownHex, out var unknown) || unknown.Length != UnknownFields.Length)
         {
-            Status = $"Unknown bytes must be exactly {UnknownFields.Length} hex bytes (+11 +29).";
+            Refuse($"Unknown bytes must be exactly {UnknownFields.Length} hex bytes (+11 +29).");
             return;
         }
 
         byte[] ai = Array.Empty<byte>();
         if (_aiLength > 0 && (!ItemEditorViewModel.TryParseHex(AiHex, out ai) || ai.Length != _aiLength))
         {
-            Status = $"AI script: exactly {_aiLength} hex bytes (edit in place; the length can't change).";
+            Refuse($"AI script: exactly {_aiLength} hex bytes (edit in place; the length can't change).");
             return;
         }
 
         // FF marks an empty monster slot in battle, and numbers past the last picture read other data
         if (Graphic < 0 || Graphic >= Core.Battle.MonsterGraphics.Count(Ctx.Rom) || Graphic == 0xFF)
         {
-            Status = $"Graphic must be a monster picture: 00-{Core.Battle.MonsterGraphics.Count(Ctx.Rom) - 1:X2}.";
+            Refuse($"Graphic must be a monster picture: 00-{Core.Battle.MonsterGraphics.Count(Ctx.Rom) - 1:X2}.");
             return;
         }
 
         var rom = Ctx.Rom;
         int o   = _recordOffset;
-        if (Core.DutchLetters.Unwritable(Ctx.Rom, Name) is string badName) { Status = "Name: " + badName + "."; return; }
+        if (Core.DutchLetters.Unwritable(Ctx.Rom, Name) is string badName) { Refuse("Name: " + badName + "."); return; }
         bool renamed = Name != Ctx.ReadName(o, GameDataOffsets.MonsterNameLen);
 
-        Commit($"Monster {SelectedIndex:X2}", () =>
+        bool written = Commit($"Monster {SelectedIndex:X2}", () =>
         {
             if (renamed) Ctx.WriteName(o, GameDataOffsets.MonsterNameLen, Name);
             int type = (MonsterType & 0x07) | _typeMiddleBits | (Flag40 ? 0x40 : 0) | (Flag80 ? 0x80 : 0);
@@ -306,6 +306,7 @@ public partial class MonsterEditorViewModel : GameDataEditorBase
             if (!want.SequenceEqual(Core.Battle.MonsterTable.ReadElements(rom, o)))
                 Core.Battle.MonsterTable.SetRecord(rom, SelectedIndex, Core.Battle.MonsterTable.WithElements(rom, o, want));
         });
+        if (!written) return;   // (the edits stay, with the error)
 
         if (renamed) RefreshList();
         LoadSelected();

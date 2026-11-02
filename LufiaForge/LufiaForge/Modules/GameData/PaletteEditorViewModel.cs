@@ -134,7 +134,7 @@ public partial class PaletteEditorViewModel : GameDataEditorBase
         catch (InvalidOperationException) when (!allow)
         {
             if (!AutoWriting && MessageBox.Show("This palette is stored compressed and no longer fits where it was. Expand the ROM to 2 MB (the game plays the same) so it can move?",
-                    "Expand ROM?", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) { Status = "Not written: the ROM wasn't expanded."; return; }
+                    "Expand ROM?", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) { Refuse("Not written: the ROM wasn't expanded."); return; }
             Commit($"{source.Name}", () => note = source.Write(Ctx.Rom, colors, true));
             if (note != null) Status += $" ({note})";
             return;
@@ -187,6 +187,7 @@ public partial class PaletteEditorViewModel : GameDataEditorBase
         for (int i = 0; i < need; i++)
             list[i].Value = PaletteSwatch.FromRgb((byte)(colors[i] >> 16), (byte)(colors[i] >> 8), (byte)colors[i]);
         if (Selected != null) Pick(Selected);
+        Edited = true;   // (the colours themselves aren't watched: picking the same colour again shows no change)
         Status = $"{need} colours read from {System.IO.Path.GetFileName(dlg.FileName)} (not yet applied).";
     }
 }

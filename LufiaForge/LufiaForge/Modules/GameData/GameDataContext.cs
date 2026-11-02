@@ -26,6 +26,10 @@ public sealed class GameDataContext
     /// <summary>Raised after an editor renames items/spells/characters, so other editors refresh.</summary>
     public event Action? NamesChanged;
 
+    /// <summary>Raised before the name lists change: editors write their pending edits first (a list entry replaced
+    /// clears the choice boxes showing it, and refreshing re-reads the record).</summary>
+    public event Action? NamesChanging;
+
     public GameDataContext(RomBuffer rom, MainViewModel? mainVm)
     {
         Rom     = rom;
@@ -44,12 +48,28 @@ public sealed class GameDataContext
     /// <summary>Call after any write: records it in the history (false when nothing really changed).</summary>
     public bool MarkModified(bool namesChanged = false, string? what = null)
     {
-        if (namesChanged)
-        {
-            RefreshNames();
-            NamesChanged?.Invoke();
-        }
-        return _mainVm?.NotifyRomModified(what ?? "Game data edit (characters / items / shops / spells / monsters)") ?? true;
+        // (the step first: other editors writing their edits below make steps of their own)
+        bool changed = _mainVm?.NotifyRomModified(what ?? "Game data edit (characters / items / shops / spells / monsters)") ?? true;
+        if (namesChanged) NamesUpdate();
+        return changed;
+    }
+
+    private void NamesUpdate()
+    {
+        NamesChanging?.Invoke();
+        RefreshNames();
+        NamesChanged?.Invoke();
+    }
+
+    /// <summary>Reads the names again when the ROM's differ from the lists (another tab renamed or added items or
+    /// spells: the Patch Manager's bows or spells); the editors are told as after a rename.</summary>
+    public void RecheckNames()
+    {
+        int spells = Core.Battle.SpellTablePatch.SpellCount(Rom);
+        bool same = ItemNames.Count == GameDataOffsets.ItemCount && SpellNames.Count == spells &&
+                    Enumerable.Range(0, GameDataOffsets.ItemCount).All(i => ItemNames[i] == $"{i:X2} {ReadName(ItemOffset(i), GameDataOffsets.ItemNameLen)}") &&
+                    Enumerable.Range(0, spells).All(i => SpellNames[i] == $"{i:X2} {ReadName(Core.Battle.SpellTablePatch.SpellOffset(Rom, i), GameDataOffsets.SpellNameLen)}");
+        if (!same) NamesUpdate();
     }
 
     // ── Record locators ─────────────────────────────────────────────────────
@@ -119,9 +139,10 @@ public abstract partial class GameDataEditorBase : ObservableObject
 
     public void Attach(GameDataContext ctx)
     {
-        if (Ctx != null) Ctx.NamesChanged -= HandleNamesChanged;
+        if (Ctx != null) { Ctx.NamesChanged -= HandleNamesChanged; Ctx.NamesChanging -= HandleNamesChanging; }
         Ctx = ctx;
         Ctx.NamesChanged += HandleNamesChanged;
+        Ctx.NamesChanging += HandleNamesChanging;
         _loading++;
         try
         {
@@ -133,6 +154,7 @@ public abstract partial class GameDataEditorBase : ObservableObject
         }
         finally { _loading--; }
         Edited = false;
+        _readVersion = Ctx.Rom.Version;
         HookCollections();
     }
 
@@ -153,7 +175,8 @@ public abstract partial class GameDataEditorBase : ObservableObject
     /// <summary>Whether this editor has edits that aren't in the ROM yet.</summary>
     public virtual bool HasPendingEdits => Edited && Ctx != null;
 
-    /// <summary>Writes the edits (the editor's Apply). Null, or why they couldn't be written.</summary>
+    /// <summary>Writes the edits (the editor's Apply). Null, or why they couldn't be written: then they stay pending
+    /// (and on screen), and <see cref="Status"/> says why.</summary>
     public virtual string? WritePendingEdits()
     {
         if (!HasPendingEdits || _writing) return null;
@@ -162,16 +185,29 @@ public abstract partial class GameDataEditorBase : ObservableObject
         try
         {
             _changed = false;
+            _failed = false;
             (GetType().GetProperty("ApplyCommand")?.GetValue(this) as System.Windows.Input.ICommand)?.Execute(null);
+            if (_failed) { Edited = true; return $"{PageName}: {Status}"; }
             if (!_changed) Status = status;   // the same bytes again: keep what the editor said
             Edited = false;
             return null;
         }
-        catch (Exception ex) { return ex.Message; }
+        catch (Exception ex) { Edited = true; Status = $"Error: {ex.Message}"; return $"{PageName}: {ex.Message}"; }
         finally { _writing = false; }
     }
 
-    private bool _changed;
+    private bool _changed, _failed;
+
+    /// <summary>The page's name in messages ("Monster" for the Monster editor).</summary>
+    protected virtual string PageName => GetType().Name.Replace("EditorViewModel", "").Replace("ViewModel", "");
+
+    /// <summary>The edits can't be written as they are (a value out of range, a write that failed): says why, and
+    /// they stay pending instead of being taken as written.</summary>
+    protected void Refuse(string why)
+    {
+        Status = why;
+        _failed = true;
+    }
 
     /// <summary>The property names that don't count as edits (lists and what the editor shows).</summary>
     private static readonly HashSet<string> NotEdits = new()
@@ -195,18 +231,42 @@ public abstract partial class GameDataEditorBase : ObservableObject
     protected override void OnPropertyChanged(System.ComponentModel.PropertyChangedEventArgs e)
     {
         base.OnPropertyChanged(e);
+        if (_hold is { } hold && e.PropertyName == hold.Name)
+        {
+            // the record's edits couldn't be written: back to it (its edits are still on screen)
+            if (_reverting) return;
+            _reverting = true;
+            try { GetType().GetProperty(hold.Name)?.SetValue(this, hold.Old); }
+            catch { }
+            finally { _reverting = false; _hold = null; }
+            // (a list that set the selection takes the old one back once its own change is done)
+            System.Windows.Application.Current?.Dispatcher.BeginInvoke(() => base.OnPropertyChanged(e), System.Windows.Threading.DispatcherPriority.Background);
+            return;
+        }
         if (_loading > 0 || _writing || e.PropertyName == null || IsShownOnly(e.PropertyName) || e.PropertyName.StartsWith("Selected")) return;
         Edited = true;
         if (GetType().GetProperty(e.PropertyName)?.GetValue(this) is System.Collections.Specialized.INotifyCollectionChanged) HookCollections();
     }
 
-    /// <summary>Picking another record: the edits of the one shown are written first.</summary>
+    /// <summary>Picking another record: the edits of the one shown are written first. When they can't be, the
+    /// record stays picked (see <see cref="Holding"/>) with its edits and the reason in <see cref="Status"/>.</summary>
     protected override void OnPropertyChanging(System.ComponentModel.PropertyChangingEventArgs e)
     {
-        if (_loading == 0 && !_writing && e.PropertyName != null && e.PropertyName.StartsWith("Selected") && HasPendingEdits)
-            WritePendingEdits();
+        if (_loading == 0 && !_writing && _hold == null && e.PropertyName != null && e.PropertyName.StartsWith("Selected") && HasPendingEdits)
+        {
+            var p = GetType().GetProperty(e.PropertyName);
+            object? old = p?.CanWrite == true ? p.GetValue(this) : null;
+            if (WritePendingEdits() != null && p?.CanWrite == true) _hold = (e.PropertyName, old);
+        }
         base.OnPropertyChanging(e);
     }
+
+    private (string Name, object? Old)? _hold;
+    private bool _reverting;
+
+    /// <summary>Another record was picked but the shown one's edits couldn't be written: the pick is taken back, so
+    /// nothing may load the other record meanwhile.</summary>
+    protected bool Holding => _hold != null;
 
     private readonly HashSet<object> _hooked = new(ReferenceEqualityComparer.Instance);
 
@@ -234,7 +294,7 @@ public abstract partial class GameDataEditorBase : ObservableObject
     }
 
     /// <summary>Attaches to a reloaded ROM (after undo / redo) keeping the record that was selected: an int
-    /// SelectedIndex, or a selected list entry found again by its text.</summary>
+    /// SelectedIndex, or a selected list entry found again by its key (<see cref="SelectionKey"/>).</summary>
     public void Reattach(GameDataContext ctx)
     {
         var props = GetType().GetProperties().Where(p => p.CanRead && p.CanWrite && p.Name.StartsWith("Selected") && p.GetIndexParameters().Length == 0).ToList();
@@ -245,16 +305,26 @@ public abstract partial class GameDataEditorBase : ObservableObject
             try
             {
                 if (v is int or bool) { if (!Equals(p.GetValue(this), v)) p.SetValue(this, v); continue; }
-                if (v == null) continue;
-                string text = v.ToString() ?? "";
+                if (v == null || SelectionKey(v) is not { } key) continue;   // (no key: the entry OnRomLoaded picked stays)
                 var match = GetType().GetProperties()
                     .Where(q => q.GetIndexParameters().Length == 0 && typeof(System.Collections.IEnumerable).IsAssignableFrom(q.PropertyType) && q.PropertyType != typeof(string))
                     .SelectMany(q => (q.GetValue(this) as System.Collections.IEnumerable)?.Cast<object>() ?? Enumerable.Empty<object>())
-                    .FirstOrDefault(o => o != null && p.PropertyType.IsInstanceOfType(o) && o.ToString() == text);
-                if (match != null) p.SetValue(this, match);
+                    .FirstOrDefault(o => o != null && p.PropertyType.IsInstanceOfType(o) && Equals(SelectionKey(o), key));
+                if (match != null && !ReferenceEquals(match, p.GetValue(this))) p.SetValue(this, match);
             }
             catch { }
         }
+    }
+
+    /// <summary>What identifies a list entry across reloads: its number (Number, Resource, Index), else its Name,
+    /// else its own text (a type that writes one); null when it has none (then it isn't looked for).</summary>
+    protected virtual object? SelectionKey(object entry)
+    {
+        var t = entry.GetType();
+        foreach (var name in new[] { "Number", "Resource", "Index", "Name" })
+            if (t.GetProperty(name) is { } p && p.GetIndexParameters().Length == 0 && p.GetValue(entry) is { } v and (int or string))
+                return (name, v);
+        return t.GetMethod("ToString", Type.EmptyTypes)?.DeclaringType != typeof(object) ? entry.ToString() : null;
     }
 
     /// <summary>Build record lists and load the first record.</summary>
@@ -266,11 +336,22 @@ public abstract partial class GameDataEditorBase : ObservableObject
     /// <summary>Re-reads the selected record (what it shows isn't an edit).</summary>
     protected void LoadSelected()
     {
+        if (_hold != null) return;   // (the pick is being taken back: the record's edits stay)
         _loading++;
         try { LoadRecord(); }
         finally { _loading--; }
         Edited = false;
+        if (Ctx != null) _readVersion = Ctx.Rom.Version;
         HookCollections();
+    }
+
+    /// <summary>Runs code that changes the editor's lists and values without that counting as an edit (or writing
+    /// the edits when a list drops its selection).</summary>
+    protected void Quietly(Action a)
+    {
+        _loading++;
+        try { a(); }
+        finally { _loading--; }
     }
 
     /// <summary>
@@ -279,8 +360,16 @@ public abstract partial class GameDataEditorBase : ObservableObject
     /// </summary>
     protected virtual void OnNamesChanged() => LoadSelected();
 
+    /// <summary>Another page renames: this page's own edits go in first (re-reading the record afterwards would
+    /// throw them away).</summary>
+    private void HandleNamesChanging()
+    {
+        if (HasPendingEdits && !_writing) WritePendingEdits();
+    }
+
     private void HandleNamesChanged()
     {
+        if (HasPendingEdits && !_writing) return;   // (they couldn't be written: they stay as typed, unread)
         string status = Status;
         OnNamesChanged();
         Status = status;
@@ -294,25 +383,41 @@ public abstract partial class GameDataEditorBase : ObservableObject
         Status = "Put back as the project has it.";
     }
 
-    /// <summary>Called when the editor is shown: picks up changes other tabs made (the Patch Manager adding spells).</summary>
+    /// <summary>The ROM's <see cref="Core.RomBuffer.Version"/> when this page last read it.</summary>
+    private int _readVersion;
+
+    /// <summary>Called when the editor is shown: picks up changes other tabs made (the Patch Manager adding spells or
+    /// patches, another page writing the same bytes). With no edits of its own pending, a page reads the ROM again
+    /// (keeping the record picked) when it changed since the page read it.</summary>
     public virtual void Recheck()
     {
-        if (Ctx != null && Ctx.SpellNames.Count != Core.Battle.SpellTablePatch.SpellCount(Ctx.Rom)) Ctx.RefreshNames();
+        if (Ctx == null || Ctx.Rom.Version == _readVersion) return;
+        Ctx.RecheckNames();
+        if (HasPendingEdits) return;
+        string status = Status;
+        Reattach(Ctx);
+        Status = status;
     }
 
-    /// <summary>Runs a write action, reporting success or the error in <see cref="Status"/>.</summary>
-    protected void Commit(string what, Action write, bool namesChanged = false)
+    /// <summary>Runs a write action, reporting success or the error in <see cref="Status"/>; false when it failed
+    /// (then the edits stay pending).</summary>
+    protected bool Commit(string what, Action write, bool namesChanged = false)
     {
-        if (Ctx == null) return;
+        if (Ctx == null) return false;
+        int before = Ctx.Rom.Version;
         try
         {
             write();
+            // (this page's own write isn't a change to read again; one by another page meanwhile still is)
+            if (before == _readVersion) _readVersion = Ctx.Rom.Version;
             if (Ctx.MarkModified(namesChanged, what)) { _changed = true; Status = $"{what} saved in the project."; }
             else Status = $"{what}: nothing changed.";
+            return true;
         }
         catch (Exception ex)
         {
-            Status = $"Error: {ex.Message}";
+            Refuse($"Error: {ex.Message}");
+            return false;
         }
     }
 

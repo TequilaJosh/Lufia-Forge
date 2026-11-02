@@ -127,6 +127,9 @@ public partial class PatchManagerViewModel : ObservableObject
             MessageBox.Show($"\"{patch.Name}\" adds a small routine to the expanded part of the ROM. Expand the ROM to 2 MB (the game plays the same)?",
                 "Expand ROM?", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
         { StatusText = "Not added: the ROM wasn't expanded."; return; }
+        // the tabs' edits not written yet go in first (a reload afterwards would drop them, and a page writing them
+        // later could put back bytes the patch changed)
+        _mainVm?.WritePendingEdits();
         try
         {
             if (adding) patch.Apply(_rom); else patch.Remove!(_rom);
@@ -305,6 +308,7 @@ public partial class PatchManagerViewModel : ObservableObject
             return;
         }
 
+        _mainVm?.WritePendingEdits();   // the tabs' edits first: every tab reloads from the patched ROM afterwards
         try
         {
             byte[] patched = IpsHandler.ApplyPatch(_rom, _loadedPatchPath);
@@ -399,6 +403,7 @@ public partial class PatchManagerViewModel : ObservableObject
 
         try
         {
+            _mainVm?.WritePendingEdits();   // the patch holds every edit, also those still in a tab
             IpsHandler.ExportPatch(_rom, openDialog.FileName, saveDialog.FileName);
 
             string name = Path.GetFileName(saveDialog.FileName);

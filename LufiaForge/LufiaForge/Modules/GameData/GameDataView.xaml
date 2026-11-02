@@ -5,7 +5,7 @@
 
     <Grid Background="{StaticResource MidPurpleBrush}">
 
-        <TabControl Style="{StaticResource LufiaSideTabControl}" SelectedIndex="1"
+        <TabControl x:Name="Pages" Style="{StaticResource LufiaSideTabControl}" SelectedIndex="1"
                     Visibility="{Binding IsRomLoaded, Converter={StaticResource BoolToVisibilityConverter}}">
             <TabItem Header="Party" Style="{StaticResource LufiaSideGroup}"/>
             <TabItem Header="Characters" Style="{StaticResource LufiaSideTab}">

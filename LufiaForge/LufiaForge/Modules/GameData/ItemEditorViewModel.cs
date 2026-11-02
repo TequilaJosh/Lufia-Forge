@@ -152,7 +152,7 @@ public partial class ItemEditorViewModel : GameDataEditorBase
         // Validate the hex fields before touching the ROM.
         if (!TryParseHex(HeaderHex, out var header) || header.Length != 3)
         {
-            Status = "Header bytes (+18..+20) must be exactly 3 hex bytes.";
+            Refuse("Header bytes (+18..+20) must be exactly 3 hex bytes.");
             return;
         }
         byte[]? effect = null;
@@ -160,13 +160,13 @@ public partial class ItemEditorViewModel : GameDataEditorBase
         {
             if (!TryParseHex(EffectHex, out effect) || effect.Length != _tailLength)
             {
-                Status = $"Effect data must be exactly {_tailLength} hex bytes (records can't change size).";
+                Refuse($"Effect data must be exactly {_tailLength} hex bytes (records can't change size).");
                 return;
             }
         }
         if (HasPropertyList && Properties.Any(p => p.Id == 0))
         {
-            Status = "Property id 00 is the list terminator; pick another id.";
+            Refuse("Property id 00 is the list terminator; pick another id.");
             return;
         }
 
@@ -174,13 +174,13 @@ public partial class ItemEditorViewModel : GameDataEditorBase
         string typed = Description.Replace("\r", "");
         if (_descriptions != null && typed != _descriptions.Read(SelectedIndex))
         {
-            if (Core.ItemDescriptions.Problem(typed, Ctx.Rom) is string bad) { Status = "Description: " + bad + "."; return; }
+            if (Core.ItemDescriptions.Problem(typed, Ctx.Rom) is string bad) { Refuse("Description: " + bad + "."); return; }
             newDescription = typed;
         }
 
-        if (Core.DutchLetters.Unwritable(Ctx.Rom, Name) is string badName) { Status = "Name: " + badName + "."; return; }
+        if (Core.DutchLetters.Unwritable(Ctx.Rom, Name) is string badName) { Refuse("Name: " + badName + "."); return; }
         bool renamed = Name != Ctx.ReadName(o, GameDataOffsets.ItemNameLen);
-        Commit($"Item {SelectedIndex:X2}", () =>
+        bool written = Commit($"Item {SelectedIndex:X2}", () =>
         {
             if (renamed) Ctx.WriteName(o, GameDataOffsets.ItemNameLen, Name);
             rom.WriteByte(o + 12, (byte)Type);
@@ -212,6 +212,7 @@ public partial class ItemEditorViewModel : GameDataEditorBase
             }
             Core.Battle.ItemTable.Sync(rom, SelectedIndex);   // (the item bank's copy, which the game reads)
         }, namesChanged: renamed);
+        if (!written) return;   // (the edits stay, with the error)
 
         if (!renamed) LoadSelected();
         if (newDescription != null && Core.ItemDescriptions.Warning(newDescription) is { Length: > 0 } warn) Status += " Warning, description: " + warn + ".";

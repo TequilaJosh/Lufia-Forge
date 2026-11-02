@@ -418,14 +418,15 @@ public partial class BattleBackgroundEditorViewModel : GameDataEditorBase
         bool expand = Backgrounds.Count > 0 && rom.Length < MapWriter.ExpandedSize;
         if (expand && !AutoWriting &&
             MessageBox.Show("Battle backgrounds need the expanded ROM (2 MB). Expand it?", "Expand ROM?", MessageBoxButton.YesNo) != MessageBoxResult.Yes)
-        { Status = "Not applied."; return; }
+        { Refuse("Not applied: the ROM wasn't expanded."); return; }
         var list = Backgrounds.Select(b => new BattleBackgrounds.Background(Clip(b.Name), b.Picture)).ToList();
         var maps = _maps.ToArray();
-        Commit("Battle backgrounds", () =>
-        {
-            if (expand) rom.Expand(MapWriter.ExpandedSize);
-            BattleBackgrounds.Apply(rom, list, maps);
-        });
+        if (!Commit("Battle backgrounds", () =>
+            {
+                if (expand) rom.Expand(MapWriter.ExpandedSize);
+                BattleBackgrounds.Apply(rom, list, maps);
+            }))
+            return;   // (still pending, with the error)
         Dirty = false;
     }
 }
