@@ -38,8 +38,10 @@ public partial class L2MapsPage
     /// <summary>The graphics list again (from the ROM: what each map uses now, this map as edited), and this map's choice.</summary>
     private void LoadGraphicsChoices()
     {
-        GraphicsChoices.Clear(); _graphics.Clear();
-        if (_rom == null || _edit == null || _edit.IsWorld) { GraphicsChoice = -1; return; }
+        var keep = BlockSource > 0 && BlockSource <= _sources.Count ? _sources[BlockSource - 1].Key : ((int, int, int, int, int)?)null;
+        GraphicsChoices.Clear(); _graphics.Clear(); BlockSourceChoices.Clear(); _sources.Clear();
+        OnPropertyChanged(nameof(HasBlockSources));
+        if (_rom == null || _edit == null || _edit.IsWorld) { GraphicsChoice = -1; BlockSource = -1; return; }
         var groups = Enumerable.Range(2, L2Maps.Count(_rom) - 2)
             .Where(m => m != _edit.MapId && !L2NewMaps.IsFree(_rom, m))
             .GroupBy(m => (Bs: (int)_rom.ReadByte(L2Maps.BlockSetAt(_rom, m)), Ts: (int)_rom.ReadByte(L2Maps.TileSetAt(_rom, m)),
@@ -54,8 +56,13 @@ public partial class L2MapsPage
                 : NameOf(maps[0]) + (maps.Count > 1 ? $" and {maps.Count - 1} other map{(maps.Count == 2 ? "" : "s")}" : "") + (k == mine ? " (and this map)" : "");
             _graphics.Add(k);
             GraphicsChoices.Add($"{who}   (blocks {k.Bs}, tiles {k.Ts}, colours {k.Ps})");
+            if (k != mine && maps.Count > 0) _sources.Add((k, maps[0]));
         }
         GraphicsChoice = _graphics.IndexOf(mine);
+        BlockSourceChoices.Add("This map's graphics");
+        foreach (var s in _sources) BlockSourceChoices.Add(GraphicsChoices[_graphics.IndexOf(s.Key)]);
+        BlockSource = keep is { } kk && _sources.FindIndex(s => s.Key == kk) is var at and >= 0 ? at + 1 : 0;
+        OnPropertyChanged(nameof(HasBlockSources));
     }
 
     partial void OnGraphicsChoiceChanged(int value)
@@ -69,7 +76,8 @@ public partial class L2MapsPage
         _stats.Clear();
         ReloadBlocks(); Refresh();
         Status = $"The map is drawn with the graphics of {GraphicsChoices[value].Split("   ")[0]} now: their blocks, tiles, colours and animations (written with the map; Undo takes it back). " +
-                 "The map keeps its block numbers, so on other blocks it looks scrambled until you paint it again.";
+                 "The map keeps its block numbers, so on other blocks it looks scrambled until you paint it again. " +
+                 "To keep this map's look and paint with other graphics' blocks too, pick them under Blocks, From.";
     }
 
     [RelayCommand]
