@@ -29,17 +29,18 @@ public partial class L2MapsPage
         {
             if (BlockSetChoices.Count == 0 && _rom != null)
             {
-                var uses = Enumerable.Range(2, L2Maps.Count - 2).ToList();
-                string Used(int list, int v) { var m = uses.Where(id => _rom.ReadByte(list + id) == v).ToList(); return m.Count == 0 ? "" : $"  ({m.Count} map{(m.Count == 1 ? "" : "s")}, e.g. {NameOf(m[0])})"; }
-                for (int i = 1; i <= BlockSets; i++) BlockSetChoices.Add($"{i}{Used(L2Maps.BlockSetList, i)}");
-                for (int i = 1; i <= TileSets; i++) TileSetChoices.Add($"{i}{Used(L2Maps.TileSetList, i)}");
-                for (int i = 1; i <= PaletteSets; i++) PaletteSetChoices.Add($"{i}{Used(L2Maps.PaletteSetList, i)}");
+                var uses = Enumerable.Range(2, L2Maps.Count(_rom!) - 2).ToList();
+                string Used(Func<RomBuffer, int, int> at, int v) { var m = uses.Where(id => _rom.ReadByte(at(_rom, id)) == v).ToList(); return m.Count == 0 ? "" : $"  ({m.Count} map{(m.Count == 1 ? "" : "s")}, e.g. {NameOf(m[0])})"; }
+                for (int i = 1; i <= BlockSets; i++) BlockSetChoices.Add($"{i}{Used(L2Maps.BlockSetAt, i)}");
+                for (int i = 1; i <= TileSets; i++) TileSetChoices.Add($"{i}{Used(L2Maps.TileSetAt, i)}");
+                for (int i = 1; i <= PaletteSets; i++) PaletteSetChoices.Add($"{i}{Used(L2Maps.PaletteSetAt, i)}");
             }
             BlockSetChoice = _edit?.BlockSetIndex - 1 ?? -1;
             TileSetChoice = _edit?.TileSetIndex - 1 ?? -1;
             PaletteSetChoice = _edit?.PaletteSetIndex - 1 ?? -1;
             MapWidth = _edit?.Width ?? 0; MapHeight = _edit?.Height ?? 0;
             UpdateTestStartNote();
+            UpdateNewMapNote();
         }
         finally { _loadingSettings = false; }
     }
@@ -105,6 +106,80 @@ public partial class L2MapsPage
         _main.NotifyRomModified("Lufia II: normal new-game start");
         UpdateTestStartNote();
         Status = "A new game starts as in the game again.";
+    }
+
+    // ---------------------------------------------------------------- new maps
+
+    [ObservableProperty] private int _newMapWidth = 32, _newMapHeight = 28;
+    [ObservableProperty] private string _newMapNote = "";
+    public bool CanDeleteMap => _rom != null && SelectedIndex >= L2NewMaps.GameCount && SelectedIndex < L2Maps.Count(_rom) && !L2NewMaps.IsFree(_rom, SelectedIndex);
+
+    private void UpdateNewMapNote()
+    {
+        OnPropertyChanged(nameof(CanDeleteMap));
+        if (_rom == null) { NewMapNote = ""; return; }
+        int made = L2Maps.Count(_rom) - L2NewMaps.GameCount - Enumerable.Range(L2NewMaps.GameCount, L2Maps.Count(_rom) - L2NewMaps.GameCount).Count(m => L2NewMaps.IsFree(_rom, m));
+        NewMapNote = (L2NewMaps.CantInstall(_rom) is { } why ? why + " " : "") +
+            $"New maps take the numbers F2-FF ({made} of {L2NewMaps.Slots} used). A copy has this map's blocks, graphics, exits, characters, " +
+            "events, treasure (with new opened flags) and puzzles; a blank map has this map's graphics, music and settings, the size typed, " +
+            "the brush block on the ground, and preset point 0 in the middle. Then point an exit at it (Pick on map...). In the game it shows this map's name.";
+    }
+
+    [RelayCommand] private void NewMapCopy() => MakeNewMap(blank: false);
+    [RelayCommand] private void NewMapBlank() => MakeNewMap(blank: true);
+
+    private void MakeNewMap(bool blank)
+    {
+        if (_rom == null || _main == null || _edit == null) { Status = "Pick a town or dungeon map first (the world maps can't be copied)."; return; }
+        if (WritePendingEdits() is { } why) { Status = "The map couldn't be written first: " + why; return; }
+        int template = _edit.MapId;
+        string from = NameOf(template);
+        int map;
+        try { map = L2NewMaps.Create(_rom, template, blank, NewMapWidth, NewMapHeight, SelectedBlock); }
+        catch (Exception ex) { Status = "No new map: " + ex.Message; return; }
+        if (LufiaForge.Core.Maps.MapNames.ProjectNames != null)
+            LufiaForge.Core.Maps.MapNames.SetProjectName(map, blank ? $"New map (graphics of {from})" : $"{from} (copy)");
+        _main.NotifyRomModified(blank ? $"Lufia II: new blank map {map:X2} ({NewMapWidth} x {NewMapHeight}, graphics of {template:X2})" : $"Lufia II: new map {map:X2}, a copy of {template:X2} {from}");
+        ReloadNames();
+        SelectedIndex = map;
+        Status = $"Map {map:X2} made ({(blank ? "blank, with the graphics of " : "a copy of ")}{template:X2} {from}). Nothing leads to it yet: point an exit at it (Select an exit, Pick on map...) or start a test game on it.";
+    }
+
+    [RelayCommand]
+    private void DeleteMap()
+    {
+        if (_rom == null || _main == null || !CanDeleteMap) { Status = "Only maps made with New map (F2 up) can be deleted."; return; }
+        int id = SelectedIndex;
+        string label = $"{id:X2} {NameOf(id)}";
+        Status = "Looking for what leads to this map...";
+        var refs = L2NewMaps.References(_rom, id, NameOf);
+        bool last = id == L2Maps.Count(_rom) - 1;
+        string text = $"Delete {label}?\n\n" +
+            (last ? "Its number becomes free for the next new map." : "Its number stays taken by a small empty map until the next New map uses it (so the maps after it keep their numbers).") +
+            (refs.Count == 0 ? "\n\nNothing else leads to it." :
+                "\n\nThese still lead to it and would take the party to an empty map until you change them:\n  " + string.Join("\n  ", refs.Take(15)) +
+                (refs.Count > 15 ? $"\n  ...and {refs.Count - 15} more" : "")) +
+            "\n\nEdit > Undo takes it back.";
+        if (System.Windows.MessageBox.Show(text, "Delete map", System.Windows.MessageBoxButton.OKCancel,
+                refs.Count == 0 ? System.Windows.MessageBoxImage.Question : System.Windows.MessageBoxImage.Warning,
+                System.Windows.MessageBoxResult.Cancel) != System.Windows.MessageBoxResult.OK) { Status = "Not deleted."; return; }
+        _edit = null; _history.Clear(); _redo.Clear();
+        try { L2NewMaps.Delete(_rom, id); }
+        catch (Exception ex) { Status = "Not deleted: " + ex.Message; return; }
+        if (LufiaForge.Core.Maps.MapNames.ProjectNames != null) LufiaForge.Core.Maps.MapNames.SetProjectName(id, "");
+        _main.NotifyRomModified($"Lufia II: deleted map {id:X2}");
+        ReloadNames();
+        SelectedIndex = -1;
+        SelectedIndex = 3;
+        Status = $"Map {id:X2} deleted" + (refs.Count > 0 ? $"; {refs.Count} exit(s) / event(s) still lead to it: point them elsewhere." : ".");
+    }
+
+    /// <summary>The map list again (a map was made or deleted).</summary>
+    private void ReloadNames()
+    {
+        _names = Enumerable.Range(0, L2Maps.Count(_rom!)).Select(id => RomName(_rom!, id)).ToList();
+        DestinationChoices.Clear();
+        FillList();
     }
 
     [RelayCommand]

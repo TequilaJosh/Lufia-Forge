@@ -98,11 +98,14 @@
             <DockPanel Margin="8,8,4,8">
                 <TextBox DockPanel.Dock="Top" Style="{StaticResource LufiaSearchBox}" Tag="Search maps (name or number)" Margin="0,0,0,6"
                          Text="{Binding MapSearch, UpdateSourceTrigger=PropertyChanged}"/>
-                <Expander DockPanel.Dock="Bottom" Header="Rename this map" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,6,0,0">
+                <Expander DockPanel.Dock="Bottom" Header="Rename or delete this map" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,6,0,0">
                     <StackPanel Margin="0,4,0,0">
                         <TextBox Style="{StaticResource GdText}" Text="{Binding MapNameText}" HorizontalAlignment="Stretch" Width="Auto"
                                  ToolTip="Type a name and press Tab. Clear it to go back to the game's name."/>
                         <TextBlock Text="{Binding MapNameHint}" Style="{StaticResource GdHint}" TextWrapping="Wrap"/>
+                        <Button Content="🗑  Delete this map..." Style="{StaticResource LufiaButton}" Padding="10,4" Command="{Binding DeleteMapCommand}" HorizontalAlignment="Left" Margin="0,8,0,0"
+                                IsEnabled="{Binding CanDeleteMap}"
+                                ToolTip="Only maps made with New map (F2 up); first lists every exit and event that still leads to it"/>
                     </StackPanel>
                 </Expander>
                 <ListBox Style="{StaticResource GdRecordList}" ItemsSource="{Binding Maps}" SelectedItem="{Binding SelectedMap}" DisplayMemberPath="Label"/>
@@ -559,7 +562,7 @@
 
                 <!-- Map settings -->
                 <Border Grid.Row="2" Style="{StaticResource LufiaCard}" Padding="10,6">
-                    <Expander Header="⚙  Map settings, size, characters, test start" Foreground="{StaticResource GoldLightBrush}">
+                    <Expander Header="⚙  Map settings, size, characters, new map, test start" Foreground="{StaticResource GoldLightBrush}">
                         <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="380">
                             <StackPanel Margin="0,8,0,0">
                                 <TextBlock Text="Graphics" Style="{StaticResource GdSection}"/>
@@ -596,8 +599,19 @@
                                         ToolTip="Then click where it stands; pick its sprite and how it moves in the inspector"/>
 
                                 <TextBlock Text="New map" Style="{StaticResource GdSection}" Margin="0,10,0,0"/>
-                                <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap"
-                                           Text="Lufia II keeps its 242 maps in fixed tables (the game reads a map's number in many places), so maps can't be added or deleted yet. Reshape one: resize it, paint it, place pieces of others on it."/>
+                                <WrapPanel>
+                                    <Button Content="Copy of this map" Style="{StaticResource LufiaButton}" Padding="10,4" Command="{Binding NewMapCopyCommand}" Margin="0,0,6,4"
+                                            ToolTip="A new map (F2 up) with this map's blocks, graphics, exits, characters, events, treasure and puzzles"/>
+                                    <Button Content="Blank (brush block)" Style="{StaticResource LufiaButton}" Padding="10,4" Command="{Binding NewMapBlankCommand}" Margin="0,0,6,4"
+                                            ToolTip="A new empty map with this map's graphics, music and settings, the size below, the brush block on the ground"/>
+                                </WrapPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                    <TextBlock Text="blank size" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                    <TextBox Style="{StaticResource GdNumber}" Width="44" Text="{Binding NewMapWidth}" ToolTip="Width in blocks (16 to 96)"/>
+                                    <TextBlock Text=" x " Style="{StaticResource GdFieldLabel}"/>
+                                    <TextBox Style="{StaticResource GdNumber}" Width="44" Text="{Binding NewMapHeight}" ToolTip="Height in blocks (14 to 88; 7744 blocks in all at most)"/>
+                                </StackPanel>
+                                <TextBlock Text="{Binding NewMapNote}" Style="{StaticResource GdHint}" TextWrapping="Wrap"/>
 
                                 <TextBlock Text="Test start (for test ROMs)" Style="{StaticResource GdSection}" Margin="0,10,0,0"/>
                                 <StackPanel Orientation="Horizontal">

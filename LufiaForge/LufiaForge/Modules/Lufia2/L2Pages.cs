@@ -811,7 +811,7 @@ public partial class L2TextPage : ObservableObject
         _rom = rom; _main = main;
         MapNames.Clear(); _maps.Clear();
         int total = 0;
-        for (int m = 0; m < L2Maps.Count; m++)
+        for (int m = 0; m < L2Maps.Count(rom); m++)
         {
             int c = L2Events.Lines(rom, m).Count;
             if (c == 0) continue;

@@ -66,7 +66,7 @@ public static class L2Gold
     private static HashSet<int> UsedSlots(RomBuffer rom, int exceptMap)
     {
         var used = new HashSet<int>();
-        for (int m = 2; m < L2Maps.Count; m++)
+        for (int m = 2; m < L2Maps.Count(rom); m++)
             if (m != exceptMap)
                 foreach (var r in L2Chests.Records(rom, m))
                     if (r.Item >= First && r.Item < First + Slots) used.Add(r.Item - First);

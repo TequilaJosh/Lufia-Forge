@@ -96,7 +96,7 @@ public partial class L2CutscenesPage : ObservableObject
         var rom = _rom!;
         _readVersion = rom.Version;
         _all = new List<L2CutsceneItem>();
-        for (int map = 0; map < L2Maps.Count; map++)
+        for (int map = 0; map < L2Maps.Count(rom); map++)
         {
             int block;
             try { block = L2Events.Block(rom, map); } catch (Exception) { continue; }

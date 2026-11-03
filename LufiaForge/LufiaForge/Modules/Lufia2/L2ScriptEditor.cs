@@ -223,7 +223,7 @@ public static class L2FlagUses
     {
         if (_uses != null && ReferenceEquals(_rom, rom)) return _uses;
         var uses = new Dictionary<int, List<string>>();
-        for (int m = 0; m < L2Maps.Count; m++)
+        for (int m = 0; m < L2Maps.Count(rom); m++)
         {
             string map = $"{m:X2} {L2Maps.Name(rom, m)}";
             foreach (var (title, ops) in L2Script.MapScripts(rom, m))
@@ -553,7 +553,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         _items =L2Battle.Items(rom).Select(i => i.Name.Trim()).ToArray();
         _spells = L2Battle.Spells(rom).Select(s => s.Name.Trim()).ToArray();
         _songs = Enumerable.Range(0, L2Script.SongCount).Select(i => L2Script.SongName(rom, i)).ToArray();
-        _maps = Enumerable.Range(0, L2Maps.Count).Select(m => MapNameOf(rom, m)).ToArray();
+        _maps = Enumerable.Range(0, L2Maps.Count(rom)).Select(m => MapNameOf(rom, m)).ToArray();
         _spritePics.Clear(); _facingPics.Clear();
         _choices.Clear();
         _who.Clear();
@@ -707,7 +707,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         if (_pointSpots.Count == 0)
         {
             string from = "";
-            for (int m = 0; m < L2Maps.Count && _arrival == null; m++)
+            for (int m = 0; m < L2Maps.Count(rom) && _arrival == null; m++)
             {
                 if (m == _map) continue;
                 foreach (var (_, b) in L2MapInfo.Records(rom, m, L2MapInfo.Exits, 9))

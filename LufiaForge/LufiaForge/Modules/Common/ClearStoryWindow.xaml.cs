@@ -24,7 +24,7 @@ public partial class ClearStoryWindow : Window
         {
             StartLabel.Text = "A new game starts here, with Maxim";
             PointLabel.Text = "Preset point";
-            var maps = Enumerable.Range(2, L2Maps.Count - 2)
+            var maps = Enumerable.Range(2, L2Maps.Count(rom) - 2)
                 .Select(id => new Choice(id, $"{id:X2}  {L2Maps.Name(rom, id)}"))
                 .Where(c => L2StoryClear.PresetPoints(rom, c.Id).Count > 0 && L2Events.Block(rom, c.Id) >= 0).ToList();
             MapCombo.ItemsSource = maps;

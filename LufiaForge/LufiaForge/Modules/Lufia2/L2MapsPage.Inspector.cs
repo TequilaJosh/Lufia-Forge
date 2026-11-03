@@ -244,7 +244,7 @@ public partial class L2MapsPage
     {
         if (_rom == null) return;
         if (DestinationChoices.Count == 0)
-            for (int m = 0; m < L2Maps.Count; m++) DestinationChoices.Add($"{m:X2}  {NameOf(m)}");
+            for (int m = 0; m < L2Maps.Count(_rom!); m++) DestinationChoices.Add($"{m:X2}  {NameOf(m)}");
         if (SpriteChoices.Count != L2Sprites.Count(_rom))
         {
             SpriteChoices.Clear();

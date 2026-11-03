@@ -93,8 +93,16 @@ is written), `Modules/Lufia2/L2MapWindows.cs` (pick a place, pieces and presets,
   pictures; Remove and Add change them. How a group is read: a battle starts with the monster in place 1 or 2 (picked at
   random) and adds monsters of up to 2 more kinds from the list; how many come depends on the party's size. A group with
   place 1 empty and place 2 filled is a fixed battle (the other places are layout data): only place 2 can change.
-* Lufia II keeps its 242 maps in fixed tables, so maps can't be added or deleted (yet): resize one, paint it, place
-  pieces of others on it.
+* **New map** (Map settings): "Copy of this map" or "Blank (brush block)" makes map F2, F3, ... up to FF (14 new maps;
+  exits and scripts keep a map's number in one byte). A copy has the map's blocks, graphics, map info (exits,
+  characters, treasure spots, doors), its own copy of the event block and start-up script, its treasure with new opened
+  flags, a copy of its puzzles (they use the same puzzle switches as the original, so opening one opens both) and its
+  field monster list. A blank map has the map's graphics, music, battle background and settings, the size typed, the
+  brush block on the ground, nothing on the upper layer, and preset point 0 in the middle. Point an exit at it (Pick on
+  map...) or start a test game on it. In the game it shows its template's name (names are read from bank $87, see
+  section 2). "Rename or delete this map" deletes a new map: the last one gives its number back; one in the middle stays
+  a small empty map until the next New map takes it, so the maps after it keep their numbers. The window lists what still
+  leads to it first.
 * **＋ Puzzle (U)**: a wall blasted open, a passage cut, a door drawn open. First paint the look it changes to somewhere
   else on the map (Paint and Collision, walls and all, as the game's own maps keep their opened walls off to the side).
   Pick what sets it off (a bomb, a sword hit, an arrow, the hammer, the action button), then: drag over what changes,
@@ -226,6 +234,23 @@ is written), `Modules/Lufia2/L2MapWindows.cs` (pick a place, pieces and presets,
   treasure of any map uses. The chest lists fill the table up to the next info block, so a list that grows goes to
   $92:8000 on (the table's offsets are 24-bit sums from $91:B8B5, so 0xC74B on reaches bank $92's ROM): that is map 00's
   info block, which is moved to the added space the first time (any bank works for an info block).
+* **New maps** (`L2NewMaps`, from the decompiled code, 2026-11-02): all 242 maps (00-F1) are used (each is reached by an
+  exit, an event, or the Ancient Cave's code), so new maps take F2-FF. The game reads a map's data from tables indexed by
+  its number, each followed at once by other data: the map file (file 0x3F + map, `ADC #$003F` at $80:EB24), the file
+  table $A7:8000 ($80:8EA9, $80:8EB1), the header $87:8010 + map * 8 ($83:B5BA, $83:B5C7, $80:BEB9, $80:BEC6,
+  $80:C894, $82:F4A3), the graphics lists $CF:F72E / F81E / F90E / FA08 / FBA6 ($80:EB8B, $80:F03B, $80:EB4B,
+  $80:F217, $80:F2D2, $80:EFC8), the map info pointers $CF:FCBC ($83:B601, $83:B60C, $86:9F44, $86:9F4E), the puzzle
+  blocks $8F:8000 ($80:E86D, $80:E88C) and the field monster lists $97:B9AC ($81:837D, `LDA $B9AC,X` with DB = $97,
+  then `CLC`: the same 4 bytes as `LDA long,X`, and the carry is already clear after the `ASL`). A raw search of the
+  whole ROM for those addresses finds nothing else. The first new map copies every one of these tables into one block of
+  the added space ("LF2MX": 256 entries each, the file table with files 0x2B0-0x2BD for the new maps) and points the
+  reads at it; a 6-byte hook at $80:EB23 (`CLC; ADC #$003F; STA $54` becomes `JSL; NOP; NOP`) gives maps F2 up the
+  files 0x2B0 + map - F2. The treasure table $91:B8B5 needs nothing: the game left 0x1C bytes of FF after its 242
+  entries, so new maps' entries go there (on the empty list at offset 0x201 until they get treasure). Two tables are
+  left alone: $94:C998 (each map's treasure group, read only by the treasure counter item, which counts maps up to F0)
+  and the Ancient Cave's (F0, F1). The name stays a u16 from $87:8000 (both name readers add bank $87 themselves), so a
+  new map shows its template's name in the game. A new map's file, info block, event block and start-up script are
+  always written into new room, never over the template's.
 * **Test start**: the new-game code at $83:ACCD (map, scene, preset point); the start map gets a scene of its own (F0 up:
   show Maxim, fade in).
 
@@ -298,6 +323,20 @@ is written), `Modules/Lufia2/L2MapWindows.cs` (pick a place, pieces and presets,
   the Hi-Potion is in the items. VRAM at the start, during the message and after the menu holds all 875 tiles of the new
   set (only tiles 1-15 differ: the water animation). From the walkable block nearest the kept pictures (35,8) they
   are off screen.
+
+## 3e. Checked: new maps (2026-11-02)
+
+* Opening the copied tables changes nothing for the game's maps: every one of the 242 reads the same in Lufia Forge
+  (blocks, graphics, info, events, start-up script, treasure, puzzles, field monsters) after the tables move and after
+  new maps are made.
+* In the game (BizHawk, 2.5 MB and 8 MB, hidden): a new game started on Elcid and on its copy F2, Secret Skills Cave and
+  its copy F3, a blank 24 x 20 map with Secret Skills Cave's graphics and a blank 32 x 28 one with Elcid's. All load;
+  the copies look the same as their originals (F3 pixel for pixel; F2's villagers walk about), and the 8 MB screenshots
+  match the 2.5 MB ones (there the LF2MX block and the hook run from bank $40). Walking: F2's own step-on event plays
+  (its copied event block), its south exit leads to the world map at Elcid, and Elcid's entrance there leads into Elcid.
+* The window (17 checks): the list shows 242 maps, Copy of this map makes F2 (named "... (copy)" in the project) and
+  shows it, Blank makes a 20 x 16 map of the brush block, the Events page lists the copy's events, Undo and Redo take
+  the new maps back and forth with the list, and the saved project keeps them.
 
 ## 4. Shrine maps CF and F1: fixed as in the European release
 

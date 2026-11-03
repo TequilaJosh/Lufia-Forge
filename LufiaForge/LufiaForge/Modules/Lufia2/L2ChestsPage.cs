@@ -56,7 +56,7 @@ public partial class L2ChestsPage : L2Page
 
     protected override IEnumerable<string> ReadNames()
     {
-        _maps = Enumerable.Range(2, L2Maps.Count - 2).Where(m => L2Chests.Records(Rom!, m).Count > 0).ToList();
+        _maps = Enumerable.Range(2, L2Maps.Count(Rom!) - 2).Where(m => L2Chests.Records(Rom!, m).Count > 0).ToList();
         return _maps.Select(m => $"{m:X2}  {L2Maps.Name(Rom!, m)}  ({L2Chests.Records(Rom!, m).Count})");
     }
 

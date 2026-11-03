@@ -462,7 +462,7 @@ public static class L2Script
             {
                 Items = L2Battle.Items(rom).Select(i => i.Name.Trim()).ToArray(),
                 Spells = L2Battle.Spells(rom).Select(s => s.Name.Trim()).ToArray(),
-                Maps = Enumerable.Range(0, L2Maps.Count).Select(m => L2Maps.Name(rom, m)).ToArray(),
+                Maps = Enumerable.Range(0, L2Maps.Count(rom)).Select(m => L2Maps.Name(rom, m)).ToArray(),
                 Songs = Enumerable.Range(0, SongCount).Select(i => SongName(rom, i)).ToArray(),
             };
             _rom = rom; _last = n;

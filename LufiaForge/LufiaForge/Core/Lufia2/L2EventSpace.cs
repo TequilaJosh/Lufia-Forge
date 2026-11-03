@@ -99,7 +99,7 @@ public static class L2EventSpace
                     return b;
                 }
         var files = new List<(int Id, int At, int Size)>();
-        for (int id = 0; id < L2Rom.FileCount; id++)
+        foreach (int id in L2Rom.FileIds(rom))
         {
             int at = L2Rom.FileOffset(rom, id);
             if (at >= 0x200000 || at < 0) continue;
@@ -107,6 +107,7 @@ public static class L2EventSpace
             catch (Exception) { }
         }
         int firstMap = L2Maps.MapFileBase + 2, lastMap = L2Maps.BlockSetFileBase - 1;   // 3F and 40 are the licence screen and a font
+        bool IsMap(int id) => id >= firstMap && id <= lastMap || id >= L2NewMaps.NewFileBase;
         // banks of map files first (the map editor moves those files too), then any bank of packed files
         foreach (bool mapsOnly in new[] { true, false })
         for (int b = HighestBank; b >= LowestBank; b--)
@@ -114,7 +115,7 @@ public static class L2EventSpace
             int bank = b * 0x8000;
             if (IsRegion(rom, bank)) continue;
             var touching = files.Where(f => f.At < bank + 0x8000 && f.At + f.Size > bank).ToList();
-            if (touching.Count == 0 || mapsOnly && touching.Any(f => f.Id < firstMap || f.Id > lastMap)) continue;
+            if (touching.Count == 0 || mapsOnly && touching.Any(f => !IsMap(f.Id))) continue;
             // every byte of the bank must belong to one of them (or be empty), so nothing else lives there
             var used = new bool[0x8000];
             foreach (var f in touching)
@@ -128,10 +129,9 @@ public static class L2EventSpace
                 rom.WriteBytes(to, rom.ReadBytes(f.At, f.Size));
                 // the old copy is dead now, also where it runs into the next bank (so that bank can be cleared later too)
                 rom.WriteBytes(f.At, new byte[f.Size]);
-                int rel = to - L2Rom.FileTable;
                 // every table entry pointing at this file (ids can share one)
-                for (int id = 0; id < L2Rom.FileCount; id++)
-                    if (L2Rom.FileOffset(rom, id) == f.At) rom.WriteBytes(L2Rom.FileTable + id * 3, new[] { (byte)rel, (byte)(rel >> 8), (byte)(rel >> 16) });
+                foreach (int id in L2Rom.FileIds(rom))
+                    if (L2Rom.FileOffset(rom, id) == f.At) L2Rom.SetFileOffset(rom, id, to);
             }
             rom.WriteBytes(bank, new byte[0x8000]);
             WriteMark(rom, bank, bank);

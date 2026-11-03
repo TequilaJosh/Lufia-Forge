@@ -46,11 +46,11 @@ public static class L2PuzzlePresets
     {
         var list = new List<Preset>();
         var seen = new HashSet<string>();
-        for (int m = 2; m < L2Maps.Count; m++)
+        for (int m = 2; m < L2Maps.Count(rom); m++)
         {
             L2Maps.Map map;
             try { map = L2Maps.Read(rom, m); } catch { continue; }
-            int bs = rom.ReadByte(L2Maps.BlockSetList + m), ts = rom.ReadByte(L2Maps.TileSetList + m), ps = rom.ReadByte(L2Maps.PaletteSetList + m);
+            int bs = rom.ReadByte(L2Maps.BlockSetAt(rom, m)), ts = rom.ReadByte(L2Maps.TileSetAt(rom, m)), ps = rom.ReadByte(L2Maps.PaletteSetAt(rom, m));
             string name = L2Maps.Name(rom, m);
             void Add(Kind kind, int w, int h, (int, byte)[][]? closed, (int, byte)[][]? open, int tx, int ty)
             {

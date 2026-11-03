@@ -24,13 +24,13 @@ public partial class L2ExitsPage : L2Page
 
     protected override IEnumerable<string> ReadNames()
     {
-        _maps = Enumerable.Range(2, L2Maps.Count - 2).Where(m => L2MapInfo.Read(Rom!, m).Any(e => e.Kind == "Exit")).ToList();
+        _maps = Enumerable.Range(2, L2Maps.Count(Rom!) - 2).Where(m => L2MapInfo.Read(Rom!, m).Any(e => e.Kind == "Exit")).ToList();
         return _maps.Select(m => $"{m:X2}  {L2Maps.Name(Rom!, m)}  ({L2MapInfo.Read(Rom!, m).Count(e => e.Kind == "Exit")})");
     }
 
     protected override void Load(int index)
     {
-        var maps = Enumerable.Range(0, L2Maps.Count).Select(m => new L2Option(m, $"{m:X2} {L2Maps.Name(Rom!, m)}")).ToList();
+        var maps = Enumerable.Range(0, L2Maps.Count(Rom!)).Select(m => new L2Option(m, $"{m:X2} {L2Maps.Name(Rom!, m)}")).ToList();
         _exits = L2MapInfo.Read(Rom!, _maps[index]).Where(e => e.Kind == "Exit").ToList();
         Rows = _exits.Select(e => new L2ExitRow
         {

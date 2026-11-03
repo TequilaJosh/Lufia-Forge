@@ -62,7 +62,7 @@ public static class L2Dutch
     {
         var v = (byte[])dutch.Clone();
         Array.Copy(dutch, HeaderTable, v, L2Events.HeaderTable, 0x8000);
-        for (int m = 0; m < L2Maps.Count; m++)
+        for (int m = 0; m < L2NewMaps.GameCount; m++)
             foreach (int f in new[] { 0, 3 })
             {
                 int e = L2Events.HeaderTable + 0x10 + m * 8 + f;
@@ -101,7 +101,7 @@ public static class L2Dutch
         progress?.Invoke("Names");
         ImportNames(target, dutch, ReadNames(dutch), report);
         var blocks = new Dictionary<int, IReadOnlyDictionary<L2EventBlocks.Entry, L2EventScript>>();
-        for (int m = 0; m < L2Maps.Count; m++)
+        for (int m = 0; m < L2NewMaps.GameCount; m++)
         {
             progress?.Invoke($"Map {m:X2}");
             ImportMap(target, nl, m, report, blocks);
@@ -322,7 +322,7 @@ public static class L2Dutch
             n.AttackNames.Add(Zero(nl, 0x28000 + (nl.ReadUInt16Le(NlAttackNames + i * 2) & 0x7FFF) + 1));
         for (int i = 0; i < L2Capsules.AttackNameCount; i++)
             n.CapsuleAttacks.Add(Zero(nl, NlCapsuleAttacks + nl.ReadUInt16Le(NlCapsuleAttacks + i * 2)));
-        for (int m = 0; m < L2Maps.Count; m++) n.MapNames.Add(L2Maps.Name(view, m));
+        for (int m = 0; m < L2NewMaps.GameCount; m++) n.MapNames.Add(L2Maps.Name(view, m));
         var words = DescriptionWords(nl);
         var dict = L2Text.Words(nl);
         for (int e = 0; e < L2Descriptions.Count; e++) n.Descriptions[e] = Description(nl, e, words, dict);
@@ -441,16 +441,16 @@ public static class L2Dutch
     private static bool WriteMapNames(RomBuffer rom, List<string> names)
     {
         int h = L2Events.HeaderTable;
-        var starts = Enumerable.Range(0, L2Maps.Count).Select(m => h + rom.ReadUInt16Le(h + 0x10 + m * 8 + 6)).ToList();
-        if (starts.Min() <= h + 0x10 + L2Maps.Count * 8 || starts.Max() >= h + 0x8000) return false;
-        var recs = Enumerable.Range(0, L2Maps.Count).Select(m =>
+        var starts = Enumerable.Range(0, L2Maps.Count(rom)).Select(m => h + rom.ReadUInt16Le(L2Events.HeaderAt(rom, m) + 6)).ToList();
+        if (starts.Min() <= h + 0x10 + L2NewMaps.GameCount * 8 || starts.Max() >= h + 0x8000) return false;
+        var recs = Enumerable.Range(0, L2Maps.Count(rom)).Select(m =>
         {
             string name = m < names.Count && names[m].Length > 0 ? names[m] : L2Maps.Name(rom, m);
             var enc = L2Text.Encode(rom, name).ToList();
             if (enc.Count > 0 && enc[^1] == 0) enc.RemoveAt(enc.Count - 1);
             return enc.Where(b => b != 0x0A).Append((byte)0).ToArray();
         }).ToList();
-        return Rewrite(rom, starts, a => MapNameLength(rom, a), recs, (m, at) => rom.WriteUInt16Le(h + 0x10 + m * 8 + 6, (ushort)(at - h)));
+        return Rewrite(rom, starts, a => MapNameLength(rom, a), recs, (m, at) => rom.WriteUInt16Le(L2Events.HeaderAt(rom, m) + 6, (ushort)(at - h)));
     }
 
     /// <summary>A map name's bytes, its 00 included (05 / 06 take a byte, 0A two).</summary>

@@ -61,7 +61,7 @@ public static class L2StoryClear
         int maps = 0, people = 0, events = 0, treasure = 0;
         var doneBlocks = new HashSet<int>();
         var doneInfo = new HashSet<int>();
-        for (int m = 0; m < L2Maps.Count; m++)
+        for (int m = 0; m < L2Maps.Count(rom); m++)
         {
             bool any = false;
             // people: the start-up script's 68 / 7B become a jump to the next command

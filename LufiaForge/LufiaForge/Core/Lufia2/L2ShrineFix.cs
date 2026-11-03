@@ -34,7 +34,7 @@ public static class L2ShrineFix
         try
         {
             if (rom.Length < L2Rom.OriginalSize || GameDetect.Detect(rom.ToArray()) != GameKind.Lufia2) return false;
-            if (rom.ReadByte(L2Maps.BlockSetList + FixedMaps[0]) != BlockSet || rom.ReadByte(L2Maps.TileSetList + FixedMaps[0]) != TileSet) return false;
+            if (rom.ReadByte(L2Maps.BlockSetAt(rom, FixedMaps[0])) != BlockSet || rom.ReadByte(L2Maps.TileSetAt(rom, FixedMaps[0])) != TileSet) return false;
             return Sha(L2Rom.ReadFile(rom, BlockSetFile)) == UsBlockSet && Sha(L2Rom.ReadFile(rom, TileSetFile)) == UsTileSet;
         }
         catch (Exception) { return false; }
@@ -49,7 +49,7 @@ public static class L2ShrineFix
         var before = rom.ToArray();
         try
         {
-            var others = Enumerable.Range(0, L2Maps.Count).Where(m => rom.ReadByte(L2Maps.BlockSetList + m) == BlockSet && !FixedMaps.Contains(m)).ToList();
+            var others = Enumerable.Range(0, L2Maps.Count(rom)).Where(m => rom.ReadByte(L2Maps.BlockSetAt(rom, m)) == BlockSet && !FixedMaps.Contains(m)).ToList();
             var oldLooks = others.ToDictionary(m => m, m => Looks(rom, m));
             L2Rom.WriteFile(rom, BlockSetFile, blockSet);
             L2Rom.WriteFile(rom, TileSetFile, tileSet);

@@ -83,7 +83,7 @@ public sealed class L2PickPlaceWindow : Window
         var maps = new ComboBox { Style = L2Ui.S("LufiaComboBox"), Width = 320, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 0, 0, 6) };
         // the world map first, then the towns and dungeons (the sea floor is reached by events only)
         var ids = new List<int> { 0 };
-        ids.AddRange(Enumerable.Range(2, L2Maps.Count - 2));
+        ids.AddRange(Enumerable.Range(2, L2Maps.Count(rom) - 2));
         foreach (int m in ids) maps.Items.Add(m == 0 ? "00  World map" : $"{m:X2}  {name(m)}");
         maps.SelectedIndex = Math.Max(0, ids.IndexOf(map));
         maps.SelectionChanged += (_, _) => { Map = ids[Math.Max(0, maps.SelectedIndex)]; Draw(); _mark.BringIntoView(); };
@@ -201,9 +201,9 @@ public sealed class L2PiecesWindow : Window
         _rom = rom; _blockSet = blockSet; _tileSet = tileSet;
         Title = "Pieces from maps - Lufia Forge"; Width = 1100; Height = 780; WindowStartupLocation = WindowStartupLocation.CenterOwner; Background = L2Ui.B("MidPurpleBrush"); ShowInTaskbar = false;
         foreach (var p in L2Presets.Load().Where(p => p.BlockSet == blockSet)) _entries.Add(($"★ {p.Name}  ({p.W} x {p.H})", -1, p));
-        for (int m = 2; m < L2Maps.Count; m++)
-            if (rom.ReadByte(L2Maps.BlockSetList + m) == blockSet)
-                _entries.Add(($"{m:X2}  {name(m)}{(rom.ReadByte(L2Maps.TileSetList + m) == tileSet ? "" : "  (other tiles)")}{(m == current ? "  (this map)" : "")}", m, null));
+        for (int m = 2; m < L2Maps.Count(rom); m++)
+            if (rom.ReadByte(L2Maps.BlockSetAt(rom, m)) == blockSet)
+                _entries.Add(($"{m:X2}  {name(m)}{(rom.ReadByte(L2Maps.TileSetAt(rom, m)) == tileSet ? "" : "  (other tiles)")}{(m == current ? "  (this map)" : "")}", m, null));
         foreach (var e in _entries) _list.Items.Add(e.Label);
         _list.Style = L2Ui.S("GdRecordList");
         _list.SelectionChanged += (_, _) => Show();
@@ -260,7 +260,7 @@ public sealed class L2PiecesWindow : Window
         catch (Exception ex) { _image.Source = null; _note.Text = "Couldn't draw it: " + ex.Message; }
     }
 
-    private int FirstMapWith(int set) { for (int m = 2; m < L2Maps.Count; m++) if (_rom.ReadByte(L2Maps.BlockSetList + m) == set) return m; return 3; }
+    private int FirstMapWith(int set) { for (int m = 2; m < L2Maps.Count(_rom); m++) if (_rom.ReadByte(L2Maps.BlockSetAt(_rom, m)) == set) return m; return 3; }
 
     private void Drag(Point p)
     {
@@ -288,7 +288,7 @@ public sealed class L2PiecesWindow : Window
                 g[y * w + x] = L0.Blocks[i];
                 if (L1 != null) { u[y * w + x] = L1.Blocks[i]; f[y * w + x] = L1.Flags[i]; }
             }
-        Picked = new L2MapsPage.Clip(w, h, g, u, f, _rom.ReadByte(L2Maps.BlockSetList + e.Map), _rom.ReadByte(L2Maps.TileSetList + e.Map));
+        Picked = new L2MapsPage.Clip(w, h, g, u, f, _rom.ReadByte(L2Maps.BlockSetAt(_rom, e.Map)), _rom.ReadByte(L2Maps.TileSetAt(_rom, e.Map)));
         DialogResult = true;
     }
 
@@ -387,7 +387,7 @@ public sealed class L2BlockEditorWindow : Window
         bigGrid.Children.Add(_big);
         var qc = new Canvas { IsHitTestVisible = false }; qc.Children.Add(_quarterBox); bigGrid.Children.Add(qc);
 
-        int maps = Enumerable.Range(2, L2Maps.Count - 2).Count(m => rom.ReadByte(L2Maps.BlockSetList + m) == map.BlockSet - L2Maps.BlockSetFileBase);
+        int maps = Enumerable.Range(2, L2Maps.Count(rom) - 2).Count(m => rom.ReadByte(L2Maps.BlockSetAt(rom, m)) == map.BlockSet - L2Maps.BlockSetFileBase);
         var mid = new StackPanel { Width = 300, Margin = new Thickness(12, 0, 12, 0) };
         mid.Children.Add(L2Ui.Label($"Block set {map.BlockSet - L2Maps.BlockSetFileBase} ({maps} map{(maps == 1 ? "" : "s")} use it: they all change). Click a block on the left, a quarter of it here, then a tile on the right."));
         mid.Children.Add(bigGrid);
