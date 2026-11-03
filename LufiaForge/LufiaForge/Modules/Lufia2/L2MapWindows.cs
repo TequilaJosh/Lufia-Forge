@@ -154,6 +154,9 @@ public static class L2Presets
         public int[] Ground { get; set; } = Array.Empty<int>();
         public int[] Upper { get; set; } = Array.Empty<int>();
         public byte[] Flags { get; set; } = Array.Empty<byte>();
+        /// <summary>The map it was kept from and its palette set (-1 for presets kept before 2026-11-02).</summary>
+        public int Map { get; set; } = -1;
+        public int PaletteSet { get; set; } = -1;
     }
 
     private static string PathOf => System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "LufiaForge", "l2presets.json");
@@ -174,11 +177,11 @@ public static class L2Presets
     {
         var list = Load();
         list.RemoveAll(p => p.Name == name && p.BlockSet == c.BlockSet);
-        list.Add(new Preset { Name = name, BlockSet = c.BlockSet, TileSet = c.TileSet, W = c.W, H = c.H, Ground = c.Ground, Upper = c.Upper, Flags = c.Flags });
+        list.Add(new Preset { Name = name, BlockSet = c.BlockSet, TileSet = c.TileSet, W = c.W, H = c.H, Ground = c.Ground, Upper = c.Upper, Flags = c.Flags, Map = c.SourceMap, PaletteSet = c.PaletteSet });
         Save(list);
     }
 
-    public static L2MapsPage.Clip ToClip(Preset p) => new(p.W, p.H, p.Ground, p.Upper, p.Flags, p.BlockSet, p.TileSet);
+    public static L2MapsPage.Clip ToClip(Preset p) => new(p.W, p.H, p.Ground, p.Upper, p.Flags, p.BlockSet, p.TileSet, p.Map, p.PaletteSet);
 }
 
 /// <summary>Copy part of another map (or a kept preset) to place on this one.</summary>
@@ -200,7 +203,10 @@ public sealed class L2PiecesWindow : Window
     {
         _rom = rom; _blockSet = blockSet; _tileSet = tileSet;
         Title = "Pieces from maps - Lufia Forge"; Width = 1100; Height = 780; WindowStartupLocation = WindowStartupLocation.CenterOwner; Background = L2Ui.B("MidPurpleBrush"); ShowInTaskbar = false;
-        foreach (var p in L2Presets.Load().Where(p => p.BlockSet == blockSet)) _entries.Add(($"★ {p.Name}  ({p.W} x {p.H})", -1, p));
+        // every preset: those kept on these graphics first, then the others (their blocks are added to this map's set)
+        var presets = L2Presets.Load();
+        foreach (var p in presets.Where(p => p.BlockSet == blockSet)) _entries.Add(($"★ {p.Name}  ({p.W} x {p.H})", -1, p));
+        foreach (var p in presets.Where(p => p.BlockSet != blockSet)) _entries.Add(($"★ {p.Name}  ({p.W} x {p.H}, other graphics)", -1, p));
         for (int m = 2; m < L2Maps.Count(rom); m++)
             if (rom.ReadByte(L2Maps.BlockSetAt(rom, m)) == blockSet)
                 _entries.Add(($"{m:X2}  {name(m)}{(rom.ReadByte(L2Maps.TileSetAt(rom, m)) == tileSet ? "" : "  (other tiles)")}{(m == current ? "  (this map)" : "")}", m, null));
@@ -220,7 +226,7 @@ public sealed class L2PiecesWindow : Window
         buttons.Children.Add(L2Ui.Button("Delete this preset", false, (_, _) => DeletePreset()));
         buttons.Children.Add(L2Ui.Button("Cancel", false, (_, _) => DialogResult = false));
         var left = new DockPanel { Width = 300, Margin = new Thickness(0, 0, 10, 0) };
-        var lt = L2Ui.Label($"Maps with block set {blockSet} (the same blocks as this map), and your presets for it (★).", true);
+        var lt = L2Ui.Label($"Your presets (★; those from other graphics have their blocks added to this map's block set when used), and the maps with block set {blockSet} (the same blocks as this map).", true);
         DockPanel.SetDock(lt, Dock.Top); left.Children.Add(lt); left.Children.Add(_list);
         var right = new DockPanel();
         DockPanel.SetDock(_note, Dock.Top); DockPanel.SetDock(buttons, Dock.Bottom);
@@ -230,7 +236,7 @@ public sealed class L2PiecesWindow : Window
         dock.Children.Add(left); dock.Children.Add(right);
         Content = dock;
         _list.SelectedIndex = _entries.Count > 0 ? 0 : -1;
-        if (_entries.Count == 0) _note.Text = "No map uses this block set.";
+        if (_entries.Count == 0) _note.Text = "No map uses this block set, and you have no presets yet.";
     }
 
     private (string Label, int Map, L2Presets.Preset? Preset)? Entry => _list.SelectedIndex >= 0 ? _entries[_list.SelectedIndex] : null;
@@ -245,11 +251,12 @@ public sealed class L2PiecesWindow : Window
             {
                 var clip = L2Presets.ToClip(p);
                 // a preset is drawn as a little map of its own
-                var m = new L2Maps.Map { Id = Entry!.Value.Map >= 0 ? e.Map : FirstMapWith(_blockSet), BlockSet = L2Maps.BlockSetFileBase + p.BlockSet, TileSet = L2Maps.TileSetFileBase + p.TileSet,
+                var m = new L2Maps.Map { Id = p.Map >= 2 && p.Map < L2Maps.Count(_rom) && _rom.ReadByte(L2Maps.BlockSetAt(_rom, p.Map)) == p.BlockSet ? p.Map : FirstMapWith(p.BlockSet), PaletteSet = p.PaletteSet, BlockSet = L2Maps.BlockSetFileBase + p.BlockSet, TileSet = L2Maps.TileSetFileBase + p.TileSet,
                     Layers = new[] { new L2Maps.Layer { Width = p.W, Height = p.H, Blocks = p.Ground, Flags = new byte[p.W * p.H] }, new L2Maps.Layer { Width = p.W, Height = p.H, Blocks = p.Upper, Flags = p.Flags } } };
                 var (w, h, px) = L2Maps.Render(_rom, m);
                 _image.Source = L2Ui.Bitmap(w, h, px);
-                _note.Text = $"Your preset \"{p.Name}\". Use it to place it on the map.";
+                _note.Text = p.BlockSet == _blockSet && p.TileSet == _tileSet ? $"Your preset \"{p.Name}\". Use it to place it on the map."
+                    : $"Your preset \"{p.Name}\", kept on block set {p.BlockSet} / tile set {p.TileSet}. Use it: the blocks this map's block set lacks are added to it (and tiles to its tile set), then place it.";
                 return;
             }
             _map = L2Maps.Read(_rom, e.Map);
@@ -313,7 +320,7 @@ public sealed class L2PiecesWindow : Window
         buttons.Children.Add(L2Ui.Button("Save", true, (_, _) => w.DialogResult = true));
         buttons.Children.Add(L2Ui.Button("Cancel", false, (_, _) => w.DialogResult = false));
         var sp = new StackPanel { Margin = new Thickness(12) };
-        sp.Children.Add(L2Ui.Label("A name for the piece (Pieces... lists it with a ★ on maps with the same blocks):"));
+        sp.Children.Add(L2Ui.Label("A name for the piece (Pieces... lists it with a ★ on every map):"));
         sp.Children.Add(box); sp.Children.Add(buttons);
         w.Content = sp;
         w.Loaded += (_, _) => { box.Focus(); box.SelectAll(); };

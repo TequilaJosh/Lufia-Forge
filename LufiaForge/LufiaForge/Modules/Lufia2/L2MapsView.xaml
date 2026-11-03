@@ -32,6 +32,8 @@
                                  ToolTip="Select / move (S): click exits, step-on areas, characters, preset points and treasure to edit them; drag to move"/>
                     <RadioButton GroupName="L2MapTool" Style="{StaticResource LufiaToolRadio}" IsChecked="{Binding IsPaintTool}" Content="✎  Paint"
                                  ToolTip="Paint (B): paint the brush; Ctrl + click or right-click picks a block from the map"/>
+                    <RadioButton GroupName="L2MapTool" Style="{StaticResource LufiaToolRadio}" IsChecked="{Binding IsFillTool}" Content="▧  Fill"
+                                 ToolTip="Fill (G): click a block: it and every block joined to it that is the same become the brush. Shift + click fills the whole layer."/>
                     <RadioButton GroupName="L2MapTool" Style="{StaticResource LufiaToolRadio}" IsChecked="{Binding IsPickTool}" Content="⌖  Pick"
                                  ToolTip="Pick block (I): click the map to take its block as the brush"/>
                     <RadioButton GroupName="L2MapTool" Style="{StaticResource LufiaToolRadio}" IsChecked="{Binding IsAreaTool}" Content="▭  Area"
@@ -100,6 +102,11 @@
                          Text="{Binding MapSearch, UpdateSourceTrigger=PropertyChanged}"/>
                 <Expander DockPanel.Dock="Bottom" Header="Rename or delete this map" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,6,0,0">
                     <StackPanel Margin="0,4,0,0">
+                        <TextBlock Text="Name in the game" Style="{StaticResource GdFieldLabel}"/>
+                        <TextBox Style="{StaticResource GdText}" Text="{Binding GameNameText}" HorizontalAlignment="Stretch" Width="Auto"
+                                 ToolTip="Type the name and press Tab: it is written into the ROM (Edit, Undo takes it back)."/>
+                        <TextBlock Text="{Binding GameNameHint}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                        <TextBlock Text="Name in Lufia Forge only" Style="{StaticResource GdFieldLabel}"/>
                         <TextBox Style="{StaticResource GdText}" Text="{Binding MapNameText}" HorizontalAlignment="Stretch" Width="Auto"
                                  ToolTip="Type a name and press Tab. Clear it to go back to the game's name."/>
                         <TextBlock Text="{Binding MapNameHint}" Style="{StaticResource GdHint}" TextWrapping="Wrap"/>
@@ -159,6 +166,11 @@
                             <TextBlock Text="Paint on" Style="{StaticResource LufiaLabel}" VerticalAlignment="Center" Margin="0,0,6,0"/>
                             <RadioButton GroupName="L2Layer" Content="Ground" Style="{StaticResource LufiaToolRadio}" IsChecked="{Binding EditUpper, Converter={StaticResource InverseBoolConverter}}" Padding="8,2"/>
                             <RadioButton GroupName="L2Layer" Content="Upper layer" Style="{StaticResource LufiaToolRadio}" IsChecked="{Binding EditUpper}" Padding="8,2"/>
+                            <TextBlock Text="Size" Style="{StaticResource LufiaLabel}" VerticalAlignment="Center" Margin="12,0,6,0"/>
+                            <ComboBox Style="{StaticResource GdCombo}" Width="70" ItemsSource="{Binding BrushSizes}" SelectedItem="{Binding BrushSize}" ItemStringFormat="{}{0} x {0}"
+                                      ToolTip="How big a one-block brush paints, around the block under the mouse ([ and ] change it). A brush of several blocks (dragged on the block list) paints as it was picked."/>
+                            <Button Content="Fill the layer" Style="{StaticResource LufiaButton}" Padding="8,2" Margin="8,0,0,0" Command="{Binding FillLayerCommand}"
+                                    ToolTip="Fills the whole layer painted with the brush (Shift + click with Fill does the same; Undo takes it back)"/>
                             <StackPanel Orientation="Horizontal" Margin="12,0,0,0" Visibility="{Binding IsCollisionTool, Converter={StaticResource BoolToVisibilityConverter}}">
                                 <TextBlock Text="Collision to paint" Style="{StaticResource LufiaLabel}" VerticalAlignment="Center" Margin="0,0,6,0"/>
                                 <ComboBox Style="{StaticResource GdCombo}" Width="190" ItemsSource="{Binding CollisionChoices}" SelectedIndex="{Binding CollisionKind}"/>

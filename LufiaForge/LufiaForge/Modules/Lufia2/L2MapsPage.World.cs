@@ -253,12 +253,13 @@ public partial class L2MapsPage
     private BitmapSource? WorldBrushPicture()
     {
         if (_world == null) return null;
-        int w = BrushW * Cell, h = BrushH * Cell;
+        var (bw, bh, cells, _) = Painted();
+        int w = bw * Cell, h = bh * Cell;
         var px = new uint[w * h];
-        for (int by = 0; by < BrushH; by++)
-            for (int bx = 0; bx < BrushW; bx++)
+        for (int by = 0; by < bh; by++)
+            for (int bx = 0; bx < bw; bx++)
             {
-                var b = Big(_brush[by * BrushW + bx]);
+                var b = Big(cells[by * bw + bx]);
                 for (int y = 0; y < Cell; y++) Array.Copy(b, y * Cell, px, (by * Cell + y) * w + bx * Cell, Cell);
             }
         return BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgra32, null, px.Select(c => (int)c).ToArray(), w * 4);
@@ -330,6 +331,10 @@ public partial class L2MapsPage
         {
             case L2Tool.Paint:
                 WorldRecord("painting"); _worldDragging = true; PaintWorld(cx, cy); break;
+            case L2Tool.Fill:
+                WorldRecord(System.Windows.Input.Keyboard.Modifiers.HasFlag(System.Windows.Input.ModifierKeys.Shift) ? "filling the map" : "filling");
+                FillWorld(cx, cy, System.Windows.Input.Keyboard.Modifiers.HasFlag(System.Windows.Input.ModifierKeys.Shift));
+                WorldDropIfSame(); WorldUndoState(); break;
             case L2Tool.Area:
                 _areaStart = (cx, cy); AreaRect = (cx, cy, cx + 1, cy + 1); _worldDragging = true; break;
         }
@@ -349,7 +354,7 @@ public partial class L2MapsPage
         string text = $"block ({sx},{sy}), big block ({cx},{cy}) {b:X3}, {(t < terrain.Length ? terrain[t] : "terrain " + t)}" + (HasZones ? $"; battle zone {w.Zones[cy / 2 * 64 + cx / 2]:X2}" : "");
         if (_edit != null) foreach (var (kind, idx) in HitsAt(sx, sy)) text += "; " + Describe(kind, idx);
         HoverText = text;
-        if (Tool == L2Tool.Paint && !Stamping && !ShowZones) { BrushPreviewX = cx * Cell; BrushPreviewY = cy * Cell; BrushPreviewW = BrushW * Cell; BrushPreviewH = BrushH * Cell; BrushPreviewVisible = BrushPreviewImage != null; }
+        if (Tool == L2Tool.Paint && !Stamping && !ShowZones) { var (pw, ph, _, po) = Painted(); BrushPreviewX = (cx + po) * Cell; BrushPreviewY = (cy + po) * Cell; BrushPreviewW = pw * Cell; BrushPreviewH = ph * Cell; BrushPreviewVisible = BrushPreviewImage != null; }
         else BrushPreviewVisible = false;
         if (Stamping) { StampX = cx * Cell; StampY = cy * Cell; }
         if (!_worldDragging || cx == _wLastX && cy == _wLastY) return;
@@ -370,10 +375,22 @@ public partial class L2MapsPage
     private void PaintWorld(int cx, int cy)
     {
         var w = _world!;
-        for (int by = 0; by < BrushH; by++)
-            for (int bx = 0; bx < BrushW; bx++)
-                if (cx + bx < L2WorldMap.Size && cy + by < L2WorldMap.Size) w.Cells[(cy + by) * L2WorldMap.Size + cx + bx] = _brush[by * BrushW + bx];
-        DrawWorldCells(cx, cy, cx + BrushW, cy + BrushH); WorldUndoState();
+        var (bw, bh, cells, off) = Painted();
+        cx += off; cy += off;
+        for (int by = 0; by < bh; by++)
+            for (int bx = 0; bx < bw; bx++)
+                if (cx + bx is >= 0 and < L2WorldMap.Size && cy + by is >= 0 and < L2WorldMap.Size) w.Cells[(cy + by) * L2WorldMap.Size + cx + bx] = cells[by * bw + bx];
+        DrawWorldCells(Math.Max(0, cx), Math.Max(0, cy), Math.Min(L2WorldMap.Size, cx + bw), Math.Min(L2WorldMap.Size, cy + bh)); WorldUndoState();
+    }
+
+    /// <summary>Fills the big blocks joined to (cx, cy) that are the same as it (side by side, not corner to corner) with
+    /// the brush (a brush of several blocks repeats, lined up with the map's corner); <paramref name="all"/>: the whole map.</summary>
+    private void FillWorld(int cx, int cy, bool all = false)
+    {
+        var w = _world!;
+        int n = Fill(w.Cells, L2WorldMap.Size, L2WorldMap.Size, cx, cy, all);
+        DrawWorld();
+        Status = n == 0 ? "Nothing to fill: it is the brush already." : $"{n} big block{(n == 1 ? "" : "s")} filled with the brush (Undo takes it back).";
     }
 
     private void PaintZone(int cx, int cy)

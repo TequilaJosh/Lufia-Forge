@@ -17,10 +17,12 @@ public partial class L2SettingsPage : ObservableObject
     public List<L2Option> WorldOptions { get; } = new() { new(1, "Slow (1 pixel a frame)"), new(2, "Normal (2 pixels a frame)"), new(4, "Fast (4)"), new(8, "Very fast (8)") };
     public List<L2Option> FieldOptions { get; } = L2Settings.FieldWalkLabels.Select((l, i) => new L2Option(i, l)).ToList();
     public List<L2Option> SellOptions { get; } = L2Settings.SellLabels.Select((l, i) => new L2Option(i, l)).ToList();
+    public List<L2Option> NameWhenOptions { get; } = L2MapNames.WhenLabels.Select((l, i) => new L2Option(i, l)).ToList();
+    public List<L2Option> NameWhereOptions { get; } = L2MapNames.WhereLabels.Select((l, i) => new L2Option(i, l)).ToList();
 
-    [ObservableProperty] private int _encounter, _worldSpeed, _fieldSpeed, _sell, _levelCap;
+    [ObservableProperty] private int _encounter, _worldSpeed, _fieldSpeed, _sell, _levelCap, _nameWhen, _nameWhere;
     [ObservableProperty] private string _encounterText = "", _status = "", _sizeText = "";
-    [ObservableProperty] private bool _canEncounter, _canWorld, _canField, _canSell, _canLevel;
+    [ObservableProperty] private bool _canEncounter, _canWorld, _canField, _canSell, _canLevel, _canNameBox;
 
     public void SetRom(RomBuffer rom, MainViewModel main)
     {
@@ -158,11 +160,12 @@ public partial class L2SettingsPage : ObservableObject
         FieldSpeed = L2Settings.FieldWalk(rom); CanField = FieldSpeed >= 0;
         Sell = L2Settings.Sell(rom); CanSell = Sell >= 0;
         LevelCap = L2Settings.LevelCap(rom); CanLevel = LevelCap > 0;
+        CanNameBox = L2MapNames.CanSetBox(rom); NameWhen = (int)L2MapNames.BoxWhen(rom); NameWhere = (int)L2MapNames.BoxWhere(rom);
         _loading = false;
         UpdateText();
         SizeText = SizeOf(rom);
         MakeEightCommand.NotifyCanExecuteChanged();
-        Status = CanEncounter && CanWorld && CanField && CanSell && CanLevel ? "" : "Some settings are greyed out: that part of the ROM has been changed some other way.";
+        Status = CanEncounter && CanWorld && CanField && CanSell && CanLevel && CanNameBox ? "" : "Some settings are greyed out: that part of the ROM has been changed some other way.";
     }
 
     private void UpdateText()
@@ -211,4 +214,6 @@ public partial class L2SettingsPage : ObservableObject
     partial void OnFieldSpeedChanged(int value) => Change("walking in towns and dungeons", r => L2Settings.SetFieldWalk(r, value));
     partial void OnSellChanged(int value) => Change("selling price", r => L2Settings.SetSell(r, value));
     partial void OnLevelCapChanged(int value) => Change("level cap", r => L2Settings.SetLevelCap(r, value));
+    partial void OnNameWhenChanged(int value) => Change("map name box", r => L2MapNames.SetBox(r, (L2MapNames.When)value, (L2MapNames.Where)NameWhere));
+    partial void OnNameWhereChanged(int value) => Change("map name box place", r => L2MapNames.SetBox(r, (L2MapNames.When)NameWhen, (L2MapNames.Where)value));
 }

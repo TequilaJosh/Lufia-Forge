@@ -39,6 +39,16 @@
                 </Border>
                 <Border Style="{StaticResource GdCard}">
                     <StackPanel Width="330">
+                        <TextBlock Text="MAP NAMES" Style="{StaticResource GdSection}"/>
+                        <TextBlock Text="Show the map's name on entering" Style="{StaticResource GdFieldLabel}"/>
+                        <ComboBox Style="{StaticResource GdCombo}" ItemsSource="{Binding NameWhenOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding NameWhen}" IsEnabled="{Binding CanNameBox}"/>
+                        <TextBlock Text="Where" Style="{StaticResource GdFieldLabel}" Margin="0,6,0,0"/>
+                        <ComboBox Style="{StaticResource GdCombo}" ItemsSource="{Binding NameWhereOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding NameWhere}" IsEnabled="{Binding CanNameBox}"/>
+                        <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0" Text="The game shows a map's name in a box for 2 seconds when you walk into a town or dungeon whose name differs from the last one (not on the world map, nor at the start of a new game). Name maps on the Maps page: Rename or delete this map, under the map list. Other boxes (Found ..., doors) stay where they were."/>
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource GdCard}">
+                    <StackPanel Width="330">
                         <TextBlock Text="ROM SIZE" Style="{StaticResource GdSection}"/>
                         <TextBlock Text="{Binding SizeText}" Style="{StaticResource GdHint}" TextWrapping="Wrap"/>
                         <Button Content="Make the ROM 8 MB..." Command="{Binding MakeEightCommand}" Padding="18,4" Margin="0,8,0,0" HorizontalAlignment="Left"/>

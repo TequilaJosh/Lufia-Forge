@@ -19,7 +19,20 @@ public partial class L2MapsPage
 
     public string BrushText => BrushW * BrushH > 1
         ? $"Brush: {BrushW} x {BrushH} blocks from {SelectedBlock:X3}, painted on the {(EditUpper ? "upper" : "ground")} layer."
-        : $"Brush: block {SelectedBlock:X3}, painted on the {(EditUpper ? "upper" : "ground")} layer.";
+        : $"Brush: block {SelectedBlock:X3}{(BrushSize > 1 ? $", {BrushSize} x {BrushSize}" : "")}, painted on the {(EditUpper ? "upper" : "ground")} layer.";
+
+    /// <summary>How big a one-block brush paints: 1, 3, 5 or 7 blocks square, around the block under the mouse.</summary>
+    [ObservableProperty] private int _brushSize = 1;
+    public static IReadOnlyList<int> BrushSizes { get; } = new[] { 1, 3, 5, 7 };
+    partial void OnBrushSizeChanged(int value) => BrushChanged();
+
+    /// <summary>The brush as it is painted: a single block grows to <see cref="BrushSize"/> square, centred on the block
+    /// under the mouse (Off: the top-left's offset from it); a brush of several blocks is painted as it was picked.</summary>
+    private (int W, int H, int[] Cells, int Off) Painted()
+    {
+        if (BrushW * BrushH == 1 && BrushSize > 1) return (BrushSize, BrushSize, Enumerable.Repeat(_brush[0], BrushSize * BrushSize).ToArray(), -(BrushSize / 2));
+        return (BrushW, BrushH, _brush, 0);
+    }
 
     partial void OnSelectedBlockChanged(int value) { OnPropertyChanged(nameof(BrushText)); }
 
@@ -44,12 +57,13 @@ public partial class L2MapsPage
     private BitmapSource? BrushPicture()
     {
         if (_blocks.Length == 0) return null;
-        int w = BrushW * 16, h = BrushH * 16;
+        var (bw, bh, cells, _) = Painted();
+        int w = bw * 16, h = bh * 16;
         var px = new uint[w * h];
-        for (int by = 0; by < BrushH; by++)
-            for (int bx = 0; bx < BrushW; bx++)
+        for (int by = 0; by < bh; by++)
+            for (int bx = 0; bx < bw; bx++)
             {
-                int b = _brush[by * BrushW + bx];
+                int b = cells[by * bw + bx];
                 if (b < 0 || b >= _blocks.Length) continue;
                 for (int y = 0; y < 16; y++) for (int x = 0; x < 16; x++) px[(by * 16 + y) * w + bx * 16 + x] = _blocks[b][y * 16 + x];
             }
@@ -234,8 +248,67 @@ public partial class L2MapsPage
         if (_rom == null || _edit == null) return;
         var w = new L2PiecesWindow(_rom, _edit.MapId, _edit.BlockSetIndex, _edit.TileSetIndex, NameOf) { Owner = System.Windows.Application.Current.MainWindow };
         if (w.ShowDialog() != true || w.Picked == null) return;
+        var clip = w.Picked;
+        if (clip.BlockSet != _edit.BlockSetIndex || clip.TileSet != _edit.TileSetIndex)
+        {
+            if (WritePendingEdits() is { } why) { Status = "The map couldn't be written first: " + why; return; }
+            clip = BringIn(clip);
+            if (clip == null) return;
+        }
         Tool = L2Tool.Paint;
-        StartStamp(w.Picked);
+        StartStamp(clip);
+    }
+
+    /// <summary>A piece from other graphics (a preset kept on another map) in this map's block set: each block is a block of
+    /// the set that draws the same, or one added to it (its tiles into the tile set when it has none of their shape), as
+    /// chests and door pieces from other maps are (<see cref="L2ChestLooks.Translate"/>). The piece keeps its own walls.
+    /// Written into the ROM at once, one Edit > Undo step; null (and nothing written) when this map's sets can't take it.</summary>
+    public Clip? BringIn(Clip c)
+    {
+        if (_rom == null || _edit == null || _main == null) return null;
+        bool Has(int m, bool tiles) => _rom.ReadByte(L2Maps.BlockSetAt(_rom, m)) == c.BlockSet && (!tiles || _rom.ReadByte(L2Maps.TileSetAt(_rom, m)) == c.TileSet);
+        int src = c.SourceMap >= 2 && c.SourceMap < L2Maps.Count(_rom) && Has(c.SourceMap, true) ? c.SourceMap
+            : Enumerable.Range(2, L2Maps.Count(_rom) - 2).Where(m => Has(m, true)).Concat(Enumerable.Range(2, L2Maps.Count(_rom) - 2).Where(m => Has(m, false))).DefaultIfEmpty(-1).First();
+        if (src < 0) { Status = $"No map uses block set {c.BlockSet} any more, so the piece's blocks can't be read."; return null; }
+        int ps = c.PaletteSet >= 0 ? c.PaletteSet : _rom.ReadByte(L2Maps.PaletteSetAt(_rom, src));
+        int n = c.W * c.H, before = L2Maps.BlockCount(_rom, _edit.MapId);
+        int TileCount() => L2Rom.ReadFile(_rom, L2Maps.TileSetFileBase + _edit.TileSetIndex).Length / 32;
+        int tilesBefore = TileCount();
+        var g = new int[n]; var u = new int[n]; var f = new byte[n];
+        var done = new Dictionary<(int, int, int), (int G, int U)>();
+        try
+        {
+            L2Rom.AllOrNothing(_rom, () =>
+            {
+                for (int i = 0; i < n; i++)
+                {
+                    var key = (c.Ground[i], c.Upper[i], c.Flags[i] & 0xFC);
+                    if (!done.TryGetValue(key, out var t))
+                    {
+                        var cell = new (int Block, byte Flags)[] { (c.Ground[i], (byte)0), (c.Upper[i], (byte)(c.Flags[i] & 0xFC)) };
+                        var look = new L2ChestLooks.Look(src, 0, 0, 0x33, cell, cell, c.BlockSet, c.TileSet, ps);
+                        var (closed, _, _) = L2ChestLooks.Translate(_rom, look, _edit);
+                        // block 0 is "nothing here" on either layer, whatever it draws
+                        t = (c.Ground[i] == 0 ? 0 : closed[0].Block, c.Upper[i] == 0 || closed.Length < 2 ? 0 : closed[1].Block);
+                        done[key] = t;
+                    }
+                    g[i] = t.G; u[i] = t.U; f[i] = (byte)(c.Flags[i] & 0xFC);
+                }
+                return 0;
+            });
+        }
+        catch (Exception ex) { Status = "This piece can't be used on this map: " + ex.Message.Replace("the chest's", "the piece's").Replace("chest", "piece"); return null; }
+        int added = L2Maps.BlockCount(_rom, _edit.MapId) - before, tiles = TileCount() - tilesBefore;
+        string tileText = tiles > 0 ? $" and {tiles} tile{(tiles == 1 ? "" : "s")} to tile set {_edit.TileSetIndex}" : "";
+        if (added > 0)
+        {
+            _main.NotifyRomModified($"Lufia II: {added} block{(added == 1 ? "" : "s")} added to block set {_edit.BlockSetIndex}{tileText} for a piece from block set {c.BlockSet}");
+            ReloadBlocks();
+        }
+        Status = (added > 0 ? $"{added} block{(added == 1 ? "" : "s")} added to block set {_edit.BlockSetIndex}{tileText} for this piece (recoloured to this map's closest colours; Edit, Undo takes them out). "
+                            : "Every block of the piece was in this map's block set already. ")
+            + "Click to place it; right-click or Esc stops.";
+        return new Clip(c.W, c.H, g, u, f, _edit.BlockSetIndex, _edit.TileSetIndex, _edit.MapId, _edit.PaletteSetIndex);
     }
 
     [RelayCommand]
@@ -244,8 +317,8 @@ public partial class L2MapsPage
         if (_edit == null || AreaRect is not { } r) { Status = "Drag an area with the Area tool first."; return; }
         string? name = L2PiecesWindow.AskName(System.Windows.Application.Current.MainWindow);
         if (string.IsNullOrWhiteSpace(name)) return;
-        L2Presets.Add(name.Trim(), Cut(r));
-        Status = $"Kept \"{name.Trim()}\": Pieces... (My presets) places it again on any map with block set {_edit.BlockSetIndex}.";
+        L2Presets.Add(name.Trim(), Cut(r) with { SourceMap = _edit.MapId, PaletteSet = _edit.PaletteSetIndex });
+        Status = $"Kept \"{name.Trim()}\": Pieces... (★) places it again on any map (on other graphics its blocks are added to that map's block set).";
     }
 
     // ---------------------------------------------------------------- blocks

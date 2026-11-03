@@ -440,6 +440,13 @@ public static class L2Dutch
     /// <see cref="RepackAttackNames"/>; identical names share their bytes.</summary>
     private static bool WriteMapNames(RomBuffer rom, List<string> names)
     {
+        if (L2MapNames.IsMoved(rom))
+        {
+            // the names were moved out of bank $87 (named maps): each one written there
+            for (int m = 0; m < Math.Min(names.Count, L2Maps.Count(rom)); m++)
+                if (names[m].Length > 0 && L2Maps.Name(rom, m) != names[m]) try { L2MapNames.Write(rom, m, names[m]); } catch (InvalidOperationException) { }
+            return true;
+        }
         int h = L2Events.HeaderTable;
         var starts = Enumerable.Range(0, L2Maps.Count(rom)).Select(m => h + rom.ReadUInt16Le(L2Events.HeaderAt(rom, m) + 6)).ToList();
         if (starts.Min() <= h + 0x10 + L2NewMaps.GameCount * 8 || starts.Max() >= h + 0x8000) return false;

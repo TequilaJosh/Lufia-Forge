@@ -122,7 +122,7 @@ public partial class L2MapsPage
         NewMapNote = (L2NewMaps.CantInstall(_rom) is { } why ? why + " " : "") +
             $"New maps take the numbers F2-FF ({made} of {L2NewMaps.Slots} used). A copy has this map's blocks, graphics, exits, characters, " +
             "events, treasure (with new opened flags) and puzzles; a blank map has this map's graphics, music and settings, the size typed, " +
-            "the brush block on the ground, and preset point 0 in the middle. Then point an exit at it (Pick on map...). In the game it shows this map's name.";
+            "the brush block on the ground, and preset point 0 in the middle. Then point an exit at it (Pick on map...). In the game it has this map's name until you give it one (Rename or delete this map, under the list).";
     }
 
     [RelayCommand] private void NewMapCopy() => MakeNewMap(blank: false);

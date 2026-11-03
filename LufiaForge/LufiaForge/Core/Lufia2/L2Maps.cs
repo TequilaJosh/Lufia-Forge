@@ -49,7 +49,7 @@ public static class L2Maps
     /// <summary>A map's name: zero-terminated at the header table + u16. It can use the text dictionary (05 / 06 /
     /// 80-FF, as dialogue does) and 0A xx yy = the first (yyxx &gt;&gt; 12) + 2 letters of another name, at the header
     /// table + (yyxx &amp; 0FFF) (e.g. "Elcid" for the houses of Elcid, "Cave" + " to Sundletan B" + "2").</summary>
-    public static string Name(RomBuffer rom, int id) => NameAt(rom, HeaderTable + rom.ReadUInt16Le(L2Events.HeaderAt(rom, id) + 6), 0);
+    public static string Name(RomBuffer rom, int id) => NameAt(rom, L2MapNames.NameAt(rom, id), 0);
 
     private static string NameAt(RomBuffer rom, int at, int depth, bool keepSpaces = false)
     {
@@ -62,7 +62,7 @@ public static class L2Maps
             if (b == 0x0A)
             {
                 int w = rom.ReadUInt16Le(p); p += 2;
-                string part = NameAt(rom, HeaderTable + (w & 0x0FFF), depth + 1, keepSpaces: true);
+                string part = NameAt(rom, L2MapNames.Base(rom) + (w & 0x0FFF), depth + 1, keepSpaces: true);
                 int n = (w >> 12) + 2;
                 sb.Append(part.Length > n ? part[..n] : part);
             }

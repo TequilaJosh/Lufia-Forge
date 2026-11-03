@@ -9,7 +9,7 @@ using LufiaForge.Core.Lufia2;
 
 namespace LufiaForge.Modules.Lufia2;
 
-public enum L2Tool { Select, Paint, Pick, Area, Collision, AddExit, AddTrigger, AddCharacter, AddPoint, AddChest, AddHidden, AddPuzzle, AddPreset }
+public enum L2Tool { Select, Paint, Fill, Pick, Area, Collision, AddExit, AddTrigger, AddCharacter, AddPoint, AddChest, AddHidden, AddPuzzle, AddPreset }
 
 /// <summary>What can be picked on the map: its list in the info block and the record's index there.</summary>
 public enum SelKind { Exit, Door, Trigger, Character, Point, Treasure }
@@ -23,6 +23,7 @@ public partial class L2MapsPage
     [ObservableProperty] private L2Tool _tool = L2Tool.Select;
     public bool IsSelectTool { get => Tool == L2Tool.Select; set { if (value) Tool = L2Tool.Select; } }
     public bool IsPaintTool { get => Tool == L2Tool.Paint; set { if (value) Tool = L2Tool.Paint; } }
+    public bool IsFillTool { get => Tool == L2Tool.Fill; set { if (value) Tool = L2Tool.Fill; } }
     public bool IsPickTool { get => Tool == L2Tool.Pick; set { if (value) Tool = L2Tool.Pick; } }
     public bool IsAreaTool { get => Tool == L2Tool.Area; set { if (value) Tool = L2Tool.Area; } }
     public bool IsCollisionTool { get => Tool == L2Tool.Collision; set { if (value) Tool = L2Tool.Collision; } }
@@ -40,7 +41,7 @@ public partial class L2MapsPage
         _presetClicks.Clear(); _spikeRect = null; _presetCells = null;
         NotifyPresetOptions();
         OnPropertyChanged(nameof(ChestLookVisible));
-        foreach (var n in new[] { nameof(IsSelectTool), nameof(IsPaintTool), nameof(IsPickTool), nameof(IsAreaTool), nameof(IsCollisionTool),
+        foreach (var n in new[] { nameof(IsSelectTool), nameof(IsPaintTool), nameof(IsFillTool), nameof(IsPickTool), nameof(IsAreaTool), nameof(IsCollisionTool),
                                   nameof(IsAddExitTool), nameof(IsAddTriggerTool), nameof(IsAddCharacterTool), nameof(IsAddPointTool), nameof(IsAddChestTool), nameof(IsAddHiddenTool), nameof(IsAddPuzzleTool), nameof(PuzzleOptionsVisible), nameof(IsAddPresetTool), nameof(PresetOptionsVisible) })
             OnPropertyChanged(n);
         if (value != L2Tool.Area) AreaRect = null;
@@ -53,7 +54,8 @@ public partial class L2MapsPage
     public string ToolHint => _world != null ? WorldHint : Stamping ? "Click to place the copied blocks (both layers and their walls); right-click or Esc stops." : Tool switch
     {
         L2Tool.Select => "Select (S): click an exit, step-on area, character, preset point, chest or door to edit it; drag to move it (an area's or exit's bottom-right block resizes it). Click again to reach what lies under it. Double-click an exit to go there.",
-        L2Tool.Paint => $"Paint (B): paints the brush on the {(EditUpper ? "upper" : "ground")} layer; drag to paint more. Right-click or Ctrl + click picks the block under the mouse.",
+        L2Tool.Paint => $"Paint (B): paints the brush on the {(EditUpper ? "upper" : "ground")} layer; drag to paint more. Size: 1, 3, 5 or 7 blocks square ([ and ] change it). Right-click or Ctrl + click picks the block under the mouse.",
+        L2Tool.Fill => $"Fill (G): click a block: it and every block joined to it that is the same become the brush, on the {(EditUpper ? "upper" : "ground")} layer. Shift + click (or Fill the layer) fills the whole layer. Right-click picks a block.",
         L2Tool.Pick => "Pick (I): click the map to take its block (on the layer being painted) as the brush.",
         L2Tool.Area => "Area (M): drag a rectangle, then Copy (Ctrl+C), Cut (Ctrl+X), Fill or Delete (Del); Paste (Ctrl+V) places what was copied, from any map with the same graphics.",
         L2Tool.Collision => "Collision (L): paints where the party can't walk (and doorways and walls). Drag to paint; right-click clears a block. The red, blue and orange marks show it.",
@@ -73,6 +75,7 @@ public partial class L2MapsPage
         : Tool switch
         {
             L2Tool.Paint => "Paint (B): paints big blocks (32 x 32 pixels in the game); right-click or Ctrl + click picks one from the map.",
+            L2Tool.Fill => "Fill (G): click a big block: it and every block joined to it that is the same become the brush; Shift + click fills the whole map. Right-click picks one.",
             L2Tool.Pick => "Pick (I): click the map to take its big block as the brush.",
             L2Tool.Area => "Area (M): drag a rectangle, then Copy, Cut, Fill; Paste places it (an island, a forest, a coast).",
             L2Tool.Select => "Select (S): click an entrance (green, named after where it leads) to edit it; drag to move it; double-click goes into that map.",
@@ -123,7 +126,7 @@ public partial class L2MapsPage
             Stamp(cx, cy);
             return;
         }
-        if (right && Tool is L2Tool.Paint or L2Tool.Pick or L2Tool.Area) { PickBlock(cx, cy); return; }
+        if (right && Tool is L2Tool.Paint or L2Tool.Fill or L2Tool.Pick or L2Tool.Area) { PickBlock(cx, cy); return; }
         if (ctrl && Tool == L2Tool.Paint) { PickBlock(cx, cy); return; }
         switch (Tool)
         {
@@ -131,6 +134,9 @@ public partial class L2MapsPage
                 Record("painting"); _strokeWhat = "painting";
                 _dragging = true;
                 PaintBrush(cx, cy);
+                break;
+            case L2Tool.Fill:
+                FillAt(cx, cy, all: System.Windows.Input.Keyboard.Modifiers.HasFlag(System.Windows.Input.ModifierKeys.Shift));
                 break;
             case L2Tool.Pick:
                 PickBlock(cx, cy);
@@ -245,8 +251,9 @@ public partial class L2MapsPage
         HoverText = text;
         if (Tool == L2Tool.Paint && !Stamping)
         {
-            BrushPreviewX = cx * 16; BrushPreviewY = cy * 16;
-            BrushPreviewW = BrushW * 16; BrushPreviewH = BrushH * 16;
+            var (pw, ph, _, po) = Painted();
+            BrushPreviewX = (cx + po) * 16; BrushPreviewY = (cy + po) * 16;
+            BrushPreviewW = pw * 16; BrushPreviewH = ph * 16;
             BrushPreviewVisible = BrushPreviewImage != null;
         }
         else BrushPreviewVisible = false;
@@ -291,16 +298,78 @@ public partial class L2MapsPage
         if (layer >= _edit.Map.Layers.Length) return;
         var L = _edit.Map.Layers[layer];
         bool any = false;
-        for (int by = 0; by < BrushH; by++)
-            for (int bx = 0; bx < BrushW; bx++)
+        var (bw, bh, cells, off) = Painted();
+        for (int by = 0; by < bh; by++)
+            for (int bx = 0; bx < bw; bx++)
             {
-                int x = cx + bx, y = cy + by;
-                if (x >= L.Width || y >= L.Height) continue;
-                int b = _brush[by * BrushW + bx];
+                int x = cx + off + bx, y = cy + off + by;
+                if (x < 0 || y < 0 || x >= L.Width || y >= L.Height) continue;
+                int b = cells[by * bw + bx];
                 if (L.Blocks[y * L.Width + x] == b) continue;
                 L.Blocks[y * L.Width + x] = b; any = true;
             }
         if (any) { RememberBrush(); DrawMap(); UpdateUndoState(); }
+    }
+
+    /// <summary>Fill (G): the block at (cx, cy) and every block joined to it (side by side) that is the same become the
+    /// brush, on the layer painted; <paramref name="all"/>: every block of the layer. One Undo step.</summary>
+    private void FillAt(int cx, int cy, bool all)
+    {
+        if (_edit == null) return;
+        int layer = EditUpper ? 1 : 0;
+        if (layer >= _edit.Map.Layers.Length) return;
+        var L = _edit.Map.Layers[layer];
+        Record(all ? "filling the layer" : "filling");
+        int n = Fill(L.Blocks, L.Width, L.Height, cx, cy, all);
+        DropIfSame();
+        if (n > 0) { RememberBrush(); DrawMap(); }
+        UpdateUndoState();
+        Status = n == 0 ? "Nothing to fill: it is the brush already." : $"{n} block{(n == 1 ? "" : "s")} of the {(EditUpper ? "upper" : "ground")} layer filled with the brush (Undo takes it back).";
+    }
+
+    /// <summary>Fills a grid of blocks with the brush from (cx, cy): the cells joined to it with the same block, or every
+    /// cell. A brush of several blocks repeats, lined up with the grid's corner. Returns how many changed.</summary>
+    private int Fill(int[] grid, int w, int h, int cx, int cy, bool all)
+    {
+        int Brush(int x, int y) => _brush[y % BrushH * BrushW + x % BrushW];
+        var cells = new List<int>();
+        if (all) cells.AddRange(Enumerable.Range(0, w * h));
+        else
+        {
+            int from = grid[cy * w + cx];
+            var seen = new bool[w * h];
+            var todo = new Stack<int>();
+            todo.Push(cy * w + cx); seen[cy * w + cx] = true;
+            while (todo.Count > 0)
+            {
+                int i = todo.Pop();
+                cells.Add(i);
+                int x = i % w, y = i / w;
+                foreach (var (nx, ny) in new[] { (x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1) })
+                {
+                    if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+                    int j = ny * w + nx;
+                    if (seen[j] || grid[j] != from) continue;
+                    seen[j] = true; todo.Push(j);
+                }
+            }
+        }
+        int n = 0;
+        foreach (int i in cells)
+        {
+            int b = Brush(i % w, i / w);
+            if (grid[i] != b) { grid[i] = b; n++; }
+        }
+        return n;
+    }
+
+    /// <summary>Fills the whole layer painted (or the world map) with the brush.</summary>
+    [RelayCommand]
+    private void FillLayer()
+    {
+        if (_world != null) { WorldRecord("filling the map"); FillWorld(0, 0, all: true); WorldDropIfSame(); WorldUndoState(); return; }
+        if (_edit == null || !IsEditableMap) return;
+        FillAt(0, 0, all: true);
     }
 
     private void PaintCollision(int cx, int cy)
@@ -347,7 +416,10 @@ public partial class L2MapsPage
     [ObservableProperty] private bool _areaVisible;
 
     /// <summary>Blocks copied (both layers, with their cell flags), shared by every map; the graphics they came from.</summary>
-    public sealed record Clip(int W, int H, int[] Ground, int[] Upper, byte[] Flags, int BlockSet, int TileSet);
+    /// <summary>Copied blocks: both layers and the upper layer's flags, in block set / tile set <see cref="BlockSet"/> /
+    /// <see cref="TileSet"/> (as a map with them, <see cref="SourceMap"/>, draws them with palette set
+    /// <see cref="PaletteSet"/>; -1: not known, any map with those sets).</summary>
+    public sealed record Clip(int W, int H, int[] Ground, int[] Upper, byte[] Flags, int BlockSet, int TileSet, int SourceMap = -1, int PaletteSet = -1);
     private static Clip? _clip;
 
     [RelayCommand]
@@ -654,6 +726,9 @@ public partial class L2MapsPage
             case System.Windows.Input.Key.S: case System.Windows.Input.Key.V: Tool = L2Tool.Select; return true;
             case System.Windows.Input.Key.B: case System.Windows.Input.Key.P: Tool = L2Tool.Paint; return true;
             case System.Windows.Input.Key.I: Tool = L2Tool.Pick; return true;
+            case System.Windows.Input.Key.G: Tool = L2Tool.Fill; return true;
+            case System.Windows.Input.Key.OemOpenBrackets: BrushSize = BrushSizes[Math.Max(0, BrushSizes.ToList().IndexOf(BrushSize) - 1)]; return true;
+            case System.Windows.Input.Key.OemCloseBrackets: BrushSize = BrushSizes[Math.Min(BrushSizes.Count - 1, BrushSizes.ToList().IndexOf(BrushSize) + 1)]; return true;
             case System.Windows.Input.Key.M: Tool = L2Tool.Area; return true;
             case System.Windows.Input.Key.L: Tool = L2Tool.Collision; return true;
             case System.Windows.Input.Key.E: Tool = L2Tool.AddExit; return true;
