@@ -289,6 +289,8 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
         if (_rom == null || _edit == null) { _blocks = Array.Empty<uint[]>(); PickerImage = null; return; }
         try { _blocks = L2Maps.AllBlocks(_rom, _edit.ForDrawing); } catch { _blocks = Array.Empty<uint[]>(); }
         if (SelectedBlock >= _blocks.Length) SelectedBlock = Math.Min(1, _blocks.Length - 1);
+        if (_brush.Any(b => b >= _blocks.Length)) SetBrush(SelectedBlock);
+        LoadSourceBlocks();
         DrawPicker();
         UpdateNeighbours();
         UpdateRecent();

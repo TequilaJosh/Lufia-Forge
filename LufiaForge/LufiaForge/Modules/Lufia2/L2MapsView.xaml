@@ -547,9 +547,14 @@
                                 </ItemsControl>
                             </StackPanel>
                         </Expander>
+                        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4" Visibility="{Binding HasBlockSources, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <TextBlock DockPanel.Dock="Left" Text="From" Width="38" Style="{StaticResource LufiaLabel}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <ComboBox Style="{StaticResource GdCombo}" Width="Auto" HorizontalAlignment="Stretch" ItemsSource="{Binding BlockSourceChoices}" SelectedIndex="{Binding BlockSource}"
+                                      ToolTip="Paint with the blocks of other graphics too: a block picked there is added to this map's block set (its tiles to the tile set, recoloured to this map's colours), and the map keeps its own look"/>
+                        </DockPanel>
                         <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4">
-                            <TextBlock DockPanel.Dock="Left" Text="Order" Style="{StaticResource LufiaLabel}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <ComboBox Style="{StaticResource GdCombo}" Width="Auto" HorizontalAlignment="Stretch" ItemsSource="{Binding PaletteModeChoices}" SelectedIndex="{Binding PaletteMode}"
+                            <TextBlock DockPanel.Dock="Left" Text="Order" Width="38" Style="{StaticResource LufiaLabel}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <ComboBox Style="{StaticResource GdCombo}" Width="Auto" HorizontalAlignment="Stretch" ItemsSource="{Binding PaletteModeChoices}" SelectedIndex="{Binding PaletteMode}" IsEnabled="{Binding OrderEnabled}"
                                       ToolTip="Block set order (drag to make a brush of several blocks), the blocks the game's maps use most first, or only the blocks this map uses"/>
                         </DockPanel>
                         <Border Background="#FF101018" CornerRadius="4">
@@ -579,7 +584,7 @@
                             <StackPanel Margin="0,8,0,0">
                                 <TextBlock Text="Graphics" Style="{StaticResource GdSection}"/>
                                 <ComboBox Style="{StaticResource GdCombo}" Width="Auto" HorizontalAlignment="Stretch" ItemsSource="{Binding GraphicsChoices}" SelectedIndex="{Binding GraphicsChoice}"
-                                          ToolTip="Draw this map with the graphics of other maps: their blocks, tiles, colours and animations together (edit the colours in Graphics > Map palettes)"/>
+                                          ToolTip="Draw this map with the graphics of other maps: their blocks, tiles, colours and animations together (edit the colours in Graphics > Map palettes). To keep this map's look and add other graphics' blocks to it, use Blocks, From."/>
 
                                 <TextBlock Text="Size" Style="{StaticResource GdSection}" Margin="0,10,0,0"/>
                                 <StackPanel Orientation="Horizontal">
