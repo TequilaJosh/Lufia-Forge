@@ -443,7 +443,7 @@ public partial class L2MapsPage
                 g[y * w + x] = L0.Blocks[i];
                 if (L1 != null) { u[y * w + x] = L1.Blocks[i]; f[y * w + x] = L1.Flags[i]; }
             }
-        return new Clip(w, h, g, u, f, _edit.BlockSetIndex, _edit.TileSetIndex);
+        return new Clip(w, h, g, u, f, _edit.BlockSetIndex, _edit.TileSetIndex, _edit.MapId, _edit.PaletteSetIndex);
     }
 
     [RelayCommand]
@@ -508,7 +508,19 @@ public partial class L2MapsPage
             StartStamp(_clip); return;
         }
         if (_edit == null || _clip == null) { Status = "Nothing copied yet: drag an area with the Area tool and Copy it (or use Pieces and presets...)."; return; }
-        StartStamp(_clip);
+        var clip = _clip;
+        if (clip.BlockSet != _edit.BlockSetIndex || clip.TileSet != _edit.TileSetIndex)
+        {
+            // copied on other graphics: its blocks in this map's block set first, as presets and From are
+            if (WritePendingEdits() is { } why) { Status = "The map couldn't be written first: " + why; return; }
+            clip = BringIn(clip, "copy");
+            if (clip == null) return;
+            string note = Status;
+            StartStamp(clip);
+            Status = note;
+            return;
+        }
+        StartStamp(clip);
     }
 
     /// <summary>Starts placing <paramref name="clip"/> (from Copy, Pieces... or a preset).</summary>

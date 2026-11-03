@@ -195,6 +195,11 @@ public sealed class L2PiecesWindow : Window
     private readonly Rectangle _box = new() { Stroke = Brushes.White, StrokeThickness = 1.5, StrokeDashArray = new DoubleCollection { 3, 2 }, Fill = new SolidColorBrush(Color.FromArgb(0x30, 0, 0xBF, 0xFF)), IsHitTestVisible = false, Visibility = Visibility.Collapsed };
     private readonly TextBlock _note = L2Ui.Label("");
     private readonly List<(string Label, int Map, L2Presets.Preset? Preset)> _entries = new();
+    // the two lists: all of the user's presets together, or the maps with these blocks
+    private readonly List<(string Label, int Map, L2Presets.Preset? Preset)> _presets = new(), _maps = new();
+    private readonly System.Windows.Controls.RadioButton _showPresets = new() { GroupName = "PiecesShow", Margin = new Thickness(0, 0, 4, 0) };
+    private readonly System.Windows.Controls.RadioButton _showMaps = new() { GroupName = "PiecesShow", Content = "Pieces of maps" };
+    private readonly TextBlock _listNote = L2Ui.Label("", true);
     private L2Maps.Map? _map;
     private (int X, int Y)? _start;
     private (int X1, int Y1, int X2, int Y2)? _rect;
@@ -202,16 +207,18 @@ public sealed class L2PiecesWindow : Window
     public L2PiecesWindow(RomBuffer rom, int current, int blockSet, int tileSet, Func<int, string> name)
     {
         _rom = rom; _blockSet = blockSet; _tileSet = tileSet;
-        Title = "Pieces from maps - Lufia Forge"; Width = 1100; Height = 780; WindowStartupLocation = WindowStartupLocation.CenterOwner; Background = L2Ui.B("MidPurpleBrush"); ShowInTaskbar = false;
-        // every preset: those kept on these graphics first, then the others (their blocks are added to this map's set)
-        var presets = L2Presets.Load();
-        foreach (var p in presets.Where(p => p.BlockSet == blockSet)) _entries.Add(($"★ {p.Name}  ({p.W} x {p.H})", -1, p));
-        foreach (var p in presets.Where(p => p.BlockSet != blockSet)) _entries.Add(($"★ {p.Name}  ({p.W} x {p.H}, other graphics)", -1, p));
+        Title = "Pieces and presets - Lufia Forge"; Width = 1100; Height = 780; WindowStartupLocation = WindowStartupLocation.CenterOwner; Background = L2Ui.B("MidPurpleBrush"); ShowInTaskbar = false;
+        // every preset in one list, by name, wherever it was kept (those from other graphics have their blocks added
+        // to this map's set when used)
+        foreach (var p in L2Presets.Load().OrderBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase))
+            _presets.Add(($"★ {p.Name}  ({p.W} x {p.H}{(p.BlockSet == blockSet ? "" : ", other graphics")})", -1, p));
         for (int m = 2; m < L2Maps.Count(rom); m++)
             if (rom.ReadByte(L2Maps.BlockSetAt(rom, m)) == blockSet)
-                _entries.Add(($"{m:X2}  {name(m)}{(rom.ReadByte(L2Maps.TileSetAt(rom, m)) == tileSet ? "" : "  (other tiles)")}{(m == current ? "  (this map)" : "")}", m, null));
-        foreach (var e in _entries) _list.Items.Add(e.Label);
+                _maps.Add(($"{m:X2}  {name(m)}{(rom.ReadByte(L2Maps.TileSetAt(rom, m)) == tileSet ? "" : "  (other tiles)")}{(m == current ? "  (this map)" : "")}", m, null));
         _list.Style = L2Ui.S("GdRecordList");
+        _showPresets.Style = _showMaps.Style = L2Ui.S("LufiaToolRadio");
+        _showPresets.Checked += (_, _) => Fill();
+        _showMaps.Checked += (_, _) => Fill();
         _list.SelectionChanged += (_, _) => Show();
         var canvas = new Canvas { IsHitTestVisible = false }; canvas.Children.Add(_box);
         var grid = new Grid { HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
@@ -226,8 +233,11 @@ public sealed class L2PiecesWindow : Window
         buttons.Children.Add(L2Ui.Button("Delete this preset", false, (_, _) => DeletePreset()));
         buttons.Children.Add(L2Ui.Button("Cancel", false, (_, _) => DialogResult = false));
         var left = new DockPanel { Width = 300, Margin = new Thickness(0, 0, 10, 0) };
-        var lt = L2Ui.Label($"Your presets (★; those from other graphics have their blocks added to this map's block set when used), and the maps with block set {blockSet} (the same blocks as this map).", true);
-        DockPanel.SetDock(lt, Dock.Top); left.Children.Add(lt); left.Children.Add(_list);
+        var show = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 6) };
+        show.Children.Add(_showPresets); show.Children.Add(_showMaps);
+        DockPanel.SetDock(show, Dock.Top); left.Children.Add(show);
+        _listNote.Margin = new Thickness(0, 0, 0, 6);
+        DockPanel.SetDock(_listNote, Dock.Top); left.Children.Add(_listNote); left.Children.Add(_list);
         var right = new DockPanel();
         DockPanel.SetDock(_note, Dock.Top); DockPanel.SetDock(buttons, Dock.Bottom);
         right.Children.Add(_note); right.Children.Add(buttons); right.Children.Add(scroll);
@@ -235,8 +245,27 @@ public sealed class L2PiecesWindow : Window
         DockPanel.SetDock(left, Dock.Left);
         dock.Children.Add(left); dock.Children.Add(right);
         Content = dock;
+        // the presets first, when there are any
+        if (_presets.Count > 0) _showPresets.IsChecked = true; else _showMaps.IsChecked = true;
+    }
+
+    /// <summary>The list shown: the presets or the maps.</summary>
+    private void Fill()
+    {
+        bool presets = _showPresets.IsChecked == true;
+        _showPresets.Content = $"★ My presets ({_presets.Count})";
+        _entries.Clear(); _entries.AddRange(presets ? _presets : _maps);
+        _list.Items.Clear();
+        foreach (var e in _entries) _list.Items.Add(e.Label);
+        _listNote.Text = presets
+            ? "Every preset you kept (Save as preset), on any map. Those from other graphics have their blocks added to this map's block set when used."
+            : $"The maps with block set {_blockSet} (the same blocks as this map): drag around a piece of one.";
         _list.SelectedIndex = _entries.Count > 0 ? 0 : -1;
-        if (_entries.Count == 0) _note.Text = "No map uses this block set, and you have no presets yet.";
+        if (_entries.Count == 0)
+        {
+            _image.Source = null;
+            _note.Text = presets ? "No presets yet: select a piece with the Area tool and click Save as preset." : "No other map uses this block set.";
+        }
     }
 
     private (string Label, int Map, L2Presets.Preset? Preset)? Entry => _list.SelectedIndex >= 0 ? _entries[_list.SelectedIndex] : null;
@@ -305,8 +334,8 @@ public sealed class L2PiecesWindow : Window
         var list = L2Presets.Load();
         list.RemoveAll(x => x.Name == p.Name && x.BlockSet == p.BlockSet);
         L2Presets.Save(list);
-        int i = _list.SelectedIndex;
-        _entries.RemoveAt(i); _list.Items.RemoveAt(i);
+        _presets.RemoveAll(x => x.Preset == p);
+        Fill();
         _note.Text = $"Deleted \"{p.Name}\".";
     }
 

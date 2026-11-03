@@ -15,7 +15,7 @@ namespace LufiaForge.Modules.MapEditor;
 public partial class MapEditorViewModel
 {
     /// <summary>A rectangle of blocks. Raw = the map's own words (copied from a map), else metatile numbers (from the palette).</summary>
-    public sealed record BlockPattern(int W, int H, ushort[] Tiles, bool Raw, int TilesetKey, string Source);
+    public sealed record BlockPattern(int W, int H, ushort[] Tiles, bool Raw, int TilesetKey, string Source, int SourceMap = -1);
 
     /// <summary>Shared by every map (and the Map Editor windows), like a clipboard.</summary>
     private static BlockPattern? _clipboard;
@@ -93,7 +93,7 @@ public partial class MapEditorViewModel
         int w = x2 - x1 + 1, h = y2 - y1 + 1;
         var t = new ushort[w * h];
         for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) t[y * w + x] = _map.GetTile(x1 + x, y1 + y);
-        return new BlockPattern(w, h, t, true, TilesetKey, $"map {_map.MapId:X2}");
+        return new BlockPattern(w, h, t, true, TilesetKey, $"map {_map.MapId:X2}", _map.MapId);
     }
 
     [RelayCommand(CanExecute = nameof(HasArea))]
@@ -102,7 +102,7 @@ public partial class MapEditorViewModel
         if (AreaPattern() is not { } p) return;
         _clipboard = p;
         OnPropertyChanged(nameof(HasClipboard)); PasteCommand.NotifyCanExecuteChanged();
-        Status = $"Copied {p.W} x {p.H} blocks. Ctrl+V (or Paste) to stamp them, here or on another map with the same tileset.";
+        Status = $"Copied {p.W} x {p.H} blocks. Ctrl+V (or Paste) to stamp them, here or on another map (on other graphics their blocks are added to that map's tileset).";
     }
 
     [RelayCommand(CanExecute = nameof(HasArea))]
@@ -155,6 +155,22 @@ public partial class MapEditorViewModel
     private void Paste()
     {
         if (_clipboard is not { } p || _map == null) return;
+        if (p.TilesetKey != TilesetKey && p.TilesetKey >= 0 && TilesetKey >= 0 && p.SourceMap >= 0 && _rom != null)
+        {
+            // copied on another tileset: its blocks in this map's tileset first, as From does
+            LufiaMap? src = null;
+            try { src = LufiaMap.Load(_rom, p.SourceMap); } catch { }
+            if (src != null && !src.IsWorld && src.Tileset == p.TilesetKey)
+            {
+                var ids = p.Tiles.Where(t => t != Prefabs.Keep).Select(t => t & 0x3FF).Distinct().ToList();
+                if (BringBlocks(src, ids) is not { } r) return;
+                var to = ids.Select((b, i) => (b, r.Blocks[i])).ToDictionary(x => x.b, x => x.Item2);
+                var tiles = p.Tiles.Select(t => t == Prefabs.Keep ? t : (ushort)to[t & 0x3FF]).ToArray();
+                StartStamp(new BlockPattern(p.W, p.H, tiles, false, TilesetKey, p.Source, _map!.MapId));
+                Status = BroughtText(r) + $"Pasting {p.W} x {p.H} blocks: click to stamp (as many times as you like), Esc or right-click to stop.";
+                return;
+            }
+        }
         if (p.TilesetKey != TilesetKey &&
             MessageBox.Show($"These blocks were copied from {p.Source}, which uses a different tileset, so they will look different here. Paste anyway?",
                 "Different tileset", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
