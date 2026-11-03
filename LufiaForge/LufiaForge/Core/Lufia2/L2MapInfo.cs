@@ -9,6 +9,10 @@ public static class L2MapInfo
 {
     public const int Pointers = 0x27FCBC;
 
+    /// <summary>File offset of map <paramref name="map"/>'s info pointer (u24; the game's table is at <see cref="Pointers"/>
+    /// until New map moves it).</summary>
+    public static int PointerAt(RomBuffer rom, int map) => L2NewMaps.Entry(rom, L2MapTable.Info, map);
+
     /// <summary>A thing on the map: a kind, an area (x1,y1)-(x2,y2) inclusive, and what it does.</summary>
     public sealed record Entry(string Kind, int Id, int X1, int Y1, int X2, int Y2, string Detail, int DestMap = -1, int DestX = 0, int DestY = 0)
     {
@@ -155,13 +159,13 @@ public static class L2MapInfo
         int at = L2Rom.Allocate(rom, data.Count + 1, upper: true);
         rom.WriteBytes(at, data.Append((byte)0).ToArray());
         int snes = L2Rom.FileToSnes(at);
-        rom.WriteBytes(Pointers + map * 3, new[] { (byte)snes, (byte)(snes >> 8), (byte)(snes >> 16) });
+        rom.WriteBytes(PointerAt(rom, map), new[] { (byte)snes, (byte)(snes >> 8), (byte)(snes >> 16) });
         return true;
     }
 
     public static int Block(RomBuffer rom, int map)
     {
-        int a = rom.ReadByte(Pointers + map * 3) | rom.ReadByte(Pointers + map * 3 + 1) << 8 | rom.ReadByte(Pointers + map * 3 + 2) << 16;
+        int a = (int)rom.ReadUInt24Le(PointerAt(rom, map));
         return a == 0 ? -1 : L2Rom.SnesToFile(a);
     }
 

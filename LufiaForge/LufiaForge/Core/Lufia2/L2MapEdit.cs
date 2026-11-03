@@ -65,9 +65,9 @@ public sealed class L2MapEdit
         Sprites = new Dictionary<int, int>(_origSprites);
         _origCharacters = Records(Characters).Select(r => 0x4F + r.Bytes[0]).ToHashSet();
         _origTriggers = Records(Triggers).Select(r => (int)r.Bytes[0]).ToHashSet();
-        BlockSetIndex = _origBlockSet = rom.ReadByte(L2Maps.BlockSetList + map);
-        TileSetIndex = _origTileSet = rom.ReadByte(L2Maps.TileSetList + map);
-        PaletteSetIndex = _origPaletteSet = rom.ReadByte(L2Maps.PaletteSetList + map);
+        BlockSetIndex = _origBlockSet = rom.ReadByte(L2Maps.BlockSetAt(rom, map));
+        TileSetIndex = _origTileSet = rom.ReadByte(L2Maps.TileSetAt(rom, map));
+        PaletteSetIndex = _origPaletteSet = rom.ReadByte(L2Maps.PaletteSetAt(rom, map));
         _origWidth = Map.Layers[0].Width; _origHeight = Map.Layers[0].Height;
         _origBlocks = Map.Layers.Select(l => (int[])l.Blocks.Clone()).ToArray();
         _origFlags = Map.Layers.Select(l => (byte[])l.Flags.Clone()).ToArray();
@@ -512,7 +512,7 @@ public sealed class L2MapEdit
         // the info block
         if (InfoChanged)
         {
-            bool shared = Enumerable.Range(0, L2Maps.Count).Count(m => L2MapInfo.Block(rom, m) == _origInfoAt) > 1;
+            bool shared = Enumerable.Range(0, L2Maps.Count(rom)).Count(m => L2MapInfo.Block(rom, m) == _origInfoAt) > 1;
             // (the block may have moved since this edit was read: the world map's goes when treasure lists need its room)
             if (Info.Length == _origInfo.Length && !shared && _origInfoAt >= 0 && L2MapInfo.Block(rom, MapId) == _origInfoAt)
                 rom.WriteBytes(_origInfoAt, Info);
@@ -521,7 +521,7 @@ public sealed class L2MapEdit
                 int at = L2Rom.Allocate(rom, Info.Length + 1, upper: true);
                 rom.WriteBytes(at, Info.Append((byte)0).ToArray());
                 int snes = L2Rom.FileToSnes(at);
-                rom.WriteBytes(L2MapInfo.Pointers + MapId * 3, new[] { (byte)snes, (byte)(snes >> 8), (byte)(snes >> 16) });
+                rom.WriteBytes(L2MapInfo.PointerAt(rom, MapId), new[] { (byte)snes, (byte)(snes >> 8), (byte)(snes >> 16) });
             }
             done.Add("exits, areas, characters and points");
         }
@@ -587,9 +587,9 @@ public sealed class L2MapEdit
         // graphics
         if (SetsChanged && !IsWorld)
         {
-            rom.WriteByte(L2Maps.BlockSetList + MapId, (byte)BlockSetIndex);
-            rom.WriteByte(L2Maps.TileSetList + MapId, (byte)TileSetIndex);
-            rom.WriteByte(L2Maps.PaletteSetList + MapId, (byte)PaletteSetIndex);
+            rom.WriteByte(L2Maps.BlockSetAt(rom, MapId), (byte)BlockSetIndex);
+            rom.WriteByte(L2Maps.TileSetAt(rom, MapId), (byte)TileSetIndex);
+            rom.WriteByte(L2Maps.PaletteSetAt(rom, MapId), (byte)PaletteSetIndex);
             done.Add("graphics");
         }
         return done.Count == 0 ? "Nothing changed." : "Written: " + string.Join(", ", done) + ".";

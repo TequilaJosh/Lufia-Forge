@@ -128,7 +128,7 @@ public partial class L2EncountersPage : ObservableObject
             try { var (w, h, px) = L2WorldMap.Render(rom, 8); _worldSmall = Bitmap(w, h, px); } catch { _worldSmall = null; }
         RefreshLists();
         _mapIds.Clear(); MapNames.Clear();
-        for (int m = 0; m < L2Maps.Count; m++)
+        for (int m = 0; m < L2Maps.Count(rom); m++)
         {
             int n = L2Encounters.MapList(rom, m).Length;
             if (n == 0) continue;

@@ -1,18 +1,28 @@
 namespace LufiaForge.Core.Lufia2;
 
 /// <summary>
-/// Lufia II maps (LEdit's L2Map / L2MapHeader / L2MapBlockSet, US addresses). Map n (0-0xF1; 0 and 1 are the
-/// world and sea-floor maps) is packed file 0x3F + n on the US ROM (LEdit's 0x40 + n is the German numbering; checked
+/// Lufia II maps (LEdit's L2Map / L2MapHeader / L2MapBlockSet, US addresses). Map n (0-0xF1, and F2 up when made with
+/// New map; 0 and 1 are the world and sea-floor maps) is packed file 0x3F + n (new maps: <see cref="L2NewMaps.FileOf"/>) on the US ROM (LEdit's 0x40 + n is the German numbering; checked
 /// in the game: Tia's shop, map 04, is file 0x43): a 6-byte head, then two layers of 16x16 blocks (u16 head,
 /// u8 width, u8 height, then width x height cells of block-low, flags). Per-map lists at $CF:F72E... pick its block
 /// set, tile set and palettes; the header table at $87:8000 names it.
 /// </summary>
 public static class L2Maps
 {
-    public const int Count = 0xF2, MapFileBase = 0x3F;
-    public const int HeaderTable = 0x38000, BlockSetList = 0x27F72E, TileSetList = 0x27F81E, AnimIndexList = 0x27F90E,
-                     AnimData = 0x27F9FE, PaletteSetList = 0x27FA08, PaletteSetPointers = 0x27FAFA, InfoPointers = 0x27FCBC;
+    public const int MapFileBase = 0x3F;
+    public const int HeaderTable = 0x38000, AnimData = 0x27F9FE, PaletteSetPointers = 0x27FAFA;
     public const int BlockSetFileBase = 0x130, TileSetFileBase = 0x14B;
+
+    /// <summary>How many maps the ROM has: the game's 242 (00-F1) and those made with New map (<see cref="L2NewMaps"/>).</summary>
+    public static int Count(RomBuffer rom) => L2NewMaps.Count(rom);
+
+    /// <summary>File offsets of map <paramref name="id"/>'s bytes in the per-map graphics lists ($CF:F72E block set,
+    /// $CF:F81E tile set, $CF:F90E animation, $CF:FA08 palette set, $CF:FBA6 colour animation; moved by New map).</summary>
+    public static int BlockSetAt(RomBuffer rom, int id) => L2NewMaps.Entry(rom, L2MapTable.BlockSet, id);
+    public static int TileSetAt(RomBuffer rom, int id) => L2NewMaps.Entry(rom, L2MapTable.TileSet, id);
+    public static int AnimIndexAt(RomBuffer rom, int id) => L2NewMaps.Entry(rom, L2MapTable.AnimIndex, id);
+    public static int PaletteSetAt(RomBuffer rom, int id) => L2NewMaps.Entry(rom, L2MapTable.PaletteSet, id);
+    public static int ColourAnimAt(RomBuffer rom, int id) => L2NewMaps.Entry(rom, L2MapTable.ColourAnim, id);
 
     public sealed class Layer
     {
@@ -39,7 +49,7 @@ public static class L2Maps
     /// <summary>A map's name: zero-terminated at the header table + u16. It can use the text dictionary (05 / 06 /
     /// 80-FF, as dialogue does) and 0A xx yy = the first (yyxx &gt;&gt; 12) + 2 letters of another name, at the header
     /// table + (yyxx &amp; 0FFF) (e.g. "Elcid" for the houses of Elcid, "Cave" + " to Sundletan B" + "2").</summary>
-    public static string Name(RomBuffer rom, int id) => NameAt(rom, HeaderTable + rom.ReadUInt16Le(HeaderTable + 0x10 + id * 8 + 6), 0);
+    public static string Name(RomBuffer rom, int id) => NameAt(rom, HeaderTable + rom.ReadUInt16Le(L2Events.HeaderAt(rom, id) + 6), 0);
 
     private static string NameAt(RomBuffer rom, int at, int depth, bool keepSpaces = false)
     {
@@ -66,7 +76,7 @@ public static class L2Maps
 
     public static Map Read(RomBuffer rom, int id)
     {
-        byte[] f = L2Rom.ReadFile(rom, MapFileBase + id);
+        byte[] f = L2Rom.ReadFile(rom, L2NewMaps.FileOf(id));
         var layers = new List<Layer>();
         int p = 6;
         for (int l = 0; l < 2 && p + 4 <= f.Length; l++)
@@ -85,7 +95,7 @@ public static class L2Maps
         return new Map
         {
             Id = id, Name = Name(rom, id), Layers = layers.ToArray(),
-            BlockSet = BlockSetFileBase + rom.ReadByte(BlockSetList + id), TileSet = TileSetFileBase + rom.ReadByte(TileSetList + id),
+            BlockSet = BlockSetFileBase + rom.ReadByte(BlockSetAt(rom, id)), TileSet = TileSetFileBase + rom.ReadByte(TileSetAt(rom, id)),
         };
     }
 
@@ -94,7 +104,7 @@ public static class L2Maps
     /// layer's u16 head kept, the new width and height, the cells).</summary>
     public static void Write(RomBuffer rom, Map map)
     {
-        byte[] f = L2Rom.ReadFile(rom, MapFileBase + map.Id);
+        byte[] f = L2Rom.ReadFile(rom, L2NewMaps.FileOf(map.Id));
         var outp = new List<byte>(f.Take(6));
         int p = 6;
         for (int l = 0; l < 2 && l < map.Layers.Length; l++)
@@ -110,13 +120,13 @@ public static class L2Maps
             }
         }
         if (p < f.Length) outp.AddRange(f.Skip(p));
-        L2Rom.WriteFile(rom, MapFileBase + map.Id, outp.ToArray());
+        L2Rom.WriteFile(rom, L2NewMaps.FileOf(map.Id), outp.ToArray());
     }
 
     /// <summary>How many blocks the map's block set has.</summary>
     public static int BlockCount(RomBuffer rom, int id)
     {
-        byte[] bs = L2Rom.ReadFile(rom, BlockSetFileBase + rom.ReadByte(BlockSetList + id));
+        byte[] bs = L2Rom.ReadFile(rom, BlockSetFileBase + rom.ReadByte(BlockSetAt(rom, id)));
         return (short)(bs[2] | bs[3] << 8);
     }
 
@@ -157,8 +167,8 @@ public static class L2Maps
     /// <summary>The map's 6 background palettes (CGRAM rows 2-7), 16 ARGB colours each.</summary>
     public static uint[][] Palettes(RomBuffer rom, int id, int paletteSet = -1)
     {
-        int set = paletteSet >= 0 ? paletteSet : rom.ReadByte(PaletteSetList + id);
-        int anim = rom.ReadByte(AnimIndexList + id);
+        int set = paletteSet >= 0 ? paletteSet : rom.ReadByte(PaletteSetAt(rom, id));
+        int anim = rom.ReadByte(AnimIndexAt(rom, id));
         int v29 = rom.ReadByte(AnimData + anim * 2 + 1);
         int palOff = (v29 >> 4) != 0 ? 0x20 : 0x10;
         int ptr = rom.ReadUInt16Le(PaletteSetPointers + Math.Max(0, set - 1) * 2);

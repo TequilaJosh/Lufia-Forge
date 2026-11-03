@@ -9,7 +9,12 @@ namespace LufiaForge.Core.Lufia2;
 /// </summary>
 public static class L2Events
 {
+    /// <summary>$87:8000: the map names (a u16 from here) and the persistent characters' table pointer. The 8-byte map
+    /// records start at +0x10 (<see cref="HeaderAt"/>; New map moves them).</summary>
     public const int HeaderTable = 0x38000;
+
+    /// <summary>File offset of map <paramref name="map"/>'s header record: event block u24, start-up script u24, name u16.</summary>
+    public static int HeaderAt(RomBuffer rom, int map) => L2NewMaps.Entry(rom, L2MapTable.Header, map);
 
     public static readonly string[] Speakers = { "Maxim", "Selan", "Guy", "Artea", "Tia", "Dekar", "Lexis" };
 
@@ -19,7 +24,7 @@ public static class L2Events
     /// <summary>File offset of map <paramref name="map"/>'s event block, or -1.</summary>
     public static int Block(RomBuffer rom, int map)
     {
-        int e = HeaderTable + 0x10 + map * 8;
+        int e = HeaderAt(rom, map);
         int off = rom.ReadByte(e) | rom.ReadByte(e + 1) << 8 | rom.ReadByte(e + 2) << 16;
         int at = L2Rom.SnesToFile(0x878000 + off);
         return at + 2 < rom.Length && rom.ReadByte(at) == 'P' && rom.ReadByte(at + 1) == 'H' ? at : -1;
@@ -250,7 +255,7 @@ public static class L2Events
         int lo = changed.Min(), hi = changed.Max();
         bool Near(int p) => p >= 0 && p <= hi + 0x1000 && p + 0x10000 > lo;
         var seen = new HashSet<int>();
-        for (int m = 0; m < L2Maps.Count; m++)
+        for (int m = 0; m < L2Maps.Count(rom); m++)
         {
             if (!Near(Block(rom, m)) && !Near(L2EventBlocks.InitScript(rom, m))) continue;
             List<(string, List<L2Script.Op>)> scripts;

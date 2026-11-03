@@ -58,9 +58,9 @@ public static class L2EventBlocks
 
     private static void PointMaps(RomBuffer rom, int field, int oldAt, int newAt)
     {
-        for (int m = 0; m < L2Maps.Count; m++)
+        for (int m = 0; m < L2Maps.Count(rom); m++)
         {
-            int e = L2Events.HeaderTable + 0x10 + m * 8 + field;
+            int e = L2Events.HeaderAt(rom, m) + field;
             int v = (int)rom.ReadUInt24Le(e);
             if (HeaderToFile(v) != oldAt) continue;
             int n = HeaderValue(newAt);
@@ -71,7 +71,7 @@ public static class L2EventBlocks
     /// <summary>The start-up script of a map (file offset).</summary>
     public static int InitScript(RomBuffer rom, int map)
     {
-        return HeaderToFile((int)rom.ReadUInt24Le(L2Events.HeaderTable + 0x10 + map * 8 + 3));
+        return HeaderToFile((int)rom.ReadUInt24Le(L2Events.HeaderAt(rom, map) + 3));
     }
 
     /// <summary>The file offset a map header u24 points at.</summary>
@@ -354,7 +354,7 @@ public static class L2EventBlocks
     public static int RepackAll(RomBuffer rom, IReadOnlyDictionary<int, IReadOnlyDictionary<Entry, L2EventScript>> changes, List<int>? stuck = null)
     {
         var mapsOf = new Dictionary<int, List<int>>();
-        for (int m = 0; m < L2Maps.Count; m++)
+        for (int m = 0; m < L2Maps.Count(rom); m++)
         {
             int b = L2Events.Block(rom, m);
             if (b < 0) continue;
@@ -419,9 +419,9 @@ public static class L2EventBlocks
             rom.WriteBytes(at, built[b]);
         }
         // the maps point at their blocks' new places
-        for (int m = 0; m < L2Maps.Count; m++)
+        for (int m = 0; m < L2Maps.Count(rom); m++)
         {
-            int e = L2Events.HeaderTable + 0x10 + m * 8;
+            int e = L2Events.HeaderAt(rom, m);
             int old = HeaderToFile((int)rom.ReadUInt24Le(e));
             if (!placeAt.TryGetValue(old, out int now) || !home.Contains(old)) continue;
             int n = HeaderValue(now);
@@ -472,10 +472,66 @@ public static class L2EventBlocks
         rom.WriteBytes(at, built!);
         if (at != init)
         {
-            int n = HeaderValue(at), e = L2Events.HeaderTable + 0x10 + map * 8 + 3;
+            int n = HeaderValue(at), e = L2Events.HeaderAt(rom, map) + 3;
             rom.WriteBytes(e, new[] { (byte)n, (byte)(n >> 8), (byte)(n >> 16) });
         }
         return at == init ? "Written in the event space." : $"The start-up script moved to {L2Rom.FileToSnes(at):X6} in the event space to make room.";
+    }
+
+    /// <summary>Writes a start-up script for <paramref name="map"/> into new room in the event space and points the map's
+    /// header at it (a new map's script, never written over the one it was copied from).</summary>
+    public static void WriteInitNew(RomBuffer rom, int map, L2EventScript script)
+    {
+        foreach (var s in script.Steps) s.PadTo = 0;
+        var (probe, err) = script.WithJumpBase(0x200000 - 0x8000).Build(rom, 0x200000 - 0x8000);
+        if (err != null) throw new InvalidOperationException(err);
+        int room = probe!.Length + 0x40;
+        int chunk = L2EventSpace.Allocate(rom, room + 8);
+        rom.WriteBytes(chunk, new[] { (byte)'L', (byte)'F', (byte)'2', (byte)'I', (byte)room, (byte)(room >> 8), (byte)0, (byte)0 });
+        int at = chunk + 8;
+        var (built, e2) = script.WithJumpBase(InitBase(at)).Build(rom, at);
+        if (e2 != null) throw new InvalidOperationException(e2);
+        rom.WriteBytes(at, built!);
+        int n = HeaderValue(at);
+        rom.WriteBytes(L2Events.HeaderAt(rom, map) + 3, new[] { (byte)n, (byte)(n >> 8), (byte)(n >> 16) });
+    }
+
+    /// <summary>An event block with six empty lists, in a chunk of the event space with room for events to be added
+    /// (as a block moved there). Returns the file offset of its "PH".</summary>
+    public static int NewBlock(RomBuffer rom)
+    {
+        var block = new byte[0x14];
+        block[0] = (byte)'P'; block[1] = (byte)'H';
+        for (int i = 0; i < Heads.Length; i++)
+        {
+            block[Heads[i]] = (byte)(0x0E + i);
+            block[0x0E + i] = 0xFF;
+        }
+        return PutBlock(rom, block, 0x400);
+    }
+
+    /// <summary>A copy of the event block at <paramref name="from"/> (every event and the key table, laid out again) in a
+    /// chunk of its own. Returns the file offset of its "PH".</summary>
+    public static int CopyBlock(RomBuffer rom, int from)
+    {
+        if (from < 0) return NewBlock(rom);
+        // laid out once to learn the size (nothing is padded, so it doesn't depend on the address), then where it goes
+        int size = BuildBlock(rom, from, new Dictionary<Entry, L2EventScript>(), 0x1F8000).Length;
+        int room = Math.Min(L2EventSpace.Mark - 8, size + Math.Max(0x200, size / 8));
+        if (size > room) throw new InvalidOperationException($"The map's events take {size} bytes; one bank holds {room}.");
+        int chunk = L2EventSpace.Allocate(rom, room + 8);
+        var built = BuildBlock(rom, from, new Dictionary<Entry, L2EventScript>(), chunk + 8);
+        rom.WriteBytes(chunk, new[] { (byte)'L', (byte)'F', (byte)'2', (byte)'B', (byte)room, (byte)(room >> 8), (byte)built.Length, (byte)(built.Length >> 8) });
+        rom.WriteBytes(chunk + 8, built);
+        return chunk + 8;
+    }
+
+    private static int PutBlock(RomBuffer rom, byte[] block, int room)
+    {
+        int chunk = L2EventSpace.Allocate(rom, room + 8);
+        rom.WriteBytes(chunk, new[] { (byte)'L', (byte)'F', (byte)'2', (byte)'B', (byte)room, (byte)(room >> 8), (byte)block.Length, (byte)(block.Length >> 8) });
+        rom.WriteBytes(chunk + 8, block);
+        return chunk + 8;
     }
 
     // ------------------------------------------------------------------ new events

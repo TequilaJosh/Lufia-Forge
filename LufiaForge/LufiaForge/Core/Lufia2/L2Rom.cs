@@ -11,7 +11,23 @@ namespace LufiaForge.Core.Lufia2;
 /// </summary>
 public static class L2Rom
 {
+    /// <summary>The file table's base: an entry is the file's offset from here (the game's table sits here too, until New
+    /// map moves it, <see cref="FileTableAt"/>). <see cref="FileCount"/> is the game's files.</summary>
     public const int FileTable = 0x138000, FileCount = 0x2A8;
+
+    /// <summary>File offset of the file table the game reads now (its own, or the copy New map makes with room for the
+    /// new maps' files).</summary>
+    public static int FileTableAt(RomBuffer rom) => L2NewMaps.Table(rom, L2MapTable.Files);
+
+    /// <summary>Every file there is: the game's and the new maps'.</summary>
+    public static IEnumerable<int> FileIds(RomBuffer rom) => Enumerable.Range(0, FileCount).Concat(L2NewMaps.NewFiles(rom));
+
+    /// <summary>Points file <paramref name="id"/> at file offset <paramref name="at"/>.</summary>
+    public static void SetFileOffset(RomBuffer rom, int id, int at)
+    {
+        int rel = at - FileTable;
+        rom.WriteBytes(FileTableAt(rom) + id * 3, new[] { (byte)rel, (byte)(rel >> 8), (byte)(rel >> 16) });
+    }
 
     /// <summary>A SNES address as a file offset. Banks $80-$FF read the first 4 MB; banks $01-$7D (upper halves) read
     /// the upper 4 MB of an 8 MB ROM (<see cref="ExpandTo8"/>); bank $00 is the copy of the first bank.</summary>
@@ -40,8 +56,7 @@ public static class L2Rom
     public static int OffsetInBank(int from, int to) => (FileToSnes(to) - FileToSnes(from)) & 0xFFFF;
 
     /// <summary>File offset of packed file <paramref name="id"/>.</summary>
-    public static int FileOffset(RomBuffer rom, int id) =>
-        FileTable + rom.ReadByte(FileTable + id * 3) + (rom.ReadByte(FileTable + id * 3 + 1) << 8) + (rom.ReadByte(FileTable + id * 3 + 2) << 16);
+    public static int FileOffset(RomBuffer rom, int id) => FileTable + (int)rom.ReadUInt24Le(FileTableAt(rom) + id * 3);
 
     /// <summary>Packed file <paramref name="id"/>, unpacked.</summary>
     public static byte[] ReadFile(RomBuffer rom, int id) => LufiaCompression.Decompress(rom, FileOffset(rom, id), out _);
@@ -230,8 +245,17 @@ public static class L2Rom
         }
         int next = Allocate(rom, packed.Length);
         rom.WriteBytes(next, packed);
-        int rel = next - FileTable;
-        rom.WriteBytes(FileTable + id * 3, new[] { (byte)rel, (byte)(rel >> 8), (byte)(rel >> 16) });
+        SetFileOffset(rom, id, next);
+    }
+
+    /// <summary>Packs <paramref name="data"/> into new room in the added space as file <paramref name="id"/> (never over
+    /// the bytes the file table pointed at: a new map's file starts as a copy of another map's entry).</summary>
+    public static void WriteNewFile(RomBuffer rom, int id, byte[] data)
+    {
+        byte[] packed = LufiaCompression.Compress(data);
+        int next = Allocate(rom, packed.Length);
+        rom.WriteBytes(next, packed);
+        SetFileOffset(rom, id, next);
     }
 
     /// <summary>Runs an edit that writes in several steps (an info block, then a start-up script, then events...): when

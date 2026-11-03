@@ -122,7 +122,7 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
         bool dropped = HasPendingEdits;
         _rom = rom; _main = main;
         main.Register(this);
-        _names = Enumerable.Range(0, L2Maps.Count).Select(id => RomName(rom, id)).ToList();
+        _names = Enumerable.Range(0, L2Maps.Count(rom)).Select(id => RomName(rom, id)).ToList();
         _itemNames = null;
         _gameLooks = null;
         _stats.Clear();
@@ -140,6 +140,7 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
 
     private static string RomName(RomBuffer rom, int id)
     {
+        if (L2NewMaps.IsFree(rom, id)) return "(free: the next new map takes this number)";
         string n = L2Maps.Name(rom, id);
         return n.Length > 0 && !n.Contains('~') ? n : id < 2 ? (id == 0 ? "World map" : "Sea floor") : "Map " + id.ToString("X2");
     }
@@ -154,7 +155,7 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
         var keep = SelectedIndex;
         _filling = true;
         Maps.Clear();
-        for (int id = 0; id < L2Maps.Count; id++)
+        for (int id = 0; id < L2Maps.Count(_rom!); id++)
         {
             string label = $"{id:X2}  {NameOf(id)}";
             if (q.Length > 0 && !label.Contains(q, StringComparison.OrdinalIgnoreCase) && !(int.TryParse(q, System.Globalization.NumberStyles.HexNumber, null, out int h) && h == id)) continue;

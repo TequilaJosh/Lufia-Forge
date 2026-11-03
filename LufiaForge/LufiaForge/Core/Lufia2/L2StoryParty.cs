@@ -25,7 +25,7 @@ public static class L2StoryParty
     private static List<Ev> All(RomBuffer rom)
     {
         var list = new List<Ev>();
-        for (int m = 0; m < L2Maps.Count; m++)
+        for (int m = 0; m < L2Maps.Count(rom); m++)
         {
             int block = L2Events.Block(rom, m);
             if (block < 0) continue;

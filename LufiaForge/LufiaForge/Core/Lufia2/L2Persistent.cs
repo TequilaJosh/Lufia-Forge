@@ -40,7 +40,7 @@ public static class L2Persistent
         var start = Start(rom);
         var sprite = start.ToDictionary(p => p.Id, p => p.Sprite);
         var list = new List<Place>(start);
-        for (int m = 0; m < L2Maps.Count; m++)
+        for (int m = 0; m < L2Maps.Count(rom); m++)
         {
             List<(string, List<L2Script.Op>)> scripts;
             try { scripts = L2Script.MapScripts(rom, m); } catch (Exception) { continue; }

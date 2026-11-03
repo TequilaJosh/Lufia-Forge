@@ -24,11 +24,15 @@ public static class L2Encounters
         for (int i = 0; i < GroupSize; i++) rom.WriteByte(Groups + g * GroupSize + i, (byte)(i < monsters.Length ? monsters[i] : 0xFF));
     }
 
+    /// <summary>File offset of map <paramref name="map"/>'s u16 list offset (from <see cref="MapLists"/>; New map moves
+    /// the offsets, not the lists).</summary>
+    public static int IndexAt(RomBuffer rom, int map) => L2NewMaps.Entry(rom, L2MapTable.Encounters, map);
+
     /// <summary>Where a map's list starts (file offset) and how long it is (up to the next list).</summary>
     public static (int At, int Length) MapList(RomBuffer rom, int map)
     {
-        var starts = Enumerable.Range(0, L2Maps.Count).Select(m => (int)rom.ReadUInt16Le(MapLists + m * 2)).Distinct().OrderBy(v => v).ToList();
-        int p = rom.ReadUInt16Le(MapLists + map * 2);
+        var starts = Enumerable.Range(0, L2Maps.Count(rom)).Select(m => (int)rom.ReadUInt16Le(IndexAt(rom, m))).Distinct().OrderBy(v => v).ToList();
+        int p = rom.ReadUInt16Le(IndexAt(rom, map));
         int next = starts.FirstOrDefault(v => v > p, p);
         int len = next > p ? next - p : 0;
         return (MapLists + p, Math.Min(len, 32));
@@ -37,8 +41,8 @@ public static class L2Encounters
     /// <summary>Maps that share map <paramref name="map"/>'s list (it changes for all of them).</summary>
     public static List<int> SharingWith(RomBuffer rom, int map)
     {
-        int p = rom.ReadUInt16Le(MapLists + map * 2);
-        return Enumerable.Range(0, L2Maps.Count).Where(m => m != map && rom.ReadUInt16Le(MapLists + m * 2) == p).ToList();
+        int p = rom.ReadUInt16Le(IndexAt(rom, map));
+        return Enumerable.Range(0, L2Maps.Count(rom)).Where(m => m != map && rom.ReadUInt16Le(IndexAt(rom, m)) == p).ToList();
     }
 
     // ---------------------------------------------------------------- world map battle zones
@@ -165,7 +169,7 @@ public static class L2Encounters
         for (int z = 1; z < ZoneCountIn(rom); z++)
             foreach (var s in ZoneGroups(rom, z)) if (s.Group == g) zones.Add((z, s.Share));
         var maps = new List<int>();
-        for (int m = 0; m < L2Maps.Count; m++)
+        for (int m = 0; m < L2Maps.Count(rom); m++)
         {
             var (at, len) = MapList(rom, m);
             for (int i = 0; i < len; i++) if (rom.ReadByte(at + i) == g) { maps.Add(m); break; }

@@ -39,7 +39,7 @@ public partial class L2GameStartPage : ObservableObject
         _loading = true;
         try
         {
-            _mapNames = Enumerable.Range(0, L2Maps.Count).Select(m => L2Maps.Name(rom, m)).ToArray();
+            _mapNames = Enumerable.Range(0, L2Maps.Count(rom)).Select(m => L2Maps.Name(rom, m)).ToArray();
             MapChoices.Clear();
             for (int m = 2; m < _mapNames.Length; m++)
                 if (L2Events.Block(rom, m) >= 0 && L2StoryClear.PresetPoints(rom, m).Count > 0) MapChoices.Add(new L2Option(m, $"{m:X2} {_mapNames[m]}"));

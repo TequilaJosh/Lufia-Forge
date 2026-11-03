@@ -157,7 +157,7 @@ public sealed class L2PuzzleBlock
     /// <summary>Maps whose block sits where its commands can't reach RAM (<see cref="SeesRam"/>): written into the space
     /// added after 2.5 MB by Lufia Forge before 2026-11-01.</summary>
     public static List<int> OutOfReach(RomBuffer rom) =>
-        Enumerable.Range(0, L2Maps.Count).Where(m => L2Puzzles.Block(rom, m) is var b && b >= 0 && !SeesRam(b)).ToList();
+        Enumerable.Range(0, L2Maps.Count(rom)).Where(m => L2Puzzles.Block(rom, m) is var b && b >= 0 && !SeesRam(b)).ToList();
 
     /// <summary>Lays the blocks of <see cref="OutOfReach"/> out again in the event space. Returns the maps moved and why
     /// any couldn't be.</summary>
@@ -174,6 +174,15 @@ public sealed class L2PuzzleBlock
         return (moved, null);
     }
 
+    /// <summary>The same entries and commands for another map (a new map copied from this one).</summary>
+    public L2PuzzleBlock For(int map)
+    {
+        var copy = new L2PuzzleBlock { Map = map, Problem = Problem };
+        copy.Entries.AddRange(Entries);
+        copy.Code.AddRange(Code);
+        return copy;
+    }
+
     /// <summary>Writes the block in the event space (<see cref="SeesRam"/>) and points the map at it. Returns its file
     /// offset.</summary>
     public int Write(RomBuffer rom)
@@ -186,7 +195,7 @@ public sealed class L2PuzzleBlock
         rom.WriteBytes(at, data);
         int hi = (at - L2Puzzles.Table) / 0x8000, lo = (at - L2Puzzles.Table) % 0x8000;
         if (hi > 0xFF) throw new InvalidOperationException("The added space is past what the puzzle table can point at.");
-        rom.WriteBytes(L2Puzzles.Table + Map * 3, new[] { (byte)lo, (byte)(lo >> 8), (byte)hi });
+        rom.WriteBytes(L2NewMaps.Entry(rom, L2MapTable.Puzzle, Map), new[] { (byte)lo, (byte)(lo >> 8), (byte)hi });
         return at;
     }
 }

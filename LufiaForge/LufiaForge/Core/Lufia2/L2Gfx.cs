@@ -625,10 +625,10 @@ public static class L2Gfx
         var sorted = ptrs.Distinct().OrderBy(p => p).ToList();
         for (int i = 0; i < sets; i++)
         {
-            var maps = Enumerable.Range(0, L2Maps.Count).Where(m => rom.ReadByte(L2Maps.PaletteSetList + m) == i + 1).ToList();
+            var maps = Enumerable.Range(0, L2Maps.Count(rom)).Where(m => rom.ReadByte(L2Maps.PaletteSetAt(rom, m)) == i + 1).ToList();
             int k = sorted.IndexOf(ptrs[i]);
             int size = Math.Min(0x100, k + 1 < sorted.Count ? sorted[k + 1] - ptrs[i] : 0x10000 - ptrs[i]);
-            int head = maps.Count > 0 && rom.ReadByte(L2Maps.AnimData + rom.ReadByte(L2Maps.AnimIndexList + maps[0]) * 2 + 1) >> 4 != 0 ? 0x20 : 0x10;
+            int head = maps.Count > 0 && rom.ReadByte(L2Maps.AnimData + rom.ReadByte(L2Maps.AnimIndexAt(rom, maps[0])) * 2 + 1) >> 4 != 0 ? 0x20 : 0x10;
             int at = L2Rom.SnesToFile(0x9B0000 | ptrs[i]);
             var rows = new List<PaletteRow> { new("Before the map rows", at, head / 2) };
             for (int r = 0; head + r * 0x20 < size && r < 6; r++)

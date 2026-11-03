@@ -29,7 +29,7 @@ public static class L2ChestLooks
     {
         var list = new List<Look>();
         var seen = new HashSet<string>();
-        for (int m = 2; m < L2Maps.Count; m++)
+        for (int m = 2; m < L2Maps.Count(rom); m++)
         {
             List<(int At, byte[] Bytes)> spots;
             try { spots = L2MapInfo.Records(rom, m, 0x26, 4); } catch { continue; }
@@ -38,7 +38,7 @@ public static class L2ChestLooks
             var chests = L2Chests.Records(rom, m);
             L2Maps.Map map;
             try { map = L2Maps.Read(rom, m); } catch { continue; }
-            int bs = rom.ReadByte(L2Maps.BlockSetList + m), ts = rom.ReadByte(L2Maps.TileSetList + m), ps = rom.ReadByte(L2Maps.PaletteSetList + m);
+            int bs = rom.ReadByte(L2Maps.BlockSetAt(rom, m)), ts = rom.ReadByte(L2Maps.TileSetAt(rom, m)), ps = rom.ReadByte(L2Maps.PaletteSetAt(rom, m));
             foreach (var (_, b) in spots)
             {
                 var l = looks.FirstOrDefault(x => x[0] == b[3]);
@@ -108,7 +108,7 @@ public static class L2ChestLooks
     /// <summary>Whether map <paramref name="map"/> has a tile animation (water and the like): its $CF:F90E entry's
     /// $CF:F9FE byte 0 high nibble picks file 0x15F + n (0 = none).</summary>
     public static bool HasTileAnimation(RomBuffer rom, int map) =>
-        rom.ReadByte(L2Maps.AnimData + rom.ReadByte(L2Maps.AnimIndexList + map) * 2) >> 4 != 0;
+        rom.ReadByte(L2Maps.AnimData + rom.ReadByte(L2Maps.AnimIndexAt(rom, map)) * 2) >> 4 != 0;
 
     /// <summary>The colours (CGRAM numbers 0-127) map <paramref name="map"/>'s colour animation changes: $CF:FBA6 + map
     /// (1-based, 0 = none) picks a $CF:FC98 pointer to a record in bank $A1 ("PS", count | 80, then count u16 offsets
@@ -117,7 +117,7 @@ public static class L2ChestLooks
     public static bool[] CyclingColours(RomBuffer rom, int map)
     {
         var c = new bool[128];
-        int n = rom.ReadByte(0x27FBA6 + map);
+        int n = rom.ReadByte(L2Maps.ColourAnimAt(rom, map));
         if (n == 0 || n > 0x12) return c;
         int at = L2Rom.SnesToFile(0xA10000 | rom.ReadUInt16Le(0x27FC98 + (n - 1) * 2));
         if (rom.ReadByte(at) != 0x50 || rom.ReadByte(at + 1) != 0x53) return c;
@@ -151,8 +151,8 @@ public static class L2ChestLooks
     /// Cave's ($83:9F49 / $83:9F5F: block sets 0B, 09, 04 with tile sets 0B, 09, 04).</summary>
     public static List<int> PairedBlockSets(RomBuffer rom, int tileSet)
     {
-        var sets = Enumerable.Range(0, L2Maps.Count).Where(m => rom.ReadByte(L2Maps.TileSetList + m) == tileSet)
-            .Select(m => (int)rom.ReadByte(L2Maps.BlockSetList + m)).ToHashSet();
+        var sets = Enumerable.Range(0, L2Maps.Count(rom)).Where(m => rom.ReadByte(L2Maps.TileSetAt(rom, m)) == tileSet)
+            .Select(m => (int)rom.ReadByte(L2Maps.BlockSetAt(rom, m))).ToHashSet();
         if (tileSet is 0x0B or 0x09 or 0x04) sets.Add(tileSet);
         return sets.OrderBy(s => s).ToList();
     }

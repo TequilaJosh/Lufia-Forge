@@ -181,7 +181,7 @@ public static class L2Shops
     public static List<int> UsedOn(RomBuffer rom, int id)
     {
         var maps = new List<int>();
-        for (int m = 0; m < L2Maps.Count; m++)
+        for (int m = 0; m < L2Maps.Count(rom); m++)
         {
             int b = L2Events.Block(rom, m);
             if (b < 0) continue;

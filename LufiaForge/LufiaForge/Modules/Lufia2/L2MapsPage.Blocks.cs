@@ -182,9 +182,9 @@ public partial class L2MapsPage
         if (_stats.TryGetValue(key, out var st)) return st;
         st = new BlockStats { Counts = new int[_blocks.Length] };
         for (int d = 0; d < 4; d++) st.Next[d] = new();
-        for (int m = 2; m < L2Maps.Count; m++)
+        for (int m = 2; m < L2Maps.Count(_rom!); m++)
         {
-            if (_rom!.ReadByte(L2Maps.BlockSetList + m) != _edit.BlockSetIndex) continue;
+            if (_rom!.ReadByte(L2Maps.BlockSetAt(_rom!, m)) != _edit.BlockSetIndex) continue;
             L2Maps.Map map;
             try { map = m == _edit.MapId ? _edit.Map : L2Maps.Read(_rom, m); } catch { continue; }
             if (layer >= map.Layers.Length) continue;

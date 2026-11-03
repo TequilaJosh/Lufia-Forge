@@ -50,8 +50,8 @@ public partial class L2EventsPage : L2Page
         // a new ROM (another project, or Edit > Undo / Redo): unsaved steps belong to the old one, dropped without asking
         Editor.Unload();
         Flags.Clear();
-        _maps = Enumerable.Range(0, L2Maps.Count).Select(m => L2ScriptEditor.MapNameOf(Rom!, m)).ToArray();
-        return Enumerable.Range(0, L2Maps.Count).Select(m => $"{m:X2}  {_maps[m]}");
+        _maps = Enumerable.Range(0, L2Maps.Count(Rom!)).Select(m => L2ScriptEditor.MapNameOf(Rom!, m)).ToArray();
+        return Enumerable.Range(0, L2Maps.Count(Rom!)).Select(m => $"{m:X2}  {_maps[m]}");
     }
 
     protected override void Load(int index)

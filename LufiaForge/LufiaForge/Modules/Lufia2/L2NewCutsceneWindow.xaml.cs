@@ -39,7 +39,7 @@ public partial class L2NewCutsceneWindow : Window
         InitializeComponent();
         _page = page;
         _rom = page.CurrentRom!;
-        for (int m = 0; m < L2Maps.Count; m++)
+        for (int m = 0; m < L2Maps.Count(_rom); m++)
         {
             int block;
             try { block = L2Events.Block(_rom, m); } catch (Exception) { continue; }

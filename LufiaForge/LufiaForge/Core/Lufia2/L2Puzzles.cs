@@ -222,7 +222,7 @@ public static class L2Puzzles
     /// <summary>File offset of map <paramref name="map"/>'s puzzle block, or -1.</summary>
     public static int Block(RomBuffer rom, int map)
     {
-        int e = Table + map * 3;
+        int e = L2NewMaps.Entry(rom, L2MapTable.Puzzle, map);
         int lo = rom.ReadUInt16Le(e), hi = rom.ReadByte(e + 2);
         if (lo == 0xFFFF && hi == 0xFF) return -1;
         int at = Table + hi * 0x8000 + lo;

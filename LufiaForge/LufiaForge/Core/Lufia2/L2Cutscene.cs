@@ -766,7 +766,7 @@ public static class L2Cutscene
     public static int FreeFlag(RomBuffer rom, IEnumerable<int>? avoid = null)
     {
         var used = new HashSet<int>(avoid ?? Array.Empty<int>());
-        for (int m = 0; m < L2Maps.Count; m++)
+        for (int m = 0; m < L2Maps.Count(rom); m++)
             foreach (var (_, ops) in L2Script.MapScripts(rom, m))
                 foreach (var o in ops.Where(o => !o.IsText))
                 {
@@ -1128,7 +1128,7 @@ public static class L2Cutscene
     public static Dictionary<int, List<(int Map, int Head, int Id, int Point)>> GoTos(RomBuffer rom, int map)
     {
         var found = new Dictionary<int, List<(int, int, int, int)>>();
-        for (int m = 0; m < L2Maps.Count; m++)
+        for (int m = 0; m < L2Maps.Count(rom); m++)
         {
             int block = L2Events.Block(rom, m);
             if (block < 0) continue;

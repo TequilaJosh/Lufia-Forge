@@ -96,7 +96,7 @@ public static class L2Chests
     public static HashSet<int> UsedFlags(RomBuffer rom, int exceptMap = -1)
     {
         var used = new HashSet<int>();
-        for (int m = 0; m < L2Maps.Count; m++)
+        for (int m = 0; m < L2Maps.Count(rom); m++)
             if (m != exceptMap) foreach (var r in Records(rom, m)) used.Add(r.Flag);
         return used;
     }
@@ -114,7 +114,7 @@ public static class L2Chests
     private static int SpaceEnd(RomBuffer rom)
     {
         int end = Space + 0x8000;
-        for (int m = 0; m < L2Maps.Count; m++)
+        for (int m = 0; m < L2Maps.Count(rom); m++)
         {
             int b = L2MapInfo.Block(rom, m);
             if (b > Space && b < end) end = b;
@@ -126,14 +126,14 @@ public static class L2Chests
     /// was moved now.</summary>
     public static bool MakeSpace(RomBuffer rom)
     {
-        var at = Enumerable.Range(0, L2Maps.Count).Where(m => L2MapInfo.Block(rom, m) == Space).ToList();
+        var at = Enumerable.Range(0, L2Maps.Count(rom)).Where(m => L2MapInfo.Block(rom, m) == Space).ToList();
         if (at.Count == 0) return false;
         int size = rom.ReadUInt16Le(Space);
         var data = rom.ReadBytes(Space, size);
         int to = L2Rom.Allocate(rom, size + 1, upper: true);
         rom.WriteBytes(to, data.Append((byte)0).ToArray());
         int snes = L2Rom.FileToSnes(to);
-        foreach (int m in at) rom.WriteBytes(L2MapInfo.Pointers + m * 3, new[] { (byte)snes, (byte)(snes >> 8), (byte)(snes >> 16) });
+        foreach (int m in at) rom.WriteBytes(L2MapInfo.PointerAt(rom, m), new[] { (byte)snes, (byte)(snes >> 8), (byte)(snes >> 16) });
         return true;
     }
 
@@ -146,7 +146,7 @@ public static class L2Chests
         var bytes = recs.SelectMany(r => r.Bytes).Append((byte)0xFF).ToArray();
         int off = Offset(rom, map), at = FileOf(off);
         int old = Records(rom, map).Count;
-        bool shared = Enumerable.Range(0, L2Maps.Count).Any(m => m != map && Offset(rom, m) == off);
+        bool shared = Enumerable.Range(0, L2Maps.Count(rom)).Any(m => m != map && Offset(rom, m) == off);
         if (at >= 0 && !shared && recs.Count <= old)
         {
             rom.WriteBytes(at, bytes);
@@ -154,7 +154,7 @@ public static class L2Chests
         }
         MakeSpace(rom);
         int end = SpaceEnd(rom), next = Space;
-        for (int m = 0; m < L2Maps.Count; m++)
+        for (int m = 0; m < L2Maps.Count(rom); m++)
         {
             if (m == map) continue;
             int f = FileOf(Offset(rom, m));
