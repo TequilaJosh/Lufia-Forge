@@ -99,6 +99,34 @@ public sealed class TileImport
     }
 
     private byte[] _newBlocks = Array.Empty<byte>();
+    private int _tilesPlaced;
+
+    /// <summary>The four tilemap words (TL, BL, TR, BR) that draw a 16 x 16 picture with these graphics: each 8x8 tile in
+    /// its best palette row, an existing tile (maybe mirrored) or a new one in a free slot, as <see cref="Draw"/> does.
+    /// <paramref name="priority"/>[q] is quadrant q's priority bit (0x2000 or 0). Only the tiles change here: the caller
+    /// puts the words into a block (<see cref="BlockSet"/>) and saves the tiles with <see cref="SaveTiles"/>.</summary>
+    public ushort[] Words(uint[] px16, IReadOnlyList<int> priority, out int newTiles)
+    {
+        var words = new ushort[4];
+        newTiles = 0;
+        for (int q = 0; q < 4; q++)
+        {
+            int tx = q >= 2 ? 8 : 0, ty = (q & 1) == 1 ? 8 : 0;   // TL, BL, TR, BR
+            var (pal, idx) = Quantise(px16, 16, tx, ty);
+            var (tile, hf, vf, isNew) = Place(idx);
+            if (isNew) { newTiles++; _tilesPlaced++; }
+            words[q] = (ushort)(tile | pal << 10 | priority[q] & 0x2000 | (hf ? 0x4000 : 0) | (vf ? 0x8000 : 0));
+        }
+        return words;
+    }
+
+    /// <summary>Writes the graphics when <see cref="Words"/> put new tiles in.</summary>
+    public string SaveTiles(bool allowExpand)
+    {
+        if (_tilesPlaced == 0) return "";
+        var t = ResourceWriter.Save(_rom, _ts.TilesResource, _tiles, allowExpand);
+        return t.Moved ? $"tile graphics moved to 0x{t.FileOffset:X6}" : "tile graphics written in place";
+    }
 
     /// <summary>Best palette row (2-7) for an 8x8 tile and its 4bpp colour indices.</summary>
     private (int Pal, byte[] Index) Quantise(uint[] px, int width, int x0, int y0)

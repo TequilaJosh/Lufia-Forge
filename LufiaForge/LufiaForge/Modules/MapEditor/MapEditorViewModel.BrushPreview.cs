@@ -14,12 +14,15 @@ public partial class MapEditorViewModel
     [ObservableProperty] private double _brushPreviewX, _brushPreviewY;
     [ObservableProperty] private bool _brushPreviewVisible;
 
-    /// <summary>The brush block's picture (after the brush or the tileset changes).</summary>
+    /// <summary>The brush block's picture (after the brush or the tileset changes): <see cref="BrushSize"/> blocks square.</summary>
     private void RefreshBrushPreview()
     {
         if (_tileset == null || Brush < 0 || Brush >= _tileset.MetatileCount) { BrushPreviewImage = null; return; }
-        var px = _tileset.MetatilePixels(Brush);
-        var bmp = BitmapSource.Create(16, 16, 96, 96, PixelFormats.Bgra32, null, px, 16 * 4);
+        var one = _tileset.MetatilePixels(Brush);
+        int n = BrushSize, w = n * 16;
+        var px = new uint[w * w];
+        for (int y = 0; y < w; y++) for (int x = 0; x < w; x++) px[y * w + x] = one[y % 16 * 16 + x % 16];
+        var bmp = BitmapSource.Create(w, w, 96, 96, PixelFormats.Bgra32, null, px, w * 4);
         bmp.Freeze();
         BrushPreviewImage = bmp;
     }
@@ -28,7 +31,7 @@ public partial class MapEditorViewModel
     private void BrushPreviewFollow(int x, int y)
     {
         bool show = Tool == MapTool.Paint && _stamp == null && !_picking && BrushPreviewImage != null;
-        if (show) { BrushPreviewX = x * 16; BrushPreviewY = y * 16; }
+        if (show) { BrushPreviewX = (x - BrushSize / 2) * 16; BrushPreviewY = (y - BrushSize / 2) * 16; }
         BrushPreviewVisible = show;
     }
 }

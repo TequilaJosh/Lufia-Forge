@@ -114,6 +114,7 @@ public partial class MapEditorViewModel
         _populating = false;
         NewMapNote = $"{MapFactory.FreeIds(_rom).Count} free map numbers left.";
         RefreshTestStart();
+        RefreshGraphicsChoices();
     }
 
     /// <summary>" (Alekia, Treck…)": the first maps that use a tileset, to recognise it in the list.</summary>

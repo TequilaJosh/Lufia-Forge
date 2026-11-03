@@ -249,6 +249,7 @@ public partial class MapEditorViewModel
         if (_paletteStart == null || _tileset == null) return;
         _paletteStart = null;
         var (x1, y1, x2, y2) = _paletteRect;
+        if (_srcTileset != null) { PickFromOther(x1, y1, x2, y2); OnPropertyChanged(nameof(PaletteBoxX)); OnPropertyChanged(nameof(PaletteBoxY)); return; }
         if (x1 == x2 && y1 == y2 || _paletteOrder != null)   // a sorted palette: one block (its neighbours aren't neighbours in the tileset)
         {
             BrushBoxW = BrushBoxH = 16;

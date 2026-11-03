@@ -167,7 +167,7 @@ public partial class MapEditorView : UserControl, LufiaForge.Modules.Common.ILoc
         var p = e.GetPosition(MapSurface);
         if (e.ClickCount == 2) { Vm?.OnDoubleClick(p.X, p.Y); return; }
         MapSurface.CaptureMouse();
-        Vm?.OnMouseDown(p.X, p.Y, (Keyboard.Modifiers & ModifierKeys.Control) != 0);
+        Vm?.OnMouseDown(p.X, p.Y, (Keyboard.Modifiers & ModifierKeys.Control) != 0, (Keyboard.Modifiers & ModifierKeys.Shift) != 0);
     }
 
     private void MapSurface_MouseMove(object sender, MouseEventArgs e)

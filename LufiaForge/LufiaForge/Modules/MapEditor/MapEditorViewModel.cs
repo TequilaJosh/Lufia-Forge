@@ -15,7 +15,7 @@ using Color = System.Windows.Media.Color;
 
 namespace LufiaForge.Modules.MapEditor;
 
-public enum MapTool { Select, Paint, Pick, AddExit, AddArrival, Area, AddTrigger }
+public enum MapTool { Select, Paint, Pick, AddExit, AddArrival, Area, AddTrigger, Fill }
 
 /// <summary>A rectangle drawn over the map (NPC, exit, arrival point, selection).</summary>
 public sealed class MapOverlay
@@ -338,6 +338,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost, LufiaFor
         OnPropertyChanged(nameof(IsAddArrivalTool));
         OnPropertyChanged(nameof(IsAreaTool));
         OnPropertyChanged(nameof(IsAddTriggerTool));
+        OnPropertyChanged(nameof(IsFillTool));
         OnPropertyChanged(nameof(ToolHint));
         if (value != MapTool.Paint) BrushPreviewVisible = false;
         if (value != MapTool.Paint) CancelStamp();
@@ -365,7 +366,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost, LufiaFor
 
     /// <summary>Where the brush's block sits in the palette image (16 blocks per row), for its highlight box.</summary>
     /// <summary>Where the brush's block is in the palette (its place in the chosen order; off the palette if it isn't listed).</summary>
-    private int BrushCell => _paletteOrder == null ? Brush : Array.IndexOf(_paletteOrder, Brush);
+    private int BrushCell => _srcTileset != null ? _srcPick : _paletteOrder == null ? Brush : Array.IndexOf(_paletteOrder, Brush);
     public double BrushBoxX => BrushCell < 0 ? -100 : BrushCell % 16 * 16;
     public double BrushBoxY => BrushCell < 0 ? -100 : BrushCell / 16 * 16;
 
@@ -521,11 +522,13 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost, LufiaFor
     {
         RefreshBrushPreview();
         if (_tileset == null) return;
-        _paletteOrder = PaletteOrder();
-        int count = _paletteOrder?.Length ?? _tileset.MetatileCount, cols = 16, rows = (count + cols - 1) / cols;
+        // the blocks of other graphics (From), in their tileset's order, or this map's
+        var shown = _srcTileset ?? _tileset;
+        _paletteOrder = _srcTileset != null ? null : PaletteOrder();
+        int count = _paletteOrder?.Length ?? shown.MetatileCount, cols = 16, rows = (count + cols - 1) / cols;
         int w = cols * 16, h = Math.Max(1, rows) * 16;
         var buf = new uint[w * h];
-        for (int i = 0; i < count; i++) _tileset.DrawMetatile(buf, w, (i % cols) * 16, (i / cols) * 16, _paletteOrder?[i] ?? i);
+        for (int i = 0; i < count; i++) shown.DrawMetatile(buf, w, (i % cols) * 16, (i / cols) * 16, _paletteOrder?[i] ?? i);
         var bmp = new WriteableBitmap(w, h, 96, 96, PixelFormats.Bgra32, null);
         bmp.WritePixels(new Int32Rect(0, 0, w, h), buf, w * 4, 0);
         PaletteImage = bmp;
@@ -765,7 +768,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost, LufiaFor
     private static bool Inside(int x, int y, int x1, int y1, int x2, int y2) =>
         x >= x1 && x < Math.Max(x2, x1 + 1) && y >= y1 && y < Math.Max(y2, y1 + 1);
 
-    public void OnMouseDown(double px, double py, bool ctrl = false)
+    public void OnMouseDown(double px, double py, bool ctrl = false, bool shift = false)
     {
         if (_map == null) return;
         _inGesture = true;
@@ -782,7 +785,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost, LufiaFor
             _picking = true;   // eyedropper: no painting until the button is released
             Brush = _map.GetTile(x, y) & 0x3FF;
             Status = $"Picked block {Brush:X3} from ({x}, {y}). Paint with it, or Ctrl + click another block.";
-            if (Tool != MapTool.Paint) Tool = MapTool.Paint;
+            if (Tool is not (MapTool.Paint or MapTool.Fill)) Tool = MapTool.Paint;
             return;
         }
         switch (Tool)
@@ -798,6 +801,9 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost, LufiaFor
             case MapTool.Paint:
                 _stroke = new();
                 PaintAt(x, y);
+                break;
+            case MapTool.Fill:
+                FillAt(x, y, shift);
                 break;
             case MapTool.AddExit:
             {
@@ -941,12 +947,22 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost, LufiaFor
         if (_paletteOrder != null) { if (px < 0 || px >= 256 || i < 0 || i >= _paletteOrder.Length) return; i = _paletteOrder[i]; }
         if (i < 0 || i >= _tileset.MetatileCount) return;
         Brush = i;
-        Tool = MapTool.Paint;
+        if (Tool != MapTool.Fill) Tool = MapTool.Paint;
     }
 
+    /// <summary>Paints the brush on (x, y), or the <see cref="BrushSize"/> square around it.</summary>
     private void PaintAt(int x, int y)
     {
+        int r = BrushSize / 2;
+        for (int yy = y - r; yy <= y + r; yy++)
+            for (int xx = x - r; xx <= x + r; xx++)
+                PaintCell(xx, yy);
+    }
+
+    private void PaintCell(int x, int y)
+    {
         if (_map == null || _tileset == null || MapImage == null || _pixels == null) return;
+        if (x < 0 || y < 0 || x >= _map.Width || y >= _map.Height) return;
         ushort before = _map.GetTile(x, y);
         if ((before & 0x3FF) == Brush) return;
         _stroke ??= new();
