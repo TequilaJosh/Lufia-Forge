@@ -43,14 +43,16 @@ is written), `Modules/Lufia2/L2MapWindows.cs` (pick a place, pieces and presets,
   under the mouse (both layers' blocks, walls, what stands there).
 * **Blocks**: the order (block set order, the blocks the game's maps with these graphics use most, or only this map's),
   recent brushes, "Goes with this block" (what the game's maps put to the right, left, below and above the brush),
-  Pieces... (copy a part of any map with the same block set, or one of your presets), Edit blocks... (the block editor).
-  Pieces... lists every preset (★), also those kept on other graphics: used on this map, each of its blocks becomes a
+  Pieces and presets... (one of your presets, or a part of any map with the same block set), Edit blocks... (the block
+  editor). Presets are kept for every ROM in %APPDATA%\LufiaForge\l2presets.json. Pieces and presets... lists every preset (★), also those kept on other graphics: used on this map, each of its blocks becomes a
   block of this map's set that draws the same, or a new one added to the set, with tiles copied into the tile set
   (recoloured to this map's closest colour rows) when it has none of that shape, as chests from other maps are; the
   piece keeps its own walls. One Edit > Undo step; refused, saying why, when the block set is full (1024 blocks, as
   Secret Skills Cave's) or the tile set has no free tile. Checked in the window: the church kept on Elcid (block set 2)
   placed on map 04 (block set 3): 47 blocks and 91 tiles added.
-* **Map settings**: the block set, tile set and palette set (drawn at once; block sets and tile sets go in pairs), the
+* **Map settings**: the graphics, one list: each mix of block set, tile set, tile animation, palette set and colour
+  cycling a game map uses, named after its maps (drawn at once, written with the map; the five go together, as the tile
+  animation also picks where the palettes start), the
   size, adding a character, and the test start (a new game starts on this map at a preset point; Normal start puts the
   game's opening back).
 * **Names**: "Rename or delete this map" (under the list): "Name in the game" writes the name the save menu and the
@@ -174,7 +176,8 @@ is written), `Modules/Lufia2/L2MapWindows.cs` (pick a place, pieces and presets,
   sprite (Dankirk North Cave B5's character 1 as a soldier, Dragon Mountain's character 2 as a monster). A new one is
   `68 id sprite` at the top of the start-up script; a sprite change rewrites every 68 / 7B of that id; one taken out loses its 68 / 7B (jumps to it go to the next step) and its talk event (+6).
 * **Step-on areas**: a new one gets an empty event in the +8 list; one taken out loses it.
-* **Graphics**: the map's bytes in the block set, tile set and palette set lists ($CF:F72E, $CF:F81E, $CF:FA08).
+* **Graphics**: the map's bytes in the block set, tile set, tile animation, palette set and colour cycling lists
+  ($CF:F72E, $CF:F81E, $CF:F90E, $CF:FA08, $CF:FBA6; moved with new maps).
 * **Block editor**: the block set file (0x130 + set): 8 bytes per block from +0x10, four SNES words (top left, bottom
   left, top right, bottom right: tile 10 bits, colour row 3 bits, priority, flip across, flip up-down).
 * **World map**: file 0x28C (sea floor 0x28F), a 0x40-byte head then 128 x 128 u16 big-block numbers; the zones are file

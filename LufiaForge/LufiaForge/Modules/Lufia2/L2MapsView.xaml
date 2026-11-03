@@ -72,7 +72,7 @@
                         <Button Content="Fill" Style="{StaticResource LufiaButton}" Padding="9,4" Command="{Binding FillAreaCommand}" Margin="0,0,4,0" ToolTip="Fill the selected area with the brush block"/>
                         <Button Content="Delete" Style="{StaticResource LufiaButton}" Padding="9,4" Command="{Binding DeleteAreaCommand}" ToolTip="Clear the layer being painted in the area (Del)"/>
                         <Button Content="★  Save as preset..." Style="{StaticResource LufiaButtonGold}" Padding="9,4" Margin="4,0,0,0" Command="{Binding SaveAreaAsPresetCommand}"
-                                ToolTip="Keep the selected piece (a house you built, a bridge, a garden) to place again with Pieces..., on any map with the same blocks"/>
+                                ToolTip="Keep the selected piece (a house you built, a bridge, a garden) to place again on any map: Pieces and presets..., under the blocks, lists it with a ★"/>
                     </StackPanel>
 
                     <Rectangle Width="1" Fill="{StaticResource BorderPurpleBrush}" Margin="14,2,12,2"/>
@@ -503,8 +503,8 @@
                         <TextBlock DockPanel.Dock="Top" Text="{Binding BrushText}" Style="{StaticResource LufiaLabel}" TextWrapping="Wrap"
                                    Foreground="{StaticResource GoldLightBrush}" Margin="0,0,0,6"/>
                         <UniformGrid DockPanel.Dock="Top" Columns="2" Margin="0,0,0,6">
-                            <Button Content="🧩  Pieces..." Style="{StaticResource LufiaButtonGold}" Padding="9,4" Margin="0,0,3,0" Command="{Binding PiecesFromMapsCommand}"
-                                    ToolTip="Copy part of any map with the same blocks (a house, a bridge, a river bend), or one of your presets, and place it on this map"/>
+                            <Button Content="🧩  Pieces and ★ presets..." Style="{StaticResource LufiaButtonGold}" Padding="9,4" Margin="0,0,3,0" Command="{Binding PiecesFromMapsCommand}"
+                                    ToolTip="Place one of your presets (★, kept with Save as preset on any map), or copy part of a map with the same blocks (a house, a bridge, a river bend)"/>
                             <Button Content="🧱  Edit blocks…" Style="{StaticResource LufiaButton}" Padding="9,4" Margin="3,0,0,0" Command="{Binding EditBlocksCommand}"
                                     ToolTip="Block editor: each block's four 8x8 tiles, their colour rows, flips and priority"/>
                         </UniformGrid>
@@ -578,24 +578,8 @@
                         <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="380">
                             <StackPanel Margin="0,8,0,0">
                                 <TextBlock Text="Graphics" Style="{StaticResource GdSection}"/>
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="70"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition/><RowDefinition/><RowDefinition/>
-                                    </Grid.RowDefinitions>
-                                    <TextBlock Text="Blocks" Style="{StaticResource GdFieldLabel}"/>
-                                    <ComboBox Grid.Column="1" Style="{StaticResource GdCombo}" Width="Auto" HorizontalAlignment="Stretch" ItemsSource="{Binding BlockSetChoices}" SelectedIndex="{Binding BlockSetChoice}"
-                                              ToolTip="The block set: how the map's blocks are built from tiles (goes with a tile set)"/>
-                                    <TextBlock Grid.Row="1" Text="Tiles" Style="{StaticResource GdFieldLabel}"/>
-                                    <ComboBox Grid.Row="1" Grid.Column="1" Style="{StaticResource GdCombo}" Width="Auto" HorizontalAlignment="Stretch" ItemsSource="{Binding TileSetChoices}" SelectedIndex="{Binding TileSetChoice}"
-                                              ToolTip="The tile set: the 8x8 pictures the blocks are made of"/>
-                                    <TextBlock Grid.Row="2" Text="Colours" Style="{StaticResource GdFieldLabel}"/>
-                                    <ComboBox Grid.Row="2" Grid.Column="1" Style="{StaticResource GdCombo}" Width="Auto" HorizontalAlignment="Stretch" ItemsSource="{Binding PaletteSetChoices}" SelectedIndex="{Binding PaletteSetChoice}"
-                                              ToolTip="The palette set (edit the colours in Graphics > Map palettes)"/>
-                                </Grid>
+                                <ComboBox Style="{StaticResource GdCombo}" Width="Auto" HorizontalAlignment="Stretch" ItemsSource="{Binding GraphicsChoices}" SelectedIndex="{Binding GraphicsChoice}"
+                                          ToolTip="Draw this map with the graphics of other maps: their blocks, tiles, colours and animations together (edit the colours in Graphics > Map palettes)"/>
 
                                 <TextBlock Text="Size" Style="{StaticResource GdSection}" Margin="0,10,0,0"/>
                                 <StackPanel Orientation="Horizontal">

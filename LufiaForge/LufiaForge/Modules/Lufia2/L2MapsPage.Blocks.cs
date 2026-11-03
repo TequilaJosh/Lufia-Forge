@@ -318,7 +318,7 @@ public partial class L2MapsPage
         string? name = L2PiecesWindow.AskName(System.Windows.Application.Current.MainWindow);
         if (string.IsNullOrWhiteSpace(name)) return;
         L2Presets.Add(name.Trim(), Cut(r) with { SourceMap = _edit.MapId, PaletteSet = _edit.PaletteSetIndex });
-        Status = $"Kept \"{name.Trim()}\": Pieces... (★) places it again on any map (on other graphics its blocks are added to that map's block set).";
+        Status = $"Kept \"{name.Trim()}\": \"Pieces and ★ presets...\" (under the blocks) places it again on any map (on other graphics its blocks are added to that map's block set).";
     }
 
     // ---------------------------------------------------------------- blocks

@@ -436,7 +436,7 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
 
     private void Restore(L2MapEdit.State s)
     {
-        bool sets = _edit!.BlockSetIndex != s.BlockSet || _edit.TileSetIndex != s.TileSet || _edit.PaletteSetIndex != s.PaletteSet;
+        bool sets = _edit!.BlockSetIndex != s.BlockSet || _edit.TileSetIndex != s.TileSet || _edit.PaletteSetIndex != s.PaletteSet || _edit.AnimIndex != s.Anim;
         _edit.Restore(s);
         if (Selection != null) Selection = Find(Selection.Kind, Selection.Index);
         LoadSettings();
