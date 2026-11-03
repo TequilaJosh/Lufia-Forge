@@ -339,6 +339,11 @@ public partial class L2MapsPage
             if (WritePendingEdits() is { } why) { Status = "The map couldn't be written first: " + why; return; }
             clip = BringIn(clip);
             if (clip == null) return;
+            string note = Status;
+            Tool = L2Tool.Paint;
+            StartStamp(clip);
+            Status = note;   // what was added, not only "click to place"
+            return;
         }
         Tool = L2Tool.Paint;
         StartStamp(clip);

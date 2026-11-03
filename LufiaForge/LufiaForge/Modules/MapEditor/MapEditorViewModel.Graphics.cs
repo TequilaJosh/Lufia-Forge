@@ -143,24 +143,7 @@ public partial class MapEditorViewModel
         var ids = new List<int>();
         for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) ids.Add(Math.Min((y1 + y) * 16 + x1 + x, n - 1));
         if (ids[0] < 0) return;
-        if (!WritePendingFirst()) return;
-        BlockBring.Result r;
-        try
-        {
-            try { r = BlockBring.Bring(_rom, _map, _srcMap, ids); }
-            catch (BlockBring.NeedsRoomException ex)
-            {
-                if (!MakeRoomFor(ex.Message + " Blocks from other graphics go into spare blocks.")) return;
-                if (_map == null || _srcMap == null) return;
-                r = BlockBring.Bring(_rom, _map, _srcMap, ids);
-            }
-        }
-        catch (Exception ex) { Status = "These blocks can't be added to this map's tileset: " + ex.Message; return; }
-        if (r.Added > 0)
-        {
-            _mainVm?.NotifyRomModified($"Tileset {_map.Tileset}: {r.Added} block{(r.Added == 1 ? "" : "s")} from tileset {_srcMap.Tileset}");
-            _tileset = MapTileset.ForMap(_rom, _map);
-        }
+        if (BringBlocks(_srcMap, ids) is not { } r || _map == null) return;
         _srcPick = y1 * 16 + x1;
         if (w * h == 1)
         {
@@ -179,11 +162,40 @@ public partial class MapEditorViewModel
         }
         BuildPalette();
         OnBrushBoxChanged();
-        Status = (r.Added > 0 ? $"{r.Added} block{(r.Added == 1 ? "" : "s")} added to tileset {_map.Tileset}" + (r.NewTiles > 0 ? $" ({r.NewTiles} new tile{(r.NewTiles == 1 ? "" : "s")}, colours matched to this map's palette)" : "") +
-                                $": {r.Where}. Edit > Undo takes them out. "
-                              : "This map's tileset has these blocks already. ")
-               + (w * h == 1 ? $"Brush: block {Brush:X3}." : "Click on the map to stamp them, Esc to stop.");
+        Status = BroughtText(r) + (w * h == 1 ? $"Brush: block {Brush:X3}." : "Click on the map to stamp them, Esc to stop.");
     }
+
+    /// <summary>Blocks of <paramref name="source"/>'s graphics as blocks of this map's tileset (added when it has none that
+    /// draw the same; room is made first on a town tileset, asking). Null when they can't be: the status says why.</summary>
+    private BlockBring.Result? BringBlocks(LufiaMap source, IReadOnlyList<int> ids)
+    {
+        if (_rom == null || _map == null) return null;
+        if (!WritePendingFirst()) return null;
+        BlockBring.Result r;
+        try
+        {
+            try { r = BlockBring.Bring(_rom, _map, source, ids); }
+            catch (BlockBring.NeedsRoomException ex)
+            {
+                if (!MakeRoomFor(ex.Message + " Blocks from other graphics go into spare blocks.")) return null;
+                if (_map == null) return null;
+                r = BlockBring.Bring(_rom, _map, source, ids);
+            }
+        }
+        catch (Exception ex) { Status = "These blocks can't be added to this map's tileset: " + ex.Message; return null; }
+        if (r.Added > 0)
+        {
+            _mainVm?.NotifyRomModified($"Tileset {_map.Tileset}: {r.Added} block{(r.Added == 1 ? "" : "s")} from tileset {source.Tileset}");
+            _tileset = MapTileset.ForMap(_rom, _map);
+            BuildPalette();
+        }
+        return r;
+    }
+
+    private string BroughtText(BlockBring.Result r) => r.Added > 0
+        ? $"{r.Added} block{(r.Added == 1 ? "" : "s")} added to tileset {_map?.Tileset}" + (r.NewTiles > 0 ? $" ({r.NewTiles} new tile{(r.NewTiles == 1 ? "" : "s")}, colours matched to this map's palette)" : "") +
+          $": {r.Where}. Edit > Undo takes them out. "
+        : "This map's tileset has these blocks already. ";
 
     // ── brush size and fill ──
 
