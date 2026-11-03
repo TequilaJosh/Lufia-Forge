@@ -19,12 +19,16 @@ public sealed class L2MapEdit
     public int BlockSetIndex { get; set; }
     public int TileSetIndex { get; set; }
     public int PaletteSetIndex { get; set; }
+    /// <summary>The tile animation (which tiles move, and where the palettes start) and colour cycling: they go with the
+    /// tile set and palette set, so the map's graphics are the five together.</summary>
+    public int AnimIndex { get; set; }
+    public int ColourAnimIndex { get; set; }
 
     private readonly byte[] _origInfo;
     private readonly int _origInfoAt;
     private readonly Dictionary<int, int> _origSprites;
     private readonly HashSet<int> _origCharacters, _origTriggers;
-    private readonly int _origBlockSet, _origTileSet, _origPaletteSet;
+    private readonly int _origBlockSet, _origTileSet, _origPaletteSet, _origAnim, _origColourAnim;
     private readonly int _origWidth, _origHeight;
     private readonly int[][] _origBlocks;
     private readonly byte[][] _origFlags;
@@ -68,6 +72,8 @@ public sealed class L2MapEdit
         BlockSetIndex = _origBlockSet = rom.ReadByte(L2Maps.BlockSetAt(rom, map));
         TileSetIndex = _origTileSet = rom.ReadByte(L2Maps.TileSetAt(rom, map));
         PaletteSetIndex = _origPaletteSet = rom.ReadByte(L2Maps.PaletteSetAt(rom, map));
+        AnimIndex = _origAnim = rom.ReadByte(L2Maps.AnimIndexAt(rom, map));
+        ColourAnimIndex = _origColourAnim = rom.ReadByte(L2Maps.ColourAnimAt(rom, map));
         _origWidth = Map.Layers[0].Width; _origHeight = Map.Layers[0].Height;
         _origBlocks = Map.Layers.Select(l => (int[])l.Blocks.Clone()).ToArray();
         _origFlags = Map.Layers.Select(l => (byte[])l.Flags.Clone()).ToArray();
@@ -450,16 +456,16 @@ public sealed class L2MapEdit
     public L2Maps.Map ForDrawing => new()
     {
         Id = Map.Id, Name = Map.Name, Layers = Map.Layers,
-        BlockSet = L2Maps.BlockSetFileBase + BlockSetIndex, TileSet = L2Maps.TileSetFileBase + TileSetIndex, PaletteSet = PaletteSetIndex,
+        BlockSet = L2Maps.BlockSetFileBase + BlockSetIndex, TileSet = L2Maps.TileSetFileBase + TileSetIndex, PaletteSet = PaletteSetIndex, AnimIndex = AnimIndex,
     };
 
     // ---------------------------------------------------------------- undo
 
     /// <summary>Everything the editor can change, for one undo step.</summary>
-    public sealed record State(int W, int H, int[][] Blocks, byte[][] Flags, byte[] Info, Dictionary<int, int> Sprites, int BlockSet, int TileSet, int PaletteSet, List<L2Chests.Rec> Chests);
+    public sealed record State(int W, int H, int[][] Blocks, byte[][] Flags, byte[] Info, Dictionary<int, int> Sprites, int BlockSet, int TileSet, int PaletteSet, List<L2Chests.Rec> Chests, int Anim, int ColourAnim);
 
     public State Save() => new(Width, Height, Map.Layers.Select(l => (int[])l.Blocks.Clone()).ToArray(), Map.Layers.Select(l => (byte[])l.Flags.Clone()).ToArray(),
-                               (byte[])Info.Clone(), new Dictionary<int, int>(Sprites), BlockSetIndex, TileSetIndex, PaletteSetIndex, new List<L2Chests.Rec>(Chests));
+                               (byte[])Info.Clone(), new Dictionary<int, int>(Sprites), BlockSetIndex, TileSetIndex, PaletteSetIndex, new List<L2Chests.Rec>(Chests), AnimIndex, ColourAnimIndex);
 
     public void Restore(State s)
     {
@@ -467,12 +473,12 @@ public sealed class L2MapEdit
         Map = new L2Maps.Map { Id = Map.Id, Name = Map.Name, Layers = layers, BlockSet = Map.BlockSet, TileSet = Map.TileSet };
         Info = (byte[])s.Info.Clone();
         Sprites = new Dictionary<int, int>(s.Sprites);
-        BlockSetIndex = s.BlockSet; TileSetIndex = s.TileSet; PaletteSetIndex = s.PaletteSet;
+        BlockSetIndex = s.BlockSet; TileSetIndex = s.TileSet; PaletteSetIndex = s.PaletteSet; AnimIndex = s.Anim; ColourAnimIndex = s.ColourAnim;
         Chests = new List<L2Chests.Rec>(s.Chests);
     }
 
     public static bool Same(State a, State b) =>
-        a.W == b.W && a.H == b.H && a.BlockSet == b.BlockSet && a.TileSet == b.TileSet && a.PaletteSet == b.PaletteSet &&
+        a.W == b.W && a.H == b.H && a.BlockSet == b.BlockSet && a.TileSet == b.TileSet && a.PaletteSet == b.PaletteSet && a.Anim == b.Anim && a.ColourAnim == b.ColourAnim &&
         a.Info.AsSpan().SequenceEqual(b.Info) && a.Chests.SequenceEqual(b.Chests) && a.Sprites.Count == b.Sprites.Count && a.Sprites.All(kv => b.Sprites.TryGetValue(kv.Key, out var v) && v == kv.Value) &&
         a.Blocks.Zip(b.Blocks).All(p => p.First.AsSpan().SequenceEqual(p.Second)) && a.Flags.Zip(b.Flags).All(p => p.First.AsSpan().SequenceEqual(p.Second));
 
@@ -485,7 +491,8 @@ public sealed class L2MapEdit
     public bool SpritesEdited(int id) => Sprites.TryGetValue(id, out int v) && (!_origSprites.TryGetValue(id, out int o) || o != v);
 
     public bool SpritesChanged => Sprites.Count != _origSprites.Count || Sprites.Any(kv => !_origSprites.TryGetValue(kv.Key, out var v) || v != kv.Value);
-    public bool SetsChanged => BlockSetIndex != _origBlockSet || TileSetIndex != _origTileSet || PaletteSetIndex != _origPaletteSet;
+    public bool SetsChanged => BlockSetIndex != _origBlockSet || TileSetIndex != _origTileSet || PaletteSetIndex != _origPaletteSet ||
+                               AnimIndex != _origAnim || ColourAnimIndex != _origColourAnim;
     public bool ChestsChanged => !Chests.SequenceEqual(_origChests);
     public bool HasChanges => LayersChanged || InfoChanged || SpritesChanged || SetsChanged || ChestsChanged;
 
@@ -590,6 +597,8 @@ public sealed class L2MapEdit
             rom.WriteByte(L2Maps.BlockSetAt(rom, MapId), (byte)BlockSetIndex);
             rom.WriteByte(L2Maps.TileSetAt(rom, MapId), (byte)TileSetIndex);
             rom.WriteByte(L2Maps.PaletteSetAt(rom, MapId), (byte)PaletteSetIndex);
+            rom.WriteByte(L2Maps.AnimIndexAt(rom, MapId), (byte)AnimIndex);
+            rom.WriteByte(L2Maps.ColourAnimAt(rom, MapId), (byte)ColourAnimIndex);
             done.Add("graphics");
         }
         return done.Count == 0 ? "Nothing changed." : "Written: " + string.Join(", ", done) + ".";

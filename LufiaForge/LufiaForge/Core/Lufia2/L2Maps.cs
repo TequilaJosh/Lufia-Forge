@@ -44,6 +44,8 @@ public static class L2Maps
         public int TileSet { get; init; }
         /// <summary>The palette set to draw it with (-1: the one the ROM gives the map).</summary>
         public int PaletteSet { get; init; } = -1;
+        /// <summary>The tile animation to draw it with (it picks where the palettes start; -1: the map's own).</summary>
+        public int AnimIndex { get; init; } = -1;
     }
 
     /// <summary>A map's name: zero-terminated at the header table + u16. It can use the text dictionary (05 / 06 /
@@ -149,7 +151,7 @@ public static class L2Maps
     public static uint[][] AllBlocks(RomBuffer rom, Map map)
     {
         byte[] blockSet = L2Rom.ReadFile(rom, map.BlockSet), tiles = L2Rom.ReadFile(rom, map.TileSet);
-        var pals = Palettes(rom, map.Id, map.PaletteSet);
+        var pals = Palettes(rom, map.Id, map.PaletteSet, map.AnimIndex);
         int count = blockSet.Length >= 4 ? Math.Max(0, (int)(short)(blockSet[2] | blockSet[3] << 8)) : 0;
         var all = new uint[count][];
         for (int b = 0; b < count; b++)
@@ -165,10 +167,10 @@ public static class L2Maps
     }
 
     /// <summary>The map's 6 background palettes (CGRAM rows 2-7), 16 ARGB colours each.</summary>
-    public static uint[][] Palettes(RomBuffer rom, int id, int paletteSet = -1)
+    public static uint[][] Palettes(RomBuffer rom, int id, int paletteSet = -1, int animIndex = -1)
     {
         int set = paletteSet >= 0 ? paletteSet : rom.ReadByte(PaletteSetAt(rom, id));
-        int anim = rom.ReadByte(AnimIndexAt(rom, id));
+        int anim = animIndex >= 0 ? animIndex : rom.ReadByte(AnimIndexAt(rom, id));
         int v29 = rom.ReadByte(AnimData + anim * 2 + 1);
         int palOff = (v29 >> 4) != 0 ? 0x20 : 0x10;
         int ptr = rom.ReadUInt16Le(PaletteSetPointers + Math.Max(0, set - 1) * 2);
@@ -198,7 +200,7 @@ public static class L2Maps
         int id = map.Id;
         byte[] blockSet = L2Rom.ReadFile(rom, map.BlockSet);
         byte[] tiles = L2Rom.ReadFile(rom, map.TileSet);
-        var pals = Palettes(rom, id, map.PaletteSet);
+        var pals = Palettes(rom, id, map.PaletteSet, map.AnimIndex);
         int w = map.Layers.Max(l => l.Width) * 16, h = map.Layers.Max(l => l.Height) * 16;
         var px = new uint[w * h];
         int blockCount = blockSet.Length >= 4 ? (short)(blockSet[2] | blockSet[3] << 8) : 0;

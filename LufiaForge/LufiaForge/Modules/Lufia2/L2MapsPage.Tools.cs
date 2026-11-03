@@ -507,7 +507,7 @@ public partial class L2MapsPage
             if (_clip == null || _clip.BlockSet != -1 - _world.Map) { Status = "Copy an area of this map first (big blocks can't go between the world map, the sea floor and towns)."; return; }
             StartStamp(_clip); return;
         }
-        if (_edit == null || _clip == null) { Status = "Nothing copied yet: drag an area with the Area tool and Copy it (or use Pieces...)."; return; }
+        if (_edit == null || _clip == null) { Status = "Nothing copied yet: drag an area with the Area tool and Copy it (or use Pieces and presets...)."; return; }
         StartStamp(_clip);
     }
 

@@ -320,7 +320,7 @@ public sealed class L2PiecesWindow : Window
         buttons.Children.Add(L2Ui.Button("Save", true, (_, _) => w.DialogResult = true));
         buttons.Children.Add(L2Ui.Button("Cancel", false, (_, _) => w.DialogResult = false));
         var sp = new StackPanel { Margin = new Thickness(12) };
-        sp.Children.Add(L2Ui.Label("A name for the piece (Pieces... lists it with a ★ on every map):"));
+        sp.Children.Add(L2Ui.Label("A name for the piece (\"Pieces and ★ presets...\", under the blocks, lists it with a ★ on every map):"));
         sp.Children.Add(box); sp.Children.Add(buttons);
         w.Content = sp;
         w.Loaded += (_, _) => { box.Focus(); box.SelectAll(); };

@@ -10,34 +10,22 @@ public partial class L2MapsPage
 {
     // ---------------------------------------------------------------- graphics, size, test start
 
-    public ObservableCollection<string> BlockSetChoices { get; } = new();
-    public ObservableCollection<string> TileSetChoices { get; } = new();
-    public ObservableCollection<string> PaletteSetChoices { get; } = new();
-    [ObservableProperty] private int _blockSetChoice = -1, _tileSetChoice = -1, _paletteSetChoice = -1;
+    /// <summary>The graphics a map can have: each mix of block set, tile set, tile animation, palette set and colour
+    /// cycling a map of the game uses (they go together; mixed by hand they draw scrambled or in the wrong colours).</summary>
+    public ObservableCollection<string> GraphicsChoices { get; } = new();
+    private readonly List<(int Bs, int Ts, int Anim, int Ps, int Ca)> _graphics = new();
+    [ObservableProperty] private int _graphicsChoice = -1;
     [ObservableProperty] private int _mapWidth, _mapHeight;
     [ObservableProperty] private int _testStartPoint;
     [ObservableProperty] private string _testStartNote = "";
     private bool _loadingSettings;
-
-    // the game's own sets (1 up): 27 block sets, 20 tile sets, 87 palette sets
-    private const int BlockSets = 27, TileSets = 20, PaletteSets = 87;
 
     private void LoadSettings()
     {
         _loadingSettings = true;
         try
         {
-            if (BlockSetChoices.Count == 0 && _rom != null)
-            {
-                var uses = Enumerable.Range(2, L2Maps.Count(_rom!) - 2).ToList();
-                string Used(Func<RomBuffer, int, int> at, int v) { var m = uses.Where(id => _rom.ReadByte(at(_rom, id)) == v).ToList(); return m.Count == 0 ? "" : $"  ({m.Count} map{(m.Count == 1 ? "" : "s")}, e.g. {NameOf(m[0])})"; }
-                for (int i = 1; i <= BlockSets; i++) BlockSetChoices.Add($"{i}{Used(L2Maps.BlockSetAt, i)}");
-                for (int i = 1; i <= TileSets; i++) TileSetChoices.Add($"{i}{Used(L2Maps.TileSetAt, i)}");
-                for (int i = 1; i <= PaletteSets; i++) PaletteSetChoices.Add($"{i}{Used(L2Maps.PaletteSetAt, i)}");
-            }
-            BlockSetChoice = _edit?.BlockSetIndex - 1 ?? -1;
-            TileSetChoice = _edit?.TileSetIndex - 1 ?? -1;
-            PaletteSetChoice = _edit?.PaletteSetIndex - 1 ?? -1;
+            LoadGraphicsChoices();
             MapWidth = _edit?.Width ?? 0; MapHeight = _edit?.Height ?? 0;
             UpdateTestStartNote();
             UpdateNewMapNote();
@@ -45,20 +33,43 @@ public partial class L2MapsPage
         finally { _loadingSettings = false; }
     }
 
-    partial void OnBlockSetChoiceChanged(int value) => ChangeSets("the block set", e => e.BlockSetIndex = value + 1, value);
-    partial void OnTileSetChoiceChanged(int value) => ChangeSets("the tile set", e => e.TileSetIndex = value + 1, value);
-    partial void OnPaletteSetChoiceChanged(int value) => ChangeSets("the palette set", e => e.PaletteSetIndex = value + 1, value);
+    private (int, int, int, int, int) GraphicsOf(L2MapEdit e) => (e.BlockSetIndex, e.TileSetIndex, e.AnimIndex, e.PaletteSetIndex, e.ColourAnimIndex);
 
-    private void ChangeSets(string what, Action<L2MapEdit> set, int value)
+    /// <summary>The graphics list again (from the ROM: what each map uses now, this map as edited), and this map's choice.</summary>
+    private void LoadGraphicsChoices()
     {
-        if (_loadingSettings || _edit == null || value < 0) return;
+        GraphicsChoices.Clear(); _graphics.Clear();
+        if (_rom == null || _edit == null || _edit.IsWorld) { GraphicsChoice = -1; return; }
+        var groups = Enumerable.Range(2, L2Maps.Count(_rom) - 2)
+            .Where(m => m != _edit.MapId && !L2NewMaps.IsFree(_rom, m))
+            .GroupBy(m => (Bs: (int)_rom.ReadByte(L2Maps.BlockSetAt(_rom, m)), Ts: (int)_rom.ReadByte(L2Maps.TileSetAt(_rom, m)),
+                           Anim: (int)_rom.ReadByte(L2Maps.AnimIndexAt(_rom, m)), Ps: (int)_rom.ReadByte(L2Maps.PaletteSetAt(_rom, m)),
+                           Ca: (int)_rom.ReadByte(L2Maps.ColourAnimAt(_rom, m))))
+            .ToDictionary(g => g.Key, g => g.ToList());
+        var mine = GraphicsOf(_edit);
+        if (!groups.ContainsKey(mine)) groups[mine] = new();
+        foreach (var (k, maps) in groups.OrderBy(g => g.Value.Count == 0 ? -1 : g.Value[0]))
+        {
+            string who = maps.Count == 0 ? "Only this map"
+                : NameOf(maps[0]) + (maps.Count > 1 ? $" and {maps.Count - 1} other map{(maps.Count == 2 ? "" : "s")}" : "") + (k == mine ? " (and this map)" : "");
+            _graphics.Add(k);
+            GraphicsChoices.Add($"{who}   (blocks {k.Bs}, tiles {k.Ts}, colours {k.Ps})");
+        }
+        GraphicsChoice = _graphics.IndexOf(mine);
+    }
+
+    partial void OnGraphicsChoiceChanged(int value)
+    {
+        if (_loadingSettings || _edit == null || value < 0 || value >= _graphics.Count) return;
+        var g = _graphics[value];
         var before = _edit.Save();
-        set(_edit);
+        _edit.BlockSetIndex = g.Bs; _edit.TileSetIndex = g.Ts; _edit.AnimIndex = g.Anim; _edit.PaletteSetIndex = g.Ps; _edit.ColourAnimIndex = g.Ca;
         if (L2MapEdit.Same(before, _edit.Save())) return;
-        _history.Add((before, "changing " + what)); _redo.Clear();
+        _history.Add((before, "changing the graphics")); _redo.Clear();
         _stats.Clear();
         ReloadBlocks(); Refresh();
-        Status = $"The map is drawn with {what} {value + 1} now (written with the map; Undo takes it back). Block sets and tile sets go in pairs: a block set drawn with another tile set looks scrambled.";
+        Status = $"The map is drawn with the graphics of {GraphicsChoices[value].Split("   ")[0]} now: their blocks, tiles, colours and animations (written with the map; Undo takes it back). " +
+                 "The map keeps its block numbers, so on other blocks it looks scrambled until you paint it again.";
     }
 
     [RelayCommand]
