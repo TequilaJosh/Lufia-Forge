@@ -10,7 +10,8 @@ is written), `Modules/Lufia2/L2MapWindows.cs` (pick a place, pieces and presets,
 | Tool (key) | What it does |
 |---|---|
 | Select (S) | Click an exit, step-on area, character, preset point, treasure spot or door to edit it in the inspector; drag to move it (an exit's or area's bottom-right block resizes it). Clicking the same block again reaches what lies under it. Double-click: an exit goes to its map, a character opens its talk event, an area its event. Del takes it out. |
-| Paint (B) | Paints the brush on the ground or the upper layer ("Paint on"). Drag on the block list for a brush of several blocks. Right-click or Ctrl + click picks the block under the mouse. |
+| Paint (B) | Paints the brush on the ground or the upper layer ("Paint on"). Size (beside it, or [ and ]): a one-block brush paints 1 x 1, 3 x 3, 5 x 5 or 7 x 7 around the mouse. Drag on the block list for a brush of several blocks (painted as picked). Right-click or Ctrl + click picks the block under the mouse. |
+| Fill (G) | Click a block: it and every block joined to it (side by side) that is the same become the brush, on the layer painted; a brush of several blocks repeats. Shift + click, or "Fill the layer", fills the whole layer (on the world map, the whole map). One Undo step. |
 | Pick (I) | Takes the block under the mouse as the brush. |
 | Area (M) | Drag a rectangle: Copy (Ctrl+C), Cut (Ctrl+X), Paste (Ctrl+V, then click to place; Esc stops), Fill, Delete (Del), Save as preset. Copies take both layers and their walls; they paste on any map with the same graphics. |
 | Collision (L) | Paints "can't walk", doorway, wall on the top or left edge, upper level or room border; right-click clears a block. |
@@ -43,10 +44,19 @@ is written), `Modules/Lufia2/L2MapWindows.cs` (pick a place, pieces and presets,
 * **Blocks**: the order (block set order, the blocks the game's maps with these graphics use most, or only this map's),
   recent brushes, "Goes with this block" (what the game's maps put to the right, left, below and above the brush),
   Pieces... (copy a part of any map with the same block set, or one of your presets), Edit blocks... (the block editor).
+  Pieces... lists every preset (★), also those kept on other graphics: used on this map, each of its blocks becomes a
+  block of this map's set that draws the same, or a new one added to the set, with tiles copied into the tile set
+  (recoloured to this map's closest colour rows) when it has none of that shape, as chests from other maps are; the
+  piece keeps its own walls. One Edit > Undo step; refused, saying why, when the block set is full (1024 blocks, as
+  Secret Skills Cave's) or the tile set has no free tile. Checked in the window: the church kept on Elcid (block set 2)
+  placed on map 04 (block set 3): 47 blocks and 91 tiles added.
 * **Map settings**: the block set, tile set and palette set (drawn at once; block sets and tile sets go in pairs), the
   size, adding a character, and the test start (a new game starts on this map at a preset point; Normal start puts the
   game's opening back).
-* **Names**: "Rename this map" keeps your name in the project.
+* **Names**: "Rename or delete this map" (under the list): "Name in the game" writes the name the save menu and the
+  box on entering show (letters of the game's font, at most 20; Edit > Undo takes it back); "Name in Lufia Forge only"
+  keeps a name in the project. The box: Settings, Map names (never / when the name changes, as the game / on every map;
+  top middle as the game, or a corner).
 * **Undo**: every change is one step (Ctrl+Z / Ctrl+Y, up to 300). The edits are kept in the tab ("Edited") and written
   by themselves when another map is picked or the project is saved, or with Apply; Revert drops them. The block editor
   writes straight into the ROM (Edit > Undo takes it back).
@@ -324,6 +334,27 @@ is written), `Modules/Lufia2/L2MapWindows.cs` (pick a place, pieces and presets,
   set (only tiles 1-15 differ: the water animation). From the walkable block nearest the kept pictures (35,8) they
   are off screen.
 
+## 2b. Map names and the name box (`L2MapNames`, 2026-11-02)
+
+* A name is the u16 at map header +6: bytes at $87:8000 + it, ended by 00; 0A xx yy = the first (yyxx >> 12) + 2 bytes
+  at $87:8000 + (yyxx & 0FFF). `CopyMapName` ($80:C9C0, four `LDA $878000,X`) copies a name to RAM with those pieces
+  written out (the save menu prints the copy; the box on entering compares it with the last map's). The box itself
+  (`ShowMapNameBox`, $80:C8D5) prints each byte as a letter from bank $09B9 (`LDA #$87` at $80:C8AD) with the data bank
+  set to it: dictionary codes come out as other letters, so names are plain letters.
+* The game's 242 names fill bank $87 up to the start-up scripts (15 bytes free; 421 pieces). The first name written
+  moves every name, pieces written out as `CopyMapName` does (a piece with a 00 ends the name there), into a chunk of
+  the event space ("LF2N", room, used: banks $A8-$BF or $01-$3F, where the data bank reaches RAM as the box's printing
+  needs) and points those five bytes at its bank. Seven US names (maps D2-D7, EF) have pieces that point into the map
+  header table (garbage in the US game too); after the move they end where the copy ends. Names written later go at
+  the chunk's end (the same name twice is shared); a full chunk is packed again into a new one.
+* The box: `ShowMapNameOnEntry` ($80:C825, on entering a town or dungeon; not the world maps, not a new game's start)
+  skips the box when the name is the one shown last (`BEQ` at $80:C8BE: operand 09 instead of 13 shows it on every map),
+  then sets the place $125D = 0x40 (`LDX #$0040` at $80:C8C9; `BRA` to the end shows it never). `ShowMapNameBox`
+  centres every box by adding (0x1E - width) & ~1 to $125D ($80:C8EF-$80:C900; width in tiles, the frame one tile more on
+  each side; places are bytes of a 32-tile row, 0x40 a row). For a corner the place is set to 0x41 (the treasure and
+  door boxes use 0x180 and 0x440, even) and the centring becomes a JSL to code ("LF2NB") that puts an odd place in its
+  corner (rows 1 or 22, one tile from the side) and centres the others as the game does.
+
 ## 3e. Checked: new maps (2026-11-02)
 
 * Opening the copied tables changes nothing for the game's maps: every one of the 242 reads the same in Lufia Forge
@@ -337,6 +368,17 @@ is written), `Modules/Lufia2/L2MapWindows.cs` (pick a place, pieces and presets,
 * The window (17 checks): the list shows 242 maps, Copy of this map makes F2 (named "... (copy)" in the project) and
   shows it, Blank makes a 20 x 16 map of the brush block, the Events page lists the copy's events, Undo and Redo take
   the new maps back and forth with the list, and the saved project keeps them.
+
+## 3f. Checked: map names (2026-11-02)
+
+* Moving the names: every one of the 242 copies the same bytes as before (Lufia Forge reads 7 garbled US names shorter);
+  renames read back, 300 renames in a row pack the chunk again with no other name changed, every box setting reads back
+  and the game's setting puts the code back byte for byte.
+* In the game (BizHawk): a new map F2 named "Test Town" with Elcid's world map entrance pointed at it, the box on every
+  map: entering F2 shows "Test Town" top middle, top left, top right, bottom left and bottom right; entering Elcid shows
+  "Elcid" (top left and the game's middle). Dictionary words in a name came out as other letters, hence plain letters.
+* The window: the copy shows its template's name, "Test Town" is written (the names move), the template keeps its
+  name, a letter the font lacks is refused, Settings sets every map / top right, Undo puts the middle back.
 
 ## 4. Shrine maps CF and F1: fixed as in the European release
 

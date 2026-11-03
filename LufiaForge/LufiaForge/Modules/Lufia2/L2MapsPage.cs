@@ -194,6 +194,10 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
         OnPropertyChanged(nameof(ToolHint));
         IsEditableMap = (_edit != null || _world != null) && TableGuard.LockReason(_rom!, "Maps") == null;
         MapNameText = value >= 0 ? (LufiaForge.Core.Maps.MapNames.ProjectNames?.GetValueOrDefault(value) ?? "") : "";
+        _settingGameName = true;
+        GameNameText = value >= 2 && _rom != null ? L2Maps.Name(_rom, value) : "";
+        _settingGameName = false;
+        GameNameHint = value < 2 ? "The world maps have no name of their own." : L2MapNames.CantWrite(_rom!) ?? "Shown in the save menu and in the box on entering (Settings, Map names). Letters of the game's font, at most 20.";
         OnPropertyChanged(nameof(MapNameHint));
         LoadSettings();
         ReloadBlocks();
@@ -612,6 +616,32 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
     public string MapNameHint => LufiaForge.Core.Maps.MapNames.ProjectNames == null
         ? "Open or make a project to name maps (the names are kept in it)."
         : $"The game calls it \"{_names.ElementAtOrDefault(SelectedIndex)}\". Your name is kept in this project; clear it to go back.";
+
+    [ObservableProperty] private string _gameNameText = "", _gameNameHint = "";
+    private bool _settingGameName;
+
+    /// <summary>The name the game shows (written when the box loses focus).</summary>
+    partial void OnGameNameTextChanged(string value)
+    {
+        if (_settingGameName || _rom == null || _main == null || SelectedIndex < 2) return;
+        int id = SelectedIndex;
+        if (value.Trim() == L2Maps.Name(_rom, id)) return;
+        try { L2MapNames.Write(_rom, id, value); }
+        catch (Exception ex) { GameNameHint = "Not written: " + ex.Message; return; }
+        _main.NotifyRomModified($"Lufia II: map {id:X2} named \"{value.Trim()}\" in the game");
+        _names[id] = RomName(_rom, id);
+        var item = Maps.FirstOrDefault(m => m.Id == id);
+        if (item != null)
+        {
+            int at = Maps.IndexOf(item);
+            _filling = true;
+            Maps[at] = new L2MapItem { Id = id, Label = $"{id:X2}  {NameOf(id)}" };
+            SelectedMap = Maps[at];
+            _filling = false;
+        }
+        GameNameHint = $"Map {id:X2} is called \"{L2Maps.Name(_rom, id)}\" in the game now.";
+        OnPropertyChanged(nameof(MapNameHint));
+    }
 
     partial void OnMapNameTextChanged(string value)
     {
