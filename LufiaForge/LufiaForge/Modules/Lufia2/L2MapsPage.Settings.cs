@@ -109,11 +109,23 @@ public partial class L2MapsPage
         if (_edit == null) return;
         if (MapWidth == _edit.Width && MapHeight == _edit.Height) { Status = "Type the new width and height first."; return; }
         var before = _edit.Save();
-        try { _edit.Resize(MapWidth, MapHeight, SelectedBlock); }
+        int fill = FillBlock();
+        try { _edit.Resize(MapWidth, MapHeight, fill); }
         catch (Exception ex) { Status = ex.Message; MapWidth = _edit.Width; MapHeight = _edit.Height; return; }
         _history.Add((before, "resizing the map")); _redo.Clear();
         Refresh();
-        Status = $"The map is {_edit.Width} x {_edit.Height} now (new blocks: the brush block on the ground). Exits, characters and areas outside it stay where they were: move them in.";
+        Status = $"The map is {_edit.Width} x {_edit.Height} now (new blocks: block {fill:X3} on the ground{(fill != SelectedBlock ? ", as the brush is block 000, which the game draws nothing for" : ", the brush block")}). Exits, characters and areas outside it stay where they were: move them in.";
+    }
+
+    /// <summary>The block new ground gets: the brush, but not block 0 (the game draws nothing for it, so the screen shows
+    /// what was there before): then the block the map's edges have most, else block 1.</summary>
+    private int FillBlock()
+    {
+        if (SelectedBlock != 0 || _edit == null) return SelectedBlock;
+        var G = _edit.Map.Layers[0];
+        var edge = Enumerable.Range(0, G.Width).SelectMany(x => new[] { G.Blocks[x], G.Blocks[(G.Height - 1) * G.Width + x] })
+            .Concat(Enumerable.Range(0, G.Height).SelectMany(y => new[] { G.Blocks[y * G.Width], G.Blocks[y * G.Width + G.Width - 1] }));
+        return edge.Where(b => b != 0).GroupBy(b => b).OrderByDescending(g => g.Count()).Select(g => g.Key).DefaultIfEmpty(1).First();
     }
 
     private void UpdateTestStartNote()
@@ -177,7 +189,7 @@ public partial class L2MapsPage
         int template = _edit.MapId;
         string from = NameOf(template);
         int map;
-        try { map = L2NewMaps.Create(_rom, template, blank, NewMapWidth, NewMapHeight, SelectedBlock); }
+        try { map = L2NewMaps.Create(_rom, template, blank, NewMapWidth, NewMapHeight, FillBlock()); }
         catch (Exception ex) { Status = "No new map: " + ex.Message; return; }
         if (LufiaForge.Core.Maps.MapNames.ProjectNames != null)
             LufiaForge.Core.Maps.MapNames.SetProjectName(map, blank ? $"New map (graphics of {from})" : $"{from} (copy)");

@@ -58,7 +58,9 @@ public partial class L2MapsPage
         L2Tool.Fill => $"Fill (G): click a block: it and every block joined to it that is the same become the brush, on the {(EditUpper ? "upper" : "ground")} layer. Shift + click (or Fill the layer) fills the whole layer. Right-click picks a block.",
         L2Tool.Pick => "Pick (I): click the map to take its block (on the layer being painted) as the brush.",
         L2Tool.Area => "Area (M): drag a rectangle, then Copy (Ctrl+C), Cut (Ctrl+X), Fill or Delete (Del); Paste (Ctrl+V) places what was copied, from any map with the same graphics.",
-        L2Tool.Collision => "Collision (L): paints where the party can't walk (and doorways and walls). Drag to paint; right-click clears a block. The red, blue and orange marks show it.",
+        L2Tool.Collision => WallLine
+            ? "Collision (L), Wall line: drag along the grid lines to draw walls the party can't cross (the yellow lines, as the game's borders); right-drag takes them away. Pick another kind on the right for whole blocks."
+            : "Collision (L): paints where the party can't walk (and doorways and walls). Drag to paint; right-click clears a block. The red, blue and orange marks show it. Wall line draws walls along the grid lines.",
         L2Tool.AddExit => "Add exit (E): drag a rectangle where the party leaves the map, then pick where it leads.",
         L2Tool.AddTrigger => "Add step-on area (T): drag a rectangle; walking onto it plays a new event (made when the map is written, then edit it in Events).",
         L2Tool.AddCharacter => "Add character (C): click where it stands, then pick its sprite and how it moves.",
@@ -88,10 +90,15 @@ public partial class L2MapsPage
     partial void OnEditUpperChanged(bool value) { OnPropertyChanged(nameof(ToolHint)); OnPropertyChanged(nameof(BrushText)); }
 
     // collision paint
-    public static readonly string[] CollisionKinds = { "Can't walk here (obstacle)", "Doorway", "Wall on the top edge", "Wall on the left edge", "Upper level", "Room border" };
-    private static readonly byte[] CollisionBits = { 0x80, 0x20, 0x04, 0x08, 0x40, 0x10 };
+    public static readonly string[] CollisionKinds = { "Wall line (draw along the grid lines)", "Can't walk here (obstacle)", "Doorway", "Wall on the top edge", "Wall on the left edge", "Upper level", "Room border" };
+    private static readonly byte[] CollisionBits = { 0x00, 0x80, 0x20, 0x04, 0x08, 0x40, 0x10 };
+    /// <summary>Wall line: the mouse draws walls on the grid lines it runs along (a wall is the top or left edge of a
+    /// cell, 04 / 08; the line under a cell is the top edge of the cell below), as the game's borders are.</summary>
+    private bool WallLine => CollisionKind == 0;
+    private (int X, int Y, byte Bit)? _lastEdge;
     public IReadOnlyList<string> CollisionChoices => CollisionKinds;
     [ObservableProperty] private int _collisionKind;
+    partial void OnCollisionKindChanged(int value) => OnPropertyChanged(nameof(ToolHint));
 
     // ---------------------------------------------------------------- mouse
 
@@ -144,7 +151,8 @@ public partial class L2MapsPage
             case L2Tool.Collision:
                 Record(right ? "clearing collision" : "painting collision");
                 _dragging = true; _collisionClear = right;
-                PaintCollision(cx, cy);
+                _lastEdge = null;
+                if (WallLine) PaintEdge(px, py); else PaintCollision(cx, cy);
                 break;
             case L2Tool.Area:
             case L2Tool.AddExit:
@@ -185,6 +193,7 @@ public partial class L2MapsPage
         bool inside = cx >= 0 && cy >= 0 && cx < _edit.Width && cy < _edit.Height;
         if (_world == null) UpdateHover(cx, cy, inside);
         if (!inside || !_dragging) return;
+        if (Tool == L2Tool.Collision && WallLine) { PaintEdge(px, py); return; }
         if (cx == _lastX && cy == _lastY) return;
         _lastX = cx; _lastY = cy;
         switch (Tool)
@@ -241,7 +250,8 @@ public partial class L2MapsPage
         if (_edit == null || !inside) { HoverText = ""; BrushPreviewVisible = false; CameraVisible = false; return; }
         var g = _edit.Map.Layers[0]; var u = _edit.Map.Layers.Length > 1 ? _edit.Map.Layers[1] : null;
         int i = cy * _edit.Width + cx;
-        string text = $"({cx},{cy})  ground {g.Blocks[i]:X3}" + (u != null ? $", upper {u.Blocks[i]:X3}" : "");
+        string text = $"({cx},{cy})  ground {g.Blocks[i]:X3}" + (g.Blocks[i] == 0 ? " (nothing: the game draws no ground here, so whatever was on the screen shows; paint a block, a black one for the space around rooms)" : "") +
+                      (u != null ? $", upper {u.Blocks[i]:X3}" : "");
         byte f = u?.Flags[i] ?? 0;
         var walls = new List<string>();
         if ((f & 0x80) != 0) walls.Add("can't walk"); if ((f & 0x20) != 0) walls.Add("doorway"); if ((f & 0x04) != 0) walls.Add("wall on top");
@@ -379,6 +389,33 @@ public partial class L2MapsPage
         int i = cy * L.Width + cx;
         byte old = L.Flags[i];
         byte v = _collisionClear ? (byte)(old & 0x03) : (byte)(old | CollisionBits[Math.Clamp(CollisionKind, 0, CollisionBits.Length - 1)]);
+        if (v == old) return;
+        L.Flags[i] = v;
+        if (!ShowCollision) ShowCollision = true; else DrawMap();
+        UpdateUndoState();
+    }
+
+    /// <summary>Wall line: the grid line near pixel (<paramref name="px"/>, <paramref name="py"/>) gets a wall (or loses
+    /// it on a right-drag). Only a line within 5 pixels counts; where two cross, the drag keeps the line it was on.</summary>
+    private void PaintEdge(double px, double py)
+    {
+        if (_edit == null || _edit.Map.Layers.Length < 2) return;
+        var L = _edit.Map.Layers[1];
+        double fx = px / 16, fy = py / 16;
+        double dx = Math.Abs(fx - Math.Round(fx)) * 16, dy = Math.Abs(fy - Math.Round(fy)) * 16;
+        int x, y; byte bit;
+        bool across = dy <= 5, down = dx <= 5;
+        // where two lines cross, the line keeps the way it was going (a drag along one doesn't catch the other there)
+        if (across && down) { if (_lastEdge is not { } last) return; across = last.Bit == 0x04; down = !across; }
+        if (across) { x = (int)Math.Floor(fx); y = (int)Math.Round(fy); bit = 0x04; }
+        else if (down) { x = (int)Math.Round(fx); y = (int)Math.Floor(fy); bit = 0x08; }
+        else return;
+        // the map's own edges stop the party anyway: a line there needs no cell (and the bottom / right ones have none)
+        if (x < 0 || y < 0 || x >= L.Width || y >= L.Height) return;
+        if (_lastEdge == (x, y, bit)) return;
+        _lastEdge = (x, y, bit);
+        int i = y * L.Width + x;
+        byte old = L.Flags[i], v = _collisionClear ? (byte)(old & ~bit) : (byte)(old | bit);
         if (v == old) return;
         L.Flags[i] = v;
         if (!ShowCollision) ShowCollision = true; else DrawMap();
