@@ -365,27 +365,17 @@ public partial class L2MapsPage
         int TileCount() => L2Rom.ReadFile(_rom, L2Maps.TileSetFileBase + _edit.TileSetIndex).Length / 32;
         int tilesBefore = TileCount();
         var g = new int[n]; var u = new int[n]; var f = new byte[n];
-        var done = new Dictionary<(int, int, int), (int G, int U)>();
         try
         {
-            L2Rom.AllOrNothing(_rom, () =>
-            {
-                for (int i = 0; i < n; i++)
-                {
-                    var key = (c.Ground[i], c.Upper[i], c.Flags[i] & 0xFC);
-                    if (!done.TryGetValue(key, out var t))
-                    {
-                        var cell = new (int Block, byte Flags)[] { (c.Ground[i], (byte)0), (c.Upper[i], (byte)(c.Flags[i] & 0xFC)) };
-                        var look = new L2ChestLooks.Look(src, 0, 0, 0x33, cell, cell, c.BlockSet, c.TileSet, ps);
-                        var (closed, _, _) = L2ChestLooks.Translate(_rom, look, _edit);
-                        // block 0 is "nothing here" on either layer, whatever it draws
-                        t = (c.Ground[i] == 0 ? 0 : closed[0].Block, c.Upper[i] == 0 || closed.Length < 2 ? 0 : closed[1].Block);
-                        done[key] = t;
-                    }
-                    g[i] = t.G; u[i] = t.U; f[i] = (byte)(c.Flags[i] & 0xFC);
-                }
-                return 0;
-            });
+            // every block of the piece in one go: the tile set and the block set are written once
+            var ids = c.Ground.Concat(c.Upper).Where(b => b != 0).Distinct().ToList();
+            var list = ids.Select(b => (b, (byte)0)).ToArray();
+            var look = new L2ChestLooks.Look(src, 0, 0, -1, list, Array.Empty<(int, byte)>(), c.BlockSet, c.TileSet, ps);
+            var p = L2ChestLooks.Prepare(_rom, look, _edit);
+            var to = ids.Select((b, i) => (b, p.Closed[i].Block)).ToDictionary(x => x.b, x => x.Block);
+            to[0] = 0;   // block 0 is "nothing here" on either layer, whatever it draws
+            L2Rom.AllOrNothing(_rom, () => { p.Write(); return 0; });
+            for (int i = 0; i < n; i++) { g[i] = to[c.Ground[i]]; u[i] = to[c.Upper[i]]; f[i] = (byte)(c.Flags[i] & 0xFC); }
         }
         catch (Exception ex) { Status = $"This {what} can't be used on this map: " + ex.Message.Replace("the chest's", $"the {what}'s").Replace("chest", what); return null; }
         int added = L2Maps.BlockCount(_rom, _edit.MapId) - before, tiles = TileCount() - tilesBefore;

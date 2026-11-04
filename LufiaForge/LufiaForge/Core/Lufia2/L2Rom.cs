@@ -232,20 +232,45 @@ public static class L2Rom
     /// <summary>Packs <paramref name="data"/> and puts it back as file <paramref name="id"/>: where it was when it fits
     /// there, else in the added space (never across a 32 KB bank, so the game's unpacker reads it as one piece), the
     /// file table pointing at the new place.</summary>
-    public static void WriteFile(RomBuffer rom, int id, byte[] data)
+    public static void WriteFile(RomBuffer rom, int id, byte[] data) => WriteFiles(rom, (id, data));
+
+    /// <summary>Writes files that change together (a tile set and its block set). Each goes back where it is when it still
+    /// fits. Files that grew and were the last ones put in the added space (one after another up to its free end) are
+    /// written again from where the first of them starts, so a file that keeps growing (tiles added one piece at a time)
+    /// doesn't leave a copy behind each time; any other file that grew goes to new room.</summary>
+    public static void WriteFiles(RomBuffer rom, params (int Id, byte[] Data)[] files)
     {
-        byte[] packed = LufiaCompression.Compress(data);
-        int at = FileOffset(rom, id);
-        LufiaCompression.Decompress(rom, at, out int oldSize);
         bool crosses(int o, int n) => o / 0x8000 != (o + n - 1) / 0x8000;
-        if (packed.Length <= oldSize && !(at >= OriginalSize && crosses(at, packed.Length)))
+        var grow = new List<(int Id, byte[] Packed, int At, int OldSize)>();
+        foreach (var (id, data) in files)
         {
-            rom.WriteBytes(at, packed);
-            return;
+            byte[] packed = LufiaCompression.Compress(data);
+            int at = FileOffset(rom, id);
+            LufiaCompression.Decompress(rom, at, out int oldSize);
+            if (packed.Length <= oldSize && !(at >= OriginalSize && crosses(at, packed.Length))) { rom.WriteBytes(at, packed); continue; }
+            grow.Add((id, packed, at, oldSize));
         }
-        int next = Allocate(rom, packed.Length);
-        rom.WriteBytes(next, packed);
-        SetFileOffset(rom, id, next);
+        if (grow.Count == 0) return;
+        // the files at the end of the added space: walking back from its free end, each ends where the next starts (or in
+        // the bank before, when the next was moved to a bank start: nothing is ever put in that gap)
+        if (FindMark(rom) is var (mark, next))
+        {
+            int end = next, start = -1;
+            foreach (var f in grow.Where(f => f.At >= OriginalSize && f.At < mark).OrderByDescending(f => f.At))
+            {
+                int fe = f.At + f.OldSize;
+                bool touches = fe == end || fe < end && end % 0x8000 == 0 && (fe - 1) / 0x8000 == end / 0x8000 - 1;
+                if (!touches) break;
+                start = end = f.At;
+            }
+            if (start >= 0) WriteMark(rom, mark, start);
+        }
+        foreach (var f in grow)
+        {
+            int to = Allocate(rom, f.Packed.Length);
+            rom.WriteBytes(to, f.Packed);
+            SetFileOffset(rom, f.Id, to);
+        }
     }
 
     /// <summary>Packs <paramref name="data"/> into new room in the added space as file <paramref name="id"/> (never over

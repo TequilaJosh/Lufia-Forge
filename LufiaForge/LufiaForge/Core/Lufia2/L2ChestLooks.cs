@@ -286,7 +286,10 @@ public static class L2ChestLooks
     /// can stop the chest, so a refused chest leaves the ROM as it was.</summary>
     public static Prepared Prepare(RomBuffer rom, Look look, L2MapEdit edit)
     {
-        int layers = edit.Map.Layers.Length;
+        // Layers -1: a list of blocks (a piece from other graphics), every entry of Closed, whatever the layer
+        bool many = look.Layers < 0;
+        int layers = many ? look.Closed.Length : edit.Map.Layers.Length;
+        bool Copies(int i) => many || L2MapEdit.CopiesLayer(look.Layers, i);
         (int, byte)[] Fit((int Block, byte Flags)[] pic) => Enumerable.Range(0, layers).Select(i => i < pic.Length ? pic[i] : (0, (byte)0)).ToArray();
         LastRecoloured = 0;
         LastTiles = null;
@@ -312,7 +315,7 @@ public static class L2ChestLooks
         long offSum = 0, offPixels = 0;
         // the source rows' colours as the chest uses them (pixels per colour number), to pick one row of this map for each
         var chestBlocks = look.Closed.Concat(look.Open).Select((c, i) => (c.Block, Layer: i % Math.Max(1, look.Closed.Length)))
-            .Where(c => c.Block != 0 && c.Block < src.Count && L2MapEdit.CopiesLayer(look.Layers, c.Layer)).Select(c => c.Block).Distinct().ToList();
+            .Where(c => c.Block != 0 && c.Block < src.Count && Copies(c.Layer)).Select(c => c.Block).Distinct().ToList();
         (int Pal, int[] Map) RowFor(int srcPal)
         {
             if (rowFor.TryGetValue(srcPal, out var r)) return r;
@@ -420,7 +423,7 @@ public static class L2ChestLooks
             return done[block] = nb;
         }
         (int, byte)[] Pic((int Block, byte Flags)[] pic) => Enumerable.Range(0, layers).Select(i =>
-            i < pic.Length && L2MapEdit.CopiesLayer(look.Layers, i) ? (Map1(pic[i].Block), pic[i].Flags) : (0, (byte)0)).ToArray();
+            i < pic.Length && Copies(i) ? (Map1(pic[i].Block), pic[i].Flags) : (0, (byte)0)).ToArray();
         var closed = Pic(look.Closed);
         var open = Pic(look.Open);
         byte[]? tileFile = null, blockFile = null;
@@ -447,9 +450,11 @@ public static class L2ChestLooks
         int ts = edit.TileSetIndex, bs = edit.BlockSetIndex;
         return new Prepared(closed, open, newWords.Count, () =>
         {
-            // the tile set first (repacked; moved to the added space when it no longer fits where it was)
-            if (tileFile != null) L2Rom.WriteFile(rom, L2Maps.TileSetFileBase + ts, tileFile);
-            if (blockFile != null) L2Rom.WriteFile(rom, L2Maps.BlockSetFileBase + bs, blockFile);
+            // the tile set and the block set (repacked; moved to the added space when they no longer fit where they were)
+            var write = new List<(int, byte[])>();
+            if (tileFile != null) write.Add((L2Maps.TileSetFileBase + ts, tileFile));
+            if (blockFile != null) write.Add((L2Maps.BlockSetFileBase + bs, blockFile));
+            L2Rom.WriteFiles(rom, write.ToArray());
         });
     }
 
