@@ -154,6 +154,9 @@ public sealed class L2StageState
     public int Frames { get; set; }
     /// <summary>The actor that moved in this step (-1: none) and where it came from.</summary>
     public int MovedId { get; set; } = -1;
+    /// <summary>The tiles the moved actor went over in this step, in order (a path walk), for playback; null: a
+    /// straight move.</summary>
+    public List<(int X, int Y)>? MovedRoute { get; set; }
     /// <summary>The story flags that are on (the ones set at the start, then turned on and off by the steps).</summary>
     public HashSet<int> Flags { get; } = new();
     /// <summary>Event counters (variables) that aren't 0.</summary>
@@ -197,9 +200,13 @@ public sealed class L2StageMap
     /// <summary>The walk area of each character with a character start (map info +10: x1, y1 to x2, y2, the right and
     /// bottom edges left out): a step out of it is refused in the game.</summary>
     public Dictionary<int, (int X1, int Y1, int X2, int Y2)> Areas { get; private init; } = new();
+    /// <summary>The map's paths (what "A character walks a path" walks), by id.</summary>
+    public Dictionary<int, L2Paths.Path> Paths { get; private init; } = new();
 
     public static L2StageMap Read(RomBuffer rom, int map)
     {
+        var paths = new Dictionary<int, L2Paths.Path>();
+        try { foreach (var p in L2Paths.Read(rom, map)) paths.TryAdd(p.Id, p); } catch (Exception) { }
         var points = new Dictionary<int, (int, int)>();
         try { foreach (var p in L2StoryClear.PresetPoints(rom, map)) points.TryAdd(p.Id, (p.X, p.Y)); } catch (Exception) { }
         var areas = new Dictionary<int, (int, int, int, int)>();
@@ -212,14 +219,14 @@ public sealed class L2StageMap
                 if (!hidden.Contains(0x4F + b[0])) areas.TryAdd(0x4F + b[0], (b[3], b[4], b[5], b[6]));
         }
         catch (Exception) { }
-        if (map < 2) return new L2StageMap { Points = points, Areas = areas };   // the world maps: no cell flags
+        if (map < 2) return new L2StageMap { Points = points, Areas = areas, Paths = paths };   // the world maps: no cell flags
         try
         {
             var m = L2Maps.Read(rom, map);
             var l = m.Layers.Length > 1 ? m.Layers[1] : m.Layers[0];
-            return new L2StageMap { Width = l.Width, Height = l.Height, _flags = l.Flags, Points = points, Areas = areas };
+            return new L2StageMap { Width = l.Width, Height = l.Height, _flags = l.Flags, Points = points, Areas = areas, Paths = paths };
         }
-        catch (Exception) { return new L2StageMap { Points = points, Areas = areas }; }
+        catch (Exception) { return new L2StageMap { Points = points, Areas = areas, Paths = paths }; }
     }
 
     /// <summary>Whether a character with a character start may step onto (x, y): inside its walk area (or it has none).</summary>
@@ -598,7 +605,7 @@ public static class L2Cutscene
         var st = steps[i];
         var points = m.Points;
         var s = cur.Copy();
-        s.Speaker = null; s.Text = null; s.MovedId = -1;
+        s.Speaker = null; s.Text = null; s.MovedId = -1; s.MovedRoute = null;
         s.Frames = 6;
         L2StageState.Actor A(int id)
         {
@@ -697,6 +704,33 @@ public static class L2Cutscene
                 break;
             }
             case 0x89: s.Frames = 0; s.Caption = ""; break;
+            case 0x33 when b.Length >= 3:
+            {
+                var a = A(b[2]);
+                if (!m.Paths.TryGetValue(b[1], out var path)) { s.Caption = $"{name(b[2])} walks path {b[1]} (the map has no such path)"; break; }
+                if (!a.Placed) { s.Caption = $"{name(b[2])} walks path {b[1]} (but isn't on the map)"; break; }
+                var (px, py, pd, tiles, frames) = L2Paths.Play(path.Program, a.X, a.Y, a.Dir);
+                // a step the way is blocked waits in the game until it is free: a wall never frees, so the walk hangs there
+                for (int k = 0; k < tiles.Count; k++)
+                {
+                    var (fx, fy) = k == 0 ? (a.X, a.Y) : (tiles[k - 1].X, tiles[k - 1].Y);
+                    if (Math.Abs(tiles[k].X - fx) + Math.Abs(tiles[k].Y - fy) != 1) continue;   // put somewhere (18)
+                    if (m.Wall(fx, fy, tiles[k].Dir) is { } hit)
+                    {
+                        s.Warning = $"{Cap(name(b[2]))} walks path {b[1]} into {hit} at ({tiles[k].X}, {tiles[k].Y}): in the game it waits there for good (a path doesn't go round walls).";
+                        s.WarnX = tiles[k].X; s.WarnY = tiles[k].Y;
+                        break;
+                    }
+                }
+                if (px != a.X || py != a.Y) { s.MovedId = a.Id; s.MovedRoute = new[] { (a.X, a.Y) }.Concat(tiles.Select(t => (t.X, t.Y))).ToList(); }
+                a.X = px; a.Y = py; a.Dir = pd; a.NudgeX = a.NudgeY = 0;
+                bool goesOn = (path.Flags & L2Paths.FlagEventGoesOn) != 0;
+                s.Caption = $"{name(b[2])} walks path {b[1]}" + (goesOn ? " (the event goes on meanwhile)" : "");
+                s.Frames = goesOn ? 6 : Math.Max(6, frames);
+                if ((path.Flags & L2Paths.FlagCameraStays) == 0) s.CameraOnLeader = false;
+                if ((path.Flags & L2Paths.FlagCameraStays) == 0) { s.CameraX = px; s.CameraY = py; }
+                break;
+            }
             case 0x3A when b.Length >= 3: s.CameraX = b[1]; s.CameraY = b[2]; s.CameraOnLeader = false; s.Caption = "The camera jumps"; break;
             case 0xC4 when b.Length >= 3: s.CameraX = b[1]; s.CameraY = b[2]; s.CameraOnLeader = false; s.Caption = "The camera scrolls"; s.Frames = 40; break;
             case 0x3B when b.Length >= 2 && points.TryGetValue(b[1], out var p3): s.CameraX = p3.X; s.CameraY = p3.Y; s.CameraOnLeader = false; break;

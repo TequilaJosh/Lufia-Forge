@@ -181,6 +181,38 @@ public sealed class L2MapEdit
     /// <summary>A preset point id one higher than the highest.</summary>
     public int NextPointId() => Records(Points).Select(r => (int)r.Bytes[0]).DefaultIfEmpty(-1).Max() + 1;
 
+    /// <summary>A path id one higher than the highest (FF ends the list, so at most FE).</summary>
+    public int NextPathId()
+    {
+        int id = Records(Paths).Select(r => (int)r.Bytes[0]).DefaultIfEmpty(0).Max() + 1;
+        return id <= 0xFE ? id : throw new InvalidOperationException("The map has no path number left.");
+    }
+
+    /// <summary>Writes path <paramref name="id"/> (a new record, or the one with that id): its walk program goes at the
+    /// end of the block (the old program stays, other paths may share it) unless it was the block's last bytes, which
+    /// it then replaces.</summary>
+    public void SetPath(int id, int x, int y, int flags, byte[] program)
+    {
+        var recs = Records(Paths);
+        int k = recs.FindIndex(r => r.Bytes[0] == id);
+        int at;
+        if (k >= 0 && (recs[k].Bytes[4] | recs[k].Bytes[5] << 8) is int old && L2Paths.ProgramAt(Info, old) is { } was &&
+            old + was.Length == Info.Length && recs.Count(r => (r.Bytes[4] | r.Bytes[5] << 8) == old) == 1)
+        {
+            at = old;
+            Info = Info.Take(old).Concat(program).ToArray();
+        }
+        else
+        {
+            at = Info.Length;
+            Info = Info.Concat(program).ToArray();
+        }
+        if (Info.Length > 0x0FFF) throw new InvalidOperationException("The map's info block would be bigger than the game can load (4 KB).");
+        SetU16(0, Info.Length);
+        var rec = new[] { (byte)id, (byte)x, (byte)y, (byte)flags, (byte)at, (byte)(at >> 8) };
+        if (k >= 0) SetRecord(Paths, k, rec); else AddRecord(Paths, rec);
+    }
+
     // ---------------------------------------------------------------- treasure
 
     /// <summary>The look (list +04 record) treasure spot record <paramref name="b"/> names, or null.</summary>

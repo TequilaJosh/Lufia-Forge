@@ -142,6 +142,17 @@ bank and under 4 KB (`$7E:F000-$FFFF`; the biggest in the game is 0x5EB).
 | +12 | paths | 6: id, x, y (copy of the first target), flags (40 clear: the camera follows; 10: the event doesn't wait; 20: walk in the background), u16 program offset |
 | +14 | areas | 5: id, x1, y1, x2, y2 (43, 87, B4, 9C) |
 
+**Paths** (+12, what 33 walks): the u16 is the offset of a walk program inside the info block (the game copies the
+block to `$7E:F000` and runs it from there). The game's 1,614 paths use: `12 x y` head for block x, y (sideways
+first, then up or down; once there, go on), `00`-`03` one step up / down / left / right, `18 x y` put the walker on
+x, y, `0C s` speed (8 is the usual 2 pixels a frame: 4 slow, 16 running; progress += s a frame, a pixel per 4),
+`08 d` face d (action 18 + d: 0 up, 1 down, 2 left, 3 right), `1B n` wait n frames, `0F` end the walk and hold the
+walker, and a few leader checks and jumps (188 paths). A step whose way is blocked waits until it is free, so a
+path into a wall hangs the event. The record's x, y is the first place the program heads for; flags 80 and 08 are
+set on every game path and not read by 33. Lufia Forge's path editor (the Stage, "walk a path") writes
+`[0C s] [1B n] 12 x y ... [08 d] 0F`; all 1,426 game paths made only of these commands read back into it and write
+out as the same bytes (1,109) or the same route (317).
+
 **Making a map character**: the start-up script's `68 id sprite` (or `7B` for a field monster) fills the next actor
 slot from 8 on (at most 32), and the character start with n = id - 0x4F gives its place, walk area and movement. 68
 must come before any other command that uses characters in the start-up script.
@@ -396,6 +407,10 @@ Edit > Undo takes back each save. In the tab, Undo / Redo work on the steps befo
 * Added to the opening scene: B6 00 A0 (Maxim not drawn), 7A 00 10 (a pose frame), 5A / 8A (the screen shakes, then
   stops), 47 10 (thought box), 48 01 14 (the box at column 1, row 20), BB (the "LUFIA 2 REPORT" screen).
 * The opening map's first event step 5B 01 00 plays the title sequence (night forest, title screen).
+
+* A path drawn with the path editor (2026-11-04, the user's map F3, a new step-on event `33 01 00` on the start
+  point): Maxim walked (20,26) to (19,26), (19,25), (19,24) and (18,24), 8 frames a tile at speed 8, and ended
+  facing down as set (`08 01`).
 
 ## 11. Still uncertain
 
