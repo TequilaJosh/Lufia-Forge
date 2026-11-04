@@ -502,6 +502,14 @@
                         </DockPanel>
                         <TextBlock DockPanel.Dock="Top" Text="{Binding BrushText}" Style="{StaticResource LufiaLabel}" TextWrapping="Wrap"
                                    Foreground="{StaticResource GoldLightBrush}" Margin="0,0,0,6"/>
+                        <UniformGrid DockPanel.Dock="Top" Columns="3" Margin="0,0,0,6">
+                            <Button Content="↻  Rotate" Style="{StaticResource LufiaButton}" Padding="6,3" Margin="0,0,3,0" Command="{Binding RotateBrushCommand}"
+                                    ToolTip="Q: turn the brush a quarter clockwise, or the piece being placed (a preset, a paste), walls and all. Turned blocks the block set lacks are added to it (Edit, Undo takes them out)."/>
+                            <Button Content="↔  Flip" Style="{StaticResource LufiaButton}" Padding="6,3" Margin="0,0,3,0" Command="{Binding FlipBrushAcrossCommand}"
+                                    ToolTip="F: flip the brush (or the piece being placed) across, left to right"/>
+                            <Button Content="↕  Flip" Style="{StaticResource LufiaButton}" Padding="6,3" Command="{Binding FlipBrushUpDownCommand}"
+                                    ToolTip="D: flip the brush (or the piece being placed) up/down"/>
+                        </UniformGrid>
                         <UniformGrid DockPanel.Dock="Top" Columns="2" Margin="0,0,0,6">
                             <Button Content="🧩  Pieces and ★ presets..." Style="{StaticResource LufiaButtonGold}" Padding="9,4" Margin="0,0,3,0" Command="{Binding PiecesFromMapsCommand}"
                                     ToolTip="Place one of your presets (★, kept with Save as preset on any map), or copy part of a map with the same blocks (a house, a bridge, a river bend)"/>

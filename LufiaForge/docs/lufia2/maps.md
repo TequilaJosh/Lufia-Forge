@@ -50,6 +50,15 @@ is written), `Modules/Lufia2/L2MapWindows.cs` (pick a place, pieces and presets,
   piece keeps its own walls. One Edit > Undo step; refused, saying why, when the block set is full (1024 blocks, as
   Secret Skills Cave's) or the tile set has no free tile. Checked in the window: the church kept on Elcid (block set 2)
   placed on map 04 (block set 3): 47 blocks and 91 tiles added.
+* **Rotate / Flip** (Blocks; Q, F, D): turns the brush (one block or several) a quarter clockwise or flips it across or
+  up/down; while a preset, a paste or a piece of a map is being placed, the whole piece turns, its walls too (L2BlockTurn).
+  A map cell can't turn its block, so a turned block is a block of the set: one that looks the same when there is one,
+  else one added (flips and half turns use the tiles' flip bits; a quarter turn draws turned tiles into free tiles of the
+  tile set). Four quarter turns come back to the same block. Checked in the window: block 060 turned a quarter matches
+  pixel for pixel; the church turned 5 x 10 -> 10 x 5.
+* Pieces from other graphics are brought in with one write of the tile set and block set (L2Rom.WriteFiles); files that
+  grow again right after being written reuse their room. Before 2026-11-03 each block was written on its own, which
+  filled the added space with old copies of the tile set (a big house could need megabytes and fail with "ROM full").
 * **From** (Blocks): the picker shows the blocks of other graphics (each mix the game's maps use); a block picked there,
   or a brush dragged over several, is added to this map's block set (tiles to its tile set, recoloured to this map's
   colour rows) when the set has none that draws the same, then painted as any other. One Edit > Undo step per pick;

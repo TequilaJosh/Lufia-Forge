@@ -51,7 +51,7 @@ public partial class L2MapsPage
         OnPropertyChanged(nameof(ToolHint));
     }
 
-    public string ToolHint => _world != null ? WorldHint : Stamping ? "Click to place the copied blocks (both layers and their walls); right-click or Esc stops." : Tool switch
+    public string ToolHint => _world != null ? WorldHint : Stamping ? "Click to place the copied blocks (both layers and their walls); Q turns the piece a quarter, F / D flip it; right-click or Esc stops." : Tool switch
     {
         L2Tool.Select => "Select (S): click an exit, step-on area, character, preset point, chest or door to edit it; drag to move it (an area's or exit's bottom-right block resizes it). Click again to reach what lies under it. Double-click an exit to go there.",
         L2Tool.Paint => $"Paint (B): paints the brush on the {(EditUpper ? "upper" : "ground")} layer; drag to paint more. Size: 1, 3, 5 or 7 blocks square ([ and ] change it). Right-click or Ctrl + click picks the block under the mouse.",
@@ -751,6 +751,9 @@ public partial class L2MapsPage
             case System.Windows.Input.Key.H: Tool = L2Tool.AddHidden; return true;
             case System.Windows.Input.Key.U: Tool = L2Tool.AddPuzzle; return true;
             case System.Windows.Input.Key.R: Tool = L2Tool.AddPreset; return true;
+            case System.Windows.Input.Key.Q: RotateBrush(); return true;
+            case System.Windows.Input.Key.F: FlipBrushAcross(); return true;
+            case System.Windows.Input.Key.D: FlipBrushUpDown(); return true;
             case System.Windows.Input.Key.Escape: Escape(); return true;
             case System.Windows.Input.Key.Delete:
                 if (Tool == L2Tool.Area && AreaRect != null) DeleteArea(); else DeleteSelected();
