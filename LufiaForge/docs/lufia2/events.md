@@ -244,7 +244,7 @@ Fields are what the editor shows; "rare" commands sit in the "Rarely used" menu.
 | 69 | 1 | Map settings | settings | Bits: 01 dungeon controls, 02 special palette, 04 unknown, 08 no Escape, 10 no Warp, 20 can step down slopes, 40 no field tools, 80 no Reset spell. Towns 08 / 98, dungeons 01 / 11. | code |
 | 6A | 3 | If a story flag is off, go to a step | story flag, go to |  | code |
 | 6B / 88 | 0 | Update where the party can walk |  | After changing map tiles. | code |
-| 6C | 3 | Draw a character shifted | who, x, y (signed pixels) | Only the picture moves. | code |
+| 6C | 3 | Draw a character shifted | who, x, y (signed pixels) | Only the picture moves; set, not added (0, 0 draws it on its place again). | code |
 | 6D / 6E | 2 + text + 00 | Credits text (rare) | | u16 screen offset, then letters. | code |
 | 6F | 1 | Play a song now | song | For a scene; the map's music comes back later. | code |
 | 70 / 71 / 72 | 0 | Fade the music out / wait for it / stop the music | | | code |
@@ -266,7 +266,7 @@ Fields are what the editor shows; "rare" commands sit in the "Rarely used" menu.
 | 87 | 2 | Copy map tiles (quick, for animations) | onto area, from area | Follow with 6B / 88. | data |
 | 89 | 1 | Wait for the action | who | Then holds the character still. | code |
 | 8A | 0 | Stop the shaking | | | game |
-| 8B / C0 | 3 | Nudge a character (and settle it on the tile) | who, x, y (signed pixels) | | code |
+| 8B / C0 | 3 | Nudge a character (and settle it on the tile) | who, x, y (signed pixels) | Added to its pixel place; it stays off its tile until something puts it on a tile or point (2F, 30, 98, a map change). The Sinistrals standing between two tiles (E7, EB): 98 who point, 6C who F8 00, 89 who, 6C who 00 00, 8B who F8 00. | code |
 | 8C | 3 | Action settings | who, first, second | Before "hold up an item" (86 xx 40). | data |
 | 8D, A0, C2, C3, C8, C9 | 6 / 7 | Ring of sparkles around a point / character (rare) | ring, place, count, size, spin, other | | data |
 | 8E, 8F, 90, 9F, 9A, A1, A2 | | Change, tilt, remove, wait for a ring (rare) | | | code |
