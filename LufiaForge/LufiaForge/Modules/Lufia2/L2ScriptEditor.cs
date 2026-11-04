@@ -36,6 +36,7 @@ public partial class L2FieldVm : ObservableObject
     public bool IsNumber => !IsChoice;
     public bool IsJump => Def.Kind == L2Kind.Jump;
     public bool IsFlag => Def.Kind == L2Kind.Flag;
+    public bool IsPath => Def.Kind == L2Kind.Path;
     public bool HasHint => Hint.Length > 0;
     public List<L2Option> Choices { get; } = new();
     [ObservableProperty] private L2Option? _selected;
@@ -87,6 +88,7 @@ public partial class L2FieldVm : ObservableObject
     /// <summary>Go where the jump leads (highlights its step).</summary>
     public void Follow() { if (IsJump && Selected != null) _owner.HighlightLine(Selected.Value); }
     public void ShowFlagUses() { if (IsFlag) _owner.ShowFlag(Raw); }
+    public void EditPath() { if (IsPath) _owner.EditPath(this); }
 }
 
 /// <summary>One step of the script as a card: text with its speaker, or a command with its fields in place.</summary>
@@ -183,8 +185,10 @@ public sealed class L2StageMark
     public double Width { get; init; }
     public double Height { get; init; }
     public string Label { get; init; } = "";
-    /// <summary>The source of a tile copy (drawn in another colour).</summary>
+    /// <summary>The source of a tile copy (drawn in another colour); on a path, a step a wall stops.</summary>
     public bool IsSource { get; init; }
+    /// <summary>A path's start or one of its places (a numbered box; the other path marks are its tiles).</summary>
+    public bool IsCorner { get; init; }
 }
 
 /// <summary>A character drawn on the stage.</summary>
@@ -398,6 +402,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
     public void Load(RomBuffer rom, MainViewModel main, int map, L2EventItem item, string title)
     {
         Stop();
+        IsDrawingPath = false; PathMarks.Clear();
         if (NamesStale(rom)) ReadRomNames(rom);
         _rom = rom; _main = main;
         _map = map;
@@ -535,6 +540,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
     public void Unload()
     {
         Stop();
+        IsDrawingPath = false; PathMarks.Clear();
         _script = null; _event = null; _saved = null;
         Lines.Clear(); _undo.Clear(); _redo.Clear(); UpdateUndo();
         Cast.Clear(); CastHeader = "";
@@ -677,7 +683,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         _pointSpots = L2StoryClear.PresetPoints(rom, map);
         _goToPoints = L2Cutscene.GoToPoints(rom, map);
         _points = L2MapInfo.Records(rom, map, L2MapInfo.Points, 3).Select(r => ((int)r.Bytes[0], $"point {r.Bytes[0]} ({r.Bytes[1]},{r.Bytes[2]})")).ToList();
-        _paths = L2MapInfo.Records(rom, map, L2MapInfo.Paths, 6).Select(r => ((int)r.Bytes[0], $"path {r.Bytes[0]} (from {r.Bytes[1]},{r.Bytes[2]})")).ToList();
+        ReadPaths();
         _areas = L2MapInfo.Records(rom, map, L2MapInfo.Areas, 5).Select(r => ((int)r.Bytes[0], $"area {r.Bytes[0]} ({r.Bytes[1]},{r.Bytes[2]})-({r.Bytes[3] - 1},{r.Bytes[4] - 1})")).ToList();
         _exits = L2MapInfo.Records(rom, map, L2MapInfo.Exits, 9).Select(r => ((int)r.Bytes[0], $"exit {r.Bytes[0]} to {(r.Bytes[8] < _maps.Length ? _maps[r.Bytes[8]] : "map " + r.Bytes[8].ToString("X2"))}")).ToList();
         _doors = L2MapInfo.Records(rom, map, L2MapInfo.Doors, 15).Select(r => ((int)r.Bytes[0], $"door {r.Bytes[0]} ({r.Bytes[1]},{r.Bytes[2]})")).ToList();
@@ -1656,9 +1662,24 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
             int sprite = a.Sprite >= 0 ? a.Sprite : a.Id < 7 ? a.Id : 0x0C;
             var o = before != null && before.Actors.TryGetValue(a.Id, out var oo) ? oo : null;
             double x = a.X, y = a.Y;
-            bool walking = t < 1 && o != null && o.Placed && o.Visible && a.Visible && (o.X != a.X || o.Y != a.Y) && Math.Abs(o.X - a.X) + Math.Abs(o.Y - a.Y) <= 6;
-            if (walking) { x = o!.X + (a.X - o.X) * t; y = o.Y + (a.Y - o.Y) * t; }
-            var pic = SpritePicture(sprite, a.Dir, walking ? phase : 0);
+            int dir = a.Dir;
+            bool walking;
+            if (t < 1 && s.MovedId == a.Id && s.MovedRoute is { Count: > 1 } route && o != null && o.Visible && a.Visible)
+            {
+                // a path walk: along its tiles, facing the way of each step
+                walking = true;
+                double f = t * (route.Count - 1);
+                int k = Math.Min(route.Count - 2, (int)f);
+                var (ax, ay) = route[k]; var (bx, by) = route[k + 1];
+                x = ax + (bx - ax) * (f - k); y = ay + (by - ay) * (f - k);
+                dir = bx < ax ? 2 : bx > ax ? 3 : by < ay ? 0 : 1;
+            }
+            else
+            {
+                walking = t < 1 && o != null && o.Placed && o.Visible && a.Visible && (o.X != a.X || o.Y != a.Y) && Math.Abs(o.X - a.X) + Math.Abs(o.Y - a.Y) <= 6;
+                if (walking) { x = o!.X + (a.X - o.X) * t; y = o.Y + (a.Y - o.Y) * t; }
+            }
+            var pic = SpritePicture(sprite, dir, walking ? phase : 0);
             double w = pic?.PixelWidth ?? 16, h = pic?.PixelHeight ?? 32;
             bool moved = o != null && (o.X != a.X || o.Y != a.Y || o.Visible != a.Visible || o.Dir != a.Dir ||
                                        o.ShiftX != a.ShiftX || o.ShiftY != a.ShiftY || o.NudgeX != a.NudgeX || o.NudgeY != a.NudgeY);
@@ -1822,6 +1843,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
             string g = _picked >= 0 ? "" : n + (actor.Id >= 0x50 ? "" : actor.Id == 0 ? " (the leader)" : "");
             string pre = _picked >= 0 ? n + " " : "";
             list.Add(new L2StageAction(g, $"🚶 {pre}walk{(_picked >= 0 ? "s" : "")} here", () => AddWalk(actor.Id, x, y)));
+            list.Add(new L2StageAction(g, $"🛤 {pre}walk{(_picked >= 0 ? "s" : "")} a path, first to here (then click more places)", () => StartPath(actor.Id, x, y)));
             list.Add(new L2StageAction(g, $"✨ {pre}appear{(_picked >= 0 ? "s" : "")} here", () => AddPlace(actor.Id, x, y)));
             list.Add(new L2StageAction(g, $"👀 {pre}turn{(_picked >= 0 ? "s" : "")} to face this tile", () => AddFace(actor.Id, x, y)));
             if (actor.Visible) list.Add(new L2StageAction(g, $"💨 {pre}leave{(_picked >= 0 ? "s" : "")}", () => Insert(-1, new L2Step { Bytes = new byte[] { 0x2E, (byte)actor.Id } })));

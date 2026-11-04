@@ -287,6 +287,13 @@ public partial class L2EventEditorPanel : UserControl
         if (sender is FrameworkElement { DataContext: L2FieldVm f }) f.ShowFlagUses();
     }
 
+    private void EditPath_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: L2FieldVm f }) return;
+        if (StageRoot.Visibility != Visibility.Visible) ShowStage(true);
+        f.EditPath();
+    }
+
     private void OpenScene_Click(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement { DataContext: L2LineVm line }) _editor?.OpenScene(line);
@@ -379,6 +386,7 @@ public partial class L2EventEditorPanel : UserControl
         var (x, y) = TileAt(e);
         _lastTile = (x, y);
         if (_pickStart) { _pickStart = false; _editor.SetPartyStart(x, y); return; }
+        if (_editor.IsDrawingPath) { _editor.PathClick(x, y); return; }
         var p = e.GetPosition(Stage);
         if (_editor.StageClick(p.X, p.Y)) return;
         ShowActionMenu(x, y);
@@ -388,8 +396,9 @@ public partial class L2EventEditorPanel : UserControl
     {
         var (x, y) = TileAt(e);
         _lastTile = (x, y);
-        ShowActionMenu(x, y);
         e.Handled = true;
+        if (_editor?.IsDrawingPath == true) { _editor.PathUndoCorner(); return; }
+        ShowActionMenu(x, y);
     }
 
     /// <summary>What can happen at a tile: the picked character (or any) walks / appears / turns; the camera moves; the party starts.</summary>
@@ -491,7 +500,8 @@ public partial class L2EventEditorPanel : UserControl
     {
         if (_editor != null)
         {
-            if (e.Key == Key.Escape && (_editor.PickedActor >= 0 || _pickStart)) { _pickStart = false; _editor.LetGo(); e.Handled = true; }
+            if (e.Key == Key.Escape && _editor.IsDrawingPath) { _editor.PathCancel(); e.Handled = true; }
+            else if (e.Key == Key.Escape && (_editor.PickedActor >= 0 || _pickStart)) { _pickStart = false; _editor.LetGo(); e.Handled = true; }
             else if (Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase && Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
             {
                 bool shift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
