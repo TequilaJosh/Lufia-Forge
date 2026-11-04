@@ -324,7 +324,7 @@ public static class L2NewMaps
         return refs.Distinct().ToList();
     }
 
-    /// <summary>A map file with the template's heads: <paramref name="w"/> x <paramref name="h"/> blocks, the ground
+    /// <summary>A map file with the template's head (both layers scrolling with the map): <paramref name="w"/> x <paramref name="h"/> blocks, the ground
     /// all <paramref name="fill"/>, the upper layer empty (block 0, no walls).</summary>
     public static byte[] BlankFile(byte[] template, int w, int h, int fill)
     {
@@ -334,8 +334,9 @@ public static class L2NewMaps
         int p = 6;
         for (int l = 0; l < 2; l++)
         {
-            outp.Add(p + 1 < template.Length ? template[p] : (byte)0);
-            outp.Add(p + 1 < template.Length ? template[p + 1] : (byte)0);
+            // the layer's scroll mode: 0, scrolls with the map (a template's ground layer may be a parallax background
+            // far below, as on the game's mountains and towers, which draws a blank map out of line with its walls)
+            outp.Add(0); outp.Add(0);
             outp.Add((byte)w); outp.Add((byte)h);
             if (p + 3 < template.Length) p += 4 + template[p + 2] * template[p + 3] * 2;
             int cell = l == 0 ? fill & 0x3FF : 0;

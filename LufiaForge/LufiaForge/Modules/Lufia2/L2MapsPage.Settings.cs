@@ -27,6 +27,7 @@ public partial class L2MapsPage
         {
             LoadGraphicsChoices();
             MapWidth = _edit?.Width ?? 0; MapHeight = _edit?.Height ?? 0;
+            OnPropertyChanged(nameof(GroundParallax));
             UpdateTestStartNote();
             UpdateNewMapNote();
         }
@@ -79,6 +80,28 @@ public partial class L2MapsPage
                  "The map keeps its block numbers, so on other blocks it looks scrambled until you paint it again. " +
                  "To keep this map's look and paint with other graphics' blocks too, pick them under Blocks, From.";
     }
+
+    /// <summary>The ground layer scrolls as a parallax background far below (the game's mountains, towers and Shrine of
+    /// Daos floors, where the party looks down past ledges); off, it scrolls with the map as in towns. A map copied from
+    /// such a floor but drawn as one flat place shows out of line with its walls in the game when it's on.</summary>
+    public bool GroundParallax
+    {
+        get => _edit != null && !_edit.IsWorld && (_edit.GroundMode & 0xFF) != 0;
+        set
+        {
+            if (_edit == null || _edit.IsWorld || _loadingSettings || value == GroundParallax) return;
+            var before = _edit.Save();
+            if (!value) _parallaxWas = _edit.GroundMode;
+            _edit.GroundMode = value ? (_parallaxWas & 0xFF) != 0 ? _parallaxWas : L2Maps.ParallaxMode : 0;
+            _history.Add((before, value ? "making the ground a far-off background" : "making the ground scroll with the map")); _redo.Clear();
+            OnPropertyChanged();
+            UpdateUndoState();
+            Status = value
+                ? "The ground layer scrolls as a far-off background in the game (as on mountains and towers): it moves slower than the walls and the upper layer. Written with the map; Undo takes it back."
+                : "The ground layer scrolls with the map in the game, in line with its walls, as in towns. Written with the map; Undo takes it back.";
+        }
+    }
+    private int _parallaxWas;
 
     [RelayCommand]
     private void ResizeMap()

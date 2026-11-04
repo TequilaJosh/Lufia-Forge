@@ -104,7 +104,21 @@ public static class L2Maps
     /// <summary>Writes the map's two layers back (block numbers and cell flags): its packed file is rebuilt and put back
     /// (<see cref="L2Rom.WriteFile"/>). A map whose size changed gets its file laid out again (the 6-byte head and each
     /// layer's u16 head kept, the new width and height, the cells).</summary>
-    public static void Write(RomBuffer rom, Map map)
+    /// <summary>The word at the head of layer <paramref name="layer"/> in the map's file: low byte the scroll mode (0 =
+    /// scrolls with the map; the game's mountains, towers and Shrine of Daos floors give their ground layer 02 or 03, a
+    /// parallax background far below, table $8E:BE6E), high byte its parallax speeds.</summary>
+    public static int LayerMode(RomBuffer rom, int id, int layer)
+    {
+        byte[] f = L2Rom.ReadFile(rom, L2NewMaps.FileOf(id));
+        int p = 6;
+        for (int l = 0; l < layer && p + 4 <= f.Length; l++) p += 4 + f[p + 2] * f[p + 3] * 2;
+        return p + 1 < f.Length ? f[p] | f[p + 1] << 8 : 0;
+    }
+
+    /// <summary>The ground layer scroll mode most of the game's mountains and towers have (mode 02, speeds 11).</summary>
+    public const int ParallaxMode = 0x1102;
+
+    public static void Write(RomBuffer rom, Map map, int groundMode = -1)
     {
         byte[] f = L2Rom.ReadFile(rom, L2NewMaps.FileOf(map.Id));
         var outp = new List<byte>(f.Take(6));
@@ -113,7 +127,9 @@ public static class L2Maps
         {
             var L = map.Layers[l];
             int ow = f[p + 2], oh = f[p + 3];
-            outp.Add(f[p]); outp.Add(f[p + 1]); outp.Add((byte)L.Width); outp.Add((byte)L.Height);
+            if (l == 0 && groundMode >= 0) { outp.Add((byte)groundMode); outp.Add((byte)(groundMode >> 8)); }
+            else { outp.Add(f[p]); outp.Add(f[p + 1]); }
+            outp.Add((byte)L.Width); outp.Add((byte)L.Height);
             p += 4 + ow * oh * 2;
             for (int i = 0; i < L.Width * L.Height; i++)
             {
