@@ -1,3 +1,5 @@
+using CommunityToolkit.Mvvm.Input;
+using LufiaForge.Core.Lufia2;
 using LufiaForge.Core.Maps;
 
 namespace LufiaForge.Modules.MapEditor;
@@ -91,5 +93,91 @@ public partial class MapEditorViewModel
         }
         catch (Exception ex) { Status = "Turn brush: " + ex.Message; }
         return true;
+    }
+
+    // ── Rotate / Flip (Q, F, D): the brush, or the piece being stamped (a preset, a building, a paste, a palette rectangle) ──
+
+    [RelayCommand] private void RotateBrush() => TurnBy(1, false, "turned a quarter clockwise");
+    [RelayCommand] private void FlipBrushAcross() => TurnBy(0, true, "flipped across");
+    [RelayCommand] private void FlipBrushUpDown() => TurnBy(2, true, "flipped up/down");
+
+    /// <summary>Q, F and D: rotate or flip the brush.</summary>
+    private bool TurnKey(System.Windows.Input.Key key)
+    {
+        switch (key)
+        {
+            case System.Windows.Input.Key.Q: RotateBrush(); return true;
+            case System.Windows.Input.Key.F: FlipBrushAcross(); return true;
+            case System.Windows.Input.Key.D: FlipBrushUpDown(); return true;
+            default: return false;
+        }
+    }
+
+    /// <summary>Turns the brush block or the whole piece being stamped: each block becomes its turned copy (found in the
+    /// tileset or added, <see cref="BlockTurn"/>), and the cells move to their turned places.</summary>
+    private void TurnBy(int quarters, bool flip, string what)
+    {
+        if (_rom == null || _map == null || _tileset == null) return;
+        if (_map.IsWorld) { Status = "World map blocks can't be turned (the world map has a fixed set of blocks)."; return; }
+        var p = _stamp;
+        if (p != null && p.TilesetKey != TilesetKey)
+        { Status = "This piece was copied on another tileset and is being pasted as it is: copy it again from this map to turn it."; return; }
+        int w = p?.W ?? 1, h = p?.H ?? 1;
+        var cells = p != null ? p.Tiles.Select(c => c == Prefabs.Keep ? c : (ushort)(c & 0x3FF)).ToArray() : new[] { (ushort)Brush };
+        var ids = cells.Where(c => c != Prefabs.Keep).Select(c => (int)c).Distinct().ToList();
+        if (ids.Count == 0) return;
+        int before = cells[0];
+        if (!WritePendingFirst()) return;
+        BlockTurn.Result r;
+        try
+        {
+            try { r = BlockTurn.Turn(_rom, _map, ids, quarters, flip); }
+            catch (BlockBring.NeedsRoomException ex)
+            {
+                int threshold = _map.CompositeThreshold;
+                if (!MakeRoomFor(ex.Message)) return;
+                if (_map == null) return;
+                // making room puts the spares where the map's composites started: they move up
+                int d = _map.CompositeThreshold - threshold;
+                if (threshold >= 0 && d != 0)
+                {
+                    cells = cells.Select(c => c != Prefabs.Keep && c >= threshold ? (ushort)(c + d) : c).ToArray();
+                    ids = ids.Select(b => b >= threshold ? b + d : b).ToList();
+                }
+                r = BlockTurn.Turn(_rom, _map, ids, quarters, flip);
+            }
+        }
+        catch (Exception ex) { Status = "Can't turn it: " + ex.Message; return; }
+        if (r.Added > 0)
+        {
+            _mainVm?.NotifyRomModified($"Tileset {_map.Tileset}: {r.Added} turned block{(r.Added == 1 ? "" : "s")}");
+            _tileset = MapTileset.ForMap(_rom, _map);
+            BuildPalette();
+        }
+        var to = ids.Select((b, i) => (b, r.Blocks[i])).ToDictionary(x => x.b, x => x.Item2);
+        var (nw, nh) = L2BlockTurn.Size(w, h, quarters);
+        var o = new ushort[nw * nh];
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                var (tx, ty) = L2BlockTurn.Point(x, y, w, h, quarters, flip);
+                ushort c = cells[y * w + x];
+                o[ty * nw + tx] = c == Prefabs.Keep ? c : (ushort)to[c];
+            }
+        string added = r.Added > 0
+            ? $" ({r.Added} turned block{(r.Added == 1 ? "" : "s")} added to tileset {_map.Tileset}" +
+              (r.NewTiles > 0 ? $", {r.NewTiles} new tile{(r.NewTiles == 1 ? "" : "s")}" : "") + "; Edit > Undo takes them out)"
+            : "";
+        if (p != null)
+        {
+            if (Tool != MapTool.Paint) Tool = MapTool.Paint;
+            StartStamp(new BlockPattern(nw, nh, o, false, TilesetKey, p.Source, _map.MapId));
+            BrushBoxW = BrushBoxH = 16;
+            OnBrushBoxChanged();
+            Status = $"The piece is {what}{added}. Click to stamp it; Q turns it again, F / D flip it; Esc stops.";
+            return;
+        }
+        Brush = o[0];
+        Status = $"Brush: block {before:X3} {what} is block {o[0]:X3}{added}. Q turns it again, F / D flip it.";
     }
 }

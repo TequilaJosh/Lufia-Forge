@@ -111,13 +111,29 @@ public sealed class TileImport
         newTiles = 0;
         for (int q = 0; q < 4; q++)
         {
-            int tx = q >= 2 ? 8 : 0, ty = (q & 1) == 1 ? 8 : 0;   // TL, BL, TR, BR
-            var (pal, idx) = Quantise(px16, 16, tx, ty);
-            var (tile, hf, vf, isNew) = Place(idx);
-            if (isNew) { newTiles++; _tilesPlaced++; }
-            words[q] = (ushort)(tile | pal << 10 | priority[q] & 0x2000 | (hf ? 0x4000 : 0) | (vf ? 0x8000 : 0));
+            words[q] = QuarterWord(px16, q, priority[q], out bool isNew);
+            if (isNew) newTiles++;
         }
         return words;
+    }
+
+    /// <summary>The tilemap word for quarter <paramref name="q"/> (TL, BL, TR, BR) of a 16 x 16 picture, as <see cref="Words"/>.</summary>
+    public ushort QuarterWord(uint[] px16, int q, int priority, out bool isNew)
+    {
+        int tx = q >= 2 ? 8 : 0, ty = (q & 1) == 1 ? 8 : 0;
+        var (pal, idx) = Quantise(px16, 16, tx, ty);
+        var (tile, hf, vf, n) = PlaceTile(idx);
+        isNew = n;
+        return (ushort)(tile | pal << 10 | priority & 0x2000 | (hf ? 0x4000 : 0) | (vf ? 0x8000 : 0));
+    }
+
+    /// <summary>A tile drawing these 64 colour numbers (0-15): one of the graphics' tiles (maybe mirrored), or a new one
+    /// in a free slot (written by <see cref="SaveTiles"/>).</summary>
+    public (int Tile, bool H, bool V, bool New) PlaceTile(byte[] idx)
+    {
+        var r = Place(idx);
+        if (r.New) _tilesPlaced++;
+        return r;
     }
 
     /// <summary>Writes the graphics when <see cref="Words"/> put new tiles in.</summary>
