@@ -177,6 +177,18 @@ is written), `Modules/Lufia2/L2MapWindows.cs` (pick a place, pieces and presets,
   A piece from other graphics needs room in this map's block set (Secret Skills Cave's is full, so only its own
   graphics' pieces fit there).
 
+### Houses and rooms (checked in the game, 2026-11-03)
+
+* The game keeps a town's insides on a map of their own (Parcelyte 2C outside, 2D inside): rooms in black (block 001 in
+  block set 2), black on every edge, the doors exits between the two maps.
+* Inside a room (cells marked Room border) the game blacks out the rest of the map but doesn't stop the screen at the
+  map's edge: past it the screen wraps round to the opposite side. Rooms built on the outdoor map show the grass from
+  the other side there (and after an exit within the same map the screen can keep pieces of the view before). On a
+  map of their own, black all round, nothing shows.
+* A new map made from a mountain, tower or Shrine of Daos floor keeps a ground layer that scrolls as a far-off
+  background (Map settings), and those floors' map settings (`69 D9`: dungeon controls, no field tools). For a town:
+  untick the box, and set the start-up script's Map settings to `98` as Parcelyte's.
+
 ## 2. How it is written
 
 * **Blocks**: the map's packed file (0x3F + map) is rebuilt: the 6-byte head, then each layer (u16 head, width, height,
