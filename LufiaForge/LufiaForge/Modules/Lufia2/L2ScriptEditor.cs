@@ -1660,12 +1660,14 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
             if (walking) { x = o!.X + (a.X - o.X) * t; y = o.Y + (a.Y - o.Y) * t; }
             var pic = SpritePicture(sprite, a.Dir, walking ? phase : 0);
             double w = pic?.PixelWidth ?? 16, h = pic?.PixelHeight ?? 32;
-            bool moved = o != null && (o.X != a.X || o.Y != a.Y || o.Visible != a.Visible || o.Dir != a.Dir);
+            bool moved = o != null && (o.X != a.X || o.Y != a.Y || o.Visible != a.Visible || o.Dir != a.Dir ||
+                                       o.ShiftX != a.ShiftX || o.ShiftY != a.ShiftY || o.NudgeX != a.NudgeX || o.NudgeY != a.NudgeY);
             string name = L2EventCommands.Cap(Name(a.Id));
             Actors.Add(new L2StageActor
             {
                 Id = a.Id, X = a.X, Y = a.Y, Name = name,
-                Left = x * 16 + 8 - w / 2, Top = y * 16 + 16 - h, Picture = pic,
+                // off its tile by the nudges (8B / C0) and drawn off that by a shift (6C), as the game draws it
+                Left = x * 16 + 8 - w / 2 + a.NudgeX + a.ShiftX, Top = y * 16 + 16 - h + a.NudgeY + a.ShiftY, Picture = pic,
                 Label = a.Id == 0 || _cast.Contains(a.Id) || moved || a.Id == _picked ? name.Replace("Cutscene character", "cutscene").Replace("Character", "char") : "",
                 Opacity = a.Visible ? 1 : 0.3, Moved = moved && t >= 1, Picked = a.Id == _picked,
                 // sprites with a picture for each facing show it; others get a small arrow

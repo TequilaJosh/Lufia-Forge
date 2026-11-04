@@ -126,8 +126,15 @@ public sealed class L2StageState
         public int Dir { get; set; } = 1;
         public bool Visible { get; set; }
         public int Sprite { get; set; } = -1;
+        /// <summary>Pixels the picture is drawn off its place ("Draw a character shifted", 6C; set, not added).</summary>
+        public int ShiftX { get; set; }
+        public int ShiftY { get; set; }
+        /// <summary>Pixels the character stands off its tile ("Nudge a character", 8B / C0; added up, gone when it is put
+        /// on a tile or point).</summary>
+        public int NudgeX { get; set; }
+        public int NudgeY { get; set; }
         public bool Placed => X >= 0 && Y >= 0;
-        public Actor Copy() => new() { Id = Id, X = X, Y = Y, Dir = Dir, Visible = Visible, Sprite = Sprite };
+        public Actor Copy() => new() { Id = Id, X = X, Y = Y, Dir = Dir, Visible = Visible, Sprite = Sprite, ShiftX = ShiftX, ShiftY = ShiftY, NudgeX = NudgeX, NudgeY = NudgeY };
     }
 
     public Dictionary<int, Actor> Actors { get; } = new();
@@ -622,9 +629,28 @@ public static class L2Cutscene
             case 0x48: s.BoxFixed = true; s.Caption = "The next text box is put in a fixed place (over nobody)"; break;
             case 0x3D: s.LinedUp = true; s.Caption = "The party lines up behind the leader"; break;
             case 0x34 when b.Length >= 3: { var a = A(b[1]); a.Sprite = L2Sprites.ToEditor(sp.Rom, sp.Map, b[2]); s.Caption = $"{name(b[1])} is shown as sprite {L2Sprites.Name(a.Sprite)}"; break; }
-            case 0x2F when b.Length >= 4: { var a = A(b[1]); a.X = b[2]; a.Y = b[3]; s.Caption = $"{name(b[1])} is put on ({b[2]}, {b[3]})"; break; }
-            case 0x30 when b.Length >= 3 && points.TryGetValue(b[2], out var p): { var a = A(b[1]); a.X = p.X; a.Y = p.Y; s.Caption = $"{name(b[1])} is put on point {b[2]}"; break; }
-            case 0x98 when b.Length >= 3: { var a = A(b[1]); if (points.TryGetValue(b[2], out var p2)) { a.X = p2.X; a.Y = p2.Y; } a.Visible = true; s.Caption = $"{name(b[1])} appears"; s.Frames = 30; break; }
+            case 0x2F when b.Length >= 4: { var a = A(b[1]); a.X = b[2]; a.Y = b[3]; a.NudgeX = a.NudgeY = 0; s.Caption = $"{name(b[1])} is put on ({b[2]}, {b[3]})"; break; }
+            case 0x30 when b.Length >= 3 && points.TryGetValue(b[2], out var p): { var a = A(b[1]); a.X = p.X; a.Y = p.Y; a.NudgeX = a.NudgeY = 0; s.Caption = $"{name(b[1])} is put on point {b[2]}"; break; }
+            case 0x98 when b.Length >= 3: { var a = A(b[1]); if (points.TryGetValue(b[2], out var p2)) { a.X = p2.X; a.Y = p2.Y; a.NudgeX = a.NudgeY = 0; } a.Visible = true; s.Caption = $"{name(b[1])} appears"; s.Frames = 30; break; }
+            case 0x6C when b.Length >= 4:
+            {
+                var a = A(b[1]); a.ShiftX = (sbyte)b[2]; a.ShiftY = (sbyte)b[3];
+                s.Caption = a.ShiftX == 0 && a.ShiftY == 0 ? $"{name(b[1])} is drawn on its place again" : $"{name(b[1])} is drawn {Pixels(a.ShiftX, a.ShiftY)} off its place";
+                break;
+            }
+            case 0x8B or 0xC0 when b.Length >= 4:
+            {
+                var a = A(b[1]); a.NudgeX += (sbyte)b[2]; a.NudgeY += (sbyte)b[3];
+                if (op == 0xC0 && a.Placed)
+                {
+                    // the game settles it on the tile its pixel place is in
+                    int px = a.X * 16 + a.NudgeX, py = a.Y * 16 + a.NudgeY;
+                    a.X = (int)Math.Floor(px / 16.0); a.Y = (int)Math.Floor(py / 16.0);
+                    a.NudgeX = px - a.X * 16; a.NudgeY = py - a.Y * 16;
+                }
+                s.Caption = $"{name(b[1])} is nudged {Pixels((sbyte)b[2], (sbyte)b[3])}";
+                break;
+            }
             case 0x2D when b.Length >= 2: A(b[1]).Visible = true; s.Caption = $"{name(b[1])} appears"; break;
             case 0x2E or 0x99 or 0x9D when b.Length >= 2: A(b[1]).Visible = false; s.Caption = $"{name(b[1])} leaves"; s.Frames = op == 0x2E ? 6 : 30; break;
             case 0x31 when b.Length >= 3 && b[2] is >= 1 and <= 4: A(b[1]).Dir = new[] { 0, 0, 1, 2, 3 }[b[2]]; s.Caption = $"{name(b[1])} turns"; break;
@@ -707,6 +733,15 @@ public static class L2Cutscene
     }
 
     private static string Cap(string s) => s.Length > 0 ? char.ToUpperInvariant(s[0]) + s[1..] : s;
+
+    /// <summary>"8 pixels left and 4 down" for a pixel shift.</summary>
+    private static string Pixels(int x, int y)
+    {
+        var parts = new List<string>();
+        if (x != 0) parts.Add($"{Math.Abs(x)} pixel{(Math.Abs(x) == 1 ? "" : "s")} {(x < 0 ? "left" : "right")}");
+        if (y != 0) parts.Add($"{Math.Abs(y)} pixel{(Math.Abs(y) == 1 ? "" : "s")} {(y < 0 ? "up" : "down")}");
+        return parts.Count == 0 ? "by 0 pixels" : string.Join(" and ", parts);
+    }
 
     /// <summary>Whether actor <paramref name="id"/> steps in direction <paramref name="dir"/> in the same round as step
     /// <paramref name="i"/> (the A3 commands next to it, before the waits): walking together in a line, the one in front

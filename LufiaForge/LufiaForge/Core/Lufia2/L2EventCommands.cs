@@ -387,9 +387,12 @@ public static class L2EventCommands
         One(0x7B, "Add a field monster (start-up script)", Chars, (b, w) => $"Add field monster {NoSprite(w.Who(b[1]))} with sprite {b[2]:X2}", null,
             "Only in a map's start-up script.", rare: true, ps: new[] { Who(1), P("sprite", L2Kind.Sprite, 2) });
         One(0x6C, "Draw a character shifted", Chars, (b, w) => $"Draw {w.Who(b[1])} shifted by ({(sbyte)b[2]}, {(sbyte)b[3]}) pixels", new byte[] { 0x6C, 0x50, 0, 0 },
-            "Only the picture moves; the character stays on its tile.", ps: new[] { Who(1), P("x pixels", L2Kind.Signed, 2, 127, min: -128), P("y pixels", L2Kind.Signed, 3, 127, min: -128) });
+            "Only the picture moves; the character stays on its tile (0, 0 draws it on its place again). To leave someone standing between two tiles, use Nudge.",
+            ps: new[] { Who(1), P("x pixels", L2Kind.Signed, 2, 127, min: -128), P("y pixels", L2Kind.Signed, 3, 127, min: -128) });
         One(0x8B, "Nudge a character", Chars, (b, w) => $"Nudge {w.Who(b[1])} by ({(sbyte)b[2]}, {(sbyte)b[3]}) pixels", new byte[] { 0x8B, 0x50, 0, 0 },
-            "", ps: new[] { Who(1), P("x pixels", L2Kind.Signed, 2, 127, min: -128), P("y pixels", L2Kind.Signed, 3, 127, min: -128) });
+            "It stands that many pixels off its tile until it is put on a tile or point again (-8, 0: between two tiles, as the Sinistrals appear). " +
+            "After \"appears in a flash\", nudge only after \"Wait for the action\"; the game's way: appear, Draw shifted (-8, 0), Wait for the action, Draw shifted (0, 0), Nudge (-8, 0).",
+            ps: new[] { Who(1), P("x pixels", L2Kind.Signed, 2, 127, min: -128), P("y pixels", L2Kind.Signed, 3, 127, min: -128) });
         One(0xC0, "Nudge a character onto another tile", Chars, (b, w) => $"Nudge {w.Who(b[1])} by ({(sbyte)b[2]}, {(sbyte)b[3]}) pixels and settle it on that tile",
             new byte[] { 0xC0, 0x50, 0, 0x10 }, "", ps: new[] { Who(1), P("x pixels", L2Kind.Signed, 2, 127, min: -128), P("y pixels", L2Kind.Signed, 3, 127, min: -128) });
         One(0x7A, "Show a sprite frame", Chars, (b, w) => $"{Cap(w.Who(b[1]))} shows frame {b[2]:X2}", new byte[] { 0x7A, 0x50, 0x00 },
