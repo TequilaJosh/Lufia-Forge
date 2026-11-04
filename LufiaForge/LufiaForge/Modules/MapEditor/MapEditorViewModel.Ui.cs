@@ -37,7 +37,7 @@ public partial class MapEditorViewModel
     public string ToolHint => Tool switch
     {
         MapTool.Select => "Select / move (S): click a character, exit, arrival point or treasure to edit it; drag to move; click the same block again for the next thing on it. Double-click an exit to go there.",
-        MapTool.Paint => "Paint (B): click or drag to paint the brush block. Size: 1, 3, 5 or 7 blocks square ([ and ] change it). Ctrl + click picks a block from the map. Pick a brush (or drag a rectangle of blocks) on the right.",
+        MapTool.Paint => "Paint (B): click or drag to paint the brush block. Size: 1, 3, 5 or 7 blocks square ([ and ] change it). Ctrl + click picks a block from the map. Pick a brush (or drag a rectangle of blocks) on the right. Q rotates the brush or the piece being placed, F / D flip it.",
         MapTool.Fill => "Fill (G): click a block: it and every same block joined to it become the brush block. Shift + click fills the whole map. Ctrl + click picks a block from the map.",
         MapTool.Pick => "Pick block (I): click the map to take its block as the brush.",
         MapTool.Area => "Area (M): drag a rectangle, then Copy (Ctrl+C), Cut (Ctrl+X), Fill or Delete; Paste (Ctrl+V) stamps copied blocks. Esc stops.",
@@ -63,6 +63,7 @@ public partial class MapEditorViewModel
             _ => null,
         };
         if (t == null && IsMapLoaded && BrushSizeKey(key)) return true;
+        if (t == null && IsMapLoaded && TurnKey(key)) return true;
         if (t == null || !IsMapLoaded) return false;
         Tool = t.Value;
         return true;

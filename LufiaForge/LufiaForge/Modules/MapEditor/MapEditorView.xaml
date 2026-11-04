@@ -350,6 +350,14 @@
                         </DockPanel>
                         <TextBlock DockPanel.Dock="Top" Text="{Binding BrushText}" Style="{StaticResource LufiaLabel}" TextWrapping="Wrap"
                                    Foreground="{StaticResource GoldLightBrush}" Margin="0,0,0,6"/>
+                        <UniformGrid DockPanel.Dock="Top" Columns="3" Margin="0,0,0,6">
+                            <Button Content="↻ Rotate" Style="{StaticResource LufiaButton}" Padding="6,2" Margin="0,0,3,0" Command="{Binding RotateBrushCommand}"
+                                    ToolTip="Turn the brush, or the piece being placed (a building, preset or paste), a quarter clockwise (Q). Turned blocks the tileset doesn't have are added to it (quarter turns draw new tiles); Undo takes them out"/>
+                            <Button Content="↔ Flip" Style="{StaticResource LufiaButton}" Padding="6,2" Margin="3,0,3,0" Command="{Binding FlipBrushAcrossCommand}"
+                                    ToolTip="Flip the brush, or the piece being placed, across (F); walls flip with it"/>
+                            <Button Content="↕ Flip" Style="{StaticResource LufiaButton}" Padding="6,2" Margin="3,0,0,0" Command="{Binding FlipBrushUpDownCommand}"
+                                    ToolTip="Flip the brush, or the piece being placed, up/down (D); walls flip with it"/>
+                        </UniformGrid>
                         <UniformGrid DockPanel.Dock="Top" Columns="2" Margin="0,0,0,6">
                             <Button Content="🏠  Buildings..." Style="{StaticResource LufiaButtonGold}" Padding="9,4" Margin="0,0,3,0"
                                     Command="{Binding BuildingsCommand}"
