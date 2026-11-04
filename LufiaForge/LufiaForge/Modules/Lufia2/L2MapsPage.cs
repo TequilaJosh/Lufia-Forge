@@ -210,6 +210,11 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
             : "The sea floor: paint, pick and copy its big blocks.";
         else if (_rom != null && TableGuard.LockReason(_rom, "Maps") is { } locked) Status = locked;
         else if (_edit != null) Status = $"{NameOf(value)}. Pick a tool above; Ctrl+Z takes back each change.";
+        // a new map made from a mountain, tower or Shrine of Daos floor keeps its ground layer far below: in the game
+        // it then shows out of line with the walls, which a flat map built here won't want
+        if (_edit != null && value >= L2NewMaps.GameCount && GroundParallax)
+            Status = $"{NameOf(value)}: its ground layer scrolls as a far-off background in the game (as on the map it was made from), so the game shows it out of line with the walls. " +
+                     "For a town or any flat map, untick \"Ground layer is a far-off background\" in Map settings.";
         _readVersion = _rom?.Version ?? -1;
     }
 
