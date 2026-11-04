@@ -14,7 +14,7 @@ is written), `Modules/Lufia2/L2MapWindows.cs` (pick a place, pieces and presets,
 | Fill (G) | Click a block: it and every block joined to it (side by side) that is the same become the brush, on the layer painted; a brush of several blocks repeats. Shift + click, or "Fill the layer", fills the whole layer (on the world map, the whole map). One Undo step. |
 | Pick (I) | Takes the block under the mouse as the brush. |
 | Area (M) | Drag a rectangle: Copy (Ctrl+C), Cut (Ctrl+X), Paste (Ctrl+V, then click to place; Esc stops), Fill, Delete (Del), Save as preset. Copies take both layers and their walls; they paste on any map with the same graphics. |
-| Collision (L) | Paints "can't walk", doorway, wall on the top or left edge, upper level or room border; right-click clears a block. |
+| Collision (L) | Wall line (the default) draws walls along the grid lines the mouse runs along (the yellow lines; a wall is the top or left edge of a cell, so the line under a cell is the top edge of the one below), right-drag takes them away. The other kinds paint "can't walk", doorway, wall on the top or left edge, upper level or room border on whole blocks; right-click clears a block. |
 | + Exit (E) | Drag where the party leaves; then pick the map and block it leads to (Pick on map...). On the world map this adds an entrance to a town or dungeon (see below). |
 | + Step-on area (T) | Drag an area; its event (empty) is made when the map is written; Event... opens it in Events. |
 | + Character (C) | Click where it stands; pick its sprite (the picture shows it) and how it moves; Talk event... gives it something to say. |
@@ -22,6 +22,9 @@ is written), `Modules/Lufia2/L2MapWindows.cs` (pick a place, pieces and presets,
 | + Chest (K) | Click a block: a chest with the picture picked in "Chest picture" under the map (this map's own chest, or any chest of the game, closed and open; see below), its own opened flag, and an item or gold picked in the inspector. Pressing A facing it gives it once. |
 | + Hidden item (H) | Click a block: nothing shows there; pressing A facing it finds the item, once. The block can't be walked onto (as a chest), so put it on furniture, a wall or a dead end. |
 
+* **Ground block 000** draws nothing in the game (the screen keeps what was there, often grass from elsewhere), so the editor
+  shows it as purple stripes; the game's maps put a black block (001 in block set 2) around their rooms. Resize map and
+  Blank new maps never fill with it (the brush, or the block the map's edges have most when the brush is 000).
 * **Show**: ground, upper layer, collision, characters, exits (labelled with the map they lead to), step-on areas,
   treasure, doors, preset points, and the camera (the 16 x 14 blocks the screen shows with the party on the block under
   the mouse; it stops at the map's edges).

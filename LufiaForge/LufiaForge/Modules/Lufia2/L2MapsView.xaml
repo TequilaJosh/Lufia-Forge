@@ -173,7 +173,8 @@
                                     ToolTip="Fills the whole layer painted with the brush (Shift + click with Fill does the same; Undo takes it back)"/>
                             <StackPanel Orientation="Horizontal" Margin="12,0,0,0" Visibility="{Binding IsCollisionTool, Converter={StaticResource BoolToVisibilityConverter}}">
                                 <TextBlock Text="Collision to paint" Style="{StaticResource LufiaLabel}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <ComboBox Style="{StaticResource GdCombo}" Width="190" ItemsSource="{Binding CollisionChoices}" SelectedIndex="{Binding CollisionKind}"/>
+                                <ComboBox Style="{StaticResource GdCombo}" Width="250" ItemsSource="{Binding CollisionChoices}" SelectedIndex="{Binding CollisionKind}"
+                                          ToolTip="Wall line draws the yellow walls along the grid lines (drag along a line; right-drag takes them away). The others paint whole blocks."/>
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Margin="12,0,0,0" Visibility="{Binding PresetOptionsVisible, Converter={StaticResource BoolToVisibilityConverter}}">
                                 <ComboBox Style="{StaticResource GdCombo}" Width="300" ItemsSource="{Binding PresetKindChoices}" SelectedIndex="{Binding PresetKind}"/>

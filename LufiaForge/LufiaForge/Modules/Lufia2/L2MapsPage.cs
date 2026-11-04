@@ -497,6 +497,23 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
         {
             var map = _edit.ForDrawing;
             var (w, h, px) = L2Maps.Render(_rom, map, ShowGround, ShowUpper);
+            // ground block 0 draws nothing in the game (the screen keeps what was there, grass from elsewhere): a purple
+            // stripe pattern here, so it doesn't pass for the black the game's maps put around their rooms
+            if (ShowGround && map.Layers.Length > 0)
+            {
+                var G = map.Layers[0];
+                for (int cy = 0; cy < G.Height; cy++)
+                    for (int cx = 0; cx < G.Width; cx++)
+                    {
+                        if (G.Blocks[cy * G.Width + cx] != 0) continue;
+                        for (int y = 0; y < 16; y++)
+                            for (int x = 0; x < 16; x++)
+                            {
+                                int i = (cy * 16 + y) * w + cx * 16 + x;
+                                if (i < px.Length && px[i] == 0) px[i] = (x + y) % 8 < 3 ? 0xFF6A2A78u : 0xFF1A0A20u;
+                            }
+                    }
+            }
             if (ShowCollision && map.Layers.Length > 1)
             {
                 var L = map.Layers[1];
