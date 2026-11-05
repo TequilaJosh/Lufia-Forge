@@ -196,6 +196,14 @@
                     </Style>
                 </Expander.Style>
                 <Border Style="{StaticResource GdCard}" Margin="0,4,0,0" Padding="6,2">
+                    <DockPanel>
+                    <DockPanel DockPanel.Dock="Top" Margin="0,2,0,4">
+                        <Button DockPanel.Dock="Left" Content="＋ Add a character…" Style="{StaticResource LufiaButton}" Click="AddCast_Click" Padding="8,1" Margin="0,0,10,0"
+                                VerticalAlignment="Top" IsEnabled="{Binding CanEdit}"
+                                ToolTip="Pick a sprite, then click a tile on the stage: a new character is made with the map (hidden) and appears there at the picked step"/>
+                        <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" VerticalAlignment="Center"
+                                   Text="Map characters are made by the start-up script; story characters (10-4F, such as Idura) are put on their map by the game itself. To show someone else in their place in this event, use Sprite… on their row."/>
+                    </DockPanel>
                     <ScrollViewer MaxHeight="210" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                         <ItemsControl ItemsSource="{Binding Cast}">
                             <ItemsControl.ItemTemplate>
@@ -209,6 +217,16 @@
                                             <StackPanel>
                                                 <WrapPanel>
                                                     <TextBlock Text="{Binding Name}" Foreground="{StaticResource GoldLightBrush}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,10,2"/>
+                                                    <Button Content="Sprite…" Padding="6,0" Margin="0,0,4,2" Click="CastSprite_Click"
+                                                            ToolTip="Give it another sprite in this event (a &quot;Change a character's sprite&quot; step before its first use)">
+                                                        <Button.Style>
+                                                            <Style TargetType="Button" BasedOn="{StaticResource LufiaButton}">
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding CanSprite}" Value="False"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Button.Style>
+                                                    </Button>
                                                     <ItemsControl ItemsSource="{Binding Links}">
                                                         <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                                                         <ItemsControl.ItemTemplate>
@@ -236,6 +254,7 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                     </ScrollViewer>
+                    </DockPanel>
                 </Border>
             </Expander>
         </StackPanel>
