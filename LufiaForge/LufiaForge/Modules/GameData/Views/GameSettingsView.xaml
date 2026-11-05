@@ -33,7 +33,7 @@
                             <TextBlock Text="Menu button" Style="{StaticResource GdFieldLabel}" Width="110"/>
                             <ComboBox Style="{StaticResource GdCombo}" Width="180" ItemsSource="{Binding MenuButtonLabels}" SelectedIndex="{Binding MenuButton}"
                                       IsEnabled="{Binding CanMenuButton}"
-                                      ToolTip="The button that opens the menu on the field (the game uses B). FrankCG92's menu button remap."/>
+                                      ToolTip="The button that opens the menu on the field (the game uses B). Colmines92's menu button remap."/>
                         </StackPanel>
                         <TextBlock Text="{Binding MenuButtonText}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,2,0,0"/>
                     </StackPanel>

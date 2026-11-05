@@ -97,7 +97,7 @@ public partial class GameSettingsViewModel : GameDataEditorBase
     private void UpdateMenuText() => MenuButtonText = !CanMenuButton
         ? "The menu button check ($01:823E) was changed by another patch, so it can't be set here."
         : MenuButton == 5 && HoldLPatch ? "L also avoids random battles while held (the patch under Random battles): both will happen."
-        : "Opens the menu while walking. Thanks to FrankCG92 for the remap.";
+        : "Opens the menu while walking. Thanks to Colmines92 for the remap.";
 
     private void UpdateEncounterText()
     {
