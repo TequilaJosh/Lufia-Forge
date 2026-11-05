@@ -3,7 +3,7 @@ namespace LufiaForge.Core;
 /// <summary>
 /// Lufia 1: the button that opens the menu on the field (B in the game). <c>$01:823E</c> reads it:
 /// <c>LDA $31 / AND #$80 / BEQ / TRB $35 / BEQ</c>: held (<c>$30</c>/<c>$31</c>: buttons low/high byte) and just pressed
-/// (<c>$34</c>/<c>$35</c>, the same bits; TRB clears the press). The idea and the button masks are FrankCG92's menu
+/// (<c>$34</c>/<c>$35</c>, the same bits; TRB clears the press). The idea and the button masks are Colmines92's menu
 /// button remap (shared on the Lufia Forge Discord); this also points the just-pressed check at the matching byte, which
 /// the buttons of the low byte (X, L, R) need.
 /// </summary>
@@ -25,7 +25,7 @@ public static class MenuButtonPatch
         if (rom.Length < Site + 8) return -1;
         var b = rom.ReadBytes(Site, 8);
         if (b[0] != 0xA5 || b[2] != 0x29 || b[4] != 0xF0 || b[5] != 0x1B || b[6] != 0x14) return -1;
-        // the press byte FrankCG92's patch leaves at $35 counts too
+        // the press byte Colmines92's patch leaves at $35 counts too
         if (b[1] is not (0x30 or 0x31) || b[7] is not (0x34 or 0x35)) return -1;
         return Array.FindIndex(Buttons, x => x.Reg == b[1] && x.Mask == b[3]);
     }
