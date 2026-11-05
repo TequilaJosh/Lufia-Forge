@@ -18,6 +18,8 @@ public sealed class L2CastRowVm
     public string Made { get; init; } = "";
     public string Uses { get; init; } = "";
     public bool InEvent { get; init; }
+    /// <summary>The event can change its sprite (the editor can edit and it isn't the start-up script).</summary>
+    public bool CanSprite { get; init; }
     public double Dim => InEvent ? 1.0 : 0.6;
     public List<L2CastLink> Links { get; init; } = new();
 }
@@ -94,7 +96,8 @@ public partial class L2ScriptEditor
                 if (sprite < 0) sprite = places[0].Sprite;
                 string Place(L2Persistent.Place p) => $"start {p.Spot}" + (starts.TryGetValue(0x4F + p.Spot, out var at) ? $" ({at[1]}, {at[2]})" : "") +
                     (p.From < 0 ? " from a new game on" : $" once {(p.From < _maps.Length ? _maps[p.From] : $"map {p.From:X2}")} sends it");
-                made.Add($"A story character with sprite {L2Sprites.Name(places[0].Sprite)} (\"Send a story character to another map\" puts it here): " + string.Join("; ", places.Select(Place)) + ".");
+                made.Add($"A story character with sprite {L2Sprites.Name(places[0].Sprite)}: the game puts it on its map itself (a new game, or \"Send a story character to another map\"), " +
+                         "so the start-up script doesn't make it. Here: " + string.Join("; ", places.Select(Place)) + ".");
             }
             if (id == talkedTo) made.Add("The one talked to: this event plays when the party talks to it.");
             if (id >= 0x50 && !creates.Any(c => c.Id == id))
@@ -120,6 +123,7 @@ public partial class L2ScriptEditor
                 Made = string.Join(" ", made),
                 Uses = usesText,
                 InEvent = u != null,
+                CanSprite = CanEdit && !here && id != 0xFF,
                 Links = links,
             });
         }
@@ -127,6 +131,50 @@ public partial class L2ScriptEditor
         foreach (var r in rows.OrderBy(r => r.InEvent ? 0 : 1).ThenBy(r => r.InEvent ? uses[r.Id].Min(x => x.Line) : r.Id)) Cast.Add(r);
         int onMap = rows.Count(r => r.Id >= 7);
         CastHeader = $"Characters: {onMap} on this map, {inEvent} in this {(here ? "script" : "event")}";
+    }
+
+    /// <summary>Gives a character another sprite for this event ("Change a character's sprite", 34): put before the
+    /// first step that uses it, or right after it when that step makes it appear (a command on a hidden character
+    /// reaches another one in the game), else below the picked step.</summary>
+    public void ChangeSpriteInEvent(int id, int sprite)
+    {
+        if (_rom == null || _main == null || _script == null || !CanEdit || _event?.IsInit == true) return;
+        int spriteByte;
+        try { spriteByte = L2Sprites.ToGame(_rom, _map, sprite, L2MapInfo.NewSpriteBytesUsed(_rom, _map, true)); }
+        catch (Exception ex) { StageInfo = "Not changed: " + ex.Message; return; }
+        if (sprite >= L2Sprites.GameCount) _main.NotifyRomModified($"Lufia II: map {_map:X2} shows a new sprite");
+        int at = -1;
+        for (int i = 0; i < _script.Steps.Count && at < 0; i++)
+        {
+            var s = _script.Steps[i];
+            if (s.IsText) continue;
+            var def = L2EventCommands.Find(s.Op);
+            if (def == null) continue;
+            bool uses = false;
+            foreach (var p in def.FieldsFor(s.Bytes))
+                if (p.Kind is L2Kind.Who or L2Kind.WhoOrAll)
+                    try { if (p.Get(s.Bytes) == id) uses = true; } catch (Exception) { }
+            if (!uses) continue;
+            // a step that shows it (2D, or an appear action: A3 who 60 / 62 / 86) goes first
+            bool shows = s.Op == 0x2D || s.Op == 0xA3 && s.Bytes.Length >= 3 && s.Bytes[2] is 0x60 or 0x62 or 0x86;
+            at = shows ? i + 1 : i;
+            if (shows && at < _script.Steps.Count && !_script.Steps[at].IsText && _script.Steps[at].Op == 0x2F && _script.Steps[at].Bytes.Length > 1 && _script.Steps[at].Bytes[1] == id) at++;
+        }
+        Insert(at, new L2Step { Bytes = new byte[] { 0x34, (byte)id, (byte)spriteByte } });
+        StageInfo = $"{L2EventCommands.Cap(Name(id))} looks like {L2Sprites.Name(sprite)} from step {SelectedLine + 1} on (only in this event" +
+                    (id is >= 0x10 and < 0x50 ? "; other events still show the story character's own sprite" : "") + ").";
+    }
+
+    /// <summary>A new character for this map's cutscenes (<see cref="AddCastMember"/>) that appears on (x, y) at the
+    /// picked step of this event.</summary>
+    public void AddCharacterHere(int sprite, int x, int y)
+    {
+        bool init = _event?.IsInit == true;
+        int id = AddCastMember(sprite, x, y);
+        if (id < 0 || init) return;
+        string made = StageInfo;
+        AddPlace(id, x, y);
+        StageInfo = made.Replace(" Click a tile and pick \"appears here\" to show it.", "") + $" It appears on ({x}, {y}) at step {SelectedLine + 1}.";
     }
 
     /// <summary>Goes to a line of the Characters section: in this event, or the start-up script opened at it.</summary>

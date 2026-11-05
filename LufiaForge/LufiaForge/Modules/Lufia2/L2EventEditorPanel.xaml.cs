@@ -386,6 +386,7 @@ public partial class L2EventEditorPanel : UserControl
         var (x, y) = TileAt(e);
         _lastTile = (x, y);
         if (_pickStart) { _pickStart = false; _editor.SetPartyStart(x, y); return; }
+        if (_placeSprite >= 0) { int sprite = _placeSprite; _placeSprite = -1; _editor.AddCharacterHere(sprite, x, y); return; }
         if (_editor.IsDrawingPath) { _editor.PathClick(x, y); return; }
         var p = e.GetPosition(Stage);
         if (_editor.StageClick(p.X, p.Y)) return;
@@ -398,6 +399,7 @@ public partial class L2EventEditorPanel : UserControl
         _lastTile = (x, y);
         e.Handled = true;
         if (_editor?.IsDrawingPath == true) { _editor.PathUndoCorner(); return; }
+        if (_placeSprite >= 0) { _placeSprite = -1; if (_editor != null) _editor.StageInfo = "No character added."; return; }
         ShowActionMenu(x, y);
     }
 
@@ -418,6 +420,12 @@ public partial class L2EventEditorPanel : UserControl
             if (a.Group.Length == 0) { if (subs.Count > 0 && !menu.Items.OfType<Separator>().Any()) menu.Items.Add(new Separator()); menu.Items.Add(mi); continue; }
             if (!subs.TryGetValue(a.Group, out var sub)) { sub = new MenuItem { Header = a.Group }; subs[a.Group] = sub; menu.Items.Add(sub); }
             sub.Items.Add(mi);
+        }
+        if (_editor.CanEdit)
+        {
+            var add = new MenuItem { Header = "＋ A new character appears here…", ToolTip = "Pick its sprite: it is made with the map (hidden) and appears on this tile at this step" };
+            add.Click += (_, _) => { int s = PickSprite(_editor, Window.GetWindow(this), "New character", "＋ Add the character"); if (s >= 0) _editor.AddCharacterHere(s, x, y); };
+            menu.Items.Add(add);
         }
         menu.IsOpen = true;
     }
@@ -451,22 +459,35 @@ public partial class L2EventEditorPanel : UserControl
         if (y * z < top + StageScroll.ViewportHeight * 0.2 || y * z > top + StageScroll.ViewportHeight * 0.8) StageScroll.ScrollToVerticalOffset(Math.Max(0, vy));
     }
 
+    /// <summary>A sprite to place with the next click on the stage (-1: none).</summary>
+    private int _placeSprite = -1;
+
     private void AddCast_Click(object sender, RoutedEventArgs e)
     {
         if (_editor?.Rom == null) return;
-        int sprite = PickSprite(_editor, Window.GetWindow(this));
+        int sprite = PickSprite(_editor, Window.GetWindow(this), "New character", "Next: click the tile on the stage");
         if (sprite < 0) return;
-        _editor.AddCastMember(sprite, _lastTile.X, _lastTile.Y);
+        _placeSprite = sprite;
+        if (StageRoot.Visibility != Visibility.Visible) { _stageChosen = true; StageToggle.IsChecked = true; ShowStage(true); }
+        _editor.StageInfo = $"Click the tile on the stage where the new character ({L2Sprites.Name(sprite)}) appears (right-click or Esc: no character).";
+    }
+
+    private void CastSprite_Click(object sender, RoutedEventArgs e)
+    {
+        if (_editor?.Rom == null || sender is not FrameworkElement { DataContext: L2CastRowVm row }) return;
+        int sprite = PickSprite(_editor, Window.GetWindow(this), $"{row.Name.Trim()}: sprite in this event", "Use this sprite",
+            "Pick the sprite it has in this event. A \"Change a character's sprite\" step goes in before the first step that uses it (after the one that makes it appear).");
+        if (sprite >= 0) _editor.ChangeSpriteInEvent(row.Id, sprite);
     }
 
     /// <summary>A small window to pick a map sprite (with its picture); -1 when cancelled.</summary>
-    public static int PickSprite(L2ScriptEditor editor, Window? owner)
+    public static int PickSprite(L2ScriptEditor editor, Window? owner, string title = "New character", string button = "＋ Add the character", string? hint = null)
     {
         var rom = editor.Rom!;
-        var w = L2Ui.Window("Cutscene character", 420, 560);
+        var w = L2Ui.Window(title, 420, 560);
         w.Owner = owner;
         var root = new DockPanel { Margin = new Thickness(12) };
-        root.Children.Add(L2Ui.Label("Pick the sprite of the new character. It is made with the map and hidden until a step makes it appear on the tile you clicked last (or (0, 0)).", true));
+        root.Children.Add(L2Ui.Label(hint ?? "Pick the sprite of the new character. It is made with the map, hidden until a step makes it appear.", true));
         DockPanel.SetDock(root.Children[0], Dock.Top);
         var list = new ListBox { Margin = new Thickness(0, 8, 0, 8) };
         if (L2Ui.S("GdRecordList") is { } ls) list.Style = ls;
@@ -483,7 +504,7 @@ public partial class L2EventEditorPanel : UserControl
         list.SelectedIndex = Math.Min(0x0C, count - 1);
         int picked = -1;
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = System.Windows.HorizontalAlignment.Right };
-        buttons.Children.Add(L2Ui.Button("＋ Add the character", true, (_, _) => { picked = list.SelectedItem is StackPanel { Tag: int t } ? t : -1; w.DialogResult = true; }));
+        buttons.Children.Add(L2Ui.Button(button, true, (_, _) => { picked = list.SelectedItem is StackPanel { Tag: int t } ? t : -1; w.DialogResult = true; }));
         var cancel = L2Ui.Button("Cancel", false, (_, _) => w.DialogResult = false); cancel.Margin = new Thickness(8, 0, 0, 0);
         buttons.Children.Add(cancel);
         DockPanel.SetDock(buttons, Dock.Bottom);
@@ -501,6 +522,7 @@ public partial class L2EventEditorPanel : UserControl
         if (_editor != null)
         {
             if (e.Key == Key.Escape && _editor.IsDrawingPath) { _editor.PathCancel(); e.Handled = true; }
+            else if (e.Key == Key.Escape && _placeSprite >= 0) { _placeSprite = -1; _editor.StageInfo = "No character added."; e.Handled = true; }
             else if (e.Key == Key.Escape && (_editor.PickedActor >= 0 || _pickStart)) { _pickStart = false; _editor.LetGo(); e.Handled = true; }
             else if (Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase && Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
             {
