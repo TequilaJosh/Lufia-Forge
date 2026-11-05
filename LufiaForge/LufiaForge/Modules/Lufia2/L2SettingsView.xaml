@@ -33,8 +33,11 @@
                         <TextBlock Text="SHOPS AND LEVELS" Style="{StaticResource GdSection}"/>
                         <TextBlock Text="Shops buy items for" Style="{StaticResource GdFieldLabel}"/>
                         <ComboBox Style="{StaticResource GdCombo}" ItemsSource="{Binding SellOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding Sell}" IsEnabled="{Binding CanSell}"/>
-                        <TextBlock Text="Highest level (2 to 99)" Style="{StaticResource GdFieldLabel}" Margin="0,6,0,0"/>
+                        <TextBlock Text="{Binding LevelCapLabel}" Style="{StaticResource GdFieldLabel}" Margin="0,6,0,0"/>
                         <TextBox Style="{StaticResource GdNumber}" HorizontalAlignment="Left" Text="{Binding LevelCap, UpdateSourceTrigger=LostFocus}" IsEnabled="{Binding CanLevel}"/>
+                        <CheckBox Content="Higher limits: levels to 255, HP and MP to 9999" Style="{StaticResource GdCheck}" IsChecked="{Binding Limits}" IsEnabled="{Binding CanLimits}" Margin="0,10,0,0"
+                                  ToolTip="Patch: levels show with 3 digits (Colmines92's patch) and HP / MP with 4 in the menus and the battle bar; saves keep levels past 127 and HP / MP past 1023 (old saves load as before); EXP goes on past level 99 and growth past 104. Untick to remove it."/>
+                        <TextBlock Text="{Binding LimitsText}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0"/>
                     </StackPanel>
                 </Border>
                 <Border Style="{StaticResource GdCard}">

@@ -103,7 +103,10 @@ public partial class L2CharactersPage : L2Page
 
     /// <summary>The levels a growth row is used for: row r takes a hero from level 8r (at least 1) to the next, so it
     /// makes levels 8r+1 to 8r+8.</summary>
-    private static string BandLabel(int r) => $"Levels {Math.Max(2, r * 8 + 1)}-{Math.Min(r * 8 + 8, L2Characters.MaxLevel)}";
+    private string BandLabel(int r) => $"Levels {Math.Max(2, r * 8 + 1)}-{BandEnd(r)}";
+
+    /// <summary>The highest level: 99, or 255 with the higher limits (the last row goes on to it).</summary>
+    private int MaxLv => Rom != null ? L2Characters.MaxLevelOf(Rom) : L2Characters.MaxLevel;
 
     partial void OnGrowthStatChanged(int value) { if (Rom != null && SelectedIndex >= 0) { bool l = Loading; Loading = true; try { ShowBands(); } finally { Loading = l; } Refresh(); } }
 
@@ -129,23 +132,23 @@ public partial class L2CharactersPage : L2Page
     {
         if (Rom == null || SelectedIndex < 0) return;
         int c = SelectedIndex;
-        var levels = Enumerable.Range(1, L2Characters.MaxLevel).ToArray();
+        var levels = Enumerable.Range(1, MaxLv).ToArray();
         var stats = levels.Select(lv => L2Characters.StatsAt(Rom, c, lv)).ToArray();
         ChartHandles = GrowthStat == 7 ? null : Enumerable.Range(0, _rows.Length).Select(BandEnd).ToList();
         if (GrowthStat == 7)
-            Chart = new[] { new ChartSeries("EXP for the next level", levels.Take(97).Select(lv => (double)L2Characters.ExpNeeded(Rom, c, lv)).ToArray(), StatColors[7], true) };
+            Chart = new[] { new ChartSeries("EXP for the next level", levels.Take(MaxLv > 99 ? MaxLv - 1 : 97).Select(lv => (double)L2Characters.ExpNeeded(Rom, c, lv)).ToArray(), StatColors[7], true) };
         else
             Chart = Enumerable.Range(0, 7).Select(i => new ChartSeries(L2Characters.Stats[i], stats.Select(x => (double)x[i]).ToArray(), StatColors[i], i == GrowthStat)).ToList();
         string Row(int lv) => $"{lv,5}  " + string.Join("", stats[lv - 1].Select(x => $"{x,6}")) + $"  {L2Characters.ExpNeeded(Rom, c, lv),12:N0}";
         LevelTable = "Level" + string.Join("", L2Characters.Stats.Select(x => $"{x,6}")) + "  EXP for next\n" +
-                     string.Join("\n", new[] { 1, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 99 }.Select(Row));
+                     string.Join("\n", new[] { 1, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 99 }.Concat(MaxLv > 99 ? new[] { 120, 150, 200, MaxLv } : Array.Empty<int>()).Select(Row));
         int lo = Level <= 1 ? 0 : L2Characters.ExpNeeded(Rom, c, Level - 1), hi = L2Characters.ExpNeeded(Rom, c, Level);
         ExpHint = Exp >= lo && Exp < hi
             ? $"Level {Level} covers {lo:N0} to {hi - 1:N0} EXP."
             : $"Level {Level} needs {lo:N0} to {hi - 1:N0} EXP: with {Exp:N0} the game would put the hero at another level.";
     }
 
-    private static int BandEnd(int r) => Math.Min(r * 8 + 8, L2Characters.MaxLevel);
+    private int BandEnd(int r) => r == L2Characters.GrowthRows - 1 ? MaxLv : Math.Min(r * 8 + 8, MaxLv);
 
     /// <summary>A handle of the chart was dragged to <paramref name="value"/>: the band before it gets the gain that
     /// reaches that value, the band after it the gain that still reaches the next handle (the rest stays).</summary>

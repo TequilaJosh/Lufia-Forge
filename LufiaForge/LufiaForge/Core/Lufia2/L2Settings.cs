@@ -77,5 +77,7 @@ public static class L2Settings
 
     // ── level cap ──
     public static int LevelCap(RomBuffer rom) => rom.ReadByte(LevelCap1) == 0xC9 && rom.ReadByte(LevelCap2) == 0xC9 && rom.ReadByte(LevelCap1 + 1) == rom.ReadByte(LevelCap2 + 1) ? rom.ReadByte(LevelCap1 + 1) : -1;
-    public static void SetLevelCap(RomBuffer rom, int cap) { if (LevelCap(rom) > 0) { cap = Math.Clamp(cap, 2, 99); rom.WriteByte(LevelCap1 + 1, (byte)cap); rom.WriteByte(LevelCap2 + 1, (byte)cap); } }
+    /// <summary>The highest cap: 99, or 255 with the higher limits (<see cref="L2Limits"/>: the game's EXP stops at 99).</summary>
+    public static int MaxLevelCap(RomBuffer rom) => L2Limits.IsApplied(rom) ? L2Limits.MaxLevel : 99;
+    public static void SetLevelCap(RomBuffer rom, int cap) { if (LevelCap(rom) > 0) { cap = Math.Clamp(cap, 2, MaxLevelCap(rom)); rom.WriteByte(LevelCap1 + 1, (byte)cap); rom.WriteByte(LevelCap2 + 1, (byte)cap); } }
 }

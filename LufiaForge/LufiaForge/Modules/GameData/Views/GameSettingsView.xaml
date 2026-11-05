@@ -86,8 +86,12 @@
                             <TextBlock Grid.Row="2" Text="Max level (actual)" Style="{StaticResource GdFieldLabel}"/>
                             <TextBox   Grid.Row="2" Grid.Column="1" Style="{StaticResource GdNumber}" Text="{Binding MaxLevelActual}"/>
                         </Grid>
-                        <TextBlock Style="{StaticResource GdHint}" Margin="0,8,0,0"
-                                   Text="Swamp damage above ~50 can wipe the party quickly. The game is designed for a level cap of 99; higher values may not display correctly."/>
+                        <CheckBox Content="Higher limits: levels to 255, HP and MP to 9999" Style="{StaticResource GdCheck}" IsChecked="{Binding LimitsPatch}"
+                                  IsEnabled="{Binding CanLimitsPatch}" Margin="0,10,0,0"
+                                  ToolTip="Patch: levels show with 3 digits (Colmines92's patch), HP and MP with 4 in the menus, the battle windows (one column wider), the save screen, battle messages and damage numbers; max HP and MP stop at 9999; levels past 113 and near 200 work. Set the cap with Max level. Needs the 2 MB expanded ROM. Untick and Apply to remove it."/>
+                        <TextBlock Text="{Binding LimitsText}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                        <TextBlock Style="{StaticResource GdHint}" Margin="0,8,0,0" TextWrapping="Wrap"
+                                   Text="Swamp damage above ~50 can wipe the party quickly."/>
                     </StackPanel>
                 </Border>
 
