@@ -23,6 +23,9 @@ public partial class L2SettingsPage : ObservableObject
     [ObservableProperty] private int _encounter, _worldSpeed, _fieldSpeed, _sell, _levelCap, _nameWhen, _nameWhere;
     [ObservableProperty] private string _encounterText = "", _status = "", _sizeText = "";
     [ObservableProperty] private bool _canEncounter, _canWorld, _canField, _canSell, _canLevel, _canNameBox;
+    /// <summary>Levels to 255 and HP / MP to 9999 (<see cref="L2Limits"/>).</summary>
+    [ObservableProperty] private bool _limits, _canLimits;
+    [ObservableProperty] private string _limitsText = "", _levelCapLabel = "Highest level (2 to 99)";
 
     public void SetRom(RomBuffer rom, MainViewModel main)
     {
@@ -160,6 +163,13 @@ public partial class L2SettingsPage : ObservableObject
         FieldSpeed = L2Settings.FieldWalk(rom); CanField = FieldSpeed >= 0;
         Sell = L2Settings.Sell(rom); CanSell = Sell >= 0;
         LevelCap = L2Settings.LevelCap(rom); CanLevel = LevelCap > 0;
+        Limits = L2Limits.IsApplied(rom); CanLimits = Limits || L2Limits.IsOriginal(rom);
+        LevelCapLabel = $"Highest level (2 to {L2Settings.MaxLevelCap(rom)})";
+        LimitsText = !CanLimits
+            ? "Another patch or a fan hack changed the code these limits change (a 3-digit level patch, Frue Lufia...), so they can't be added here."
+            : Limits
+                ? "Levels show 3 digits and HP / MP 4. Thanks to Colmines92 for the 3-digit levels." + (LevelCap <= 99 ? " Raise the highest level above 99 to let heroes go past it." : "")
+                : "The game stops at level 99 (its EXP and growth tables end there; saves keep 7 bits of the level) and shows HP / MP up to 999.";
         CanNameBox = L2MapNames.CanSetBox(rom); NameWhen = (int)L2MapNames.BoxWhen(rom); NameWhere = (int)L2MapNames.BoxWhere(rom);
         _loading = false;
         UpdateText();
@@ -214,6 +224,12 @@ public partial class L2SettingsPage : ObservableObject
     partial void OnFieldSpeedChanged(int value) => Change("walking in towns and dungeons", r => L2Settings.SetFieldWalk(r, value));
     partial void OnSellChanged(int value) => Change("selling price", r => L2Settings.SetSell(r, value));
     partial void OnLevelCapChanged(int value) => Change("level cap", r => L2Settings.SetLevelCap(r, value));
+    partial void OnLimitsChanged(bool value)
+    {
+        if (_loading || _rom == null || value == L2Limits.IsApplied(_rom)) return;
+        try { Change(value ? "higher limits" : "higher limits removed", r => { if (value) L2Limits.Apply(r); else L2Limits.Remove(r); }); }
+        catch (Exception ex) { Reload(); Status = "Not changed: " + ex.Message; }
+    }
     partial void OnNameWhenChanged(int value) => Change("map name box", r => L2MapNames.SetBox(r, (L2MapNames.When)value, (L2MapNames.Where)NameWhere));
     partial void OnNameWhereChanged(int value) => Change("map name box place", r => L2MapNames.SetBox(r, (L2MapNames.When)NameWhen, (L2MapNames.Where)value));
 }

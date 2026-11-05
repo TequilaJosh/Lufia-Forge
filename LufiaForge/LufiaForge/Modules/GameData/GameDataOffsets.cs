@@ -71,6 +71,8 @@ public static class GameDataOffsets
     public const int SwampDamage      = 0x96B4;  // u16 damage per step
     public const int MaxLevelDisplay  = 0x40AB5;
     public const int MaxLevelActual   = 0x46636;
+    /// <summary>The event "every member gains 2 levels" ($01:D909 CMP #$63) skips heroes at this level.</summary>
+    public const int MaxLevelEvent    = 0x0D90A;
     public const int InternalTitle    = 0x7FC0;
     public const int InternalTitleLen = 21;
     public const int RegionByte       = 0x7FD9;

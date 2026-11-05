@@ -34,6 +34,10 @@ public partial class GameSettingsViewModel : GameDataEditorBase
     [ObservableProperty] private bool _canMenuButton;
     [ObservableProperty] private string _menuButtonText = "";
     public string[] MenuButtonLabels { get; } = LufiaForge.Core.MenuButtonPatch.Buttons.Select(b => b.Name).ToArray();
+    /// <summary>Levels to 255 and HP / MP to 9999 shown and kept (<see cref="LufiaForge.Core.LimitsPatch"/>).</summary>
+    [ObservableProperty] private bool _limitsPatch;
+    [ObservableProperty] private bool _canLimitsPatch;
+    [ObservableProperty] private string _limitsText = "";
     [ObservableProperty] private bool _retargetFix;
     [ObservableProperty] private bool _canRetargetFix;
     /// <summary>Dutch letters in the fonts (<see cref="LufiaForge.Core.DutchLetters"/>).</summary>
@@ -79,6 +83,16 @@ public partial class GameSettingsViewModel : GameDataEditorBase
     partial void OnSafeStepsChanged(int value) => UpdateEncounterText();
     partial void OnMenuButtonChanged(int value) => UpdateMenuText();
     partial void OnHoldLPatchChanged(bool value) => UpdateMenuText();
+    partial void OnLimitsPatchChanged(bool value) => UpdateLimitsText();
+    partial void OnMaxLevelActualChanged(int value) => UpdateLimitsText();
+
+    private void UpdateLimitsText() => LimitsText = !CanLimitsPatch
+        ? "Another patch changed the menus or battle code these limits change (a 3-digit level patch, Restored...), so they can't be added here."
+        : LimitsPatch
+            ? $"Levels show 3 digits and HP / MP 4. Thanks to Colmines92 for the 3-digit levels.{(MaxLevelActual <= 99 ? " Raise Max level (actual) above 99 to let heroes go past it." : "")}"
+            : MaxLevelActual > 99
+                ? "Above level 99 the game shows only the last 2 digits of the level: tick Higher limits to show 3."
+                : "The game shows levels with 2 digits and HP / MP with 3.";
 
     private void UpdateMenuText() => MenuButtonText = !CanMenuButton
         ? "The menu button check ($01:823E) was changed by another patch, so it can't be set here."
@@ -117,6 +131,9 @@ public partial class GameSettingsViewModel : GameDataEditorBase
         MenuButton        = Math.Max(0, menu);
         UpdateMenuText();
         DutchLetters      = LufiaForge.Core.DutchLetters.IsApplied(rom);
+        LimitsPatch       = LufiaForge.Core.LimitsPatch.IsApplied(rom);
+        CanLimitsPatch    = LimitsPatch || LufiaForge.Core.LimitsPatch.IsOriginal(rom);
+        UpdateLimitsText();
         RetargetFix       = LufiaForge.Core.Battle.RetargetPatch.IsApplied(rom);
         CanRetargetFix    = RetargetFix || LufiaForge.Core.Battle.RetargetPatch.IsOriginal(rom);
         InternalTitle     = rom.ReadAscii(GameDataOffsets.InternalTitle, GameDataOffsets.InternalTitleLen).TrimEnd();
@@ -136,7 +153,8 @@ public partial class GameSettingsViewModel : GameDataEditorBase
         bool patchWanted = HoldLPatch, patched = LufiaForge.Core.Battle.EncounterPatch.IsApplied(rom);
         bool fixWanted = RetargetFix, fixed_ = LufiaForge.Core.Battle.RetargetPatch.IsApplied(rom);
         bool lettersWanted = DutchLetters, letters = LufiaForge.Core.DutchLetters.IsApplied(rom);
-        if ((patchWanted && !patched || fixWanted && !fixed_ || lettersWanted && !letters) && rom.Length < Core.Maps.MapWriter.ExpandedSize && !AutoWriting &&
+        bool limitsWanted = LimitsPatch && CanLimitsPatch, limits = LufiaForge.Core.LimitsPatch.IsApplied(rom);
+        if ((patchWanted && !patched || fixWanted && !fixed_ || lettersWanted && !letters || limitsWanted && !limits) && rom.Length < Core.Maps.MapWriter.ExpandedSize && !AutoWriting &&
             System.Windows.MessageBox.Show("The patches you ticked add small routines to the expanded part of the ROM. Expand the ROM to 2 MB?",
                 "Expand ROM?", System.Windows.MessageBoxButton.YesNo) != System.Windows.MessageBoxResult.Yes)
         { Refuse("Not applied: the ROM was not expanded."); return; }
@@ -149,6 +167,8 @@ public partial class GameSettingsViewModel : GameDataEditorBase
             if (!fixWanted && fixed_) LufiaForge.Core.Battle.RetargetPatch.Remove(rom);
             if (lettersWanted && !letters) LufiaForge.Core.DutchLetters.Apply(rom);
             if (!lettersWanted && letters) LufiaForge.Core.DutchLetters.Remove(rom);
+            if (limitsWanted && !limits) LufiaForge.Core.LimitsPatch.Apply(rom);
+            if (!limitsWanted && limits) LufiaForge.Core.LimitsPatch.Remove(rom);
             if (LufiaForge.Core.MenuButtonPatch.Current(rom) >= 0) LufiaForge.Core.MenuButtonPatch.Set(rom, MenuButton);
             rom.WriteByte(GameDataOffsets.WalkSpeed, (byte)(FastWalk ? 0x20 : 0x10));
             rom.WriteBytes(GameDataOffsets.WalkSpeedPatch,
@@ -160,6 +180,9 @@ public partial class GameSettingsViewModel : GameDataEditorBase
             rom.WriteUInt16Le(GameDataOffsets.SwampDamage, (ushort)Clamp(SwampDamage, 0, 999));
             rom.WriteByte(GameDataOffsets.MaxLevelDisplay, (byte)Clamp(MaxLevelDisplayed, 1, 255));
             rom.WriteByte(GameDataOffsets.MaxLevelActual,  (byte)Clamp(MaxLevelActual,    1, 255));
+            // the event "every member gains 2 levels" ($01:D8F3) skips heroes at 99 with its own CMP #$63
+            if (rom.ReadByte(GameDataOffsets.MaxLevelEvent - 1) == 0xC9)
+                rom.WriteByte(GameDataOffsets.MaxLevelEvent, (byte)Clamp(MaxLevelActual, 1, 255));
             rom.WriteByte(LufiaForge.Core.Battle.Encounters.RateOffset, (byte)Clamp(EncounterRate, 0, 255));
             rom.WriteByte(LufiaForge.Core.Battle.Encounters.SafeStepsOffset(rom), (byte)Clamp(SafeSteps, 0, 255));
 

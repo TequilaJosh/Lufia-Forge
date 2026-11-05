@@ -22,6 +22,9 @@ public static class L2Characters
 {
     public const int Table = 0xBB93C, Count = 7, RecordSize = 14, ExpBase = 0xBB99E;
     public const int Growth = 0xBB62C, GrowthSize = 0x70, GrowthRows = 13, MaxLevel = 99;
+
+    /// <summary>The highest level: 99, or 255 with the higher limits (<see cref="L2Limits"/>).</summary>
+    public static int MaxLevelOf(RomBuffer rom) => L2Limits.IsApplied(rom) ? L2Limits.MaxLevel : MaxLevel;
     public const int NewGame = 0x2B2A1, CaveReset = 0x2B395;
     public static readonly string[] Stats = { "HP", "MP", "STR", "AGL", "INT", "GUT", "MGR" };
     public static readonly string[] Names = { "Maxim", "Selan", "Guy", "Artea", "Tia", "Dekar", "Lexis" };
@@ -52,15 +55,16 @@ public static class L2Characters
     {
         var start = Read(rom, c);
         var acc = new int[7];
-        for (int k = 1; k < Math.Min(level, MaxLevel); k++)
-            for (int i = 0; i < 7; i++) acc[i] += rom.ReadByte(GrowthAt(c, k / 8) + i);
+        // past level 104 the game uses row 12 again (with the higher limits; without them the cap is 99)
+        for (int k = 1; k < Math.Min(level, MaxLevelOf(rom)); k++)
+            for (int i = 0; i < 7; i++) acc[i] += rom.ReadByte(GrowthAt(c, Math.Min(k / 8, GrowthRows - 1)) + i);
         return start.Select((s, i) => s + (acc[i] >> 4)).ToArray();
     }
 
     /// <summary>Total EXP needed to go from <paramref name="level"/> to the next.</summary>
     public static int ExpNeeded(RomBuffer rom, int c, int level)
     {
-        if (level >= 98) return 9_999_999;
+        if (level >= 98) return L2Limits.ExpForLevel(rom, level) ?? 9_999_999;
         int w = rom.ReadUInt16Le(ExpBase + c * 2);
         long v = (w & 0xFF) << 8 | w >> 8, acc = v;
         for (int k = 2; k <= level; k++)
@@ -162,11 +166,11 @@ public static class L2Characters
             rom.WriteBytes(p, name);
             p += 6;
         }
-        rom.WriteUInt16Le(p, (ushort)Math.Clamp(r.Level, 1, MaxLevel));
+        rom.WriteUInt16Le(p, (ushort)Math.Clamp(r.Level, 1, MaxLevelOf(rom)));
         rom.WriteUInt16Le(p + 2, (ushort)r.Unknown);
         for (int i = 0; i < r.Spells.Count; i++) rom.WriteByte(r.SpellsAt + i, (byte)r.Spells[i]);
         p = r.SpellsAt + r.Spells.Count + 1;
-        int exp = Math.Clamp(r.Exp, 0, 9_999_999);
+        int exp = Math.Clamp(r.Exp, 0, L2Limits.IsApplied(rom) ? 0xFFFFFF : 9_999_999);
         rom.WriteByte(p, (byte)exp); rom.WriteByte(p + 1, (byte)(exp >> 8)); rom.WriteByte(p + 2, (byte)(exp >> 16));
         p += 3;
         for (int i = 0; i < r.Words.Length; i++) rom.WriteUInt16Le(p + i * 2, (ushort)r.Words[i]);
