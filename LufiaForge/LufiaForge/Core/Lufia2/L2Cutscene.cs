@@ -463,6 +463,47 @@ public static class L2Cutscene
         return s;
     }
 
+    /// <summary>The stage as the game sets the map up with story flags <paramref name="flags"/> on: only the characters the
+    /// start-up script makes with those flags (its checks followed, as the game does: Treasure Sword Shrine 4F makes its
+    /// two characters only with flag 28 on and 2C off), then the "When the map is shown" event (+2 00) played with them
+    /// (its puts and hides). The others the script can make are on the stage hidden and nowhere, as in the game.
+    /// Checked against the game's own scenes and step-on events, 2026-11-10.</summary>
+    public static L2StageState Initial(RomBuffer rom, int map, int leaderX, int leaderY, IEnumerable<L2Persistent.Place>? persistent,
+        IEnumerable<int> flags, IReadOnlyDictionary<int, int>? counters = null)
+    {
+        var s = Initial(rom, map, leaderX, leaderY, persistent);
+        s.Flags.UnionWith(flags);
+        if (counters != null) foreach (var kv in counters) s.Counters[kv.Key] = kv.Value;
+        try
+        {
+            int init = L2EventBlocks.InitScript(rom, map);
+            var sc = L2EventScript.Read(rom, init, L2EventBlocks.InitBase(init));
+            var made = Run(rom, map, s, sc.Steps, _ => "", 0, 600).Select(r => sc.Steps[r.Step])
+                .Where(st => Is(st, 0x68, 3) || Is(st, 0x7B, 3)).Select(st => (int)st.Bytes[1]).ToHashSet();
+            foreach (int id in Creates(rom, map).Keys)
+                if (!made.Contains(id) && s.Actors.TryGetValue(id, out var a)) { a.Visible = false; a.X = a.Y = -1; }
+            // the characters HiddenWhenShown hid whatever the flags: shown again, the event below hides them when it does
+            foreach (int id in HiddenWhenShown(rom, map))
+                if (made.Contains(id) && s.Actors.TryGetValue(id, out var a) && a.Placed) a.Visible = true;
+            int block = L2Events.Block(rom, map);
+            if (block >= 0 && L2EventBlocks.ReadLists(rom, block).FirstOrDefault(e => e.Head == L2EventBlocks.GameList && e.Id == 0) is { } shown)
+            {
+                var ss = L2EventScript.Read(rom, block + shown.Offset, block);
+                var run = Run(rom, map, s, ss.Steps, _ => "", 0, 600);
+                if (run.Count > 0)
+                {
+                    var after = run[^1].After;
+                    after.Caption = ""; after.BranchWhy = null; after.BranchTo = -1; after.Jumped = false;
+                    after.Text = null; after.Speaker = null; after.Warning = null; after.MovedId = -1; after.MovedRoute = null; after.Frames = 0;
+                    after.CameraX = leaderX; after.CameraY = leaderY; after.CameraOnLeader = true;
+                    return after;
+                }
+            }
+        }
+        catch (Exception) { }
+        return s;
+    }
+
     /// <summary>The characters the map's start-up script makes (68 / 7B, every step it can reach) and their sprites
     /// (Lufia Forge's numbers); the first create of an id wins.</summary>
     public static Dictionary<int, int> Creates(RomBuffer rom, int map)
