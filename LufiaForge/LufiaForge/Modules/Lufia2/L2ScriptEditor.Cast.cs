@@ -206,14 +206,26 @@ public partial class L2ScriptEditor
             if (st.Op is 0x30 or 0x98 && points.TryGetValue(st.Bytes[2], out var p)) { at = (p.Item1, p.Item2); break; }
             if (st.Op == 0x2F && st.Bytes.Length >= 4) { at = (st.Bytes[2], st.Bytes[3]); break; }
         }
-        int id = AddCastMember(hero, at.X, at.Y);
+        // a map character with the hero's sprite this event already uses (made for the hero before) plays the part again
+        var usedIds = _script.Steps.Where(s => !s.IsText).SelectMany(s => L2EventCommands.Find(s.Op)?.FieldsFor(s.Bytes)
+            .Where(p => p.Kind is L2Kind.Who or L2Kind.WhoOrAll).Select(p => { try { return p.Get(s.Bytes); } catch (Exception) { return -1; } }) ?? Enumerable.Empty<int>()).ToHashSet();
+        int reuse = _who.Where(kv => kv.Key >= 0x50 && kv.Value.Sprite == hero && usedIds.Contains(kv.Key)).Select(kv => kv.Key).DefaultIfEmpty(-1).First();
+        int id = reuse >= 0 ? reuse : AddCastMember(hero, at.X, at.Y);
         if (id < 0 || _script == null) return;
         Remember();
         int first = -1;
         for (int i = 0; i < _script.Steps.Count; i++)
         {
             var s = _script.Steps[i];
-            if (s.IsText || L2EventCommands.Find(s.Op) is not { } def || s.Op is 0x2B or 0x2C) continue;
+            if (s.IsText)
+            {
+                // a text the hero says: said by the character (its box points at it)
+                bool says = s.Op == 0x13 && s.Bytes.Length >= 2 && s.Bytes[1] == hero ||
+                            s.Op is >= 0x61 and <= 0x67 && L2EventCommands.SpeakerOf61[s.Op - 0x61] == hero;
+                if (says) s.Bytes = new byte[] { 0x13, (byte)id };
+                continue;
+            }
+            if (L2EventCommands.Find(s.Op) is not { } def || s.Op is 0x2B or 0x2C) continue;
             var b = (byte[])s.Bytes.Clone();
             bool changed = false;
             foreach (var p in def.FieldsFor(b))
@@ -228,7 +240,8 @@ public partial class L2ScriptEditor
             var f = _script.Steps[first];
             // shown before it (the game's character commands skip a hidden character and move the leader instead; it is
             // made where it is first put, so it shows up there)
-            if (f.Op is not (0x98 or 0x2D))
+            bool shownBefore = _script.Steps.Take(first).Any(x => !x.IsText && x.Op is 0x2D or 0x98 && x.Bytes.Length >= 2 && x.Bytes[1] == id);
+            if (f.Op is not (0x98 or 0x2D) && !shownBefore)
                 _script.Steps.Insert(first, new L2Step { Bytes = new byte[] { 0x2D, (byte)id } });
         }
         Changed(true);

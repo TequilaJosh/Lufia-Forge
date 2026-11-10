@@ -495,6 +495,66 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         return (party, joined);
     }
 
+    /// <summary>Hero <paramref name="h"/> (1-6) isn't in the story's party at step <paramref name="i"/>: not in the test
+    /// party, or in it only because the cutscene uses the hero, and not made to join earlier in this event.</summary>
+    private bool HeroAbsent(int i, int h)
+    {
+        var (party, joined) = PartyAt(i);
+        return !joined.Contains(h) && (!party.Contains(h) || _testOnly.Contains(h));
+    }
+
+    /// <summary>The heroes the event's steps move while they aren't in the story's party (see <see cref="HeroAbsent"/>).</summary>
+    private List<int> AbsentHeroes()
+    {
+        var l = new List<int>();
+        if (_script == null) return l;
+        for (int i = 0; i < _script.Steps.Count; i++)
+        {
+            var st = _script.Steps[i];
+            if (st.IsText || st.Op is 0x2B or 0x2C || L2EventCommands.Find(st.Op) is not { } def) continue;
+            foreach (var p in def.FieldsFor(st.Bytes))
+            {
+                if (p.Kind is not (L2Kind.Who or L2Kind.WhoOrAll)) continue;
+                int h;
+                try { h = p.Get(st.Bytes); } catch (Exception) { continue; }
+                if (h is >= 1 and <= 6 && !l.Contains(h) && HeroAbsent(i, h)) l.Add(h);
+            }
+        }
+        return l;
+    }
+
+    /// <summary>Texts wider than the box (or longer than a box shows) broken at spaces to fit, and cut into more text
+    /// steps of the same speaker when they take more than one box (a question only gets its lines broken). Only the
+    /// texts changed here, unless <paramref name="all"/>. Returns how many were changed.</summary>
+    private int FitTexts(bool all)
+    {
+        if (_script == null) return 0;
+        int n = 0;
+        for (int i = _script.Steps.Count - 1; i >= 0; i--)
+        {
+            var s = _script.Steps[i];
+            if (!s.IsText || !all && !s.TextChanged || L2Events.WidthWarning(s.Text).Length == 0) continue;
+            var boxes = L2Events.FitToBoxes(s.Text);
+            bool question = s.Op == 0x10 || s.End == 0x0B;
+            if (question)
+            {
+                if (boxes.Count > 1) continue;   // (its choices can't move to another box)
+                s.Text = boxes[0]; n++; continue;
+            }
+            byte end = s.End;
+            s.Text = boxes[0];
+            if (boxes.Count > 1) s.End = 0x01;
+            for (int k = 1; k < boxes.Count; k++)
+                _script.Steps.Insert(i + k, new L2Step
+                {
+                    Bytes = (byte[])s.Bytes.Clone(), IsText = true, Text = boxes[k], End = k == boxes.Count - 1 ? end : (byte)0x01,
+                    OriginalEnd = 0xFF, OriginalText = "\u0001",
+                });
+            n++;
+        }
+        return n;
+    }
+
     private List<int> PartyForTest() => new[] { 0 }.Concat(TestParty.Where(h => h.IsOn).Select(h => h.Number)).Take(L2StoryParty.MaxParty).ToList();
 
     /// <summary>An event that only checks and ends with no story flag on (the game's own cutscenes check the story so far:
@@ -1193,6 +1253,12 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         }
         if (rebuild) Dispatch(() => Changed(false, line));
         else Changed(false);
+        // a hero who isn't in the story's party here: a map character that looks like the hero takes the part
+        if (p.Kind is L2Kind.Who or L2Kind.WhoOrAll && value is >= 1 and <= 6 && s.Op is not (0x2B or 0x2C) && _script.Steps.IndexOf(s) is var at && at >= 0 && HeroAbsent(at, value))
+        {
+            int hero = value;
+            Dispatch(() => HeroToCharacter(hero));
+        }
     }
 
     private L2Step? Next(L2Step s)
@@ -1453,6 +1519,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         // the steps here were read before another page wrote this event (or moved its map's events): writing them
         // would put back what that page changed
         if (ChangedElsewhere()) { Status = "Not saved: this event was changed on another page after it was opened here. Revert reads it again; then make your changes again."; return false; }
+        int fitted = FitTexts(all: false);
         // every text must be text the game can show (texts not changed are written as they are: the game's own can hold
         // codes typed text can't)
         for (int i = 0; i < _script.Steps.Count; i++)
@@ -1475,7 +1542,8 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
             _event = init ? items[0] : items.FirstOrDefault(x => x.Entry?.Head == entry!.Head && x.Entry?.Id == entry.Id) ?? _event;
             ReadScript(keep);
             MarkRead();
-            Status = "Saved in the project. " + result + (added ? " An End step was added at the bottom." : "");
+            Status = "Saved in the project. " + result + (added ? " An End step was added at the bottom." : "") +
+                     (fitted > 0 ? $" {fitted} text{(fitted > 1 ? "s were" : " was")} wider or longer than the box: the lines were broken to fit ({L2Events.BoxWidth} letters, {L2Events.BoxLines} lines a box, more boxes when needed)." : "");
             Saved?.Invoke(result);
             return true;
         }
@@ -1647,15 +1715,14 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
             vm.HeroFix = -1; vm.HeroFixText = "";
             if (!st.IsText && L2EventCommands.Find(st.Op) is { } def && st.Op is not (0x2B or 0x2C))
             {
-                var (party, joined) = PartyAt(i);
+                var (party, _) = PartyAt(i);
                 foreach (var p in def.FieldsFor(st.Bytes))
                 {
                     if (p.Kind is not (L2Kind.Who or L2Kind.WhoOrAll)) continue;
                     int h;
                     try { h = p.Get(st.Bytes); } catch (Exception) { continue; }
-                    if (h is < 1 or > 6 || joined.Contains(h)) continue;
+                    if (h is < 1 or > 6 || !HeroAbsent(i, h)) continue;
                     bool inTest = party.Contains(h);
-                    if (inTest && !_testOnly.Contains(h)) continue;
                     string n = L2EventCommands.HeroNames[h];
                     string them = h is 1 or 4 ? "her" : "him";
                     vm.Warning = (vm.Warning.Length > 0 ? vm.Warning + " " : "") + (inTest
@@ -2157,10 +2224,29 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         return m == 0x02 && s == 0x01 && p == 0x06 ? "A new game starts as in the game (the opening)." : $"A new game starts on map {m:X2} {_maps.ElementAtOrDefault(m)} at point {p} (scene {s:X2}).";
     }
 
+    /// <summary>Before a test in the game: heroes the steps move who aren't in the story's party become map characters
+    /// that look like them, and texts too wide or long for the box are broken to fit. Returns what was done ("": nothing).</summary>
+    public string PrepareForTest()
+    {
+        string done = "";
+        if (_script == null || !CanEdit || _event?.Entry == null) return done;
+        foreach (int h in AbsentHeroes())
+        {
+            HeroToCharacter(h);
+            done += StageInfo + " ";
+        }
+        int fitted = FitTexts(all: true);
+        if (fitted > 0) { Changed(true); done += $"{fitted} text{(fitted > 1 ? "s" : "")} broken to fit the box. "; }
+        // the party: the heroes now played by map characters no longer join for the test
+        if (done.Length > 0 && SaveNow(quiet: true) && !_partyByHand) FillTestParty();
+        return done;
+    }
+
     [RelayCommand]
     public void TestInGame()
     {
         if (_rom == null || _main == null || _map < 0) return;
+        string fixedFirst = PrepareForTest();
         if (HasPendingEdits && !SaveNow(quiet: true)) return;
         if (TestPoint == null) { Status = "The map has no preset point for the party to start on: add one on the Maps page."; return; }
         try
@@ -2191,7 +2277,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
             var next = _script?.Steps.Where(s => s.Op == 0x16 && s.Bytes.Length >= 4).Select(s => (Map: (int)s.Bytes[1], Scene: (int)s.Bytes[2])).Distinct().ToList() ?? new();
             if (_event?.Entry != null && next.Count > 0)
                 set += $" At its end the event goes to {string.Join(" or ", next.Select(n => $"{_maps.ElementAtOrDefault(n.Map)} ({n.Map:X2}) scene {n.Scene:X2}"))}, so the game carries on there.";
-            Status = set + " " + _main.PlayInBizHawk();
+            Status = fixedFirst + set + " " + _main.PlayInBizHawk();
         }
         catch (Exception ex) { Status = "Not set: " + ex.Message; }
         TestNote = NewGameNote();
