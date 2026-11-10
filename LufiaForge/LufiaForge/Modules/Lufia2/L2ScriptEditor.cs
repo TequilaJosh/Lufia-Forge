@@ -568,8 +568,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         int talkedTo = _event.Entry.Head == L2EventBlocks.TalkList ? _event.Entry.Id : -1;
         var on = L2Cutscene.FlagsToPlay(_rom, _map, _script, f =>
         {
-            var s = L2Cutscene.Initial(_rom, _map, x, y, _persistent);
-            s.Flags.UnionWith(f);
+            var s = L2Cutscene.Initial(_rom, _map, x, y, _persistent, f);
             s.Talker = s.TalkSave = talkedTo >= 0 ? talkedTo : 0xFF;
             return s;
         }, Name);
@@ -1668,9 +1667,8 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
     {
         if (_rom == null || _map < 0) { _states = new(); _run = new(); _firstVisit.Clear(); _start = null; TimelineItems = new(); Resimulated?.Invoke(); return; }
         var (x, y) = LeaderStart();
-        var start = L2Cutscene.Initial(_rom, _map, x, y, _persistent);
-        start.Flags.UnionWith(_flagsOn);
-        foreach (var kv in _countersAtStart) start.Counters[kv.Key] = kv.Value;
+        // the map as the game sets it up with these story flags: only the characters its start-up script makes with them
+        var start = L2Cutscene.Initial(_rom, _map, x, y, _persistent, _flagsOn, _countersAtStart);
         int talkedTo = _event?.Entry is { Head: L2EventBlocks.TalkList } te ? te.Id : -1;
         start.Talker = start.TalkSave = talkedTo >= 0 ? talkedTo : 0xFF;
         _start = start;
@@ -1717,6 +1715,14 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
             vm.Flow = !reached && _run.Count > 0 ? "Playback doesn't reach this step with these story flags." : flow;
             // a hero who isn't in the party here: the game's character commands then act on the leader
             vm.HeroFix = -1; vm.HeroFixText = "";
+            // commands only the start-up script or the "before the map loads" event may hold
+            if (!st.IsText && st.Op is 0x68 or 0x7B && _event is { IsInit: false })
+                vm.Warning = (vm.Warning.Length > 0 ? vm.Warning + " " : "") +
+                             "This only works in the map's start-up script: in an event the game puts Maxim on that character's place (checked in the game). " +
+                             "To bring in a character here, use + Add a character in the Characters section.";
+            if (!st.IsText && st.Op == 0x83 && !(_event?.Entry is { Head: L2EventBlocks.GameList, Id: 2 }))
+                vm.Warning = (vm.Warning.Length > 0 ? vm.Warning + " " : "") +
+                             "This only works in the \"Before the map loads\" event: anywhere else the event stops here (checked in the game). Use Go to another map or Leave through an exit instead.";
             if (LeaderVanishes(i))
             {
                 vm.Warning = (vm.Warning.Length > 0 ? vm.Warning + " " : "") +
