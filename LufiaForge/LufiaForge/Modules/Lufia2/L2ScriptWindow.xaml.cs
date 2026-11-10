@@ -564,7 +564,40 @@ public partial class L2ScriptWindow : Window
             };
             menu.Items.Add(item);
         }
+        // the Sinistrals' waves, as their own battle scripts do them (without the counter that times them)
+        var waves = new MenuItem { Header = "Sinistral attacks" };
+        foreach (var (who, wave) in new[] { ("Gades", "Destructo-wave"), ("Amon", "Chaos wave"), ("Erim", "Devastation wave"), ("Daos", "Terror wave") })
+        {
+            var steps = SinistralWave(who);
+            if (steps == null) continue;
+            var item = new MenuItem { Header = $"{wave} ({who})", ToolTip = $"{who}'s wave as the game does it: every hero, " + string.Join(", ", steps.Select(s => L2AiScripts.Describe(s, steps, _names)).Where(t => !t.StartsWith("End"))).ToLowerInvariant() };
+            item.Click += (_, _) =>
+            {
+                var add = SinistralWave(who)!;
+                int at = Math.Clamp(StepList.SelectedIndex + 1, 0, _steps.Count);
+                _steps.InsertRange(at, add);
+                RefreshList(at);
+                StatusText.Text = $"Added: {wave} (steps {at + 1}-{at + add.Count}), {who}'s own steps. Change the damage, the statuses or the name if you like; " +
+                                  "in front of it a chance (\"With a 50% chance, go to\") makes it one of several actions.";
+            };
+            waves.Items.Add(item);
+        }
+        if (waves.Items.Count > 0) { menu.Items.Add(new Separator()); menu.Items.Add(waves); }
         menu.IsOpen = true;
+    }
+
+    /// <summary>A Sinistral's wave from its battle script in the ROM: the steps from its start to its first End, without
+    /// the chance and counter steps that time it in the Sinistral's own script (05, 07, 0C, 0E). Null when the monster or
+    /// its wave isn't found (a ROM where they were changed).</summary>
+    private List<Step>? SinistralWave(string who)
+    {
+        int m = Array.FindIndex(_names.Monsters, n => n.Trim() == who);
+        if (m < 0) return null;
+        List<Step> steps;
+        try { steps = L2AiScripts.LoadOriginal(_rom, L2AiScripts.Kind.MonsterAttack, m); } catch (Exception) { return null; }
+        int end = steps.FindIndex(s => s.Op == 0x00);
+        if (end < 0 || !steps.Take(end).Any(s => s.Op == 0x1E)) return null;
+        return steps.Take(end + 1).Where(s => s.Op is not (0x05 or 0x07 or 0x0C or 0x0E)).Select(s => s.Clone()).ToList();
     }
 
     // ── steps ───────────────────────────────────────────────────────────────

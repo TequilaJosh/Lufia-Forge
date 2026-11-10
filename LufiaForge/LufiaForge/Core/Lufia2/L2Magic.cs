@@ -473,6 +473,28 @@ public static class L2Magic
             if ((it.Values.TryGetValue(0x2000, out var w) ? w : L2AiScripts.ItemAddedWords(rom, it.Index).GetValueOrDefault(0x2000)) is var a and > 0)
                 Add(a - 1, $"{it.Name.Trim()} ({(it.EquipType == 1 ? "weapon" : "item")})");
         foreach (var kv in BuiltIn) Add(kv.Key, kv.Value);
+        // monsters' own attacks (their battle scripts play an animation, mostly after showing a name: the Sinistrals'
+        // waves 96-99 were listed as unused)
+        try
+        {
+            var attackNames = L2AiScripts.MonsterAttackNames(rom);
+            var monsters = L2Battle.Monsters(rom);
+            for (int m = 0; m < monsters.Count; m++)
+            {
+                if (monsters[m].Unused) continue;
+                List<L2AiScripts.Step> steps;
+                try { steps = L2AiScripts.LoadOriginal(rom, L2AiScripts.Kind.MonsterAttack, m); } catch (Exception) { continue; }
+                string? shown = null;
+                foreach (var s in steps)
+                {
+                    if (s.Op == 0x1E && s.Args.Length > 0) shown = s.Args[0] < attackNames.Length ? attackNames[s.Args[0]] : null;
+                    else if (s.Op == 0x5A && s.Args.Length > 0 && s.Args[0] != 0xE0)
+                        Add(s.Args[0], shown is { Length: > 0 } ? $"{shown} ({monsters[m].Name.Trim()})" : $"{monsters[m].Name.Trim()} (monster)");
+                    else if (s.Op == 0x00) shown = null;
+                }
+            }
+        }
+        catch (Exception) { }
         var list = new List<(int, string)>();
         for (int n = 0; n < 0xFF; n++)
         {
