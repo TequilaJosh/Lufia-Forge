@@ -142,6 +142,9 @@ public partial class L2LineVm : ObservableObject
     [ObservableProperty] private string _errorText = "";
     [ObservableProperty] private string _bytesText = "";
     [ObservableProperty] private bool _isHighlighted;
+    /// <summary>A hero the step uses who isn't in the party there (-1: none): the card offers a map character instead.</summary>
+    [ObservableProperty] private int _heroFix = -1;
+    [ObservableProperty] private string _heroFixText = "";
     /// <summary>In the range marked for Copy (Shift+click).</summary>
     [ObservableProperty] private bool _isMarked;
     [ObservableProperty] private bool _dropAbove, _dropBelow;
@@ -162,6 +165,8 @@ public partial class L2LineVm : ObservableObject
     partial void OnNoteChanged(string value) => OnPropertyChanged(nameof(HasNote));
     partial void OnFlowChanged(string value) => OnPropertyChanged(nameof(HasFlow));
     partial void OnWarningChanged(string value) => OnPropertyChanged(nameof(HasWarning));
+    public bool HasHeroFix => HeroFix >= 0;
+    partial void OnHeroFixChanged(int value) => OnPropertyChanged(nameof(HasHeroFix));
     partial void OnReachedChanged(bool value) => OnPropertyChanged(nameof(Dim));
     public void RefreshShowBytes() => OnPropertyChanged(nameof(ShowBytes));
     public void Notify(string property) => OnPropertyChanged(property);
@@ -443,6 +448,8 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
     private L2PuzzleText? _puzzleText;
     [ObservableProperty] private string _testPartyWhy = "";
     private bool _partyByHand, _fillingParty;
+    /// <summary>Heroes in the test party only because the cutscene uses them (the story so far doesn't bring them).</summary>
+    private HashSet<int> _testOnly = new();
 
     /// <summary>The story's party at this event (<see cref="L2StoryParty"/>), unless picked by hand.</summary>
     private void FillTestParty()
@@ -452,12 +459,14 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         L2StoryParty.Result r;
         try { r = L2StoryParty.Of(_rom, _map, _event.Entry?.Head ?? -1, _event.Entry?.Id ?? -1, _flagsOn.ToList()); }
         catch (Exception) { r = new L2StoryParty.Result(new List<int> { 0 }, "Maxim"); }
+        _testOnly = r.ForTest.ToHashSet();
         _fillingParty = true;
         TestParty.Clear();
         for (int h = 1; h < 7; h++)
             TestParty.Add(new L2StartFlagVm { Number = h, Label = L2EventCommands.HeroNames[h], IsOn = r.Heroes.Contains(h), Changed = PartyChanged });
         _fillingParty = false;
         TestPartyWhy = "Maxim leads" + (r.Heroes.Count > 1 ? "; the story's party here: " + r.Why[(r.Why.IndexOf(", ") + 2)..] : " alone: the story's party here has no one else (as far as the story flags show).");
+        if (_script != null) Annotate();
     }
 
     private void PartyChanged()
@@ -466,6 +475,24 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         _partyByHand = true;
         int n = TestParty.Count(h => h.IsOn);
         TestPartyWhy = "Picked by hand" + (n > L2StoryParty.MaxParty - 1 ? $": only {L2StoryParty.MaxParty - 1} can join Maxim, the first ones ticked are taken." : ".");
+        if (_script != null) Annotate();
+    }
+
+    /// <summary>The party at step <paramref name="i"/>: the test party, with the joins (2B) and leaves (2C) before it,
+    /// and the heroes this event has made join by then.</summary>
+    private (HashSet<int> Party, HashSet<int> Joined) PartyAt(int i)
+    {
+        var party = new HashSet<int>(PartyForTest());
+        var joined = new HashSet<int>();
+        if (_script == null) return (party, joined);
+        for (int k = 0; k < i && k < _script.Steps.Count; k++)
+        {
+            var s = _script.Steps[k];
+            if (s.IsText || s.Bytes.Length < 2) continue;
+            if (s.Op == 0x2B) { party.Add(s.Bytes[1]); joined.Add(s.Bytes[1]); }
+            else if (s.Op == 0x2C) { party.Remove(s.Bytes[1]); joined.Remove(s.Bytes[1]); }
+        }
+        return (party, joined);
     }
 
     private List<int> PartyForTest() => new[] { 0 }.Concat(TestParty.Where(h => h.IsOn).Select(h => h.Number)).Take(L2StoryParty.MaxParty).ToList();
@@ -1616,6 +1643,45 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
                 flow = "Playback: " + BranchText(_run[k].After) + (times > 1 ? $" (the first of {times} times)" : "");
             }
             vm.Flow = !reached && _run.Count > 0 ? "Playback doesn't reach this step with these story flags." : flow;
+            // a hero who isn't in the party here: the game's character commands then act on the leader
+            vm.HeroFix = -1; vm.HeroFixText = "";
+            if (!st.IsText && L2EventCommands.Find(st.Op) is { } def && st.Op is not (0x2B or 0x2C))
+            {
+                var (party, joined) = PartyAt(i);
+                foreach (var p in def.FieldsFor(st.Bytes))
+                {
+                    if (p.Kind is not (L2Kind.Who or L2Kind.WhoOrAll)) continue;
+                    int h;
+                    try { h = p.Get(st.Bytes); } catch (Exception) { continue; }
+                    if (h is < 1 or > 6 || joined.Contains(h)) continue;
+                    bool inTest = party.Contains(h);
+                    if (inTest && !_testOnly.Contains(h)) continue;
+                    string n = L2EventCommands.HeroNames[h];
+                    string them = h is 1 or 4 ? "her" : "him";
+                    vm.Warning = (vm.Warning.Length > 0 ? vm.Warning + " " : "") + (inTest
+                        ? $"{n} isn't in the story's party here: Test in the game adds {them} so the test plays, but in the game itself these steps skip {them} " +
+                          $"and move Maxim (the leader) instead, with the camera. Have {them} join first (A hero joins the party), or use a map character that looks like {n}."
+                        : $"{n} isn't in the party here: the game's character commands skip {them} and move Maxim (the leader) instead, and the camera follows. " +
+                          $"For a cutscene, use a map character that looks like {n}.");
+                    vm.HeroFix = h;
+                    vm.HeroFixText = $"Use a map character that looks like {n}";
+                    break;
+                }
+                // a map character hidden at this step: put, turned or walked, the game moves the leader instead (the
+                // game's own events never do it: 0 of 169 puts on a point, 0 of 606 turns)
+                if (vm.HeroFix < 0 && st.Op is 0x30 or 0x31 or 0x33 && Before(i) is { } at)
+                    foreach (var p in def.FieldsFor(st.Bytes))
+                    {
+                        if (p.Kind is not (L2Kind.Who or L2Kind.WhoOrAll)) continue;
+                        int who;
+                        try { who = p.Get(st.Bytes); } catch (Exception) { continue; }
+                        if (who < 0x10 || !at.Actors.TryGetValue(who, out var a) || a.Visible || !a.Placed) continue;
+                        vm.Warning = (vm.Warning.Length > 0 ? vm.Warning + " " : "") +
+                                     $"{L2EventCommands.Cap(Name(who))} is hidden at this step: the game skips a hidden character and moves Maxim (the leader) instead. " +
+                                     "Show it first (Show a character, or A character appears on a point).";
+                        break;
+                    }
+            }
         }
         FlowNote = _run.Count == 0 ? "" :
             $"Playback runs {Lines.Count(l => l.Reached)} of the {Lines.Count} steps" + (_run.Count >= 3000 ? " (it goes round a loop: it stops after 3000 commands)." : ".");

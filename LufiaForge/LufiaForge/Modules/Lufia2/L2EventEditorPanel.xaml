@@ -148,6 +148,9 @@
                                        Visibility="{Binding HasFlow, Converter={StaticResource BoolToVisibilityConverter}}"/>
                             <TextBlock Text="{Binding Warning}" Foreground="#FFFF6060" FontSize="11" TextWrapping="Wrap"
                                        Visibility="{Binding HasWarning, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                            <Button Content="{Binding HeroFixText}" HorizontalAlignment="Left" Style="{StaticResource LufiaButton}" Padding="6,0" Margin="0,2,0,0"
+                                    ToolTip="Makes a map character with this hero's sprite (hidden until the event shows it) and uses it in every step of this event"
+                                    Click="HeroFix_Click" Visibility="{Binding HasHeroFix, Converter={StaticResource BoolToVisibilityConverter}}"/>
                             <TextBlock Text="{Binding ErrorText}" Foreground="{StaticResource ErrorBrush}" TextWrapping="Wrap"/>
                         </StackPanel>
 

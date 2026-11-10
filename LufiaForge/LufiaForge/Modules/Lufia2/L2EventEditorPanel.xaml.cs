@@ -236,6 +236,22 @@ public partial class L2EventEditorPanel : UserControl
         q.Click += (_, _) => _editor.AddText(new byte[] { 0x10, 0x02, 0, 0, 0, 0 }, "Is that so?\nYes\nNo", 0x0B, at);
         menu.Items.Add(q);
         menu.Items.Add(new Separator());
+        var ready = new MenuItem { Header = "Ready-made" };
+        var sp = new MenuItem { Header = "✨ Sparkles on a spot (they turn, then go)", ToolTip = "The Sinistrals' warp (Shrine of Daos 1F): a ring of sparkles appears, tilts one way and the other, shrinks away, and the event waits for it. Pick the spot on the stage." };
+        sp.Click += (_, _) =>
+        {
+            int n = _editor.Lines.Count;
+            _editor.Insert(at, L2ScriptEditor.SparkleSteps(0, 1, 3));
+            // the ring's point: picked on the stage
+            if (_editor.Lines.Count > n && at >= 0 && at < _editor.Lines.Count && _editor.Lines[at].Fields.FirstOrDefault(f => f.IsPlace) is { } pf)
+            {
+                if (StageRoot.Visibility != Visibility.Visible) ShowStage(true);
+                pf.PickPlace();
+            }
+        };
+        ready.Items.Add(sp);
+        menu.Items.Add(ready);
+        menu.Items.Add(new Separator());
         var offered = L2EventCommands.Definitions.Where(d => d.Template != null && !L2EventScript.TextOpeners.Contains(d.Template[0])).ToList();
         foreach (string cat in L2EventCommands.Categories)
         {
@@ -300,6 +316,11 @@ public partial class L2EventEditorPanel : UserControl
         if (w.ShowDialog() != true) return;
         if (w.Map < 2) { _editor.StageInfo = "\"Go to another map\" arrives at a point of a town or dungeon, not the world map."; return; }
         _editor.PickArrival(f, w.Map, w.X, w.Y);
+    }
+
+    private void HeroFix_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: L2LineVm l } && l.HeroFix >= 0) _editor?.HeroToCharacter(l.HeroFix);
     }
 
     private void PickPlace_Click(object sender, RoutedEventArgs e)
@@ -497,6 +518,9 @@ public partial class L2EventEditorPanel : UserControl
             var change = new MenuItem { Header = "🧱 Change the map (copy tiles from another place)…", ToolTip = "Drag over the place that changes, then click where its new look is, or use a preset" };
             change.Click += (_, _) => _editor.StartChangeMap();
             menu.Items.Add(change);
+            var sparkle = new MenuItem { Header = "✨ Sparkles here (turn on this spot, then go)", ToolTip = "The Sinistrals' warp: a ring of sparkles appears on this tile, turns, shrinks away; the event waits for it" };
+            sparkle.Click += (_, _) => _editor.AddSparkles(x, y);
+            menu.Items.Add(sparkle);
             var add = new MenuItem { Header = "＋ A new character appears here…", ToolTip = "Pick its sprite: it is made with the map (hidden) and appears on this tile at this step" };
             add.Click += (_, _) => { int s = PickSprite(_editor, Window.GetWindow(this), "New character", "＋ Add the character"); if (s >= 0) _editor.AddCharacterHere(s, x, y); };
             menu.Items.Add(add);
