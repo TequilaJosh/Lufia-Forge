@@ -128,6 +128,53 @@ public static class L2Events
         return best;
     }
 
+    /// <summary>The width of one line as the box shows it (see <see cref="LongestLine"/>).</summary>
+    private static int Width(string line)
+    {
+        string s = System.Text.RegularExpressions.Regex.Replace(line, @"\[(NAME|Name)\]", "Maxim");
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"\[(GLYPH|Glyph) [0-9A-Fa-f]{2}\]", "#");
+        return System.Text.RegularExpressions.Regex.Replace(s, @"\[[^\]]*\]", "").Length;
+    }
+
+    /// <summary>The text with every line wider than the box broken at spaces (a word wider than the box is cut), then
+    /// cut into boxes of <see cref="BoxLines"/> lines. One box: the text as it was when it already fits.</summary>
+    public static List<string> FitToBoxes(string text)
+    {
+        var lines = new List<string>();
+        foreach (var raw in text.Replace("\r", "").Split('\n'))
+        {
+            if (Width(raw) <= BoxWidth) { lines.Add(raw); continue; }
+            string cur = "";
+            foreach (var word in raw.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+            {
+                string w = word;
+                string tryLine = cur.Length == 0 ? w : cur + " " + w;
+                if (Width(tryLine) <= BoxWidth) { cur = tryLine; continue; }
+                if (cur.Length > 0) lines.Add(cur);
+                // a word wider than the box on its own: cut (codes kept whole)
+                while (Width(w) > BoxWidth)
+                {
+                    int k = 0, width = 0;
+                    while (k < w.Length && width < BoxWidth)
+                    {
+                        if (w[k] == '[' && w.IndexOf(']', k) is var e && e > k) { width += Width(w[k..(e + 1)]); k = e + 1; }
+                        else { width++; k++; }
+                    }
+                    lines.Add(w[..k]); w = w[k..];
+                }
+                cur = w;
+            }
+            lines.Add(cur);
+        }
+        bool trailing = lines.Count > 1 && lines[^1].Length == 0;
+        if (trailing) lines.RemoveAt(lines.Count - 1);
+        var boxes = new List<string>();
+        for (int i = 0; i < lines.Count; i += BoxLines) boxes.Add(string.Join("\n", lines.Skip(i).Take(BoxLines)));
+        if (boxes.Count == 0) boxes.Add("");
+        if (trailing) boxes[^1] += "\n";
+        return boxes;
+    }
+
     /// <summary>Lines the text takes in its box (a trailing line break doesn't start one).</summary>
     public static int LineCount(string text)
     {
