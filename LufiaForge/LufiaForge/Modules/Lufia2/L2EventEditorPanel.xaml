@@ -39,6 +39,10 @@
                             Click="EditPath_Click" Visibility="{Binding IsPath, Converter={StaticResource BoolToVisibilityConverter}}"/>
                     <Button Content="🧱 Pick on the stage" ToolTip="Pick on the stage where the map changes and where its new look comes from (the areas are made for you)" Style="{StaticResource LufiaButton}" Padding="6,0" Margin="3,0,0,0"
                             Click="EditChange_Click" Visibility="{Binding IsArea, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                    <Button Content="📍 Pick on the stage" ToolTip="Click where it is on the stage (a point there is used or made, a door or exit is found)" Style="{StaticResource LufiaButton}" Padding="6,0" Margin="3,0,0,0"
+                            Click="PickPlace_Click" Visibility="{Binding IsPlace, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                    <Button Content="📍 Pick on the map…" ToolTip="Click where the party arrives, on that map (a point there is used or made)" Style="{StaticResource LufiaButton}" Padding="6,0" Margin="3,0,0,0"
+                            Click="PickArrival_Click" Visibility="{Binding IsArrival, Converter={StaticResource BoolToVisibilityConverter}}"/>
                     <TextBlock Text="{Binding Error}" Foreground="{StaticResource ErrorBrush}" FontSize="11" VerticalAlignment="Center" Margin="4,0,0,0"/>
                 </StackPanel>
             </DataTemplate>
@@ -444,6 +448,14 @@
                                 </Canvas>
                             </Grid>
                         </ScrollViewer>
+                    </Border>
+                    <!-- picking a place for a field: what to click, Cancel -->
+                    <Border Grid.Row="1" VerticalAlignment="Top" Margin="8,8,8,0" Padding="10,6" Background="#F0201030" BorderBrush="#FF40E0FF" BorderThickness="1.5" CornerRadius="3"
+                            Visibility="{Binding IsPickingPlace, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Content="Cancel" Style="{StaticResource LufiaButton}" Command="{Binding PlaceCancelCommand}" Margin="8,0,0,0"/>
+                            <TextBlock Text="{Binding PlaceInfo}" Foreground="{StaticResource TextPrimaryBrush}" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                        </DockPanel>
                     </Border>
                     <!-- changing the map: what to click next, a preset instead, Cancel -->
                     <Border Grid.Row="1" VerticalAlignment="Top" Margin="8,8,8,0" Padding="10,6" Background="#F0201030" BorderBrush="#FF40E0FF" BorderThickness="1.5" CornerRadius="3"
