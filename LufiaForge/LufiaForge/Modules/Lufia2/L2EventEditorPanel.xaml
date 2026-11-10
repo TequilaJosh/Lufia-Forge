@@ -222,6 +222,16 @@
                                             <StackPanel>
                                                 <WrapPanel>
                                                     <TextBlock Text="{Binding Name}" Foreground="{StaticResource GoldLightBrush}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,10,2"/>
+                                                    <Button Content="When…" Padding="6,0" Margin="0,0,4,2" Click="CastWhen_Click"
+                                                            ToolTip="When the map has this character: always, or only while a story flag is on or off">
+                                                        <Button.Style>
+                                                            <Style TargetType="Button" BasedOn="{StaticResource LufiaButton}">
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding CanWhen}" Value="False"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Button.Style>
+                                                    </Button>
                                                     <Button Content="Sprite…" Padding="6,0" Margin="0,0,4,2" Click="CastSprite_Click"
                                                             ToolTip="Give it another sprite in this event (a &quot;Change a character's sprite&quot; step before its first use)">
                                                         <Button.Style>
