@@ -102,14 +102,14 @@ public partial class L2EventEditorPanel : UserControl
         if (_editor != null)
         {
             _editor.ScrollRequested -= ScrollTo; _editor.LineHighlighted -= BringLineIntoView; _editor.OpenRequested -= OpenOther;
-            _editor.PropertyChanged -= Editor_PropertyChanged;
+            _editor.PropertyChanged -= Editor_PropertyChanged; _editor.PasteMatchRequested -= AskPasteMatch;
             if (IsLoaded) Main?.Unregister(_editor);
         }
         _editor = editor;
         editor.CutsceneMode = _cutsceneMode;
         DataContext = editor;
         editor.ScrollRequested += ScrollTo; editor.LineHighlighted += BringLineIntoView; editor.OpenRequested += OpenOther;
-        editor.PropertyChanged += Editor_PropertyChanged;
+        editor.PropertyChanged += Editor_PropertyChanged; editor.PasteMatchRequested += AskPasteMatch;
         Timeline.Bind(editor);
         if (IsLoaded) Main?.Register(editor);
         _history.Clear();
@@ -146,6 +146,9 @@ public partial class L2EventEditorPanel : UserControl
     private void Line_MouseDown(object sender, MouseButtonEventArgs e)
     {
         if (_editor == null || sender is not FrameworkElement { DataContext: L2LineVm line }) return;
+        // Shift+click: the steps from the picked one to this one, for Copy
+        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) && _editor.SelectedLine >= 0) { _editor.MarkRange(_editor.SelectedLine, line.Index); return; }
+        _editor.ClearMark();
         if (_editor.SelectedLine != line.Index) _editor.SelectedLine = line.Index;
     }
 
@@ -287,6 +290,40 @@ public partial class L2EventEditorPanel : UserControl
         if (sender is FrameworkElement { DataContext: L2FieldVm f }) f.ShowFlagUses();
     }
 
+    private void EditChange_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: L2FieldVm f } || _editor == null) return;
+        if (StageRoot.Visibility != Visibility.Visible) ShowStage(true);
+        f.EditChange();
+    }
+
+    private void ChangePreset_Click(object sender, RoutedEventArgs e)
+    {
+        if (_editor?.Rom == null) return;
+        var presets = L2Presets.Load().OrderBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
+        if (presets.Count == 0) { _editor.ChangeInfo = "You have no presets yet: keep one on the Maps page (drag an area, then Pieces and presets...)."; return; }
+        var w = L2Ui.Window("Use a preset", 460, 520);
+        w.Owner = Window.GetWindow(this);
+        var root = new DockPanel { Margin = new Thickness(12) };
+        var top = L2Ui.Label("Pick the preset the place changes into. It is kept on a part of the map you click next (somewhere the player never sees).", true);
+        DockPanel.SetDock(top, Dock.Top); root.Children.Add(top);
+        var list = new ListBox { Margin = new Thickness(0, 8, 0, 8) };
+        if (L2Ui.S("GdRecordList") is { } ls) list.Style = ls;
+        foreach (var p in presets) list.Items.Add(new ListBoxItem { Content = $"{p.Name}  ({p.W} x {p.H})", Tag = p });
+        list.SelectedIndex = 0;
+        L2Presets.Preset? picked = null;
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = System.Windows.HorizontalAlignment.Right };
+        buttons.Children.Add(L2Ui.Button("Use it", true, (_, _) => { picked = (list.SelectedItem as ListBoxItem)?.Tag as L2Presets.Preset; w.DialogResult = true; }));
+        var cancel = L2Ui.Button("Cancel", false, (_, _) => w.DialogResult = false); cancel.Margin = new Thickness(8, 0, 0, 0);
+        buttons.Children.Add(cancel);
+        DockPanel.SetDock(buttons, Dock.Bottom); root.Children.Add(buttons);
+        root.Children.Add(list);
+        list.MouseDoubleClick += (_, _) => { picked = (list.SelectedItem as ListBoxItem)?.Tag as L2Presets.Preset; w.DialogResult = true; };
+        w.Content = root;
+        if (w.ShowDialog() != true || picked == null) return;
+        if (_editor.ChangeWithPreset(picked) is { } why) _editor.ChangeInfo = why;
+    }
+
     private void EditPath_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement { DataContext: L2FieldVm f }) return;
@@ -377,6 +414,15 @@ public partial class L2EventEditorPanel : UserControl
     {
         var (x, y) = TileAt(e);
         Stage.ToolTip = $"Tile ({x}, {y})";
+        if (_editor?.IsChangingMap == true) _editor.ChangeMove(x, y, e.LeftButton == MouseButtonState.Pressed);
+    }
+
+    private void Stage_MouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (Stage.IsMouseCaptured) Stage.ReleaseMouseCapture();
+        if (_editor?.IsChangingMap != true) return;
+        var (x, y) = TileAt(e);
+        _editor.ChangeUp(x, y);
     }
 
     private void Stage_MouseDown(object sender, MouseButtonEventArgs e)
@@ -387,6 +433,7 @@ public partial class L2EventEditorPanel : UserControl
         _lastTile = (x, y);
         if (_pickStart) { _pickStart = false; _editor.SetPartyStart(x, y); return; }
         if (_placeSprite >= 0) { int sprite = _placeSprite; _placeSprite = -1; _editor.AddCharacterHere(sprite, x, y); return; }
+        if (_editor.IsChangingMap) { _editor.ChangeDown(x, y); Stage.CaptureMouse(); return; }
         if (_editor.IsDrawingPath) { _editor.PathClick(x, y); return; }
         var p = e.GetPosition(Stage);
         if (_editor.StageClick(p.X, p.Y)) return;
@@ -399,6 +446,7 @@ public partial class L2EventEditorPanel : UserControl
         _lastTile = (x, y);
         e.Handled = true;
         if (_editor?.IsDrawingPath == true) { _editor.PathUndoCorner(); return; }
+        if (_editor?.IsChangingMap == true) { _editor.ChangeCancel(); return; }
         if (_placeSprite >= 0) { _placeSprite = -1; if (_editor != null) _editor.StageInfo = "No character added."; return; }
         ShowActionMenu(x, y);
     }
@@ -423,6 +471,9 @@ public partial class L2EventEditorPanel : UserControl
         }
         if (_editor.CanEdit)
         {
+            var change = new MenuItem { Header = "🧱 Change the map (copy tiles from another place)…", ToolTip = "Drag over the place that changes, then click where its new look is, or use a preset" };
+            change.Click += (_, _) => _editor.StartChangeMap();
+            menu.Items.Add(change);
             var add = new MenuItem { Header = "＋ A new character appears here…", ToolTip = "Pick its sprite: it is made with the map (hidden) and appears on this tile at this step" };
             add.Click += (_, _) => { int s = PickSprite(_editor, Window.GetWindow(this), "New character", "＋ Add the character"); if (s >= 0) _editor.AddCharacterHere(s, x, y); };
             menu.Items.Add(add);
@@ -480,6 +531,44 @@ public partial class L2EventEditorPanel : UserControl
         if (sprite >= 0) _editor.ChangeSpriteInEvent(row.Id, sprite);
     }
 
+    /// <summary>Pasting steps from another map: a window to match each character, point, path and area they name.</summary>
+    private bool AskPasteMatch(string intro, List<L2PasteRef> refs)
+    {
+        var w = L2Ui.Window("Paste steps", 640, Math.Min(760, 220 + refs.Count * 44));
+        w.Owner = Window.GetWindow(this);
+        var root = new DockPanel { Margin = new Thickness(12) };
+        var top = L2Ui.Label(intro + " (Points and characters are this map's; paths and areas can be copied over.)", true);
+        DockPanel.SetDock(top, Dock.Top); root.Children.Add(top);
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = System.Windows.HorizontalAlignment.Right, Margin = new Thickness(0, 10, 0, 0) };
+        bool ok = false;
+        var combos = new List<(L2PasteRef Ref, System.Windows.Controls.ComboBox Box)>();
+        buttons.Children.Add(L2Ui.Button("Paste", true, (_, _) =>
+        {
+            foreach (var (r, box) in combos) if (box.SelectedItem is L2Option o) r.To = o.Value;
+            ok = true; w.DialogResult = true;
+        }));
+        var cancel = L2Ui.Button("Cancel", false, (_, _) => w.DialogResult = false); cancel.Margin = new Thickness(8, 0, 0, 0);
+        buttons.Children.Add(cancel);
+        DockPanel.SetDock(buttons, Dock.Bottom); root.Children.Add(buttons);
+        var list = new StackPanel { Margin = new Thickness(0, 8, 0, 0) };
+        foreach (var r in refs)
+        {
+            var row = new DockPanel { Margin = new Thickness(0, 3, 0, 3) };
+            var label = L2Ui.Label(r.Label); label.Width = 260; label.VerticalAlignment = VerticalAlignment.Center;
+            row.Children.Add(label);
+            var box = new System.Windows.Controls.ComboBox { ItemsSource = r.Choices, DisplayMemberPath = "Label", MinWidth = 300 };
+            if (L2Ui.S("GdCombo") is { } cs) box.Style = cs;
+            box.SelectedItem = r.Choices.FirstOrDefault(o => o.Value == r.To) ?? r.Choices.FirstOrDefault();
+            row.Children.Add(box);
+            combos.Add((r, box));
+            list.Children.Add(row);
+        }
+        root.Children.Add(new ScrollViewer { Content = list, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
+        w.Content = root;
+        w.ShowDialog();
+        return ok;
+    }
+
     /// <summary>A small window to pick a map sprite (with its picture); -1 when cancelled.</summary>
     public static int PickSprite(L2ScriptEditor editor, Window? owner, string title = "New character", string button = "＋ Add the character", string? hint = null)
     {
@@ -522,12 +611,15 @@ public partial class L2EventEditorPanel : UserControl
         if (_editor != null)
         {
             if (e.Key == Key.Escape && _editor.IsDrawingPath) { _editor.PathCancel(); e.Handled = true; }
+            else if (e.Key == Key.Escape && _editor.IsChangingMap) { _editor.ChangeCancel(); e.Handled = true; }
             else if (e.Key == Key.Escape && _placeSprite >= 0) { _placeSprite = -1; _editor.StageInfo = "No character added."; e.Handled = true; }
             else if (e.Key == Key.Escape && (_editor.PickedActor >= 0 || _pickStart)) { _pickStart = false; _editor.LetGo(); e.Handled = true; }
             else if (Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase && Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
             {
                 bool shift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
                 if (e.Key == Key.Z && !shift) { _editor.Undo(); e.Handled = true; }
+                else if (e.Key == Key.C && !shift) { _editor.CopySteps(); e.Handled = true; }
+                else if (e.Key == Key.V && !shift) { _editor.PasteSteps(); e.Handled = true; }
                 else if (e.Key == Key.Y || e.Key == Key.Z && shift) { _editor.Redo(); e.Handled = true; }
             }
         }

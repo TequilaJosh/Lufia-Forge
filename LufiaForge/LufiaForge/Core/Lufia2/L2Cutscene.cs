@@ -157,6 +157,8 @@ public sealed class L2StageState
     /// <summary>The tiles the moved actor went over in this step, in order (a path walk), for playback; null: a
     /// straight move.</summary>
     public List<(int X, int Y)>? MovedRoute { get; set; }
+    /// <summary>Map tiles copied so far (43, 87, B4): the "from" area (X, Y, W, H) put with its top-left on (DX, DY).</summary>
+    public List<(int DX, int DY, int SX, int SY, int W, int H)> TileCopies { get; } = new();
     /// <summary>The story flags that are on (the ones set at the start, then turned on and off by the steps).</summary>
     public HashSet<int> Flags { get; } = new();
     /// <summary>Event counters (variables) that aren't 0.</summary>
@@ -186,6 +188,7 @@ public sealed class L2StageState
         foreach (var kv in Actors) s.Actors[kv.Key] = kv.Value.Copy();
         s.Flags.UnionWith(Flags);
         foreach (var kv in Counters) s.Counters[kv.Key] = kv.Value;
+        s.TileCopies.AddRange(TileCopies);
         return s;
     }
 }
@@ -202,6 +205,8 @@ public sealed class L2StageMap
     public Dictionary<int, (int X1, int Y1, int X2, int Y2)> Areas { get; private init; } = new();
     /// <summary>The map's paths (what "A character walks a path" walks), by id.</summary>
     public Dictionary<int, L2Paths.Path> Paths { get; private init; } = new();
+    /// <summary>The map's areas for tile copies (map info list +14: id, x1, y1, x2, y2; x2 and y2 past the end).</summary>
+    public Dictionary<int, (int X1, int Y1, int X2, int Y2)> TileAreas { get; private init; } = new();
 
     public static L2StageMap Read(RomBuffer rom, int map)
     {
@@ -209,6 +214,8 @@ public sealed class L2StageMap
         try { foreach (var p in L2Paths.Read(rom, map)) paths.TryAdd(p.Id, p); } catch (Exception) { }
         var points = new Dictionary<int, (int, int)>();
         try { foreach (var p in L2StoryClear.PresetPoints(rom, map)) points.TryAdd(p.Id, (p.X, p.Y)); } catch (Exception) { }
+        var tileAreas = new Dictionary<int, (int, int, int, int)>();
+        try { foreach (var (_, b) in L2MapInfo.Records(rom, map, L2MapInfo.Areas, 5)) tileAreas.TryAdd(b[0], (b[1], b[2], b[3], b[4])); } catch (Exception) { }
         var areas = new Dictionary<int, (int, int, int, int)>();
         try
         {
@@ -219,14 +226,14 @@ public sealed class L2StageMap
                 if (!hidden.Contains(0x4F + b[0])) areas.TryAdd(0x4F + b[0], (b[3], b[4], b[5], b[6]));
         }
         catch (Exception) { }
-        if (map < 2) return new L2StageMap { Points = points, Areas = areas, Paths = paths };   // the world maps: no cell flags
+        if (map < 2) return new L2StageMap { Points = points, Areas = areas, Paths = paths, TileAreas = tileAreas };   // the world maps: no cell flags
         try
         {
             var m = L2Maps.Read(rom, map);
             var l = m.Layers.Length > 1 ? m.Layers[1] : m.Layers[0];
-            return new L2StageMap { Width = l.Width, Height = l.Height, _flags = l.Flags, Points = points, Areas = areas, Paths = paths };
+            return new L2StageMap { Width = l.Width, Height = l.Height, _flags = l.Flags, Points = points, Areas = areas, Paths = paths, TileAreas = tileAreas };
         }
-        catch (Exception) { return new L2StageMap { Points = points, Areas = areas, Paths = paths }; }
+        catch (Exception) { return new L2StageMap { Points = points, Areas = areas, Paths = paths, TileAreas = tileAreas }; }
     }
 
     /// <summary>Whether a character with a character start may step onto (x, y): inside its walk area (or it has none).</summary>
@@ -751,6 +758,15 @@ public static class L2Cutscene
             case 0x6F or 0x4B when b.Length >= 2: s.Song = b[1]; s.Caption = "Music"; break;
             case 0x72: s.Song = -1; break;
             case 0x5A: s.Shaking = true; s.Caption = "The screen shakes"; break;
+            // the "from" area's tiles, at its size, go with their top-left on the "onto" area's first tile ($80:B76A)
+            case 0x43 or 0x87 or 0xB4 when b.Length >= 3:
+                if (m.TileAreas.TryGetValue(b[1], out var onto) && m.TileAreas.TryGetValue(b[2], out var from))
+                {
+                    s.TileCopies.Add((onto.X1, onto.Y1, from.X1, from.Y1, from.X2 - from.X1, from.Y2 - from.Y1));
+                    s.Caption = $"The map changes at ({onto.X1}, {onto.Y1})";
+                }
+                else s.Caption = "The map changes (an area isn't on this map)";
+                break;
             case 0x8A or 0x56: s.Shaking = false; break;
             case 0x37 when b.Length >= 2: s.Frames = b[1]; s.Caption = "Wait"; break;
             case 0x38 when b.Length >= 2: s.Frames = b[1] * 60; s.Caption = "Wait"; break;

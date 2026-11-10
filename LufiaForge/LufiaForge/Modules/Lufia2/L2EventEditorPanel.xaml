@@ -37,6 +37,8 @@
                             Click="FlagUses_Click" Visibility="{Binding IsFlag, Converter={StaticResource BoolToVisibilityConverter}}"/>
                     <Button Content="🛤 Draw on the stage" ToolTip="Draw this path on the stage: click the places it walks to in turn" Style="{StaticResource LufiaButton}" Padding="6,0" Margin="3,0,0,0"
                             Click="EditPath_Click" Visibility="{Binding IsPath, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                    <Button Content="🧱 Pick on the stage" ToolTip="Pick on the stage where the map changes and where its new look comes from (the areas are made for you)" Style="{StaticResource LufiaButton}" Padding="6,0" Margin="3,0,0,0"
+                            Click="EditChange_Click" Visibility="{Binding IsArea, Converter={StaticResource BoolToVisibilityConverter}}"/>
                     <TextBlock Text="{Binding Error}" Foreground="{StaticResource ErrorBrush}" FontSize="11" VerticalAlignment="Center" Margin="4,0,0,0"/>
                 </StackPanel>
             </DataTemplate>
@@ -50,6 +52,9 @@
                             <Setter Property="BorderBrush" Value="{StaticResource BorderPurpleBrush}"/>
                             <Setter Property="Background" Value="Transparent"/>
                             <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsMarked}" Value="True">
+                                    <Setter Property="Background" Value="#2200BFFF"/>
+                                </DataTrigger>
                                 <DataTrigger Binding="{Binding IsHighlighted}" Value="True">
                                     <Setter Property="Background" Value="#33FFD700"/>
                                     <Setter Property="BorderBrush" Value="{StaticResource GoldBrush}"/>
@@ -313,6 +318,8 @@
                                 ToolTip="Or Ctrl + mouse wheel on the stage; hold the middle mouse button to drag the map"/>
                         <CheckBox Content="Camera" IsChecked="{Binding ShowCamera}" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" Margin="0,0,10,4"
                                   ToolTip="The dashed box: what the screen shows (256 x 224)"/>
+                        <Button Content="🧱 Change the map…" Style="{StaticResource LufiaButton}" Command="{Binding StartChangeMapCommand}" Margin="0,0,10,4"
+                                ToolTip="A step that changes part of the map: drag over the place, then click where its new look is (or use a preset)"/>
                         <Button Content="＋ Cutscene character…" Style="{StaticResource LufiaButton}" Click="AddCast_Click" Margin="0,0,10,4"
                                 ToolTip="A new character for this map's cutscenes: made with the map, hidden until a step makes it appear"/>
                         <TextBlock Text="{Binding Caption}" Foreground="{StaticResource GoldLightBrush}" VerticalAlignment="Center" Margin="0,0,0,4"/>
@@ -322,7 +329,7 @@
                         <ScrollViewer common:ScrollPan.MiddleDrag="True" x:Name="StageScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="#FF120A1E"
                                       PreviewMouseWheel="Stage_PreviewMouseWheel">
                             <Grid x:Name="Stage" HorizontalAlignment="Left" VerticalAlignment="Top" Cursor="Cross" Background="Transparent"
-                                  MouseLeftButtonDown="Stage_MouseDown" MouseRightButtonDown="Stage_RightDown" MouseMove="Stage_MouseMove">
+                                  MouseLeftButtonDown="Stage_MouseDown" MouseLeftButtonUp="Stage_MouseUp" MouseRightButtonDown="Stage_RightDown" MouseMove="Stage_MouseMove">
                                 <Grid.LayoutTransform>
                                     <ScaleTransform ScaleX="{Binding Zoom}" ScaleY="{Binding Zoom}"/>
                                 </Grid.LayoutTransform>
@@ -427,6 +434,18 @@
                                 </Canvas>
                             </Grid>
                         </ScrollViewer>
+                    </Border>
+                    <!-- changing the map: what to click next, a preset instead, Cancel -->
+                    <Border Grid.Row="1" VerticalAlignment="Top" Margin="8,8,8,0" Padding="10,6" Background="#F0201030" BorderBrush="#FF40E0FF" BorderThickness="1.5" CornerRadius="3"
+                            Visibility="{Binding IsChangingMap, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <StackPanel>
+                            <TextBlock Text="{Binding ChangeInfo}" Foreground="{StaticResource TextPrimaryBrush}" TextWrapping="Wrap" Margin="0,0,0,4"/>
+                            <WrapPanel>
+                                <Button Content="★ Use a preset…" Style="{StaticResource LufiaButton}" Click="ChangePreset_Click" Margin="0,0,6,0"
+                                        ToolTip="Instead of a place on the map: one of your presets, kept on a part of the map the player doesn't see"/>
+                                <Button Content="Cancel" Style="{StaticResource LufiaButton}" Command="{Binding ChangeCancelCommand}"/>
+                            </WrapPanel>
+                        </StackPanel>
                     </Border>
                     <!-- drawing a path: its settings, Done / Cancel -->
                     <Border Grid.Row="1" VerticalAlignment="Top" Margin="8,8,8,0" Padding="10,6" Background="#F0201030" BorderBrush="#FF60F080" BorderThickness="1.5" CornerRadius="3"
@@ -548,6 +567,10 @@
 
         <DockPanel Grid.Row="4" Margin="0,10,0,0" LastChildFill="True">
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <Button Content="📋 Copy steps" Style="{StaticResource LufiaButton}" Command="{Binding CopyStepsCommand}" Margin="0,0,4,0"
+                        ToolTip="Copy the picked step, or the steps marked with Shift+click (Ctrl+C), to paste in this or another event"/>
+                <Button Content="📋 Paste" Style="{StaticResource LufiaButton}" Command="{Binding PasteStepsCommand}" IsEnabled="{Binding HasClip}" Margin="0,0,12,0"
+                        ToolTip="{Binding ClipInfo}"/>
                 <Button Content="↶ Undo" Style="{StaticResource LufiaButton}" Command="{Binding UndoCommand}" IsEnabled="{Binding CanUndo}" ToolTip="{Binding UndoTip}" Margin="0,0,4,0"/>
                 <Button Content="↷ Redo" Style="{StaticResource LufiaButton}" Command="{Binding RedoCommand}" IsEnabled="{Binding CanRedo}" ToolTip="{Binding RedoTip}" Margin="0,0,12,0"/>
                 <Button Content="↺ Revert" Style="{StaticResource LufiaButton}" Command="{Binding RevertCommand}" Margin="0,0,8,0" ToolTip="Put the event back as the project has it"/>

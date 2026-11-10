@@ -293,7 +293,7 @@ public static class L2EventCommands
 
         // ── flow ──
         One(0x00, "End the event", Flow, (_, _) => "End of the event", new byte[] { 0x00 }, "Closes any text box, brings the camera back and ends.", 'G');
-        One(0x42, "End the event", Flow, (_, _) => "End of the event", null, "The same as the usual end.", rare: true);
+        One(0x42, "End the event", Flow, (_, _) => "End of the event", new byte[] { 0x42 }, "The same as the usual end.", rare: true);
         One(0x1C, "Go to a step", Flow, (_, w) => $"Go to {w.Jump(0)}", new byte[] { 0x1C, 0, 0 }, "", 'G', ps: L2ParamDef.Jump("go to", 0));
         One(0x15, "If a story flag is on, go to a step", Flow, (b, w) => $"If {w.Flag(b[1])} is on, go to {w.Jump(0)}", new byte[] { 0x15, 0, 0, 0 },
             "", 'G', ps: new[] { P("story flag", L2Kind.Flag, 1), L2ParamDef.Jump("go to", 0) });
@@ -372,7 +372,7 @@ public static class L2EventCommands
             new byte[] { 0x32, 0x50, 0x05 }, "Releases a character the event holds; with everyone, each goes back to its own way of moving.",
             ps: new[] { P("who", L2Kind.WhoOrAll, 1), Pk("moves", 2, MoveModes) });
         One(0x77, "Hold a character still", Chars, (b, w) => $"Hold {w.Who(b[1])} still", new byte[] { 0x77, 0x50 }, "It stops wandering until let go.", ps: Who(1));
-        One(0xBE, "Hold a character still", Chars, (b, w) => $"Hold {w.Who(b[1])} still", null, "", ps: Who(1));
+        One(0xBE, "Hold a character still", Chars, (b, w) => $"Hold {w.Who(b[1])} still", new byte[] { 0xBE, 0x00 }, "", ps: Who(1));
         One(0x78, "Everyone stands still", Chars, (_, _) => "All map characters stand still", new byte[] { 0x78 }, "\"Let everyone move on their own\" undoes it.", 'D');
         One(0x79, "Wait for everyone to stop walking", Chars, (_, _) => "Wait until nobody is walking a path", new byte[] { 0x79 }, "", waits: "until every walk is done");
         One(0x36, "Wait for a character to stop walking", Chars, (b, w) => $"Wait until {w.Who(b[1])} is done walking", new byte[] { 0x36, 0x00 }, "",
@@ -382,9 +382,9 @@ public static class L2EventCommands
         One(0x35, "Send a story character to another map", Chars, (b, w) => $"{Cap(w.Who(b[1]))} goes to {w.Map(b[2])}, character start {b[3]}",
             new byte[] { 0x35, 0x10, 0x03, 0x01 }, "For story characters (10-4F): from now on they stand on that map at that start. Hidden here at once.",
             ps: new[] { P("story character", L2Kind.Who, 1, 0x4F, min: 0x10), P("map", L2Kind.Map, 2), P("start", L2Kind.Number, 3) });
-        One(0x68, "Add a map character (start-up script)", Chars, (b, w) => $"Add {NoSprite(w.Who(b[1]))} with sprite {b[2]:X2}", null,
+        One(0x68, "Add a map character (start-up script)", Chars, (b, w) => $"Add {NoSprite(w.Who(b[1]))} with sprite {b[2]:X2}", new byte[] { 0x68, 0x50, 0x00 },
             "Only in a map's start-up script, before anything else that uses characters.", 'G', rare: true, ps: new[] { Who(1), P("sprite", L2Kind.Sprite, 2) });
-        One(0x7B, "Add a field monster (start-up script)", Chars, (b, w) => $"Add field monster {NoSprite(w.Who(b[1]))} with sprite {b[2]:X2}", null,
+        One(0x7B, "Add a field monster (start-up script)", Chars, (b, w) => $"Add field monster {NoSprite(w.Who(b[1]))} with sprite {b[2]:X2}", new byte[] { 0x7B, 0x50, 0x00 },
             "Only in a map's start-up script.", rare: true, ps: new[] { Who(1), P("sprite", L2Kind.Sprite, 2) });
         One(0x6C, "Draw a character shifted", Chars, (b, w) => $"Draw {w.Who(b[1])} shifted by ({(sbyte)b[2]}, {(sbyte)b[3]}) pixels", new byte[] { 0x6C, 0x50, 0, 0 },
             "Only the picture moves; the character stays on its tile (0, 0 draws it on its place again). To leave someone standing between two tiles, use Nudge.",
@@ -406,9 +406,9 @@ public static class L2EventCommands
         One(0xB2, "Two characters face each other", Chars, (b, w) => $"{Cap(w.Who(b[1]))} and {w.Who(b[2])} face each other", new byte[] { 0xB2, 0x00, 0x50 }, "", rare: true,
             ps: new[] { Who(1), Who(2, "and") });
         One(0xB3, "The party looks at a character", Chars, (b, w) => $"The party turns to look at {w.Who(b[1])}", new byte[] { 0xB3, 0x50 }, "", rare: true, ps: Who(1));
-        One(0xB5, "Forget story character 4F's map", Chars, (_, _) => "Story character 4F leaves every map", null, "", '?', rare: true);
-        One(0xB7, "Bring back a defeated field monster", Chars, (b, w) => $"Bring back {w.Who(b[1])}", null, "", '?', rare: true, ps: Who(1));
-        One(0xBD, "Add an effect character", Chars, (b, _) => $"Add effect character {b[1]:X2} (type {b[2]:X2})", null, "Used once by the game.", '?', rare: true,
+        One(0xB5, "Forget story character 4F's map", Chars, (_, _) => "Story character 4F leaves every map", new byte[] { 0xB5 }, "", '?', rare: true);
+        One(0xB7, "Bring back a defeated field monster", Chars, (b, w) => $"Bring back {w.Who(b[1])}", new byte[] { 0xB7, 0x50 }, "", '?', rare: true, ps: Who(1));
+        One(0xBD, "Add an effect character", Chars, (b, _) => $"Add effect character {b[1]:X2} (type {b[2]:X2})", new byte[] { 0xBD, 0x5E, 0x00 }, "Used once by the game.", '?', rare: true,
             ps: new[] { P("id", L2Kind.Hex, 1), P("type", L2Kind.Hex, 2) });
 
         // ── character actions ──
@@ -437,29 +437,29 @@ public static class L2EventCommands
         {
             bool point = from == "a point";
             One(op, $"Ring of sparkles around {from}" + (kind == 0x4F ? " (second kind)" : ""), Moves,
-                (b, w) => $"Ring {b[1]:X2}: {b[3]} sparkles around {(point ? w.Point(b[2]) : w.Who(b[2]))}", new byte[] { (byte)op, 0x00, point ? (byte)1 : (byte)0, 0x0A, 0x64, 0x40, 0x00 },
-                "A group of effect sprites; the ring commands below change it.", 'D', rare: true,
+                (b, w) => $"Ring {b[1]:X2}: {b[3]} sparkles around {(point ? w.Point(b[2]) : w.Who(b[2]))}", new byte[] { (byte)op, 0x00, point ? (byte)1 : (byte)0, 0x01, 0x78, 0x00, 0x00 },
+                "A group of effect sprites (the Sinistrals' warp uses it: Shrine of Daos 1F). Tilt a ring, Grow or shrink a ring and Wait until a ring is gone change it.", 'D', rare: false,
                 ps: new[] { P("ring", L2Kind.Hex, 1), point ? P("point", L2Kind.Point, 2) : Who(2, "around"), P("how many", L2Kind.Number, 3), P("size", L2Kind.Hex, 4), P("spin", L2Kind.Hex, 5), P("other", L2Kind.Hex, 6) });
         }
         foreach (var (op, from) in new[] { (0xC8, "a point"), (0xC9, "a character") })
         {
             bool point = from == "a point";
-            One(op, $"Ring of effect sprites around {from}", Moves, (b, w) => $"Ring {b[1]:X2}: {b[4]} x sprite {b[3]:X2} around {(point ? w.Point(b[2]) : w.Who(b[2]))}", null, "", 'D', rare: true,
+            One(op, $"Ring of effect sprites around {from}", Moves, (b, w) => $"Ring {b[1]:X2}: {b[4]} x sprite {b[3]:X2} around {(point ? w.Point(b[2]) : w.Who(b[2]))}", new byte[] { (byte)op, 0x00, point ? (byte)1 : (byte)0, 0x55, 0x06, 0x40, 0x40, 0x00 }, "", 'D', rare: false,
                 ps: new[] { P("ring", L2Kind.Hex, 1), point ? P("point", L2Kind.Point, 2) : Who(2, "around"), P("sprite type", L2Kind.Hex, 3), P("how many", L2Kind.Number, 4), P("size", L2Kind.Hex, 5), P("spin", L2Kind.Hex, 6), P("other", L2Kind.Hex, 7) });
         }
-        One(0x8E, "Grow or shrink a ring", Moves, (b, _) => $"Ring {b[1]:X2}: size changes (stop {b[2]:X2}, rate {b[3]:X2})", null, "", 'C', rare: true,
+        One(0x8E, "Grow or shrink a ring", Moves, (b, _) => $"Ring {b[1]:X2}: size changes (stop {b[2]:X2}, rate {b[3]:X2})", new byte[] { 0x8E, 0x00, 0xB0, 0x21 }, "", 'C', rare: false,
             ps: new[] { P("ring", L2Kind.Hex, 1), P("stop at", L2Kind.Hex, 2), P("rate", L2Kind.Hex, 3) });
-        One(0x9F, "Grow or shrink a ring, then remove it", Moves, (b, _) => $"Ring {b[1]:X2}: size changes, then it goes", null, "", 'C', rare: true,
+        One(0x9F, "Grow or shrink a ring, then remove it", Moves, (b, _) => $"Ring {b[1]:X2}: size changes, then it goes", new byte[] { 0x9F, 0x00, 0x84, 0xE1 }, "", 'C', rare: false,
             ps: new[] { P("ring", L2Kind.Hex, 1), P("stop at", L2Kind.Hex, 2), P("rate", L2Kind.Hex, 3) });
-        One(0x8F, "Tilt a ring", Moves, (b, _) => $"Ring {b[1]:X2}: tilts (stop {b[2]:X2}, rate {b[3]:X2})", null, "", 'C', rare: true,
+        One(0x8F, "Tilt a ring", Moves, (b, _) => $"Ring {b[1]:X2}: tilts (stop {b[2]:X2}, rate {b[3]:X2})", new byte[] { 0x8F, 0x00, 0x00, 0x81 }, "", 'C', rare: false,
             ps: new[] { P("ring", L2Kind.Hex, 1), P("stop at", L2Kind.Hex, 2), P("rate", L2Kind.Hex, 3) });
-        One(0x90, "Tilt a ring the other way", Moves, (b, _) => $"Ring {b[1]:X2}: tilts the other way (stop {b[2]:X2}, rate {b[3]:X2})", null, "", 'C', rare: true,
+        One(0x90, "Tilt a ring the other way", Moves, (b, _) => $"Ring {b[1]:X2}: tilts the other way (stop {b[2]:X2}, rate {b[3]:X2})", new byte[] { 0x90, 0x00, 0x00, 0x81 }, "", 'C', rare: false,
             ps: new[] { P("ring", L2Kind.Hex, 1), P("stop at", L2Kind.Hex, 2), P("rate", L2Kind.Hex, 3) });
-        One(0x9A, "Remove a ring", Moves, (b, _) => $"Ring {b[1]:X2} fades away", null, "", 'C', rare: true, ps: P("ring", L2Kind.Hex, 1));
-        One(0xA1, "Wait for a ring", Moves, (b, _) => $"Wait until ring {b[1]:X2} is done changing", null, "", 'C', "until it stops changing", true,
+        One(0x9A, "Remove a ring", Moves, (b, _) => $"Ring {b[1]:X2} fades away", new byte[] { 0x9A, 0x00 }, "", 'C', rare: false, ps: P("ring", L2Kind.Hex, 1));
+        One(0xA1, "Wait for a ring", Moves, (b, _) => $"Wait until ring {b[1]:X2} is done changing", new byte[] { 0xA1, 0x00, 0x00 }, "", 'C', "until it stops changing", false,
             P("ring", L2Kind.Hex, 1), Pk("change", 2, L((0, "size"), (1, "tilt"), (2, "other tilt"))));
-        One(0xA2, "Wait until a ring is gone", Moves, (b, _) => $"Wait until ring {b[1]:X2} is gone", null, "", 'C', "until it is gone", true, P("ring", L2Kind.Hex, 1));
-        One(0xC1, "Effect settings", Moves, (b, _) => $"Effect settings {b[1]:X2}, {b[2]:X2}", null, "Unknown use; always before a ring of sparkles.", '?', rare: true,
+        One(0xA2, "Wait until a ring is gone", Moves, (b, _) => $"Wait until ring {b[1]:X2} is gone", new byte[] { 0xA2, 0x00 }, "", 'C', "until it is gone", false, P("ring", L2Kind.Hex, 1));
+        One(0xC1, "Effect settings", Moves, (b, _) => $"Effect settings {b[1]:X2}, {b[2]:X2}", new byte[] { 0xC1, 0x1D, 0x00 }, "Unknown use; always before a ring of sparkles.", '?', rare: true,
             ps: new[] { P("first", L2Kind.Hex, 1), P("second", L2Kind.Hex, 2) });
 
         // ── maps and places ──
@@ -468,13 +468,13 @@ public static class L2EventCommands
             ps: new[] { P("map", L2Kind.Map, 1), P("scene", L2Kind.Scene, 2), P("arrival point", L2Kind.ArrivalPoint, 3) });
         One(0x5E, "Leave through an exit", Places, (b, w) => $"Leave through {w.Exit(b[1])}", new byte[] { 0x5E, 0x00 }, "As if the party walked through that exit of the map.",
             ps: P("exit", L2Kind.Exit, 1));
-        One(0x83, "Send the player elsewhere (before the map loads)", Places, (b, w) => $"Instead, go through {w.Exit(b[1])}", null,
+        One(0x83, "Send the player elsewhere (before the map loads)", Places, (b, w) => $"Instead, go through {w.Exit(b[1])}", new byte[] { 0x83, 0x0A },
             "Only in the \"before the map loads\" event.", rare: true, ps: P("exit", L2Kind.Exit, 1));
-        One(0x85, "Choose where the player arrives (before the map loads)", Places, (b, w) => $"Arrive at {w.Point(b[1])}, facing {Opt(Facings, b[2] & 15)}", null,
+        One(0x85, "Choose where the player arrives (before the map loads)", Places, (b, w) => $"Arrive at {w.Point(b[1])}, facing {Opt(Facings, b[2] & 15)}", new byte[] { 0x85, 0x01, 0x00 },
             "Only in the \"before the map loads\" event.", rare: true, ps: new[] { P("point", L2Kind.Point, 1), new L2ParamDef { Label = "facing", Kind = L2Kind.Choice, Options = Facings, Get = b => b[2] & 15, Set = (b, v) => b[2] = (byte)(v & 15) } });   // the byte is the facing ($80:BE04 shifts it into $05B2's high nibble)
         One(0x69, "Map settings", Places, (b, _) => "Map settings: " + (b[1] == 0 ? "none" : string.Join(", ", MapModeBits.Where(m => (b[1] & m.Item1) != 0).Select(m => m.Item2))),
             new byte[] { 0x69, 0x08 }, "Usually in the start-up script: towns use 08 or 98, dungeons 01 or 11.", ps: P("settings", L2Kind.Hex, 1));
-        One(0xA9, "Where Escape leads", Places, (b, w) => b[1] >= 2 ? $"Escape leads to {w.Map(b[1])}, point {b[2]}" : $"Escape leads to world map spot {b[2]}", null,
+        One(0xA9, "Where Escape leads", Places, (b, w) => b[1] >= 2 ? $"Escape leads to {w.Map(b[1])}, point {b[2]}" : $"Escape leads to world map spot {b[2]}", new byte[] { 0xA9, 0x10, 0x07 },
             "Usually in the start-up script.", 'D', rare: true, ps: new[] { P("map", L2Kind.Map, 1), P("point", L2Kind.Number, 2) });
         One(0xAC, "Where the party appears when the map reloads", Places, (b, w) => $"After a battle or the menu, the party appears at {w.Point(b[1])}", null, "", 'C', rare: true,
             ps: new[] { P("point", L2Kind.Point, 1), Pk("facing", 2, Facings) });
@@ -484,14 +484,14 @@ public static class L2EventCommands
             "Changes the map (both layers) and where the party can walk.", ps: new[] { P("onto area", L2Kind.Area, 1), P("from area", L2Kind.Area, 2) });
         One(0x87, "Copy map tiles (quick, for animations)", Places, (b, w) => $"Copy the tiles of {w.Area(b[2])} onto {w.Area(b[1])} (quick)", new byte[] { 0x87, 0x01, 0x02 },
             "Follow it with \"Update where the party can walk\".", 'D', ps: new[] { P("onto area", L2Kind.Area, 1), P("from area", L2Kind.Area, 2) });
-        One(0xB4, "Copy map tiles on chosen layers", Places, (b, w) => $"Copy the tiles of {w.Area(b[2])} onto {w.Area(b[1])} (layers {b[3]:X2})", null, "", rare: true,
+        One(0xB4, "Copy map tiles on chosen layers", Places, (b, w) => $"Copy the tiles of {w.Area(b[2])} onto {w.Area(b[1])} (layers {b[3]:X2})", new byte[] { 0xB4, 0x05, 0x04, 0x02 }, "", rare: true,
             ps: new[] { P("onto area", L2Kind.Area, 1), P("from area", L2Kind.Area, 2), P("layers", L2Kind.Hex, 3) });
         One(0x6B, "Update where the party can walk", Places, (_, _) => "Update where the party can walk", new byte[] { 0x6B }, "After changing map tiles.");
-        One(0x88, "Update where the party can walk", Places, (_, _) => "Update where the party can walk", null, "", rare: true);
-        One(0x7C, "Ship: what it can do", Places, (b, _) => $"Ship: {Opt(ShipAbilities, b[1]).ToLowerInvariant()}", null, "", '?', rare: true, ps: Pk("can", 1, ShipAbilities));
-        One(0x7D, "Ship: park it on the world map", Places, (b, _) => $"Park the ship at world map point {b[1]}", null, "", 'C', rare: true, ps: P("point", L2Kind.Number, 1));
-        One(0x7E, "Ship: where it is", Places, (b, _) => $"Ship: {Opt(ShipStates, b[1]).ToLowerInvariant()}", null, "", 'C', rare: true, ps: Pk("state", 1, ShipStates));
-        One(0x7F, "Ship: party aboard", Places, (b, _) => b[1] == 0 ? "The party is on foot" : "The party is aboard the ship", null, "", 'C', rare: true, ps: Pk("party", 1, L((0, "on foot"), (0xFF, "aboard"))));
+        One(0x88, "Update where the party can walk", Places, (_, _) => "Update where the party can walk", new byte[] { 0x88 }, "", rare: true);
+        One(0x7C, "Ship: what it can do", Places, (b, _) => $"Ship: {Opt(ShipAbilities, b[1]).ToLowerInvariant()}", new byte[] { 0x7C, 0x00 }, "", '?', rare: true, ps: Pk("can", 1, ShipAbilities));
+        One(0x7D, "Ship: park it on the world map", Places, (b, _) => $"Park the ship at world map point {b[1]}", new byte[] { 0x7D, 0x01 }, "", 'C', rare: true, ps: P("point", L2Kind.Number, 1));
+        One(0x7E, "Ship: where it is", Places, (b, _) => $"Ship: {Opt(ShipStates, b[1]).ToLowerInvariant()}", new byte[] { 0x7E, 0x00 }, "", 'C', rare: true, ps: Pk("state", 1, ShipStates));
+        One(0x7F, "Ship: party aboard", Places, (b, _) => b[1] == 0 ? "The party is on foot" : "The party is aboard the ship", new byte[] { 0x7F, 0xFF }, "", 'C', rare: true, ps: Pk("party", 1, L((0, "on foot"), (0xFF, "aboard"))));
         One(0x80, "Ship: facing", Places, (b, _) => $"Ship faces {b[1]:X2}", null, "", '?', rare: true, ps: P("facing", L2Kind.Hex, 1));
 
         // ── shops and services ──
@@ -501,7 +501,7 @@ public static class L2EventCommands
         One(0x19, "Open the church", Shops, (_, _) => "Open the church menu (the event ends)", new byte[] { 0x19 }, "Save, cure and so on; the event ends there.");
         One(0x53, "Start a story battle", Shops, (b, _) => $"Story battle {b[1]:X2}", new byte[] { 0x53, 0x00 },
             "Afterwards story flag FF is on when the party did not win (losing is game over except battles 0B and 25).", 'G', ps: P("battle", L2Kind.Battle, 1, 0x26));
-        One(0xA5, "Game over", Shops, (_, _) => "Game over (back to the title screen)", null, "", rare: true);
+        One(0xA5, "Game over", Shops, (_, _) => "Game over (back to the title screen)", new byte[] { 0xA5 }, "", rare: true);
 
         // ── camera ──
         l.Add(new L2CommandDef
@@ -532,7 +532,7 @@ public static class L2EventCommands
             "Use step 1, 3, 5 or 15 (others stay black). Follow it with \"Wait for the fade\".", ps: new[] { L2ParamDef.Nibble("step", L2Kind.Number, 1, true), L2ParamDef.Nibble("frames per step", L2Kind.Number, 1, false) });
         One(0xA4, "Fade in quickly", Screen, (_, _) => "Fade in quickly", new byte[] { 0xA4 }, "About a quarter of a second; used after story battles.");
         One(0x76, "Wait for the fade", Screen, (_, _) => "Wait for the fade", new byte[] { 0x76 }, "", waits: "until the fade is done");
-        One(0x57, "Wait for every screen effect", Screen, (_, _) => "Wait until every screen effect stops", null, "Never ends during a quake or while the event moves the camera.", rare: true,
+        One(0x57, "Wait for every screen effect", Screen, (_, _) => "Wait until every screen effect stops", new byte[] { 0x57 }, "Never ends during a quake or while the event moves the camera.", rare: true,
             waits: "until all effects stop");
         One(0x5A, "Shake the screen", Screen, (b, _) => $"The screen shakes (strength {b[2]}, how often {b[3]:X2})", new byte[] { 0x5A, 0x05, 0x02, 0x7F },
             "Keeps shaking until \"Stop the shaking\".", 'G', ps: new[] { P("strength", L2Kind.Number, 2, 15), P("how often (of 255)", L2Kind.Hex, 3) });
@@ -544,7 +544,7 @@ public static class L2EventCommands
             "", ps: ColourFields());
         One(0x96, "Darken with a colour (half)", Screen, (b, _) => $"Darken half with {ColourName(b[1])}", null, "", rare: true, ps: ColourFields());
         One(0x97, "End the colour", Screen, (_, _) => "End the colour (back to the map's look)", new byte[] { 0x97 }, "");
-        One(0xC5, "Keep the colour as it is", Screen, (_, _) => "Keep the colour as it is now", null, "", '?', rare: true);
+        One(0xC5, "Keep the colour as it is", Screen, (_, _) => "Keep the colour as it is now", new byte[] { 0xC5 }, "", '?', rare: true);
         One(0x93, "Wash the colours toward white", Screen, (b, _) => $"Colours toward white (channels {b[1]:X2}, step {(sbyte)b[2]}, every {b[3]} frames)", null, "", rare: true,
             ps: new[] { P("channels", L2Kind.Hex, 1), P("step", L2Kind.Signed, 2, 127, min: -128), P("frames per step", L2Kind.Number, 3) });
         One(0x9B, "Custom colour fade", Screen, (b, _) => "Custom colour fade", null, "", rare: true);
@@ -554,12 +554,12 @@ public static class L2EventCommands
         One(0x3E, "Screen off", Screen, (_, _) => "Screen off (black at once)", null, "", rare: true);
         One(0x3F, "Screen on", Screen, (_, _) => "Screen on (full brightness at once)", null, "", rare: true);
         One(0x40, "Draw the map again", Screen, (_, _) => "Draw the whole map again", null, "", rare: true);
-        One(0xC7, "Draw the map again (dark screen)", Screen, (_, _) => "Draw the map again (while the screen is dark)", null, "", 'D', rare: true);
-        One(0x82, "Refresh around the hero", Screen, (_, _) => "Refresh the map around the hero", null, "", '?', rare: true);
-        One(0x60, "Write a screen register", Screen, (b, _) => $"Screen register 21{b[1]:X2} = {b[2]:X2}", null, "", rare: true, ps: new[] { P("register", L2Kind.Hex, 1), P("value", L2Kind.Hex, 2) });
-        One(0xCA, "Layer scrolling", Screen, (b, _) => $"Layer {b[1] / 2 + 1} scrolls in mode {b[2]} ({b[3]:X2})", null, "", rare: true,
+        One(0xC7, "Draw the map again (dark screen)", Screen, (_, _) => "Draw the map again (while the screen is dark)", new byte[] { 0xC7 }, "", 'D', rare: true);
+        One(0x82, "Refresh around the hero", Screen, (_, _) => "Refresh the map around the hero", new byte[] { 0x82 }, "", '?', rare: true);
+        One(0x60, "Write a screen register", Screen, (b, _) => $"Screen register 21{b[1]:X2} = {b[2]:X2}", new byte[] { 0x60, 0x2C, 0x1F }, "", rare: true, ps: new[] { P("register", L2Kind.Hex, 1), P("value", L2Kind.Hex, 2) });
+        One(0xCA, "Layer scrolling", Screen, (b, _) => $"Layer {b[1] / 2 + 1} scrolls in mode {b[2]} ({b[3]:X2})", new byte[] { 0xCA, 0x00, 0x03, 0x21 }, "", rare: true,
             ps: new[] { Pk("layer", 1, L((0, "1"), (2, "2"), (4, "3"), (6, "4"))), Pk("mode", 2, L((0, "follows the camera"), (1, "fixed"), (2, "parallax"), (3, "scrolls by itself"), (4, "parallax (other)"))), P("setting", L2Kind.Hex, 3) });
-        One(0x74, "Battle background", Screen, (b, _) => $"Battles here use background {b[1]:X2}", null, "Usually in the start-up script.", rare: true, ps: P("background", L2Kind.Hex, 1));
+        One(0x74, "Battle background", Screen, (b, _) => $"Battles here use background {b[1]:X2}", new byte[] { 0x74, 0x05 }, "Usually in the start-up script.", rare: true, ps: P("background", L2Kind.Hex, 1));
 
         // ── music and sound ──
         One(0x4B, "Set the map's music", Sound, (b, w) => $"Music: {w.Song(b[1])}", new byte[] { 0x4B, 0x01 }, "Nothing changes when that song already plays; it comes back after a battle.",
@@ -570,7 +570,7 @@ public static class L2EventCommands
         One(0x72, "Stop the music", Sound, (_, _) => "Stop the music", new byte[] { 0x72 }, "");
         One(0x4C, "Play a sound", Sound, (b, _) => $"Sound {b[1]:X2}", new byte[] { 0x4C, 0x15 }, "", ps: P("sound", L2Kind.Sound, 1, 0x8E));
         One(0xAE, "Sounds on or off", Sound, (b, _) => b[1] == 0xFF ? "Sounds on again" : "Sounds off", new byte[] { 0xAE, 0x00 }, "", ps: Pk("sounds", 1, L((0x00, "off"), (0xFF, "on"))));
-        One(0x4D, "Wait for a music cue", Sound, (b, _) => $"Wait for music cue {b[1]}", null, "", waits: "until the song gets there", rare: true, ps: P("cue", L2Kind.Number, 1));
+        One(0x4D, "Wait for a music cue", Sound, (b, _) => $"Wait for music cue {b[1]}", new byte[] { 0x4D, 0x21 }, "", waits: "until the song gets there", rare: true, ps: P("cue", L2Kind.Number, 1));
         One(0x4E, "Wait for the sound to end", Sound, (_, _) => "Wait for the sound to end", null, "", '?', "until the sound ends", true);
 
         // ── waiting ──
@@ -605,17 +605,17 @@ public static class L2EventCommands
             0x08 => "Load the normal font again",
             _ => $"Special {b[1]:X2}",
         };
-        One(0xA7, "Followers stop or resume", Special, (b, _) => b[1] == 0 ? "Followers stop following the leader's steps" : "Followers follow again", null, "", 'C', rare: true,
+        One(0xA7, "Followers stop or resume", Special, (b, _) => b[1] == 0 ? "Followers stop following the leader's steps" : "Followers follow again", new byte[] { 0xA7, 0x00 }, "", 'C', rare: true,
             ps: Pk("followers", 1, L((0x00, "stop"), (0xFF, "follow"))));
-        One(0xA8, "Enter or leave the Ancient Cave", Special, (b, _) => b[1] == 0 ? "Enter the Ancient Cave (party and items reset)" : "Leave the Ancient Cave", null, "", 'D', rare: true,
+        One(0xA8, "Enter or leave the Ancient Cave", Special, (b, _) => b[1] == 0 ? "Enter the Ancient Cave (party and items reset)" : "Leave the Ancient Cave", new byte[] { 0xA8, 0x01 }, "", 'D', rare: true,
             ps: Pk("", 1, L((0, "enter"), (1, "leave"))));
-        One(0xA6, "Place the cave floor's monsters", Special, (_, _) => "Place this floor's monsters (Ancient Cave)", null, "", '?', rare: true);
-        One(0xAA, "Turn puzzle switches 00-1F off", Special, (_, _) => "Turn puzzle switches 00-1F off", null, "The map's puzzle switches 00-1F ($7F:D100-D103, $80:AC18), the ones a save keeps.", 'C', rare: true);
-        One(0xAD, "Rebuild the treasure list", Special, (_, _) => "Rebuild a treasure list (Dragon egg wish?)", null, "", '?', rare: true);
-        One(0xBB, "Show the report screen", Special, (_, _) => "Show the report screen (defeats and other records) and end", null, "The game uses it at the end.", 'G', rare: true);
-        One(0xBC, "Draw the map again and end", Special, (_, _) => "Draw the map again and end the event", null, "", 'C', rare: true);
-        One(0xCB, "Message speed", Special, (b, _) => $"Message speed = {b[1]}", null, "", 'D', rare: true, ps: P("speed", L2Kind.Number, 1));
-        One(0xCC, "Remember the last story battle", Special, (_, _) => "Remember the last story battle", null, "", '?', rare: true);
+        One(0xA6, "Place the cave floor's monsters", Special, (_, _) => "Place this floor's monsters (Ancient Cave)", new byte[] { 0xA6 }, "", '?', rare: true);
+        One(0xAA, "Turn puzzle switches 00-1F off", Special, (_, _) => "Turn puzzle switches 00-1F off", new byte[] { 0xAA }, "The map's puzzle switches 00-1F ($7F:D100-D103, $80:AC18), the ones a save keeps.", 'C', rare: true);
+        One(0xAD, "Rebuild the treasure list", Special, (_, _) => "Rebuild a treasure list (Dragon egg wish?)", new byte[] { 0xAD }, "", '?', rare: true);
+        One(0xBB, "Show the report screen", Special, (_, _) => "Show the report screen (defeats and other records) and end", new byte[] { 0xBB }, "The game uses it at the end.", 'G', rare: true);
+        One(0xBC, "Draw the map again and end", Special, (_, _) => "Draw the map again and end the event", new byte[] { 0xBC }, "", 'C', rare: true);
+        One(0xCB, "Message speed", Special, (b, _) => $"Message speed = {b[1]}", new byte[] { 0xCB, 0x02 }, "", 'D', rare: true, ps: P("speed", L2Kind.Number, 1));
+        One(0xCC, "Remember the last story battle", Special, (_, _) => "Remember the last story battle", new byte[] { 0xCC }, "", '?', rare: true);
         One(0x6D, "Credits text", Special, (b, _) => "Credits text", null, "", rare: true);
         One(0x6E, "Credits text (tall)", Special, (b, _) => "Credits text (tall letters)", null, "", rare: true);
         foreach (int op in new[] { 0x27, 0x2A, 0x39, 0x4F, 0x5F })
