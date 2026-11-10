@@ -39,6 +39,11 @@ public partial class L2FieldVm : ObservableObject
     public bool IsPath => Def.Kind == L2Kind.Path;
     /// <summary>The "onto" area of a tile copy: its card gets a button to pick both areas on the stage.</summary>
     public bool IsArea => Def.Kind == L2Kind.Area && !Step.IsText && Step.Op is 0x43 or 0x87 or 0xB4 && Def.Label == "onto area";
+    /// <summary>A place of the map (a point, a tile, a door, an exit, an area): its card gets "Pick on the stage".</summary>
+    public bool IsPlace => L2ScriptEditor.IsPlaceField(Step, Def);
+    /// <summary>A point of another map (where "Go to another map" arrives): picked on that map in a window.</summary>
+    public bool IsArrival => Def.Kind == L2Kind.ArrivalPoint && !Step.IsText;
+    public int StepMap => L2EventCommands.Find(Step.Op)?.FieldsFor(Step.Bytes).FirstOrDefault(q => q.Kind == L2Kind.Map) is { } m ? m.Get(Step.Bytes) : -1;
     public bool HasHint => Hint.Length > 0;
     public List<L2Option> Choices { get; } = new();
     [ObservableProperty] private L2Option? _selected;
@@ -92,6 +97,7 @@ public partial class L2FieldVm : ObservableObject
     public void ShowFlagUses() { if (IsFlag) _owner.ShowFlag(Raw); }
     public void EditPath() { if (IsPath) _owner.EditPath(this); }
     public void EditChange() { if (IsArea) _owner.EditChange(this); }
+    public void PickPlace() { if (IsPlace) _owner.StartPickPlace(this); }
 }
 
 /// <summary>One step of the script as a card: text with its speaker, or a command with its fields in place.</summary>
@@ -1373,6 +1379,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
                 PuzzleMarks.Add(new L2StageMark { Left = from[1] * 16, Top = from[2] * 16, Width = w * 16, Height = h * 16, Label = $"new look (area {cs.Bytes[2]})", IsSource = true });
             }
         }
+        else if (!IsPuzzle && !IsChangingMap && !IsPickingPlace) MarkPlaces();
         _textLine = null;
         if (!IsPlaying) ShowStage();
         // (after the stage, which brings the view back to the camera)

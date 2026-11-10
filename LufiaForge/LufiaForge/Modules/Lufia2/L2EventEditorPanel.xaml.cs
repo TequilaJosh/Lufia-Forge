@@ -290,6 +290,25 @@ public partial class L2EventEditorPanel : UserControl
         if (sender is FrameworkElement { DataContext: L2FieldVm f }) f.ShowFlagUses();
     }
 
+    private void PickArrival_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: L2FieldVm f } || _editor?.Rom is not { } rom) return;
+        int map = Math.Max(2, f.StepMap);
+        int point = f.Raw;
+        var at = L2MapInfo.Records(rom, map, L2MapInfo.Points, 3).Select(r => r.Bytes).FirstOrDefault(b => b[0] == point);
+        var w = new L2PickPlaceWindow(rom, map, at?[1] ?? 0, at?[2] ?? 0, m => L2Maps.Name(rom, m)) { Owner = Window.GetWindow(this), Title = "Where the party arrives - Lufia Forge" };
+        if (w.ShowDialog() != true) return;
+        if (w.Map < 2) { _editor.StageInfo = "\"Go to another map\" arrives at a point of a town or dungeon, not the world map."; return; }
+        _editor.PickArrival(f, w.Map, w.X, w.Y);
+    }
+
+    private void PickPlace_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: L2FieldVm f } || _editor == null) return;
+        if (StageRoot.Visibility != Visibility.Visible) ShowStage(true);
+        f.PickPlace();
+    }
+
     private void EditChange_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement { DataContext: L2FieldVm f } || _editor == null) return;
@@ -415,13 +434,15 @@ public partial class L2EventEditorPanel : UserControl
         var (x, y) = TileAt(e);
         Stage.ToolTip = $"Tile ({x}, {y})";
         if (_editor?.IsChangingMap == true) _editor.ChangeMove(x, y, e.LeftButton == MouseButtonState.Pressed);
+        if (_editor?.IsPickingPlace == true) _editor.PlaceMove(x, y, e.LeftButton == MouseButtonState.Pressed);
     }
 
     private void Stage_MouseUp(object sender, MouseButtonEventArgs e)
     {
         if (Stage.IsMouseCaptured) Stage.ReleaseMouseCapture();
-        if (_editor?.IsChangingMap != true) return;
         var (x, y) = TileAt(e);
+        if (_editor?.IsPickingPlace == true) { _editor.PlaceUp(x, y); return; }
+        if (_editor?.IsChangingMap != true) return;
         _editor.ChangeUp(x, y);
     }
 
@@ -434,6 +455,7 @@ public partial class L2EventEditorPanel : UserControl
         if (_pickStart) { _pickStart = false; _editor.SetPartyStart(x, y); return; }
         if (_placeSprite >= 0) { int sprite = _placeSprite; _placeSprite = -1; _editor.AddCharacterHere(sprite, x, y); return; }
         if (_editor.IsChangingMap) { _editor.ChangeDown(x, y); Stage.CaptureMouse(); return; }
+        if (_editor.IsPickingPlace) { _editor.PlaceDown(x, y); Stage.CaptureMouse(); return; }
         if (_editor.IsDrawingPath) { _editor.PathClick(x, y); return; }
         var p = e.GetPosition(Stage);
         if (_editor.StageClick(p.X, p.Y)) return;
@@ -447,6 +469,7 @@ public partial class L2EventEditorPanel : UserControl
         e.Handled = true;
         if (_editor?.IsDrawingPath == true) { _editor.PathUndoCorner(); return; }
         if (_editor?.IsChangingMap == true) { _editor.ChangeCancel(); return; }
+        if (_editor?.IsPickingPlace == true) { _editor.PlaceCancel(); return; }
         if (_placeSprite >= 0) { _placeSprite = -1; if (_editor != null) _editor.StageInfo = "No character added."; return; }
         ShowActionMenu(x, y);
     }
@@ -640,6 +663,7 @@ public partial class L2EventEditorPanel : UserControl
         {
             if (e.Key == Key.Escape && _editor.IsDrawingPath) { _editor.PathCancel(); e.Handled = true; }
             else if (e.Key == Key.Escape && _editor.IsChangingMap) { _editor.ChangeCancel(); e.Handled = true; }
+            else if (e.Key == Key.Escape && _editor.IsPickingPlace) { _editor.PlaceCancel(); e.Handled = true; }
             else if (e.Key == Key.Escape && _placeSprite >= 0) { _placeSprite = -1; _editor.StageInfo = "No character added."; e.Handled = true; }
             else if (e.Key == Key.Escape && (_editor.PickedActor >= 0 || _pickStart)) { _pickStart = false; _editor.LetGo(); e.Handled = true; }
             else if (Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase && Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
