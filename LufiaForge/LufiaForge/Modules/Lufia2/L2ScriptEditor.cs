@@ -1522,6 +1522,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         if (ChangedElsewhere()) { Status = "Not saved: this event was changed on another page after it was opened here. Revert reads it again; then make your changes again."; return false; }
         int fitted = FitTexts(all: false);
         int ended = _event?.Entry != null ? FitEffects() : 0;
+        int drawn = _event?.Entry != null ? FitMapDraws() : 0;
         // every text must be text the game can show (texts not changed are written as they are: the game's own can hold
         // codes typed text can't)
         for (int i = 0; i < _script.Steps.Count; i++)
@@ -1546,7 +1547,8 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
             MarkRead();
             Status = "Saved in the project. " + result + (added ? " An End step was added at the bottom." : "") +
                      (fitted > 0 ? $" {fitted} text{(fitted > 1 ? "s were" : " was")} wider or longer than the box: the lines were broken to fit ({L2Events.BoxWidth} letters, {L2Events.BoxLines} lines a box, more boxes when needed)." : "") +
-                     (ended > 0 ? " A colour, shaking or ring was still going at the end of the event: steps that end it were added before the end (the game's events always end them)." : "");
+                     (ended > 0 ? " A colour, shaking or ring was still going at the end of the event: steps that end it were added before the end (the game's events always end them)." : "") +
+                     (drawn > 0 ? " The map was changed while the screen is off: \"Draw the map again\" was added after it (without it the game doesn't show the change)." : "");
             Saved?.Invoke(result);
             return true;
         }
@@ -1699,6 +1701,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
     private void Annotate()
     {
         if (_script == null) return;
+        var screenOff = ScreenOff();
         for (int i = 0; i < Lines.Count && i < _script.Steps.Count; i++)
         {
             var vm = Lines[i];
@@ -1723,6 +1726,10 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
             if (!st.IsText && st.Op == 0x83 && !(_event?.Entry is { Head: L2EventBlocks.GameList, Id: 2 }))
                 vm.Warning = (vm.Warning.Length > 0 ? vm.Warning + " " : "") +
                              "This only works in the \"Before the map loads\" event: anywhere else the event stops here (checked in the game). Use Go to another map or Leave through an exit instead.";
+            if (CopyNotDrawn(i, screenOff))
+                vm.Warning = (vm.Warning.Length > 0 ? vm.Warning + " " : "") +
+                             "The screen is off here (before the scene fades in, or after a fade to black): the game changes the map but doesn't draw it, " +
+                             "so the change doesn't show (checked in the game). Saving adds \"Draw the map again\" after this step.";
             if (LeaderVanishes(i))
             {
                 vm.Warning = (vm.Warning.Length > 0 ? vm.Warning + " " : "") +
@@ -2271,6 +2278,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         int fitted = FitTexts(all: true);
         if (fitted > 0) { Changed(true); done += $"{fitted} text{(fitted > 1 ? "s" : "")} broken to fit the box. "; }
         if (FitEffects() > 0) { Changed(true); done += "A colour, shaking or ring left going at the end is now ended before it. "; }
+        if (FitMapDraws() > 0) { Changed(true); done += "The map changed while the screen is off is now drawn again after the change. "; }
         // the party: the heroes now played by map characters no longer join for the test
         if (done.Length > 0 && SaveNow(quiet: true) && !_partyByHand) FillTestParty();
         return done;

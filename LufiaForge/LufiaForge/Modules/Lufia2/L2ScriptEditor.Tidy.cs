@@ -11,11 +11,70 @@ namespace LufiaForge.Modules.Lufia2;
 /// becomes (0,0)), and when the event ends the leader stands there, the view jumps and the map's characters go. The
 /// game's events hide the leader (2E 00) instead; a map character that looks like Maxim flickers away in his place.</item>
 /// <item>Shaking is stopped (8A) and rings are removed (9A) the same way.</item>
+/// <item>A tile copy (43, 87, B4) made while the screen is off changes the map but doesn't draw it again (the game skips
+/// the drawing while $0583 is $80: before a scene's first fade in, after a fade to black, after "screen off"), so the
+/// screen keeps the old look until the map scrolls. "Draw the map again" (40) after it draws it (checked in the game on
+/// the user's Jeros' Story scene: the copy alone, at the start of the scene or after a fade to black, never showed; with
+/// 40 after it, it shows as the screen comes on). The start-up script and the game's own events (list +2) run before
+/// the map is drawn and need nothing. The check flags none of the 313 copies in the game's own scenes, talk and step-on
+/// events.</item>
 /// </list></summary>
 public partial class L2ScriptEditor
 {
     private static bool StartsColour(int op) => op is 0x93 or 0x94 or 0x95 or 0x96 or 0x9B;
     private static bool IsRing(int op) => op is 0x8D or 0xA0 or 0xC2 or 0xC3 or 0xC8 or 0xC9;
+    private static bool CopiesTiles(int op) => op is 0x43 or 0x87 or 0xB4;
+    private static bool DrawsMap(int op) => op is 0x40 or 0xC7 or 0xBC;
+
+    /// <summary>For every step: whether the screen is off when it runs, reading the steps top to bottom. A scene whose
+    /// first change of the screen is a fade in starts with it off (the party arrives in it); a fade to black, "screen
+    /// off" and a map change turn it off, a fade in and "screen on" turn it on. Only for events the player starts (not
+    /// the start-up script or the game's own events, which run before the map is drawn).</summary>
+    private bool[] ScreenOff()
+    {
+        var steps = _script!.Steps;
+        var off = new bool[steps.Count];
+        if (_event?.Entry is not { } e || e.Head == L2EventBlocks.GameList) return off;
+        int first = steps.Where(s => !s.IsText && s.Bytes.Length > 0).Select(s => (int)s.Op)
+                         .FirstOrDefault(op => op is 0x58 or 0x59 or 0xA4 or 0x3E or 0x3F, -1);
+        // only a scene (it plays as the party arrives): talk and step-on events start with the screen on, and the game's
+        // use "fade in quickly" there without a fade out first
+        bool now = e.Head == L2EventBlocks.SceneList && first is 0x59 or 0xA4 or 0x3F;
+        for (int i = 0; i < steps.Count; i++)
+        {
+            off[i] = now;
+            var s = steps[i];
+            if (s.IsText || s.Bytes.Length == 0) continue;
+            if (s.Op is 0x58 or 0x3E or 0x16 or 0x5E) now = true;
+            else if (s.Op is 0x59 or 0xA4 or 0x3F) now = false;
+        }
+        return off;
+    }
+
+    /// <summary>Step <paramref name="i"/> copies map tiles while the screen is off and nothing draws the map after it.</summary>
+    private bool CopyNotDrawn(int i, bool[] off)
+    {
+        var steps = _script!.Steps;
+        if (i < 0 || i >= steps.Count || i >= off.Length || !off[i] || steps[i] is not { IsText: false } s || s.Bytes.Length == 0 || !CopiesTiles(s.Op)) return false;
+        // the last of copies one after another gets the drawing
+        return !(i + 1 < steps.Count && steps[i + 1] is { IsText: false } n && n.Bytes.Length > 0 && (DrawsMap(n.Op) || CopiesTiles(n.Op) && off[i + 1]));
+    }
+
+    /// <summary>After every tile copy made while the screen is off: "Draw the map again" (40). Returns how many were
+    /// added.</summary>
+    private int FitMapDraws()
+    {
+        if (_script == null) return 0;
+        var off = ScreenOff();
+        int added = 0;
+        for (int i = _script.Steps.Count - 1; i >= 0; i--)
+        {
+            if (!CopyNotDrawn(i, off)) continue;
+            _script.Steps.Insert(i + 1, new L2Step { Bytes = new byte[] { 0x40 } });
+            added++;
+        }
+        return added;
+    }
 
     /// <summary>The colour, shaking and rings still going when step <paramref name="end"/> is reached, reading the steps
     /// top to bottom (a map change starts afresh).</summary>
