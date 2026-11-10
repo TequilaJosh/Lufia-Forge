@@ -37,6 +37,8 @@ public partial class L2FieldVm : ObservableObject
     public bool IsJump => Def.Kind == L2Kind.Jump;
     public bool IsFlag => Def.Kind == L2Kind.Flag;
     public bool IsPath => Def.Kind == L2Kind.Path;
+    /// <summary>The "onto" area of a tile copy: its card gets a button to pick both areas on the stage.</summary>
+    public bool IsArea => Def.Kind == L2Kind.Area && !Step.IsText && Step.Op is 0x43 or 0x87 or 0xB4 && Def.Label == "onto area";
     public bool HasHint => Hint.Length > 0;
     public List<L2Option> Choices { get; } = new();
     [ObservableProperty] private L2Option? _selected;
@@ -89,6 +91,7 @@ public partial class L2FieldVm : ObservableObject
     public void Follow() { if (IsJump && Selected != null) _owner.HighlightLine(Selected.Value); }
     public void ShowFlagUses() { if (IsFlag) _owner.ShowFlag(Raw); }
     public void EditPath() { if (IsPath) _owner.EditPath(this); }
+    public void EditChange() { if (IsArea) _owner.EditChange(this); }
 }
 
 /// <summary>One step of the script as a card: text with its speaker, or a command with its fields in place.</summary>
@@ -133,6 +136,8 @@ public partial class L2LineVm : ObservableObject
     [ObservableProperty] private string _errorText = "";
     [ObservableProperty] private string _bytesText = "";
     [ObservableProperty] private bool _isHighlighted;
+    /// <summary>In the range marked for Copy (Shift+click).</summary>
+    [ObservableProperty] private bool _isMarked;
     [ObservableProperty] private bool _dropAbove, _dropBelow;
     public ObservableCollection<L2FieldVm> Fields { get; } = new();
 
@@ -691,11 +696,13 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         try
         {
             var (w, h, px) = L2Maps.Render(rom, map);
-            var bmp = BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgra32, null, px.Select(c => (int)(c == 0 ? 0xFF000000 : c)).ToArray(), w * 4);
+            _mapPixels = px.Select(c => (int)(c == 0 ? 0xFF000000 : c)).ToArray(); _mapW = w; _mapH = h;
+            _copiesShown = "";
+            var bmp = BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgra32, null, _mapPixels, w * 4);
             bmp.Freeze();
-            MapImage = bmp;
+            MapImage = _baseImage = bmp;
         }
-        catch (Exception ex) { MapImage = null; Status = "The map can't be drawn: " + ex.Message; }
+        catch (Exception ex) { MapImage = _baseImage = null; _mapPixels = null; Status = "The map can't be drawn: " + ex.Message; }
     }
 
     /// <summary>Where an exit of another map puts the party on this one (for a map without preset points), or null.</summary>
@@ -1354,6 +1361,18 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
             }
             catch (Exception) { }
         }
+        else if (!IsPuzzle && !IsChangingMap && _script != null && value >= 0 && value < _script.Steps.Count && _script.Steps[value] is { IsText: false } cs &&
+                 cs.Op is 0x43 or 0x87 or 0xB4 && cs.Bytes.Length >= 3 && _rom != null)
+        {
+            // a tile copy: where the map changes (blue) and where the new look comes from (orange)
+            var ar = L2MapInfo.Records(_rom, _map, L2MapInfo.Areas, 5).GroupBy(r => (int)r.Bytes[0]).ToDictionary(g => g.Key, g => g.First().Bytes);
+            if (ar.TryGetValue(cs.Bytes[1], out var onto) && ar.TryGetValue(cs.Bytes[2], out var from))
+            {
+                int w = from[3] - from[1], h = from[4] - from[2];
+                PuzzleMarks.Add(new L2StageMark { Left = onto[1] * 16, Top = onto[2] * 16, Width = w * 16, Height = h * 16, Label = $"changes (area {cs.Bytes[1]})" });
+                PuzzleMarks.Add(new L2StageMark { Left = from[1] * 16, Top = from[2] * 16, Width = w * 16, Height = h * 16, Label = $"new look (area {cs.Bytes[2]})", IsSource = true });
+            }
+        }
         _textLine = null;
         if (!IsPlaying) ShowStage();
         // (after the stage, which brings the view back to the camera)
@@ -1652,8 +1671,45 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
 
     /// <summary>Draws a stage. <paramref name="t"/> below 1 draws the characters that moved since <paramref name="before"/>
     /// part of the way there, in a walking frame (<paramref name="phase"/>).</summary>
+    private int[]? _mapPixels;
+    private int _mapW, _mapH;
+    private BitmapSource? _baseImage;
+    private string _copiesShown = "";
+
+    /// <summary>The stage's map with the tile copies done by the shown step (43, 87, B4), each from the map as it is then.</summary>
+    private void ShowTileCopies(L2StageState? s)
+    {
+        if (_mapPixels == null) return;
+        var copies = s?.TileCopies ?? new();
+        string key = string.Join(";", copies);
+        if (key == _copiesShown) return;
+        _copiesShown = key;
+        if (copies.Count == 0) { MapImage = _baseImage; return; }
+        var px = (int[])_mapPixels.Clone();
+        foreach (var (dx, dy, sx, sy, w, h) in copies)
+        {
+            var part = new int[w * 16 * h * 16];
+            for (int y = 0; y < h * 16; y++)
+                for (int x = 0; x < w * 16; x++)
+                {
+                    int fx = sx * 16 + x, fy = sy * 16 + y;
+                    part[y * w * 16 + x] = fx < _mapW && fy < _mapH ? px[fy * _mapW + fx] : unchecked((int)0xFF000000);
+                }
+            for (int y = 0; y < h * 16; y++)
+                for (int x = 0; x < w * 16; x++)
+                {
+                    int tx = dx * 16 + x, ty = dy * 16 + y;
+                    if (tx < _mapW && ty < _mapH) px[ty * _mapW + tx] = part[y * w * 16 + x];
+                }
+        }
+        var bmp = BitmapSource.Create(_mapW, _mapH, 96, 96, PixelFormats.Bgra32, null, px, _mapW * 4);
+        bmp.Freeze();
+        MapImage = bmp;
+    }
+
     private void ShowState(L2StageState? s, L2StageState? before, double t = 1, int phase = 0)
     {
+        ShowTileCopies(s);
         Actors.Clear();
         if (s == null || _rom == null) { HasSpeech = false; Caption = ""; FlagsNow = ""; return; }
         foreach (var a in s.Actors.Values.Where(a => a.Placed).OrderBy(a => a.Y))
