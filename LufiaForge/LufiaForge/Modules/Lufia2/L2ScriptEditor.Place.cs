@@ -96,20 +96,8 @@ public partial class L2ScriptEditor
             {
                 case L2Kind.Point:
                 {
-                    var edit = new L2MapEdit(_rom!, _map);
-                    var here = edit.Records(L2MapEdit.Points).FirstOrDefault(r => r.Bytes[1] == x && r.Bytes[2] == y);
-                    int id;
-                    bool made = here.Bytes == null;
-                    if (!made) id = here.Bytes![0];
-                    else
-                    {
-                        id = edit.NextPointId();
-                        if (id > 0xFF) { PlaceInfo = "The map has no free point number."; return; }
-                        edit.AddRecord(L2MapEdit.Points, new[] { (byte)id, (byte)x, (byte)y });
-                        edit.Apply(_rom!);
-                        _main!.NotifyRomModified($"Lufia II: map {_map:X2} point {id}");
-                        ReadPlaces();
-                    }
+                    int id = PointOn(x, y, out bool made);
+                    if (id < 0) { PlaceInfo = "The map has no free point number."; return; }
                     Finish(b => p.Set(b, id), $"point {id} ({x}, {y})" + (made ? ", a new point" : ""));
                     break;
                 }
@@ -150,6 +138,50 @@ public partial class L2ScriptEditor
             }
         }
         catch (Exception ex) { PlaceInfo = "Not written: " + ex.Message; }
+    }
+
+    /// <summary>The map's point on tile (x, y), made when there is none (-1: no free number).</summary>
+    private int PointOn(int x, int y, out bool made)
+    {
+        var edit = new L2MapEdit(_rom!, _map);
+        var here = edit.Records(L2MapEdit.Points).FirstOrDefault(r => r.Bytes[1] == x && r.Bytes[2] == y);
+        made = here.Bytes == null;
+        if (!made) return here.Bytes![0];
+        int id = edit.NextPointId();
+        if (id > 0xFF) return -1;
+        edit.AddRecord(L2MapEdit.Points, new[] { (byte)id, (byte)x, (byte)y });
+        edit.Apply(_rom!);
+        _main!.NotifyRomModified($"Lufia II: map {_map:X2} point {id}");
+        ReadPlaces();
+        return id;
+    }
+
+    /// <summary>The steps of a ring of sparkles that turns on one spot and goes, as the Sinistrals' warp plays it (Shrine
+    /// of Daos 1F): the ring appears, tilts one way and the other, shrinks and is removed, and the event waits for it.</summary>
+    public static L2Step[] SparkleSteps(int ring, int point, int count) => new[]
+    {
+        new L2Step { Bytes = new byte[] { 0x8D, (byte)ring, (byte)point, (byte)count, 0x78, 0x00, 0x00 } },
+        new L2Step { Bytes = new byte[] { 0x8F, (byte)ring, 0x00, 0x81 } },
+        new L2Step { Bytes = new byte[] { 0x90, (byte)ring, 0x00, 0x81 } },
+        new L2Step { Bytes = new byte[] { 0x9F, (byte)ring, 0x84, 0xE1 } },
+        new L2Step { Bytes = new byte[] { 0xA2, (byte)ring } },
+    };
+
+    /// <summary>Sparkles turning on tile (x, y) (a point there is used or made), added at step <paramref name="at"/> (-1: after the picked one).</summary>
+    public void AddSparkles(int x, int y, int at = -1)
+    {
+        if (_rom == null || _main == null || _script == null || !CanEdit) return;
+        try
+        {
+            int point = PointOn(x, y, out bool made);
+            if (point < 0) { StageInfo = "The map has no free point number."; return; }
+            // a ring number no other step of the event uses
+            var used = _script.Steps.Where(s => !s.IsText && s.Bytes.Length >= 2 && s.Op is 0x8D or 0xA0 or 0xC2 or 0xC3 or 0xC8 or 0xC9).Select(s => (int)s.Bytes[1]).ToHashSet();
+            int ring = Enumerable.Range(0, 8).FirstOrDefault(r => !used.Contains(r), 0);
+            Insert(at, SparkleSteps(ring, point, 3));
+            StageInfo = $"Sparkles on ({x}, {y}) ({(made ? "a new point " : "point ")}{point}): the ring appears, turns, shrinks away, and the event waits for it to go.";
+        }
+        catch (Exception ex) { StageInfo = "Not added: " + ex.Message; }
     }
 
     private void Finish(Action<byte[]> edit, string what)

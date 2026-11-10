@@ -17,7 +17,11 @@ public static class L2StoryParty
 
     public const int MaxParty = 4;
 
-    public sealed record Result(List<int> Heroes, string Why);
+    public sealed record Result(List<int> Heroes, string Why)
+    {
+        /// <summary>Heroes in <see cref="Heroes"/> only because the cutscene uses them: the story so far doesn't bring them.</summary>
+        public IReadOnlyCollection<int> ForTest { get; init; } = Array.Empty<int>();
+    }
 
     private sealed record Ev(int Map, int Head, int Id, L2EventScript Script, HashSet<int> Sets);
 
@@ -137,13 +141,14 @@ public static class L2StoryParty
                 used = Used(L2EventScript.Read(rom, block + en.Offset, block), head, id);
         }
         catch (Exception) { }
-        foreach (int h in used.Where(h => h > 0 && !party.Contains(h))) { party.Add(h); why[h] = "the cutscene uses " + (h == 1 || h == 4 ? "her" : "him"); }
+        var forTest = used.Where(h => h > 0 && !party.Contains(h)).ToList();
+        foreach (int h in forTest) { party.Add(h); why[h] = "the cutscene uses " + (h == 1 || h == 4 ? "her" : "him"); }
         var keep = new List<int> { 0 };
         keep.AddRange(party.Where(h => h > 0 && used.Contains(h)));
         keep.AddRange(party.Where(h => h > 0 && !used.Contains(h)));
         keep = keep.Distinct().Take(MaxParty).ToList();
         string text = string.Join(", ", keep.Select(h => h == 0 ? "Maxim" : $"{L2EventCommands.HeroNames[h]} ({why.GetValueOrDefault(h, "")})"));
-        return new Result(keep, text);
+        return new Result(keep, text) { ForTest = forTest.Where(keep.Contains).ToList() };
     }
 
     /// <summary>The party changes an event makes, in step order: joins (2B, story flag 02-07 on) and leaves (2C, flag off).</summary>

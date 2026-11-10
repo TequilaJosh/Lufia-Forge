@@ -438,7 +438,7 @@ public static class L2EventCommands
             bool point = from == "a point";
             One(op, $"Ring of sparkles around {from}" + (kind == 0x4F ? " (second kind)" : ""), Moves,
                 (b, w) => $"Ring {b[1]:X2}: {b[3]} sparkles around {(point ? w.Point(b[2]) : w.Who(b[2]))}", new byte[] { (byte)op, 0x00, point ? (byte)1 : (byte)0, 0x01, 0x78, 0x00, 0x00 },
-                "A group of effect sprites (the Sinistrals' warp uses it: Shrine of Daos 1F). Tilt a ring, Grow or shrink a ring and Wait until a ring is gone change it.", 'D', rare: false,
+                "A group of effect sprites (the Sinistrals' warp uses it: Shrine of Daos 1F). On its own it stands still and stays: Tilt a ring, Grow or shrink a ring make it turn, Grow or shrink then remove it (or Remove a ring) takes it away, Wait until a ring is gone holds the event. + > Ready-made > Sparkles on a spot adds all of them.", 'D', rare: false,
                 ps: new[] { P("ring", L2Kind.Hex, 1), point ? P("point", L2Kind.Point, 2) : Who(2, "around"), P("how many", L2Kind.Number, 3), P("size", L2Kind.Hex, 4), P("spin", L2Kind.Hex, 5), P("other", L2Kind.Hex, 6) });
         }
         foreach (var (op, from) in new[] { (0xC8, "a point"), (0xC9, "a character") })

@@ -192,6 +192,50 @@ public partial class L2ScriptEditor
         catch (Exception ex) { StageInfo = "Not changed: " + ex.Message; }
     }
 
+    /// <summary>Hero <paramref name="hero"/> isn't in the party in this event: a new map character with the hero's sprite
+    /// takes its place in every step of the event (made with the map, hidden; a "Show a character" goes before its first
+    /// step unless that step makes it appear).</summary>
+    public void HeroToCharacter(int hero)
+    {
+        if (_rom == null || _script == null || hero is < 1 or > 6 || !CanEdit) return;
+        // where it first stands: the first "put" or "appears" with a place
+        (int X, int Y) at = (0, 0);
+        var points = L2MapInfo.Records(_rom, _map, L2MapInfo.Points, 3).ToDictionary(r => (int)r.Bytes[0], r => (r.Bytes[1], r.Bytes[2]));
+        foreach (var st in _script.Steps.Where(s => !s.IsText && s.Bytes.Length >= 3 && s.Bytes[1] == hero))
+        {
+            if (st.Op is 0x30 or 0x98 && points.TryGetValue(st.Bytes[2], out var p)) { at = (p.Item1, p.Item2); break; }
+            if (st.Op == 0x2F && st.Bytes.Length >= 4) { at = (st.Bytes[2], st.Bytes[3]); break; }
+        }
+        int id = AddCastMember(hero, at.X, at.Y);
+        if (id < 0 || _script == null) return;
+        Remember();
+        int first = -1;
+        for (int i = 0; i < _script.Steps.Count; i++)
+        {
+            var s = _script.Steps[i];
+            if (s.IsText || L2EventCommands.Find(s.Op) is not { } def || s.Op is 0x2B or 0x2C) continue;
+            var b = (byte[])s.Bytes.Clone();
+            bool changed = false;
+            foreach (var p in def.FieldsFor(b))
+                if (p.Kind is L2Kind.Who or L2Kind.WhoOrAll)
+                    try { if (p.Get(b) == hero) { p.Set(b, id); changed = true; } } catch (Exception) { }
+            if (!changed) continue;
+            s.Bytes = b;
+            if (first < 0) first = i;
+        }
+        if (first >= 0)
+        {
+            var f = _script.Steps[first];
+            // shown before it (the game's character commands skip a hidden character and move the leader instead; it is
+            // made where it is first put, so it shows up there)
+            if (f.Op is not (0x98 or 0x2D))
+                _script.Steps.Insert(first, new L2Step { Bytes = new byte[] { 0x2D, (byte)id } });
+        }
+        Changed(true);
+        StageInfo = $"In this event {L2EventCommands.HeroNames[hero]} is now map character {id - 0x4F} with {L2EventCommands.HeroNames[hero]}'s sprite " +
+                    $"(made with the map, hidden until the event shows it{(at != (0, 0) ? $", standing at ({at.X}, {at.Y})" : "")}).";
+    }
+
     /// <summary>The story flags with their names, for the "When..." window.</summary>
     public List<L2Option> FlagChoices => ChoicesOf(L2Kind.Flag);
 
