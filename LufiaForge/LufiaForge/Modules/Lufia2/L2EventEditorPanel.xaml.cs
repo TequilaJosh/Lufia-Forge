@@ -523,6 +523,34 @@ public partial class L2EventEditorPanel : UserControl
         _editor.StageInfo = $"Click the tile on the stage where the new character ({L2Sprites.Name(sprite)}) appears (right-click or Esc: no character).";
     }
 
+    private void CastWhen_Click(object sender, RoutedEventArgs e)
+    {
+        if (_editor?.Rom == null || sender is not FrameworkElement { DataContext: L2CastRowVm row }) return;
+        var w = L2Ui.Window($"{row.Name.Trim()}: when it is on the map", 520, 300);
+        w.Owner = Window.GetWindow(this);
+        var root = new StackPanel { Margin = new Thickness(14) };
+        root.Children.Add(L2Ui.Label("The start-up script makes the map's characters as the map loads. Pick when it makes this one " +
+                                     "(two characters can share a place: one while a flag is off, the other once it is on).", true));
+        var always = new System.Windows.Controls.RadioButton { Content = "Always", Margin = new Thickness(0, 10, 0, 4), Foreground = L2Ui.B("TextPrimaryBrush"), IsChecked = true };
+        var whileOn = new System.Windows.Controls.RadioButton { Content = "Only while this story flag is on", Margin = new Thickness(0, 4, 0, 4), Foreground = L2Ui.B("TextPrimaryBrush") };
+        var whileOff = new System.Windows.Controls.RadioButton { Content = "Only while this story flag is off", Margin = new Thickness(0, 4, 0, 4), Foreground = L2Ui.B("TextPrimaryBrush") };
+        var flags = new System.Windows.Controls.ComboBox { ItemsSource = _editor.FlagChoices, DisplayMemberPath = "Label", Margin = new Thickness(20, 4, 0, 4), MinWidth = 380 };
+        if (L2Ui.S("GdCombo") is { } cs) flags.Style = cs;
+        flags.SelectedIndex = 0;
+        root.Children.Add(always); root.Children.Add(whileOn); root.Children.Add(whileOff); root.Children.Add(flags);
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = System.Windows.HorizontalAlignment.Right, Margin = new Thickness(0, 12, 0, 0) };
+        bool ok = false;
+        buttons.Children.Add(L2Ui.Button("Set", true, (_, _) => { ok = true; w.DialogResult = true; }));
+        var cancel = L2Ui.Button("Cancel", false, (_, _) => w.DialogResult = false); cancel.Margin = new Thickness(8, 0, 0, 0);
+        buttons.Children.Add(cancel);
+        root.Children.Add(buttons);
+        w.Content = root;
+        w.ShowDialog();
+        if (!ok) return;
+        int flag = always.IsChecked == true ? -1 : (flags.SelectedItem as L2Option)?.Value ?? 0;
+        _editor.SetWhen(row.Id, flag, whileOn.IsChecked == true);
+    }
+
     private void CastSprite_Click(object sender, RoutedEventArgs e)
     {
         if (_editor?.Rom == null || sender is not FrameworkElement { DataContext: L2CastRowVm row }) return;

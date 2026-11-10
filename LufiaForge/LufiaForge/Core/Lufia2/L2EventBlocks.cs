@@ -592,6 +592,42 @@ public static class L2EventBlocks
         return used;
     }
 
+    /// <summary>When the map's start-up script makes character <paramref name="id"/>: always (<paramref name="flag"/> -1),
+    /// or only while story flag <paramref name="flag"/> is on (<paramref name="on"/>) or off. Its create (68 / 7B) is
+    /// taken out of where it was and put at the end of the script with its own check, as the game's maps do (Elcid's
+    /// start-up script makes its people under "Check whether story flag 0A is off: if not, go to" the end). A character
+    /// made in more than one place (with other sprites under other flags) is refused: edit the start-up script for that.</summary>
+    public static string SetCreateCondition(RomBuffer rom, int map, int id, int flag, bool on)
+    {
+        int init = InitScript(rom, map);
+        var script = L2EventScript.Read(rom, init, InitBase(init));
+        if (script.Problem != null) throw new InvalidOperationException("The map's start-up script can't be changed: " + script.Problem);
+        var steps = script.Steps;
+        var creates = steps.Where(s => !s.IsText && s.Op is 0x68 or 0x7B && s.Bytes.Length >= 3 && s.Bytes[1] == id).ToList();
+        if (creates.Count == 0) throw new InvalidOperationException($"The start-up script doesn't make character {id:X2}.");
+        if (creates.Count > 1) throw new InvalidOperationException($"The start-up script makes character {id:X2} in {creates.Count} places (other sprites under other story flags): change those steps in the start-up script itself.");
+        var create = creates[0];
+        int at = steps.IndexOf(create);
+        var next = at + 1 < steps.Count ? steps[at + 1] : null;
+        // what jumped to the create goes on with the step after it
+        foreach (var s in steps) foreach (var j in s.Jumps) if (j.Step == create) j.Step = next;
+        steps.RemoveAt(at);
+        // at the top of the script (where "Add a character" puts creates): no check or jump of the script reaches
+        // there, so the create depends on its own check only (put before the script's end, it sat inside the last
+        // check's skip)
+        if (steps.Count == 0) throw new InvalidOperationException("The start-up script has no end.");
+        var made = new L2Step { Bytes = (byte[])create.Bytes.Clone() };
+        var first = steps[0];
+        steps.Insert(0, made);
+        if (flag >= 0)
+        {
+            var check = new L2Step { Bytes = new byte[] { 0x14, (byte)(on ? 0x00 : 0x01), (byte)flag, 0x30, 0x00, 0x00, 0xFF } };
+            check.Jumps.Add(new L2Jump { Step = first });
+            steps.Insert(0, check);
+        }
+        return SaveInit(rom, map, script);
+    }
+
     /// <summary>Adds a character to a map: a character start (where it stands, the area it may walk in, how it moves) and
     /// "Add a map character" at the top of the start-up script (both or neither). Returns its actor id.</summary>
     public static int AddCharacter(RomBuffer rom, int map, int x, int y, int sprite, int mode) =>

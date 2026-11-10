@@ -20,6 +20,8 @@ public sealed class L2CastRowVm
     public bool InEvent { get; init; }
     /// <summary>The event can change its sprite (the editor can edit and it isn't the start-up script).</summary>
     public bool CanSprite { get; init; }
+    /// <summary>A map character the start-up script makes once: its "When..." button sets the story flag it needs.</summary>
+    public bool CanWhen { get; init; }
     public double Dim => InEvent ? 1.0 : 0.6;
     public List<L2CastLink> Links { get; init; } = new();
 }
@@ -124,6 +126,7 @@ public partial class L2ScriptEditor
                 Uses = usesText,
                 InEvent = u != null,
                 CanSprite = CanEdit && !here && id != 0xFF,
+                CanWhen = CanEdit && id >= 0x50 && creates.Count(c => c.Id == id) == 1,
                 Links = links,
             });
         }
@@ -164,6 +167,33 @@ public partial class L2ScriptEditor
         StageInfo = $"{L2EventCommands.Cap(Name(id))} looks like {L2Sprites.Name(sprite)} from step {SelectedLine + 1} on (only in this event" +
                     (id is >= 0x10 and < 0x50 ? "; other events still show the story character's own sprite" : "") + ").";
     }
+
+    /// <summary>Character <paramref name="id"/> is made always (<paramref name="flag"/> -1) or only while a story flag is on
+    /// or off (<see cref="L2EventBlocks.SetCreateCondition"/>); the open event is read again.</summary>
+    public void SetWhen(int id, int flag, bool on)
+    {
+        if (_rom == null || _main == null || _map < 0) return;
+        if (HasPendingEdits && !SaveNow(quiet: true)) return;
+        try
+        {
+            L2EventBlocks.SetCreateCondition(_rom, _map, id, flag, on);
+            _main.NotifyRomModified($"Lufia II: map {_map:X2} character {id - 0x4F} " + (flag < 0 ? "always made" : $"made while story flag {flag:X2} is {(on ? "on" : "off")}"));
+            int keep = SelectedLine;
+            ReadMap();
+            var items = ItemsOf(_rom, _map);
+            if (_event != null) _event = _event.IsInit ? items[0] : items.FirstOrDefault(x2 => x2.Entry?.Head == _event.Entry?.Head && x2.Entry?.Id == _event.Entry?.Id) ?? _event;
+            ReadScript(keep);
+            MarkRead();
+            StageInfo = flag < 0
+                ? $"{L2EventCommands.Cap(Name(id))} is on the map always."
+                : $"{L2EventCommands.Cap(Name(id))} is on the map only while story flag {flag:X2} is {(on ? "on" : "off")} (checked as the map loads: another character can stand on its place under the other flags).";
+            Saved?.Invoke("character condition");
+        }
+        catch (Exception ex) { StageInfo = "Not changed: " + ex.Message; }
+    }
+
+    /// <summary>The story flags with their names, for the "When..." window.</summary>
+    public List<L2Option> FlagChoices => ChoicesOf(L2Kind.Flag);
 
     /// <summary>A new character for this map's cutscenes (<see cref="AddCastMember"/>) that appears on (x, y) at the
     /// picked step of this event.</summary>
