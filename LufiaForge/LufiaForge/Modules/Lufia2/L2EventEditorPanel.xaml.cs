@@ -320,7 +320,9 @@ public partial class L2EventEditorPanel : UserControl
 
     private void HeroFix_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is FrameworkElement { DataContext: L2LineVm l } && l.HeroFix >= 0) _editor?.HeroToCharacter(l.HeroFix);
+        if (sender is not FrameworkElement { DataContext: L2LineVm l } || l.HeroFix < 0 || _editor == null) return;
+        if (l.HeroFix == 0) _editor.LeaderVanishToStandIn();
+        else _editor.HeroToCharacter(l.HeroFix);
     }
 
     private void PickPlace_Click(object sender, RoutedEventArgs e)

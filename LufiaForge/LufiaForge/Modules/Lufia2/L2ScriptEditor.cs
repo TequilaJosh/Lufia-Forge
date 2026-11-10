@@ -1253,6 +1253,8 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         }
         if (rebuild) Dispatch(() => Changed(false, line));
         else Changed(false);
+        if (p.Kind is L2Kind.Who or L2Kind.WhoOrAll && value == 0 && s.Op is 0x99 or 0x9D)
+            Dispatch(() => LeaderVanishToStandIn());
         // a hero who isn't in the story's party here: a map character that looks like the hero takes the part
         if (p.Kind is L2Kind.Who or L2Kind.WhoOrAll && value is >= 1 and <= 6 && s.Op is not (0x2B or 0x2C) && _script.Steps.IndexOf(s) is var at && at >= 0 && HeroAbsent(at, value))
         {
@@ -1520,6 +1522,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         // would put back what that page changed
         if (ChangedElsewhere()) { Status = "Not saved: this event was changed on another page after it was opened here. Revert reads it again; then make your changes again."; return false; }
         int fitted = FitTexts(all: false);
+        int ended = _event?.Entry != null ? FitEffects() : 0;
         // every text must be text the game can show (texts not changed are written as they are: the game's own can hold
         // codes typed text can't)
         for (int i = 0; i < _script.Steps.Count; i++)
@@ -1543,7 +1546,8 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
             ReadScript(keep);
             MarkRead();
             Status = "Saved in the project. " + result + (added ? " An End step was added at the bottom." : "") +
-                     (fitted > 0 ? $" {fitted} text{(fitted > 1 ? "s were" : " was")} wider or longer than the box: the lines were broken to fit ({L2Events.BoxWidth} letters, {L2Events.BoxLines} lines a box, more boxes when needed)." : "");
+                     (fitted > 0 ? $" {fitted} text{(fitted > 1 ? "s were" : " was")} wider or longer than the box: the lines were broken to fit ({L2Events.BoxWidth} letters, {L2Events.BoxLines} lines a box, more boxes when needed)." : "") +
+                     (ended > 0 ? " A colour, shaking or ring was still going at the end of the event: steps that end it were added before the end (the game's events always end them)." : "");
             Saved?.Invoke(result);
             return true;
         }
@@ -1713,6 +1717,28 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
             vm.Flow = !reached && _run.Count > 0 ? "Playback doesn't reach this step with these story flags." : flow;
             // a hero who isn't in the party here: the game's character commands then act on the leader
             vm.HeroFix = -1; vm.HeroFixText = "";
+            if (LeaderVanishes(i))
+            {
+                vm.Warning = (vm.Warning.Length > 0 ? vm.Warning + " " : "") +
+                             "The game never makes Maxim (the leader) flicker or vanish: it frees his place, and when the event ends he turns up on " +
+                             "another tile and the map's characters go. A map character that looks like him can flicker away instead (Test in the game does it by itself).";
+                vm.HeroFix = 0;
+                vm.HeroFixText = "Use a map character that looks like Maxim";
+            }
+            if (!st.IsText && st.Op == 0x00 && _event?.Entry != null)
+            {
+                var (colour, shake, rings) = EffectsAt(i);
+                var left = new List<string>();
+                if (colour != null) left.Add("a colour (it would keep flashing on the map)");
+                if (shake) left.Add("the shaking");
+                if (rings.Count > 0) left.Add("ring " + string.Join(", ", rings.Select(r => r.ToString("X2"))));
+                if (left.Count > 0)
+                    vm.Warning = (vm.Warning.Length > 0 ? vm.Warning + " " : "") +
+                                 $"The event ends with {string.Join(" and ", left)} still going: saving adds the steps that end it before this one.";
+                if (Before(i)?.Actors.GetValueOrDefault(0) is { Visible: false })
+                    vm.Warning = (vm.Warning.Length > 0 ? vm.Warning + " " : "") +
+                                 "The event ends with Maxim hidden: the player walks about unseen. Show him again, or go to the next scene (Go to another map) before the end.";
+            }
             if (!st.IsText && L2EventCommands.Find(st.Op) is { } def && st.Op is not (0x2B or 0x2C))
             {
                 var (party, _) = PartyAt(i);
@@ -1736,7 +1762,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
                 }
                 // a map character hidden at this step: put, turned or walked, the game moves the leader instead (the
                 // game's own events never do it: 0 of 169 puts on a point, 0 of 606 turns)
-                if (vm.HeroFix < 0 && st.Op is 0x30 or 0x31 or 0x33 && Before(i) is { } at)
+                if (vm.HeroFix < 0 && st.Op is 0x2F or 0x30 or 0x31 or 0x33 && Before(i) is { } at)
                     foreach (var p in def.FieldsFor(st.Bytes))
                     {
                         if (p.Kind is not (L2Kind.Who or L2Kind.WhoOrAll)) continue;
@@ -1744,7 +1770,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
                         try { who = p.Get(st.Bytes); } catch (Exception) { continue; }
                         if (who < 0x10 || !at.Actors.TryGetValue(who, out var a) || a.Visible || !a.Placed) continue;
                         vm.Warning = (vm.Warning.Length > 0 ? vm.Warning + " " : "") +
-                                     $"{L2EventCommands.Cap(Name(who))} is hidden at this step: the game skips a hidden character and moves Maxim (the leader) instead. " +
+                                     $"{L2EventCommands.Cap(Name(who))} is hidden at this step: the game skips a hidden character and moves another one instead (the last one the event moved, or Maxim). " +
                                      "Show it first (Show a character, or A character appears on a point).";
                         break;
                     }
@@ -2235,8 +2261,10 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
             HeroToCharacter(h);
             done += StageInfo + " ";
         }
+        if (LeaderVanishToStandIn() > 0) done += StageInfo + " ";
         int fitted = FitTexts(all: true);
         if (fitted > 0) { Changed(true); done += $"{fitted} text{(fitted > 1 ? "s" : "")} broken to fit the box. "; }
+        if (FitEffects() > 0) { Changed(true); done += "A colour, shaking or ring left going at the end is now ended before it. "; }
         // the party: the heroes now played by map characters no longer join for the test
         if (done.Length > 0 && SaveNow(quiet: true) && !_partyByHand) FillTestParty();
         return done;
