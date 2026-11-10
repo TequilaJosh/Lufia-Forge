@@ -219,6 +219,7 @@ public partial class L2ScriptWindow : Window
             BytesText.Text = $"{b.Length} bytes: {BitConverter.ToString(b).Replace('-', ' ')}";
         }
         catch (Exception e) { BytesText.Text = e.Message; }
+        UpdatePreview();
     }
 
     private void StepList_SelectionChanged(object sender, SelectionChangedEventArgs e) { if (!_loading) ShowStep(); }
