@@ -302,6 +302,12 @@ public partial class EventLineVm : ObservableObject
             // short-form flag commands (C0-FF) hold F0-FF as 0-F
             if (d.Kind == ParamKind.Flag && d.Max < 0xFF && choices != null)
                 choices = choices.Where(c => c.Value >= 0xF0).Select(c => (c.Value - 0xF0, c.Label)).ToList();
+            // a sound number past the list (from 80 the driver repeats 00-38) stays as it is
+            if (d.Kind == ParamKind.Sound && choices != null)
+            {
+                int v; try { v = d.Get(b); } catch { v = -1; }
+                if (v >= 0 && choices.All(c => c.Value != v)) choices = choices.Append((v, Core.Audio.SoundNames.Label(false, v))).ToList();
+            }
             Params.Add(new ParamVm(this)
             {
                 Label = d.Label, Def = d,
@@ -366,8 +372,15 @@ public partial class EventEditorPanel : UserControl, LufiaForge.ViewModels.IPend
         Loaded += (_, _) => (Application.Current?.MainWindow?.DataContext as LufiaForge.ViewModels.MainViewModel)?.Register(this);
         // shown again: what another tab, Undo or a patch changed meanwhile is read again
         IsVisibleChanged += (_, e) => { if (e.NewValue is true) Dispatcher.BeginInvoke(RefreshIfStale); };
+        // a sound renamed in Settings: the cards show the new name (also when it was renamed while this was off screen)
+        Loaded += (_, _) =>
+        {
+            Core.Audio.SoundNames.Changed -= SoundNamesChanged; Core.Audio.SoundNames.Changed += SoundNamesChanged;
+            if (_soundNames != Core.Audio.SoundNames.Version) SoundNamesChanged();
+        };
         Unloaded += (_, _) =>
         {
+            Core.Audio.SoundNames.Changed -= SoundNamesChanged;
             Common.SoundPreview.StopWhenGone(this);
             if (HasPendingEdits) WritePendingEdits();
             // a part popped out into its own window keeps working while this tab is away: its edits stay registered
@@ -450,6 +463,7 @@ public partial class EventEditorPanel : UserControl, LufiaForge.ViewModels.IPend
     /// <summary>Dropdown entries for a field kind (null = plain number).</summary>
     public IReadOnlyList<(int Value, string Label)>? ChoicesFor(ParamKind kind)
     {
+        if (kind == ParamKind.Sound) return EventCommands.Choices(kind, _rom);   // (not kept: names can change in Settings)
         if (_choiceCache.TryGetValue(kind, out var c)) return c;
         c = EventCommands.Choices(kind, _rom, EventScript.MapLabel);
         _choiceCache[kind] = c;
@@ -1063,6 +1077,14 @@ public partial class EventEditorPanel : UserControl, LufiaForge.ViewModels.IPend
     {
         if (sender is FrameworkElement { DataContext: ParamVm p }) p.Follow();
     }
+
+    /// <summary>A sound was renamed in Settings: the lines with a sound show the new name.</summary>
+    private int _soundNames = Core.Audio.SoundNames.Version;
+    private void SoundNamesChanged() => Dispatcher.BeginInvoke(() =>
+    {
+        _soundNames = Core.Audio.SoundNames.Version;
+        foreach (var l in _lines.Where(l => l.Params.Any(p => p.IsAudio && !p.IsSong)).ToList()) { l.BuildParams(); l.Refresh(); }
+    });
 
     private void Listen_Click(object sender, RoutedEventArgs e)
     {

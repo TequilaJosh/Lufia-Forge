@@ -1,6 +1,7 @@
 <UserControl x:Class="LufiaForge.Modules.Lufia2.L2SettingsView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:common="clr-namespace:LufiaForge.Modules.Common">
     <UserControl.Resources>
         <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
     </UserControl.Resources>
@@ -68,6 +69,9 @@
                         <Button Content="Make room for new monsters..." Command="{Binding MakeRoomCommand}" Padding="18,4" Margin="0,8,0,0" HorizontalAlignment="Left"/>
                         <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,6,0,0" Text="The fan hacks keep their monsters in bank $D0, which Spekkio and Kureji Lufia fill. This copies the monsters (table, records, battle scripts) to a bank of their own at the same addresses and points the game there, tidying the hack's data first when it isn't yet; bank $D0 keeps the monster attack names. Everything is checked on a copy first. Adding a monster on the Monsters page does this by itself when the bank is full. One step: Edit, Undo takes it back."/>
                     </StackPanel>
+                </Border>
+                <Border Style="{StaticResource GdCard}">
+                    <common:SoundNamesPanel Lufia2="True" Width="520"/>
                 </Border>
             </WrapPanel>
         </StackPanel>

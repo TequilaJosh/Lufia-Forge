@@ -320,8 +320,8 @@ public static class EventCommands
 
         // ── music & sound ──
         Add(0x0A, 0x0A, "Play music", Snd, (b, _) => b[1] == 0xFF ? "Stop the music" : $"Play music {b[1]:X2}", new byte[] { 0x0A, 1 }, "", P("song (FF = stop)", ParamKind.Music, 1));
-        Add(0x54, 0x54, "Play sound effect", Snd, (b, _) => $"Play sound effect {b[1]:X2}", new byte[] { 0x54, 0x10 }, "", P("sound", ParamKind.Sound, 1));
-        Add(0x3A, 0x3A, "Set the text sound", Snd, (b, _) => $"Text prints with sound {b[1]:X2}", new byte[] { 0x3A, 4 }, "", P("sound", ParamKind.Sound, 1));
+        Add(0x54, 0x54, "Play sound effect", Snd, (b, _) => $"Play sound effect {b[1]:X2}: {Audio.SoundNames.Name(false, b[1])}", new byte[] { 0x54, 0x10 }, "", P("sound", ParamKind.Sound, 1));
+        Add(0x3A, 0x3A, "Set the text sound", Snd, (b, _) => $"Text prints with sound {b[1]:X2} ({Audio.SoundNames.Name(false, b[1])})", new byte[] { 0x3A, 4 }, "", P("sound", ParamKind.Sound, 1));
         Add(0x3B, 0x3B, "Silent text", Snd, (_, _) => "Text prints without sound", new byte[] { 0x3B });
         Add(0x6C, 0x6C, "Wait for the music", Snd, (b, _) => $"Wait until the music reaches point {b[1]} (about {b[1] * 1.5:0.#} s into the song)", new byte[] { 0x6C, 1 }, "until the music reaches that point",
             P("music point", ParamKind.Number, 1));
@@ -388,6 +388,7 @@ public static class EventCommands
     /// <summary>Choices for a field kind, as (value, label) pairs; null = plain number field.</summary>
     public static IReadOnlyList<(int Value, string Label)>? Choices(ParamKind kind, RomBuffer rom, Func<int, string>? mapLabel = null) => kind switch
     {
+        ParamKind.Sound => Enumerable.Range(0, Audio.SoundNames.Count(false)).Select(i => (i, Audio.SoundNames.Label(false, i))).ToList(),
         ParamKind.Item => Enumerable.Range(0, 256).Select(i => (i, $"{i:X2} {MapSetupScript.ItemName(rom, i)}")).ToList(),
         ParamKind.Spell => Enumerable.Range(0, Battle.SpellTablePatch.SpellCount(rom)).Select(i => (i, $"{i:X2} {SpellName(rom, i)}")).ToList(),
         ParamKind.Character => CharacterNames.Select((n, i) => (i, n)).ToList(),

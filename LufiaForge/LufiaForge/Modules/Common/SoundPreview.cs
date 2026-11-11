@@ -45,7 +45,7 @@ public static class SoundPreview
                     if (id >= L2Sound.EffectCount) { Stop(); return $"The game has sounds 00-{L2Sound.EffectCount - 1:X2}; {id:X2} plays nothing."; }
                     s.PlaySoundEffect(id);
                 }
-                render = (buf, pairs) => { lock (Gate) s.Render(buf, pairs * 2); };
+                render = (buf, pairs) => { lock (Gate) s.Render(buf, pairs * 2); Heard(buf, pairs); };
             }
             else
             {
@@ -57,8 +57,12 @@ public static class SoundPreview
                     if (id >= LufiaSound.SongCount) { Stop(); return id == 0xFF ? "FF stops the music: there's nothing to hear." : $"The game has songs 00-{LufiaSound.SongCount - 1:X2}; {id:X2} plays nothing."; }
                     s.PlaySong(id);
                 }
-                else s.PlaySoundEffect(id);
-                render = (buf, pairs) => { lock (Gate) s.Render(buf, pairs * 2); };
+                else
+                {
+                    if ((id & 0x7F) >= SoundNames.Count(false)) { Stop(); return $"The game has sounds 00-{SoundNames.Count(false) - 1:X2}; {id:X2} plays nothing."; }
+                    s.PlaySilentSong(); s.PlaySoundEffect(id);   // (the driver plays sounds only while a song runs)
+                }
+                render = (buf, pairs) => { lock (Gate) s.Render(buf, pairs * 2); Heard(buf, pairs); };
             }
             _audio = new AudioOut(lufia2 ? L2Sound.SampleRate : LufiaSound.SampleRate, render);
             if (!_audio.Start()) { Stop(); return "No sound device."; }
@@ -70,19 +74,28 @@ public static class SoundPreview
         _started = DateTime.Now;
         if (!song)
         {
-            // a sound ends by itself: Lufia II's driver says when (status bit 1); Lufia 1's is given a few seconds
-            _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
+            // a sound ends by itself: when what is played has been quiet for a moment (a sound that keeps going stops
+            // after 12 seconds; one that plays nothing after 1.5)
+            _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
             _timer.Tick += (_, _) =>
             {
                 double secs = (DateTime.Now - _started).TotalSeconds;
-                bool over = secs > (lufia2 ? 12 : 4);
-                if (!over && lufia2 && secs > 0.4 && _sound is L2Sound l2)
-                    lock (Gate) over = (l2.Status() & 0x02) == 0;
-                if (over) Stop();
+                long quiet = Environment.TickCount64 - Interlocked.Read(ref _lastLoud);
+                bool heard = Interlocked.Read(ref _lastLoud) != 0;
+                if (secs > 12 || heard && quiet > 400 || !heard && secs > 1.5) Stop();
             };
             _timer.Start();
         }
         return "";
+    }
+
+    private static long _lastLoud;
+
+    /// <summary>The render thread: notes when the sound was last loud enough to hear.</summary>
+    private static void Heard(short[] buf, int pairs)
+    {
+        for (int i = 0; i < pairs * 2; i++)
+            if (buf[i] > 200 || buf[i] < -200) { Interlocked.Exchange(ref _lastLoud, Environment.TickCount64); return; }
     }
 
     /// <summary>
@@ -97,6 +110,9 @@ public static class SoundPreview
         t.Start();
     }
 
+    /// <summary>What plays has been loud enough to hear (tests).</summary>
+    public static bool WasHeard => Interlocked.Read(ref _lastLoud) != 0;
+
     /// <summary>Something is playing (tests).</summary>
     public static bool IsPlaying => _audio != null;
 
@@ -105,6 +121,7 @@ public static class SoundPreview
     {
         _timer?.Stop(); _timer = null;
         _audio?.Dispose(); _audio = null;
+        Interlocked.Exchange(ref _lastLoud, 0);   // (after the render thread has stopped)
         lock (Gate) { _sound?.Dispose(); _sound = null; }
         if (_button != null) _button.Content = ListenText;
         _button = null; _key = null;
