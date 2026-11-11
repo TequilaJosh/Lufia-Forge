@@ -301,7 +301,7 @@
                                 <TextBlock DockPanel.Dock="Left" Text="Bytes" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,6,0"/>
                                 <TextBox Style="{StaticResource GdText}" FontFamily="Consolas" Text="{Binding PuzzleBytes, UpdateSourceTrigger=PropertyChanged}" Width="Auto"/>
                             </DockPanel>
-                            <ScrollViewer x:Name="LinesScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <ScrollViewer x:Name="LinesScroll" common:DragScroll.Edges="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                                 <ItemsControl x:Name="LinesList" ItemsSource="{Binding Lines}" ItemTemplate="{StaticResource L2LineTemplate}" IsEnabled="{Binding CanEdit}"/>
                             </ScrollViewer>
                         </DockPanel>
