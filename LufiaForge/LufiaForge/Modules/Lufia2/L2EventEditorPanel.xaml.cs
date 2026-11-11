@@ -52,6 +52,7 @@ public partial class L2EventEditorPanel : UserControl
         };
         Unloaded += (_, _) =>
         {
+            Common.SoundPreview.StopWhenGone(this);
             if (_editor == null) return;
             if (_editor.HasPendingEdits) _editor.WritePendingEdits();
             if (Common.PopOutHost.AnyPoppedOut(this)) return;
@@ -304,6 +305,13 @@ public partial class L2EventEditorPanel : UserControl
     private void FlagUses_Click(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement { DataContext: L2FieldVm f }) f.ShowFlagUses();
+    }
+
+    private void Listen_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { DataContext: L2FieldVm f } b || _editor == null || f.Raw < 0) return;
+        string note = Common.SoundPreview.Toggle(b, _editor.Rom, lufia2: true, song: f.IsSong, f.Raw);
+        if (note.Length > 0) _editor.Status = note;
     }
 
     private void PickArrival_Click(object sender, RoutedEventArgs e)

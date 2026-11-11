@@ -33,6 +33,8 @@
                     </Image>
                     <Button Content="→" ToolTip="Go where this jump leads" Style="{StaticResource LufiaButton}" Padding="6,0" Margin="3,0,0,0"
                             Click="Follow_Click" Visibility="{Binding IsJump, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                    <Button Content="▶ Listen" ToolTip="Hear it as the game plays it (click again to stop)" Style="{StaticResource LufiaButton}" Padding="6,0" Margin="3,0,0,0"
+                            Click="Listen_Click" Visibility="{Binding IsAudio, Converter={StaticResource BoolToVisibilityConverter}}"/>
                     <Button Content="⚑" ToolTip="Where else is this story flag used?" Style="{StaticResource LufiaButton}" Padding="5,0" Margin="3,0,0,0"
                             Click="FlagUses_Click" Visibility="{Binding IsFlag, Converter={StaticResource BoolToVisibilityConverter}}"/>
                     <Button Content="🛤 Draw on the stage" ToolTip="Draw this path on the stage: click the places it walks to in turn" Style="{StaticResource LufiaButton}" Padding="6,0" Margin="3,0,0,0"
