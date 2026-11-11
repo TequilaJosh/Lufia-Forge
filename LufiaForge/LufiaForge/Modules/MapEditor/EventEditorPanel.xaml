@@ -161,7 +161,7 @@
         <common:PopOutHost Grid.Column="0" Title="Lines" ButtonMargin="0,4,26,0">
         <Grid>
         <Border x:Name="LinesCard" Style="{StaticResource GdCard}" Margin="0" Padding="6">
-            <ScrollViewer x:Name="LinesScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <ScrollViewer x:Name="LinesScroll" common:DragScroll.Edges="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                 <ItemsControl x:Name="Lines" ItemTemplate="{StaticResource LineTemplate}">
                 </ItemsControl>
             </ScrollViewer>
