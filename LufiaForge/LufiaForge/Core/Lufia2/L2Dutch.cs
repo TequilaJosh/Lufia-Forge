@@ -407,7 +407,7 @@ public static class L2Dutch
 
     /// <summary>Monster attack names (a byte for the default animation, the name, 00; at $85:8000 + (u16 &amp; 7FFF)): packed
     /// again in their room when they sit there one after another, else each written in its own place when it fits.</summary>
-    private static bool RepackAttackNames(RomBuffer rom, List<string> names)
+    internal static bool RepackAttackNames(RomBuffer rom, List<string> names)
     {
         int table = L2AiScripts.AttackNameTable, n = L2AiScripts.AttackNameCount;
         var starts = Enumerable.Range(0, n).Select(i => 0x28000 + (rom.ReadUInt16Le(table + i * 2) & 0x7FFF)).ToList();

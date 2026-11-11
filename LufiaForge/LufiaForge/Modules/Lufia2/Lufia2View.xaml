@@ -50,6 +50,9 @@
             <TabItem Header="Monsters" Style="{StaticResource LufiaSideTab}">
                 <local:L2MonstersView DataContext="{Binding Monsters}"/>
             </TabItem>
+            <TabItem Header="Monster attacks" Style="{StaticResource LufiaSideTab}">
+                <local:L2AttacksView DataContext="{Binding Attacks}"/>
+            </TabItem>
             <TabItem Header="Encounters" Style="{StaticResource LufiaSideTab}">
                 <local:L2EncountersView DataContext="{Binding Encounters}"/>
             </TabItem>

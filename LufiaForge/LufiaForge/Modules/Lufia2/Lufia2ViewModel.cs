@@ -14,6 +14,7 @@ public partial class Lufia2ViewModel : ObservableObject
     public L2MonstersPage Monsters { get; } = new();
     public L2ItemsPage Items { get; } = new();
     public L2SpellsPage Spells { get; } = new();
+    public L2AttacksPage Attacks { get; } = new();
     public L2IpPage IpAttacks { get; } = new();
     public L2AnimationsPage Animations { get; } = new();
     public L2MapsPage Maps { get; } = new();
@@ -71,6 +72,7 @@ public partial class Lufia2ViewModel : ObservableObject
             case "Encounters": Encounters.Shown(); break;
             case "Items": Items.Shown(); break;
             case "Spells": Spells.Shown(); break;
+            case "Monster attacks": Attacks.Shown(); break;
             case "IP attacks": IpAttacks.Shown(); break;
             case "Animations": Animations.Shown(); break;
             case "Shops": Shops.Shown(); break;
@@ -98,7 +100,7 @@ public partial class Lufia2ViewModel : ObservableObject
         string movedList = string.Join(", ", moved.Select(r => r.Table.Name));
         LockBanner = moved.Count == 0 ? "" : $"Another hack changed where this game keeps its {movedList}. The pages that edit them are read-only here, so nothing that hack put in the game's old places gets written over.";
         if (moved.Count > 0) Overview += $" It changed where the game keeps its {movedList}: the pages that edit them stay read-only.";
-        try { Monsters.SetRom(rom, main); Items.SetRom(rom, main); Spells.SetRom(rom, main); IpAttacks.SetRom(rom, main); Animations.SetRom(rom, main); Maps.SetRom(rom, main); Text.SetRom(rom, main); Encounters.SetRom(rom, main); Shops.SetRom(rom, main); Characters.SetRom(rom, main); Capsules.SetRom(rom, main); Events.SetRom(rom, main); Cutscenes.SetRom(rom, main); Chests.SetRom(rom, main); Exits.SetRom(rom, main); Credits.SetRom(rom, main); Settings.SetRom(rom, main); GameStart.SetRom(rom, main); Music.SetRom(rom, main); Graphics.SetRom(rom, main); }
+        try { Monsters.SetRom(rom, main); Items.SetRom(rom, main); Spells.SetRom(rom, main); Attacks.SetRom(rom, main); IpAttacks.SetRom(rom, main); Animations.SetRom(rom, main); Maps.SetRom(rom, main); Text.SetRom(rom, main); Encounters.SetRom(rom, main); Shops.SetRom(rom, main); Characters.SetRom(rom, main); Capsules.SetRom(rom, main); Events.SetRom(rom, main); Cutscenes.SetRom(rom, main); Chests.SetRom(rom, main); Exits.SetRom(rom, main); Credits.SetRom(rom, main); Settings.SetRom(rom, main); GameStart.SetRom(rom, main); Music.SetRom(rom, main); Graphics.SetRom(rom, main); }
         catch (Exception ex) { Overview += $"\n\nCouldn't read part of the ROM: {ex.Message}"; }
     }
 }
