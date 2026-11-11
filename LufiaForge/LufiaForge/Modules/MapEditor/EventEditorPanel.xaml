@@ -85,8 +85,6 @@
                                                                          Visibility="{Binding IsField, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                                                 <TextBlock Text="{Binding SongNameText}" Foreground="{StaticResource GoldLightBrush}" VerticalAlignment="Center" Margin="4,0,0,0"
                                                                            Visibility="{Binding IsSong, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                                                                <Button Content="▶ Listen" ToolTip="Hear it as the game plays it (click again to stop)" Style="{StaticResource LufiaButton}" Padding="6,0" Margin="3,0,0,0"
-                                                                        Click="Listen_Click" Visibility="{Binding IsAudio, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                                                 <Button Content="⚑" ToolTip="Where else is this flag used?" Style="{StaticResource LufiaButton}" Padding="5,0" Margin="3,0,0,0"
                                                                         Click="FlagUses_Click" Visibility="{Binding IsFlag, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                                                 <TextBlock Text="{Binding FlagNameText}" Foreground="{StaticResource GoldLightBrush}" VerticalAlignment="Center" Margin="4,0,0,0"
@@ -94,6 +92,8 @@
                                                                 <ComboBox Style="{StaticResource GdCombo}" Width="190" ItemsSource="{Binding Choices}"
                                                                           SelectedIndex="{Binding ChoiceIndex}"
                                                                           Visibility="{Binding IsChoice, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                                <Button Content="▶ Listen" ToolTip="Hear it as the game plays it (click again to stop)" Style="{StaticResource LufiaButton}" Padding="6,0" Margin="3,0,0,0"
+                                                                        Click="Listen_Click" Visibility="{Binding IsAudio, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                                                 <Button Content="→" ToolTip="Go where this jump leads" Style="{StaticResource LufiaButton}" Padding="6,0" Margin="3,0,0,0"
                                                                         Click="Follow_Click" Visibility="{Binding IsJump, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                                             </StackPanel>

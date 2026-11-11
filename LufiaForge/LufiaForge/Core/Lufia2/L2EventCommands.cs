@@ -308,7 +308,7 @@ public static class L2EventCommands
             "The game's opening uses it for its text without a box.", 'G', rare: true, ps: Pk("background", 1, L((0, "normal"), (1, "see-through"))));
         One(0x50, "Text voice off", Text, (_, _) => "Text voice off", new byte[] { 0x50 }, "", rare: true);
         One(0x51, "Text voice from the speaker", Text, (_, _) => "Text voice: the speaker's", new byte[] { 0x51 }, "", rare: true);
-        One(0x52, "Text voice: a sound", Text, (b, _) => $"Text voice: sound {b[1]:X2}", new byte[] { 0x52, 0x45 }, "Played every other letter.", rare: true,
+        One(0x52, "Text voice: a sound", Text, (b, _) => $"Text voice: sound {b[1]:X2} ({Audio.SoundNames.Name(true, b[1])})", new byte[] { 0x52, 0x45 }, "Played every other letter.", rare: true,
             ps: P("sound", L2Kind.Sound, 1, 0x8E));
         One(0xB8, "Next message stays up while the player walks on", Text, (_, _) => "The next message stays up while the player walks on (like a sign)",
             new byte[] { 0xB8 }, "The event ends as soon as the next message is shown; the box stays up for 4 seconds or until the player moves.");
@@ -607,7 +607,7 @@ public static class L2EventCommands
         One(0x70, "Fade the music out", Sound, (_, _) => "Fade the music out", new byte[] { 0x70 }, "Takes a second; \"Wait for the music fade\" waits for it.");
         One(0x71, "Wait for the music fade", Sound, (_, _) => "Wait for the music to fade out", new byte[] { 0x71 }, "", waits: "a second");
         One(0x72, "Stop the music", Sound, (_, _) => "Stop the music", new byte[] { 0x72 }, "");
-        One(0x4C, "Play a sound", Sound, (b, _) => $"Sound {b[1]:X2}", new byte[] { 0x4C, 0x15 }, "", ps: P("sound", L2Kind.Sound, 1, 0x8E));
+        One(0x4C, "Play a sound", Sound, (b, _) => $"Sound {b[1]:X2}: {Audio.SoundNames.Name(true, b[1])}", new byte[] { 0x4C, 0x15 }, "", ps: P("sound", L2Kind.Sound, 1, 0x8E));
         One(0xAE, "Sounds on or off", Sound, (b, _) => b[1] == 0xFF ? "Sounds on again" : "Sounds off", new byte[] { 0xAE, 0x00 }, "", ps: Pk("sounds", 1, L((0x00, "off"), (0xFF, "on"))));
         One(0x4D, "Wait for a music cue", Sound, (b, _) => $"Wait for music cue {b[1]}", new byte[] { 0x4D, 0x21 }, "", waits: "until the song gets there", rare: true, ps: P("cue", L2Kind.Number, 1));
         One(0x4E, "Wait for the sound to end", Sound, (_, _) => "Wait for the sound to end", null, "", '?', "until the sound ends", true);

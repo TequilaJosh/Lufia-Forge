@@ -239,6 +239,18 @@ public sealed class LufiaSound : IDisposable
         return UnpackFrames + (Clock - start) / ClocksPerFrame * UploadSlowdown;
     }
 
+    /// <summary>
+    /// Starts a song with no channels (song 01 with every channel marked unused): nothing is heard, but the driver runs
+    /// as it does while music plays. It only plays sound effects then (checked: after boot, or after 0A FF, effect 10
+    /// gives silence; with this song it is heard), so a sound is previewed on top of it.
+    /// </summary>
+    public void PlaySilentSong()
+    {
+        var d = LufiaCompression.DecompressResource(_rom, 1, out _);
+        for (int i = 0x12; i < 0x1A && i < d.Length; i++) d[i] = 0xFF;   // channel table (0x10-0x17 after the length word)
+        PlaySongData(d);
+    }
+
     /// <summary>Event 0A FF ($00:8F98 → command 04).</summary>
     public void StopMusic()
     {

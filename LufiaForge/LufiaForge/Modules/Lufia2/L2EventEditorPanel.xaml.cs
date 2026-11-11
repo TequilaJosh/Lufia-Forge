@@ -50,8 +50,15 @@ public partial class L2EventEditorPanel : UserControl
             if (_editor != null) Main?.Register(_editor);
             CastExpander.IsExpanded = Common.LayoutMemory.Get("l2events.cast") == "1";   // (open or shut on another page meanwhile)
         };
+        // a sound renamed in Settings: the cards show the new name (also when it was renamed while this was off screen)
+        Loaded += (_, _) =>
+        {
+            Core.Audio.SoundNames.Changed -= SoundNamesChanged; Core.Audio.SoundNames.Changed += SoundNamesChanged;
+            if (_soundNames != Core.Audio.SoundNames.Version) SoundNamesChanged();
+        };
         Unloaded += (_, _) =>
         {
+            Core.Audio.SoundNames.Changed -= SoundNamesChanged;
             Common.SoundPreview.StopWhenGone(this);
             if (_editor == null) return;
             if (_editor.HasPendingEdits) _editor.WritePendingEdits();
@@ -306,6 +313,9 @@ public partial class L2EventEditorPanel : UserControl
     {
         if (sender is FrameworkElement { DataContext: L2FieldVm f }) f.ShowFlagUses();
     }
+
+    private int _soundNames = Core.Audio.SoundNames.Version;
+    private void SoundNamesChanged() { _soundNames = Core.Audio.SoundNames.Version; Dispatcher.BeginInvoke(() => _editor?.RefreshSoundNames()); }
 
     private void Listen_Click(object sender, RoutedEventArgs e)
     {

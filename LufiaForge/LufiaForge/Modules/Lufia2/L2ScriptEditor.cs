@@ -1062,6 +1062,8 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
 
     private List<L2Option> ChoicesOf(L2Kind kind)
     {
+        if (kind == L2Kind.Sound)   // (not kept: names can change in Settings)
+            return Enumerable.Range(0, Core.Audio.SoundNames.Count(true)).Select(i => new L2Option(i, Core.Audio.SoundNames.Label(true, i))).ToList();
         if (_choices.TryGetValue(kind, out var l)) return l;
         var rom = _rom!;
         IEnumerable<L2Option> c = kind switch
@@ -1103,7 +1105,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
                 choices = ChoicesOf(p.Kind);
                 if (_who.TryGetValue(v, out var w) && w.Sprite >= 0) pic = SpritePicture(w.Sprite);
                 break;
-            case L2Kind.Hero or L2Kind.Item or L2Kind.Spell or L2Kind.Song or L2Kind.Map or L2Kind.Capsule or L2Kind.Flag
+            case L2Kind.Hero or L2Kind.Item or L2Kind.Spell or L2Kind.Song or L2Kind.Sound or L2Kind.Map or L2Kind.Capsule or L2Kind.Flag
                 or L2Kind.Point or L2Kind.Path or L2Kind.Area or L2Kind.Exit or L2Kind.Door:
                 choices = ChoicesOf(p.Kind); break;
             case L2Kind.Scene: choices = SceneChoices(s.Bytes.Length > 1 ? s.Bytes[1] : 0); break;
@@ -1115,7 +1117,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
                 hex = true;
                 pic = SpritePicture(v);
                 break;
-            case L2Kind.Hex or L2Kind.Variable or L2Kind.Sound or L2Kind.Battle or L2Kind.Shop: hex = true; break;
+            case L2Kind.Hex or L2Kind.Variable or L2Kind.Battle or L2Kind.Shop: hex = true; break;
         }
         return new L2FieldVm(this, s, p, choices, v, hex, pic);
     }
@@ -1179,6 +1181,15 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         CanUndo = _undo.Count > 0; CanRedo = _redo.Count > 0;
         UndoTip = $"Undo ({_undo.Count} step{(_undo.Count == 1 ? "" : "s")}, Ctrl+Z)";
         RedoTip = $"Redo ({_redo.Count} step{(_redo.Count == 1 ? "" : "s")}, Ctrl+Y)";
+    }
+
+    /// <summary>A sound was renamed in Settings: the cards with a sound show the new name.</summary>
+    public void RefreshSoundNames()
+    {
+        if (_script == null) return;
+        foreach (var l in Lines)
+            if (l.Step is { IsText: false } s && L2EventCommands.Find(s.Op)?.FieldsFor(s.Bytes).Any(f => f.Kind == L2Kind.Sound) == true)
+                FillLine(l, fields: true);
     }
 
     /// <summary>After an edit: the cards show the new sentences (every card's fields again when the structure changed),
