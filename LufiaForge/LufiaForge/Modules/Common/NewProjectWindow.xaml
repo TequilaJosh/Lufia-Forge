@@ -5,7 +5,7 @@
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
         Background="{DynamicResource MidPurpleBrush}">
     <StackPanel Margin="18">
-        <TextBlock Text="New project" Style="{StaticResource LufiaCardTitle}" FontSize="16"/>
+        <TextBlock x:Name="TitleText" Text="New project" Style="{StaticResource LufiaCardTitle}" FontSize="16"/>
         <TextBlock x:Name="RomText" Style="{StaticResource LufiaLabel}" TextWrapping="Wrap" Margin="0,4,0,14"/>
 
         <TextBlock Text="Project name" Style="{StaticResource LufiaLabel}" Margin="0,0,0,4"/>
@@ -18,7 +18,7 @@
         </DockPanel>
         <TextBlock x:Name="PathText" Style="{StaticResource LufiaLabel}" Foreground="{StaticResource TextDisabledBrush}" TextWrapping="Wrap" Margin="0,6,0,0"/>
 
-        <TextBlock Style="{StaticResource LufiaLabel}" TextWrapping="Wrap" Margin="0,14,0,0"
+        <TextBlock x:Name="NoteText" Style="{StaticResource LufiaLabel}" TextWrapping="Wrap" Margin="0,14,0,0"
                    Text="Your changes are kept in the project (the ROM you picked is never changed). Lufia Forge saves the project every 5 minutes and asks before closing if something isn't saved. File &gt; Export ROM writes a playable ROM whenever you want one."/>
 
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">

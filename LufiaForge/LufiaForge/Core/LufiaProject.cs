@@ -70,7 +70,7 @@ public sealed class LufiaProject
         var info = JsonDocument.Parse(Read(zip, "project.json")).RootElement;
         int format = info.TryGetProperty("format", out var f) ? f.GetInt32() : 0;
         if (format > Format) throw new InvalidDataException("This project was saved by a newer Lufia Forge. Update the app to open it.");
-        var p = new LufiaProject(path, info.GetProperty("name").GetString() ?? System.IO.Path.GetFileNameWithoutExtension(path), Read(zip, "base.sfc"))
+        var p = new LufiaProject(path, NameFor(path, info.GetProperty("name").GetString()), Read(zip, "base.sfc"))
         {
             Created = info.TryGetProperty("created", out var c) ? c.GetDateTime() : File.GetCreationTime(path),
             Saved = info.TryGetProperty("saved", out var s) ? s.GetDateTime() : File.GetLastWriteTime(path),
@@ -84,6 +84,19 @@ public sealed class LufiaProject
                 if (int.TryParse(e.Name, System.Globalization.NumberStyles.HexNumber, null, out int id)) p.MapNames[id] = e.Value.GetString() ?? "";
         return (p, ApplyDiff(p._base, Read(zip, "changes.bin")));
     }
+
+    /// <summary>A project's file is named after it (<see cref="FileNameFor"/>), so a file named otherwise was copied or
+    /// renamed by hand: its own file name is the name then (the copy of "p2" saved as "p3.lfproj" is "p3").</summary>
+    public static string NameFor(string path, string? stored)
+    {
+        string file = System.IO.Path.GetFileNameWithoutExtension(path);
+        if (string.IsNullOrWhiteSpace(stored)) return file;
+        return string.Equals(FileNameFor(stored), file, StringComparison.OrdinalIgnoreCase) ? stored : file;
+    }
+
+    /// <summary>The file name a project with this name gets (characters a file name can't hold become _).</summary>
+    public static string FileNameFor(string name) =>
+        string.Concat(name.Select(c => System.IO.Path.GetInvalidFileNameChars().Contains(c) ? '_' : c)).Trim().TrimEnd('.');
 
     /// <summary>Saves the project with the ROM as it is now.</summary>
     public void Save(byte[] rom)
@@ -244,7 +257,9 @@ public static class RecentProjects
         try
         {
             if (!File.Exists(File_)) return new();
-            return JsonSerializer.Deserialize<List<Entry>>(File.ReadAllText(File_)) ?? new();
+            // a project file copied or renamed by hand shows under its file name (as it opens: LufiaProject.NameFor)
+            return (JsonSerializer.Deserialize<List<Entry>>(File.ReadAllText(File_)) ?? new())
+                .Select(e => e with { Name = LufiaProject.NameFor(e.Path, e.Name) }).ToList();
         }
         catch { return new(); }
     }

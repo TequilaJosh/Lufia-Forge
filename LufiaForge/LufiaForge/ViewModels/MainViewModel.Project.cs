@@ -436,6 +436,38 @@ public partial class MainViewModel
         catch (Exception ex) { MessageBox.Show($"The project couldn't be saved: {ex.Message}", "Save project", MessageBoxButton.OK, MessageBoxImage.Error); }
     }
 
+    /// <summary>File, New Project From This One: saves this project, then saves it again as a new project in a folder of
+    /// its own (named in <see cref="Modules.Common.NewProjectWindow"/>) and goes on in that one. The project left behind
+    /// is a version to go back to.</summary>
+    [RelayCommand(CanExecute = nameof(IsRomLoaded))]
+    private void NewProjectFromThis()
+    {
+        if (Project == null || RomBuffer == null) return;
+        var ask = new Modules.Common.NewProjectWindow(Project) { Owner = Application.Current?.MainWindow };
+        if (ask.ShowDialog() != true) return;
+        string from = Project.Name;
+        if (HasUnsavedProjectChanges() && !SaveProjectNow(quiet: false)) return;
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(ask.ProjectPath)!);
+            SaveProjectTo(ask.ProjectPath);
+            if (Project.Name != ask.ProjectName && LufiaProject.FileNameFor(ask.ProjectName) == Project.Name)
+            {
+                Project.Name = ask.ProjectName;   // a name with characters a file name can't hold
+                SaveProjectNow(quiet: true);
+                RecentProjects.Add(Project.Path, Project.Name);
+                RefreshRecent();
+                OnPropertyChanged(nameof(WindowTitle));
+                OnPropertyChanged(nameof(ProjectText));
+            }
+            StatusMessage = $"New project \"{Project.Name}\" made from \"{from}\" (saved, and left as it is). You're in \"{Project.Name}\" now.";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"The new project couldn't be made: {ex.Message}", "New project from this one", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
     /// <summary>Save Project As, once the file is picked: when the save fails the project keeps its old file and name
     /// (later saves go there, not to the file that couldn't be written). The bookmarks and flag names go along.</summary>
     public void SaveProjectTo(string path)

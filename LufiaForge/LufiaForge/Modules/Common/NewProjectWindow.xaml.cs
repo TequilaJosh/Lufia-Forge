@@ -22,14 +22,41 @@ public partial class NewProjectWindow : Window
         Update();
     }
 
-    private static string Clean(string name) =>
-        string.Concat(name.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c)).Trim().TrimEnd('.');
-
-    private string Target()
+    /// <summary>A new project from the one open (File, New Project From This One): named "&lt;name&gt; 2" at first, in a
+    /// folder of its own next to the project's folder.</summary>
+    public NewProjectWindow(LufiaProject from) : this(from.Path)
     {
-        string file = Clean(ProjectName);
+        Title = TitleText.Text = "New project from this one";
+        RomText.Text = $"\"{from.Name}\" is saved, then copied into a new project, and you go on in the copy. \"{from.Name}\" stays as it is now: open it from File > Open Project or the list of recent projects to go back to it.";
+        NoteText.Text = "The copy keeps everything: the changes, the map names, the bookmarks and flag names. Both start from the same ROM, and the ROM is never changed.";
+        OkButton.Content = "✔  Make the copy";
+        string folder = Path.GetDirectoryName(Path.GetDirectoryName(from.Path) ?? "") ?? "";
+        if (folder.Length > 0) FolderBox.Text = folder;
+        NameBox.Text = NextName(from.Name, n => File.Exists(Target(n)));
+        Update();
+    }
+
+    /// <summary>The name after this one: a number at its end counts up ("p2" → "p3", "Hack v9" → "Hack v10"), otherwise
+    /// " 2" goes after it; names already taken are skipped.</summary>
+    public static string NextName(string name, Func<string, bool> taken)
+    {
+        var m = System.Text.RegularExpressions.Regex.Match(name, @"^(.*?)(\d+)$");
+        string head = m.Success ? m.Groups[1].Value : name + " ";
+        long n = m.Success && long.TryParse(m.Groups[2].Value, out long k) ? k + 1 : 2;
+        string next = head + n;
+        for (int i = 0; i < 1000 && taken(next); i++) next = head + ++n;
+        return next;
+    }
+
+    private static string Clean(string name) => LufiaProject.FileNameFor(name);
+
+    private string Target(string projectName)
+    {
+        string file = Clean(projectName);
         return file.Length == 0 ? "" : Path.Combine(FolderBox.Text.Trim(), file, file + LufiaProject.Extension);
     }
+
+    private string Target() => Target(ProjectName);
 
     private void Update()
     {
