@@ -165,7 +165,8 @@ public partial class L2LineVm : ObservableObject
     partial void OnNoteChanged(string value) => OnPropertyChanged(nameof(HasNote));
     partial void OnFlowChanged(string value) => OnPropertyChanged(nameof(HasFlow));
     partial void OnWarningChanged(string value) => OnPropertyChanged(nameof(HasWarning));
-    public bool HasHeroFix => HeroFix >= 0;
+    /// <summary>-1 no button, 0 Maxim look-alike, 1-6 a hero look-alike, -2 make a ring like the game's.</summary>
+    public bool HasHeroFix => HeroFix >= 0 || HeroFix == -2;
     partial void OnHeroFixChanged(int value) => OnPropertyChanged(nameof(HasHeroFix));
     partial void OnReachedChanged(bool value) => OnPropertyChanged(nameof(Dim));
     public void RefreshShowBytes() => OnPropertyChanged(nameof(ShowBytes));
@@ -1320,7 +1321,18 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         if (def.Template == null) return;
         if (def.Ops[0] == 0x10) { AddText(new byte[] { 0x10, 0x02, 0, 0, 0, 0 }, "Is that so?\nYes\nNo", 0x0B, at); return; }
         if (L2EventScript.TextOpeners.Contains(def.Template[0])) { AddText(def.Template, "...", 0x01, at); return; }
+        // a ring comes with what the game always does with one: it turns, closes in and goes, the event waits for it
+        if (IsRing(def.Template[0])) { AddRing(def.Template, at); return; }
         Insert(at, new L2Step { Bytes = (byte[])def.Template.Clone() });
+    }
+
+    /// <summary>A ring (on a ring number no other ring of the event uses) and the game's steps that go with it.</summary>
+    public void AddRing(byte[] start, int at = -1)
+    {
+        var b = (byte[])start.Clone();
+        b[1] = (byte)FreeRing();
+        Insert(at, RingSteps(b));
+        Status = "A ring and the steps the game always gives one (it turns, closes in and goes; the event waits for it). " + Status;
     }
 
     /// <summary>Adds text spoken by the opener's speaker.</summary>
@@ -1521,6 +1533,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         // would put back what that page changed
         if (ChangedElsewhere()) { Status = "Not saved: this event was changed on another page after it was opened here. Revert reads it again; then make your changes again."; return false; }
         int fitted = FitTexts(all: false);
+        int rings = FitRings();
         int ended = _event?.Entry != null ? FitEffects() : 0;
         int drawn = _event?.Entry != null ? FitMapDraws() : 0;
         // every text must be text the game can show (texts not changed are written as they are: the game's own can hold
@@ -1548,6 +1561,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
             Status = "Saved in the project. " + result + (added ? " An End step was added at the bottom." : "") +
                      (fitted > 0 ? $" {fitted} text{(fitted > 1 ? "s were" : " was")} wider or longer than the box: the lines were broken to fit ({L2Events.BoxWidth} letters, {L2Events.BoxLines} lines a box, more boxes when needed)." : "") +
                      (ended > 0 ? " A colour, shaking or ring was still going at the end of the event: steps that end it were added before the end (the game's events always end them)." : "") +
+                     (rings > 0 ? " A wait for a ring that nothing takes away (the game would wait there forever) now has the game's steps before it: the ring turns, closes in and goes." : "") +
                      (drawn > 0 ? " The map was changed while the screen is off: \"Draw the map again\" was added after it (without it the game doesn't show the change)." : "");
             Saved?.Invoke(result);
             return true;
@@ -1726,6 +1740,16 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
             if (!st.IsText && st.Op == 0x83 && !(_event?.Entry is { Head: L2EventBlocks.GameList, Id: 2 }))
                 vm.Warning = (vm.Warning.Length > 0 ? vm.Warning + " " : "") +
                              "This only works in the \"Before the map loads\" event: anywhere else the event stops here (checked in the game). Use Go to another map or Leave through an exit instead.";
+            if (RingWaitsForever(i))
+                vm.Warning = (vm.Warning.Length > 0 ? vm.Warning + " " : "") +
+                             "Nothing takes this ring away (a ring stands still and stays until \"Grow or shrink then remove it\" or \"Remove a ring\"), so the game waits here forever. " +
+                             "Saving adds the game's steps before this one: the ring turns, closes in and goes.";
+            if (RingStandsStill(i))
+            {
+                vm.Warning = (vm.Warning.Length > 0 ? vm.Warning + " " : "") +
+                             "Nothing makes this ring move, so it stands still where it appears (one sprite is a single dot). The game's rings always turn and close in.";
+                if (vm.HeroFix < 0) { vm.HeroFix = -2; vm.HeroFixText = "Make it like the game's ring (it turns, closes in and goes)"; }
+            }
             if (CopyNotDrawn(i, screenOff))
                 vm.Warning = (vm.Warning.Length > 0 ? vm.Warning + " " : "") +
                              "The screen is off here (before the scene fades in, or after a fade to black): the game changes the map but doesn't draw it, " +
@@ -2277,6 +2301,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         if (LeaderVanishToStandIn() > 0) done += StageInfo + " ";
         int fitted = FitTexts(all: true);
         if (fitted > 0) { Changed(true); done += $"{fitted} text{(fitted > 1 ? "s" : "")} broken to fit the box. "; }
+        if (FitRings() > 0) { Changed(true); done += "A ring the event waited for forever now turns, closes in and goes as in the game. "; }
         if (FitEffects() > 0) { Changed(true); done += "A colour, shaking or ring left going at the end is now ended before it. "; }
         if (FitMapDraws() > 0) { Changed(true); done += "The map changed while the screen is off is now drawn again after the change. "; }
         // the party: the heroes now played by map characters no longer join for the test

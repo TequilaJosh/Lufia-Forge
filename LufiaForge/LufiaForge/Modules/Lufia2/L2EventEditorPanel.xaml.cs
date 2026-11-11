@@ -237,11 +237,11 @@ public partial class L2EventEditorPanel : UserControl
         menu.Items.Add(q);
         menu.Items.Add(new Separator());
         var ready = new MenuItem { Header = "Ready-made" };
-        var sp = new MenuItem { Header = "✨ Sparkles on a spot (they turn, then go)", ToolTip = "The Sinistrals' warp (Shrine of Daos 1F): a ring of sparkles appears, tilts one way and the other, shrinks away, and the event waits for it. Pick the spot on the stage." };
+        var sp = new MenuItem { Header = "✨ Sparkles on a spot (they turn, then go)", ToolTip = "The game's warp sparkles (Shrine of Daos 1F): 10 sparkles appear 120 pixels out, turn, close in and go, and the event waits for them. Pick the spot on the stage." };
         sp.Click += (_, _) =>
         {
             int n = _editor.Lines.Count;
-            _editor.Insert(at, L2ScriptEditor.SparkleSteps(0, 1, 3));
+            _editor.AddRing(new byte[] { 0x8D, 0x00, 0x01, 0x0A, 0x78, 0x40, 0x00 }, at);
             // the ring's point: picked on the stage
             if (_editor.Lines.Count > n && at >= 0 && at < _editor.Lines.Count && _editor.Lines[at].Fields.FirstOrDefault(f => f.IsPlace) is { } pf)
             {
@@ -320,8 +320,9 @@ public partial class L2EventEditorPanel : UserControl
 
     private void HeroFix_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not FrameworkElement { DataContext: L2LineVm l } || l.HeroFix < 0 || _editor == null) return;
-        if (l.HeroFix == 0) _editor.LeaderVanishToStandIn();
+        if (sender is not FrameworkElement { DataContext: L2LineVm l } || !l.HasHeroFix || _editor == null) return;
+        if (l.HeroFix == -2) _editor.RingLikeGame(l.Index);
+        else if (l.HeroFix == 0) _editor.LeaderVanishToStandIn();
         else _editor.HeroToCharacter(l.HeroFix);
     }
 

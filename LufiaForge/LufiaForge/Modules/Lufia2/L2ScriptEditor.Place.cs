@@ -158,14 +158,9 @@ public partial class L2ScriptEditor
 
     /// <summary>The steps of a ring of sparkles that turns on one spot and goes, as the Sinistrals' warp plays it (Shrine
     /// of Daos 1F): the ring appears, tilts one way and the other, shrinks and is removed, and the event waits for it.</summary>
-    public static L2Step[] SparkleSteps(int ring, int point, int count) => new[]
-    {
-        new L2Step { Bytes = new byte[] { 0x8D, (byte)ring, (byte)point, (byte)count, 0x78, 0x00, 0x00 } },
-        new L2Step { Bytes = new byte[] { 0x8F, (byte)ring, 0x00, 0x81 } },
-        new L2Step { Bytes = new byte[] { 0x90, (byte)ring, 0x00, 0x81 } },
-        new L2Step { Bytes = new byte[] { 0x9F, (byte)ring, 0x84, 0xE1 } },
-        new L2Step { Bytes = new byte[] { 0xA2, (byte)ring } },
-    };
+    /// <summary>The game's warp sparkles on a point (Shrine of Daos: 10 sparkles 120 pixels out, turning, closing in
+    /// and going, the event waiting for them).</summary>
+    public static L2Step[] SparkleSteps(int ring, int point) => RingSteps(new byte[] { 0x8D, (byte)ring, (byte)point, 0x0A, 0x78, 0x40, 0x00 });
 
     /// <summary>Sparkles turning on tile (x, y) (a point there is used or made), added at step <paramref name="at"/> (-1: after the picked one).</summary>
     public void AddSparkles(int x, int y, int at = -1)
@@ -176,10 +171,8 @@ public partial class L2ScriptEditor
             int point = PointOn(x, y, out bool made);
             if (point < 0) { StageInfo = "The map has no free point number."; return; }
             // a ring number no other step of the event uses
-            var used = _script.Steps.Where(s => !s.IsText && s.Bytes.Length >= 2 && s.Op is 0x8D or 0xA0 or 0xC2 or 0xC3 or 0xC8 or 0xC9).Select(s => (int)s.Bytes[1]).ToHashSet();
-            int ring = Enumerable.Range(0, 8).FirstOrDefault(r => !used.Contains(r), 0);
-            Insert(at, SparkleSteps(ring, point, 3));
-            StageInfo = $"Sparkles on ({x}, {y}) ({(made ? "a new point " : "point ")}{point}): the ring appears, turns, shrinks away, and the event waits for it to go.";
+            Insert(at, SparkleSteps(FreeRing(), point));
+            StageInfo = $"Sparkles on ({x}, {y}) ({(made ? "a new point " : "point ")}{point}): as in the game's warps, the ring appears, turns, closes in and goes, and the event waits for it.";
         }
         catch (Exception ex) { StageInfo = "Not added: " + ex.Message; }
     }

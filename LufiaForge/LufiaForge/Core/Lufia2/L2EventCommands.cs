@@ -220,6 +220,28 @@ public static class L2EventCommands
     private static string Frames(int f) => f == 1 ? "1 frame" : f % 60 == 0 && f > 0 ? $"{f} frames ({f / 60} s)" : $"{f} frames ({f / 60.0:0.#} s)";
     private static string DirName(int d) => d is >= 1 and <= 4 ? Directions[d - 1].Item2 : $"direction {d}";
     private static string Opt(IReadOnlyList<(int, string)> list, int v) => list.FirstOrDefault(o => o.Item1 == v).Item2 ?? $"{v:X2}";
+
+    /// <summary>A ring change's rate: the signed step (high nibble) and the frames between steps (low nibble).</summary>
+    public static (int Step, int Every) RingRate(int rate) => ((rate >> 4) >= 8 ? (rate >> 4) - 16 : rate >> 4, rate & 0x0F);
+    /// <summary>A ring change's stop: bit 7 set = it stops (at the rest x 2), else it keeps going.</summary>
+    public static bool RingStops(int stop) => (stop & 0x80) != 0;
+
+    private static string Every(int frames) => frames switch { 0 => "every 256 frames", 1 => "every frame", _ => $"every {frames} frames" };
+
+    private static string RingSize(int stop, int rate)
+    {
+        var (step, every) = RingRate(rate);
+        if (step == 0) return "its size stays (rate 0)";
+        string how = $"{(step < 0 ? "closes in" : "spreads out")} by {Math.Abs(step)} {Every(every)}";
+        return how + (RingStops(stop) ? $" to {(stop & 0x7F) * 2} pixels" : " (keeps going)");
+    }
+
+    private static string RingTurn(int stop, int rate)
+    {
+        var (step, every) = RingRate(rate);
+        if (step == 0) return "not at all (rate 0)";
+        return $"by {step} {Every(every)}" + (RingStops(stop) ? $" until angle {((stop << 1) & 0xFF):X2}" : " (keeps turning)");
+    }
     private static int W(byte[] b, int p) => b[p] | b[p + 1] << 8;
 
     private static readonly List<L2CommandDef> All = Build();
@@ -433,27 +455,44 @@ public static class L2EventCommands
             ps: new[] { P("animation", L2Kind.Hex, 1, 0x5F), P("point", L2Kind.Point, 2) });
         One(0x9C, "Scatter animations over an area", Moves, (b, w) => $"{b[2]} x animation {b[3]:X2} scattered over {w.Area(b[1])}", new byte[] { 0x9C, 0x01, 0x08, 0x26 }, "",
             ps: new[] { P("area", L2Kind.Area, 1), P("how many", L2Kind.Number, 2), P("animation", L2Kind.Hex, 3) });
+        // rings, as the game makes them ($80:AA20, $83:C729, moved each frame at $83:E27D): how many sprites, their distance
+        // from the centre in pixels, two tilt angles. Changes (8E/9F size, 8F/90 the tilts): "rate" high nibble = signed
+        // step, low nibble = every that many frames; "stop" with bit 7 = stop at (stop & 7F) x 2, without = keeps going.
+        // 9F removes the ring when its size change stops. The game's warps: ring 0A 78 40 00, 8F 00 41, 9F 84 E1, A2.
+        const string ringHelp = "Sparkles around {0}, as in the game's warps (the Sinistrals at Shrine of Daos, characters appearing in a flash). " +
+                                "On its own a ring stands still and stays: the game always follows it with Tilt a ring (it keeps turning), " +
+                                "Grow or shrink then remove it (it closes in and goes) and Wait until a ring is gone, and adding it from the + menu adds those too. " +
+                                "Values: how many sprites, their distance from the centre in pixels, and the ring's tilt at the start (40 = a quarter turn); the game's warps use 10, 120, 40 and 00.";
         foreach (var (op, from, kind) in new[] { (0x8D, "a point", 0x3C), (0xA0, "a character", 0x3C), (0xC2, "a point", 0x4F), (0xC3, "a character", 0x4F) })
         {
             bool point = from == "a point";
             One(op, $"Ring of sparkles around {from}" + (kind == 0x4F ? " (second kind)" : ""), Moves,
-                (b, w) => $"Ring {b[1]:X2}: {b[3]} sparkles around {(point ? w.Point(b[2]) : w.Who(b[2]))}", new byte[] { (byte)op, 0x00, point ? (byte)1 : (byte)0, 0x01, 0x78, 0x00, 0x00 },
-                "A group of effect sprites (the Sinistrals' warp uses it: Shrine of Daos 1F). On its own it stands still and stays: Tilt a ring, Grow or shrink a ring make it turn, Grow or shrink then remove it (or Remove a ring) takes it away, Wait until a ring is gone holds the event. + > Ready-made > Sparkles on a spot adds all of them.", 'D', rare: false,
-                ps: new[] { P("ring", L2Kind.Hex, 1), point ? P("point", L2Kind.Point, 2) : Who(2, "around"), P("how many", L2Kind.Number, 3), P("size", L2Kind.Hex, 4), P("spin", L2Kind.Hex, 5), P("other", L2Kind.Hex, 6) });
+                (b, w) => $"Ring {b[1]:X2}: {b[3]} sparkle{(b[3] == 1 ? "" : "s")} around {(point ? w.Point(b[2]) : w.Who(b[2]))}, {b[4]} pixels out",
+                new byte[] { (byte)op, 0x00, point ? (byte)1 : (byte)0, 0x0A, 0x78, 0x40, 0x00 },
+                string.Format(ringHelp, from), 'D', rare: false,
+                ps: new[] { P("ring", L2Kind.Hex, 1), point ? P("point", L2Kind.Point, 2) : Who(2, "around"), P("how many", L2Kind.Number, 3),
+                            P("distance (pixels)", L2Kind.Number, 4), P("tilt at the start", L2Kind.Hex, 5), P("other tilt at the start", L2Kind.Hex, 6) });
         }
         foreach (var (op, from) in new[] { (0xC8, "a point"), (0xC9, "a character") })
         {
             bool point = from == "a point";
-            One(op, $"Ring of effect sprites around {from}", Moves, (b, w) => $"Ring {b[1]:X2}: {b[4]} x sprite {b[3]:X2} around {(point ? w.Point(b[2]) : w.Who(b[2]))}", new byte[] { (byte)op, 0x00, point ? (byte)1 : (byte)0, 0x55, 0x06, 0x40, 0x40, 0x00 }, "", 'D', rare: false,
-                ps: new[] { P("ring", L2Kind.Hex, 1), point ? P("point", L2Kind.Point, 2) : Who(2, "around"), P("sprite type", L2Kind.Hex, 3), P("how many", L2Kind.Number, 4), P("size", L2Kind.Hex, 5), P("spin", L2Kind.Hex, 6), P("other", L2Kind.Hex, 7) });
+            One(op, $"Ring of effect sprites around {from}", Moves, (b, w) => $"Ring {b[1]:X2}: {b[4]} x sprite {b[3]:X2} around {(point ? w.Point(b[2]) : w.Who(b[2]))}, {b[5]} pixels out",
+                new byte[] { (byte)op, 0x00, point ? (byte)1 : (byte)0, 0x55, 0x06, 0x40, 0x40, 0x00 }, string.Format(ringHelp, from), 'D', rare: false,
+                ps: new[] { P("ring", L2Kind.Hex, 1), point ? P("point", L2Kind.Point, 2) : Who(2, "around"), P("sprite type", L2Kind.Hex, 3), P("how many", L2Kind.Number, 4),
+                            P("distance (pixels)", L2Kind.Number, 5), P("tilt at the start", L2Kind.Hex, 6), P("other tilt at the start", L2Kind.Hex, 7) });
         }
-        One(0x8E, "Grow or shrink a ring", Moves, (b, _) => $"Ring {b[1]:X2}: size changes (stop {b[2]:X2}, rate {b[3]:X2})", new byte[] { 0x8E, 0x00, 0xB0, 0x21 }, "", 'C', rare: false,
+        One(0x8E, "Grow or shrink a ring", Moves, (b, _) => $"Ring {b[1]:X2}: {RingSize(b[2], b[3])}", new byte[] { 0x8E, 0x00, 0xB0, 0x21 },
+            "Rate: the first digit is how far it moves each time (1-7 out, 8-F in: F = 1, E = 2 ... 8 = 8), the second how many frames between moves. " +
+            "Stop: 80 and up stops at twice the rest in pixels (84 = 8 pixels); under 80 it keeps going.", 'C', rare: false,
             ps: new[] { P("ring", L2Kind.Hex, 1), P("stop at", L2Kind.Hex, 2), P("rate", L2Kind.Hex, 3) });
-        One(0x9F, "Grow or shrink a ring, then remove it", Moves, (b, _) => $"Ring {b[1]:X2}: size changes, then it goes", new byte[] { 0x9F, 0x00, 0x84, 0xE1 }, "", 'C', rare: false,
+        One(0x9F, "Grow or shrink a ring, then remove it", Moves, (b, _) => $"Ring {b[1]:X2}: {RingSize(b[2], b[3])}, then it goes", new byte[] { 0x9F, 0x00, 0x84, 0xE1 },
+            "The game's warps close the ring in by 2 pixels a frame to 8 pixels (stop 84, rate E1), then it goes. It only goes once it stops: the stop must be 80 or more.", 'C', rare: false,
             ps: new[] { P("ring", L2Kind.Hex, 1), P("stop at", L2Kind.Hex, 2), P("rate", L2Kind.Hex, 3) });
-        One(0x8F, "Tilt a ring", Moves, (b, _) => $"Ring {b[1]:X2}: tilts (stop {b[2]:X2}, rate {b[3]:X2})", new byte[] { 0x8F, 0x00, 0x00, 0x81 }, "", 'C', rare: false,
+        One(0x8F, "Tilt a ring", Moves, (b, _) => $"Ring {b[1]:X2}: turns {RingTurn(b[2], b[3])}", new byte[] { 0x8F, 0x00, 0x00, 0x41 },
+            "Makes the ring turn. Rate: the first digit is how far each time (1-7 one way, 8-F the other), the second how many frames between. Stop: under 80 it keeps turning (the game's warps: stop 00, rate 41).", 'C', rare: false,
             ps: new[] { P("ring", L2Kind.Hex, 1), P("stop at", L2Kind.Hex, 2), P("rate", L2Kind.Hex, 3) });
-        One(0x90, "Tilt a ring the other way", Moves, (b, _) => $"Ring {b[1]:X2}: tilts the other way (stop {b[2]:X2}, rate {b[3]:X2})", new byte[] { 0x90, 0x00, 0x00, 0x81 }, "", 'C', rare: false,
+        One(0x90, "Tilt a ring the other way", Moves, (b, _) => $"Ring {b[1]:X2}: turns the other way {RingTurn(b[2], b[3])}", new byte[] { 0x90, 0x00, 0x00, 0x21 },
+            "Turns the ring about its other axis (the game uses it with Tilt a ring for a ring that wobbles as it turns). Same values as Tilt a ring.", 'C', rare: false,
             ps: new[] { P("ring", L2Kind.Hex, 1), P("stop at", L2Kind.Hex, 2), P("rate", L2Kind.Hex, 3) });
         One(0x9A, "Remove a ring", Moves, (b, _) => $"Ring {b[1]:X2} fades away", new byte[] { 0x9A, 0x00 }, "", 'C', rare: false, ps: P("ring", L2Kind.Hex, 1));
         One(0xA1, "Wait for a ring", Moves, (b, _) => $"Wait until ring {b[1]:X2} is done changing", new byte[] { 0xA1, 0x00, 0x00 }, "", 'C', "until it stops changing", false,

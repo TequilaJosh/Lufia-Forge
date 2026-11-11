@@ -131,6 +131,133 @@ public partial class L2ScriptEditor
         return added;
     }
 
+    /// <summary>A ring and what the game's warps always do with it ($80:AA20; Shrine of Daos, Gades at the Shrine, every
+    /// "appears in a flash"): it keeps turning (8F 00 41), closes in by 2 a frame to 8 pixels and goes (9F 84 E1), and the
+    /// event waits until it is gone (A2).</summary>
+    public static L2Step[] RingSteps(byte[] start)
+    {
+        byte r = start[1];
+        return new[]
+        {
+            new L2Step { Bytes = (byte[])start.Clone() },
+            new L2Step { Bytes = new byte[] { 0x8F, r, 0x00, 0x41 } },
+            new L2Step { Bytes = new byte[] { 0x9F, r, 0x84, 0xE1 } },
+            new L2Step { Bytes = new byte[] { 0xA2, r } },
+        };
+    }
+
+    /// <summary>A ring number no ring of this event uses.</summary>
+    private int FreeRing()
+    {
+        var used = _script?.Steps.Where(s => !s.IsText && s.Bytes.Length >= 2 && IsRing(s.Op)).Select(s => (int)s.Bytes[1]).ToHashSet() ?? new HashSet<int>();
+        return Enumerable.Range(0, 8).FirstOrDefault(r => !used.Contains(r), 0);
+    }
+
+    private bool StepOnRing(int i, int ring, params int[] ops) =>
+        _script!.Steps[i] is { IsText: false } s && s.Bytes.Length >= 2 && s.Bytes[1] == ring && ops.Contains(s.Op);
+
+    /// <summary>The step that started the ring a step at <paramref name="i"/> works on (the last start of that ring
+    /// above it), or -1.</summary>
+    private int RingStart(int i, int ring)
+    {
+        for (int j = i - 1; j >= 0; j--)
+            if (_script!.Steps[j] is { IsText: false } s && s.Bytes.Length >= 2 && IsRing(s.Op) && s.Bytes[1] == ring) return j;
+        return -1;
+    }
+
+    /// <summary>Between steps <paramref name="from"/> and <paramref name="to"/> (not included): a change that makes the
+    /// ring turn (8F / 90 with a step), and one that takes it away (9F that stops, or 9A).</summary>
+    private (bool Turns, bool Goes) RingMoves(int from, int to, int ring)
+    {
+        bool turns = false, goes = false;
+        for (int j = from + 1; j < to && j < _script!.Steps.Count; j++)
+        {
+            var s = _script.Steps[j];
+            if (s.IsText || s.Bytes.Length < 2 || s.Bytes[1] != ring) continue;
+            if (s.Op is 0x8F or 0x90 && s.Bytes.Length >= 4 && L2EventCommands.RingRate(s.Bytes[3]).Step != 0) turns = true;
+            if (s.Op == 0x9F && s.Bytes.Length >= 4 && L2EventCommands.RingStops(s.Bytes[2]) && L2EventCommands.RingRate(s.Bytes[3]).Step != 0) goes = true;
+            if (s.Op == 0x9A) goes = true;
+        }
+        return (turns, goes);
+    }
+
+    /// <summary>Step <paramref name="i"/> waits until a ring is gone (A2) that nothing takes away: the game waits there
+    /// forever (the ring stands where it is).</summary>
+    private bool RingWaitsForever(int i)
+    {
+        if (_script == null || i < 0 || i >= _script.Steps.Count || _script.Steps[i] is not { IsText: false, Op: 0xA2 } s || s.Bytes.Length < 2) return false;
+        int start = RingStart(i, s.Bytes[1]);
+        return start >= 0 && !RingMoves(start, i, s.Bytes[1]).Goes;
+    }
+
+    /// <summary>Step <paramref name="i"/> starts a ring that nothing makes turn or change before the ring is started
+    /// again or the event ends: it stands still (one dot when it has one sprite).</summary>
+    private bool RingStandsStill(int i)
+    {
+        if (_script == null || i < 0 || i >= _script.Steps.Count || _script.Steps[i] is not { IsText: false } s || s.Bytes.Length < 2 || !IsRing(s.Op)) return false;
+        int ring = s.Bytes[1], end = i + 1;
+        while (end < _script.Steps.Count && !(_script.Steps[end] is { IsText: false } e && e.Bytes.Length >= 2 && IsRing(e.Op) && e.Bytes[1] == ring)) end++;
+        for (int j = i + 1; j < end; j++)
+            if (StepOnRing(j, ring, 0x8E, 0x8F, 0x90, 0x9F) && _script.Steps[j].Bytes.Length >= 4 && L2EventCommands.RingRate(_script.Steps[j].Bytes[3]).Step != 0) return false;
+        return true;
+    }
+
+    /// <summary>Before every "wait until a ring is gone" that would wait forever: the game's closing steps (it turns when
+    /// nothing turns it yet, then closes in and goes). Returns how many waits were fixed.</summary>
+    private int FitRings()
+    {
+        if (_script == null) return 0;
+        int fixedCount = 0;
+        for (int i = 0; i < _script.Steps.Count; i++)
+        {
+            if (!RingWaitsForever(i)) continue;
+            int ring = _script.Steps[i].Bytes[1], start = RingStart(i, ring);
+            var add = new List<L2Step>();
+            if (!RingMoves(start, i, ring).Turns) add.Add(new L2Step { Bytes = new byte[] { 0x8F, (byte)ring, 0x00, 0x41 } });
+            add.Add(new L2Step { Bytes = new byte[] { 0x9F, (byte)ring, 0x84, 0xE1 } });
+            var wait = _script.Steps[i];
+            foreach (var other in _script.Steps)
+                foreach (var j in other.Jumps)
+                    if (j.Step == wait) j.Step = add[0];
+            _script.Steps.InsertRange(i, add);
+            i += add.Count;
+            fixedCount++;
+        }
+        return fixedCount;
+    }
+
+    /// <summary>The card's button: the ring at step <paramref name="i"/> made as the game's warps make it (10 sparkles
+    /// 120 pixels out, a quarter turn; it turns, closes in and goes, and the event waits for it).</summary>
+    public void RingLikeGame(int i)
+    {
+        if (_script == null || !CanEdit || i < 0 || i >= _script.Steps.Count || _script.Steps[i] is not { IsText: false } s || !IsRing(s.Op)) return;
+        Remember();
+        int ring = s.Bytes[1];
+        if (s.Op is 0x8D or 0xA0 or 0xC2 or 0xC3 && s.Bytes.Length >= 7)
+        {
+            var b = (byte[])s.Bytes.Clone();
+            b[3] = 0x0A; b[4] = 0x78; b[5] = 0x40; b[6] = 0x00;
+            s.Bytes = b;
+        }
+        // the steps after it that it is missing (up to where the ring is started again)
+        int end = i + 1;
+        while (end < _script.Steps.Count && !(_script.Steps[end] is { IsText: false } e && e.Bytes.Length >= 2 && IsRing(e.Op) && e.Bytes[1] == ring)) end++;
+        // up to the first wait for it: it must turn and close in (9F) before that; "Remove a ring" later is no closing
+        int wait = Enumerable.Range(i + 1, end - i - 1).FirstOrDefault(j => StepOnRing(j, ring, 0xA2), -1);
+        int limit = wait >= 0 ? wait : end;
+        bool turns = RingMoves(i, limit, ring).Turns;
+        bool closes = Enumerable.Range(i + 1, limit - i - 1).Any(j => StepOnRing(j, ring, 0x9F) && _script.Steps[j].Bytes.Length >= 4
+                                                                        && L2EventCommands.RingStops(_script.Steps[j].Bytes[2]) && L2EventCommands.RingRate(_script.Steps[j].Bytes[3]).Step != 0);
+        var add = new List<L2Step>();
+        if (!turns) add.Add(new L2Step { Bytes = new byte[] { 0x8F, (byte)ring, 0x00, 0x41 } });
+        if (!closes) add.Add(new L2Step { Bytes = new byte[] { 0x9F, (byte)ring, 0x84, 0xE1 } });
+        if (wait < 0 && !closes) add.Add(new L2Step { Bytes = new byte[] { 0xA2, (byte)ring } });
+        _script.Steps.InsertRange(i + 1, add);
+        Changed(true);
+        SelectedLine = i;
+        StageInfo = "The ring is now as in the game's warps: 10 sparkles 120 pixels out that turn, close in and go" + (add.Count > 0 ? $" ({add.Count} step{(add.Count > 1 ? "s" : "")} added after it)." : ".");
+    }
+
     /// <summary>Step <paramref name="i"/> makes the leader flicker or vanish (99 / 9D on 00).</summary>
     private bool LeaderVanishes(int i) =>
         _script != null && i >= 0 && i < _script.Steps.Count && _script.Steps[i] is { IsText: false } s && s.Op is 0x99 or 0x9D && s.Bytes.Length >= 2 && s.Bytes[1] == 0x00;
