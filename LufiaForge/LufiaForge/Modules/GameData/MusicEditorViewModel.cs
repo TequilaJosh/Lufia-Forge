@@ -62,6 +62,15 @@ public partial class MusicEditorViewModel : GameDataEditorBase, ISongEditorHost
 
     protected override void OnRomLoaded() { Fill(); SelectedIndex = -1; SelectedIndex = 0; }
 
+    /// <summary>A song's English name from its internal name ("" for one the game doesn't have).</summary>
+    public static string SongName(RomBuffer rom, int s)
+    {
+        if (s < 0 || s >= LufiaSound.SongCount) return "";
+        string tag;
+        try { tag = Tag(LufiaCompression.DecompressResource(rom, s, out _)); } catch { return ""; }
+        return Names.GetValueOrDefault(tag, tag.Count(char.IsLetter) >= 3 ? tag : "(no name)");
+    }
+
     private static string Tag(byte[] d) => new string(d.Skip(6).Take(12).Select(b => b is >= 32 and < 127 ? (char)b : ' ').ToArray()).Trim();
 
     private void Fill()
@@ -112,7 +121,7 @@ public partial class MusicEditorViewModel : GameDataEditorBase, ISongEditorHost
             if (_sound == null) { Status = "The sound driver couldn't start."; return; }
             _sound.PlaySong(SelectedIndex);
             var snd = _sound;
-            _audio = new AudioOut(LufiaSound.SampleRate, (buf, pairs) => { lock (snd) snd.Render(buf, pairs * 2); });
+            Common.SoundPreview.Stop(); _audio = new AudioOut(LufiaSound.SampleRate, (buf, pairs) => { lock (snd) snd.Render(buf, pairs * 2); });
             if (!_audio.Start()) { StopPlaying(); Status = "No sound device."; return; }
             IsPlaying = true;
             Status = $"Playing song {SelectedIndex:X2} (the game's own sound driver on an emulated sound chip).";
@@ -142,7 +151,7 @@ public partial class MusicEditorViewModel : GameDataEditorBase, ISongEditorHost
         if (_sound == null) { Status = "The sound driver couldn't start."; return false; }
         _sound.PlaySongData(data);
         var snd = _sound;
-        _audio = new AudioOut(LufiaSound.SampleRate, (buf, pairs) => { lock (snd) snd.Render(buf, pairs * 2); });
+        Common.SoundPreview.Stop(); _audio = new AudioOut(LufiaSound.SampleRate, (buf, pairs) => { lock (snd) snd.Render(buf, pairs * 2); });
         if (!_audio.Start()) { StopPlaying(); Status = "No sound device."; return false; }
         IsPlaying = true;
         return true;

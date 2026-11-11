@@ -31,6 +31,16 @@ public partial class ParamVm : ObservableObject
     public IReadOnlyList<int>? ChoiceValues { get; init; }
 
     public bool IsFlag => Def?.Kind == ParamKind.Flag;
+    /// <summary>A song or a sound: its card gets a button to hear it (and a song shows its name).</summary>
+    public bool IsAudio => Def?.Kind is ParamKind.Music or ParamKind.Sound;
+    public bool IsSong => Def?.Kind == ParamKind.Music;
+    public string SongNameText => IsSong && _line.Owner.Rom is { } rom
+        ? Raw == 0xFF ? "(stop)" : GameData.MusicEditorViewModel.SongName(rom, Raw) : "";
+    public void Listen(Button b)
+    {
+        string note = Common.SoundPreview.Toggle(b, _line.Owner.Rom, lufia2: false, song: IsSong, Raw);
+        if (note.Length > 0) _line.ErrorText = note;
+    }
     public string FlagNameText => IsFlag && EventScript.FlagName?.Invoke(Raw) is { } n ? n : "";
 
     public void Follow() { if (IsJump) _line.Owner.FollowJump(_line.Op, JumpIndex); }
@@ -322,6 +332,7 @@ public partial class EventLineVm : ObservableObject
 public partial class EventEditorPanel : UserControl, LufiaForge.ViewModels.IPendingEdits
 {
     private RomBuffer _rom = null!;
+    public RomBuffer? Rom => _rom;
     private int _mapId, _event;
     private IEventHost _owner = null!;
     private readonly ObservableCollection<EventLineVm> _lines = new();
@@ -357,6 +368,7 @@ public partial class EventEditorPanel : UserControl, LufiaForge.ViewModels.IPend
         IsVisibleChanged += (_, e) => { if (e.NewValue is true) Dispatcher.BeginInvoke(RefreshIfStale); };
         Unloaded += (_, _) =>
         {
+            Common.SoundPreview.StopWhenGone(this);
             if (HasPendingEdits) WritePendingEdits();
             // a part popped out into its own window keeps working while this tab is away: its edits stay registered
             if (Common.PopOutHost.AnyPoppedOut(this)) return;
@@ -1050,6 +1062,11 @@ public partial class EventEditorPanel : UserControl, LufiaForge.ViewModels.IPend
     private void Follow_Click(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement { DataContext: ParamVm p }) p.Follow();
+    }
+
+    private void Listen_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { DataContext: ParamVm p } b) p.Listen(b);
     }
 
     private void FlagUses_Click(object sender, RoutedEventArgs e)

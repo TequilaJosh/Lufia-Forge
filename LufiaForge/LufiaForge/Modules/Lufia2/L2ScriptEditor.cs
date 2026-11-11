@@ -37,6 +37,9 @@ public partial class L2FieldVm : ObservableObject
     public bool IsJump => Def.Kind == L2Kind.Jump;
     public bool IsFlag => Def.Kind == L2Kind.Flag;
     public bool IsPath => Def.Kind == L2Kind.Path;
+    /// <summary>A song or a sound: its card gets a button to hear it.</summary>
+    public bool IsAudio => !Step.IsText && Def.Kind is L2Kind.Song or L2Kind.Sound;
+    public bool IsSong => Def.Kind == L2Kind.Song;
     /// <summary>The "onto" area of a tile copy: its card gets a button to pick both areas on the stage.</summary>
     public bool IsArea => Def.Kind == L2Kind.Area && !Step.IsText && Step.Op is 0x43 or 0x87 or 0xB4 && Def.Label == "onto area";
     /// <summary>A place of the map (a point, a tile, a door, an exit, an area): its card gets "Pick on the stage".</summary>

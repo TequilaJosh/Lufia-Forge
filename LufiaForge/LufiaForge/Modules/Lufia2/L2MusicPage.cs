@@ -129,7 +129,7 @@ public partial class L2MusicPage : L2Page, ISongEditorHost, IPendingEdits
     private bool StartAudio()
     {
         var snd = _sound!;
-        _audio = new AudioOut(L2Sound.SampleRate, (buf, pairs) => { lock (snd) snd.Render(buf, pairs * 2); });
+        Common.SoundPreview.Stop(); _audio = new AudioOut(L2Sound.SampleRate, (buf, pairs) => { lock (snd) snd.Render(buf, pairs * 2); });
         if (!_audio.Start()) { StopPlaying(); Status = "No sound device."; return false; }
         IsPlaying = true;
         return true;

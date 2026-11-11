@@ -83,6 +83,10 @@
                                                                 <TextBox Text="{Binding Value, UpdateSourceTrigger=LostFocus}" Style="{StaticResource GdNumber}" Width="44"
                                                                          FontFamily="Consolas"
                                                                          Visibility="{Binding IsField, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                                <TextBlock Text="{Binding SongNameText}" Foreground="{StaticResource GoldLightBrush}" VerticalAlignment="Center" Margin="4,0,0,0"
+                                                                           Visibility="{Binding IsSong, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                                <Button Content="▶ Listen" ToolTip="Hear it as the game plays it (click again to stop)" Style="{StaticResource LufiaButton}" Padding="6,0" Margin="3,0,0,0"
+                                                                        Click="Listen_Click" Visibility="{Binding IsAudio, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                                                 <Button Content="⚑" ToolTip="Where else is this flag used?" Style="{StaticResource LufiaButton}" Padding="5,0" Margin="3,0,0,0"
                                                                         Click="FlagUses_Click" Visibility="{Binding IsFlag, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                                                 <TextBlock Text="{Binding FlagNameText}" Foreground="{StaticResource GoldLightBrush}" VerticalAlignment="Center" Margin="4,0,0,0"
