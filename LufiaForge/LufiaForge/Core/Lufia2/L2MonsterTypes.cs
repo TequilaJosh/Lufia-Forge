@@ -18,7 +18,7 @@ namespace LufiaForge.Core.Lufia2;
 /// <item>Shadow: 0B, plain (no element) attacks do half (Fiend, Shadow, Medusa, Deadly Sword, Black Dragon, 12).</item>
 /// </list>
 /// The game's checks for dragons, insects, flying and hard shells want that element alone (an attack that is also fire
-/// misses them). Lufia Forge adds four types of its own on element bits no script uses (0001, 0008, 2000 and 4000):
+/// misses them): the first change gives them versions that test the bit (<see cref="FixGameChecks"/>). Lufia Forge adds four types of its own on element bits no script uses (0001, 0008, 2000 and 4000):
 /// four steps in the "when hit" script test the bit and double the damage, and a weapon or spell adds the bit to its
 /// element with a 17 27 step after the step that sets it.
 /// </summary>
@@ -109,6 +109,7 @@ public static class L2MonsterTypes
         var t = Types[type];
         var steps = Load(rom, Kind.MonsterDefense, monster);
         if (Has(steps, t) == on) return false;
+        FixGameChecks(rom);
         if (on)
         {
             if (t.Added)
@@ -148,6 +149,56 @@ public static class L2MonsterTypes
         return true;
     }
 
+    // ── the game's checks that want the element alone ──────────────────────────
+
+    /// <summary>The game's shared scripts that test the element with "is" (==): 04 thrown x2 / earth 0, 0C vs dragons x2,
+    /// 0F blunt x2, 10 vs insects x2, 17 blunt half. An attack with a second element (a fire sword that is also vs
+    /// dragons) misses them. <see cref="FixGameChecks"/> gives each a version that tests the bit.</summary>
+    public static readonly int[] ExactChecks = { 0x04, 0x0C, 0x0F, 0x10, 0x17 };
+
+    /// <summary>Shared script <paramref name="n"/> testing bits: counter 1 = the element (as the game leaves it), the test in
+    /// register 12.</summary>
+    public static List<Step> BitCheck(int n)
+    {
+        var ret = Op(0x43);
+        var steps = new List<Step> { Op(0x0C, 0x80, 0x8027) };
+        void Test(int bit, Step act, Step after)
+        {
+            var skip = Op(0x06, Work, 0);
+            skip.Targets[0] = after;
+            steps.AddRange(new[] { Op(0x0C, Work, 0x8027), Op(0x16, Work, bit), skip, act });
+        }
+        switch (n)
+        {
+            case 0x04:
+                var earth = Op(0x0C, Work, 0x8027);
+                Test(0x0080, Op(0x0F, 0x2A, 2), earth);
+                var skip = Op(0x06, Work, 0); skip.Targets[0] = ret;
+                steps.AddRange(new[] { earth, Op(0x16, Work, 0x1000), skip, Op(0x0C, 0x2A, 0) });
+                break;
+            case 0x0C: Test(0x0100, Op(0x0F, 0x2A, 2), ret); break;
+            case 0x0F: Test(0x0040, Op(0x0F, 0x2A, 2), ret); break;
+            case 0x10: Test(0x0200, Op(0x0F, 0x2A, 2), ret); break;
+            case 0x17: Test(0x0040, Op(0x10, 0x2A, 2), ret); break;
+            default: throw new ArgumentOutOfRangeException(nameof(n));
+        }
+        steps.Add(ret);
+        return steps;
+    }
+
+    /// <summary>Whether the game's exact checks were given bit tests.</summary>
+    public static bool GameChecksFixed(RomBuffer rom) => ExactChecks.All(n => L2SharedScripts.Override(rom, n) >= 0);
+
+    /// <summary>Gives the game's exact checks bit tests (once), so a dragon, an insect, a flier or a hard shell counts an attack
+    /// that has other elements too. False when they were already, or this ROM's code is not the US game's.</summary>
+    public static bool FixGameChecks(RomBuffer rom)
+    {
+        if (GameChecksFixed(rom) || L2SharedScripts.CantReplace(rom) != null) return false;
+        foreach (int n in ExactChecks)
+            if (L2SharedScripts.Override(rom, n) < 0) L2SharedScripts.Replace(rom, n, BitCheck(n));
+        return true;
+    }
+
     // ── what an attack is strong against ────────────────────────────────────────
 
     /// <summary>The element a step sets (1F w, 21 w.., 22 w.., 0C 27 w) or adds (17 27 w), and which argument holds it.</summary>
@@ -184,6 +235,7 @@ public static class L2MonsterTypes
         if (bit == 0) return false;
         var steps = Load(rom, kind, index);
         if (((ElementOf(rom, kind, index) & bit) != 0) == on) return false;
+        FixGameChecks(rom);
         if (on)
         {
             int last = steps.FindLastIndex(s => ElementArg(s) >= 0 && s.Op != 0x17);

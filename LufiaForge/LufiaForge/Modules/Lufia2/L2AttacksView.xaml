@@ -93,7 +93,25 @@
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
                                 <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0"
-                                           Text="None ticked: neutral. Read from the game's weapons and spells; the 'unused' bits no script of the game uses."/>
+                                           Text="None ticked: neutral. Read from the game's weapons and spells; 'vs beasts', 'vs aquatic', 'vs plants' and 'vs humanoids' are Lufia Forge's monster types."/>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource GdCard}" Visibility="{Binding HasUses, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <StackPanel Width="250">
+                                <TextBlock Text="STRONG AGAINST" Style="{StaticResource GdSection}"/>
+                                <ItemsControl ItemsSource="{Binding StrongAgainst}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate><UniformGrid Columns="2"/></ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <CheckBox Content="{Binding Label}" IsChecked="{Binding IsChecked}" Style="{StaticResource GdCheck}" Margin="0,1"/>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0"
+                                           Text="Monster types (Monsters page, Type) this attack does double damage to: it adds the type's element on top of the ones it has (Undead: light, Flying: thrown, Hard shell: blunt)."/>
                             </StackPanel>
                         </Border>
 

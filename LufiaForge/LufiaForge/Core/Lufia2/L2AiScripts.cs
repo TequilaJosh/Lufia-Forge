@@ -476,8 +476,9 @@ public static class L2AiScripts
     /// <summary>The shared script table ($96:FADD): u16 offsets from the table, each script based at its own start.</summary>
     public const int LibraryTable = 0xB7ADD, LibraryCount = 0x29;
 
+    /// <summary>Where shared script <paramref name="n"/> is: Lufia Forge's version when it has one (<see cref="L2SharedScripts"/>).</summary>
     public static int LibraryAt(RomBuffer rom, int n) =>
-        n >= 0 && n < LibraryCount ? LibraryTable + rom.ReadUInt16Le(LibraryTable + n * 2) : -1;
+        n < 0 || n >= LibraryCount ? -1 : L2SharedScripts.Override(rom, n) is var o && o >= 0 ? o : LibraryTable + rom.ReadUInt16Le(LibraryTable + n * 2);
 
     /// <summary>Shared script <paramref name="n"/> as steps (its jumps count from its own start).</summary>
     public static List<Step> LoadLibrary(RomBuffer rom, int n)
@@ -529,7 +530,8 @@ public static class L2AiScripts
         [0x0B] = "takes half damage from plain (no element) attacks", [0x0C] = "takes double damage from dragon-slaying attacks",
         [0x0D] = "takes double damage from dark", [0x0E] = "takes half damage from dark", [0x0F] = "takes double damage from blunt weapons",
         [0x10] = "takes double damage from insect-slaying attacks", [0x11] = "immune to poison, silence, paralysis, confusion and sleep",
-        [0x12] = "healing hurts it instead, and instant death can't work on it", [0x21] = "works out 1.5 x its own ATP (counter 1)",
+        [0x12] = "healing hurts it instead, and instant death can't work on it", [0x14] = "takes half damage from every element",
+        [0x17] = "takes half damage from blunt weapons", [0x21] = "works out 1.5 x its own ATP (counter 1)",
         [0x23] = "works out its ATP with its battle bonus (counter 1)",
     };
 
@@ -1033,6 +1035,9 @@ public static class L2AiScripts
         if (body.Length > 0x7F00) throw new InvalidOperationException("The script is too long.");
         // the new statuses' commands need their code in the game
         if (steps.Any(st => st.Op is >= 0x5D and <= 0x60) && !L2StatusPatch.IsApplied(rom)) L2StatusPatch.Apply(rom);
+        // an attack with a second element on a type's (a fire sword that is also vs dragons): the game's dragon, insect,
+        // flying and hard shell checks want the element alone, so they get bit tests
+        if (steps.Any(MixedTypeElement)) L2MonsterTypes.FixGameChecks(rom);
         if (kind is Kind.Spell or Kind.IpAttack && OriginalAt(rom, kind, index) < 0)
             throw new InvalidOperationException("It has no effect script for an edited one to take the place of.");
         int block = Install(rom);
@@ -1066,6 +1071,18 @@ public static class L2AiScripts
         // the STATUS screen's resistance pages read the armor scripts' table
         if (kind == Kind.Armor) L2StatusPatch.WriteResistTable(rom);
         return baseAt;
+    }
+
+    /// <summary>A step that gives an attack the element of a type the game tests with "is" (thrown, blunt, vs dragons, vs
+    /// insects, earth) together with another: 1F, 21, 22 or 0C 27 with two bits or more, or 17 27 (bits added).</summary>
+    private static bool MixedTypeElement(Step s)
+    {
+        const int Exact = 0x0040 | 0x0080 | 0x0100 | 0x0200 | 0x1000;
+        int v;
+        if (s.Op is 0x1F or 0x21 or 0x22) v = ArgValue(s, 0);
+        else if (s.Op is 0x0C or 0x17 && ArgValue(s, 0) == 0x27 && (ArgValue(s, 1) >> 8) != 0x80) v = ArgValue(s, 1);
+        else return false;
+        return (v & Exact) != 0 && (s.Op == 0x17 || System.Numerics.BitOperations.PopCount((uint)v) > 1);
     }
 
     /// <summary>Back to the game's own script (or none): drops the table entry (its space is left as it is).</summary>

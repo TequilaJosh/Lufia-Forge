@@ -63,6 +63,8 @@ public partial class L2AttacksPage : L2Page
     public List<L2Option> EffectKinds { get; } = L2Attacks.AddMenu.Select((m, i) => new L2Option(i, m.Label)).ToList();
     public string EffectHelp(int entry) => entry >= 0 && entry < L2Attacks.AddMenu.Length ? L2Attacks.AddMenu[entry].Help : "";
     public ObservableCollection<L2Flag> Elements { get; } = new();
+    /// <summary>The monster types (<see cref="L2MonsterTypes"/>) the attack does double to: their elements.</summary>
+    public ObservableCollection<L2Flag> StrongAgainst { get; } = new();
     public ObservableCollection<L2AttackEffect> Effects { get; } = new();
 
     [ObservableProperty] private int _selectedUse = -1;
@@ -114,6 +116,13 @@ public partial class L2AttacksPage : L2Page
         if (Elements.Count == 0)
             foreach (var (bit, name) in L2AiScripts.Elements)
                 Elements.Add(new L2Flag { Label = name, Bit = bit, Changed = ElementsChanged });
+        if (StrongAgainst.Count == 0)
+            foreach (var t in L2MonsterTypes.Types.Where(t => t.Element != 0))
+            {
+                var f = new L2Flag { Label = t.Name, Bit = t.Element };
+                f.Changed = () => StrongChanged(f);
+                StrongAgainst.Add(f);
+            }
     }
 
     protected override IEnumerable<string> ReadNames()
@@ -196,6 +205,7 @@ public partial class L2AttacksPage : L2Page
         HasOwnName = L2AttackNames.IsAdded(Rom, u.Name);
         int el = L2Attacks.Element(b);
         foreach (var f in Elements) f.IsChecked = (el & f.Bit) != 0;
+        foreach (var f in StrongAgainst) f.IsChecked = (el & f.Bit) != 0;
         var crit = L2Attacks.Critical(b);
         HasCritical = crit != null;
         CriticalChance = crit?.Chance ?? 10;
@@ -327,6 +337,15 @@ public partial class L2AttacksPage : L2Page
         if (Loading) return;
         int w = Elements.Where(f => f.IsChecked).Sum(f => f.Bit);
         Change("the element", b => L2Attacks.SetElement(b, w));
+    }
+
+    /// <summary>A type ticked or not: its element added to or taken from each attack changed (each keeps its other elements);
+    /// the game's dragon, insect, flying and hard shell checks are made to count an attack with other elements too.</summary>
+    private void StrongChanged(L2Flag f)
+    {
+        if (Loading || Rom == null) return;
+        L2MonsterTypes.FixGameChecks(Rom);
+        Change($"strong against {f.Label}", b => L2Attacks.SetElement(b, f.IsChecked ? L2Attacks.Element(b) | f.Bit : L2Attacks.Element(b) & ~f.Bit));
     }
 
     partial void OnHasCriticalChanged(bool value) => Change("the criticals", b => L2Attacks.SetCritical(b, value ? (CriticalChance, CriticalMultiplier) : null));
