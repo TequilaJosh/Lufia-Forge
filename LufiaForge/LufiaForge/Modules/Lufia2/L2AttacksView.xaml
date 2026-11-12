@@ -28,6 +28,9 @@
                                 <TextBlock Text="ATTACK" Style="{StaticResource GdSection}"/>
                                 <TextBlock Text="Name (up to 26 letters; every monster that uses it shows it)" Style="{StaticResource GdFieldLabel}"/>
                                 <TextBox Style="{StaticResource GdText}" Text="{Binding NameText, UpdateSourceTrigger=LostFocus}" MaxLength="26"/>
+                                <Button Content="Give it a name of its own" Command="{Binding NewNameCommand}" Style="{StaticResource LufiaButton}" Padding="8,3" Margin="0,6,0,0" HorizontalAlignment="Left"
+                                        Visibility="{Binding HasUses, Converter={StaticResource BoolToVisibilityConverter}}"
+                                        ToolTip="A new name for this monster's attack (or for every monster with the box below ticked): the others keep this one. Up to 117 names can be added."/>
                                 <TextBlock Text="{Binding UsedByText}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,8,0,2"/>
                                 <StackPanel Visibility="{Binding HasUses, Converter={StaticResource BoolToVisibilityConverter}}">
                                     <TextBlock Text="Monster" Style="{StaticResource GdFieldLabel}"/>
@@ -59,19 +62,23 @@
                                     <TextBlock Text="Damage" Style="{StaticResource GdFieldLabel}"/>
                                     <ComboBox Style="{StaticResource GdCombo}" ItemsSource="{Binding DamageKindOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding DamageKind}"/>
                                     <UniformGrid Columns="2" Margin="0,6,0,0">
-                                        <TextBlock Text="How much" Style="{StaticResource GdFieldLabel}"/>
+                                        <TextBlock Text="Power" Style="{StaticResource GdFieldLabel}"/>
                                         <TextBox Style="{StaticResource GdNumber}" Text="{Binding Power, UpdateSourceTrigger=LostFocus}" ToolTip="The attack's power (0-32767)"/>
-                                        <TextBlock Text="Spread (give or take)" Style="{StaticResource GdFieldLabel}" Visibility="{Binding CanSpread, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                        <TextBlock Text="Spread (of 256)" Style="{StaticResource GdFieldLabel}" Visibility="{Binding CanSpread, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                         <TextBox Style="{StaticResource GdNumber}" Text="{Binding Spread, UpdateSourceTrigger=LostFocus}" Visibility="{Binding CanSpread, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                     </UniformGrid>
+                                    <TextBlock Text="{Binding PowerNote}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                    <TextBlock Text="{Binding SpreadNote}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,2,0,0"/>
                                 </StackPanel>
                                 <CheckBox Content="Critical hits" IsChecked="{Binding HasCritical}" Style="{StaticResource GdCheck}" Margin="0,8,0,0"/>
                                 <UniformGrid Columns="2" Visibility="{Binding HasCritical, Converter={StaticResource BoolToVisibilityConverter}}">
                                     <TextBlock Text="Chance %" Style="{StaticResource GdFieldLabel}"/>
                                     <TextBox Style="{StaticResource GdNumber}" Text="{Binding CriticalChance, UpdateSourceTrigger=LostFocus}"/>
-                                    <TextBlock Text="Damage (16 = x1)" Style="{StaticResource GdFieldLabel}"/>
+                                    <TextBlock Text="Damage (x/16)" Style="{StaticResource GdFieldLabel}"/>
                                     <TextBox Style="{StaticResource GdNumber}" Text="{Binding CriticalMultiplier, UpdateSourceTrigger=LostFocus}"/>
                                 </UniformGrid>
+                                <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,2,0,0" Visibility="{Binding HasCritical, Converter={StaticResource BoolToVisibilityConverter}}"
+                                           Text="Chance out of 100 each hit. Damage: 16 = normal, 24 = 1.5 times, 32 = double. A critical hit also goes through the target's DFP (100% and 16: an attack that ignores DFP)."/>
                             </StackPanel>
                         </Border>
 
@@ -134,7 +141,7 @@
                                                                    Visibility="{Binding HasNumber, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                                         <TextBox Style="{StaticResource GdNumber}" Width="52" Text="{Binding Number, UpdateSourceTrigger=LostFocus}"
                                                                  Visibility="{Binding HasNumber, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                                                        <TextBlock Text="give or take" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="6,0,4,0"
+                                                        <TextBlock Text="up to (of 256)" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="6,0,4,0"
                                                                    Visibility="{Binding HasSpread, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                                         <TextBox Style="{StaticResource GdNumber}" Width="44" Text="{Binding Spread, UpdateSourceTrigger=LostFocus}"
                                                                  Visibility="{Binding HasSpread, Converter={StaticResource BoolToVisibilityConverter}}"/>

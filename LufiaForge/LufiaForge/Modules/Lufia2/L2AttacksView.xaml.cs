@@ -47,7 +47,8 @@ public partial class L2AttacksView : UserControl
         var menu = new ContextMenu { PlacementTarget = AddEffectButton };
         foreach (var k in _vm.EffectKinds)
         {
-            var item = new MenuItem { Header = k.Label };
+            string help = _vm.EffectHelp(k.Value);
+            var item = new MenuItem { Header = k.Label, ToolTip = help.Length > 0 ? help : null };
             var kind = k;
             item.Click += (_, _) => _vm.AddEffectCommand.Execute(kind);
             menu.Items.Add(item);

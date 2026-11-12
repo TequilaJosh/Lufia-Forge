@@ -194,7 +194,7 @@ public static class L2Attacks
         {
             // the damage goes; its element stays (as a step of its own)
             int element = Element(b);
-            foreach (var s in b.All.Where(s => s.Op is 0x21 or 0x22 or 0x23).ToList()) Remove(b, s);
+            foreach (var s in b.All.Where(s => s.Op is 0x21 or 0x22 or 0x23 || IsSpreadStep(s)).ToList()) Remove(b, s);
             if (element != 0) SetElement(b, element);
         }
         switch (h)
@@ -213,14 +213,25 @@ public static class L2Attacks
 
     public static Step? DamageStep(Block b) => b.All.FirstOrDefault(s => s.Op is 0x21 or 0x22 or 0x23);
 
-    /// <summary>The damage: its kind, how much (null when the script works it out in a counter), the spread.</summary>
+    /// <summary>The game's spread: every damage step sets register 2B to 32 (up to 12% more at random); the byte in 21
+    /// and 22 is read and ignored ($85:B93D).</summary>
+    public const int GameSpread = 32;
+
+    private static bool IsSpreadStep(Step s) => s.Op == 0x0C && s.Args.Length >= 3 && s.Args[0] == 0x2B && s.Args[2] == 0x00;
+
+    /// <summary>The "set the damage spread" step after the damage, when the attack has one.</summary>
+    public static Step? SpreadStep(Block b) => DamageStep(b) is { } d ? b.All.SkipWhile(s => s != d).FirstOrDefault(IsSpreadStep) : null;
+
+    /// <summary>The damage: its kind, how much (null when the script works it out in a counter), the spread (of 256,
+    /// <see cref="GameSpread"/> unless a step after the damage sets it).</summary>
     public static (DamageKind Kind, int? Power, int Spread)? Damage(Block b)
     {
         var s = DamageStep(b);
         if (s == null) return null;
-        if (s.Op == 0x23) return (DamageKind.Fixed, s.Args[0] | s.Args[1] << 8, 0);
+        int spread = SpreadStep(b)?.Args[1] ?? GameSpread;
+        if (s.Op == 0x23) return (DamageKind.Fixed, s.Args[0] | s.Args[1] << 8, spread);
         int v = s.Args[2] | s.Args[3] << 8;
-        return ((DamageKind)s.Op, (v >> 8) == 0x80 ? null : (short)v, s.Args[4]);
+        return ((DamageKind)s.Op, (v >> 8) == 0x80 ? null : (short)v, spread);
     }
 
     public static void SetDamageKind(Block b, DamageKind k)
@@ -228,10 +239,10 @@ public static class L2Attacks
         var s = DamageStep(b);
         if (s == null) { SetHowItHits(b, Hit.Damage); s = DamageStep(b)!; }
         if ((int)k == s.Op) return;
-        int power = Damage(b)?.Power ?? 100, spread = Damage(b)?.Spread ?? 0, element = s.Op is 0x21 or 0x22 ? s.Args[0] | s.Args[1] << 8 : 0;
+        int power = Damage(b)?.Power ?? 100, element = s.Op is 0x21 or 0x22 ? s.Args[0] | s.Args[1] << 8 : 0;
         var n = k == DamageKind.Fixed
             ? Make(0x23, (byte)power, (byte)(power >> 8))
-            : Make((byte)k, (byte)element, (byte)(element >> 8), (byte)power, (byte)(power >> 8), (byte)spread);
+            : Make((byte)k, (byte)element, (byte)(element >> 8), (byte)power, (byte)(power >> 8), 0);
         int at = b.Steps.IndexOf(s);
         Remove(b, s);
         Insert(b, at, n);
@@ -246,11 +257,16 @@ public static class L2Attacks
         else { s.Args[2] = (byte)power; s.Args[3] = (byte)(power >> 8); }
     }
 
+    /// <summary>The spread (of 256): the game's 32 takes the step out, any other value sets register 2B after the damage.</summary>
     public static void SetSpread(Block b, int spread)
     {
-        var s = DamageStep(b);
-        if (s == null || s.Op == 0x23) return;
-        s.Args[4] = (byte)Math.Clamp(spread, 0, 255);
+        var d = DamageStep(b);
+        if (d == null) return;
+        spread = Math.Clamp(spread, 0, 255);
+        var s = SpreadStep(b);
+        if (spread == GameSpread) { if (s != null) Remove(b, s); return; }
+        if (s == null) Insert(b, b.Steps.IndexOf(d) + 1, s = Make(0x0C, 0x2B, 0, 0));
+        s.Args[1] = (byte)spread;
     }
 
     // ── element ───────────────────────────────────────────────────────────────
@@ -295,7 +311,8 @@ public static class L2Attacks
 
     /// <summary>The animation that comes with attack name <paramref name="name"/> (the byte before the name; E0 = none).</summary>
     public static int NameAnimation(RomBuffer rom, int name) =>
-        name < 1 || name > L2AiScripts.AttackNameCount ? 0xE0 : rom.ReadByte(0x28000 + (rom.ReadUInt16Le(L2AiScripts.AttackNameTable + (name - 1) * 2) & 0x7FFF));
+        name >= L2AttackNames.First ? L2AttackNames.Animation(rom, name)
+        : name < 1 || name > L2AiScripts.AttackNameCount ? 0xE0 : rom.ReadByte(0x28000 + (rom.ReadUInt16Le(L2AiScripts.AttackNameTable + (name - 1) * 2) & 0x7FFF));
 
     public static void SetAnimation(Block b, int? a)
     {
@@ -317,38 +334,89 @@ public static class L2Attacks
 
     // ── effects ───────────────────────────────────────────────────────────────
 
-    /// <summary>The effects an attack can have, in the order the add menu offers them.</summary>
-    public static readonly (byte Op, string Label)[] EffectKinds =
+    /// <summary>A kind of effect: a command, or (keys from 0x10000) one of the action's flags added with 17 26 (register
+    /// 26, read from the game's code: the damage steps set it to 20 or 1DC, so these go after them).</summary>
+    public sealed record EffectKind(int Key, string Label, string Help);
+
+    public const int FlagKey = 0x10000;
+
+    public static readonly EffectKind[] EffectKinds =
     {
-        (0x27, "Cause a status"), (0x26, "Cure a status"), (0x25, "Raise or lower a stat"), (0x24, "Restore HP, MP or a stat"),
-        (0x5C, "Hide the damage number"), (0x4A, "Flash and shake the screen"), (0x4C, "Screen effect"), (0x35, "Show a battle message"),
-        (0x51, "Reflect magic back (Dark reflector)"), (0x58, "Eerie light"), (0x5B, "Lose the battle if it dies by this"),
+        new(0x27, "Cause a status", "With a chance; the target's own resistance can stop it."),
+        new(0x26, "Cure a status", ""),
+        new(0x25, "Raise or lower a stat", "By a percentage of the stat, for the battle (minus lowers it)."),
+        new(0x24, "Restore HP, MP or a stat", "By an amount (the Potion's is 30)."),
+        new(FlagKey | 0x0002, "Drain: the attacker gets what it takes", "The HP (or MP) the targets lose goes to the attacker, as Absorb and Vampire do."),
+        new(FlagKey | 0x00C0, "Back rows and defending don't cut it", "Every target takes the full damage, as with magic."),
+        new(FlagKey | 0x0008, "The target's MGR blocks it (not DFP)", "As magic: the target's magic defence counts instead of its DFP."),
+        new(0x5C, "Hide the damage number", ""),
+        new(0x35, "Show a result message", "The message the game shows after an action of that kind (HP restored, MP absorbed, poisoned...)."),
+        new(0x4C, "Screen effect", "One of the battle's screen effects on the targets."),
+        new(0x4A, "Wait", "A pause of some frames (60 a second)."),
+        new(0x51, "Reflect magic back (Dark reflector)", "For a script run when the monster is hit: the magic goes back to the caster."),
+        new(0x58, "Eerie light", ""),
+        new(0x5B, "Lose the battle if it dies by this", "As the Master's fight: the heroes lose when this kills one of them."),
     };
 
-    public static bool IsEffect(Step s) => EffectKinds.Any(k => k.Op == s.Op);
+    /// <summary>The add menu: each entry an effect kind with the values it starts with.</summary>
+    public static readonly (string Label, string Help, int Key, Func<Step> Make)[] AddMenu =
+    {
+        ("Cause a status", "Poison, sleep, confusion... with a chance.", 0x27, () => Make(0x27, 0x00, 50)),
+        ("Cure a status", "", 0x26, () => Make(0x26, 0x00, 100)),
+        ("Raise or lower a stat", "For the battle, by a percentage.", 0x25, () => Make(0x25, 0x04, 25)),
+        ("Restore HP, MP or a stat", "", 0x24, () => Make(0x24, 0x00, 100, 0x00, 0x00)),
+        ("Drain: the attacker gets what it takes", "With its own damage: the attacker gets back the HP the targets lose (checked in the game).", FlagKey | 0x0002, () => Make(0x17, 0x26, 0x02, 0x00)),
+        ("Back rows and defending don't cut it", "", FlagKey | 0x00C0, () => Make(0x17, 0x26, 0xC0, 0x00)),
+        ("The target's MGR blocks it (not DFP)", "", FlagKey | 0x0008, () => Make(0x17, 0x26, 0x08, 0x00)),
+        ("Ignore the target's DFP", "Makes every hit a critical one of normal damage (critical hits 100%, x1): a critical hit goes through DFP.", -1, () => Make(0x20, 100, 16)),
+        ("Hide the damage number", "", 0x5C, () => Make(0x5C)),
+        ("Show a result message", "", 0x35, () => Make(0x35, 0x21)),
+        ("Screen effect", "", 0x4C, () => Make(0x4C, 0x03)),
+        ("Wait", "", 0x4A, () => Make(0x4A, 30)),
+        ("Reflect magic back (Dark reflector)", "", 0x51, () => Make(0x51)),
+        ("Eerie light", "", 0x58, () => Make(0x58)),
+        ("Lose the battle if it dies by this", "", 0x5B, () => Make(0x5B)),
+    };
+
+    /// <summary>The effect kind of a step, or -1 when it isn't one of the effects.</summary>
+    public static int KeyOf(Step s)
+    {
+        if (s.Op == 0x17 && s.Args.Length >= 3 && s.Args[0] == 0x26)
+        {
+            int key = FlagKey | s.Args[1] | s.Args[2] << 8;
+            return EffectKinds.Any(k => k.Key == key) ? key : -1;
+        }
+        return EffectKinds.Any(k => k.Key == s.Op) ? s.Op : -1;
+    }
+
+    public static bool IsEffect(Step s) => KeyOf(s) >= 0;
 
     public static List<Step> Effects(Block b) => b.All.Where(IsEffect).ToList();
 
-    public static Step AddEffect(Block b, byte op)
+    /// <summary>Adds the effect of add menu entry <paramref name="entry"/>; returns its step.</summary>
+    public static Step AddEffect(Block b, int entry)
     {
-        var s = op switch
+        var s = AddMenu[entry].Make();
+        if (s.Op == 0x20)
         {
-            0x27 or 0x26 => Make(op, 0x00, 50),        // poison, 50%
-            0x25 => Make(op, 0x04, 25),                // ATP +25%
-            0x24 => Make(op, 0x00, 100, 0x00, 0x00),   // HP by 100
-            0x4A => Make(op, 1),
-            _ => Make(op),
-        };
-        // shown effects go with the animation, the rest before the name as the game writes them
-        Insert(b, op is 0x5C or 0x4A or 0x4C or 0x35 ? BeforeAction(b) : BeforeName(b), s);
+            // ignore DFP: every hit a critical one, x1 (the criticals step)
+            SetCritical(b, (100, 16));
+            return b.Find(0x20)!;
+        }
+        // shown effects and the action's flags go with the animation (after the damage step, which sets the flags);
+        // the rest before the name, as the game writes them
+        Insert(b, s.Op is 0x5C or 0x4A or 0x4C or 0x35 or 0x17 ? BeforeAction(b) : BeforeName(b), s);
         // with no damage and no action of its own, the effects need the attack to be "only its effects"
-        if (op is 0x27 or 0x26 or 0x25 or 0x24 && HowItHits(b) == Hit.Attack) SetHowItHits(b, Hit.EffectsOnly);
+        if (s.Op is 0x27 or 0x26 or 0x25 or 0x24 && HowItHits(b) == Hit.Attack) SetHowItHits(b, Hit.EffectsOnly);
         return s;
     }
 
-    /// <summary>The <paramref name="ordinal"/>-th effect step of kind <paramref name="op"/> (to change the same effect in
+    /// <summary>Adds an effect of kind <paramref name="key"/> (the first add menu entry of that kind).</summary>
+    public static Step AddEffectOfKind(Block b, int key) => AddEffect(b, Array.FindIndex(AddMenu, m => m.Key == key));
+
+    /// <summary>The <paramref name="ordinal"/>-th effect step of kind <paramref name="key"/> (to change the same effect in
     /// every monster that has the attack).</summary>
-    public static Step? EffectStep(Block b, byte op, int ordinal) => b.All.Where(s => s.Op == op).ElementAtOrDefault(ordinal);
+    public static Step? EffectStep(Block b, int key, int ordinal) => b.All.Where(s => KeyOf(s) == key).ElementAtOrDefault(ordinal);
 
     // ── names ─────────────────────────────────────────────────────────────────
 
@@ -359,11 +427,10 @@ public static class L2Attacks
     public static string? Rename(RomBuffer rom, int name, string text)
     {
         text = text.Trim();
+        if (name >= L2AttackNames.First) return L2AttackNames.Rename(rom, name, text);
         if (name < 1 || name > L2AiScripts.AttackNameCount) return "There's no such attack name.";
-        if (text.Length == 0) return "A name can't be empty.";
-        if (text.Length > NameMax) return $"Up to {NameMax} letters.";
-        foreach (char c in text) if (L2Charset.ToByte(rom, c) == null) return $"The game's letters have no '{c}'.";
-        var all = L2AiScripts.MonsterAttackNames(rom).Skip(1).ToList();
+        if (L2AttackNames.Check(rom, text) is { } bad) return bad;
+        var all = L2AiScripts.MonsterAttackNames(rom).Skip(1).Take(L2AiScripts.AttackNameCount).ToList();
         all[name - 1] = text;
         return L2Dutch.RepackAttackNames(rom, all) ? null : "The names have no more room (shorten this one or another).";
     }

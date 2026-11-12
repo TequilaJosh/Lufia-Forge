@@ -48,7 +48,7 @@ public static class L2AiScripts
     // ── commands ─────────────────────────────────────────────────────────────
 
     /// <summary>What a command's argument is (for the editor's fields; the size is in <see cref="Size"/>).</summary>
-    public enum Arg { Byte, Word, Register, Value, Jump, Chance, Percent, Spell, Monster, CapsuleAttack, Element, Stat, Status, Target, Item, Library, AttackName, Animation, Sound, Restore, Change }
+    public enum Arg { Byte, Word, Register, Value, Jump, Chance, Percent, Spell, Monster, CapsuleAttack, Element, Stat, Status, Target, Item, Library, AttackName, Animation, Sound, Restore, Change, Message }
 
     public static int Size(Arg a) => a is Arg.Word or Arg.Value or Arg.Jump or Arg.Element or Arg.Item or Arg.Library ? 2 : 1;
 
@@ -102,20 +102,20 @@ public static class L2AiScripts
         O(0x5A, Show, "Play a battle animation", "The animation of a spell, IP attack or monster attack.", Arg.Animation);
         O(0x3D, Show, "Play a sound effect", "", Arg.Sound);
         O(0x56, Show, "Keep the message up", "How long (frames, 60 a second) the attack name stays.", Arg.Value);
-        O(0x35, Show, "Show a battle message", "One of the battle's built-in messages and effects (the game's spells use them).", Arg.Byte);
-        O(0x36, Show, "If that didn't work: show a battle message", "", Arg.Byte);
-        O(0x4A, Show, "Flash and shake the screen", "How many times.", Arg.Byte);
-        O(0x4C, Show, "Screen effect", "", Arg.Byte);
+        O(0x35, Show, "Show a result message", "The message and effect shown after the action, as the game's spells and items use them (HP restored, poisoned, MP absorbed...): each is named after what uses it.", Arg.Message);
+        O(0x36, Show, "If that didn't work: show a result message", "", Arg.Message);
+        O(0x4A, Show, "Wait", "Waits this many frames (60 a second); the battle screen keeps moving.", Arg.Byte);
+        O(0x4C, Show, "Screen effect", "One of the battle's screen effects on the targets (the RAN-RAN step weapon uses 3).", Arg.Byte);
         O(0x4B, Show, "Screen effect 4", "");
-        O(0x21, Eff, "Physical damage", "A special attack's damage: its element, how much (a number, or one worked out above), and a spread. Blocked by DFP.", Arg.Element, Arg.Value, Arg.Byte);
-        O(0x22, Eff, "Magic damage", "Like physical damage, but magic (the spells' kind).", Arg.Element, Arg.Value, Arg.Byte);
-        O(0x23, Eff, "Fixed damage", "", Arg.Word);
+        O(0x21, Eff, "Physical damage", "A special attack's damage: its element and its power (a number, or one worked out above). The target's DFP blocks part of it.", Arg.Element, Arg.Value, Arg.Byte);
+        O(0x22, Eff, "Magic damage", "Like physical damage, but magic (the spells' kind): the attacker's INT is added to the power, the target's MGR blocks part of it, and hitting several targets shares it out.", Arg.Element, Arg.Value, Arg.Byte);
+        O(0x23, Eff, "Damage of this power", "For weapons: the attack's power becomes this (the Bunny sword's is 120), the target's DFP still blocks part of it. In a monster's own attack it doesn't set the kind of action (a bug in the game), so it hits unpredictably: use Physical damage there.", Arg.Word);
         O(0x27, Eff, "Cause a status", "Poison, sleep, confusion... with a chance in percent.", Arg.Status, Arg.Percent);
         O(0x26, Eff, "Cure a status", "", Arg.Status, Arg.Percent);
-        O(0x24, Eff, "Restore", "Heals HP or MP (or a stat) by an amount, give or take a spread.", Arg.Restore, Arg.Value, Arg.Byte);
+        O(0x24, Eff, "Restore", "Heals HP or MP (or a stat) by an amount, as the potions and healing spells do.", Arg.Restore, Arg.Value, Arg.Byte);
         O(0x25, Eff, "Raise or lower a stat", "Changes the target's stat for the battle by a percentage (minus lowers it).", Arg.Restore, Arg.Change);
         O(0x1F, Eff, "Set the attack's element", "", Arg.Element);
-        O(0x20, Eff, "Critical hits", "Chance in percent and the damage multiplier (16 = x1).", Arg.Percent, Arg.Byte);
+        O(0x20, Eff, "Critical hits", "The chance of a critical hit and how much it does. A critical hit also goes through the target's DFP.", Arg.Percent, Arg.Byte);
         O(0x3C, Eff, "Add the user's weapon part to the amount", "The game's healing spells add it after Restore.");
         O(0x5C, Eff, "Hide the damage number", "");
         O(0x5B, Eff, "Lose the battle if it dies by this", "");
@@ -186,6 +186,63 @@ public static class L2AiScripts
     public static string ElementText(int w) =>
         w == 0 ? "neutral" : string.Join(" + ", Elements.Where(e => (w & e.Bit) != 0).Select(e => e.Name).DefaultIfEmpty($"{w:X4}"));
 
+    /// <summary>The result messages of 35 ($0A62, shown after the action), named after the game's spells and items that
+    /// use each one (read from all of the game's scripts, 2026-11-11).</summary>
+    public static readonly Dictionary<int, string> Messages = new()
+    {
+        [0x00] = "none", [0x01] = "travel (as Warp)", [0x02] = "escape (as Escape)", [0x04] = "HP restored (as Potion, Strong)",
+        [0x06] = "MP restored (as Magic jar)", [0x08] = "HP and MP restored (as Miracle)", [0x09] = "max HP up (as Life potion)",
+        [0x0A] = "max MP up (as Spell potion)", [0x0B] = "ATP changed (as Trick, the ciders)", [0x0C] = "DFP changed (as Dread, Bravery)",
+        [0x0D] = "STR up (as Power potion)", [0x0E] = "AGL changed (as Fake, Speed potion)", [0x0F] = "INT up (as Mind potion)",
+        [0x10] = "GUT up (as Brave)", [0x11] = "MGR changed (as Shield)", [0x12] = "brought back to life (as Rally, Regain)",
+        [0x13] = "poison cured (as Antidote)", [0x14] = "woken up (as Waken)", [0x15] = "confusion (as Release, Confuse ball)",
+        [0x17] = "instant death (as Perish, Destroy)", [0x18] = "as the Poison spell", [0x19] = "sleep (as Drowsy, Coma, Sleep ball)",
+        [0x1A] = "paralysis (as Freeze ball)", [0x1B] = "confusion (as Confuse)", [0x1C] = "silence (as Deflect)", [0x1E] = "mirror (as Mirror)",
+        [0x21] = "MP absorbed (as Absorb, Vampire)", [0x22] = "run from the battle (as Smoke ball)", [0x24] = "as Reset",
+        [0x25] = "curses lifted (as Curselifter)", [0x26] = "as Jewel sonar",
+    };
+
+    public static string MessageText(int v) => Messages.TryGetValue(v, out var m) ? m : "not used by the game";
+
+    /// <summary>The action's flags (register 26, read from the game's code): physical damage sets 20, magic 1DC, Absorb
+    /// 1DE. Bit 0 is set when the action bounced back.</summary>
+    public static readonly (int Bit, string Name)[] ActionFlags =
+    {
+        (0x0002, "drain: the attacker gets what the targets lose"), (0x0008, "MGR blocks it (not DFP)"), (0x0010, "a mirror bounces it back"),
+        (0x0020, "bounced by status 6"), (0x0040, "back rows don't cut it"), (0x0080, "defending doesn't cut it"),
+        (0x0100, "shared out among several targets"), (0x0004, "flag 0004 (magic has it)"), (0x0001, "it bounced back"),
+    };
+
+    public static string FlagsText(int v)
+    {
+        var on = ActionFlags.Where(f => (v & f.Bit) != 0).Select(f => f.Name).ToList();
+        int rest = v & ~ActionFlags.Sum(f => f.Bit);
+        if (rest != 0) on.Add($"other bits {rest:X4}");
+        return on.Count == 0 ? "none" : string.Join(", ", on);
+    }
+
+    /// <summary>What a command's number means, for the editor: a label and a line that explains it (null: the plain
+    /// label of its kind). Read from the game's code (2026-11-11): damage = (power x (256 + a random 0 to spread-1) / 256
+    /// - defence / 2) / 2, then cut for back rows and defending; the spread is register 2B, 32 unless set after.</summary>
+    public static (string Label, string Help)? ArgInfo(byte op, int i) => (op, i) switch
+    {
+        (0x21, 1) => ("power", "How hard it hits. The damage is about (power - the target's DFP / 2) / 2, plus up to 12% at random; a target in the back row, or defending, takes less. Gades's Destructo-wave is 350."),
+        (0x22, 1) => ("power", "How hard it hits; the attacker's INT is added. The damage is about (power + INT - the target's MGR / 2) / 2, plus up to 12% at random; against several targets each takes a share (2: 57%, 3: 50%, 4: 45%)."),
+        (0x21 or 0x22, 2) => ("(unused)", "The game reads this number and ignores it. The damage always gets up to 12% more at random: to change that, put \"Set a number: the damage spread\" after this step (0 = none, 32 = the game's 12%)."),
+        (0x23, 0) => ("power", "As the power of physical damage: about (power - the target's DFP / 2) / 2."),
+        (0x24, 1) => ("amount", "How much it heals (the Potion's is 30); healing stops at the maximum. The game's scripts never give it a minus amount (in a monster's attack a minus MP amount took nothing, seen in the game)."),
+        (0x24, 2) => ("spread", "HP and MP: up to this many 256ths more at random (the Potion's 11 is about 4%). Other stats don't use it."),
+        (0x25, 1) => ("change (%)", "A percentage of the stat (ATP, DFP, STR, AGL, INT, GUT, MGR); minus lowers it, for the battle. On HP it doesn't take a share of the HP (seen in the game: -50% took 1 HP or none): use Restore with a minus amount."),
+        (0x26 or 0x27, 1) => ("chance (%)", "Out of 100. The target's own resistance (its shared script) can stop it."),
+        (0x20, 0) => ("chance (%)", "Out of 100, each time it hits."),
+        (0x20, 1) => ("damage (x/16)", "16 = normal damage, 24 = 1.5 times, 32 = double. A critical hit also ignores the target's DFP."),
+        (0x56, 0) => ("frames", "How long the name stays up (60 frames a second)."),
+        (0x4A, 0) => ("frames", "60 frames a second."),
+        (0x57, 1) => ("boost (x/64)", "With that item worn, the damage is multiplied by this / 64 (96 = 1.5 times)."),
+        (0x47, 0) => ("frames", ""),
+        _ => null,
+    };
+
     /// <summary>A value operand: 80 in the high byte = register (low byte), else a number.</summary>
     public static string ValueText(int v) => (v >> 8) == 0x80 ? RegisterName(v & 0xFF) : $"{(short)v}";
 
@@ -198,16 +255,20 @@ public static class L2AiScripts
         0x20 => "the attacker",
         0x21 => "the targets",
         0x11 => "a working number (11)",
+        0x22 => "the damage cut (rows, defending; of 256)",
         0x23 => "the action's kind",
-        0x26 => "the special effect's number",
-        0x2D => "the special effect's amount",
+        0x26 => "the action's flags (drain, defence...)",
+        0x2C => "the HP change in %",
+        0x2D => "the MP change",
+        0x2E => "the MP spread",
+        0x2F => "the MP change in %",
         0x24 => "the action's number",
         0x25 => "the attack's name",
         0x27 => "the attack's element",
         0x28 => "the critical chance",
         0x29 => "the critical multiplier",
         0x2A => "the damage",
-        0x2B => "the damage spread",
+        0x2B => "the damage spread (random, of 256)",
         0x4E => "the poison chance",
         0x50 => "the silence chance",
         0x52 => "the death chance",
@@ -219,7 +280,7 @@ public static class L2AiScripts
         _ => $"shared value {r:X2}",
     };
 
-    public static readonly int[] KnownRegisters = { 0x2A, 0x27, 0x28, 0x29, 0x2B, 0x4E, 0x50, 0x52, 0x54, 0x56, 0x58, 0x10, 0x20, 0x21, 0x23, 0x24, 0x25,
+    public static readonly int[] KnownRegisters = { 0x2A, 0x27, 0x28, 0x29, 0x2B, 0x26, 0x2D, 0x4E, 0x50, 0x52, 0x54, 0x56, 0x58, 0x10, 0x20, 0x21, 0x23, 0x24, 0x25,
         0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87 };
 
     // ── steps ────────────────────────────────────────────────────────────────
@@ -397,7 +458,8 @@ public static class L2AiScripts
             for (int i = 0; i < 37 && at + i < rom.Length; i++) { byte c = rom.ReadByte(at + i); if (c == 0) break; sb.Append(L2Charset.ToChar(rom, c) ?? '?'); }
             names[n] = sb.ToString();
         }
-        return names;
+        // the names Lufia Forge added (8B and up, L2AttackNames)
+        return names.Concat(L2AttackNames.Names(rom)).ToArray();
     }
 
     // ── the shared library ($96:FADD) ─────────────────────────────────────────
@@ -759,7 +821,7 @@ public static class L2AiScripts
     }
 
     /// <summary>A tiny 65816 assembler: bytes, labels, 8-bit branches and JSRs within the block.</summary>
-    private sealed class Asm(int origin)
+    internal sealed class Asm(int origin)
     {
         private readonly List<byte> _b = new();
         private readonly Dictionary<string, int> _labels = new();
@@ -1050,7 +1112,7 @@ public static class L2AiScripts
         /// <summary>What each shared script does (<see cref="LibraryName"/>).</summary>
         public string[] Library { get; set; } = Array.Empty<string>();
         /// <summary>The monster attack names shown by 1E (index 0 = none).</summary>
-        public string[] AttackNames { get; init; } = Array.Empty<string>();
+        public string[] AttackNames { get; set; } = Array.Empty<string>();
         /// <summary>Battle animations 00-FF named by what uses them (<see cref="L2Magic.Animations"/>).</summary>
         public string[] Animations { get; set; } = Array.Empty<string>();
 
@@ -1095,6 +1157,7 @@ public static class L2AiScripts
         Arg.Change => $"{(sbyte)v:+0;-0;0}%",
         Arg.Animation => v < n.Animations.Length ? $"animation {v:X2} ({n.Animations[v]})" : $"animation {v:X2}",
         Arg.Sound => $"sound {v:X2}",
+        Arg.Message => $"{v:X2} {MessageText(v)}",
         Arg.Word => $"{v}",
         _ => $"{v}",
     };
@@ -1159,6 +1222,12 @@ public static class L2AiScripts
             0x25 => $"{((sbyte)ArgValue(s, 1) < 0 ? "Lower" : "Raise")} the target's {A(0)} by {Math.Abs((sbyte)ArgValue(s, 1))}%",
             0x0C when ArgValue(s, 0) == 0x23 && ArgValue(s, 1) == 5 => "Make it a special attack (the effects above happen)",
             0x0C when ArgValue(s, 0) == 0x23 && ArgValue(s, 1) == 0x0A => "Make it a magic attack (the effects above happen)",
+            0x0C when ArgValue(s, 0) == 0x26 && (ArgValue(s, 1) >> 8) != 0x80 => $"Set the action's flags to {ArgValue(s, 1):X} ({FlagsText(ArgValue(s, 1))})",
+            0x17 when ArgValue(s, 0) == 0x26 => $"The action: {FlagsText(ArgValue(s, 1))}",
+            0x16 when ArgValue(s, 0) == 0x26 => $"The action: only {FlagsText(ArgValue(s, 1))}",
+            0x35 => $"Result message: {MessageText(ArgValue(s, 0))}",
+            0x4A => $"Wait {ArgValue(s, 0)} frames",
+            0x23 => $"Damage of power {ArgValue(s, 0)}",
             0x06 => $"If {A(0)} is {A(1)}, go to {Go()}",
             0x07 => $"If {A(0)} is not {A(1)}, go to {Go()}",
             0x08 => $"If {A(0)} is more than {A(1)}, go to {Go()}",
@@ -1180,13 +1249,14 @@ public static class L2AiScripts
             0x15 => $"{Cap(A(0))} = its own {A(1)}",
             0x4E => $"{Cap(A(0))} = the attacker's {A(1)}",
             0x14 => $"Set the target's {A(1)} to {A(0)}",
-            0x21 => $"Physical damage ({A(0)}): {DamageText(ArgValue(s, 1))}, spread {ArgValue(s, 2)}",
-            0x22 => $"Magic damage ({A(0)}): {DamageText(ArgValue(s, 1))}, spread {ArgValue(s, 2)}",
-            0x24 => $"Restore {A(0)} by {A(1)} (give or take {ArgValue(s, 2)})",
+            0x21 => $"Physical damage ({A(0)}): power {DamageText(ArgValue(s, 1))}",
+            0x22 => $"Magic damage ({A(0)}): power {DamageText(ArgValue(s, 1))} + INT",
+            0x24 when (ArgValue(s, 1) >> 8) != 0x80 && (short)ArgValue(s, 1) < 0 => $"Take {-(short)ArgValue(s, 1)} {A(0)}" + (ArgValue(s, 2) > 0 ? $" (up to {ArgValue(s, 2) * 100 / 256}% more)" : ""),
+            0x24 => $"Restore {A(0)} by {A(1)}" + (ArgValue(s, 2) > 0 ? $" (up to {ArgValue(s, 2) * 100 / 256}% more)" : ""),
             0x26 => $"Cure {A(0)} ({A(1)} chance)",
             0x27 => $"Cause {A(0)} ({A(1)} chance)",
             0x1F => $"The attack's element: {A(0)}",
-            0x20 => $"Critical hits: {A(0)} chance, damage x{ArgValue(s, 1)}/16",
+            0x20 => $"Critical hits: {A(0)} chance, {ArgValue(s, 1) / 16.0:0.##}x damage, through DFP",
             _ => null,
         };
     }

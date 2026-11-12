@@ -261,8 +261,9 @@ public partial class L2ScriptWindow : Window
 
     // ── fields ──────────────────────────────────────────────────────────────
 
-    private static string Label(Arg a, int i, L2AiScripts.OpDef d) => a switch
+    private static string Label(Arg a, int i, L2AiScripts.OpDef d) => L2AiScripts.ArgInfo(d.Op, i)?.Label ?? a switch
     {
+        Arg.Message => "message",
         Arg.Jump => "go to",
         Arg.Chance => "chance (of 256)",
         Arg.Percent => "percent",
@@ -300,7 +301,8 @@ public partial class L2ScriptWindow : Window
             Arg.Stat => List(s, i, L2AiScripts.Stats),
             Arg.Status => List(s, i, L2AiScripts.Statuses),
             Arg.Target => List(s, i, L2AiScripts.Targets, plain: true),
-            Arg.AttackName => List(s, i, _names.AttackNames),
+            Arg.AttackName => NameField(s, i),
+            Arg.Message => List(s, i, Enumerable.Range(0, 0x30).Select(L2AiScripts.MessageText).ToArray()),
             Arg.Change => Signed(s, i),
             Arg.Restore => List(s, i, L2AiScripts.Restores),
             Arg.Animation when _names.Animations.Length == 0x100 => List(s, i, _names.Animations),
@@ -311,7 +313,12 @@ public partial class L2ScriptWindow : Window
             _ => Number(s, i, hex: a is Arg.Animation or Arg.Sound),
         };
         row.Children.Add(editor);
-        return row;
+        // what the number means, under its field
+        if (L2AiScripts.ArgInfo(d.Op, i) is not { Help.Length: > 0 } info) return row;
+        var both = new StackPanel();
+        both.Children.Add(row);
+        both.Children.Add(new TextBlock { Text = info.Help, Style = (Style)FindResource("GdHint"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(120, 0, 0, 6) });
+        return both;
     }
 
     /// <summary>A shared script: picked from the list (each with what it does), and a button that copies its steps in
@@ -352,6 +359,75 @@ public partial class L2ScriptWindow : Window
         panel.Children.Add(copy);
         return panel;
     }
+
+    /// <summary>The attack name shown: picked from the game's names (and the ones added), or typed: a name no other
+    /// one has becomes a new name (<see cref="L2AttackNames"/>, written at Save), an added name only this window made is
+    /// changed in place.</summary>
+    private FrameworkElement NameField(Step s, int i)
+    {
+        var panel = new StackPanel();
+        string[] Names() => _names.AttackNames;   // (the typed ones at the end)
+        var box = Combo();
+        void Fill()
+        {
+            box.Items.Clear();
+            foreach (var (n, k) in Names().Select((n, k) => (n, k))) box.Items.Add($"{k:X2}  {n}");
+            int v = L2AiScripts.ArgValue(s, i);
+            if (v >= box.Items.Count) box.Items.Add($"{v:X2}  (not in the list)");
+            box.SelectedIndex = Math.Min(v, box.Items.Count - 1);
+        }
+        Fill();
+        box.SelectionChanged += (_, _) =>
+        {
+            if (_loading || box.SelectedIndex < 0 || box.SelectedIndex >= Names().Length) return;
+            L2AiScripts.SetArg(s, i, box.SelectedIndex);
+            Changed();
+        };
+        panel.Children.Add(box);
+        var row = new DockPanel { Margin = new Thickness(0, 6, 0, 0) };
+        var use = new Button { Content = "Use this name", Style = (Style)FindResource("LufiaButton"), Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(6, 0, 0, 0) };
+        DockPanel.SetDock(use, Dock.Right);
+        var text = new TextBox { Style = (Style)FindResource("GdText"), MaxLength = L2Attacks.NameMax, ToolTip = $"Your own name for it (up to {L2Attacks.NameMax} letters)" };
+        int now = L2AiScripts.ArgValue(s, i);
+        text.Text = now > 0 && now < Names().Length ? Names()[now] : "";
+        row.Children.Add(use); row.Children.Add(text);
+        panel.Children.Add(new TextBlock { Text = "or type your own:", Style = (Style)FindResource("GdHint"), Margin = new Thickness(0, 6, 0, 0) });
+        panel.Children.Add(row);
+        void Use()
+        {
+            string t = text.Text.Trim();
+            if (L2AttackNames.Check(_rom, t) is { } bad) { StatusText.Text = "Name not used: " + bad; return; }
+            var all = Names();
+            int found = Array.FindIndex(all, n => n == t);
+            int cur = L2AiScripts.ArgValue(s, i);
+            if (found > 0) { L2AiScripts.SetArg(s, i, found); StatusText.Text = $"\"{t}\" is name {found:X2}: used."; }
+            else if (cur >= _romNames && cur - _romNames < _typed.Count && _steps.Count(x => x.Op == 0x1E && x.Args[0] == cur) == 1)
+            {
+                _typed[cur - _romNames].Text = t;   // a name this window made, used by this step only: changed
+                _names.AttackNames[cur] = t;
+                StatusText.Text = $"Name {cur:X2} is \"{t}\" now (written when you Save).";
+            }
+            else
+            {
+                if (L2AttackNames.CantAdd(_rom) is { } no || _names.AttackNames.Length > L2AttackNames.Last) { StatusText.Text = "Name not added: " + (L2AttackNames.CantAdd(_rom) ?? "no room left."); return; }
+                int n = _names.AttackNames.Length;
+                _typed.Add(new TypedName { Text = t, Animation = L2Attacks.NameAnimation(_rom, cur) });
+                _names.AttackNames = _names.AttackNames.Append(t).ToArray();
+                L2AiScripts.SetArg(s, i, n);
+                StatusText.Text = $"\"{t}\" is a new name ({n:X2}): it's added when you Save, and other monsters can use it too.";
+            }
+            _loading = true; Fill(); _loading = false;
+            Changed();
+        }
+        use.Click += (_, _) => Use();
+        text.KeyDown += (_, e) => { if (e.Key == System.Windows.Input.Key.Enter) { Use(); e.Handled = true; } };
+        return panel;
+    }
+
+    /// <summary>Names typed in this window that aren't in the ROM yet (numbers after the ROM's last name, in order).</summary>
+    private sealed class TypedName { public string Text = ""; public int Animation = 0xE0; }
+    private readonly List<TypedName> _typed = new();
+    private int _romNames => _names.AttackNames.Length - _typed.Count;
 
     private ComboBox Combo() => new() { Style = (Style)FindResource("GdCombo"), HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch, Width = double.NaN, MaxDropDownHeight = 480 };
 
@@ -529,6 +605,12 @@ public partial class L2ScriptWindow : Window
         ("A special attack with its own name", "Physical damage, a name at the top and an animation, like a dragon's breath. Set the damage, element, name and animation.",
             () => new() { Op(0x32, 1), Op(0x21, 0, 100, 0), Op(0x1E, 1), Op(0x5A, 0xE0), Op(0x00) }),
         ("A special attack on all heroes", "", () => new() { Op(0x32, 1), Op(0x32, 5), Op(0x21, 0, 60, 0), Op(0x1E, 1), Op(0x5A, 0xE0), Op(0x00) }),
+        ("A draining attack (gets the HP it takes)", "Physical damage; the attacker gets back the HP the target loses (the action's drain flag, after the damage).",
+            () => new() { Op(0x32, 1), Op(0x21, 0, 60, 0), Op(0x1E, 1), Op(0x17, 0x26, 0x0002), Op(0x5A, 0x24), Op(0x00) }),
+        ("An attack that ignores DFP", "Every hit a critical one of normal damage (critical hits 100%, x1): a critical hit goes through the target's DFP.",
+            () => new() { Op(0x32, 1), Op(0x20, 100, 16), Op(0x21, 0, 60, 0), Op(0x1E, 1), Op(0x5A, 0xE0), Op(0x00) }),
+        ("An attack that always does the same", "Physical damage with no random part (the damage spread set to 0 after it; the game's is up to 12% more).",
+            () => new() { Op(0x32, 1), Op(0x21, 0, 60, 0), Op(0x0C, 0x2B, 0), Op(0x1E, 1), Op(0x5A, 0xE0), Op(0x00) }),
         ("A status attack (poison, sleep...)", "Causes a status with a chance, shows a name and an animation, as the game's poison bites and songs do.",
             () => new() { Op(0x32, 1), Op(0x27, 0, 50), Op(0x1E, 1), Op(0x0C, 0x23, 5), Op(0x5A, 0x24), Op(0x00) }),
         ("Raise or lower a stat", "Changes the target's stat for the battle by a percentage.",
@@ -654,6 +736,8 @@ public partial class L2ScriptWindow : Window
             int self = _steps.FindIndex(s => s.Op == 0x03 && s.Targets.Length > 0 && ReferenceEquals(s.Targets[0], s));
             if (self >= 0) throw new InvalidOperationException($"Step {self + 1} goes to itself: the battle would never end.");
             if (!_steps.Any(s => s.Def?.EndsPath == true)) throw new InvalidOperationException("The script never ends: add an End (or Quit) step.");
+            // names typed here go in first (they get the numbers the steps already use)
+            foreach (var t in _typed) L2AttackNames.Add(_rom, t.Text, t.Animation);
             int at = L2AiScripts.Save(_rom, _kind, _index, _steps);
             Change = $"{Title}: {(_edited ? "edited" : "new script")} ({L2AiScripts.Build(_steps, 1).Length} bytes at 0x{at:X6})";
             DialogResult = true;
