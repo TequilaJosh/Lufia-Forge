@@ -344,6 +344,9 @@ public static class L2Attacks
     {
         new(0x27, "Cause a status", "With a chance; the target's own resistance can stop it."),
         new(0x26, "Cure a status", ""),
+        new(0x5D, "Cause a new status", "One of Lufia Forge's 16 new statuses (Zombie, Frozen, Burnt, Berserk...), with a chance."),
+        new(0x5E, "Cure a new status", ""),
+        new(0x60, "Ward against a new status", "Its targets can't get it for the rest of the battle."),
         new(0x25, "Raise or lower a stat", "By a percentage of the stat, for the battle (minus lowers it)."),
         new(0x24, "Restore HP, MP or a stat", "By an amount (the Potion's is 30)."),
         new(FlagKey | 0x0002, "Drain: the attacker gets what it takes", "The HP (or MP) the targets lose goes to the attacker, as Absorb and Vampire do."),
@@ -363,6 +366,9 @@ public static class L2Attacks
     {
         ("Cause a status", "Poison, sleep, confusion... with a chance.", 0x27, () => Make(0x27, 0x00, 50)),
         ("Cure a status", "", 0x26, () => Make(0x26, 0x00, 100)),
+        ("Cause a new status", "Zombie, Frozen, Decay, Burnt, Berserk, Spooked, Amnesia, Piety, Regen, Doom, Blind, Stone, Bleed, Curse, Stop, Mana leak (Lufia Forge's new battle code goes in with it).", 0x5D, () => Make(0x5D, 0x03, 50)),
+        ("Cure a new status", "", 0x5E, () => Make(0x5E, 0x03, 100)),
+        ("Ward against a new status", "", 0x60, () => Make(0x60, 0x03)),
         ("Raise or lower a stat", "For the battle, by a percentage.", 0x25, () => Make(0x25, 0x04, 25)),
         ("Restore HP, MP or a stat", "", 0x24, () => Make(0x24, 0x00, 100, 0x00, 0x00)),
         ("Drain: the attacker gets what it takes", "With its own damage: the attacker gets back the HP the targets lose (checked in the game).", FlagKey | 0x0002, () => Make(0x17, 0x26, 0x02, 0x00)),
@@ -407,7 +413,7 @@ public static class L2Attacks
         // the rest before the name, as the game writes them
         Insert(b, s.Op is 0x5C or 0x4A or 0x4C or 0x35 or 0x17 ? BeforeAction(b) : BeforeName(b), s);
         // with no damage and no action of its own, the effects need the attack to be "only its effects"
-        if (s.Op is 0x27 or 0x26 or 0x25 or 0x24 && HowItHits(b) == Hit.Attack) SetHowItHits(b, Hit.EffectsOnly);
+        if (s.Op is 0x27 or 0x26 or 0x25 or 0x24 or 0x5D or 0x5E or 0x60 && HowItHits(b) == Hit.Attack) SetHowItHits(b, Hit.EffectsOnly);
         return s;
     }
 

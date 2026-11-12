@@ -48,7 +48,7 @@ public static class L2AiScripts
     // ── commands ─────────────────────────────────────────────────────────────
 
     /// <summary>What a command's argument is (for the editor's fields; the size is in <see cref="Size"/>).</summary>
-    public enum Arg { Byte, Word, Register, Value, Jump, Chance, Percent, Spell, Monster, CapsuleAttack, Element, Stat, Status, Target, Item, Library, AttackName, Animation, Sound, Restore, Change, Message }
+    public enum Arg { Byte, Word, Register, Value, Jump, Chance, Percent, Spell, Monster, CapsuleAttack, Element, Stat, Status, Target, Item, Library, AttackName, Animation, Sound, Restore, Change, Message, NewStatus }
 
     public static int Size(Arg a) => a is Arg.Word or Arg.Value or Arg.Jump or Arg.Element or Arg.Item or Arg.Library ? 2 : 1;
 
@@ -115,6 +115,11 @@ public static class L2AiScripts
         O(0x24, Eff, "Restore", "Heals HP or MP (or a stat) by an amount, as the potions and healing spells do.", Arg.Restore, Arg.Value, Arg.Byte);
         O(0x25, Eff, "Raise or lower a stat", "Changes the target's stat for the battle by a percentage (minus lowers it).", Arg.Restore, Arg.Change);
         O(0x1F, Eff, "Set the attack's element", "", Arg.Element);
+        // Lufia Forge's new statuses (L2StatusPatch: these commands need it in the ROM)
+        O(0x5D, Eff, "Cause a new status", "Zombie, Frozen, Burnt, Berserk... with a chance in percent (Lufia Forge's new statuses).", Arg.NewStatus, Arg.Percent);
+        O(0x5E, Eff, "Cure a new status", "", Arg.NewStatus, Arg.Percent);
+        O(0x5F, Eff, "Resist a new status", "In a 'when hit' or armor script: this target's chance of getting it drops by this percent (100 = immune).", Arg.NewStatus, Arg.Percent);
+        O(0x60, Eff, "Ward against a new status", "The targets can't get it for the rest of the battle (a protecting spell).", Arg.NewStatus);
         O(0x20, Eff, "Critical hits", "The chance of a critical hit and how much it does. A critical hit also goes through the target's DFP.", Arg.Percent, Arg.Byte);
         O(0x3C, Eff, "Add the user's weapon part to the amount", "The game's healing spells add it after Restore.");
         O(0x5C, Eff, "Hide the damage number", "");
@@ -1022,6 +1027,8 @@ public static class L2AiScripts
             throw new InvalidOperationException("A \"go to\" jumps into the middle of a command or onto data, so the script can't be moved: point it at a step.");
         var body = Build(steps, 1);
         if (body.Length > 0x7F00) throw new InvalidOperationException("The script is too long.");
+        // the new statuses' commands need their code in the game
+        if (steps.Any(st => st.Op is >= 0x5D and <= 0x60) && !L2StatusPatch.IsApplied(rom)) L2StatusPatch.Apply(rom);
         if (kind is Kind.Spell or Kind.IpAttack && OriginalAt(rom, kind, index) < 0)
             throw new InvalidOperationException("It has no effect script for an edited one to take the place of.");
         int block = Install(rom);
@@ -1052,6 +1059,8 @@ public static class L2AiScripts
             rom.WriteBytes(e + EntrySize, new byte[] { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF });
         }
         rom.WriteBytes(e, new[] { (byte)key, (byte)(key >> 8), k, (byte)snes, (byte)(snes >> 8), (byte)(snes >> 16) });
+        // the STATUS screen's resistance pages read the armor scripts' table
+        if (kind == Kind.Armor) L2StatusPatch.WriteResistTable(rom);
         return baseAt;
     }
 
@@ -1068,6 +1077,7 @@ public static class L2AiScripts
         var last = all[^1];
         if (i != all.Count - 1) rom.WriteBytes(all[i].At, rom.ReadBytes(last.At, EntrySize));
         rom.WriteBytes(last.At, new byte[] { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF });
+        if (kind == Kind.Armor) L2StatusPatch.WriteResistTable(rom);
         return true;
     }
 
@@ -1158,6 +1168,7 @@ public static class L2AiScripts
         Arg.Animation => v < n.Animations.Length ? $"animation {v:X2} ({n.Animations[v]})" : $"animation {v:X2}",
         Arg.Sound => $"sound {v:X2}",
         Arg.Message => $"{v:X2} {MessageText(v)}",
+        Arg.NewStatus => v < L2StatusPatch.Names.Length ? L2StatusPatch.Names[v] : $"new status {v}",
         Arg.Word => $"{v}",
         _ => $"{v}",
     };
@@ -1254,6 +1265,10 @@ public static class L2AiScripts
             0x24 when (ArgValue(s, 1) >> 8) != 0x80 && (short)ArgValue(s, 1) < 0 => $"Take {-(short)ArgValue(s, 1)} {A(0)}" + (ArgValue(s, 2) > 0 ? $" (up to {ArgValue(s, 2) * 100 / 256}% more)" : ""),
             0x24 => $"Restore {A(0)} by {A(1)}" + (ArgValue(s, 2) > 0 ? $" (up to {ArgValue(s, 2) * 100 / 256}% more)" : ""),
             0x26 => $"Cure {A(0)} ({A(1)} chance)",
+            0x5D => $"Cause {A(0)} ({A(1)} chance)",
+            0x5E => $"Cure {A(0)} ({A(1)} chance)",
+            0x5F => $"Resist {A(0)} by {A(1)}",
+            0x60 => $"Ward the targets against {A(0)}",
             0x27 => $"Cause {A(0)} ({A(1)} chance)",
             0x1F => $"The attack's element: {A(0)}",
             0x20 => $"Critical hits: {A(0)} chance, {ArgValue(s, 1) / 16.0:0.##}x damage, through DFP",

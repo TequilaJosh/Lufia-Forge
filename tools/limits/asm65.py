@@ -40,6 +40,8 @@ def parse_operand(mn, op, labels, pc, final):
         if final and not -128 <= d <= 127:
             raise ValueError(f'branch out of range at {pc:06X}: {op}')
         return 'rel', d & 0xFF, 1
+    if mn == 'PEA':
+        return 'pea', value(op.lstrip('#'), labels, final) & 0xFFFF, 2
     if mn in ('MVN', 'MVP'):
         a, b = op.split(',')
         return 'mv', (value(b, labels, final) & 0xFF) | ((value(a, labels, final) & 0xFF) << 8), 2
@@ -125,13 +127,22 @@ def assemble(text, defines=None):
     labels = dict(defines or {})
     for final in (False, True):
         out, pc, cur = [], None, None
+        seen = set()
         for line in lines:
             m = re.match(r'^([A-Za-z_.][\w.]*):\s*(.*)$', line)
             if m:
+                if m.group(1) in seen:
+                    raise ValueError(f'label {m.group(1)} defined twice')
+                seen.add(m.group(1))
                 labels[m.group(1)] = pc
                 line = m.group(2)
                 if not line:
                     continue
+            # NAME = value (a constant; added 2026-11-11 for the status engine)
+            mc = re.match(r'^([A-Za-z_][\w]*)\s*=\s*(.+)$', line)
+            if mc:
+                labels[mc.group(1)] = value(mc.group(2), labels, True)
+                continue
             parts = line.split(None, 1)
             mn = parts[0].upper()
             op = parts[1] if len(parts) > 1 else ''
@@ -142,7 +153,13 @@ def assemble(text, defines=None):
                 continue
             if mn in ('DB', 'DW', 'DL'):
                 n = {'DB': 1, 'DW': 2, 'DL': 3}[mn]
-                for item in op.split(','):
+                # db "text", $00: quoted strings as their ASCII bytes (the battle text is ASCII)
+                items = re.findall(r'"[^"]*"|[^,]+', op)
+                for item in (i.strip() for i in items):
+                    if item.startswith('"'):
+                        cur[1] += item[1:-1].encode('ascii')
+                        pc += len(item) - 2
+                        continue
                     v = value(item, labels, final)
                     cur[1] += (v & ((1 << (8 * n)) - 1)).to_bytes(n, 'little')
                     pc += n

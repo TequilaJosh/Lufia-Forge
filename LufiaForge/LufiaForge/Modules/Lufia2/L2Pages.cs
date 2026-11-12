@@ -56,6 +56,12 @@ public abstract partial class L2Page : ObservableObject
     /// <summary>The page has what the ROM holds now (after reading it, or after a write of its own).</summary>
     protected void MarkRead() { if (Rom != null) _readVersion = Rom.Version; }
 
+    /// <summary>For a card in the view that writes the ROM itself (the new statuses): the ROM, the record shown, and
+    /// a change to report (Edit, Undo).</summary>
+    public RomBuffer? PageRom => Rom;
+    public int PageIndex => SelectedIndex;
+    public void ReportChange(string what) { if (Main == null) return; Main.NotifyRomModified("Lufia II: " + what); MarkRead(); }
+
     /// <summary>The ROM changed since the page read it (another page, Undo, a patch).</summary>
     protected bool ChangedSinceRead => Rom != null && Rom.Version != _readVersion;
 

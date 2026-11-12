@@ -236,6 +236,8 @@ public partial class L2AttacksPage : L2Page
             0x24 => new L2AttackEffect { Key = key, Ordinal = ordinal, Title = title, Choices = Opts(L2AiScripts.Restores), NumberLabel = "by", HasSpread = true,
                 Hint = "How much it heals (the Potion's is 30). Up to: HP and MP only, up to this many 256ths more at random (the Potion's 11 is about 4%)." },
             0x4A => new L2AttackEffect { Key = key, Ordinal = ordinal, Title = title, Hint = help, NumberLabel = "frames" },
+            0x5D or 0x5E => new L2AttackEffect { Key = key, Ordinal = ordinal, Title = title, Hint = help, Choices = Opts(L2StatusPatch.Names), NumberLabel = "chance %" },
+            0x60 => new L2AttackEffect { Key = key, Ordinal = ordinal, Title = title, Hint = help, Choices = Opts(L2StatusPatch.Names) },
             0x4C => new L2AttackEffect { Key = key, Ordinal = ordinal, Title = title, NumberLabel = "number",
                 Hint = "One of the battle's screen effects on the targets (the RAN-RAN step weapon uses 3); which number does what isn't named yet: try them with Test in the game." },
             0x35 => new L2AttackEffect { Key = key, Ordinal = ordinal, Title = title, Hint = help, Choices = MessageOptions },
@@ -249,6 +251,8 @@ public partial class L2AttacksPage : L2Page
             case 0x24: e.Choice = s.Args[0]; e.Number = (short)(s.Args[1] | s.Args[2] << 8); e.Spread = s.Args[3]; break;
             case 0x4A or 0x4C: e.Number = s.Args[0]; break;
             case 0x35: e.Choice = s.Args[0]; break;
+            case 0x5D or 0x5E: e.Choice = s.Args[0]; e.Number = s.Args[1]; break;
+            case 0x60: e.Choice = s.Args[0]; break;
         }
         e.Loading = false;
         e.Changed = EffectChanged;
@@ -352,6 +356,8 @@ public partial class L2AttacksPage : L2Page
                 break;
             case 0x4A or 0x4C: s.Args[0] = (byte)Math.Clamp(e.Number, 0, 255); break;
             case 0x35: s.Args[0] = (byte)Math.Clamp(e.Choice, 0, 255); break;
+            case 0x5D or 0x5E: s.Args[0] = (byte)Math.Clamp(e.Choice, 0, 15); s.Args[1] = (byte)Math.Clamp(e.Number, 0, 100); break;
+            case 0x60: s.Args[0] = (byte)Math.Clamp(e.Choice, 0, 15); break;
         }
     });
 
