@@ -104,6 +104,7 @@
                     <TextBlock Text="{Binding DescriptionNote}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,6,0,0"/>
                 </StackPanel>
             </Border>
+            <l2:L2TypeCard x:Name="Types" Style="{StaticResource GdCard}"/>
             <l2:L2NewStatusCard x:Name="NewStatuses" Style="{StaticResource GdCard}"/>
                 </WrapPanel>
             </StackPanel>

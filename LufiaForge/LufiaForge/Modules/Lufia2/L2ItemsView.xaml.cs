@@ -1,3 +1,4 @@
+using LufiaForge.Core.Lufia2;
 using System.Windows.Controls;
 using Kind = LufiaForge.Core.Lufia2.L2AiScripts.Kind;
 using What = LufiaForge.Core.Lufia2.L2StatusSteps.What;
@@ -15,6 +16,13 @@ public partial class L2ItemsView : UserControl
     /// <summary>The new statuses card: what this record gives, cures or resists.</summary>
     private void Attach(L2ItemsPage p)
     {
+        Types.Attach(p, Kind.Weapon, i =>
+        {
+            var rom = p.PageRom;
+            if (rom == null) return null;
+            var it = L2Battle.ReadItem(rom, i);
+            return (it.EquipType & 1) != 0 ? Kind.Weapon : (it.Words & 0x0002) != 0 ? Kind.ItemBattle : null;
+        });
         NewStatuses.Attach(p,
             new("Weapon hit causes", "As a weapon: the chance its hit gives the status (its weapon script).", Kind.Weapon, What.Cause),
             new("Worn: resists", "As armor: the wearer's chance of getting it drops by this percent (100 = immune).", Kind.Armor, What.Resist),

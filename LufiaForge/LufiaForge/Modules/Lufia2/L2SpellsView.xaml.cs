@@ -15,6 +15,7 @@ public partial class L2SpellsView : UserControl
     /// <summary>The new statuses card: what this record gives, cures or resists.</summary>
     private void Attach(L2SpellsPage p)
     {
+        Types.Attach(p, Kind.Spell);
         NewStatuses.Attach(p,
             new("Causes", "The chance the spell gives the status to its targets.", Kind.Spell, What.Cause),
             new("Cures", "The chance it cures the status.", Kind.Spell, What.Cure),

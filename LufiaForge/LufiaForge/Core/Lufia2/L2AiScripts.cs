@@ -181,11 +181,12 @@ public static class L2AiScripts
         // read from the game's own uses (2026-10-25): fire swords and Fireball 0002, Aqua sword and Droplet 0004, Silver
         // sword and Light attack 0010, Deadly sword and Gades blade 0020, maces and rods 0040, boomerangs 0080, Dragon
         // tooth and the dragon IP attacks 0100, Insect crush 0200, Cold rapier and Blizzard 0400, Thunder ax and Bolt
-        // 0800, Groundshock 1000; 0001, 0008 and 2000-8000 aren't used by any script
+        // 0800, Groundshock 1000; 0001, 0008 and 2000-8000 aren't used by any script (Lufia Forge's monster types use
+        // 0001, 0008, 2000 and 4000: L2MonsterTypes)
         (0x0002, "fire"), (0x0004, "water"), (0x0400, "ice"), (0x0800, "thunder"), (0x1000, "earth"), (0x0010, "light"),
         (0x0020, "dark"), (0x0040, "blunt (maces, rods)"), (0x0080, "thrown (boomerangs)"), (0x0100, "vs dragons"),
-        (0x0200, "vs insects"), (0x0001, "unused 0001"), (0x0008, "unused 0008"), (0x2000, "unused 2000"),
-        (0x4000, "unused 4000"), (0x8000, "unused 8000"),
+        (0x0200, "vs insects"), (0x0001, "vs beasts"), (0x0008, "vs aquatic"), (0x2000, "vs plants"),
+        (0x4000, "vs humanoids"), (0x8000, "unused 8000"),
     };
 
     public static string ElementText(int w) =>
@@ -249,6 +250,9 @@ public static class L2AiScripts
     };
 
     /// <summary>A value operand: 80 in the high byte = register (low byte), else a number.</summary>
+    /// <summary>A bit mask, or the register it is taken from (8027: the attack's element).</summary>
+    private static string Bits(int v) => (v >> 8) == 0x80 ? RegisterName(v & 0xFF) : v.ToString("X4");
+
     public static string ValueText(int v) => (v >> 8) == 0x80 ? RegisterName(v & 0xFF) : $"{(short)v}";
 
     /// <summary>What a register holds, in words. 00-7F are shared by the whole battle ($7F:F40E), 80-FF belong to the
@@ -1235,6 +1239,7 @@ public static class L2AiScripts
             0x0C when ArgValue(s, 0) == 0x23 && ArgValue(s, 1) == 0x0A => "Make it a magic attack (the effects above happen)",
             0x0C when ArgValue(s, 0) == 0x26 && (ArgValue(s, 1) >> 8) != 0x80 => $"Set the action's flags to {ArgValue(s, 1):X} ({FlagsText(ArgValue(s, 1))})",
             0x17 when ArgValue(s, 0) == 0x26 => $"The action: {FlagsText(ArgValue(s, 1))}",
+            0x17 when ArgValue(s, 0) == 0x27 && (ArgValue(s, 1) >> 8) != 0x80 => $"The attack is also: {ElementText(ArgValue(s, 1))}",
             0x16 when ArgValue(s, 0) == 0x26 => $"The action: only {FlagsText(ArgValue(s, 1))}",
             0x35 => $"Result message: {MessageText(ArgValue(s, 0))}",
             0x4A => $"Wait {ArgValue(s, 0)} frames",
@@ -1250,9 +1255,9 @@ public static class L2AiScripts
             0x0E => $"Take {A(1)} from {A(0)}",
             0x0F => $"Multiply {A(0)} by {A(1)}",
             0x10 or 0x55 => $"Divide {A(0)} by {A(1)}",
-            0x16 => $"{Cap(A(0))}: keep only the bits {ArgValue(s, 1):X4}",
-            0x17 => $"{Cap(A(0))}: add the bits {ArgValue(s, 1):X4}",
-            0x18 => $"{Cap(A(0))}: flip the bits {ArgValue(s, 1):X4}",
+            0x16 => $"{Cap(A(0))}: keep only the bits {Bits(ArgValue(s, 1))}",
+            0x17 => $"{Cap(A(0))}: add the bits {Bits(ArgValue(s, 1))}",
+            0x18 => $"{Cap(A(0))}: flip the bits {Bits(ArgValue(s, 1))}",
             0x11 => $"{Cap(A(0))} becomes a random number below it",
             0x19 => $"Make {A(0)} positive",
             0x1A => $"Turn {A(0)} negative (or back)",

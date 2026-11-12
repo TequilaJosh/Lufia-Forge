@@ -121,6 +121,7 @@
                     <TextBlock Text="{Binding AiText}" Style="{StaticResource GdFieldLabel}" FontFamily="Consolas" TextWrapping="NoWrap"/>
                 </StackPanel>
             </Border>
+            <l2:L2TypeCard x:Name="Types" Style="{StaticResource GdCard}"/>
             <l2:L2NewStatusCard x:Name="NewStatuses" Style="{StaticResource GdCard}"/>
                 </WrapPanel>
             </StackPanel>

@@ -15,6 +15,7 @@ public partial class L2MonstersView : UserControl
     /// <summary>The new statuses card: what this record gives, cures or resists.</summary>
     private void Attach(L2MonstersPage p)
     {
+        Types.Attach(p, Kind.MonsterDefense);
         NewStatuses.Attach(p,
             new("Resists", "Its chance of getting it drops by this percent (100 = immune): a step in its 'when hit' script.", Kind.MonsterDefense, What.Resist),
             new("From the start", "It has it from the moment it is in a battle (Zombie: an undead monster).", Kind.MonsterDefense, What.Resist, Start: true));
