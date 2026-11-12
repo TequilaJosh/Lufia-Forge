@@ -60,7 +60,16 @@ public abstract partial class L2Page : ObservableObject
     /// a change to report (Edit, Undo).</summary>
     public RomBuffer? PageRom => Rom;
     public int PageIndex => SelectedIndex;
-    public void ReportChange(string what) { if (Main == null) return; Main.NotifyRomModified("Lufia II: " + what); MarkRead(); }
+    public void ReportChange(string what)
+    {
+        if (Main == null) return;
+        Main.NotifyRomModified("Lufia II: " + what);
+        // the rest of the page shows the record again (its scripts' listings)
+        int i = SelectedIndex;
+        Loading = true;
+        try { Load(i); } finally { Loading = false; }
+        MarkRead();
+    }
 
     /// <summary>The ROM changed since the page read it (another page, Undo, a patch).</summary>
     protected bool ChangedSinceRead => Rom != null && Rom.Version != _readVersion;
