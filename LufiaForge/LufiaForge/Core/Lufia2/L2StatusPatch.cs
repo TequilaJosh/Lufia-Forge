@@ -51,20 +51,45 @@ public static partial class L2StatusPatch
 
     public static bool IsApplied(RomBuffer rom) => Patch.AppliedAt(rom, L2Rom.SnesToFile) >= 0;
 
+    /// <summary>File offset of the patch's block, or -1.</summary>
+    public static int BlockAt(RomBuffer rom) => Patch.AppliedAt(rom, L2Rom.SnesToFile);
+
     public static bool IsOriginal(RomBuffer rom) => Patch.IsOriginal(rom);
+
+    private static HookPatch? _v1;
+    private static HookPatch V1 => _v1 ??= new(SitesV1, CodeV1);
+
+    /// <summary>Whether the ROM has the first version (no element table): <see cref="Apply"/> upgrades it.</summary>
+    public static bool IsOldVersion(RomBuffer rom) => V1.AppliedAt(rom, L2Rom.SnesToFile) >= 0;
 
     public static void Apply(RomBuffer rom)
     {
         if (IsApplied(rom)) return;
+        byte[]? starts = null;
+        if (IsOldVersion(rom))
+        {
+            // the first version: its monsters' starting statuses come along, its code comes out
+            int old = V1.AppliedAt(rom, L2Rom.SnesToFile);
+            starts = rom.ReadBytes(old + CodeV1.Bytes.Length, MonsterTableSize);
+            V1.Restore(rom);
+        }
         if (!IsOriginal(rom)) throw new InvalidOperationException("Some of the battle code the new statuses change isn't the US game's (another patch or a fan hack changed it), so they can't be added safely.");
         L2Rom.AllOrNothing(rom, () =>
         {
-            // the block, then the monsters' starting statuses (256 words, none to start with)
-            int at = L2Rom.Allocate(rom, Patch.Code.Bytes.Length + MonsterTableSize + ResistTableSize);
-            rom.WriteBytes(at + Patch.Code.Bytes.Length, new byte[MonsterTableSize + ResistTableSize]);
+            // the block, then the monsters' starting statuses (256 words, none to start with), the resistance records and
+            // the element table's address; the element table on its own (it is read with the data bank set to its bank)
+            int at = L2Rom.Allocate(rom, Patch.Code.Bytes.Length + MonsterTableSize + ResistTableSize + 4);
+            rom.WriteBytes(at + Patch.Code.Bytes.Length, new byte[MonsterTableSize + ResistTableSize + 4]);
+            if (starts != null) rom.WriteBytes(at + Patch.Code.Bytes.Length, starts);
+            int table = L2Rom.Allocate(rom, L2Elements.TableSize);
+            rom.WriteBytes(table, new byte[L2Elements.TableSize]);
             Patch.Write(rom, at, L2Rom.FileToSnes(at));
+            int ts = L2Rom.FileToSnes(table);
+            rom.WriteBytes(at + ElemPtrAt, new[] { (byte)ts, (byte)(ts >> 8), (byte)(ts >> 16), (byte)0 });
             return at;
         });
+        // the game's weaknesses and armor guards move into the table
+        L2Elements.MoveAll(rom);
         WriteResistTable(rom);
     }
 

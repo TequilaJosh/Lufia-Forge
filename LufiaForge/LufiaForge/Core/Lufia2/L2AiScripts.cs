@@ -1034,7 +1034,12 @@ public static class L2AiScripts
         var body = Build(steps, 1);
         if (body.Length > 0x7F00) throw new InvalidOperationException("The script is too long.");
         // the new statuses' commands need their code in the game
-        if (steps.Any(st => st.Op is >= 0x5D and <= 0x60) && !L2StatusPatch.IsApplied(rom)) L2StatusPatch.Apply(rom);
+        if (steps.Any(st => st.Op is >= 0x5D and <= 0x60) && !L2StatusPatch.IsApplied(rom))
+        {
+            // the battle code goes in, and with it the element table: the game's weaknesses move there, this script's too
+            L2StatusPatch.Apply(rom);
+            steps = L2Elements.MoveIncoming(rom, kind, index, steps);
+        }
         // an attack with a second element on a type's (a fire sword that is also vs dragons): the game's dragon, insect,
         // flying and hard shell checks want the element alone, so they get bit tests
         if (steps.Any(MixedTypeElement)) L2MonsterTypes.FixGameChecks(rom);

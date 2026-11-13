@@ -15,6 +15,7 @@ public partial class L2MonstersView : UserControl
     /// <summary>The new statuses card: what this record gives, cures or resists.</summary>
     private void Attach(L2MonstersPage p)
     {
+        Elements.Attach(p, LufiaForge.Core.Lufia2.L2Elements.Who.Monster);
         Types.Attach(p, Kind.MonsterDefense);
         NewStatuses.Attach(p,
             new("Resists", "Its chance of getting it drops by this percent (100 = immune): a step in its 'when hit' script.", Kind.MonsterDefense, What.Resist),

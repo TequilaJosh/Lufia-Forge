@@ -17,35 +17,40 @@ namespace LufiaForge.Core.Lufia2;
 /// <item>Golem: 14, every element does half (the 8 gorems).</item>
 /// <item>Shadow: 0B, plain (no element) attacks do half (Fiend, Shadow, Medusa, Deadly Sword, Black Dragon, 12).</item>
 /// </list>
-/// The game's checks for dragons, insects, flying and hard shells want that element alone (an attack that is also fire
-/// misses them): the first change gives them versions that test the bit (<see cref="FixGameChecks"/>). Lufia Forge adds four types of its own on element bits no script uses (0001, 0008, 2000 and 4000):
-/// four steps in the "when hit" script test the bit and double the damage, and a weapon or spell adds the bit to its
-/// element with a 17 27 step after the step that sets it.
+/// With Lufia Forge's element table (<see cref="L2Elements"/>) a type is a set of element percents in the monster's
+/// row (the game's shared scripts move there when the table goes in); Undead also keeps shared script 12 in the script
+/// (healing hurts, no instant death). Lufia Forge adds four types of its own on element bits no script uses (0001 vs
+/// beasts, 0008 vs aquatic, 2000 vs plants, 4000 vs humanoids); a weapon or spell is strong against a type when its
+/// attack has the type's element (a 17 27 step after the step that sets it). The game's checks for dragons, insects,
+/// flying and hard shells wanted that element alone; scripts that still run them get versions that test the bit
+/// (<see cref="FixGameChecks"/>).
 /// </summary>
 public static class L2MonsterTypes
 {
-    /// <param name="Shared">The shared scripts that make it (the first one is what marks it).</param>
+    /// <param name="Values">The element percents that make it (element index as <see cref="L2Elements"/>, percent).</param>
     /// <param name="Element">The element that is strong against it (0 = none).</param>
-    public sealed record TypeDef(string Name, string Help, int[] Shared, int Element, bool Added = false);
+    /// <param name="Undead">Also healing hurts it and instant death can't work (shared script 12 in its "when hit" script).</param>
+    public sealed record TypeDef(string Name, string Help, (int K, int Pct)[] Values, int Element, bool Undead = false);
 
-    /// <summary>The register the added types' check works in: shared value 12 ($7F:F432). No script of the game and no
-    /// battle code uses it (the monsters' own counters are no good: 12 monsters' turns count with counter 8, and a
-    /// "when hit" script runs as the monster).</summary>
+    /// <summary>The register the added types' check worked in before the table: shared value 12 ($7F:F432). No script of
+    /// the game and no battle code uses it; the bit-test versions of the game's checks use it too.</summary>
     public const int Work = 0x12;
+
+    private static readonly (int, int)[] AllHalf = { (1, -50), (2, -50), (10, -50), (11, -50), (12, -50), (4, -50), (5, -50) };
 
     public static readonly TypeDef[] Types =
     {
-        new("Dragon", "Dragon-slaying attacks (the element \"vs dragons\": Dragon tooth, Lizard blow, the dragon IP attacks) do double damage. The game's shared script 0C.", new[] { 0x0C }, 0x0100),
-        new("Insect", "Insect-slaying attacks (\"vs insects\": Insect crush) do double damage. Shared script 10.", new[] { 0x10 }, 0x0200),
-        new("Undead", "Healing hurts it, instant death can't work on it, and light does double damage. Shared scripts 12 and 05 (unticking it keeps a light weakness the monster has apart from it).", new[] { 0x12, 0x05 }, 0x0010),
-        new("Flying", "Thrown weapons (boomerangs) do double damage and earth does nothing. Shared script 04.", new[] { 0x04 }, 0x0080),
-        new("Hard shell", "Blunt weapons (maces, rods) do double damage. Shared script 0F.", new[] { 0x0F }, 0x0040),
-        new("Golem", "Every element does half damage. Shared script 14.", new[] { 0x14 }, 0),
-        new("Shadow", "Plain attacks (no element) do half damage. Shared script 0B.", new[] { 0x0B }, 0),
-        new("Beast", "Added by Lufia Forge: attacks with the element \"vs beasts\" do double damage.", Array.Empty<int>(), 0x0001, true),
-        new("Aquatic", "Added by Lufia Forge: attacks with the element \"vs aquatic\" do double damage.", Array.Empty<int>(), 0x0008, true),
-        new("Plant", "Added by Lufia Forge: attacks with the element \"vs plants\" do double damage.", Array.Empty<int>(), 0x2000, true),
-        new("Humanoid", "Added by Lufia Forge: attacks with the element \"vs humanoids\" do double damage.", Array.Empty<int>(), 0x4000, true),
+        new("Dragon", "Dragon-slaying attacks (the element \"vs dragons\": Dragon tooth, Lizard blow, the dragon IP attacks) do double damage: vs dragons +100%.", new[] { (8, 100) }, 0x0100),
+        new("Insect", "Insect-slaying attacks (\"vs insects\": Insect crush) do double damage: vs insects +100%.", new[] { (9, 100) }, 0x0200),
+        new("Undead", "Healing hurts it and instant death can't work on it (shared script 12 in its 'when hit' script), and light does double damage: light +100%.", new[] { (4, 100) }, 0x0010, true),
+        new("Flying", "Thrown weapons (boomerangs) do double damage and earth does nothing: thrown +100%, earth -100%.", new[] { (7, 100), (12, -100) }, 0x0080),
+        new("Hard shell", "Blunt weapons (maces, rods) do double damage: blunt +100%.", new[] { (6, 100) }, 0x0040),
+        new("Golem", "Every element does half damage: fire, water, ice, thunder, earth, light and dark -50%.", AllHalf, 0),
+        new("Shadow", "Plain attacks (no element) do half damage: plain -50%.", new[] { (L2Elements.Plain, -50) }, 0),
+        new("Beast", "Added by Lufia Forge: attacks with the element \"vs beasts\" do double damage: vs beasts +100%.", new[] { (0, 100) }, 0x0001),
+        new("Aquatic", "Added by Lufia Forge: attacks with the element \"vs aquatic\" do double damage: vs aquatic +100%.", new[] { (3, 100) }, 0x0008),
+        new("Plant", "Added by Lufia Forge: attacks with the element \"vs plants\" do double damage: vs plants +100%.", new[] { (13, 100) }, 0x2000),
+        new("Humanoid", "Added by Lufia Forge: attacks with the element \"vs humanoids\" do double damage: vs humanoids +100%.", new[] { (14, 100) }, 0x4000),
     };
 
     private static Step Op(byte op, params int[] v)
@@ -65,30 +70,34 @@ public static class L2MonsterTypes
 
     private static bool Calls(Step s, int shared) => s.Op == 0x42 && s.Args.Length > 0 && s.Args[0] == shared;
 
-    /// <summary>Where the added type's four steps start (0C 87 =element / 16 87 bit / 06 87 0 skip / 0F 2A 2), or -1.</summary>
-    private static int AddedAt(List<Step> steps, int bit)
+    /// <summary>The element bit of the 4-step check Lufia Forge's types used before the table (0C 12 =element / 16 12 bit
+    /// / 06 12 0 skip / 0F 2A 2) when it starts at step <paramref name="i"/>, else -1 (the table takes them over).</summary>
+    public static int AddedTypeAt(List<Step> steps, int i)
     {
-        for (int i = 0; i + 3 < steps.Count; i++)
-        {
-            Step a = steps[i], b = steps[i + 1], c = steps[i + 2], d = steps[i + 3];
-            if (a.Op == 0x0C && L2AiScripts.ArgValue(a, 0) == Work && L2AiScripts.ArgValue(a, 1) == 0x8027
-                && b.Op == 0x16 && L2AiScripts.ArgValue(b, 0) == Work && L2AiScripts.ArgValue(b, 1) == bit
-                && c.Op == 0x06 && L2AiScripts.ArgValue(c, 0) == Work && L2AiScripts.ArgValue(c, 1) == 0
-                && d.Op == 0x0F && L2AiScripts.ArgValue(d, 0) == 0x2A)
-                return i;
-        }
+        if (i < 0 || i + 3 >= steps.Count) return -1;
+        Step a = steps[i], b = steps[i + 1], c = steps[i + 2], d = steps[i + 3];
+        if (a.Op == 0x0C && L2AiScripts.ArgValue(a, 0) == Work && L2AiScripts.ArgValue(a, 1) == 0x8027
+            && b.Op == 0x16 && L2AiScripts.ArgValue(b, 0) == Work
+            && c.Op == 0x06 && L2AiScripts.ArgValue(c, 0) == Work && L2AiScripts.ArgValue(c, 1) == 0 && c.Targets[0] == steps.ElementAtOrDefault(i + 4)
+            && d.Op == 0x0F && L2AiScripts.ArgValue(d, 0) == 0x2A && L2AiScripts.ArgValue(d, 1) == 2)
+            return L2AiScripts.ArgValue(b, 1);
         return -1;
     }
 
-    private static bool Has(List<Step> steps, TypeDef t) =>
-        t.Added ? AddedAt(steps, t.Element) >= 0 : steps.Any(s => Calls(s, t.Shared[0]));
+    /// <summary>Whether monster <paramref name="monster"/> is that type: its element row has the type's percents (and for
+    /// Undead its "when hit" script runs shared script 12).</summary>
+    private static bool Has(RomBuffer rom, int monster, TypeDef t)
+    {
+        var row = L2Elements.Row(rom, L2Elements.Who.Monster, monster);
+        if (t.Values.Any(v => row[v.K] != v.Pct)) return false;
+        return !t.Undead || Load(rom, Kind.MonsterDefense, monster).Any(s => Calls(s, 0x12));
+    }
 
     /// <summary>The types a monster is (bit n = <see cref="Types"/>[n]).</summary>
     public static int Of(RomBuffer rom, int monster)
     {
-        var steps = Load(rom, Kind.MonsterDefense, monster);
         int bits = 0;
-        for (int t = 0; t < Types.Length; t++) if (Has(steps, Types[t])) bits |= 1 << t;
+        for (int t = 0; t < Types.Length; t++) if (Has(rom, monster, Types[t])) bits |= 1 << t;
         return bits;
     }
 
@@ -103,49 +112,23 @@ public static class L2MonsterTypes
                 if (o.Targets[j] == old) o.Targets[j] = next;
     }
 
-    /// <summary>Makes the monster that type or not (the steps go at the top of its "when hit" script). False when nothing changed.</summary>
+    /// <summary>Makes the monster that type or not: on writes the type's percents into its element row, off sets them back
+    /// to 0 (Undead also adds or takes out shared script 12 in its "when hit" script). Puts the battle code and the table
+    /// in first. False when nothing changed.</summary>
     public static bool Set(RomBuffer rom, int monster, int type, bool on)
     {
         var t = Types[type];
-        var steps = Load(rom, Kind.MonsterDefense, monster);
-        if (Has(steps, t) == on) return false;
+        if (Has(rom, monster, t) == on) return false;
+        L2Elements.Install(rom);
         FixGameChecks(rom);
-        if (on)
+        foreach (var (k, pct) in t.Values) L2Elements.Set(rom, L2Elements.Who.Monster, monster, k, on ? pct : 0);
+        if (t.Undead)
         {
-            if (t.Added)
-            {
-                var mul = Op(0x0F, 0x2A, 2);
-                var skip = Op(0x06, Work, 0);
-                skip.Targets[0] = steps[0];
-                steps.InsertRange(0, new[] { Op(0x0C, Work, 0x8027), Op(0x16, Work, t.Element), skip, mul });
-            }
-            else
-            {
-                // the ones that come with it, then the type's script (a monster that has one of them already keeps its own)
-                var add = t.Shared.Skip(1).Where(sh => !steps.Any(s => Calls(s, sh))).Append(t.Shared[0]).Select(sh => Op(0x42, sh));
-                steps.InsertRange(0, add.ToList());
-            }
+            var steps = Load(rom, Kind.MonsterDefense, monster);
+            if (on && !steps.Any(s => Calls(s, 0x12))) steps.Insert(0, Op(0x42, 0x12));
+            if (!on) foreach (var s in steps.Where(s => Calls(s, 0x12)).ToList()) Remove(steps, s);
+            Save(rom, Kind.MonsterDefense, monster, steps);
         }
-        else if (t.Added)
-        {
-            int at = AddedAt(steps, t.Element);
-            foreach (var s in steps.GetRange(at, 4).ToList()) Remove(steps, s);
-        }
-        else
-        {
-            // the type's own script goes; the ones that come with it (Undead's light weakness) only right before it, where a
-            // tick puts them, so a weakness the monster had of its own stays
-            foreach (var s in steps.Where(s => Calls(s, t.Shared[0])).ToList())
-            {
-                for (int k = t.Shared.Length - 1; k >= 1; k--)
-                {
-                    int i = steps.IndexOf(s);
-                    if (i > 0 && Calls(steps[i - 1], t.Shared[k])) Remove(steps, steps[i - 1]);
-                }
-                Remove(steps, s);
-            }
-        }
-        Save(rom, Kind.MonsterDefense, monster, steps);
         return true;
     }
 

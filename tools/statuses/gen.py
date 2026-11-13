@@ -61,6 +61,8 @@ lines.append(f'    private static readonly HookPatch.Block Code = new("{hx(fixed
 # the RAM and the labels the C# side needs
 for k in ('NS', 'MAGIC'):
     lines.append(f'    internal const int Ram{k} = 0x{la[k]:06X};')
+lines.append('    /// <summary>Where the element table address goes in the block (Lufia Forge fills it in).</summary>')
+lines.append(f'    internal const int ElemPtrAt = 0x{la["MonStart"] + 0x1600 - A:X};')
 lines.append('}')
 out = os.path.join(here, '..', '..', 'LufiaForge', 'LufiaForge', 'Core', 'Lufia2', 'L2StatusPatch.Data.cs')
 open(out, 'w', newline='\r\n').write('\n'.join(lines) + '\n')

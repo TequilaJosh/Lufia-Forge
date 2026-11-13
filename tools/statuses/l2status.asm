@@ -48,6 +48,21 @@ INACT   = $7FFD9C
 RPAGE   = $7FFD9E
 STON    = $7FFD7E
 RSUM    = $7FFDE0
+; the element table's work (Lufia Forge's element percentages)
+EK      = $7FFDA0
+EBASE   = $7FFDA2
+ESUM    = $7FFDA4
+EBLK    = $7FFDA6
+EMAG    = $7FFDA8
+ENEG    = $7FFDAA
+EF      = $7FFDAC
+EPL     = $7FFDAE
+EPH     = $7FFDB0
+EE      = $7FFDB2
+ECNT    = $7FFDB4
+ETMP    = $7FFDB6
+ESTART  = $7FFDB8
+NBUF    = $7FFDC0
 
 ; ================================================================ the game's code: where the hooks go
 org $85B464
@@ -77,6 +92,8 @@ org $81AF64
   nop
   nop
   nop
+org $85D1BC
+  jsl ElemHit            ; LDA $7FF4D0: after the target's "when hit" script, before the damage formula
 org $85D2C5
   jsl DmgMod             ; STA $7FF462: the HP change after the formula
 org $85D18E
@@ -2355,7 +2372,7 @@ DR_none:
   beq DR_el
   brl DR_st
 DR_el:
-  ; elements: "Fire   1/2" in two columns; each from ElemTab (bit, name)
+  ; elements: "Fire   -42%" in two columns; each from ElemTab (element, name)
   ldy #TElTitle-Texts
   ldx #$31C2
   jsl DrawLine
@@ -2366,23 +2383,19 @@ DR_el1:
   asl a
   asl a
   tax
-  lda ElemTab,x          ; the element's bit
-  sta TMP2
   lda ElemTab+2,x        ; its name's text
   sta TMP3
-  ldy #TDash-Texts
-  lda RSUM
-  and TMP2
-  beq DR_e2
-  ldy #THalf-Texts
-DR_e2:
-  lda RSUM+2
-  and TMP2
-  beq DR_e3
-  ldy #TNull-Texts
-DR_e3:
-  tya
-  sta TMP4
+  lda ElemTab,x          ; the element (0-15 a bit, 16 plain)
+  pha
+  lda $14B3
+  and #$00FF
+  asl a
+  tax
+  lda $0A80,x
+  tax                    ; the hero's block
+  pla
+  jsl EPct               ; its percent: the hero's own and its worn items' added up
+  jsl NumText
   ; place: entry n at row 6 + (n/2)*2, column 2 or 17
   lda TMPK
   lsr a
@@ -2403,12 +2416,23 @@ DR_e3:
   adc #$001E
   sta TMP0
 DR_e4:
-  jsl DrawPair
+  lda TMP3
+  tay
+  lda TMP0
+  tax
+  jsl DrawLine
+  lda TMP0
+  clc
+  adc #$0010             ; the value 8 letters on
+  tax
+  jsl DrawRam
   lda TMPK
   inc a
   sta TMPK
   cmp #$0008
-  bne DR_el1
+  beq DR_eld
+  brl DR_el1
+DR_eld:
   brl DR_up
 DR_st:
   ; statuses: those guarded against, "Poison IMM" / "Sleep  1/2", two columns, up to 12
@@ -2564,6 +2588,378 @@ DrawLine:
   plp
   rtl
 
+; ================================================================ element percentages
+; Lufia Forge's element table: a row of 17 signed words per fighter (the 16 element bits in order, then "plain": an
+; attack with no element), each a percent (+22 = 22% more, -42 = 42% less, -100 = nothing, below -100 the hit heals).
+; Rows: monsters 0-255 at +$0000, heroes 0-6 at +$2200, items 0-511 at +$2300 (a hero's row plus the rows of the six
+; items it wears). The table's address is kept after the block's tables, at MonStart + $1600 (Lufia Forge fills it
+; in; bank 0 = no table).
+
+; ---- Row34: A = a row number -> A = its offset (x 34). 16-bit A.
+Row34:
+  sta ETMP
+  asl a
+  asl a
+  asl a
+  asl a
+  asl a
+  clc
+  adc ETMP
+  adc ETMP
+  rtl
+
+; ---- EAdd: A = a row's offset -> ESUM += its word for element EK (DB = the table's bank). 16-bit; changes X.
+EAdd:
+  clc
+  adc EBASE
+  clc
+  adc EK
+  tax
+  lda $0000,x
+  clc
+  adc ESUM
+  sta ESUM
+  rtl
+
+; ---- EPct: X = a fighter's block, A = an element (0-15 its bit, 16 plain) -> A = its percent (a hero: its row and the
+; rows of its six worn items added up; a monster: its row; the capsule monster or no table: 0). 16-bit A, X, Y (call
+; with them so); keeps X and Y; any DB.
+EPct:
+  php
+  rep #$30
+  phb
+  phy
+  phx
+  asl a
+  sta EK
+  txa
+  sta EBLK
+  lda #$0000
+  sta ESUM
+  lda MonStart+$1602
+  and #$00FF
+  bne EP_go
+  brl EP_out
+EP_go:
+  sep #$20
+  pha
+  plb                    ; DB = the table's bank
+  rep #$20
+  lda MonStart+$1600
+  sta EBASE
+  lda EBLK
+  beq EP_out
+  sec
+  sbc #$0BAD
+  bcc EP_mon
+  cmp #$0532
+  bcs EP_mon
+  ldy #$0000
+EP_hd:
+  cmp #$00BE
+  bcc EP_hdd
+  sbc #$00BE
+  iny
+  bra EP_hd
+EP_hdd:
+  cmp #$0000
+  bne EP_mon
+  tya                    ; hero Y: its own row
+  jsl Row34
+  clc
+  adc #$2200
+  jsl EAdd
+  ldy #$0066             ; then the six items it wears (+$66-$71)
+EP_eq:
+  tya
+  clc
+  adc EBLK
+  tax
+  lda $7E0000,x
+  and #$01FF
+  beq EP_en
+  jsl Row34
+  clc
+  adc #$2300
+  jsl EAdd
+EP_en:
+  iny
+  iny
+  cpy #$0072
+  bne EP_eq
+  bra EP_out
+EP_mon:
+  lda EBLK
+  cmp $7E0A6C            ; the capsule monster: none
+  beq EP_out
+  tax
+  lda $7E0050,x          ; a monster: its id
+  and #$00FF
+  jsl Row34
+  jsl EAdd
+EP_out:
+  lda ESUM
+  plx
+  ply
+  plb
+  plp
+  rtl
+
+; ---- EApply: X = the target's block, ECNT = an element: EMAG (the hit's size) x (100 + its percent) / 100; a factor
+; below 0 turns the hit into healing (ENEG flips). 16-bit; keeps X.
+EApply:
+  lda ECNT
+  jsl EPct
+  cmp #$0000
+  bne EA_go
+  rtl
+EA_go:
+  clc
+  adc #$0064
+  bpl EA_pos
+  eor #$FFFF
+  inc a
+  sta EF
+  lda ENEG
+  eor #$FFFF
+  sta ENEG
+  bra EA_mul
+EA_pos:
+  sta EF
+EA_mul:
+  phx
+  lda #$0000
+  sta EPL
+  sta EPH
+  ldx #$0010
+EA_ml:
+  lda EPL                ; product (EPH:EPL) = EMAG x EF
+  asl a
+  sta EPL
+  lda EPH
+  rol a
+  sta EPH
+  lda EF
+  asl a
+  sta EF
+  bcc EA_mn
+  lda EPL
+  clc
+  adc EMAG
+  sta EPL
+  lda EPH
+  adc #$0000
+  sta EPH
+EA_mn:
+  dex
+  bne EA_ml
+  lda #$0000             ; then / 100 (the remainder in ETMP)
+  sta ETMP
+  ldx #$0020
+EA_dl:
+  lda EPL
+  asl a
+  sta EPL
+  lda EPH
+  rol a
+  sta EPH
+  lda ETMP
+  rol a
+  sta ETMP
+  cmp #$0064
+  bcc EA_dn
+  sbc #$0064
+  sta ETMP
+  lda EPL
+  ora #$0001
+  sta EPL
+EA_dn:
+  dex
+  bne EA_dl
+  plx
+  lda EPH
+  bne EA_big
+  lda EPL
+  bpl EA_st
+EA_big:
+  lda #$7FFF
+EA_st:
+  sta EMAG
+  rtl
+
+; ---- ElemHit: from $85:D1BC (X = the target's block, A 8-bit), after its "when hit" script and before the damage
+; formula: a hit (the damage register below 0) is changed by the target's percent for each element of the attack
+; (multiplied: fire +50% and light +50% make x2.25), or for "plain" when it has none. Then what the hook replaced.
+ElemHit:
+  php
+  rep #$30
+  phx
+  phy
+  lda $7FF462
+  bmi EH_hit
+  brl EH_out
+EH_hit:
+  eor #$FFFF
+  inc a
+  sta EMAG
+  lda #$FFFF
+  sta ENEG
+  lda $7FF45C
+  sta EE
+  lda #$0000
+  sta ECNT
+  lda EE
+  bne EH_loop
+  lda #$0010
+  sta ECNT
+  jsl EApply
+  bra EH_fin
+EH_loop:
+  lda EE
+  beq EH_fin
+  lsr a
+  sta EE
+  bcc EH_next
+  jsl EApply
+EH_next:
+  lda ECNT
+  inc a
+  sta ECNT
+  bra EH_loop
+EH_fin:
+  lda ENEG
+  beq EH_pos
+  lda EMAG
+  eor #$FFFF
+  inc a
+  bra EH_st
+EH_pos:
+  lda EMAG
+EH_st:
+  sta $7FF462
+EH_out:
+  ply
+  plx
+  plp
+  lda $7FF4D0
+  rtl
+
+; ---- NumText: A = a percent (signed, 16-bit) -> NBUF = "+22%", "-42%" or "-" for 0 (00 at the end; % is the menu
+; font's tile $117). Keeps X.
+NumText:
+  php
+  rep #$30
+  phx
+  ldx #$0000
+  cmp #$0000
+  bne NT_some
+  lda #$002D
+  sta NBUF
+  plx
+  plp
+  rtl
+NT_some:
+  bpl NT_p
+  eor #$FFFF
+  inc a
+  sta ETMP
+  lda #$002D
+  bra NT_s
+NT_p:
+  sta ETMP
+  lda #$002B
+NT_s:
+  sep #$20
+  sta NBUF,x
+  rep #$20
+  inx
+  lda #$0000
+  sta ESTART
+  lda #$03E8
+  jsl NT_dig
+  lda #$0064
+  jsl NT_dig
+  lda #$000A
+  jsl NT_dig
+  lda ETMP
+  clc
+  adc #$0030
+  sep #$20
+  sta NBUF,x
+  inx
+  lda #$09               ; the menu font's % is tile $117: attribute $3D, letter $17, attribute $3C again (the
+  sta NBUF,x             ; STATUS screen's own "IP 0%" draws it so)
+  inx
+  lda #$3D
+  sta NBUF,x
+  inx
+  lda #$17
+  sta NBUF,x
+  inx
+  lda #$09
+  sta NBUF,x
+  inx
+  lda #$3C
+  sta NBUF,x
+  inx
+  lda #$00
+  sta NBUF,x
+  rep #$20
+  plx
+  plp
+  rtl
+
+; NT_dig: A = a power of ten: its digit of ETMP into NBUF,X (none while only zeros came), ETMP keeps the rest
+NT_dig:
+  sta EF
+  lda #$0030
+  sta EPL
+NT_dl:
+  lda ETMP
+  cmp EF
+  bcc NT_dd
+  sbc EF
+  sta ETMP
+  lda EPL
+  inc a
+  sta EPL
+  bra NT_dl
+NT_dd:
+  lda EPL
+  cmp #$0030
+  bne NT_put
+  lda ESTART
+  beq NT_skip
+NT_put:
+  lda EPL
+  sep #$20
+  sta NBUF,x
+  rep #$20
+  inx
+  lda #$0001
+  sta ESTART
+NT_skip:
+  rtl
+
+; ---- DrawRam: X = the place in the text map: draws NBUF there (the game's DrawMenuText, the text read from $7F)
+DrawRam:
+  php
+  phb
+  rep #$30
+  ldy #$FDC0
+  sep #$20
+  lda #$7F
+  sta $5F
+  lda #$3C
+  sta $0564
+  pea $7E7E
+  plb
+  plb
+  jsl $808878
+  plb
+  plp
+  rtl
+
 ; ================================================================ tables and texts
 BitTab:
   dw $0001, $0002, $0004, $0008, $0010, $0020, $0040, $0080, $0100, $0200, $0400, $0800, $1000, $2000, $4000, $8000
@@ -2585,9 +2981,9 @@ DecayTab:
 PassTab:
   dw PBur-Texts, PBle-Texts, PReg-Texts, PMan-Texts, PDoo-Texts
 
-ElemTab:                 ; bit, name
-  dw $0002, NFire-Texts, $0004, NWater-Texts, $0400, NIce-Texts, $0800, NThun-Texts
-  dw $1000, NEarth-Texts, $0010, NLight-Texts, $0020, NDark-Texts, $0001, NPlain-Texts
+ElemTab:                 ; element (0-15 its bit, 16 plain), name
+  dw $0001, NFire-Texts, $0002, NWater-Texts, $000A, NIce-Texts, $000B, NThun-Texts
+  dw $000C, NEarth-Texts, $0004, NLight-Texts, $0005, NDark-Texts, $0010, NPlain-Texts
 StatTab:                 ; bit (in the old word for 0-5, the new one after), name
   dw $0001, NPoi-Texts, $0002, NSil-Texts, $0004, NDea-Texts, $0008, NPar-Texts, $0010, NCon-Texts, $0020, NSle-Texts
   dw $0001, NZom-Texts, $0002, NFro-Texts, $0004, NDec-Texts, $0008, NBur-Texts, $0010, NBer-Texts, $0020, NSpo-Texts
@@ -2689,5 +3085,6 @@ PDoo: db "Doom strikes!", $00
 
 ; after the block Lufia Forge allocates the monsters' starting statuses (a word per monster id, 256: zeros = none) and
 ; then, at MonStart + $200, a 10-byte record per item (512) for the STATUS screen's resistance pages: elements halved,
-; elements nullified, the game's statuses immune / halved (a byte each), the new statuses immune, resisted (words)
+; elements nullified, the game's statuses immune / halved (a byte each), the new statuses immune, resisted (words);
+; then, at MonStart + $1600, the element table's address (4 bytes)
 MonStart:

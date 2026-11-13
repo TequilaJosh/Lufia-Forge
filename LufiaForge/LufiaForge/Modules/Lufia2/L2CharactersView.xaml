@@ -1,7 +1,8 @@
 <UserControl x:Class="LufiaForge.Modules.Lufia2.L2CharactersView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:common="clr-namespace:LufiaForge.Modules.Common">
+             xmlns:common="clr-namespace:LufiaForge.Modules.Common"
+             xmlns:l2="clr-namespace:LufiaForge.Modules.Lufia2">
     <UserControl.Resources>
         <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
     </UserControl.Resources>
@@ -80,6 +81,8 @@
                         </StackPanel>
                     </Border>
                 </WrapPanel>
+
+                <l2:L2ElementCard x:Name="Elements" Style="{StaticResource GdCard}" HorizontalAlignment="Left"/>
 
                 <!-- magic -->
                 <Border Style="{StaticResource GdCard}" HorizontalAlignment="Left">

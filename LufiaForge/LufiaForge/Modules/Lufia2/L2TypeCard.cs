@@ -62,7 +62,7 @@ public sealed class L2TypeCard : Border
         {
             Style = TryFindResource("GdHint") as Style, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 6),
             Text = IsMonster
-                ? "Lufia II has no type byte: a monster is a dragon, an insect or undead because its 'when hit' script runs the game's shared script for it. A tick adds or takes out those steps. Beast, Aquatic, Plant and Humanoid are Lufia Forge's: weapons and spells strong against them do double damage."
+                ? "A type is a set of element percents (ELEMENTS card): Dragon is vs dragons +100%, Flying thrown +100% and earth -100%... A tick writes them, unticking sets them back to 0. Undead also makes healing hurt it (shared script 12 in its when-hit script). Beast, Aquatic, Plant and Humanoid are Lufia Forge's own."
                 : (_kind == Kind.Weapon ? "As a weapon: " : _kind == Kind.ItemBattle ? "Used in battle: " : "") + "adds the type's element to the attack (a step after the one that sets its element), on top of any it has: a fire sword strong against dragons is both. Undead: light. The first tick also makes the game's dragon, insect, flying and hard shell checks count an attack with other elements (they wanted the element alone).",
         });
         int bits = IsMonster ? L2MonsterTypes.Of(rom, index) : L2MonsterTypes.StrongAgainst(rom, _kind, index);

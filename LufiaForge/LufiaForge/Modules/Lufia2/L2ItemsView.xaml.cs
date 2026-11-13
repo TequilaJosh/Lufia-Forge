@@ -16,6 +16,7 @@ public partial class L2ItemsView : UserControl
     /// <summary>The new statuses card: what this record gives, cures or resists.</summary>
     private void Attach(L2ItemsPage p)
     {
+        Elements.Attach(p, LufiaForge.Core.Lufia2.L2Elements.Who.Item, i => p.PageRom is { } r && L2Battle.ReadItem(r, i).EquipType != 0);
         Types.Attach(p, Kind.Weapon, i =>
         {
             var rom = p.PageRom;
