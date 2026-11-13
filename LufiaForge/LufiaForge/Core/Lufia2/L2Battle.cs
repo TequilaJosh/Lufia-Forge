@@ -19,7 +19,7 @@ public static class L2Battle
         (0x2000, "Battle animation"), (0x4000, "Unknown"), (0x8000, "IP attack"),
     };
     public static readonly string[] EquipTypes = { "Weapon", "Armor", "Shield", "Helmet", "Ring", "Jewel" };
-    public static readonly string[] ItemUse = { "Consumable", "Equipment", "Boots?", "Cursed", "Fruit", "Can't be dropped", "Usable in the menu", "Usable in battle" };
+    public static readonly string[] ItemUse = { "Used on a hero", "Equipment", "Boots?", "Cursed", "Fruit", "Can't be dropped", "Usable in the menu", "Usable in battle" };
 
     public sealed class Item
     {

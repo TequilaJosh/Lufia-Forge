@@ -46,6 +46,12 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+                    <StackPanel Orientation="Horizontal" Margin="0,8,0,2">
+                        <TextBlock Text="Break chance %" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <TextBox Style="{StaticResource GdNumber}" Width="60" Text="{Binding BreakText, UpdateSourceTrigger=LostFocus}"
+                                 ToolTip="The chance it's used up when a hero uses it, in battle or the menu (0 to 100; empty = the default: equipment never, other items always)"/>
+                    </StackPanel>
+                    <TextBlock Text="{Binding BreakNote}" Style="{StaticResource GdHint}" TextWrapping="Wrap" MaxWidth="230" HorizontalAlignment="Left"/>
                 </StackPanel>
             </Border>
             <Border Style="{StaticResource GdCard}">

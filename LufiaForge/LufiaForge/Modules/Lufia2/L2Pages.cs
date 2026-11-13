@@ -527,6 +527,9 @@ public partial class L2ItemsPage : L2Page
     [ObservableProperty] private List<L2Word> _words = new();
     [ObservableProperty] private string _wordsText = "";
     [ObservableProperty] private string _effectText = "";
+    /// <summary>The item's chance to break when used (empty = the default: equipment never, other items always).</summary>
+    [ObservableProperty] private string _breakText = "";
+    [ObservableProperty] private string _breakNote = "";
     private string[] _ipNames = Array.Empty<string>();
     /// <summary>The added words as the item had them when shown (bit -> has it, value).</summary>
     private Dictionary<int, (bool Has, int Value)> _addedAtLoad = new();
@@ -583,9 +586,21 @@ public partial class L2ItemsPage : L2Page
             if (steps.Count > 0) parts.Add(L2AiScripts.KindName(k).ToUpperInvariant() + (edited ? "  (edited in Lufia Forge)" : "") + "\n" + L2AiScripts.Listing(steps, names));
         }
         EffectText = parts.Count > 0 ? string.Join("\n\n", parts) : "No effect yet: the buttons below give it one.";
+        int own = L2ItemBreak.Own(Rom!, index);
+        BreakText = own == L2ItemBreak.Default ? "" : own.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        BreakNote = BreakDescription(index);
     }
 
-    protected override bool IsField(string p) => p is nameof(Name) or nameof(Price) or nameof(EquipType) or nameof(Icon);
+    private string BreakDescription(int index)
+    {
+        int c = L2ItemBreak.Chance(Rom!, index);
+        string now = c >= 100 ? "used up every time" : c <= 0 ? "never used up" : $"a {c}% chance to break each time (in battle: \"... broke!\")";
+        if (!L2ItemBreak.IsIn(Rom!))
+            return $"Now: {now} (the game uses up every item a hero uses, equipment too). Empty = the default: equipment never breaks, other items always. Typing a number puts the code for it in.";
+        return $"Now: {now}." + (L2ItemBreak.Own(Rom!, index) == L2ItemBreak.Default ? " Empty = the default: equipment never breaks, other items always." : " Empty goes back to the default.");
+    }
+
+    protected override bool IsField(string p) => p is nameof(Name) or nameof(Price) or nameof(EquipType) or nameof(Icon) or nameof(BreakText);
     protected override int DescriptionEntry(int index) => index;
 
     protected override string? Write()
@@ -604,7 +619,24 @@ public partial class L2ItemsPage : L2Page
             }
         }
         L2Battle.WriteItem(Rom!, _it);
+        WriteBreak();
         return _it.Name;
+    }
+
+    /// <summary>The break chance; equipment that can be used gets the code too (else the game uses it up).</summary>
+    private void WriteBreak()
+    {
+        string t = BreakText.Trim().TrimEnd('%').Trim();
+        int want = L2ItemBreak.Default;
+        if (t.Length > 0 && (!int.TryParse(t, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out want) || want is < 0 or > 100))
+            want = L2ItemBreak.Own(Rom!, _it!.Index);
+        bool usableGear = _it!.EquipType != 0 && (_it.Use & 0xC0) != 0;
+        if (L2ItemBreak.CantInstall(Rom!) == null && (want != L2ItemBreak.Own(Rom!, _it.Index) || usableGear && !L2ItemBreak.IsIn(Rom!)))
+            L2ItemBreak.Set(Rom!, _it.Index, want);
+        int own = L2ItemBreak.Own(Rom!, _it.Index);
+        string shown = own == L2ItemBreak.Default ? "" : own.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        if (BreakText != shown) { bool was = Loading; Loading = true; BreakText = shown; Loading = was; }
+        BreakNote = BreakDescription(_it.Index);
     }
 }
 

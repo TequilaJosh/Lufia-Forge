@@ -843,6 +843,10 @@ public static class L2AiScripts
         public void Br(byte op, string l) { _b.Add(op); _fix.Add((_b.Count, l, 0)); _b.Add(0); }
         public void Jsr(string l) { _b.Add(0x20); _fix.Add((_b.Count, l, 1)); _b.Add(0); _b.Add(0); }
         public void Pea(string l) { _b.Add(0xF4); _fix.Add((_b.Count, l, 2)); _b.Add(0); _b.Add(0); }
+        /// <summary>A label's 16-bit address (the operand of an absolute or long instruction written before it).</summary>
+        public void Abs(string l) { _fix.Add((_b.Count, l, 1)); _b.Add(0); _b.Add(0); }
+        /// <summary>Where the next byte goes (from the origin).</summary>
+        public int Here => _b.Count;
         public int At(string l) => _labels[l];
         public byte[] Done()
         {
