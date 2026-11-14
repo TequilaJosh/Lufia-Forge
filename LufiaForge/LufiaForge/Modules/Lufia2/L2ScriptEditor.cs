@@ -504,27 +504,23 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
     private bool HeroAbsent(int i, int h)
     {
         var (party, joined) = PartyAt(i);
-        return !joined.Contains(h) && (!party.Contains(h) || _testOnly.Contains(h));
+        return !joined.Contains(h) && !LeavesLater(i, h) && (!party.Contains(h) || _testOnly.Contains(h));
     }
 
-    /// <summary>The heroes the event's steps move while they aren't in the story's party (see <see cref="HeroAbsent"/>).</summary>
-    private List<int> AbsentHeroes()
+    /// <summary>The event makes hero <paramref name="h"/> leave the party after step <paramref name="i"/> (2C, or the hero's
+    /// story flag turned off) without making the hero join first: then the hero is in the party at step i, whatever the
+    /// story flags say (a hack's own story: Karlloon North Shrine B1's scene ends with Dekar leaving).</summary>
+    private bool LeavesLater(int i, int h)
     {
-        var l = new List<int>();
-        if (_script == null) return l;
-        for (int i = 0; i < _script.Steps.Count; i++)
+        if (_script == null) return false;
+        for (int k = i + 1; k < _script.Steps.Count; k++)
         {
-            var st = _script.Steps[i];
-            if (st.IsText || st.Op is 0x2B or 0x2C || L2EventCommands.Find(st.Op) is not { } def) continue;
-            foreach (var p in def.FieldsFor(st.Bytes))
-            {
-                if (p.Kind is not (L2Kind.Who or L2Kind.WhoOrAll)) continue;
-                int h;
-                try { h = p.Get(st.Bytes); } catch (Exception) { continue; }
-                if (h is >= 1 and <= 6 && !l.Contains(h) && HeroAbsent(i, h)) l.Add(h);
-            }
+            var s = _script.Steps[k];
+            if (s.IsText || s.Bytes.Length < 2) continue;
+            if (s.Op == 0x2B && s.Bytes[1] == h || s.Op == 0x1A && s.Bytes[1] == L2StoryParty.HeroFlag[h]) return false;
+            if (s.Op == 0x2C && s.Bytes[1] == h || s.Op == 0x1B && s.Bytes[1] == L2StoryParty.HeroFlag[h]) return true;
         }
-        return l;
+        return false;
     }
 
     /// <summary>Texts wider than the box (or longer than a box shows) broken at spaces to fit, and cut into more text
@@ -1269,12 +1265,10 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         else Changed(false);
         if (p.Kind is L2Kind.Who or L2Kind.WhoOrAll && value == 0 && s.Op is 0x99 or 0x9D)
             Dispatch(() => LeaderVanishToStandIn());
-        // a hero who isn't in the story's party here: a map character that looks like the hero takes the part
-        if (p.Kind is L2Kind.Who or L2Kind.WhoOrAll && value is >= 1 and <= 6 && s.Op is not (0x2B or 0x2C) && _script.Steps.IndexOf(s) is var at && at >= 0 && HeroAbsent(at, value))
-        {
-            int hero = value;
-            Dispatch(() => HeroToCharacter(hero));
-        }
+        // a hero who may not be in the story's party here gets a warning on the step's card with "Use a map character
+        // that looks like ..." (never done by itself: the story's party is a guess from the story flags, wrong in a hack
+        // whose hero joined in an event the flags don't lead back to; done anyway, Dekar picked for a step became a
+        // stand-in in all 49 of the event's Dekar steps)
     }
 
     private L2Step? Next(L2Step s)
@@ -1803,8 +1797,9 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
                     string n = L2EventCommands.HeroNames[h];
                     string them = h is 1 or 4 ? "her" : "him";
                     vm.Warning = (vm.Warning.Length > 0 ? vm.Warning + " " : "") + (inTest
-                        ? $"{n} isn't in the story's party here: Test in the game adds {them} so the test plays, but in the game itself these steps skip {them} " +
-                          $"and move Maxim (the leader) instead, with the camera. Have {them} join first (A hero joins the party), or use a map character that looks like {n}."
+                        ? $"{n} may not be in the party here: going by the story flags, no event before this one makes {them} join. If {n} is in the party here " +
+                          $"in your game, leave it as it is. If not, the game's character commands skip {them} and move Maxim (the leader) instead, with the camera " +
+                          $"(Test in the game adds {them}, so the test still plays): have {them} join first (A hero joins the party), or use a map character that looks like {n}."
                         : $"{n} isn't in the party here: the game's character commands skip {them} and move Maxim (the leader) instead, and the camera follows. " +
                           $"For a cutscene, use a map character that looks like {n}.");
                     vm.HeroFix = h;
@@ -2301,17 +2296,13 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         return m == 0x02 && s == 0x01 && p == 0x06 ? "A new game starts as in the game (the opening)." : $"A new game starts on map {m:X2} {_maps.ElementAtOrDefault(m)} at point {p} (scene {s:X2}).";
     }
 
-    /// <summary>Before a test in the game: heroes the steps move who aren't in the story's party become map characters
-    /// that look like them, and texts too wide or long for the box are broken to fit. Returns what was done ("": nothing).</summary>
+    /// <summary>Before a test in the game: texts too wide or long for the box are broken to fit, and the like. Heroes who
+    /// may not be in the story's party are left as they are (their cards warn; the test party has them).
+    /// Returns what was done ("": nothing).</summary>
     public string PrepareForTest()
     {
         string done = "";
         if (_script == null || !CanEdit || _event?.Entry == null) return done;
-        foreach (int h in AbsentHeroes())
-        {
-            HeroToCharacter(h);
-            done += StageInfo + " ";
-        }
         if (LeaderVanishToStandIn() > 0) done += StageInfo + " ";
         int fitted = FitTexts(all: true);
         if (fitted > 0) { Changed(true); done += $"{fitted} text{(fitted > 1 ? "s" : "")} broken to fit the box. "; }

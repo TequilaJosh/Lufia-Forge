@@ -206,6 +206,26 @@ public partial class L2ScriptEditor
             if (st.Op is 0x30 or 0x98 && points.TryGetValue(st.Bytes[2], out var p)) { at = (p.Item1, p.Item2); break; }
             if (st.Op == 0x2F && st.Bytes.Length >= 4) { at = (st.Bytes[2], st.Bytes[3]); break; }
         }
+        // none: where the hero stands at the first step that moves the hero, so its walks start from there (made on (0, 0),
+        // the stand-in walked the hero's paths from the map's corner: in a test start its first line waited for it
+        // forever). The stage follows the leader only, so a follower is taken to stand on the leader's tile.
+        if (at == (0, 0))
+            for (int i = 0; i < _script.Steps.Count; i++)
+            {
+                var s = _script.Steps[i];
+                if (s.IsText || s.Op is 0x2B or 0x2C || L2EventCommands.Find(s.Op) is not { } d) continue;
+                bool uses = false;
+                foreach (var f in d.FieldsFor(s.Bytes))
+                    if (f.Kind is L2Kind.Who or L2Kind.WhoOrAll)
+                        try { if (f.Get(s.Bytes) == hero) uses = true; } catch (Exception) { }
+                if (!uses) continue;
+                if (Before(i) is { } st)
+                {
+                    if (st.Actors.TryGetValue(hero, out var a) && a.X > 0 && a.Y > 0) at = (a.X, a.Y);
+                    else if (st.Actors.TryGetValue(0, out var lead) && lead.X > 0 && lead.Y > 0) at = (lead.X, lead.Y);
+                }
+                break;
+            }
         // a map character with the hero's sprite this event already uses (made for the hero before) plays the part again
         var usedIds = _script.Steps.Where(s => !s.IsText).SelectMany(s => L2EventCommands.Find(s.Op)?.FieldsFor(s.Bytes)
             .Where(p => p.Kind is L2Kind.Who or L2Kind.WhoOrAll).Select(p => { try { return p.Get(s.Bytes); } catch (Exception) { return -1; } }) ?? Enumerable.Empty<int>()).ToHashSet();
