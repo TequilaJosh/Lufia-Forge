@@ -70,6 +70,10 @@ Title="{Binding WindowTitle}"
                           Command="{Binding NewProjectFromThisCommand}"
                           ToolTip="Saves this project, then copies it into a new project in a folder of its own and goes on in the copy. This project stays as it is now: a version to go back to."
                           Foreground="Black"/>
+                <MenuItem Header="Merge Another Project Into This One..."
+                          Command="{Binding MergeProjectCommand}"
+                          ToolTip="Takes the changes another project made (someone else's work on a copy of this project, or your own other version) into this one. You see everything it changed, with the differences, and tick what goes in."
+                          Foreground="Black"/>
                 <Separator Style="{StaticResource LufiaSeparator}"/>
                 <MenuItem Header="Export ROM (dated copy)" ToolTip="Writes a playable ROM with everything in the project, named with the date and time, next to the project"
                           Command="{Binding SaveRomCommand}"

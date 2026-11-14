@@ -170,6 +170,17 @@ public static class L2Rom
         }
     }
 
+    /// <summary>Where <see cref="Allocate"/> hands out room, with the "LF2X" mark (16 bytes) and the next free offset it
+    /// holds: the added space of the first 4 MB (from 2.5 MB) and, on an 8 MB ROM, the upper 4 MB's data banks. Merging
+    /// projects reads them: both projects' new data starts at the same place.</summary>
+    public static List<(int Mark, int Start, int Next)> Spaces(RomBuffer rom)
+    {
+        var list = new List<(int, int, int)>();
+        if (FindMark(rom) is var (mark, next)) list.Add((mark, OriginalSize, next));
+        if (IsExLoRom(rom) && IsMark(rom, UpperMark)) list.Add((UpperMark, UpperDataStart, (int)rom.ReadUInt24Le(UpperMark + 4)));
+        return list;
+    }
+
     private static void WriteMark(RomBuffer rom, int mark, int next) =>
         rom.WriteBytes(mark, new[] { (byte)'L', (byte)'F', (byte)'2', (byte)'X', (byte)next, (byte)(next >> 8), (byte)(next >> 16) });
 

@@ -82,6 +82,9 @@ public static class RomIdentity
         (0x27F000, 0x280000, "map sprite and map lists"),
     };
 
+    /// <summary>The parts of a game's ROM, for naming where a change is (file offsets, end exclusive).</summary>
+    public static IReadOnlyList<(int Start, int End, string Name)> Parts(GameKind game) => game == GameKind.Lufia2 ? Lufia2Parts : Lufia1Parts;
+
     private static readonly (int Start, int End, string Name)[] Lufia1Parts =
     {
         (0x000000, 0x018000, "game code and monsters"), (0x018000, 0x040000, "events and map setups"), (0x040000, 0x050000, "battle data and code"),

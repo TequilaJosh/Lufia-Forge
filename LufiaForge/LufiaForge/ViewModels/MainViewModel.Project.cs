@@ -468,6 +468,118 @@ public partial class MainViewModel
         }
     }
 
+    /// <summary>File, Merge Another Project Into This One: picks a project (or a ROM), compares it with this one
+    /// (<see cref="Core.Merge.ProjectMerge"/>), shows what it changed in <see cref="Modules.Common.MergeWindow"/> and puts
+    /// in what the user ticked, as one Edit, Undo step. The other project's file is only read.</summary>
+    [RelayCommand(CanExecute = nameof(IsRomLoaded))]
+    private async Task MergeProject()
+    {
+        if (Project == null || RomBuffer == null) return;
+        var d = new OpenFileDialog
+        {
+            Title = "Pick the project to merge into this one",
+            Filter = $"Lufia Forge projects (*{LufiaProject.Extension})|*{LufiaProject.Extension}|SNES ROM files (*.sfc;*.smc)|*.sfc;*.smc|All files (*.*)|*.*",
+            InitialDirectory = Path.GetDirectoryName(Project.Path),
+        };
+        if (d.ShowDialog() != true) return;
+        await MergeFrom(d.FileName);
+    }
+
+    /// <summary>The merge with the other project (or ROM) at <paramref name="path"/> picked.</summary>
+    public async Task MergeFrom(string path)
+    {
+        if (Project == null || RomBuffer == null) return;
+        if (string.Equals(Path.GetFullPath(path), Path.GetFullPath(Project.Path), StringComparison.OrdinalIgnoreCase))
+        {
+            MessageBox.Show("That is this project. Pick the other project to take changes from.", "Merge", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        Flush(quiet: false);
+        string theirName;
+        byte[] theirs, theirsBase;
+        List<string> theirLog;
+        Dictionary<int, string> theirNames;
+        try
+        {
+            if (path.EndsWith(LufiaProject.Extension, StringComparison.OrdinalIgnoreCase))
+            {
+                var (p, rom) = LufiaProject.Open(path);
+                theirName = p.Name; theirs = rom; theirsBase = p.BaseRom; theirLog = p.Changes.ToList(); theirNames = new(p.MapNames);
+            }
+            else
+            {
+                var report = RomLoader.Load(path);
+                theirs = report.Buffer?.ToArray() ?? throw new InvalidDataException(report.Message);
+                theirName = Path.GetFileName(path); theirsBase = Project.BaseRom; theirLog = new(); theirNames = new();
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"The other project couldn't be opened: {ex.Message}", "Merge", MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
+        var project = Project;
+        var ours = RomBuffer.ToArray();
+        Core.Merge.MergeInput Input(byte[]? ancestor, string? ancestorName) => new(project.Name, ours, project.BaseRom, project.Changes.ToList(), new Dictionary<int, string>(project.MapNames),
+            theirName, theirs, theirsBase, theirLog, theirNames, ancestor, ancestorName);
+        Core.Merge.ProjectMerge plan;
+        StatusMessage = $"Comparing \"{theirName}\" with this project...";
+        System.Windows.Input.Mouse.OverrideCursor = System.Windows.Input.Cursors.Wait;
+        try { plan = await Task.Run(() => Core.Merge.ProjectMerge.Plan(Input(null, null))); }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"The projects couldn't be compared: {ex.Message}", "Merge", MessageBoxButton.OK, MessageBoxImage.Error);
+            StatusMessage = "Merge: nothing changed.";
+            return;
+        }
+        finally { System.Windows.Input.Mouse.OverrideCursor = null; }
+        if (plan.Items.Count == 0 && plan.TheirNewMapNames.Count == 0)
+        {
+            MessageBox.Show($"\"{theirName}\" has nothing this project doesn't have already (what it changed is the same here).", "Merge",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            StatusMessage = "Merge: nothing to take.";
+            return;
+        }
+        var win = new Modules.Common.MergeWindow(plan, (anc, ancName) => Task.Run(() => Core.Merge.ProjectMerge.Plan(Input(anc, ancName)))) { Owner = Application.Current?.MainWindow };
+        if (win.ShowDialog() != true) { StatusMessage = "Merge cancelled: nothing changed."; return; }
+        plan = win.Plan;
+        if (RomBuffer == null || Project != project || !RomBuffer.SameAs(ours))
+        {
+            MessageBox.Show("The project changed while the merge window was open, so nothing was merged. Merge again.", "Merge", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        (byte[] Rom, List<string> Report) result;
+        StatusMessage = "Merging...";
+        System.Windows.Input.Mouse.OverrideCursor = System.Windows.Input.Cursors.Wait;
+        try { result = await Task.Run(plan.Apply); }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"The merge couldn't be made, so nothing was changed:\n\n{ex.Message}", "Merge", MessageBoxButton.OK, MessageBoxImage.Error);
+            StatusMessage = "Merge: nothing changed.";
+            return;
+        }
+        finally { System.Windows.Input.Mouse.OverrideCursor = null; }
+        int taken = plan.Items.Count(i => i.Take), conflicts = plan.Items.Count(i => i.Take && i.Conflict), left = plan.Items.Count - taken;
+        RomBuffer.ReplaceAll(result.Rom);
+        string what = $"Merged \"{theirName}\" into this project: {taken} change{(taken == 1 ? "" : "s")} taken" +
+            (conflicts > 0 ? $" ({conflicts} where both had changed it)" : "") + (left > 0 ? $", {left} left out" : "");
+        NotifyRomModified(what);
+        if (plan.TakeLog)
+            foreach (var line in plan.TheirNewLog)
+                _pendingChanges.Add($"(from \"{theirName}\") " + System.Text.RegularExpressions.Regex.Replace(line, @"^\d{4}-\d\d-\d\d \d\d:\d\d\s+", ""));
+        int names = 0;
+        if (plan.TakeMapNames)
+            foreach (var (m, name) in plan.TheirNewMapNames)
+                if (!Project.MapNames.ContainsKey(m)) { Project.MapNames[m] = name; names++; }
+        if (names > 0) { Project.MapNamesChanged = true; Core.Maps.MapNames.ProjectNames = Project.MapNames; }
+        ReloadModules();
+        OnPropertyChanged(nameof(WindowTitle));
+        StatusMessage = what + " (Save Project keeps it)";
+        Modules.Common.InfoDialog.Show("Projects merged", "✔ Merged",
+            what + "." + (names > 0 ? $" {names} map name{(names == 1 ? "" : "s")} taken." : "") + "\n\n" + string.Join("\n\n", result.Report.Select(l => "• " + l)) +
+            "\n\nEdit > Undo takes the whole merge back (map names stay). Save Project keeps it. Play the merged scenes in BizHawk to make sure they run as both projects had them.");
+    }
+
     /// <summary>Save Project As, once the file is picked: when the save fails the project keeps its old file and name
     /// (later saves go there, not to the file that couldn't be written). The bookmarks and flag names go along.</summary>
     public void SaveProjectTo(string path)

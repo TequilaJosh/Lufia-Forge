@@ -51,6 +51,8 @@ public partial class MainViewModel : ObservableObject
         SaveProjectCommand.NotifyCanExecuteChanged();
         SaveProjectAsCommand.NotifyCanExecuteChanged();
         ApplyAllCommand.NotifyCanExecuteChanged();
+        NewProjectFromThisCommand.NotifyCanExecuteChanged();
+        MergeProjectCommand.NotifyCanExecuteChanged();
     }
 
     private void HistoryChanged()

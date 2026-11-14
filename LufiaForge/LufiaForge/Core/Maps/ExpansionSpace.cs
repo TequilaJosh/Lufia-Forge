@@ -38,6 +38,15 @@ public sealed class ExpansionSpace
 
     public IReadOnlyList<Entry> Entries => _entries;
 
+    /// <summary>Records a block already written (merging projects: the other project's blocks keep their places); one
+    /// listed already isn't added again. <see cref="Save"/> writes the table.</summary>
+    public void Keep(Entry e)
+    {
+        if (_entries.Contains(e)) return;
+        _entries.Add(e);
+        _entries.Sort((x, y) => x.Start.CompareTo(y.Start));
+    }
+
     /// <summary>The space table of an expanded ROM (read, or rebuilt for ROMs from earlier versions). Not written until <see cref="Save"/>.</summary>
     public static ExpansionSpace Load(RomBuffer rom)
     {

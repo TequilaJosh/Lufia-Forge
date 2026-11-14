@@ -20,6 +20,20 @@ public static class L2MapInfo
         public int At { get; init; }
     }
 
+    /// <summary>The size of a record of the list at <paramref name="offset"/> (+2 to +2A in the block), 0 when unknown.</summary>
+    public static int RecordSize(int offset) => offset switch
+    {
+        0x02 => 15, 0x04 => 10, 0x06 => 9, 0x0A => 5, 0x0C => 5, 0x0E => 3, 0x10 => 8, 0x14 => 5, 0x16 => 10,
+        0x1A or 0x1C or 0x1E or 0x20 or 0x22 or 0x28 or 0x2A => 3, 0x24 => 5, 0x26 => 4, _ => 0,
+    };
+
+    /// <summary>What the list at <paramref name="offset"/> holds, for the merge window.</summary>
+    public static string ListName(int offset) => offset switch
+    {
+        0x0E => "arrival points", 0x12 => "walk paths", 0x14 => "areas", 0x10 => "character starts", 0x26 => "treasure",
+        _ => Lists.FirstOrDefault(l => l.Offset == offset).Kind is { } k ? k.ToLowerInvariant() + "s" : $"list +{offset:X2}",
+    };
+
     private static readonly (int Offset, string Kind, int Size)[] Lists =
     {
         (0x02, "Door", 15), (0x06, "Exit", 9), (0x0A, "Secret passage", 5), (0x0C, "Cutscene trigger", 5),

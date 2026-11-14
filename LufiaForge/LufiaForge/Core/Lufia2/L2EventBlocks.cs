@@ -313,15 +313,25 @@ public static class L2EventBlocks
             if (old.Problem != null) throw new InvalidOperationException($"Event {e.Id:X2} can't be laid out again: {old.Problem}");
             scriptOf[e] = old;
         }
+        return LayOut(rom, lists.Select(e => (e, e.IsScript ? scriptOf[e] : null, e.IsScript ? null : keyData[e.Offset])).ToList(), at);
+    }
+
+    /// <summary>A block laid out at <paramref name="at"/> from its events in list order: "PH", the six lists, the key data,
+    /// then every script once (the same script object, or key data array, given for several events is shared again). The
+    /// entries' offsets aren't used. Text is encoded for <paramref name="rom"/>.</summary>
+    private static byte[] LayOut(RomBuffer rom, IReadOnlyList<(Entry Entry, L2EventScript? Script, byte[]? Key)> events, int at)
+    {
         int q = 0x0E;
         var listAt = new Dictionary<int, int>();
-        foreach (int head in Heads) { listAt[head] = q; q += lists.Count(x => x.Head == head) * 3 + 1; }
+        foreach (int head in Heads) { listAt[head] = q; q += events.Count(x => x.Entry.Head == head) * 3 + 1; }
         var outp = new List<byte>(new byte[q]);
-        var keyAt = new Dictionary<int, int>();
-        foreach (var (off, bytes) in keyData) { keyAt[off] = outp.Count; outp.AddRange(bytes); }
+        var keyAt = new Dictionary<byte[], int>(ReferenceEqualityComparer.Instance);
+        foreach (var (_, _, key) in events)
+            if (key != null && !keyAt.ContainsKey(key)) { keyAt[key] = outp.Count; outp.AddRange(key); }
         var placed = new Dictionary<L2EventScript, int>();
-        foreach (var s in scriptOf.Values.Distinct())
+        foreach (var (_, s, _) in events)
         {
+            if (s == null || placed.ContainsKey(s)) continue;
             var (bytes, error) = Relocated(s, at).Build(rom, at + outp.Count);
             if (error != null) throw new InvalidOperationException(error);
             placed[s] = outp.Count;
@@ -333,14 +343,39 @@ public static class L2EventBlocks
         {
             int p = listAt[head];
             outp[head] = (byte)p; outp[head + 1] = (byte)(p >> 8);
-            foreach (var e in lists.Where(x => x.Head == head))
+            foreach (var (e, s, key) in events.Where(x => x.Entry.Head == head))
             {
-                int off = e.IsScript ? placed[scriptOf[e]] : keyAt[e.Offset];
+                int off = s != null ? placed[s] : keyAt[key!];
                 outp[p++] = (byte)e.Id; outp[p++] = (byte)off; outp[p++] = (byte)(off >> 8);
             }
             outp[p] = 0xFF;
         }
         return outp.ToArray();
+    }
+
+    /// <summary>A block laid out from scratch from these events (scripts read from any ROM, key tables as bytes) in a chunk
+    /// of the event space of its own, as <see cref="CopyBlock"/> makes; the map header isn't changed. Returns the file
+    /// offset of its "PH". Scripts are copied (<see cref="L2EventScript.Detached"/>) so none is taken for bytes already
+    /// in this ROM; events given the same script object share it.</summary>
+    public static int WriteBlock(RomBuffer rom, IReadOnlyList<(Entry Entry, L2EventScript? Script, byte[]? Key)> events)
+    {
+        var copies = new Dictionary<L2EventScript, L2EventScript>();
+        var list = events.Select(x => (x.Entry, x.Script == null ? null : copies.TryGetValue(x.Script, out var c) ? c : copies[x.Script] = x.Script.Detached(), x.Key)).ToList();
+        int size = LayOut(rom, list, 0x7F8000).Length;
+        int room = Math.Min(L2EventSpace.Mark - 8, size + Math.Max(0x200, size / 8));
+        if (size > room) throw new InvalidOperationException($"The map's events take {size} bytes; one bank holds {room}.");
+        int chunk = L2EventSpace.Allocate(rom, room + 8);
+        var built = LayOut(rom, list, chunk + 8);
+        rom.WriteBytes(chunk, new[] { (byte)'L', (byte)'F', (byte)'2', (byte)'B', (byte)room, (byte)(room >> 8), (byte)built.Length, (byte)(built.Length >> 8) });
+        rom.WriteBytes(chunk + 8, built);
+        return chunk + 8;
+    }
+
+    /// <summary>Points map <paramref name="map"/>'s header at the event block at <paramref name="block"/>.</summary>
+    public static void PointMap(RomBuffer rom, int map, int block)
+    {
+        int n = HeaderValue(block);
+        rom.WriteBytes(L2Events.HeaderAt(rom, map), new[] { (byte)n, (byte)(n >> 8), (byte)(n >> 16) });
     }
 
     /// <summary>Lays out the event blocks again, all at once (<see cref="L2Dutch.Import"/>: a translation changes every

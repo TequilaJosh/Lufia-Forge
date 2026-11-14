@@ -315,6 +315,29 @@ public sealed class L2EventScript
         return s;
     }
 
+    /// <summary>A copy of the script whose steps belong nowhere in a ROM (as if added in the editor): laid out anywhere,
+    /// even at the address it was read from, nothing is taken for the old bytes there (text repeating earlier text with
+    /// 0A is written out in full). For copying a script into another ROM (merging projects).</summary>
+    public L2EventScript Detached()
+    {
+        var s = new L2EventScript(-1, JumpBase) { Problem = Problem };
+        var copy = new Dictionary<L2Step, L2Step>();
+        foreach (var st in Steps)
+            copy[st] = new L2Step
+            {
+                Bytes = (byte[])st.Bytes.Clone(), OriginalBytes = st.OriginalBytes, IsText = st.IsText, TextRaw = st.TextRaw, Text = st.Text,
+                OriginalText = st.OriginalText, End = st.End, OriginalEnd = st.OriginalEnd, HasBackReference = st.HasBackReference, OriginalLength = st.OriginalLength,
+            };
+        foreach (var st in Steps)
+        {
+            var c = copy[st];
+            foreach (var j in st.Jumps)
+                c.Jumps.Add(j.Step != null && copy.TryGetValue(j.Step, out var t) ? new L2Jump { Step = t } : new L2Jump { Absolute = j.Absolute });
+            s.Steps.Add(c);
+        }
+        return s;
+    }
+
     /// <summary>A new, empty script (one "End" step) laid out later.</summary>
     public static L2EventScript New(int jumpBase)
     {
