@@ -117,9 +117,9 @@ public static class L2AiScripts
         O(0x1F, Eff, "Set the attack's element", "", Arg.Element);
         // Lufia Forge's new statuses (L2StatusPatch: these commands need it in the ROM)
         O(0x5D, Eff, "Cause a new status", "Zombie, Frozen, Burnt, Berserk... with a chance in percent (Lufia Forge's new statuses).", Arg.NewStatus, Arg.Percent);
-        O(0x5E, Eff, "Cure a new status", "", Arg.NewStatus, Arg.Percent);
-        O(0x5F, Eff, "Resist a new status", "In a 'when hit' or armor script: this target's chance of getting it drops by this percent (100 = immune).", Arg.NewStatus, Arg.Percent);
-        O(0x60, Eff, "Ward against a new status", "The targets can't get it for the rest of the battle (a protecting spell).", Arg.NewStatus);
+        O(0x5E, Eff, "Cure a new status", "'Every new status' cures all 16 at once.", Arg.NewStatus, Arg.Percent);
+        O(0x5F, Eff, "Resist a new status", "In a 'when hit' or armor script: this target's chance of getting it drops by this percent (100 = immune). 'Every new status' at 100 makes it immune to all 16, as shared script 11 does for the game's own.", Arg.NewStatus, Arg.Percent);
+        O(0x60, Eff, "Ward against a new status", "The targets can't get it for the rest of the battle (a protecting spell). 'Every new status' wards all 16.", Arg.NewStatus);
         O(0x20, Eff, "Critical hits", "The chance of a critical hit and how much it does. A critical hit also goes through the target's DFP.", Arg.Percent, Arg.Byte);
         O(0x3C, Eff, "Add the user's weapon part to the amount", "The game's healing spells add it after Restore.");
         O(0x5C, Eff, "Hide the damage number", "");
@@ -1198,7 +1198,7 @@ public static class L2AiScripts
         Arg.Animation => v < n.Animations.Length ? $"animation {v:X2} ({n.Animations[v]})" : $"animation {v:X2}",
         Arg.Sound => $"sound {v:X2}",
         Arg.Message => $"{v:X2} {MessageText(v)}",
-        Arg.NewStatus => v < L2StatusPatch.Names.Length ? L2StatusPatch.Names[v] : $"new status {v}",
+        Arg.NewStatus => v < L2StatusPatch.Names.Length ? L2StatusPatch.Names[v] : v == L2StatusPatch.Every ? L2StatusPatch.EveryName.ToLowerInvariant() : $"new status {v}",
         Arg.Word => $"{v}",
         _ => $"{v}",
     };

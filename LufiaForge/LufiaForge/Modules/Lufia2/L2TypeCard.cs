@@ -41,7 +41,7 @@ public sealed class L2TypeCard : Border
 
     private void PageChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(L2Page.SelectedIndex) or nameof(L2Page.IsEditable)) Dispatcher.BeginInvoke(Build);
+        if (e.PropertyName is nameof(L2Page.SelectedIndex) or nameof(L2Page.IsEditable) or nameof(L2Page.Reloads)) Dispatcher.BeginInvoke(Build);
     }
 
     private void Build()

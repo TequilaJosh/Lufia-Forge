@@ -301,7 +301,7 @@ public partial class L2ScriptWindow : Window
             Arg.Item => List(s, i, _names.Items, 0x1FF),
             Arg.Stat => List(s, i, L2AiScripts.Stats),
             Arg.Status => List(s, i, L2AiScripts.Statuses),
-            Arg.NewStatus => List(s, i, L2StatusPatch.Names),
+            Arg.NewStatus => List(s, i, s.Op == 0x5D ? L2StatusPatch.Names : L2StatusPatch.Names.Append(L2StatusPatch.EveryName).ToArray()),   // 10: all 16 (cure, resist, ward)
             Arg.Target => List(s, i, L2AiScripts.Targets, plain: true),
             Arg.AttackName => NameField(s, i),
             Arg.Message => List(s, i, Enumerable.Range(0, 0x30).Select(L2AiScripts.MessageText).ToArray()),

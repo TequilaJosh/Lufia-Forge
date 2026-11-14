@@ -69,7 +69,13 @@ public abstract partial class L2Page : ObservableObject
         Loading = true;
         try { Load(i); } finally { Loading = false; }
         MarkRead();
+        // the other cards show the record again too (a change in one can put in code another reads: the status patch)
+        Reloads++;
+        OnPropertyChanged(nameof(Reloads));
     }
+
+    /// <summary>Counts <see cref="ReportChange"/>s: the cards in the view build again when it changes.</summary>
+    public int Reloads { get; private set; }
 
     /// <summary>The ROM changed since the page read it (another page, Undo, a patch).</summary>
     protected bool ChangedSinceRead => Rom != null && Rom.Version != _readVersion;
@@ -189,7 +195,7 @@ public abstract partial class L2Page : ObservableObject
     protected override void OnPropertyChanged(PropertyChangedEventArgs e)
     {
         base.OnPropertyChanged(e);
-        if (e.PropertyName is nameof(SelectedIndex) or nameof(IsEditable) or nameof(Names) or nameof(DescriptionNote) || e.PropertyName!.StartsWith("Picture")) return;
+        if (e.PropertyName is nameof(SelectedIndex) or nameof(IsEditable) or nameof(Names) or nameof(DescriptionNote) or nameof(Reloads) || e.PropertyName!.StartsWith("Picture")) return;
         if (e.PropertyName == nameof(Description)) { WriteDescription(); return; }
         if (IsField(e.PropertyName)) Edited();
     }
@@ -215,6 +221,9 @@ public abstract partial class L2Page : ObservableObject
         Loading = true;
         try { Load(i); } finally { Loading = false; }
         MarkRead();
+        // the other cards show the record again too (a change in one can put in code another reads: the status patch)
+        Reloads++;
+        OnPropertyChanged(nameof(Reloads));
     }
 
     /// <summary>A record's two battle scripts as text (what runs now: Lufia Forge's edited one or the game's).</summary>

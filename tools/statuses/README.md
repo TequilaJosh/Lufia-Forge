@@ -15,7 +15,12 @@ after a battle and are saved (in the save buffer's unused `$7E:3BBB-3BC3`, behin
 the battle.
 
 Battle script commands: `5D s c` cause status s (chance c%), `5E s c` cure it, `5F s p` resist it by p% (in a "when hit"
-or armor script: that target only), `60 s` ward the targets against it for the battle.
+or armor script: that target only), `60 s` ward the targets against it for the battle. For `5E`, `5F` and `60`, s = `10`
+means all 16 at once: `5F 10 64` makes a monster immune to every new status, as the game's shared script `42 11` does for
+its own eight.
+
+Piety is double-edged: the fighter's healing (HP and MP it restores) and its light attacks do 25% more, and dark hits it
+for 50% more.
 
 After the block Lufia Forge allocates the monsters' starting statuses (a word per monster), a 10-byte record per item
 (elements halved / nullified, the game's statuses immune / halved, the new ones immune / resisted) that the STATUS
@@ -28,7 +33,8 @@ $85:D1BC (`ElemHit`, after the target's "when hit" script, before the damage for
 (100 + percent) / 100 for each element of the attack in turn (a hero: its row plus its six worn items' rows; below -100
 the hit heals). The STATUS screen's element page (Y) shows the hero's totals ("Fire +30%"; % is the menu font's tile
 $117, drawn with the codes 09 3D / 17 / 09 3C as the game's "IP 0%"). `L2StatusPatchV1.Data.cs` keeps the first
-version of the patch (before the table) so a ROM that has it is upgraded.
+version of the patch (before the table) and `L2StatusPatchV2.Data.cs` the second (before "every status" and the piety
+bonuses), so a ROM that has either is upgraded (the second keeps its element table where it is).
 
 Each piece was checked in BizHawk (Lufia Forge test kits): every status caused, ticking, wearing off and cured; the
 damage changes measured; save and load; the STATUS screen pages; every element percent on a monster and on a hero

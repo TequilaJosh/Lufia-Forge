@@ -44,7 +44,7 @@ public sealed class L2NewStatusCard : Border
 
     private void PageChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(L2Page.SelectedIndex) or nameof(L2Page.IsEditable)) Dispatcher.BeginInvoke(Build);
+        if (e.PropertyName is nameof(L2Page.SelectedIndex) or nameof(L2Page.IsEditable) or nameof(L2Page.Reloads)) Dispatcher.BeginInvoke(Build);
     }
 
     private void Build()
@@ -58,12 +58,13 @@ public sealed class L2NewStatusCard : Border
         {
             Style = TryFindResource("GdHint") as Style, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 6),
             Text = "Lufia Forge's 16 statuses (new battle code, added to the game with the first one set here). A number is a chance in percent (resist: 100 = immune); hover a status for what it does." +
-                   (L2StatusPatch.IsApplied(rom) ? "" : " They aren't in this ROM yet."),
+                   (_columns.Any(c => HasEvery(c)) ? " The first row sets all 16 at once (resist it 100: immune to every one)." : "") +
+                   (L2StatusPatch.IsIn(rom) ? "" : " They aren't in this ROM yet."),
         });
         var grid = new Grid();
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(110) });
         foreach (var _ in _columns) grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        for (int r = 0; r <= 16; r++) grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        for (int r = 0; r <= 17; r++) grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         for (int c = 0; c < _columns.Length; c++)
         {
             var h = new TextBlock { Text = _columns[c].Header, ToolTip = _columns[c].Tip, Style = TryFindResource("GdFieldLabel") as Style, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(2, 0, 2, 4) };
@@ -71,17 +72,27 @@ public sealed class L2NewStatusCard : Border
             grid.Children.Add(h);
         }
         int start = _columns.Any(c => c.Start) ? L2StatusPatch.MonsterStart(rom, index) : 0;
-        var values = _columns.Select(c => c.Start ? null : L2StatusSteps.GetAll(rom, c.Kind, index, c.What)).ToArray();
+        // a row per status, and first (when a column has it) "every new status" (status 10: 5E, 5F, 60)
+        var values = _columns.Select(c => c.Start ? null : L2StatusSteps.GetAll(rom, c.Kind, index, c.What)
+            .Append(HasEvery(c) ? L2StatusSteps.Get(rom, c.Kind, index, c.What, L2StatusPatch.Every) : 0).ToArray()).ToArray();
+        bool every = _columns.Any(HasEvery);
         _loading = true;
-        for (int s = 0; s < 16; s++)
+        foreach (int s in (every ? new[] { L2StatusPatch.Every } : Array.Empty<int>()).Concat(Enumerable.Range(0, 16)))
         {
-            var name = new TextBlock { Text = L2StatusPatch.Names[s], ToolTip = L2StatusPatch.Help[s], Style = TryFindResource("GdFieldLabel") as Style, VerticalAlignment = VerticalAlignment.Center };
-            Grid.SetRow(name, s + 1);
+            int row = s == L2StatusPatch.Every ? 1 : every ? s + 2 : s + 1;
+            var name = new TextBlock
+            {
+                Text = s == L2StatusPatch.Every ? "Every status" : L2StatusPatch.Names[s],
+                ToolTip = s == L2StatusPatch.Every ? "All 16 at once (a single step: 'every new status')." : L2StatusPatch.Help[s],
+                Style = TryFindResource("GdFieldLabel") as Style, VerticalAlignment = VerticalAlignment.Center,
+            };
+            Grid.SetRow(name, row);
             grid.Children.Add(name);
             for (int c = 0; c < _columns.Length; c++)
             {
                 var col = _columns[c];
                 int st = s;
+                if (s == L2StatusPatch.Every && !HasEvery(col)) continue;
                 FrameworkElement cell;
                 if (col.Start || col.What == What.Ward)
                 {
@@ -102,7 +113,7 @@ public sealed class L2NewStatusCard : Border
                     };
                     cell = tb;
                 }
-                Grid.SetRow(cell, s + 1);
+                Grid.SetRow(cell, row);
                 Grid.SetColumn(cell, c + 1);
                 grid.Children.Add(cell);
             }
@@ -110,6 +121,9 @@ public sealed class L2NewStatusCard : Border
         _loading = false;
         _body.Children.Add(grid);
     }
+
+    /// <summary>Whether a column takes "every new status" (cure, resist, ward; not causes or starting statuses).</summary>
+    private static bool HasEvery(Column c) => !c.Start && c.What != What.Cause;
 
     private void Write(Column col, int status, int value)
     {
@@ -127,7 +141,7 @@ public sealed class L2NewStatusCard : Border
                 if (changed) L2StatusPatch.SetMonsterStart(rom, index, now);
             }
             else changed = L2StatusSteps.Set(rom, col.Kind, index, col.What, status, value);
-            if (changed) _page!.ReportChange($"{L2StatusPatch.Names[status]}: {col.Header.ToLowerInvariant()} {(value == 0 ? "none" : col.Start || col.What == What.Ward ? "on" : value + "%")}");
+            if (changed) _page!.ReportChange($"{L2StatusPatch.NameOf(status)}: {col.Header.ToLowerInvariant()} {(value == 0 ? "none" : col.Start || col.What == What.Ward ? "on" : value + "%")}");
         }
         catch (Exception e) { MessageBox.Show(e.Message, "New statuses", MessageBoxButton.OK, MessageBoxImage.Warning); }
         Dispatcher.BeginInvoke(Build);

@@ -39,9 +39,9 @@ public static class L2Elements
     /// <summary>File offset of the table, or -1 (no status patch, or an old one without it).</summary>
     public static int TableAt(RomBuffer rom)
     {
-        int block = L2StatusPatch.BlockAt(rom);
-        if (block < 0) return -1;
-        int p = (int)rom.ReadUInt24Le(block + L2StatusPatch.ElemPtrAt);
+        int at = L2StatusPatch.ElemPtrFile(rom);   // the newest status patch, or the second (upgraded at the next change)
+        if (at < 0) return -1;
+        int p = (int)rom.ReadUInt24Le(at);
         return (p >> 16) == 0 ? -1 : L2Rom.SnesToFile(p);
     }
 

@@ -10,6 +10,8 @@
 ;
 ; Battle script commands (new): 5D s c cause new status s with c% / 5E s c cure it with c% / 5F s p resist it by p%
 ; (in a "when hit" or armor script: this target only) / 60 s ward the targets against it for the battle.
+; For 5E, 5F and 60, s = $10 means every new status at once (5F 10 64: immune to all of them, as the game's shared
+; script 11 is to its own eight).
 
 ; ---------------------------------------------------------------- RAM ($7F:FC00-$7F:FD7F, cleared on first use)
 MAGIC   = $7FFC00
@@ -48,6 +50,7 @@ INACT   = $7FFD9C
 RPAGE   = $7FFD9E
 STON    = $7FFD7E
 RSUM    = $7FFDE0
+ALLK    = $7FFDEA          ; the status 5E / 5F work on when s = $10 (every new status)
 ; the element table's work (Lufia Forge's element percentages)
 EK      = $7FFDA0
 EBASE   = $7FFDA2
@@ -450,15 +453,29 @@ O5D_t:
   sta TINF,x
   jml $85B45E
 
-Op5E:
+Op5E:                    ; s = $10: every new status
   jsl ArgB
-  and #$0F
   sta TMPS
   jsl ArgB
   sta TMP4
   rep #$30
   lda TMPS
-  and #$000F
+  and #$00FF
+  cmp #$0010
+  bcc O5E_one
+  lda #$000F
+O5E_all:
+  sta ALLK
+  jsl O5E_set
+  lda ALLK
+  dec a
+  bpl O5E_all
+  jml $85B45E
+O5E_one:
+  jsl O5E_set
+  jml $85B45E
+
+O5E_set:                 ; A (16-bit) = the status: its cure chance (the action's, or this target's) = TMP4
   tax
   sep #$20
   lda TMP4
@@ -467,15 +484,16 @@ Op5E:
   bne O5E_t
   pla
   sta CURE,x
-  jml $85B45E
+  rep #$30
+  rtl
 O5E_t:
   pla
   sta TCURE,x
-  jml $85B45E
+  rep #$30
+  rtl
 
-Op5F:                    ; chance = chance * (100 - p) / 100
+Op5F:                    ; chance = chance * (100 - p) / 100; s = $10: every new status
   jsl ArgB
-  and #$0F
   sta TMPS
   jsl ArgB
   cmp #$64
@@ -489,7 +507,22 @@ O5F_p:
   sta TMP4               ; 100 - p
   rep #$30
   lda TMPS
-  and #$000F
+  and #$00FF
+  cmp #$0010
+  bcc O5F_one
+  lda #$000F
+O5F_all:
+  sta ALLK
+  jsl O5F_cut
+  lda ALLK
+  dec a
+  bpl O5F_all
+  jml $85B45E
+O5F_one:
+  jsl O5F_cut
+  jml $85B45E
+
+O5F_cut:                 ; A (16-bit) = the status: its chance (the action's, or this target's) x TMP4 / 100
   tax
   lda INTGT
   and #$00FF
@@ -524,15 +557,22 @@ O5F_g:
   nop
   lda $004214
   sta INF,x
-  jml $85B45E
+  rep #$30
+  rtl
 
-Op60:
+Op60:                    ; s = $10: every new status
   jsl ArgB
   rep #$30
-  and #$000F
+  and #$00FF
+  cmp #$0010
+  bcc O60_one
+  lda #$FFFF
+  bra O60_set
+O60_one:
   asl a
   tax
   lda BitTab,x
+O60_set:
   ora WARDACT
   sta WARDACT
   sep #$20
@@ -759,11 +799,33 @@ DmgMod:                  ; 16-bit A = the HP change (minus = damage); the target
   sta TMP3               ; the attacker's entry
 DM_noatk:
   rep #$30
+  lda TMP2
+  bit #$0080
+  beq DM_np
+  lda $7FF468            ; piety: the MP it restores +25% (register 2D, before the spread)
+  beq DM_np
+  bmi DM_np
+  lsr a
+  lsr a
+  clc
+  adc $7FF468
+  sta $7FF468
+DM_np:
   lda AMT
   bmi DM_dmg
   bne DM_heal
   brl DM_out
 DM_heal:
+  lda TMP2
+  bit #$0080
+  beq DM_h0
+  lda AMT                ; piety: the HP it restores +25%
+  lsr a
+  lsr a
+  clc
+  adc AMT
+  sta AMT
+DM_h0:
   lda TMP1
   bit #$0800
   bne DM_hzero
@@ -838,6 +900,19 @@ DM_mag:
   sbc TMP4
   sta AMT
 DM_tgt:
+  lda TMP2
+  bit #$0080
+  beq DM_tz
+  lda $7FF45C
+  bit #$0010
+  beq DM_tz
+  lda AMT                ; piety: its light attacks +25%
+  lsr a
+  lsr a
+  clc
+  adc AMT
+  sta AMT
+DM_tz:
   lda TMP1
   bit #$0001
   beq DM_t1
