@@ -15,6 +15,10 @@ namespace LufiaForge.Core.Lufia2;
 /// $85:D454), the action's end ($85:CE43, $81:A82C: messages), the round's end ($81:8943: burns, bleeding, regen, mana
 /// leak, doom, decay, timers), poison ($81:C6BB: it heals a zombie), the battle's end and start, saving and loading,
 /// IP ($85:D508: none when cursed).</item>
+/// <item>From the 4th version (2026-11-15): Bounce, the game's status bit 6 (physical hits go back at the attacker,
+/// plain weapon attacks too; a monster or a worn item's wearer can start every battle with it, an item can give or cure
+/// it), and focus (the Tag ring and Tag candy: each weapon attack in a row on one foe does more, <see cref="FocusPercents"/>;
+/// command 61 gives it for the battle).</item>
 /// </list>
 /// </summary>
 public static partial class L2StatusPatch
@@ -69,9 +73,10 @@ public static partial class L2StatusPatch
 
     public static bool IsOriginal(RomBuffer rom) => Patch.IsOriginal(rom);
 
-    private static HookPatch? _v1, _v2;
+    private static HookPatch? _v1, _v2, _v3;
     private static HookPatch V1 => _v1 ??= new(SitesV1, CodeV1);
     private static HookPatch V2 => _v2 ??= new(SitesV2, CodeV2);
+    private static HookPatch V3 => _v3 ??= new(SitesV3, CodeV3);
 
     /// <summary>File offset of the data after the code (the monsters' starting statuses, the resistance records, the
     /// element table's address), of the newest version or the second; -1 when neither is in.</summary>
@@ -79,6 +84,8 @@ public static partial class L2StatusPatch
     {
         int at = Patch.AppliedAt(rom, L2Rom.SnesToFile);
         if (at >= 0) return at + Patch.Code.Bytes.Length;
+        at = V3.AppliedAt(rom, L2Rom.SnesToFile);
+        if (at >= 0) return at + CodeV3.Bytes.Length;
         at = V2.AppliedAt(rom, L2Rom.SnesToFile);
         return at >= 0 ? at + CodeV2.Bytes.Length : -1;
     }
@@ -88,13 +95,22 @@ public static partial class L2StatusPatch
 
     /// <summary>Whether the ROM has an older version: <see cref="Apply"/> upgrades it.</summary>
     public static bool IsOldVersion(RomBuffer rom) =>
-        !IsApplied(rom) && (V1.AppliedAt(rom, L2Rom.SnesToFile) >= 0 || V2.AppliedAt(rom, L2Rom.SnesToFile) >= 0);
+        !IsApplied(rom) && (V1.AppliedAt(rom, L2Rom.SnesToFile) >= 0 || V2.AppliedAt(rom, L2Rom.SnesToFile) >= 0 ||
+                            V3.AppliedAt(rom, L2Rom.SnesToFile) >= 0);
 
     public static void Apply(RomBuffer rom)
     {
         if (IsApplied(rom)) return;
         byte[]? starts = null, elemPtr = null;
-        if (V2.AppliedAt(rom, L2Rom.SnesToFile) is var v2 and >= 0)
+        if (V3.AppliedAt(rom, L2Rom.SnesToFile) is var v3 and >= 0)
+        {
+            // the third version: as the second
+            int data = v3 + CodeV3.Bytes.Length;
+            starts = rom.ReadBytes(data, MonsterTableSize);
+            elemPtr = rom.ReadBytes(data + MonsterTableSize + ResistTableSize, 4);
+            V3.Restore(rom);
+        }
+        else if (V2.AppliedAt(rom, L2Rom.SnesToFile) is var v2 and >= 0)
         {
             // the second version: its starting statuses and its element table (already filled in) come along
             int data = v2 + CodeV2.Bytes.Length;
@@ -113,9 +129,10 @@ public static partial class L2StatusPatch
         {
             // the block, then the monsters' starting statuses (256 words, none to start with), the resistance records and
             // the element table's address; the element table on its own (it is read with the data bank set to its bank)
-            int at = L2Rom.Allocate(rom, Patch.Code.Bytes.Length + MonsterTableSize + ResistTableSize + 4);
-            rom.WriteBytes(at + Patch.Code.Bytes.Length, new byte[MonsterTableSize + ResistTableSize + 4]);
+            int at = L2Rom.Allocate(rom, Patch.Code.Bytes.Length + DataSize);
+            rom.WriteBytes(at + Patch.Code.Bytes.Length, new byte[DataSize]);
             if (starts != null) rom.WriteBytes(at + Patch.Code.Bytes.Length, starts);
+            rom.WriteBytes(at + Patch.Code.Bytes.Length + FocusPctAt, DefaultFocus);
             Patch.Write(rom, at, L2Rom.FileToSnes(at));
             if (elemPtr != null) rom.WriteBytes(at + ElemPtrAt, elemPtr);
             else
@@ -133,6 +150,67 @@ public static partial class L2StatusPatch
     }
 
     private const int MonsterTableSize = 0x200, ResistRecord = 10, ResistTableSize = 0x200 * ResistRecord;
+
+    /// <summary>The data after the code (from the 4th version): the monsters' new statuses at the start, the resistance
+    /// records, the element table's address, then the game's statuses each monster starts with (a byte per id), a word
+    /// per item (low byte: the game's statuses its wearer starts each battle with; bit 8: focus when worn) and the 5 focus
+    /// percents.</summary>
+    private const int GameStartAt = MonsterTableSize + ResistTableSize + 4, ItemXAt = GameStartAt + 0x100,
+        FocusPctAt = ItemXAt + 0x400, DataSize = FocusPctAt + 8;
+
+    /// <summary>The focus bonus of the 2nd-6th attack in a row on one foe, to start with (Mewlies' idea).</summary>
+    public static readonly byte[] DefaultFocus = { 10, 25, 50, 75, 100 };
+
+    /// <summary>The game's status bits a starting status can be: Bounce (bit 6) and Mirror (bit 7).</summary>
+    public const int Bounce = 0x40, Mirror = 0x80;
+
+    /// <summary>File offset of this version's own data (the 4th version's tables), or -1 when it isn't in.</summary>
+    private static int NewDataAt(RomBuffer rom) => Patch.AppliedAt(rom, L2Rom.SnesToFile) is var at and >= 0 ? at + Patch.Code.Bytes.Length : -1;
+
+    /// <summary>The game's statuses (bits as the status byte: <see cref="Bounce"/>, <see cref="Mirror"/>) monster
+    /// <paramref name="monster"/> has from the moment it is in a battle.</summary>
+    public static int MonsterGameStart(RomBuffer rom, int monster) =>
+        NewDataAt(rom) is var d and >= 0 && monster is >= 0 and <= 0xFF ? rom.ReadByte(d + GameStartAt + monster) : 0;
+
+    public static void SetMonsterGameStart(RomBuffer rom, int monster, int bits)
+    {
+        if (!IsApplied(rom)) Apply(rom);
+        if (monster is >= 0 and <= 0xFF) rom.WriteByte(NewDataAt(rom) + GameStartAt + monster, (byte)bits);
+    }
+
+    /// <summary>The game's statuses item <paramref name="item"/> gives its wearer at the start of every battle.</summary>
+    public static int ItemGameStart(RomBuffer rom, int item) =>
+        NewDataAt(rom) is var d and >= 0 && item is >= 0 and < 0x200 ? rom.ReadByte(d + ItemXAt + item * 2) : 0;
+
+    public static void SetItemGameStart(RomBuffer rom, int item, int bits)
+    {
+        if (!IsApplied(rom)) Apply(rom);
+        if (item is >= 0 and < 0x200) rom.WriteByte(NewDataAt(rom) + ItemXAt + item * 2, (byte)bits);
+    }
+
+    /// <summary>Whether wearing item <paramref name="item"/> gives focus (as the Tag ring does): each attack in a row on
+    /// one foe does more (<see cref="FocusPercents"/>).</summary>
+    public static bool ItemFocus(RomBuffer rom, int item) =>
+        NewDataAt(rom) is var d and >= 0 && item is >= 0 and < 0x200 && (rom.ReadByte(d + ItemXAt + item * 2 + 1) & 1) != 0;
+
+    public static void SetItemFocus(RomBuffer rom, int item, bool on)
+    {
+        if (!IsApplied(rom)) Apply(rom);
+        if (item is < 0 or >= 0x200) return;
+        int at = NewDataAt(rom) + ItemXAt + item * 2 + 1;
+        rom.WriteByte(at, (byte)(on ? rom.ReadByte(at) | 1 : rom.ReadByte(at) & ~1));
+    }
+
+    /// <summary>The focus bonus (percent) of the 2nd, 3rd, 4th, 5th and 6th-and-later attack in a row on one foe.</summary>
+    public static byte[] FocusPercents(RomBuffer rom) =>
+        NewDataAt(rom) is var d and >= 0 ? rom.ReadBytes(d + FocusPctAt, 5) : (byte[])DefaultFocus.Clone();
+
+    public static void SetFocusPercents(RomBuffer rom, IReadOnlyList<int> percents)
+    {
+        if (!IsApplied(rom)) Apply(rom);
+        int d = NewDataAt(rom);
+        for (int i = 0; i < 5 && i < percents.Count; i++) rom.WriteByte(d + FocusPctAt + i, (byte)Math.Clamp(percents[i], 0, 255));
+    }
 
     /// <summary>What an item gives its wearer, for the STATUS screen's resistance pages (Y): read from its armor script
     /// ("when its wearer is hit"): elements halved / nullified (shared scripts 06-0E, 18 and 19, or "if the element is n,
@@ -229,6 +307,44 @@ public static partial class L2StatusPatch
         if (!IsApplied(rom)) Apply(rom);
         int e = MonsterEntry(rom, monster);
         if (e >= 0) rom.WriteUInt16Le(e, (ushort)bits);
+    }
+
+    /// <summary>The game's Tag rings (1CE, 1CF in the US game) and Tag candy (1D1): items no code of the game uses
+    /// (nothing reads them; the candy has an animation but no script). Found by name.</summary>
+    public static (List<int> Rings, List<int> Candies) TagItems(RomBuffer rom)
+    {
+        var rings = new List<int>(); var candies = new List<int>();
+        int n = Math.Min(L2Battle.ItemCountIn(rom), 0x200);
+        for (int i = 0; i < n; i++)
+        {
+            string name = L2Battle.ReadItem(rom, i).Name.Trim();
+            if (name.Equals("Tag ring", StringComparison.OrdinalIgnoreCase)) rings.Add(i);
+            else if (name.Equals("Tag candy", StringComparison.OrdinalIgnoreCase)) candies.Add(i);
+        }
+        return (rings, candies);
+    }
+
+    /// <summary>Whether the Tag rings give focus when worn and the Tag candy gives it in battle (<see cref="MakeTagItems"/>).</summary>
+    public static bool TagItemsDone(RomBuffer rom)
+    {
+        var (rings, candies) = TagItems(rom);
+        return rings.Count + candies.Count > 0 && rings.All(r => ItemFocus(rom, r)) &&
+               candies.All(c => L2StatusSteps.HasStep(rom, L2AiScripts.Kind.ItemBattle, c, 0x61));
+    }
+
+    /// <summary>Mewlies' idea for the game's unused Tag ring and Tag candy: the ring gives focus to its wearer, the candy
+    /// gives a hero focus for the rest of the battle: each weapon attack in a row on the same foe does more
+    /// (<see cref="FocusPercents"/>). Returns what changed.</summary>
+    public static List<string> MakeTagItems(RomBuffer rom)
+    {
+        var done = new List<string>();
+        var (rings, candies) = TagItems(rom);
+        if (rings.Count + candies.Count == 0) return done;
+        if (!IsApplied(rom)) Apply(rom);
+        foreach (int r in rings.Where(r => !ItemFocus(rom, r))) { SetItemFocus(rom, r, true); done.Add($"Tag ring ({r:X3}): focus when worn"); }
+        foreach (int c in candies)
+            if (L2StatusSteps.SetStep(rom, L2AiScripts.Kind.ItemBattle, c, true, 0x61)) done.Add($"Tag candy ({c:X3}): focus for the battle when used");
+        return done;
     }
 
     public static void Remove(RomBuffer rom)

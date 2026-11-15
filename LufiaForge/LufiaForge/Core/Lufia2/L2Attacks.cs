@@ -413,7 +413,7 @@ public static class L2Attacks
         // the rest before the name, as the game writes them
         Insert(b, s.Op is 0x5C or 0x4A or 0x4C or 0x35 or 0x17 ? BeforeAction(b) : BeforeName(b), s);
         // with no damage and no action of its own, the effects need the attack to be "only its effects"
-        if (s.Op is 0x27 or 0x26 or 0x25 or 0x24 or 0x5D or 0x5E or 0x60 && HowItHits(b) == Hit.Attack) SetHowItHits(b, Hit.EffectsOnly);
+        if (s.Op is 0x27 or 0x26 or 0x25 or 0x24 or 0x5D or 0x5E or 0x60 or 0x61 && HowItHits(b) == Hit.Attack) SetHowItHits(b, Hit.EffectsOnly);
         return s;
     }
 

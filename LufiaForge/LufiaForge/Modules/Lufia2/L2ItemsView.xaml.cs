@@ -24,6 +24,7 @@ public partial class L2ItemsView : UserControl
             var it = L2Battle.ReadItem(rom, i);
             return (it.EquipType & 1) != 0 ? Kind.Weapon : (it.Words & 0x0002) != 0 ? Kind.ItemBattle : null;
         });
+        BounceFocus.Attach(p, monsters: false);
         NewStatuses.Attach(p,
             new("Weapon hit causes", "As a weapon: the chance its hit gives the status (its weapon script).", Kind.Weapon, What.Cause),
             new("Worn: resists", "As armor: the wearer's chance of getting it drops by this percent (100 = immune).", Kind.Armor, What.Resist),

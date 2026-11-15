@@ -119,6 +119,7 @@ public static class L2AiScripts
         O(0x5D, Eff, "Cause a new status", "Zombie, Frozen, Burnt, Berserk... with a chance in percent (Lufia Forge's new statuses).", Arg.NewStatus, Arg.Percent);
         O(0x5E, Eff, "Cure a new status", "'Every new status' cures all 16 at once.", Arg.NewStatus, Arg.Percent);
         O(0x5F, Eff, "Resist a new status", "In a 'when hit' or armor script: this target's chance of getting it drops by this percent (100 = immune). 'Every new status' at 100 makes it immune to all 16, as shared script 11 does for the game's own.", Arg.NewStatus, Arg.Percent);
+        O(0x61, Eff, "Give focus", "The hero targets get focus for the rest of the battle (as the Tag candy): each weapon attack in a row on the same foe does more (Lufia Forge's focus percents, +10% to +100% to start).");
         O(0x60, Eff, "Ward against a new status", "The targets can't get it for the rest of the battle (a protecting spell). 'Every new status' wards all 16.", Arg.NewStatus);
         O(0x20, Eff, "Critical hits", "The chance of a critical hit and how much it does. A critical hit also goes through the target's DFP.", Arg.Percent, Arg.Byte);
         O(0x3C, Eff, "Add the user's weapon part to the amount", "The game's healing spells add it after Restore.");
@@ -174,7 +175,7 @@ public static class L2AiScripts
     };
     public static readonly string[] Stats = { "HP", "MP", "max HP", "max MP", "ATP", "DFP", "STR", "AGL", "INT", "GUT", "MGR", "IP", "level",
         "ATP+ (battle)", "DFP+ (battle)", "STR+ (battle)", "AGL+ (battle)", "INT+ (battle)", "GUT+ (battle)", "MGR+ (battle)", "status" };
-    public static readonly string[] Statuses = { "poison", "silence", "death", "paralysis", "confusion", "sleep", "status 6", "mirror" };
+    public static readonly string[] Statuses = { "poison", "silence", "death", "paralysis", "confusion", "sleep", "bounce", "mirror" };
     public static readonly string[] Restores = { "HP", "MP", "max HP", "max MP", "ATP", "DFP", "STR", "AGL", "INT", "GUT", "MGR" };
     public static readonly (int Bit, string Name)[] Elements =
     {
@@ -215,7 +216,7 @@ public static class L2AiScripts
     public static readonly (int Bit, string Name)[] ActionFlags =
     {
         (0x0002, "drain: the attacker gets what the targets lose"), (0x0008, "MGR blocks it (not DFP)"), (0x0010, "a mirror bounces it back"),
-        (0x0020, "bounced by status 6"), (0x0040, "back rows don't cut it"), (0x0080, "defending doesn't cut it"),
+        (0x0020, "sent back by Bounce"), (0x0040, "back rows don't cut it"), (0x0080, "defending doesn't cut it"),
         (0x0100, "shared out among several targets"), (0x0004, "flag 0004 (magic has it)"), (0x0001, "it bounced back"),
     };
 
@@ -1038,7 +1039,7 @@ public static class L2AiScripts
         var body = Build(steps, 1);
         if (body.Length > 0x7F00) throw new InvalidOperationException("The script is too long.");
         // the new statuses' commands need their code in the game
-        if (steps.Any(st => st.Op is >= 0x5D and <= 0x60) && !L2StatusPatch.IsApplied(rom))
+        if (steps.Any(st => st.Op is >= 0x5D and <= 0x61) && !L2StatusPatch.IsApplied(rom))
         {
             // the battle code goes in, and with it the element table: the game's weaknesses move there, this script's too
             L2StatusPatch.Apply(rom);
@@ -1300,6 +1301,7 @@ public static class L2AiScripts
             0x5E => $"Cure {A(0)} ({A(1)} chance)",
             0x5F => $"Resist {A(0)} by {A(1)}",
             0x60 => $"Ward the targets against {A(0)}",
+            0x61 => "Give the targets focus",
             0x27 => $"Cause {A(0)} ({A(1)} chance)",
             0x1F => $"The attack's element: {A(0)}",
             0x20 => $"Critical hits: {A(0)} chance, {ArgValue(s, 1) / 16.0:0.##}x damage, through DFP",

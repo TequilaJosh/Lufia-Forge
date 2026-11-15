@@ -46,6 +46,35 @@ public static class L2StatusSteps
     public static int[] GetAll(RomBuffer rom, Kind kind, int index, What what) =>
         Enumerable.Range(0, 16).Select(st => Get(rom, kind, index, what, st)).ToArray();
 
+    /// <summary>Whether the script has a step <paramref name="op"/> (with first argument <paramref name="arg"/> when not -1):
+    /// the game's "cause / cure a status" (27 / 26) for Bounce, Lufia Forge's 61 (focus).</summary>
+    public static bool HasStep(RomBuffer rom, Kind kind, int index, byte op, int arg = -1)
+    {
+        List<Step> steps;
+        try { steps = L2AiScripts.Load(rom, kind, index).Steps; } catch (Exception) { return false; }
+        return steps.Any(x => x.Op == op && (arg < 0 || x.Args.Length > 0 && x.Args[0] == arg));
+    }
+
+    /// <summary>Puts a step at the top of the script (or takes every such step out). False when nothing changed.</summary>
+    public static bool SetStep(RomBuffer rom, Kind kind, int index, bool on, byte op, params int[] args)
+    {
+        int arg = args.Length > 0 ? args[0] : -1;
+        if (HasStep(rom, kind, index, op, arg) == on) return false;
+        var steps = Steps(rom, kind, index);
+        foreach (var old in steps.Where(x => x.Op == op && (arg < 0 || x.Args.Length > 0 && x.Args[0] == arg)).ToList())
+        {
+            int i = steps.IndexOf(old);
+            steps.RemoveAt(i);
+            var next = steps.ElementAtOrDefault(i) ?? steps.LastOrDefault();
+            foreach (var o in steps)
+                for (int j = 0; j < o.Targets.Length; j++)
+                    if (o.Targets[j] == old) o.Targets[j] = next;
+        }
+        if (on) steps.Insert(0, Op(op, args));
+        L2AiScripts.Save(rom, kind, index, steps);
+        return true;
+    }
+
     /// <summary>Sets it (0 takes the step out). False when nothing changed.</summary>
     public static bool Set(RomBuffer rom, Kind kind, int index, What what, int status, int value)
     {

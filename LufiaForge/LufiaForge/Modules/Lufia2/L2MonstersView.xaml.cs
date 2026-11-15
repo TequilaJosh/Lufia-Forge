@@ -17,6 +17,7 @@ public partial class L2MonstersView : UserControl
     {
         Elements.Attach(p, LufiaForge.Core.Lufia2.L2Elements.Who.Monster);
         Types.Attach(p, Kind.MonsterDefense);
+        BounceFocus.Attach(p, monsters: true);
         NewStatuses.Attach(p,
             new("Resists", "Its chance of getting it drops by this percent (100 = immune): a step in its 'when hit' script.", Kind.MonsterDefense, What.Resist),
             new("From the start", "It has it from the moment it is in a battle (Zombie: an undead monster).", Kind.MonsterDefense, What.Resist, Start: true));

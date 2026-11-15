@@ -66,6 +66,17 @@ ECNT    = $7FFDB4
 ETMP    = $7FFDB6
 ESTART  = $7FFDB8
 NBUF    = $7FFDC0
+; focus (Tag ring, Tag candy) and the battle-start statuses: $7F:FB60-$7F:FBEF (the game never uses $7F:FB4B up),
+; cleared at every battle's start
+FSTRK   = $7FFB60          ; per entry: attacks in a row on one foe (0-5)
+FLAST   = $7FFB80          ; per entry: that foe (its target bits)
+FDONE   = $7FFBA0          ; per entry: a focused attack this action
+FCANDY  = $7FFBC0          ; per entry: focus for the battle (the Tag candy: command 61)
+FBON    = $7FFBD0          ; per entry: the bonus this action gave (for its message)
+FOCACT  = $7FFBE0          ; command 61 ran in this action
+HSDONE  = $7FFBE2          ; the heroes got their worn items' statuses this battle
+FTMP    = $7FFBE4
+FTMP2   = $7FFBE6
 
 ; ================================================================ the game's code: where the hooks go
 org $85B464
@@ -416,8 +427,12 @@ OC_mine:
   brl Op5F
 OC_n5f:
   cmp #$60
-  bne OC_bad
+  bne OC_n60
   brl Op60
+OC_n60:
+  cmp #$61
+  bne OC_bad
+  brl Op61
 OC_bad:
   jml $85B473            ; an unknown command ends the script (as 00)
 
@@ -575,6 +590,13 @@ O60_one:
 O60_set:
   ora WARDACT
   sta WARDACT
+  sep #$20
+  jml $85B45E
+
+Op61:                    ; focus: the hero targets attack harder each time in a row they hit one foe, for the battle
+  rep #$30
+  lda #$0001
+  sta FOCACT
   sep #$20
   jml $85B45E
 
@@ -1052,6 +1074,39 @@ CI_y:
   rtl
 
 ; ================================================================ causing and curing
+; ---- MaskBlk: A = a fighter as the battle registers hold it (bit 7 = the monsters' side, the low 6 bits a mask), as
+; the game's CombatantPointer reads it -> X = its block (0 = none). 16-bit A, X; changes A.
+MaskBlk:
+  and #$00FF
+  sta FTMP
+  and #$003F
+  beq MK_0
+  ldx #$0000
+MK_b:
+  lsr a
+  bcs MK_g
+  inx
+  bra MK_b
+MK_g:
+  lda FTMP
+  and #$0080
+  beq MK_h
+  inx
+  inx
+  inx
+  inx
+  inx
+MK_h:
+  txa
+  asl a
+  tax
+  lda $7E0A64,x
+  tax
+  rtl
+MK_0:
+  ldx #$0000
+  rtl
+
 TargetStart:             ; each target starts with the action's chances
   php
   rep #$30
@@ -1065,6 +1120,40 @@ TS_l:
   bpl TS_l
   lda #$0001
   sta INTGT
+  ; Bounce (the game's status bit 6) sends back what has reg 26 bit 5: the game sets it only in ops 21 and 23, so a
+  ; weapon attack (op 37, action kind 1: the heroes' attack and the monsters' plain one) gets it too
+  lda $7FF454
+  cmp #$0001
+  bne TS_nb
+  lda $7FF45A
+  ora #$0020
+  sta $7FF45A
+TS_nb:
+  ; about to bounce (reg 26 bit 5, not already sent back, the target has bit 6): "<name> bounces the attack back!" after it
+  lda $7FF45A
+  and #$0021
+  cmp #$0020
+  bne TS_out
+  lda $7FF450
+  jsl MaskBlk
+  cpx #$0000
+  beq TS_out
+  lda $7E000F,x
+  and #$0040
+  beq TS_out
+  phb
+  pea $7E7E
+  plb
+  plb
+  jsl Ent
+  plb
+  bcc TS_out
+  lda ENT
+  tax
+  lda EXTRA,x
+  ora #$0010
+  sta EXTRA,x
+TS_out:
   plx
   plp
   lda $09F4
@@ -1189,6 +1278,13 @@ AN_done:
   lda WARD,x
   ora WARDACT
   sta WARD,x
+  lda FOCACT
+  beq AN_nf
+  cpx #$000E
+  bcs AN_nf
+  lda #$0001
+  sta FCANDY,x
+AN_nf:
   lda TMP1
   sta NS,x
   plx
@@ -1212,6 +1308,7 @@ AE_l:
   bpl AE_l
   sta WARDACT
   sta INTGT
+  sta FOCACT
   plx
   plp
   lda $7FF4E2
@@ -1237,8 +1334,111 @@ DoActMsg:                ; while the action runs, stone doesn't end the battle (
   plb
   rep #$30
   jsl ShowPending
+  jsl FocusEnd
   plb
   plp
+  rtl
+
+; ---- FocusEnd: after an action (16-bit, DB $7E): the acting hero's streak ends unless it made a focused attack; the
+; bonus that attack got is said ("Maxim's focus: +25%").
+FocusEnd:
+  lda $7FF44E
+  and #$00FF
+  bit #$0080
+  beq FE_1
+  rtl
+FE_1:
+  jsl MaskBlk
+  cpx #$0000
+  bne FE_2
+  rtl
+FE_2:
+  jsl Ent
+  bcs FE_3
+  rtl
+FE_3:
+  lda ENT
+  cmp #$000E
+  bcc FE_4
+  rtl
+FE_4:
+  phx
+  tax
+  lda FDONE,x
+  bne FE_done
+  lda #$0000
+  sta FSTRK,x
+  sta FLAST,x
+  sta FBON,x
+  plx
+  rtl
+FE_done:
+  lda #$0000
+  sta FDONE,x
+  lda FBON,x
+  bne FE_say
+  plx
+  rtl
+FE_say:
+  sta FTMP
+  lda #$0000
+  sta FBON,x
+  sta FTMP2              ; a digit was written
+  ldx #$0000
+FE_cp:
+  lda TFocus,x           ; "'s focus: +" (11 letters)
+  sta DOOMT,x
+  inx
+  inx
+  cpx #$000C
+  bne FE_cp
+  ldx #$000B
+  lda #$0064
+  jsl FE_dig
+  lda #$000A
+  jsl FE_dig
+  lda #$0001
+  sta FTMP2
+  jsl FE_dig
+  sep #$20
+  lda #$25               ; %
+  sta DOOMT,x
+  lda #$00
+  sta DOOMT+1,x
+  rep #$20
+  plx
+  jsl ShowMsgRam
+  rtl
+
+; FE_dig: A = 100, 10 or 1: the digit of FTMP for it at DOOMT + X (none for a leading 0); X moves on past it.
+FE_dig:
+  sta FTMP+$10
+  ldy #$0000
+  lda FTMP
+FD_l:
+  cmp FTMP+$10
+  bcc FD_d
+  sbc FTMP+$10
+  iny
+  bra FD_l
+FD_d:
+  sta FTMP
+  tya
+  bne FD_w
+  lda FTMP2
+  bne FD_w0
+  rtl
+FD_w0:
+  tya
+FD_w:
+  clc
+  adc #$0030
+  sep #$20
+  sta DOOMT,x
+  rep #$20
+  inx
+  lda #$0001
+  sta FTMP2
   rtl
 
 ShowPending:             ; for every entry: what was caused, cured, shattered...
@@ -2080,6 +2280,12 @@ BS_m:
   bpl BS_m
   sta WARDACT
   sta INTGT
+  ldx #$0088
+BS_f:
+  sta FSTRK,x
+  dex
+  dex
+  bpl BS_f
   plb
   plp
   lda #$FF
@@ -2109,6 +2315,19 @@ BE_n:
   dex
   dex
   bpl BE_l
+  ldx #$0BAD             ; Bounce (bit 6) ends with the battle
+BE_b:
+  sep #$20
+  lda $000F,x
+  and #$BF
+  sta $000F,x
+  rep #$20
+  txa
+  clc
+  adc #$00BE
+  tax
+  cmp #$10DF              ; past the 7th hero
+  bcc BE_b
   plb
   plp
   rtl
@@ -2220,6 +2439,7 @@ RS_l:
   beq RS_n
   sta MONID,x
   dec a
+  pha
   asl a
   tax
   lda MonStart,x
@@ -2231,11 +2451,30 @@ RS_l:
   lda NS,x
   ora TMP0
   sta NS,x
+  pla                    ; and the game's statuses it starts with (Bounce, Mirror...)
+  tax
+  lda MonStart+$1604,x
+  and #$00FF
+  beq RS_n
+  sta TMP0
+  lda $0A6E,y
+  tax
+  sep #$20
+  lda $000F,x
+  ora TMP0
+  sta $000F,x
+  rep #$20
 RS_n:
   iny
   iny
   cpy #$000C
   bne RS_l
+  lda HSDONE
+  bne RS_hs
+  lda #$0001
+  sta HSDONE
+  jsl HeroStarts
+RS_hs:
   ldy #$0000
 RS_h:
   lda $0A64,y
@@ -2272,6 +2511,52 @@ RS_hn:
   plb
   plp
   jsl $85ECF0
+  rtl
+
+; ---- HeroStarts: each hero in the battle gets the game's statuses its worn items give (the high byte of ItemX: Bounce,
+; Mirror). 16-bit, DB $7E.
+HeroStarts:
+  ldy #$0000
+HS_h:
+  lda $0A64,y
+  beq HS_n
+  sta FTMP
+  lda #$0000
+  sta FTMP2
+  phy
+  ldy #$0066
+HS_e:
+  tya
+  clc
+  adc FTMP
+  tax
+  lda $7E0000,x
+  and #$01FF
+  beq HS_en
+  asl a
+  tax
+  lda MonStart+$1704,x
+  and #$00FF
+  ora FTMP2
+  sta FTMP2
+HS_en:
+  iny
+  iny
+  cpy #$0072
+  bne HS_e
+  ply
+  lda FTMP
+  tax
+  sep #$20
+  lda $000F,x
+  ora FTMP2
+  sta $000F,x
+  rep #$20
+HS_n:
+  iny
+  iny
+  cpy #$000A
+  bne HS_h
   rtl
 
 ; ================================================================ the STATUS screen's resistance pages
@@ -2786,9 +3071,10 @@ EApply:
   lda ECNT
   jsl EPct
   cmp #$0000
-  bne EA_go
+  bne EMulPct
   rtl
-EA_go:
+; ---- EMulPct: A = a percent (not 0): EMAG x (100 + A) / 100, as EApply does. 16-bit; keeps X.
+EMulPct:
   clc
   adc #$0064
   bpl EA_pos
@@ -2902,6 +3188,7 @@ EH_next:
   sta ECNT
   bra EH_loop
 EH_fin:
+  jsl Focus
   lda ENEG
   beq EH_pos
   lda EMAG
@@ -2917,6 +3204,138 @@ EH_out:
   plx
   plp
   lda $7FF4D0
+  rtl
+
+; ---- Focus: from ElemHit (16-bit, X = the target's block; keeps X): a hero with focus (it wears an item marked for it,
+; such as the Tag ring, or the Tag candy gave it, command 61) hits harder each turn in a row it attacks the same foe
+; with its weapon: the 1st-5th attack after the first does FocusPct's percents more (+10 +25 +50 +75 +100 to start).
+; Another foe, more than one, or anything but a weapon attack starts it again (DoActMsg).
+Focus:
+  lda $7FF45A
+  bit #$0001             ; sent back by Mirror or Bounce
+  beq FO_1
+  rtl
+FO_1:
+  lda $7FF454
+  cmp #$0001             ; a weapon attack
+  beq FO_2
+  rtl
+FO_2:
+  lda $7FF44E
+  and #$00FF
+  bit #$0080
+  beq FO_3
+  rtl
+FO_3:
+  phx
+  jsl MaskBlk
+  cpx #$0000
+  bne FO_k1
+  brl FO_x
+FO_k1:
+  phb
+  pea $7E7E
+  plb
+  plb
+  jsl Ent
+  plb
+  bcs FO_k2
+  brl FO_x
+FO_k2:
+  lda ENT
+  cmp #$000E             ; heroes only
+  bcc FO_k3
+  brl FO_x
+FO_k3:
+  jsl HasFocus
+  bcs FO_k4
+  brl FO_x
+FO_k4:
+  lda ENT
+  tax
+  lda #$0001
+  sta FDONE,x
+  lda $7FF450
+  and #$00FF
+  sta FTMP               ; the target (its side bit too)
+  and #$003F
+  sta FTMP2
+  dec a
+  and FTMP2              ; more than one bit of the low six: more than one target
+  bne FO_rs              ; more than one target
+  lda FTMP
+  cmp FLAST,x
+  bne FO_new
+  lda FSTRK,x
+  cmp #$0005
+  bcs FO_bn
+  inc a
+  sta FSTRK,x
+FO_bn:
+  dec a
+  tax
+  lda MonStart+$1B04,x
+  and #$00FF
+  bne FO_k5
+  brl FO_x
+FO_k5:
+  sta FTMP
+  lda ENT
+  tax
+  lda FTMP
+  sta FBON,x
+  jsl EMulPct
+  brl FO_x
+FO_new:
+  sta FLAST,x
+  lda #$0000
+  sta FSTRK,x
+  brl FO_x
+FO_rs:
+  lda #$0000
+  sta FSTRK,x
+  sta FLAST,x
+FO_x:
+  plx
+  rtl
+
+; ---- HasFocus: X = a hero's block, ENT its entry -> carry set when it has focus. 16-bit; keeps X; any DB.
+HasFocus:
+  phx
+  phy
+  txa
+  sta FTMP
+  lda ENT
+  tax
+  lda FCANDY,x
+  bne HF_y
+  ldy #$0066             ; the six items it wears (+$66-$71)
+HF_l:
+  tya
+  clc
+  adc FTMP
+  tax
+  lda $7E0000,x
+  and #$01FF
+  beq HF_n
+  asl a
+  tax
+  lda MonStart+$1704,x
+  bit #$0100
+  bne HF_y
+HF_n:
+  iny
+  iny
+  cpy #$0072
+  bne HF_l
+  ply
+  plx
+  clc
+  rtl
+HF_y:
+  ply
+  plx
+  sec
   rtl
 
 ; ---- NumText: A = a percent (signed, 16-bit) -> NBUF = "+22%", "-42%" or "-" for 0 (00 at the end; % is the menu
@@ -3050,7 +3469,7 @@ CureTab:
   dw UZom-Texts, UFro-Texts, UDec-Texts, UBur-Texts, UBers-Texts, USpook-Texts, UAmn-Texts, UPie-Texts
   dw UReg-Texts, UDoo-Texts, UBli-Texts, USto-Texts, UBle-Texts, UCur-Texts, UStop-Texts, UMan-Texts
 ExtraTab:
-  dw XSha-Texts, XMel-Texts, XWas-Texts, XMis-Texts
+  dw XSha-Texts, XMel-Texts, XWas-Texts, XMis-Texts, XBou-Texts
 DecayTab:
   dw DAtp-Texts, DDfp-Texts, DStr-Texts, DAgl-Texts, DInt-Texts, DGut-Texts, DMgr-Texts
 PassTab:
@@ -3140,6 +3559,8 @@ XSha: db "'s ice shatters!", $00
 XMel: db "'s ice melts.", $00
 XWas: db "'s burns are cooled.", $00
 XMis: db " misses!", $00
+XBou: db " bounces the attack back!", $00
+TFocus: db "'s focus: +", $00
 TSpook: db " is too scared to act.", $00
 TStone: db " is stone.", $00
 TFroz: db " is frozen solid.", $00
@@ -3161,5 +3582,8 @@ PDoo: db "Doom strikes!", $00
 ; after the block Lufia Forge allocates the monsters' starting statuses (a word per monster id, 256: zeros = none) and
 ; then, at MonStart + $200, a 10-byte record per item (512) for the STATUS screen's resistance pages: elements halved,
 ; elements nullified, the game's statuses immune / halved (a byte each), the new statuses immune, resisted (words);
-; then, at MonStart + $1600, the element table's address (4 bytes)
+; then, at MonStart + $1600, the element table's address (4 bytes); at MonStart + $1604 the game's statuses each monster
+; starts with (a byte per id, 256: bit 6 Bounce, bit 7 Mirror); at MonStart + $1704 a word per item (512): its low byte
+; the game's statuses its wearer starts each battle with, bit 8 focus when worn (the Tag ring); at MonStart + $1B04 the
+; focus percents (5 bytes: the 2nd-6th attack in a row on one foe; 3 spare)
 MonStart:
