@@ -188,8 +188,9 @@ public partial class L2SettingsPage : ObservableObject
     {
         string mb(double b) => (b / 1048576).ToString("0.##") + " MB";
         if (L2Rom.IsExLoRom(rom))
-            return $"8 MB. Free: {mb(L2Rom.FreeSpace(rom))} in the first 4 MB, {mb(L2Rom.UpperFree(rom))} for data and " +
-                   $"{L2EventSpace.UpperBanksLeft(rom)} empty banks of 32 KB for events in the upper 4 MB (event space made so far: {mb(L2EventSpace.Free(rom))} free).";
+            return $"8 MB. Free: {mb(L2Rom.FreeSpace(rom))} in the first 4 MB, and {L2EventSpace.UpperBanksLeft(rom)} empty banks of 32 KB " +
+                   $"in the upper 4 MB for events and data (made so far: event space {mb(L2EventSpace.Free(rom))} free, data {mb(L2Rom.UpperFree(rom))} free). " +
+                   "Banks $40-$7D stay empty: old Snes9x versions can't read them.";
         return $"{mb(rom.Length)}. Free for what Lufia Forge adds: {mb(L2Rom.FreeSpace(rom))} (the ROM grows to 3 and then 4 MB by itself as that is used).";
     }
 

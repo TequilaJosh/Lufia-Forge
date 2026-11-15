@@ -187,6 +187,28 @@ public static class L2MapNames
 
     public static Where BoxWhere(RomBuffer rom) => Hook(rom) is var h and >= 0 ? (Where)rom.ReadByte(h + 6) : Where.TopMiddle;
 
+    /// <summary>The corner code's file offset (its 8-byte head first) and size, or -1 (<see cref="L2HighBanks"/>).</summary>
+    internal static (int At, int Size) CornerCode(RomBuffer rom)
+    {
+        int h = Hook(rom);
+        if (h < 0) return (-1, 0);
+        HookCode((Where)rom.ReadByte(h + 6), h + 8, out int size);
+        return (h, size + 8);
+    }
+
+    /// <summary>Makes the corner code again at <paramref name="to"/> (room for <see cref="CornerCode"/>'s size) and
+    /// calls it there.</summary>
+    internal static void MoveCornerCode(RomBuffer rom, int to)
+    {
+        int h = Hook(rom);
+        if (h < 0) return;
+        var where = (Where)rom.ReadByte(h + 6);
+        rom.WriteBytes(to, rom.ReadBytes(h, 8));
+        rom.WriteBytes(to + 8, HookCode(where, to + 8, out _));
+        int snes = L2Rom.FileToSnes(to + 8);
+        rom.WriteBytes(CentreAt + 1, new[] { (byte)snes, (byte)(snes >> 8), (byte)(snes >> 16) });
+    }
+
     /// <summary>The corner code (file offset of its magic), or -1.</summary>
     private static int Hook(RomBuffer rom)
     {

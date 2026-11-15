@@ -99,6 +99,26 @@ public static class L2NewMaps
 
     public static bool IsInstalled(RomBuffer rom) => Block(rom) >= 0;
 
+    internal const int TableBlockSize = BlockSize;
+
+    /// <summary>Moves the LF2MX block to <paramref name="to"/> (room for <see cref="TableBlockSize"/> bytes) and points
+    /// every read of the tables, the encounter read and the file hook at it (<see cref="L2HighBanks"/>).</summary>
+    internal static void MoveBlock(RomBuffer rom, int to)
+    {
+        int b = Block(rom);
+        if (b < 0) return;
+        rom.WriteBytes(to, rom.ReadBytes(b, BlockSize));
+        foreach (var s in Sites)
+        {
+            int snes = L2Rom.FileToSnes(to + Layout[s.Table].At) + s.Delta;
+            rom.WriteBytes(s.At + 1, new[] { (byte)snes, (byte)(snes >> 8), (byte)(snes >> 16) });
+        }
+        int enc = L2Rom.FileToSnes(to + EncountersAt);
+        rom.WriteBytes(EncounterSite + 1, new[] { (byte)enc, (byte)(enc >> 8), (byte)(enc >> 16) });
+        int code = L2Rom.FileToSnes(to + CodeAt);
+        rom.WriteBytes(HookSite + 1, new[] { (byte)code, (byte)(code >> 8), (byte)(code >> 16) });
+    }
+
     /// <summary>How many new map numbers are in use (made, deleted ones in the middle included).</summary>
     public static int Made(RomBuffer rom) => Block(rom) is var b and >= 0 ? rom.ReadByte(b + 6) : 0;
 

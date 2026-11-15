@@ -70,6 +70,26 @@ public static class L2Encounters
     }
 
     /// <summary>The moved table (file offset), or -1 when the game reads its own.</summary>
+    /// <summary>The moved zone table's block (file offset, its 16-byte head first), or -1.</summary>
+    internal static int ZoneBlock(RomBuffer rom) => MovedZoneTable(rom) is var at and >= 0 ? at - 0x10 : -1;
+
+    /// <summary>Moves the zone table's block to <paramref name="to"/> (room for <see cref="ZoneBlockSize"/> bytes) and
+    /// points the battle check at it (<see cref="L2HighBanks"/>).</summary>
+    internal static void MoveZoneBlock(RomBuffer rom, int to)
+    {
+        int block = ZoneBlock(rom);
+        if (block < 0) return;
+        rom.WriteBytes(to, rom.ReadBytes(block, ZoneBlockSize));
+        int snes = L2Rom.FileToSnes(to + 0x10);
+        for (int i = 0; i < 3; i++)
+        {
+            int a = snes + ZoneSiteOffsets[i];
+            rom.WriteBytes(ZoneSites[i] + 1, new[] { (byte)a, (byte)(a >> 8), (byte)(a >> 16) });
+        }
+    }
+
+    internal const int ZoneBlockSize = 0x10 + MaxZones * 10;
+
     private static int MovedZoneTable(RomBuffer rom)
     {
         if (rom.Length <= 0x31D5D || rom.ReadByte(ZoneSites[2]) != 0xBF) return -1;

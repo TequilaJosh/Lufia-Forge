@@ -75,13 +75,20 @@ public static class L2Rom
     /// console's start and its interrupts go through bank $00, which holds a copy of the first bank
     /// (<see cref="RomBuffer.IsExLoRomCopy"/>). Measured in BizHawk (2026-10-27): the game reads nothing else from
     /// banks $00-$7D, but for the battle window frame (2026-11-01, <see cref="FixLowBankReads"/>). Banks $01-$3F also
-    /// see the RAM at $0000-$1FFF, like $80-$BF, so event scripts can live there (<see cref="L2EventSpace"/>); banks
-    /// $40-$7D hold other data (<see cref="Allocate"/> with upper: true).
-    /// Works in Snes9x, bsnes / higan / BizHawk's "BSNESv115+" core and others that know ExLoROM; BizHawk's older
-    /// "BSNES" core can't run it.
+    /// see the RAM at $0000-$1FFF, like $80-$BF, so event scripts can live there (<see cref="L2EventSpace"/>), and other
+    /// data goes in banks of its own among them (<see cref="Allocate"/> with upper: true, <see cref="DataBanks"/>).
+    /// Banks $40-$7D (file 0x600000-) are left alone: Snes9x up to 1.52 at least (1.51 is still played) shows file
+    /// 0x400000-0x5FFFFF there a second time (its Map_JumboLoROMMap), so data put there by Lufia Forge before 2026-11-14
+    /// read as the copy of bank $00 and a map whose info was there reset the game on entry (Artemis, map 78);
+    /// <see cref="L2HighBanks"/> moves it. Works in Snes9x, bsnes / higan / BizHawk's "BSNESv115+" core and others that
+    /// know ExLoROM; BizHawk's older "BSNES" core can't run it.
     /// </summary>
     public const int UpperStart = 0x400000, ExSize = RomBuffer.ExLoRomSize, UpperDataStart = 0x600000, UpperDataEnd = 0x7F0000,
         UpperMark = UpperDataEnd - 16;
+
+    /// <summary>The data banks' range (banks $01-$3F, shared with the event space) and their mark at the bank's last 16
+    /// bytes: "LF2D" and the next free offset (u24), as the event space's "LF2V".</summary>
+    private const int DataFirst = UpperStart + 0x8000, DataEnd = UpperStart + 0x200000, DataMark = 0x7FF0;
 
     /// <summary>Whether the ROM is 8 MB (ExLoROM).</summary>
     public static bool IsExLoRom(RomBuffer rom) => rom.IsExLoRomCopy();
@@ -129,26 +136,57 @@ public static class L2Rom
         return changed;
     }
 
-    /// <summary>Bytes still free in the upper 4 MB (data banks $40-$7D), 0 on a smaller ROM.</summary>
-    public static int UpperFree(RomBuffer rom) =>
-        !IsExLoRom(rom) ? 0 : IsMark(rom, UpperMark) ? UpperMark - (int)rom.ReadUInt24Le(UpperMark + 4) : UpperMark - UpperDataStart;
+    /// <summary>Bytes still free in the data banks made so far (more are made from the empty banks of $01-$3F, which the
+    /// event space takes too: <see cref="L2EventSpace.UpperBanksLeft"/>), 0 on a smaller ROM.</summary>
+    public static int UpperFree(RomBuffer rom) => !IsExLoRom(rom) ? 0 :
+        DataBanks(rom).Sum(b => b + DataMark - (int)rom.ReadUInt24Le(b + DataMark + 4));
+
+    /// <summary>The data banks made so far (file offsets of their starts), highest first.</summary>
+    public static List<int> DataBanks(RomBuffer rom)
+    {
+        var list = new List<int>();
+        if (!IsExLoRom(rom)) return list;
+        for (int b = DataEnd - 0x8000; b >= DataFirst; b -= 0x8000)
+            if (IsDataBank(rom, b)) list.Add(b);
+        return list;
+    }
+
+    private static bool IsDataBank(RomBuffer rom, int bank) =>
+        bank + DataMark + 8 <= rom.Length && rom.ReadByte(bank + DataMark) == 'L' && rom.ReadByte(bank + DataMark + 1) == 'F' &&
+        rom.ReadByte(bank + DataMark + 2) == '2' && rom.ReadByte(bank + DataMark + 3) == 'D' &&
+        rom.ReadUInt24Le(bank + DataMark + 4) is var n && n >= bank && n <= bank + DataMark;
+
+    private static void WriteDataMark(RomBuffer rom, int bank, int next) =>
+        rom.WriteBytes(bank + DataMark, new[] { (byte)'L', (byte)'F', (byte)'2', (byte)'D', (byte)next, (byte)(next >> 8), (byte)(next >> 16), (byte)0 });
+
+    /// <summary>Room for <paramref name="length"/> bytes in a data bank of the upper 4 MB: one made before, else the
+    /// highest empty bank of $01-$3F (the event space takes them from the lowest). -1 when there is none.</summary>
+    private static int AllocateData(RomBuffer rom, int length)
+    {
+        if (length > DataMark) return -1;
+        foreach (int bank in DataBanks(rom))
+        {
+            int next = (int)rom.ReadUInt24Le(bank + DataMark + 4);
+            if (next + length <= bank + DataMark) { WriteDataMark(rom, bank, next + length); return next; }
+        }
+        for (int b = DataEnd - 0x8000; b >= DataFirst; b -= 0x8000)
+            if (!IsDataBank(rom, b) && L2EventSpace.IsEmptyBank(rom, b))
+            {
+                rom.WriteBytes(b, new byte[0x8000]);
+                WriteDataMark(rom, b, b + length);
+                return b;
+            }
+        return -1;
+    }
 
     /// <summary>Reserves <paramref name="length"/> bytes of added space, never across a 32 KB bank (so the game reads
     /// them as one piece), growing the ROM when needed. Returns the file offset. <paramref name="upper"/>: the data is
-    /// read through a full 24-bit address, so on an 8 MB ROM it goes in the upper 4 MB (banks $40-$7D) first.</summary>
+    /// read through a full 24-bit address, so on an 8 MB ROM it goes in a data bank of the upper 4 MB first
+    /// (<see cref="DataBanks"/>; never banks $40-$7D, which old Snes9x versions can't read).</summary>
     public static int Allocate(RomBuffer rom, int length, bool upper = false)
     {
         if (length <= 0 || length > 0x8000) throw new ArgumentOutOfRangeException(nameof(length));
-        if (upper && IsExLoRom(rom))
-        {
-            int up = IsMark(rom, UpperMark) ? (int)rom.ReadUInt24Le(UpperMark + 4) : UpperDataStart;
-            if (up / 0x8000 != (up + length - 1) / 0x8000) up = (up / 0x8000 + 1) * 0x8000;
-            if (up + length <= UpperMark)
-            {
-                WriteMark(rom, UpperMark, up + length);
-                return up;
-            }
-        }
+        if (upper && IsExLoRom(rom) && AllocateData(rom, length) is var at0 and >= 0) return at0;
         if (rom.Length < ExpandedSize) rom.Expand(ExpandedSize);
         var (mark, next) = FindMark(rom) ?? NewSpace(rom, OriginalSize) ?? throw new InvalidOperationException("The ROM has no empty space left.");
         while (true)
@@ -171,14 +209,22 @@ public static class L2Rom
     }
 
     /// <summary>Where <see cref="Allocate"/> hands out room, with the "LF2X" mark (16 bytes) and the next free offset it
-    /// holds: the added space of the first 4 MB (from 2.5 MB) and, on an 8 MB ROM, the upper 4 MB's data banks. Merging
+    /// holds: the added space of the first 4 MB (from 2.5 MB), on an 8 MB ROM each data bank ("LF2D", its mark at the
+    /// bank's end) and the old run of banks $40-$7D while a ROM still has its mark (<see cref="UpperMark"/>). Merging
     /// projects reads them: both projects' new data starts at the same place.</summary>
     public static List<(int Mark, int Start, int Next)> Spaces(RomBuffer rom)
     {
         var list = new List<(int, int, int)>();
         if (FindMark(rom) is var (mark, next)) list.Add((mark, OriginalSize, next));
         if (IsExLoRom(rom) && IsMark(rom, UpperMark)) list.Add((UpperMark, UpperDataStart, (int)rom.ReadUInt24Le(UpperMark + 4)));
+        foreach (int b in DataBanks(rom)) list.Add((b + DataMark, b, (int)rom.ReadUInt24Le(b + DataMark + 4)));
         return list;
+    }
+
+    /// <summary>Wipes the mark of the old run of banks $40-$7D (once nothing is read from there).</summary>
+    public static void ForgetUpperRun(RomBuffer rom)
+    {
+        if (IsExLoRom(rom) && IsMark(rom, UpperMark)) rom.WriteBytes(UpperMark, new byte[16]);
     }
 
     private static void WriteMark(RomBuffer rom, int mark, int next) =>

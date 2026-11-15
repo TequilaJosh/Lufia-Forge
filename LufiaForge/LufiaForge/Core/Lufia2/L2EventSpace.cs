@@ -67,6 +67,9 @@ public static class L2EventSpace
     public static int UpperBanksLeft(RomBuffer rom) => !L2Rom.IsExLoRom(rom) ? 0 :
         Enumerable.Range(0, (UpperEnd - UpperFirst) / 0x8000).Count(i => !IsRegion(rom, UpperFirst + i * 0x8000) && Empty(rom, UpperFirst + i * 0x8000));
 
+    /// <summary>Whether a 32 KB bank is all one value (00 or FF): nothing lives there (data banks take these too).</summary>
+    internal static bool IsEmptyBank(RomBuffer rom, int bank) => bank + 0x8000 <= rom.Length && Empty(rom, bank);
+
     private static bool Empty(RomBuffer rom, int bank)
     {
         byte v = rom.ReadByte(bank);

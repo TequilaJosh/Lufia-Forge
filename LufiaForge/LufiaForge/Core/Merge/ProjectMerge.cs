@@ -301,6 +301,9 @@ public sealed class ProjectMerge
         var rom = new RomBuffer(r, "merge");
         MergeBookkeeping(rom, report);
         if (_l2 != null) _l2.Converge(rom, report);
+        // a project made before 2026-11-14 may bring data in banks $40-$7D, which old Snes9x versions can't read
+        if (Game == GameKind.Lufia2 && L2HighBanks.Needed(rom))
+            report.Add("Moved out of banks $40-$7D (old Snes9x versions can't read them): " + string.Join(", ", L2HighBanks.Move(rom)) + ".");
         rom.FixChecksum();
         if (taken + conflicts > 0) report.Insert(0, $"{taken + conflicts} run{(taken + conflicts == 1 ? "" : "s")} of other bytes taken from \"{TheirName}\"" + (conflicts > 0 ? $" ({conflicts} where both projects had changed them)." : "."));
         if (_l2 != null) _l2.Verify(rom, report);
@@ -317,29 +320,32 @@ public sealed class ProjectMerge
         {
             bool Same(byte[] x, byte[] y, int q) => x.AsSpan(q, 16).SequenceEqual(y.AsSpan(q, 16));
             void Take(int q) => r.WriteBytes(q, _rb.ReadBytes(q, 16));
-            // the added space (the first 4 MB's, the upper 4 MB's): a run that filled up has its mark wiped and the next
-            // run's mark at its end, so both sides' marks go together
+            // the added space (the first 4 MB's, the old run of banks $40-$7D): a run that filled up has its mark wiped and
+            // the next run's mark at its end, so both sides' marks go together
+            var dataA = L2Rom.DataBanks(_ra).ToHashSet(); var dataB = L2Rom.DataBanks(_rb).ToHashSet();
             foreach (bool upper in new[] { false, true })
             {
-                var ma = L2Rom.Spaces(_ra).Where(s => s.Mark >= L2Rom.UpperStart == upper).Select(s => ((int, int)?)(s.Mark, s.Next)).FirstOrDefault();
-                var mb = L2Rom.Spaces(_rb).Where(s => s.Mark >= L2Rom.UpperStart == upper).Select(s => ((int, int)?)(s.Mark, s.Next)).FirstOrDefault();
+                bool Run((int Mark, int Start, int Next) s) => upper ? s.Mark == L2Rom.UpperMark : s.Mark < L2Rom.UpperStart;
+                var ma = L2Rom.Spaces(_ra).Where(Run).Select(s => ((int, int)?)(s.Mark, s.Next)).FirstOrDefault();
+                var mb = L2Rom.Spaces(_rb).Where(Run).Select(s => ((int, int)?)(s.Mark, s.Next)).FirstOrDefault();
                 var at = new[] { ma, mb }.Where(x => x != null).Select(x => x!.Value.Item1).Distinct().ToList();
                 if (at.Count == 0 || at.All(q => Same(_b, _bb, q))) continue;
                 bool further = mb is var (bm, bn) && (ma is not var (am, an) || bm > am || bm == am && bn > an);
                 if (at.All(q => Same(_a, _ab, q)) || further) foreach (int q in at) Take(q);
             }
-            // event space banks
-            var aHas = L2EventSpace.Regions(_ra).ToHashSet(); var bHas = L2EventSpace.Regions(_rb).ToHashSet();
+            // banks with a mark of their own: event space ("LF2V") and data banks ("LF2D"), both at the bank's last 16 bytes
+            var aHas = L2EventSpace.Regions(_ra).Concat(dataA).ToHashSet(); var bHas = L2EventSpace.Regions(_rb).Concat(dataB).ToHashSet();
             foreach (int bank in aHas.Union(bHas))
             {
                 int q = bank + L2EventSpace.Mark;
                 if (Same(_b, _bb, q)) continue;
                 if (Same(_a, _ab, q)) { Take(q); continue; }
-                if (aHas.Contains(bank) && bHas.Contains(bank)) { if (_rb.ReadUInt24Le(q + 4) > _ra.ReadUInt24Le(q + 4)) Take(q); }
+                bool sameKind = dataA.Contains(bank) == dataB.Contains(bank);
+                if (aHas.Contains(bank) && bHas.Contains(bank) && sameKind) { if (_rb.ReadUInt24Le(q + 4) > _ra.ReadUInt24Le(q + 4)) Take(q); }
                 else if (bHas.Contains(bank))
-                    report.Add($"The other project made bank ${L2Rom.FileToSnes(bank) >> 16:X2} event space, but this project put data there too: it stays this project's.");
+                    report.Add($"The other project made bank ${L2Rom.FileToSnes(bank) >> 16:X2} {(dataB.Contains(bank) ? "a data bank" : "event space")}, but this project put {(dataA.Contains(bank) ? "other data" : "something")} there too: it stays this project's.");
             }
-            // every mark past what either project put in its space
+            // every mark past what either project put in its space (data banks are among the spaces)
             var spaces = L2Rom.Spaces(r).Select(s => (s.Mark, s.Start)).Concat(L2EventSpace.Regions(r).Select(b => (Mark: b + L2EventSpace.Mark, Start: b)));
             foreach (var (mark, start) in spaces)
             {
@@ -383,8 +389,12 @@ internal sealed class MergeAreas
             Paint(L2Rom.OriginalSize, Math.Min(size, L2Rom.MaxSize), "Lufia Forge's added space", true);
             if (size >= L2Rom.ExSize) Paint(L2Rom.UpperStart + 0x8000, size, "the upper 4 MB", true);
             foreach (var rom in new[] { ours, theirs })
+            {
                 foreach (int bank in L2EventSpace.Regions(rom))
                     Paint(bank, bank + 0x8000, $"event space (bank ${L2Rom.FileToSnes(bank) >> 16:X2})", true);
+                foreach (int bank in L2Rom.DataBanks(rom))
+                    Paint(bank, bank + 0x8000, $"Lufia Forge's data (bank ${L2Rom.FileToSnes(bank) >> 16:X2})", true);
+            }
             foreach (var t in TableGuard.Lufia2) if (t.Old.Length > 0) Paint(t.Old.At, t.Old.At + t.Old.Length, t.Name);
             // Lufia Forge's own blocks: from where each starts to the next one (or the end of its bank)
             var marks = new List<(int At, string Name)>();

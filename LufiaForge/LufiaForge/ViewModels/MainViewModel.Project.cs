@@ -268,6 +268,18 @@ public partial class MainViewModel
             OnPropertyChanged(nameof(RomBuffer));
             _openNote = " The hero's battle window border, broken on 8 MB ROMs, was fixed (Edit, Undo takes it back).";
         }
+        if (rom.IsLufia2 && Core.Lufia2.L2HighBanks.Needed(rom))
+        {
+            try
+            {
+                var moved = Core.Lufia2.L2HighBanks.Move(rom);
+                NotifyRomModified("Lufia II: moved out of banks $40-$7D, which old Snes9x versions can't read: " + string.Join(", ", moved));
+                OnPropertyChanged(nameof(RomBuffer));
+                _openNote += " Data Lufia Forge had put where old Snes9x versions can't read it (" + string.Join(", ", moved) +
+                             ") was moved, so those maps no longer reset the game there (Edit, Undo takes it back).";
+            }
+            catch (Exception ex) { _openNote += " Data in banks $40-$7D (which old Snes9x versions can't read) couldn't be moved: " + ex.Message; }
+        }
         if (rom.IsLufia2 && Core.Lufia2.L2AiScripts.UpdateHooks(rom))
         {
             NotifyRomModified("Lufia II: battle script hooks updated (monster scripts that wrap round their bank run again)");
