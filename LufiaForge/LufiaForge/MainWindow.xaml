@@ -106,6 +106,9 @@ Title="{Binding WindowTitle}"
                 <Separator Style="{StaticResource LufiaSeparator}"/>
                 <MenuItem Header="Start from a Clean Slate..." Click="ClearStoryMenuItem_Click" Foreground="Black" IsEnabled="{Binding IsRomLoaded}"
                           ToolTip="Takes out every event, cutscene, character and treasure (the maps, graphics, monsters, items, spells and music stay); a new game starts where you pick"/>
+                <Separator Style="{StaticResource LufiaSeparator}"/>
+                <MenuItem Header="Settings..." Click="SettingsMenuItem_Click" Foreground="Black"
+                          ToolTip="Lufia Forge's own settings, the same for every project (Snes9x 1.51 mode)"/>
             </MenuItem>
 
             <MenuItem Header="_Help" Foreground="{StaticResource TextPrimaryBrush}">

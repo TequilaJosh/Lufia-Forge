@@ -258,6 +258,25 @@ public partial class MainViewModel
     /// skipped the fan hacks' monster scripts with offsets that wrap round their bank (<see cref="Core.Lufia2.L2AiScripts.UpdateHooks"/>).</summary>
     private string _openNote = "";
 
+    /// <summary>Snes9x 1.51 mode was turned on (Edit, Settings): what the open project has in the top 2 MB of its 8 MB ROM
+    /// moves now, as one Undo step, and the status bar says what.</summary>
+    public void MoveOutOfTop2MB()
+    {
+        if (RomBuffer is not { IsLufia2: true } rom || !Core.Lufia2.L2HighBanks.Needed(rom)) return;
+        WritePendingEdits();
+        try
+        {
+            var moved = Core.Lufia2.L2HighBanks.Move(rom);
+            NotifyRomModified("Lufia II: moved out of banks $40-$7D, which old Snes9x versions can't read: " + string.Join(", ", moved));
+            OnPropertyChanged(nameof(RomBuffer));
+            StatusMessage = "Snes9x 1.51 mode: moved out of the top 2 MB: " + string.Join(", ", moved) + " (Edit, Undo takes it back).";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show("What the project has in the top 2 MB couldn't be moved: " + ex.Message, "Settings", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
     private void FixKnownBugs(RomBuffer rom)
     {
         _openNote = "";
@@ -276,7 +295,7 @@ public partial class MainViewModel
                 NotifyRomModified("Lufia II: moved out of banks $40-$7D, which old Snes9x versions can't read: " + string.Join(", ", moved));
                 OnPropertyChanged(nameof(RomBuffer));
                 _openNote += " Data Lufia Forge had put where old Snes9x versions can't read it (" + string.Join(", ", moved) +
-                             ") was moved, so those maps no longer reset the game there (Edit, Undo takes it back).";
+                             ") was moved (Snes9x 1.51 mode, Edit > Settings; Edit, Undo takes it back).";
             }
             catch (Exception ex) { _openNote += " Data in banks $40-$7D (which old Snes9x versions can't read) couldn't be moved: " + ex.Message; }
         }

@@ -190,7 +190,9 @@ public partial class L2SettingsPage : ObservableObject
         if (L2Rom.IsExLoRom(rom))
             return $"8 MB. Free: {mb(L2Rom.FreeSpace(rom))} in the first 4 MB, and {L2EventSpace.UpperBanksLeft(rom)} empty banks of 32 KB " +
                    $"in the upper 4 MB for events and data (made so far: event space {mb(L2EventSpace.Free(rom))} free, data {mb(L2Rom.UpperFree(rom))} free). " +
-                   "Banks $40-$7D stay empty: old Snes9x versions can't read them.";
+                   (L2Rom.Snes9x151Mode
+                       ? "The top 2 MB stay empty: Snes9x 1.51 mode is on (Edit > Settings)."
+                       : $"Snes9x 1.51 mode is off (Edit > Settings), so the top 2 MB are used for data first: {mb(L2Rom.UpperMark - L2Rom.Spaces(rom).Where(s => s.Mark == L2Rom.UpperMark).Select(s => s.Next).DefaultIfEmpty(L2Rom.UpperDataStart).First())} free there.");
         return $"{mb(rom.Length)}. Free for what Lufia Forge adds: {mb(L2Rom.FreeSpace(rom))} (the ROM grows to 3 and then 4 MB by itself as that is used).";
     }
 

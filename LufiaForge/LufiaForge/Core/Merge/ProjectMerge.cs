@@ -304,6 +304,16 @@ public sealed class ProjectMerge
         // a project made before 2026-11-14 may bring data in banks $40-$7D, which old Snes9x versions can't read
         if (Game == GameKind.Lufia2 && L2HighBanks.Needed(rom))
             report.Add("Moved out of banks $40-$7D (old Snes9x versions can't read them): " + string.Join(", ", L2HighBanks.Move(rom)) + ".");
+        // Snes9x 1.51 mode: nothing of the other project's is written in the top 2 MB (what it had there was moved above);
+        // the merged ROM keeps this project's bytes there
+        if (Game == GameKind.Lufia2 && L2Rom.Snes9x151Mode && _n > L2Rom.UpperDataStart && L2Rom.IsExLoRom(rom))
+        {
+            int changed = 0;
+            for (int i = L2Rom.UpperDataStart; i < _n; i++)
+                if (rom.ReadByte(i) != _a[i]) { rom.WriteByte(i, _a[i]); changed++; }
+            if (changed > 0 && L2HighBanks.Found(rom).Count > 0)
+                throw new InvalidOperationException("Something of the merge still reads from the top 2 MB, which Snes9x 1.51 mode keeps out of: " + string.Join(", ", L2HighBanks.Found(rom)));
+        }
         rom.FixChecksum();
         if (taken + conflicts > 0) report.Insert(0, $"{taken + conflicts} run{(taken + conflicts == 1 ? "" : "s")} of other bytes taken from \"{TheirName}\"" + (conflicts > 0 ? $" ({conflicts} where both projects had changed them)." : "."));
         if (_l2 != null) _l2.Verify(rom, report);

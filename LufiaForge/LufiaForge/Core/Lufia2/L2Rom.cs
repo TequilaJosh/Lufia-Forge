@@ -86,6 +86,13 @@ public static class L2Rom
     public const int UpperStart = 0x400000, ExSize = RomBuffer.ExLoRomSize, UpperDataStart = 0x600000, UpperDataEnd = 0x7F0000,
         UpperMark = UpperDataEnd - 16;
 
+    /// <summary>Snes9x 1.51 mode (Lufia Forge's settings, on unless turned off): nothing is written to the top 2 MB of an
+    /// 8 MB ROM. Off, <see cref="Allocate"/> with upper: true uses it first again.</summary>
+    public static bool Snes9x151Mode { get; set; } = true;
+
+    /// <summary>The top 2 MB of an 8 MB ROM (file 0x600000 up): what Snes9x 1.51 can't read.</summary>
+    public static bool InTop2MB(int at) => at >= UpperDataStart;
+
     /// <summary>The data banks' range (banks $01-$3F, shared with the event space) and their mark at the bank's last 16
     /// bytes: "LF2D" and the next free offset (u24), as the event space's "LF2V".</summary>
     private const int DataFirst = UpperStart + 0x8000, DataEnd = UpperStart + 0x200000, DataMark = 0x7FF0;
@@ -186,6 +193,17 @@ public static class L2Rom
     public static int Allocate(RomBuffer rom, int length, bool upper = false)
     {
         if (length <= 0 || length > 0x8000) throw new ArgumentOutOfRangeException(nameof(length));
+        if (upper && IsExLoRom(rom) && !Snes9x151Mode)
+        {
+            // Snes9x 1.51 mode off (app settings): the top 2 MB first, as before 2026-11-14
+            int up = IsMark(rom, UpperMark) ? (int)rom.ReadUInt24Le(UpperMark + 4) : UpperDataStart;
+            if (up / 0x8000 != (up + length - 1) / 0x8000) up = (up / 0x8000 + 1) * 0x8000;
+            if (up + length <= UpperMark)
+            {
+                WriteMark(rom, UpperMark, up + length);
+                return up;
+            }
+        }
         if (upper && IsExLoRom(rom) && AllocateData(rom, length) is var at0 and >= 0) return at0;
         if (rom.Length < ExpandedSize) rom.Expand(ExpandedSize);
         var (mark, next) = FindMark(rom) ?? NewSpace(rom, OriginalSize) ?? throw new InvalidOperationException("The ROM has no empty space left.");
@@ -219,12 +237,6 @@ public static class L2Rom
         if (IsExLoRom(rom) && IsMark(rom, UpperMark)) list.Add((UpperMark, UpperDataStart, (int)rom.ReadUInt24Le(UpperMark + 4)));
         foreach (int b in DataBanks(rom)) list.Add((b + DataMark, b, (int)rom.ReadUInt24Le(b + DataMark + 4)));
         return list;
-    }
-
-    /// <summary>Wipes the mark of the old run of banks $40-$7D (once nothing is read from there).</summary>
-    public static void ForgetUpperRun(RomBuffer rom)
-    {
-        if (IsExLoRom(rom) && IsMark(rom, UpperMark)) rom.WriteBytes(UpperMark, new byte[16]);
     }
 
     private static void WriteMark(RomBuffer rom, int mark, int next) =>

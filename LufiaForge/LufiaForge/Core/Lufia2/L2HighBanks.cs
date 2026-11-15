@@ -6,7 +6,8 @@ namespace LufiaForge.Core.Lufia2;
 /// $00 instead (a map whose info was there reset the game as the party walked in: Artemis, map 78). Everything
 /// <see cref="L2Rom.Allocate"/> ever put there is found by what points at it and moved to a data bank of $01-$3F, which
 /// every emulator reads: map info blocks, the new maps' table block (LF2MX), the moved encounter zone table, the map name
-/// corner code and new sprites' tiles. The bytes left behind are not cleared.
+/// corner code and new sprites' tiles. Nothing is written in the top 2 MB: the bytes left there (and the old space mark)
+/// stay as they were. Done in Snes9x 1.51 mode (<see cref="L2Rom.Snes9x151Mode"/>, Lufia Forge's settings).
 /// </summary>
 public static class L2HighBanks
 {
@@ -27,7 +28,8 @@ public static class L2HighBanks
         return list;
     }
 
-    public static bool Needed(RomBuffer rom) => Found(rom).Count > 0;
+    /// <summary>Whether something must move: in Snes9x 1.51 mode (Lufia Forge's settings) only.</summary>
+    public static bool Needed(RomBuffer rom) => L2Rom.Snes9x151Mode && Found(rom).Count > 0;
 
     /// <summary>Moves all of it (one piece of work: all or nothing). Returns what was moved, one line each.</summary>
     public static List<string> Move(RomBuffer rom) => L2Rom.AllOrNothing(rom, () =>
@@ -70,7 +72,6 @@ public static class L2HighBanks
             rom.WriteBytes(entry + 2, new[] { (byte)snes, (byte)(snes >> 8), (byte)(snes >> 16) });
         }
         if (Found(rom) is { Count: > 0 } left) throw new InvalidOperationException("Still read from banks $40-$7D after the move: " + string.Join(", ", left));
-        L2Rom.ForgetUpperRun(rom);
         rom.FixChecksum();
         return done;
     });

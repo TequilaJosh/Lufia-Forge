@@ -226,6 +226,14 @@ public partial class MainWindow : Window
         }
     }
 
+    private void SettingsMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        var d = new Modules.Common.AppSettingsWindow { Owner = this };
+        if (d.ShowDialog() != true) return;
+        // turned on with a project open: what it has in the top 2 MB moves now (as when a project opens)
+        if (d.Snes9xTurnedOn) ((MainViewModel)DataContext).MoveOutOfTop2MB();
+    }
+
     private void AboutMenuItem_Click(object sender, RoutedEventArgs e) =>
         new AboutWindow { Owner = this }.ShowDialog();
 }
