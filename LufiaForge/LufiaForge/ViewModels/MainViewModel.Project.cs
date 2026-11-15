@@ -497,6 +497,27 @@ public partial class MainViewModel
         await MergeFrom(d.FileName);
     }
 
+    /// <summary>
+    /// The version both projects were made from, when the change logs show it: a project copied from another starts with
+    /// all of its change log, so when this project's log as last saved is how the other's begins, the other was made
+    /// from this project as last saved (its saved ROM), and when the other's log is how this one's begins, this project
+    /// was made from the other as it is. Counting from it, what both had before they split isn't a conflict (counted
+    /// from the starting ROM a new map both have, say, is "made by both" and every difference on it a conflict, so the
+    /// other project's work on it stayed out: the Jeros' Story projects' map F3). Null when the logs don't show it (the
+    /// window still offers picking the version by hand).
+    /// </summary>
+    private (byte[]? Rom, string? Name) SharedVersion(LufiaProject project, string theirName, byte[] theirs, List<string> theirLog)
+    {
+        var ourLog = project.Changes;
+        if (_savedRom == null || ourLog.Count == 0 || theirLog.Count == 0 || _savedRom.Length == 0) return (null, null);
+        static bool StartsWith(List<string> log, List<string> start) => log.Count >= start.Count && start.SequenceEqual(log.Take(start.Count));
+        if (StartsWith(theirLog, ourLog))
+            return ((byte[])_savedRom.Clone(), $"this project as last saved ({project.Saved:yyyy-MM-dd HH:mm}), which \"{theirName}\"'s change log carries on from");
+        if (StartsWith(ourLog, theirLog))
+            return ((byte[])theirs.Clone(), $"\"{theirName}\" itself, which this project's change log carries on from");
+        return (null, null);
+    }
+
     /// <summary>The merge with the other project (or ROM) at <paramref name="path"/> picked.</summary>
     public async Task MergeFrom(string path)
     {
@@ -534,10 +555,11 @@ public partial class MainViewModel
         var ours = RomBuffer.ToArray();
         Core.Merge.MergeInput Input(byte[]? ancestor, string? ancestorName) => new(project.Name, ours, project.BaseRom, project.Changes.ToList(), new Dictionary<int, string>(project.MapNames),
             theirName, theirs, theirsBase, theirLog, theirNames, ancestor, ancestorName);
+        var (autoAncestor, autoName) = SharedVersion(project, theirName, theirs, theirLog);
         Core.Merge.ProjectMerge plan;
         StatusMessage = $"Comparing \"{theirName}\" with this project...";
         System.Windows.Input.Mouse.OverrideCursor = System.Windows.Input.Cursors.Wait;
-        try { plan = await Task.Run(() => Core.Merge.ProjectMerge.Plan(Input(null, null))); }
+        try { plan = await Task.Run(() => Core.Merge.ProjectMerge.Plan(Input(autoAncestor, autoName))); }
         catch (Exception ex)
         {
             MessageBox.Show($"The projects couldn't be compared: {ex.Message}", "Merge", MessageBoxButton.OK, MessageBoxImage.Error);

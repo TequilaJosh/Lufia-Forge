@@ -71,7 +71,7 @@ public partial class MergeWindow : Window
             "starts unticked, so this project's version stays. Pick an item to see the differential: this project's lines (-) against " +
             "the other project's (+).";
         BaseText.Text = plan.AncestorName != null
-            ? $"Changes are counted from \"{plan.AncestorName}\", the version both projects were made from."
+            ? $"Changes are counted from {plan.AncestorName}, the version both projects were made from. \"Count from the starting ROM\" compares the other way."
             : "Changes are counted from the ROM each project started from. If both projects were copied from one version, counting from that version leaves far fewer conflicts.";
         BaseButton.Visibility = plan.AncestorName != null ? Visibility.Visible : Visibility.Collapsed;
         WarningsText.Text = string.Join("\n", plan.Warnings.Select(w => "• " + w));
@@ -156,13 +156,13 @@ public partial class MergeWindow : Window
             if (d.FileName.EndsWith(LufiaProject.Extension, StringComparison.OrdinalIgnoreCase))
             {
                 var (p, rom) = LufiaProject.Open(d.FileName);
-                bytes = rom; name = p.Name;
+                bytes = rom; name = $"\"{p.Name}\"";
             }
             else
             {
                 var report = RomLoader.Load(d.FileName);
                 bytes = report.Buffer?.ToArray() ?? throw new InvalidDataException(report.Message);
-                name = Path.GetFileName(d.FileName);
+                name = $"\"{Path.GetFileName(d.FileName)}\"";
             }
         }
         catch (Exception ex) { MessageBox.Show(this, "That file couldn't be read: " + ex.Message, "Merge", MessageBoxButton.OK, MessageBoxImage.Error); return; }
