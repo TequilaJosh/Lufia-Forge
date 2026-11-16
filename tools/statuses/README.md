@@ -24,13 +24,13 @@ its own eight.
 Bounce is the game's own status bit 6 (`$0F` of a fighter): the game's check at `$85:D0F2` sends a hit back at the
 attacker when the action has reg 26 bit 5, which only battle ops 21 and 23 set, and nothing in the game ever gives the bit.
 The patch sets that bit for weapon attacks too (op 37, action kind 1: the heroes' attack and the monsters' plain one), says
-"<name> bounces the attack back!" after the action, gives the game's statuses a monster starts with (a byte per monster)
+"<name> bounces it back!" after the action, gives the game's statuses a monster starts with (a byte per monster)
 or a hero's worn items give (the low byte of a word per item) on the battle's first round, and ends Bounce on the heroes
 with the battle.
 
 Focus (Mewlies' idea for the game's unused Tag ring and Tag candy): a hero with focus (a worn item with bit 8 of its word,
 or command 61 this battle) hits harder each turn in a row it attacks the same foe with its weapon: the 2nd-6th attack's
-power gets the 5 focus percents (+10 +25 +50 +75 +100 to start) at the element hook, and "Maxim's focus: +25%" is said
+power gets the 5 focus percents (+10 +25 +50 +75 +100 to start) at the element hook, and "Maxim's focus: 25% more" is said
 after it. Another foe, more than one, or any other action starts it again. RAM: `$7F:FB60-$7F:FBF5` (cleared at every
 battle's start; the game never uses `$7F:FB4B` up).
 

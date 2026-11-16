@@ -305,6 +305,17 @@ public partial class MainViewModel
             OnPropertyChanged(nameof(RomBuffer));
             _openNote += " Lufia Forge's battle script hooks were updated: in fan hacks some monsters' scripts didn't run with the old ones (Edit, Undo takes it back).";
         }
+        if (rom.IsLufia2 && Core.Lufia2.L2StatusPatch.HasFourthVersion(rom))
+        {
+            try
+            {
+                Core.Lufia2.L2StatusPatch.Apply(rom);
+                NotifyRomModified("Lufia II: new statuses updated: \"<name> bounces it back!\" and \"<name>'s focus: 25% more\" (the old messages didn't fit the box, and the battle font has no +)");
+                OnPropertyChanged(nameof(RomBuffer));
+                _openNote += " The Bounce and focus battle messages were fixed (Edit, Undo takes it back).";
+            }
+            catch (Exception ex) { _openNote += " The Bounce and focus battle messages couldn't be fixed: " + ex.Message; }
+        }
         if (rom.IsLufia2 && Core.Lufia2.L2PuzzleBlock.OutOfReach(rom).Count > 0)
         {
             var (moved, problem) = Core.Lufia2.L2PuzzleBlock.MoveIntoReach(rom);

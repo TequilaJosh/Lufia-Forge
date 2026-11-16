@@ -18,7 +18,8 @@ namespace LufiaForge.Core.Lufia2;
 /// <item>From the 4th version (2026-11-15): Bounce, the game's status bit 6 (physical hits go back at the attacker,
 /// plain weapon attacks too; a monster or a worn item's wearer can start every battle with it, an item can give or cure
 /// it), and focus (the Tag ring and Tag candy: each weapon attack in a row on one foe does more, <see cref="FocusPercents"/>;
-/// command 61 gives it for the battle).</item>
+/// command 61 gives it for the battle). The 5th (after 0.4.0-beta.28) only changes the messages to "&lt;name&gt; bounces it
+/// back!" and "&lt;name&gt;'s focus: 25% more" (the old ones didn't fit the box, and the battle font has no +).</item>
 /// </list>
 /// </summary>
 public static partial class L2StatusPatch
@@ -73,10 +74,11 @@ public static partial class L2StatusPatch
 
     public static bool IsOriginal(RomBuffer rom) => Patch.IsOriginal(rom);
 
-    private static HookPatch? _v1, _v2, _v3;
+    private static HookPatch? _v1, _v2, _v3, _v4;
     private static HookPatch V1 => _v1 ??= new(SitesV1, CodeV1);
     private static HookPatch V2 => _v2 ??= new(SitesV2, CodeV2);
     private static HookPatch V3 => _v3 ??= new(SitesV3, CodeV3);
+    private static HookPatch V4 => _v4 ??= new(SitesV4, CodeV4);
 
     /// <summary>File offset of the data after the code (the monsters' starting statuses, the resistance records, the
     /// element table's address), of the newest version or the second; -1 when neither is in.</summary>
@@ -84,6 +86,8 @@ public static partial class L2StatusPatch
     {
         int at = Patch.AppliedAt(rom, L2Rom.SnesToFile);
         if (at >= 0) return at + Patch.Code.Bytes.Length;
+        at = V4.AppliedAt(rom, L2Rom.SnesToFile);
+        if (at >= 0) return at + CodeV4.Bytes.Length;
         at = V3.AppliedAt(rom, L2Rom.SnesToFile);
         if (at >= 0) return at + CodeV3.Bytes.Length;
         at = V2.AppliedAt(rom, L2Rom.SnesToFile);
@@ -96,13 +100,24 @@ public static partial class L2StatusPatch
     /// <summary>Whether the ROM has an older version: <see cref="Apply"/> upgrades it.</summary>
     public static bool IsOldVersion(RomBuffer rom) =>
         !IsApplied(rom) && (V1.AppliedAt(rom, L2Rom.SnesToFile) >= 0 || V2.AppliedAt(rom, L2Rom.SnesToFile) >= 0 ||
-                            V3.AppliedAt(rom, L2Rom.SnesToFile) >= 0);
+                            V3.AppliedAt(rom, L2Rom.SnesToFile) >= 0 || V4.AppliedAt(rom, L2Rom.SnesToFile) >= 0);
+
+    /// <summary>The 4th version (0.4.0-beta.28) is in: its Bounce and focus messages need the 5th (opening a project
+    /// upgrades it, keeping all its data).</summary>
+    public static bool HasFourthVersion(RomBuffer rom) => !IsApplied(rom) && V4.AppliedAt(rom, L2Rom.SnesToFile) >= 0;
 
     public static void Apply(RomBuffer rom)
     {
         if (IsApplied(rom)) return;
-        byte[]? starts = null, elemPtr = null;
-        if (V3.AppliedAt(rom, L2Rom.SnesToFile) is var v3 and >= 0)
+        byte[]? starts = null, elemPtr = null, all = null;
+        if (V4.AppliedAt(rom, L2Rom.SnesToFile) is var v4 and >= 0)
+        {
+            // the fourth version (0.4.0-beta.28): the same data, all of it kept (only its messages changed)
+            all = rom.ReadBytes(v4 + CodeV4.Bytes.Length, DataSize);
+            elemPtr = all.AsSpan(MonsterTableSize + ResistTableSize, 4).ToArray();
+            V4.Restore(rom);
+        }
+        else if (V3.AppliedAt(rom, L2Rom.SnesToFile) is var v3 and >= 0)
         {
             // the third version: as the second
             int data = v3 + CodeV3.Bytes.Length;
@@ -133,6 +148,7 @@ public static partial class L2StatusPatch
             rom.WriteBytes(at + Patch.Code.Bytes.Length, new byte[DataSize]);
             if (starts != null) rom.WriteBytes(at + Patch.Code.Bytes.Length, starts);
             rom.WriteBytes(at + Patch.Code.Bytes.Length + FocusPctAt, DefaultFocus);
+            if (all != null) rom.WriteBytes(at + Patch.Code.Bytes.Length, all);
             Patch.Write(rom, at, L2Rom.FileToSnes(at));
             if (elemPtr != null) rom.WriteBytes(at + ElemPtrAt, elemPtr);
             else
@@ -165,7 +181,9 @@ public static partial class L2StatusPatch
     public const int Bounce = 0x40, Mirror = 0x80;
 
     /// <summary>File offset of this version's own data (the 4th version's tables), or -1 when it isn't in.</summary>
-    private static int NewDataAt(RomBuffer rom) => Patch.AppliedAt(rom, L2Rom.SnesToFile) is var at and >= 0 ? at + Patch.Code.Bytes.Length : -1;
+    private static int NewDataAt(RomBuffer rom) =>
+        Patch.AppliedAt(rom, L2Rom.SnesToFile) is var at and >= 0 ? at + Patch.Code.Bytes.Length :
+        V4.AppliedAt(rom, L2Rom.SnesToFile) is var a4 and >= 0 ? a4 + CodeV4.Bytes.Length : -1;   // the 4th: the same tables
 
     /// <summary>The game's statuses (bits as the status byte: <see cref="Bounce"/>, <see cref="Mirror"/>) monster
     /// <paramref name="monster"/> has from the moment it is in a battle.</summary>

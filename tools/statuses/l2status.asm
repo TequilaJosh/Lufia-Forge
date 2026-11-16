@@ -77,6 +77,7 @@ FOCACT  = $7FFBE0          ; command 61 ran in this action
 HSDONE  = $7FFBE2          ; the heroes got their worn items' statuses this battle
 FTMP    = $7FFBE4
 FTMP2   = $7FFBE6
+FMSG    = $7FFB4C          ; the focus message (20 bytes, to $7F:FB5F)
 
 ; ================================================================ the game's code: where the hooks go
 org $85B464
@@ -1129,7 +1130,7 @@ TS_l:
   ora #$0020
   sta $7FF45A
 TS_nb:
-  ; about to bounce (reg 26 bit 5, not already sent back, the target has bit 6): "<name> bounces the attack back!" after it
+  ; about to bounce (reg 26 bit 5, not already sent back, the target has bit 6): "<name> bounces it back!" after it
   lda $7FF45A
   and #$0021
   cmp #$0020
@@ -1340,7 +1341,7 @@ DoActMsg:                ; while the action runs, stone doesn't end the battle (
   rtl
 
 ; ---- FocusEnd: after an action (16-bit, DB $7E): the acting hero's streak ends unless it made a focused attack; the
-; bonus that attack got is said ("Maxim's focus: +25%").
+; bonus that attack got is said ("Maxim's focus: 25% more").
 FocusEnd:
   lda $7FF44E
   and #$00FF
@@ -1386,13 +1387,12 @@ FE_say:
   sta FTMP2              ; a digit was written
   ldx #$0000
 FE_cp:
-  lda TFocus,x           ; "'s focus: +" (11 letters)
-  sta DOOMT,x
+  lda TFocus,x           ; "'s focus: " (10 letters; the game's font has no +)
+  sta FMSG,x
   inx
   inx
-  cpx #$000C
+  cpx #$000A
   bne FE_cp
-  ldx #$000B
   lda #$0064
   jsl FE_dig
   lda #$000A
@@ -1401,16 +1401,26 @@ FE_cp:
   sta FTMP2
   jsl FE_dig
   sep #$20
-  lda #$25               ; %
-  sta DOOMT,x
+  lda #$25               ; "% more"
+  sta FMSG,x
+  lda #$20
+  sta FMSG+1,x
+  lda #$6D
+  sta FMSG+2,x
+  lda #$6F
+  sta FMSG+3,x
+  lda #$72
+  sta FMSG+4,x
+  lda #$65
+  sta FMSG+5,x
   lda #$00
-  sta DOOMT+1,x
+  sta FMSG+6,x
   rep #$20
   plx
-  jsl ShowMsgRam
+  jsl ShowMsgF
   rtl
 
-; FE_dig: A = 100, 10 or 1: the digit of FTMP for it at DOOMT + X (none for a leading 0); X moves on past it.
+; FE_dig: A = 100, 10 or 1: the digit of FTMP for it at FMSG + X (none for a leading 0); X moves on past it.
 FE_dig:
   sta FTMP+$10
   ldy #$0000
@@ -1434,7 +1444,7 @@ FD_w:
   clc
   adc #$0030
   sep #$20
-  sta DOOMT,x
+  sta FMSG,x
   rep #$20
   inx
   lda #$0001
@@ -1981,6 +1991,33 @@ SR_cp:
   iny
   bra SR_cp
 SR_d:
+  sty $1266
+  jsl ShowText
+  plb
+  plp
+  rtl
+
+; ShowMsgF: as ShowMsgRam, the text from FMSG (the focus message, longer than DOOMT holds)
+ShowMsgF:
+  php
+  phb
+  sep #$20
+  rep #$10
+  pea $7E7E
+  plb
+  plb
+  jsl $859150
+  jsl TrimName
+  ldy $1266
+  ldx #$0000
+SF_cp:
+  lda FMSG,x
+  sta $1269,y
+  beq SF_d
+  inx
+  iny
+  bra SF_cp
+SF_d:
   sty $1266
   jsl ShowText
   plb
@@ -3559,8 +3596,8 @@ XSha: db "'s ice shatters!", $00
 XMel: db "'s ice melts.", $00
 XWas: db "'s burns are cooled.", $00
 XMis: db " misses!", $00
-XBou: db " bounces the attack back!", $00
-TFocus: db "'s focus: +", $00
+XBou: db " bounces it back!", $00
+TFocus: db "'s focus: ", $00, $00
 TSpook: db " is too scared to act.", $00
 TStone: db " is stone.", $00
 TFroz: db " is frozen solid.", $00

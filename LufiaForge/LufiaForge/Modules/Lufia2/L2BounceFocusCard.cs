@@ -75,9 +75,9 @@ public sealed class L2BounceFocusCard : Border
         _body.Children.Add(new TextBlock
         {
             Style = TryFindResource("GdHint") as Style, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 6),
-            Text = "Bounce sends physical attacks (plain attacks too) back at the attacker, as Mirror does magic: \"<name> bounces " +
-                   "the attack back!\". It lasts until cured or the battle ends. Focus: a hero hits harder each turn in a row it " +
-                   "attacks the same foe with its weapon (\"Maxim's focus: +25%\")." + (v4 ? "" : " Both are new battle code, added to the game with the first one set here."),
+            Text = "Bounce sends physical attacks (plain attacks too) back at the attacker, as Mirror does magic: \"<name> bounces it " +
+                   "back!\". It lasts until cured or the battle ends. Focus: a hero hits harder each turn in a row it " +
+                   "attacks the same foe with its weapon (\"Maxim's focus: 25% more\")." + (v4 ? "" : " Both are new battle code, added to the game with the first one set here."),
         });
         if (_monsters)
         {
