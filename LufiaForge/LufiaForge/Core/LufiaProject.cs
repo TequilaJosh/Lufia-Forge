@@ -34,6 +34,13 @@ public sealed class LufiaProject
     public Dictionary<int, string> MapNames { get; } = new();
     /// <summary>A map was renamed since the last save (renames don't change the ROM).</summary>
     public bool MapNamesChanged { get; set; }
+    /// <summary>Names and notes given to flags ("story:105" → name, note; see <see cref="Lufia2.L2FlagNotes"/>).</summary>
+    public Dictionary<string, FlagNote> FlagNotes { get; } = new();
+    /// <summary>A flag's name or note changed since the last save (they don't change the ROM).</summary>
+    public bool FlagNotesChanged { get; set; }
+
+    /// <summary>The project has changes the ROM doesn't hold (map names, flag names).</summary>
+    public bool NamesChanged => MapNamesChanged || FlagNotesChanged;
 
     private byte[] _base;
 
@@ -82,6 +89,11 @@ public sealed class LufiaProject
         if (info.TryGetProperty("mapNames", out var mn) && mn.ValueKind == JsonValueKind.Object)
             foreach (var e in mn.EnumerateObject())
                 if (int.TryParse(e.Name, System.Globalization.NumberStyles.HexNumber, null, out int id)) p.MapNames[id] = e.Value.GetString() ?? "";
+        if (info.TryGetProperty("flagNotes", out var fn) && fn.ValueKind == JsonValueKind.Object)
+            foreach (var e in fn.EnumerateObject())
+                if (e.Value.ValueKind == JsonValueKind.Object)
+                    p.FlagNotes[e.Name] = new FlagNote(e.Value.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "",
+                                                       e.Value.TryGetProperty("note", out var t) ? t.GetString() ?? "" : "");
         return (p, ApplyDiff(p._base, Read(zip, "changes.bin")));
     }
 
@@ -115,6 +127,7 @@ public sealed class LufiaProject
             throw;
         }
         MapNamesChanged = false;
+        FlagNotesChanged = false;
     }
 
     /// <summary>Saves the project with this ROM as another file, leaving the project itself as it is (its path, its
@@ -153,6 +166,7 @@ public sealed class LufiaProject
                 baseCrc = BaseCrc,
                 changes = Changes,
                 mapNames = MapNames.OrderBy(kv => kv.Key).ToDictionary(kv => kv.Key.ToString("X2"), kv => kv.Value),
+                flagNotes = FlagNotes.OrderBy(kv => kv.Key, StringComparer.Ordinal).ToDictionary(kv => kv.Key, kv => new { name = kv.Value.Name, note = kv.Value.Note }),
             }, new JsonSerializerOptions { WriteIndented = true });
             Write(zip, "project.json", json);
             Write(zip, "base.sfc", _base);
@@ -239,6 +253,9 @@ public sealed class LufiaProject
 }
 
 /// <summary>The projects opened lately, newest first (%APPDATA%\LufiaForge\recent_projects.json).</summary>
+/// <summary>A flag's name and note (<see cref="LufiaProject.FlagNotes"/>).</summary>
+public sealed record FlagNote(string Name, string Note);
+
 public static class RecentProjects
 {
     public sealed record Entry(string Path, string Name, DateTime Opened)

@@ -134,8 +134,8 @@ public partial class L2CutscenesPage : ObservableObject
                     moves = s.Steps.Count(x => !x.IsText && x.Op is 0x2F or 0x30 or 0xA3 or 0x7A or 0x2D or 0x2E or 0x98 or 0x99 or 0x3A or 0xC4 or 0x41 or 0x58 or 0x59);
                     says = s.Steps.Count(x => x.IsText);
                     first = s.Steps.FirstOrDefault(x => x.IsText)?.Text.Replace("\n", " ") ?? "";
-                    var set = s.Steps.Where(x => !x.IsText && x.Op == 0x1A && x.Bytes.Length > 1).Select(x => x.Bytes[1]).Distinct().ToList();
-                    if (set.Count > 0) flags = " · sets story flag " + string.Join(", ", set.Select(f => f.ToString("X2")));
+                    var set = s.Steps.Where(x => !x.IsText && L2ExtraFlags.Of(x.Bytes).Use == L2ExtraFlags.Use.On).Select(x => L2ExtraFlags.FlagOf(x.Bytes)).Distinct().ToList();
+                    if (set.Count > 0) flags = " · sets story flag " + string.Join(", ", set.Select(L2ExtraFlags.Number));
                     if (s.Steps.Any(x => !x.IsText && x.Op == 0x16)) flags += " · goes to another map";
                 }
                 catch (Exception) { }

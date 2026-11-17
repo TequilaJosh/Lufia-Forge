@@ -31,6 +31,9 @@ public partial class MainViewModel
 
     public string ProjectText => Project == null ? "" : $"{Project.Name}";
 
+    /// <summary>Flag names and notes (Lufia II) are kept in the open project.</summary>
+    partial void OnProjectChanged(LufiaProject? value) => Core.Lufia2.L2FlagNotes.Project = value?.FlagNotes;
+
     private readonly List<IPendingEdits> _editors = new();
 
     /// <summary>A tab or panel whose edits are written by themselves (see <see cref="IPendingEdits"/>).</summary>
@@ -122,6 +125,12 @@ public partial class MainViewModel
             Project.MapNamesChanged = true;
             OnPropertyChanged(nameof(WindowTitle));
         };
+        Core.Lufia2.L2FlagNotes.Changed += () =>
+        {
+            if (Project == null) return;
+            Project.FlagNotesChanged = true;
+            OnPropertyChanged(nameof(WindowTitle));
+        };
     }
 
     public void RefreshRecent()
@@ -135,7 +144,7 @@ public partial class MainViewModel
     public bool HasUnsavedProjectChanges()
     {
         if (Project == null || RomBuffer == null) return false;
-        if (HasPendingEdits || Project.MapNamesChanged) return true;
+        if (HasPendingEdits || Project.NamesChanged) return true;
         return _savedRom == null || !RomBuffer.SameAs(_savedRom);
     }
 
@@ -562,12 +571,14 @@ public partial class MainViewModel
         byte[] theirs, theirsBase;
         List<string> theirLog;
         Dictionary<int, string> theirNames;
+        Dictionary<string, FlagNote> theirFlagNotes = new();
         try
         {
             if (path.EndsWith(LufiaProject.Extension, StringComparison.OrdinalIgnoreCase))
             {
                 var (p, rom) = LufiaProject.Open(path);
                 theirName = p.Name; theirs = rom; theirsBase = p.BaseRom; theirLog = p.Changes.ToList(); theirNames = new(p.MapNames);
+                theirFlagNotes = new(p.FlagNotes);
             }
             else
             {
@@ -597,7 +608,9 @@ public partial class MainViewModel
             return;
         }
         finally { System.Windows.Input.Mouse.OverrideCursor = null; }
-        if (plan.Items.Count == 0 && plan.TheirNewMapNames.Count == 0)
+        // flag names and notes (Lufia II) this project doesn't have: taken with the map names
+        var newFlagNotes = theirFlagNotes.Where(kv => !project.FlagNotes.ContainsKey(kv.Key)).ToList();
+        if (plan.Items.Count == 0 && plan.TheirNewMapNames.Count == 0 && newFlagNotes.Count == 0)
         {
             MessageBox.Show($"\"{theirName}\" has nothing this project doesn't have already (what it changed is the same here).", "Merge",
                 MessageBoxButton.OK, MessageBoxImage.Information);
@@ -636,11 +649,17 @@ public partial class MainViewModel
             foreach (var (m, name) in plan.TheirNewMapNames)
                 if (!Project.MapNames.ContainsKey(m)) { Project.MapNames[m] = name; names++; }
         if (names > 0) { Project.MapNamesChanged = true; Core.Maps.MapNames.ProjectNames = Project.MapNames; }
+        int flagNames = 0;
+        if (plan.TakeMapNames)
+            foreach (var (k, note) in newFlagNotes)
+                if (Project.FlagNotes.TryAdd(k, note)) flagNames++;
+        if (flagNames > 0) Project.FlagNotesChanged = true;
         ReloadModules();
         OnPropertyChanged(nameof(WindowTitle));
         StatusMessage = what + " (Save Project keeps it)";
         Modules.Common.InfoDialog.Show("Projects merged", "✔ Merged",
-            what + "." + (names > 0 ? $" {names} map name{(names == 1 ? "" : "s")} taken." : "") + "\n\n" + string.Join("\n\n", result.Report.Select(l => "• " + l)) +
+            what + "." + (names > 0 ? $" {names} map name{(names == 1 ? "" : "s")} taken." : "") +
+            (flagNames > 0 ? $" {flagNames} flag name{(flagNames == 1 ? "" : "s")} taken." : "") + "\n\n" + string.Join("\n\n", result.Report.Select(l => "• " + l)) +
             "\n\nEdit > Undo takes the whole merge back (map names stay). Save Project keeps it. Play the merged scenes in BizHawk to make sure they run as both projects had them.");
     }
 
@@ -740,7 +759,7 @@ public partial class MainViewModel
         {
             if (Project is not { } project || RomBuffer is not { } buffer) return null;
             var rom = buffer.ToArray();
-            if (!project.MapNamesChanged && _savedRom != null && rom.AsSpan().SequenceEqual(_savedRom)) return null;
+            if (!project.NamesChanged && _savedRom != null && rom.AsSpan().SequenceEqual(_savedRom)) return null;
             string path = Path.Combine(Path.GetDirectoryName(project.Path) ?? "",
                 $"{Path.GetFileNameWithoutExtension(project.Path)} (recovered {DateTime.Now:yyyy-MM-dd HH-mm-ss}){LufiaProject.Extension}");
             project.SaveCopy(path, rom);

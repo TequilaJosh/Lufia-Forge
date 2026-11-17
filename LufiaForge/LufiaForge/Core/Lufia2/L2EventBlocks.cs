@@ -120,10 +120,18 @@ public static class L2EventBlocks
         return owners;
     }
 
+    /// <summary>A script that uses an extra story flag (100-17F) needs the extra flags patch: added here when it isn't in
+    /// (a pasted step, a flag picked before the patch went in).</summary>
+    public static void NeedExtraFlags(RomBuffer rom, L2EventScript script)
+    {
+        if (L2ExtraFlags.Uses(script.Steps.Where(s => !s.IsText).Select(s => s.Bytes)) && !L2ExtraFlags.IsApplied(rom)) L2ExtraFlags.Apply(rom);
+    }
+
     /// <summary>Writes an event's script: over its old bytes when it fits there and changes nothing another event
     /// shares, else in the block's added part (moving the block into the event space first). Returns what was done.</summary>
     public static string Save(RomBuffer rom, int map, Entry entry, L2EventScript script)
     {
+        NeedExtraFlags(rom, script);
         int block = L2Events.Block(rom, map);
         if (block < 0) throw new InvalidOperationException("This map has no event block.");
         if (script.Steps.Count == 0) throw new InvalidOperationException("An event needs at least one step.");
@@ -151,6 +159,7 @@ public static class L2EventBlocks
     /// event space first). Events that share one script are given the same script object.</summary>
     public static string SaveAll(RomBuffer rom, int map, IReadOnlyDictionary<Entry, L2EventScript> scripts)
     {
+        foreach (var sc in scripts.Values) NeedExtraFlags(rom, sc);
         int block = L2Events.Block(rom, map);
         if (block < 0) throw new InvalidOperationException("This map has no event block.");
         var lists = ReadLists(rom, block);
@@ -162,6 +171,7 @@ public static class L2EventBlocks
     /// <summary>Adds an event to a list (talk: id = the character, trigger: id = the trigger area).</summary>
     public static string Add(RomBuffer rom, int map, int head, int id, L2EventScript script)
     {
+        NeedExtraFlags(rom, script);
         int block = L2Events.Block(rom, map);
         if (block < 0) throw new InvalidOperationException("This map has no event block.");
         var lists = ReadLists(rom, block);
@@ -473,6 +483,7 @@ public static class L2EventBlocks
     /// its own bank, so it is written whole within one bank).</summary>
     public static string SaveInit(RomBuffer rom, int map, L2EventScript script)
     {
+        NeedExtraFlags(rom, script);
         int init = InitScript(rom, map);
         if (script.Start == init && script.FitsInPlace(rom, script.ReadStarts))
         {
@@ -517,6 +528,7 @@ public static class L2EventBlocks
     /// header at it (a new map's script, never written over the one it was copied from).</summary>
     public static void WriteInitNew(RomBuffer rom, int map, L2EventScript script)
     {
+        NeedExtraFlags(rom, script);
         foreach (var s in script.Steps) s.PadTo = 0;
         var (probe, err) = script.WithJumpBase(0x200000 - 0x8000).Build(rom, 0x200000 - 0x8000);
         if (err != null) throw new InvalidOperationException(err);
@@ -581,10 +593,10 @@ public static class L2EventBlocks
         s.Steps.Insert(0, say);
         if (onceFlag >= 0)
         {
-            var check = new L2Step { Bytes = new byte[] { 0x15, (byte)onceFlag, 0, 0 } };
+            var check = new L2Step { Bytes = L2ExtraFlags.Step(L2ExtraFlags.Use.IfOn, onceFlag) };
             check.Jumps.Add(new L2Jump { Step = end });
             s.Steps.Insert(0, check);
-            s.Steps.Insert(1, new L2Step { Bytes = new byte[] { 0x1A, (byte)onceFlag } });
+            s.Steps.Insert(1, new L2Step { Bytes = L2ExtraFlags.Step(L2ExtraFlags.Use.On, onceFlag) });
         }
         return s;
     }
@@ -656,7 +668,8 @@ public static class L2EventBlocks
         steps.Insert(0, made);
         if (flag >= 0)
         {
-            var check = new L2Step { Bytes = new byte[] { 0x14, (byte)(on ? 0x00 : 0x01), (byte)flag, 0x30, 0x00, 0x00, 0xFF } };
+            var (code, value) = L2ExtraFlags.CheckBytes(on ? 0x00 : 0x01, flag);
+            var check = new L2Step { Bytes = new byte[] { 0x14, (byte)code, (byte)value, 0x30, 0x00, 0x00, 0xFF } };
             check.Jumps.Add(new L2Jump { Step = first });
             steps.Insert(0, check);
         }

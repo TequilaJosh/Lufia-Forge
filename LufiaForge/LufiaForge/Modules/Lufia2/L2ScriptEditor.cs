@@ -235,76 +235,31 @@ public sealed record L2TimelineItem(int Line, string Track, string Kind, string 
 /// <summary>Something that can happen at a tile of the stage (the stage's menu).</summary>
 public sealed record L2StageAction(string Group, string Header, Action Act);
 
-/// <summary>Where every story flag is set, cleared and checked, read from every map's scripts once per ROM.</summary>
+/// <summary>Where every story flag is set, cleared and checked (from <see cref="L2FlagIndex"/>), as lines of text.</summary>
 public static class L2FlagUses
 {
-    private static RomBuffer? _rom;
-    private static Dictionary<int, List<string>>? _uses;
-
-    public static void Invalidate() { _uses = null; }
+    public static void Invalidate() => L2FlagIndex.Invalidate();
 
     public static Dictionary<int, List<string>> Get(RomBuffer rom)
     {
-        if (_uses != null && ReferenceEquals(_rom, rom)) return _uses;
         var uses = new Dictionary<int, List<string>>();
-        for (int m = 0; m < L2Maps.Count(rom); m++)
+        foreach (var u in L2FlagIndex.All(rom).Where(u => u.Kind == L2FlagIndex.Kind.Story))
         {
-            string map = $"{m:X2} {L2Maps.Name(rom, m)}";
-            foreach (var (title, ops) in L2Script.MapScripts(rom, m))
-                foreach (var o in ops.Where(o => !o.IsText))
-                {
-                    int c = rom.ReadByte(o.At);
-                    void Use(int flag, string how)
-                    {
-                        if (!uses.TryGetValue(flag, out var l)) uses[flag] = l = new();
-                        l.Add($"{how,-8} {map}, {title} ({o.At:X6})");
-                    }
-                    switch (c)
-                    {
-                        case 0x1A: Use(rom.ReadByte(o.At + 1), "set"); break;
-                        case 0x1B: Use(rom.ReadByte(o.At + 1), "clear"); break;
-                        case 0x15 or 0x6A: Use(rom.ReadByte(o.At + 1), "test"); break;
-                        case 0x14:
-                            for (int q = o.At + 1, g = 0; g < 64 && q < o.At + o.Length; g++)
-                            {
-                                int k = rom.ReadByte(q++);
-                                if (k == 0xFF) break;
-                                if ((k & 0xC0) == 0xC0) { q += (k & 0xF8) switch { 0xC0 => 4, 0xC8 or 0xD0 or 0xD8 => 3, _ => 2 }; continue; }
-                                if ((k & 0x30) == 0) { Use(rom.ReadByte(q), "test"); q += 1; }
-                                else q += 2;
-                            }
-                            break;
-                    }
-                }
+            if (!uses.TryGetValue(u.Number, out var l)) uses[u.Number] = l = new();
+            string how = u.How switch { "on" => "set", "off" => "clear", _ => "test" };
+            l.Add($"{how,-8} {u.Map:X2} {L2Maps.Name(rom, u.Map)}, {u.Where} ({u.At:X6})");
         }
-        _rom = rom; _uses = uses;
         return uses;
     }
 
-    /// <summary>A story flag no event script and no game code uses (for "plays once"), or -1.</summary>
-    public static int Free(RomBuffer rom, IEnumerable<int>? avoid = null)
-    {
-        var uses = Get(rom);
-        var skip = avoid?.ToHashSet() ?? new HashSet<int>();
-        for (int f = 0xEF; f >= 0x01; f--)
-            if (!uses.ContainsKey(f) && L2Flags.Reserved(f) == null && !skip.Contains(f)) return f;
-        return -1;
-    }
+    /// <summary>A story flag 01-EF nothing uses and no one named (for "plays once"), or -1.</summary>
+    public static int Free(RomBuffer rom, IEnumerable<int>? avoid = null) => L2FlagIndex.FreeStory(rom, false, avoid);
 }
 
 /// <summary>Story flags the game's own code reads or writes (so they are never handed out as free).</summary>
 public static class L2Flags
 {
-    public static string? Reserved(int f) => f switch
-    {
-        0xFF => "the answer of checks and \"the party did not win\" after a story battle",
-        0xFE => "set after some story battles",
-        >= 0xF0 => "cleared on every map change",
-        >= 0xC8 and <= 0xD0 => "Iris treasures taken out of the Ancient Cave",
-        0x95 => "where the ship can be parked",
-        0x41 or 0x50 or 0x5F or 0x62 => "changes the world map",
-        _ => null,
-    };
+    public static string? Reserved(int f) => L2FlagIndex.Reserved(f);
 }
 
 /// <summary>
@@ -783,7 +738,8 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         ReadPaths();
         _areas = L2MapInfo.Records(rom, map, L2MapInfo.Areas, 5).Select(r => ((int)r.Bytes[0], $"area {r.Bytes[0]} ({r.Bytes[1]},{r.Bytes[2]})-({r.Bytes[3] - 1},{r.Bytes[4] - 1})")).ToList();
         _exits = L2MapInfo.Records(rom, map, L2MapInfo.Exits, 9).Select(r => ((int)r.Bytes[0], $"exit {r.Bytes[0]} to {(r.Bytes[8] < _maps.Length ? _maps[r.Bytes[8]] : "map " + r.Bytes[8].ToString("X2"))}")).ToList();
-        _doors = L2MapInfo.Records(rom, map, L2MapInfo.Doors, 15).Select(r => ((int)r.Bytes[0], $"door {r.Bytes[0]} ({r.Bytes[1]},{r.Bytes[2]})")).ToList();
+        _doors = L2MapInfo.Records(rom, map, L2MapInfo.Doors, 15).Select(r => ((int)r.Bytes[0], $"door {r.Bytes[0]} ({r.Bytes[1]},{r.Bytes[2]})" +
+            (L2FlagNotes.Name(L2FlagIndex.Kind.Door, map * 0x100 + r.Bytes[0]) is { } dn ? $" {dn}" : ""))).ToList();
         ReadPointChoices();
         try
         {
@@ -941,15 +897,15 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         int texts = s.Steps.Count(x => x.IsText);
         if (texts > 0) parts[0] += $" ({texts} box{(texts == 1 ? "" : "es")})";
         if (once >= 0) parts.Add($"plays once (story flag {once:X2})");
-        var sets = s.Steps.Where(x => !x.IsText && x.Op == 0x1A && x.Bytes.Length > 1).Select(x => x.Bytes[1]).Distinct().ToList();
-        var clears = s.Steps.Where(x => !x.IsText && x.Op == 0x1B && x.Bytes.Length > 1).Select(x => x.Bytes[1]).Distinct().ToList();
-        if (sets.Count > 0) parts.Add("sets story flag " + string.Join(", ", sets.Select(f => f.ToString("X2"))));
-        if (clears.Count > 0) parts.Add("clears flag " + string.Join(", ", clears.Select(f => f.ToString("X2"))));
+        var sets = s.Steps.Where(x => !x.IsText && L2ExtraFlags.Of(x.Bytes).Use == L2ExtraFlags.Use.On).Select(x => L2ExtraFlags.FlagOf(x.Bytes)).Distinct().ToList();
+        var clears = s.Steps.Where(x => !x.IsText && L2ExtraFlags.Of(x.Bytes).Use == L2ExtraFlags.Use.Off).Select(x => L2ExtraFlags.FlagOf(x.Bytes)).Distinct().ToList();
+        if (sets.Count > 0) parts.Add("sets story flag " + string.Join(", ", sets.Select(L2ExtraFlags.Number)));
+        if (clears.Count > 0) parts.Add("clears flag " + string.Join(", ", clears.Select(L2ExtraFlags.Number)));
         int moves = s.Steps.Count(x => !x.IsText && x.Op is 0x2F or 0x30 or 0xA3 or 0x7A or 0x2D or 0x2E or 0x98 or 0x99);
         if (moves > 0) parts.Add($"{moves} move{(moves == 1 ? "" : "s")}");
         var gotos = s.Steps.Where(x => !x.IsText && x.Op == 0x16 && x.Bytes.Length >= 4).Select(x => x.Bytes[1]).Distinct().ToList();
         if (gotos.Count > 0) parts.Add("goes to " + string.Join(", ", gotos.Select(m => m < _maps.Length ? _maps[m] : $"map {m:X2}")));
-        if (s.Steps.Any(x => !x.IsText && x.Op is 0x14 or 0x15 or 0x6A)) parts.Add("changes with story flags");
+        if (s.Steps.Any(x => !x.IsText && x.Op is 0x14 or 0x15 or 0x6A or L2ExtraFlags.OpIfOn or L2ExtraFlags.OpIfOff)) parts.Add("changes with story flags");
         return string.Join(" · ", parts);
     }
 
@@ -962,7 +918,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         Spell = i => i < _spells.Length ? _spells[i] : $"spell {i:X2}",
         Song = i => i < _songs.Length && _songs[i].Length > 0 ? $"{_songs[i]} ({i:X2})" : $"song {i:X2}",
         Map = m => m < _maps.Length ? $"{_maps[m]} ({m:X2})" : $"map {m:X2}",
-        Flag = f => $"story flag {f:X2}",
+        Flag = f => $"story flag {L2ExtraFlags.Number(f)}" + (L2FlagNotes.Name(L2FlagIndex.Kind.Story, f) is { } fn ? $" ({fn})" : ""),
         Jump = k => k < step.Jumps.Count && step.Jumps[k].Step is { } t && _script != null ? $"step {_script.Steps.IndexOf(t) + 1}" : "(pick a step)",
         Point = p => _points.FirstOrDefault(x => x.Id == p).Name ?? $"point {p}",
         Path = p => _paths.FirstOrDefault(x => x.Id == p).Name ?? $"path {p}",
@@ -1070,7 +1026,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
             L2Kind.Song => _songs.Select((n, i) => new L2Option(i, $"{i:X2} {(n.Length > 0 ? n : "(empty)")}")),
             L2Kind.Map => _maps.Select((n, i) => new L2Option(i, $"{i:X2} {n}")),
             L2Kind.Capsule => L2EventCommands.CapsuleNames.Select((n, i) => new L2Option(i, n)),
-            L2Kind.Flag => Enumerable.Range(0, 256).Select(f => new L2Option(f, FlagChoice(rom, f))),
+            L2Kind.Flag => Enumerable.Range(0, L2ExtraFlags.IsApplied(rom) ? L2ExtraFlags.Last + 1 : 0x100).Select(f => new L2Option(f, FlagChoice(rom, f))),
             L2Kind.Point => _points.Select(x => new L2Option(x.Id, x.Name)),
             L2Kind.Path => _paths.Select(x => new L2Option(x.Id, x.Name)),
             L2Kind.Area => _areas.Select(x => new L2Option(x.Id, x.Name)),
@@ -1142,8 +1098,8 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
     private static string FlagChoice(RomBuffer rom, int f)
     {
         var uses = L2FlagUses.Get(rom).GetValueOrDefault(f);
-        string use = f >= 0xF0 ? "cleared on every map change" : uses == null ? "not used by the game" : $"used {uses.Count}x";
-        return L2StoryFlags.Label(f) is { } l ? $"{f:X2}  {l}  ({use})" : $"{f:X2}  {use}";
+        string use = f is >= 0xF0 and < 0x100 ? "cleared on every map change" : uses == null ? (f >= 0x100 ? "extra flag, free" : "not used by the game") : $"used {uses.Count}x";
+        return L2StoryFlags.Label(f) is { } l ? $"{L2ExtraFlags.Number(f)}  {l}  ({use})" : $"{L2ExtraFlags.Number(f)}  {use}";
     }
 
     private void UpdateBytesDump()
@@ -1500,6 +1456,41 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         if (PuzzleMarks.Count > 0) ScrollRequested?.Invoke(PuzzleMarks[0].Left + PuzzleMarks[0].Width / 2, PuzzleMarks[0].Top + PuzzleMarks[0].Height / 2);
     }
 
+    /// <summary>The counter 10-1F a step uses while the extra story flags are in (they are kept there), or null.</summary>
+    private int? CounterHoldsFlags(byte[] b)
+    {
+        if (b.Length < 2 || !L2ExtraFlags.IsApplied(_rom!)) return null;
+        if (b[0] is 0x1D or 0x1E or 0x1F or 0x12 && L2ExtraFlags.HoldsFlags(b[1])) return b[1];
+        if (b[0] == 0x14)
+            foreach (var c in L2Conditions.Parse(b))
+                if (c.Kind == L2Conditions.KCounter && c.At + 1 < b.Length && L2ExtraFlags.HoldsFlags(b[c.At + 1])) return b[c.At + 1];
+        return null;
+    }
+
+    /// <summary>Picks and shows the step read from file offset <paramref name="at"/> (a use on the Flags tab).</summary>
+    public void GoToStepAt(int at)
+    {
+        if (_script == null) return;
+        int i = _script.Steps.FindIndex(s => s.At == at);
+        if (i < 0) return;
+        SelectedLine = i;
+        HighlightLine(i);
+    }
+
+    /// <summary>Flag names (or the extra flags) changed: the flag lists and the steps' words are made again.</summary>
+    public void NamesChanged()
+    {
+        _choices.Remove(L2Kind.Flag);
+        _choices.Remove(L2Kind.Door);
+        if (_rom != null && _map >= 0) ReadMap();
+        // the cards again with the new words and lists (the steps stay as they are: nothing is read from the ROM)
+        if (_script == null || _rom == null) return;
+        _refreshing = true;
+        try { foreach (var l in Lines) if (l.Step != null) FillLine(l, fields: true); }
+        finally { _refreshing = false; }
+        FillStartFlags();
+    }
+
     public void HighlightLine(int index)
     {
         foreach (var l in Lines) l.IsHighlighted = false;
@@ -1748,6 +1739,10 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
             if (!st.IsText && st.Op == 0x83 && !(_event?.Entry is { Head: L2EventBlocks.GameList, Id: 2 }))
                 vm.Warning = (vm.Warning.Length > 0 ? vm.Warning + " " : "") +
                              "This only works in the \"Before the map loads\" event: anywhere else the event stops here (checked in the game). Use Go to another map or Leave through an exit instead.";
+            if (!st.IsText && _rom != null && CounterHoldsFlags(st.Bytes) is { } held)
+                vm.Warning = (vm.Warning.Length > 0 ? vm.Warning + " " : "") +
+                             $"Counter {held:X2} holds the extra story flags {L2ExtraFlags.First + (held - 0x10) * 8:X3}-{L2ExtraFlags.First + (held - 0x10) * 8 + 7:X3} in this ROM: " +
+                             "changing it turns those flags on and off. Use counter 0F or below.";
             if (RingWaitsForever(i))
                 vm.Warning = (vm.Warning.Length > 0 ? vm.Warning + " " : "") +
                              "Nothing takes this ring away (a ring stands still and stays until \"Grow or shrink then remove it\" or \"Remove a ring\"), so the game waits here forever. " +
@@ -1846,9 +1841,9 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
                 case 0x3A or 0x3B or 0x41 or 0x75 or 0xC4: track = "Camera"; kind = "camera"; break;
                 case 0x58 or 0x59 or 0x3E or 0x3F or 0x5A or 0x8A or 0x56 or 0xA4 or 0x76: track = "Screen"; kind = "screen"; break;
                 case 0x6F or 0x4B or 0x72 or 0x4C: track = "Music and sound"; kind = "sound"; break;
-                case 0x1A or 0x1B or 0x1D or 0x1E or 0x1F: track = "Story flags"; kind = "flag"; break;
+                case 0x1A or 0x1B or 0x1D or 0x1E or 0x1F or L2ExtraFlags.OpOn or L2ExtraFlags.OpOff: track = "Story flags"; kind = "flag"; break;
                 case 0x37 or 0x38: track = "Timing"; kind = "wait"; break;
-                case 0x14 or 0x15 or 0x6A or 0x1C or 0x12 or 0x10: track = "Checks and jumps"; kind = "flow"; break;
+                case 0x14 or 0x15 or 0x6A or 0x1C or 0x12 or 0x10 or L2ExtraFlags.OpIfOn or L2ExtraFlags.OpIfOff: track = "Checks and jumps"; kind = "flow"; break;
                 default: track = "Other"; kind = "other"; break;
             }
             string label = s.IsText ? (st.Speaker?.Length > 0 ? st.Speaker + ": " : "") + s.Text.Replace("\n", " ") : st.Caption.Length > 0 ? st.Caption : Sentence(s);

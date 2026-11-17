@@ -9,8 +9,8 @@ namespace LufiaForge.Modules.Lufia2;
 /// <summary>
 /// The Events tab: a map's events (talking to characters, stepping on spots, scenes, the start-up script) in a list;
 /// the picked one opens in the event editor (<see cref="L2ScriptEditor"/>, the same editor the Maps page pops up and
-/// the Cutscenes page uses), with its steps as cards, the stage and the timeline. Also the story flags with every
-/// event that uses them.
+/// the Cutscenes page uses), with its steps as cards, the stage and the timeline. Also the Flags tab
+/// (<see cref="L2FlagsPanel"/>): every kind of flag, where it is used, names and notes, new flags.
 /// </summary>
 public partial class L2EventsPage : L2Page
 {
@@ -24,9 +24,9 @@ public partial class L2EventsPage : L2Page
     [ObservableProperty] private string _summary = "";
     [ObservableProperty] private string _status = "";
 
-    public ObservableCollection<string> Flags { get; } = new();
-    [ObservableProperty] private int _selectedFlag = -1;
-    [ObservableProperty] private string _flagUsesText = "";
+    /// <summary>The Flags tab.</summary>
+    public L2FlagsPanel FlagsPanel { get; }
+    public LufiaForge.ViewModels.MainViewModel? MainVm => Main;
 
     public RomBuffer? CurrentRom => Rom;
     public int CurrentMap => _map;
@@ -37,19 +37,21 @@ public partial class L2EventsPage : L2Page
 
     public L2EventsPage()
     {
-        Editor.Saved += _ => { Flags.Clear(); LoadFlags(); FillEvents(Editor.Event?.Entry, Editor.Event?.IsInit == true, keepEditor: true); MarkRead(); };
-        Editor.FlagRequested += f => { SelectedFlag = f; FlagRequested?.Invoke(f); };
+        FlagsPanel = new L2FlagsPanel(this);
+        Editor.Saved += _ => { FlagsPanel.Refresh(); FillEvents(Editor.Event?.Entry, Editor.Event?.IsInit == true, keepEditor: true); MarkRead(); };
+        Editor.FlagRequested += f => { FlagsPanel.ShowFlag(L2FlagIndex.Kind.Story, f); FlagRequested?.Invoke(f); };
         Editor.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(L2ScriptEditor.Status)) Status = Editor.Status; };
     }
 
-    /// <summary>Asks the view to show the Story flags tab on a flag.</summary>
+    /// <summary>Asks the view to show the Flags tab on a flag.</summary>
     public event Action<int>? FlagRequested;
+    /// <summary>Asks the view to show the Events tab (a use picked on the Flags tab).</summary>
+    public event Action? EventsRequested;
 
     protected override IEnumerable<string> ReadNames()
     {
         // a new ROM (another project, or Edit > Undo / Redo): unsaved steps belong to the old one, dropped without asking
         Editor.Unload();
-        Flags.Clear();
         _maps = Enumerable.Range(0, L2Maps.Count(Rom!)).Select(m => L2ScriptEditor.MapNameOf(Rom!, m)).ToArray();
         return Enumerable.Range(0, L2Maps.Count(Rom!)).Select(m => $"{m:X2}  {_maps[m]}");
     }
@@ -58,7 +60,7 @@ public partial class L2EventsPage : L2Page
     {
         if (!_skipLeave) Editor.ConfirmLeave();
         _map = index;
-        if (Flags.Count == 0) LoadFlags();
+        FlagsPanel.Refresh();
         FillEvents(null, false, keepEditor: false);
     }
 
@@ -103,9 +105,30 @@ public partial class L2EventsPage : L2Page
     {
         if (!ChangedSinceRead || _map < 0) return;
         L2FlagUses.Invalidate();
-        Flags.Clear(); LoadFlags();
+        FlagsPanel.Refresh();
         Editor.Shown();
         FillEvents(Editor.Event?.Entry, Editor.Event?.IsInit == true, keepEditor: true);
+        MarkRead();
+    }
+
+    /// <summary>Opens an event (head -1: the start-up script) of a map at the step read from file offset
+    /// <paramref name="at"/>, on the Events tab.</summary>
+    public void ShowEventAt(int map, int head, int id, int at)
+    {
+        if (Rom == null) return;
+        if (!Editor.ConfirmLeave()) return;
+        if (SelectedIndex != map) SelectedIndex = map; else FillEvents(null, false, keepEditor: false);
+        var item = head == L2FlagIndex.InitHead ? Events.FirstOrDefault(e => e.IsInit) : Events.FirstOrDefault(e => e.Entry?.Head == head && e.Entry?.Id == id);
+        if (item == null) return;
+        SelectedEvent = item;
+        EventsRequested?.Invoke();
+        Editor.GoToStepAt(at);
+    }
+
+    /// <summary>The extra story flags went in (the Flags tab): the editor's flag lists are read again.</summary>
+    public void FlagsChanged()
+    {
+        Editor.NamesChanged();
         MarkRead();
     }
 
@@ -125,7 +148,7 @@ public partial class L2EventsPage : L2Page
     {
         Main?.NotifyRomModified("Lufia II: " + what);
         L2FlagUses.Invalidate();
-        Flags.Clear(); LoadFlags();
+        FlagsPanel.Refresh();
         FillEvents(entry, false, keepEditor: false);
         Status = what;
         MarkRead();
@@ -161,30 +184,8 @@ public partial class L2EventsPage : L2Page
 
     // ------------------------------------------------------------------ story flags
 
-    private void LoadFlags()
-    {
-        if (Rom == null) return;
-        var uses = L2FlagUses.Get(Rom);
-        foreach (var f in Enumerable.Range(0, 256))
-        {
-            var u = uses.GetValueOrDefault(f);
-            int sets = u?.Count(x => x.StartsWith("set")) ?? 0, tests = u?.Count(x => x.StartsWith("test")) ?? 0;
-            string engine = L2Flags.Reserved(f) is { } why ? $" (game: {why})" : "";
-            Flags.Add($"{f:X2}  {(L2StoryFlags.Label(f) is { } l ? l + "  " : "")}{(u == null ? "unused" : $"set {sets}x, tested {tests}x")}{engine}");
-        }
-        OnSelectedFlagChanged(SelectedFlag);
-    }
-
     /// <summary>A story flag no event script and no game code uses (for "plays once"), or -1.</summary>
     public int FreeFlag(IEnumerable<int>? avoid = null) => Rom == null ? -1 : L2FlagUses.Free(Rom, avoid);
-
-    partial void OnSelectedFlagChanged(int value)
-    {
-        if (Rom == null || value < 0) { FlagUsesText = ""; return; }
-        string engine = L2Flags.Reserved(value) is { } why ? $"Used by the game's own code: {why}.\n\n" : "";
-        string what = L2StoryFlags.Label(value) is { } name ? $"{name}.\n{L2StoryFlags.Note(value)}\n\n" : "";
-        FlagUsesText = what + engine + (L2FlagUses.Get(Rom).TryGetValue(value, out var l) ? string.Join("\n", l) : "No event script uses this flag.");
-    }
 
     protected override bool IsField(string p) => false;
     protected override string? Write() => null;

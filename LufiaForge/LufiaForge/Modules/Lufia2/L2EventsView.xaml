@@ -6,7 +6,7 @@
     <UserControl.Resources>
         <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
     </UserControl.Resources>
-    <TabControl x:Name="Tabs" Background="Transparent" BorderThickness="0">
+    <TabControl x:Name="Tabs" Background="Transparent" BorderThickness="0" SelectionChanged="Tabs_SelectionChanged">
         <TabItem Header="Events" Style="{StaticResource LufiaTabItem}">
             <Grid common:LayoutMemory.Key="l2events.editor">
                 <Grid.ColumnDefinitions>
@@ -57,25 +57,90 @@
                 <local:L2EventEditorPanel x:Name="Editor" Grid.Column="2"/>
             </Grid>
         </TabItem>
-        <TabItem Header="Story flags" Style="{StaticResource LufiaTabItem}">
-            <Grid common:LayoutMemory.Key="l2events.flags">
+        <TabItem Header="Flags" Style="{StaticResource LufiaTabItem}" DataContext="{Binding FlagsPanel}">
+            <Grid common:LayoutMemory.Key="l2events.flags2">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="300" MinWidth="120"/>
+                    <ColumnDefinition Width="430" MinWidth="200"/>
                     <ColumnDefinition Width="6"/>
-                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*" MinWidth="260"/>
                 </Grid.ColumnDefinitions>
-                <common:PopOutHost Grid.Column="0" Title="Story flag list" Key="l2events.flaglist" ButtonMargin="0,14,32,0">
-                <ListBox Margin="12" Style="{StaticResource GdFindList}" ItemsSource="{Binding Flags}" SelectedIndex="{Binding SelectedFlag}" FontFamily="Consolas"/>
-                </common:PopOutHost>
-                <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch"/>
-                <common:PopOutHost Grid.Column="2" Title="Story flag uses" Key="l2events.flaguses" ButtonMargin="0,0,12,0">
-                <DockPanel Margin="0,12,12,12">
-                    <TextBlock DockPanel.Dock="Top" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="8,0,0,6"
-                               Text="Story flags remember what has happened (256 of them, shared by the whole game). Here is every event that turns one on or off or checks it. Flags the game's own code uses are marked; F0-FF are cleared on every map change."/>
-                    <TextBox Style="{StaticResource GdText}" Text="{Binding FlagUsesText, Mode=OneWay}" IsReadOnly="True" FontFamily="Consolas"
-                             TextWrapping="NoWrap" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" VerticalContentAlignment="Top"/>
+                <!-- the list -->
+                <DockPanel Grid.Column="0" Margin="12">
+                    <StackPanel DockPanel.Dock="Top">
+                        <DockPanel>
+                            <ComboBox DockPanel.Dock="Right" Style="{StaticResource GdCombo}" Width="120" Margin="6,0,0,0" ItemsSource="{Binding ShowChoices}"
+                                      DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding Show}" ToolTip="Which ones the list shows"/>
+                            <ComboBox Style="{StaticResource GdCombo}" ItemsSource="{Binding KindChoices}" DisplayMemberPath="Label" SelectedValuePath="Value"
+                                      SelectedValue="{Binding KindIndex}" ToolTip="The kind of flag"/>
+                        </DockPanel>
+                        <TextBlock Text="{Binding KindHelp}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                        <TextBox Style="{StaticResource GdText}" Margin="0,6,0,0" Text="{Binding Filter, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="Find by number, name, note, map or item"/>
+                    </StackPanel>
+                    <StackPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
+                        <TextBlock Text="{Binding CountText}" Style="{StaticResource GdHint}" TextWrapping="Wrap"/>
+                        <WrapPanel Margin="0,4,0,0">
+                            <Button Content="＋ New flag" Padding="8,3" Margin="0,0,6,4" Command="{Binding NewFlagCommand}"
+                                    ToolTip="Take a free one of this kind and give it a name: nothing in the game uses it">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource LufiaButtonGold}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding CanNew}" Value="False"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                            <Button Content="Add 128 more story flags" Padding="8,3" Margin="0,0,6,4" Command="{Binding AddExtraFlagsCommand}"
+                                    ToolTip="Story flags 100-17F: a small change to the game's event code keeps them in counters 10-1F, which the game never uses (they are saved with the game)">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource LufiaButton}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding ShowExtra}" Value="False"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                        </WrapPanel>
+                        <TextBlock Text="{Binding Status}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Foreground="{StaticResource GoldBrush}"/>
+                    </StackPanel>
+                    <ListBox x:Name="FlagList" Style="{StaticResource GdRecordList}" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" Margin="0,6,0,0"
+                             SelectionChanged="FlagList_SelectionChanged"
+                             HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <DockPanel Margin="0,1" Opacity="{Binding Dim}">
+                                    <TextBlock DockPanel.Dock="Left" Text="{Binding NumberText}" FontFamily="Consolas" Width="48" Foreground="{StaticResource GoldBrush}"/>
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Label}" Foreground="{StaticResource TextPrimaryBrush}" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="{Binding Detail}" Style="{StaticResource GdHint}" TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+                                </DockPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
                 </DockPanel>
-                </common:PopOutHost>
+                <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch"/>
+                <!-- the picked flag -->
+                <DockPanel Grid.Column="2" Margin="0,12,12,12">
+                    <StackPanel DockPanel.Dock="Top">
+                        <TextBlock Text="{Binding Title}" Style="{StaticResource LufiaCardTitle}" FontSize="16"/>
+                        <TextBlock Text="NAME" Style="{StaticResource GdFieldLabel}" Margin="0,8,0,2"/>
+                        <TextBox Style="{StaticResource GdText}" Text="{Binding NameText, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="Your name for it: shown in the event editor's lists and steps instead of the number alone"/>
+                        <TextBlock Text="NOTE" Style="{StaticResource GdFieldLabel}" Margin="0,8,0,2"/>
+                        <TextBox Style="{StaticResource GdText}" Text="{Binding NoteText, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="54"
+                                 VerticalContentAlignment="Top" ToolTip="What it means, where it goes on and off: for you and anyone you share the project with"/>
+                        <TextBlock Text="{Binding KeptText}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                        <TextBlock Text="{Binding About}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,8,0,0"/>
+                        <TextBlock Text="WHERE IT IS USED (double-click to open the event at that step)" Style="{StaticResource GdSection}" Margin="0,10,0,4"/>
+                    </StackPanel>
+                    <ListBox x:Name="UseList" Style="{StaticResource GdRecordList}" ItemsSource="{Binding Uses}" SelectedItem="{Binding SelectedUse}" FontFamily="Consolas"
+                             MouseDoubleClick="UseList_DoubleClick">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate><TextBlock Text="{Binding Text}" Foreground="{StaticResource TextPrimaryBrush}"/></DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
             </Grid>
         </TabItem>
     </TabControl>

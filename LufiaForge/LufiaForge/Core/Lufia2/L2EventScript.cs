@@ -86,7 +86,7 @@ public sealed class L2EventScript
         {
             0x10 when b.Length > 1 => Enumerable.Range(0, b[1]).Select(i => 2 + i * 2).Where(p => p + 1 < b.Length).ToList(),
             0x12 when b.Length > 2 => Enumerable.Range(0, b[2]).Select(i => 3 + i * 2).Where(p => p + 1 < b.Length).ToList(),
-            0x15 or 0x6A => new() { 2 },
+            0x15 or 0x6A or 0xCF or 0xD0 => new() { 2 },
             0x1C => new() { 1 },
             0x14 => L2Conditions.JumpPositions(b),
             _ => new(),

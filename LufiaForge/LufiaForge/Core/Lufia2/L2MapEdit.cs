@@ -715,7 +715,7 @@ public sealed class L2MapEdit
             add.Add(new L2Step { Bytes = new byte[] { (byte)(joins ? 0x2B : 0x2C), (byte)hero } });
             add.Add(new L2Step { Bytes = new byte[] { (byte)(joins ? 0x1A : 0x1B), (byte)L2StoryParty.HeroFlag[hero] } });
         }
-        foreach (int f in (flags ?? Array.Empty<int>()).Distinct().OrderBy(f => f)) add.Add(new L2Step { Bytes = new byte[] { 0x1A, (byte)f } });
+        foreach (int f in (flags ?? Array.Empty<int>()).Distinct().OrderBy(f => f)) add.Add(new L2Step { Bytes = L2ExtraFlags.Step(L2ExtraFlags.Use.On, f) });
         foreach (var kv in (counters ?? new Dictionary<int, int>()).OrderBy(kv => kv.Key)) add.Add(new L2Step { Bytes = new byte[] { 0x1D, (byte)kv.Key, (byte)kv.Value } });
         // persistent characters the cutscene uses, sent to their place on this map (35 id map spot), as an event would
         foreach (var (pid, pm, spot) in place ?? Array.Empty<(int, int, int)>()) add.Add(new L2Step { Bytes = new byte[] { 0x35, (byte)pid, (byte)pm, (byte)spot } });
@@ -764,7 +764,7 @@ public sealed class L2MapEdit
         for (int n = 0; n < 300 && p + 4 < rom.Length; n++)
         {
             int op = rom.ReadByte(p);
-            if (op is 0x1A or 0x1B or 0x2B or 0x2C) p += 2;
+            if (op is 0x1A or 0x1B or 0x2B or 0x2C or L2ExtraFlags.OpOn) p += 2;
             else if (op == 0x1D) p += 3;
             else if (op == 0x35) p += 4;
             else return op == 0x16;   // (laid out again, the end after it goes: "go to" never falls through)

@@ -89,8 +89,8 @@ public sealed class L2Beat
             case L2BeatKind.Wait: C(0x37, Math.Clamp(Value, 1, 255)); break;
             case L2BeatKind.Shake: C(0x5A, 0x00, Value, Value2); break;
             case L2BeatKind.StopShake: C(0x8A); break;
-            case L2BeatKind.FlagOn: C(0x1A, Value); break;
-            case L2BeatKind.FlagOff: C(0x1B, Value); break;
+            case L2BeatKind.FlagOn: l.Add(new L2Step { Bytes = L2ExtraFlags.Step(L2ExtraFlags.Use.On, Value) }); break;
+            case L2BeatKind.FlagOff: l.Add(new L2Step { Bytes = L2ExtraFlags.Step(L2ExtraFlags.Use.Off, Value) }); break;
             case L2BeatKind.GoTo: C(0x16, Value, Value2, Value3); break;
             case L2BeatKind.End: C(0x00); break;
             default: return Steps.Select(s => s).ToList();
@@ -334,8 +334,8 @@ public static class L2Cutscene
             else if (Is(s, 0x37, 2)) b = new L2Beat { Kind = L2BeatKind.Wait, Value = s.Bytes[1] };
             else if (Is(s, 0x5A, 4)) b = new L2Beat { Kind = L2BeatKind.Shake, Value = s.Bytes[2], Value2 = s.Bytes[3] };
             else if (Is(s, 0x8A, 1)) b = new L2Beat { Kind = L2BeatKind.StopShake };
-            else if (Is(s, 0x1A, 2)) b = new L2Beat { Kind = L2BeatKind.FlagOn, Value = s.Bytes[1] };
-            else if (Is(s, 0x1B, 2)) b = new L2Beat { Kind = L2BeatKind.FlagOff, Value = s.Bytes[1] };
+            else if ((Is(s, 0x1A, 2) || Is(s, L2ExtraFlags.OpOn, 2)) && !s.IsText) b = new L2Beat { Kind = L2BeatKind.FlagOn, Value = L2ExtraFlags.FlagOf(s.Bytes) };
+            else if ((Is(s, 0x1B, 2) || Is(s, L2ExtraFlags.OpOff, 2)) && !s.IsText) b = new L2Beat { Kind = L2BeatKind.FlagOff, Value = L2ExtraFlags.FlagOf(s.Bytes) };
             else if (Is(s, 0x16, 4)) b = new L2Beat { Kind = L2BeatKind.GoTo, Value = s.Bytes[1], Value2 = s.Bytes[2], Value3 = s.Bytes[3] };
             else if (Is(s, 0x00, 1)) b = new L2Beat { Kind = L2BeatKind.End };
             b ??= new L2Beat { Kind = L2BeatKind.Other };
@@ -591,10 +591,16 @@ public static class L2Cutscene
                 return Go(k, $"answer {k + 1} is picked");
             }
             case 0x1C when !st.IsText: return Go(0, "always");
-            case 0x15 when !st.IsText && b.Length >= 2:
-                return Flag(b[1]) ? Go(0, $"story flag {b[1]:X2} is on") : On($"story flag {b[1]:X2} is off");
-            case 0x6A when !st.IsText && b.Length >= 2:
-                return !Flag(b[1]) ? Go(0, $"story flag {b[1]:X2} is off") : On($"story flag {b[1]:X2} is on");
+            case 0x15 or L2ExtraFlags.OpIfOn when !st.IsText && b.Length >= 2:
+            {
+                int f = L2ExtraFlags.FlagOf(b);
+                return Flag(f) ? Go(0, $"story flag {L2ExtraFlags.Number(f)} is on") : On($"story flag {L2ExtraFlags.Number(f)} is off");
+            }
+            case 0x6A or L2ExtraFlags.OpIfOff when !st.IsText && b.Length >= 2:
+            {
+                int f = L2ExtraFlags.FlagOf(b);
+                return !Flag(f) ? Go(0, $"story flag {L2ExtraFlags.Number(f)} is off") : On($"story flag {L2ExtraFlags.Number(f)} is on");
+            }
             case 0x12 when !st.IsText && b.Length >= 3 && b[2] > 0:
             {
                 int c = Counter(b[1]), k = Math.Min(c, b[2] - 1);
@@ -614,9 +620,12 @@ public static class L2Cutscene
                     switch (c.Kind)
                     {
                         case L2Conditions.KFlag when at + 1 < b.Length:
-                            v = Flag(b[at + 1]) == ((c.Code & 1) == 0);
-                            why.Add($"story flag {b[at + 1]:X2} is {(Flag(b[at + 1]) ? "on" : "off")}");
+                        {
+                            int f = L2ExtraFlags.CheckFlag(c.Code, b[at + 1]);
+                            v = Flag(f) == ((c.Code & 1) == 0);
+                            why.Add($"story flag {L2ExtraFlags.Number(f)} is {(Flag(f) ? "on" : "off")}");
                             break;
+                        }
                         case L2Conditions.KCounter when at + 2 < b.Length:
                         {
                             int val = Counter(b[at + 1]), w = b[at + 2];
@@ -811,8 +820,8 @@ public static class L2Cutscene
             case 0x8A or 0x56: s.Shaking = false; break;
             case 0x37 when b.Length >= 2: s.Frames = b[1]; s.Caption = "Wait"; break;
             case 0x38 when b.Length >= 2: s.Frames = b[1] * 60; s.Caption = "Wait"; break;
-            case 0x1A when b.Length >= 2: s.Flags.Add(b[1]); s.Caption = $"Story flag {b[1]:X2} on"; break;
-            case 0x1B when b.Length >= 2: s.Flags.Remove(b[1]); s.Caption = $"Story flag {b[1]:X2} off"; break;
+            case 0x1A or L2ExtraFlags.OpOn when b.Length >= 2: s.Flags.Add(L2ExtraFlags.FlagOf(b)); s.Caption = $"Story flag {L2ExtraFlags.Number(L2ExtraFlags.FlagOf(b))} on"; break;
+            case 0x1B or L2ExtraFlags.OpOff when b.Length >= 2: s.Flags.Remove(L2ExtraFlags.FlagOf(b)); s.Caption = $"Story flag {L2ExtraFlags.Number(L2ExtraFlags.FlagOf(b))} off"; break;
             case 0x1D when b.Length >= 3: s.Counters[b[1]] = b[2]; s.Caption = $"Counter {b[1]:X2} = {b[2]}"; break;
             case 0x1E when b.Length >= 3: s.Counters[b[1]] = Math.Min(255, (s.Counters.TryGetValue(b[1], out int c1) ? c1 : 0) + b[2]); s.Caption = $"Counter {b[1]:X2} + {b[2]}"; break;
             case 0x1F when b.Length >= 3: s.Counters[b[1]] = Math.Max(0, (s.Counters.TryGetValue(b[1], out int c2) ? c2 : 0) - b[2]); s.Caption = $"Counter {b[1]:X2} - {b[2]}"; break;
@@ -853,12 +862,12 @@ public static class L2Cutscene
         foreach (var st in steps.Where(x => !x.IsText))
         {
             var b = st.Bytes;
-            if (st.Op is 0x15 or 0x6A && b.Length >= 2) flags.Add(b[1]);
+            if (st.Op is 0x15 or 0x6A or L2ExtraFlags.OpIfOn or L2ExtraFlags.OpIfOff && b.Length >= 2) flags.Add(L2ExtraFlags.FlagOf(b));
             if (st.Op == 0x12 && b.Length >= 2) counters.Add(b[1]);
             if (st.Op == 0x14)
                 foreach (var c in L2Conditions.Parse(b))
                 {
-                    if (c.Kind == L2Conditions.KFlag && c.At + 1 < b.Length) flags.Add(b[c.At + 1]);
+                    if (c.Kind == L2Conditions.KFlag && c.At + 1 < b.Length) flags.Add(L2ExtraFlags.CheckFlag(c.Code, b[c.At + 1]));
                     if (c.Kind == L2Conditions.KCounter && c.At + 1 < b.Length) counters.Add(b[c.At + 1]);
                 }
         }
@@ -889,28 +898,7 @@ public static class L2Cutscene
     // ------------------------------------------------------------------ making cutscenes
 
     /// <summary>A story flag no event and no game code uses (from EF down), not in <paramref name="avoid"/>; -1 if none.</summary>
-    public static int FreeFlag(RomBuffer rom, IEnumerable<int>? avoid = null)
-    {
-        var used = new HashSet<int>(avoid ?? Array.Empty<int>());
-        for (int m = 0; m < L2Maps.Count(rom); m++)
-            foreach (var (_, ops) in L2Script.MapScripts(rom, m))
-                foreach (var o in ops.Where(o => !o.IsText))
-                {
-                    int c = rom.ReadByte(o.At);
-                    if (c is 0x1A or 0x1B or 0x15 or 0x6A) used.Add(rom.ReadByte(o.At + 1));
-                    if (c == 0x14)
-                        for (int q = o.At + 1, g = 0; g < 64 && q < o.At + o.Length; g++)
-                        {
-                            int k = rom.ReadByte(q++);
-                            if (k == 0xFF) break;
-                            if ((k & 0xC0) == 0xC0) { q += (k & 0xF8) switch { 0xC0 => 4, 0xC8 or 0xD0 or 0xD8 => 3, _ => 2 }; continue; }
-                            if ((k & 0x30) == 0) { used.Add(rom.ReadByte(q)); q += 1; } else q += 2;
-                        }
-                }
-        for (int f = 0xEF; f > 0; f--)
-            if (!used.Contains(f) && f is not (>= 0xC8 and <= 0xD0) && f is not (0x95 or 0x41 or 0x50 or 0x5F or 0x62)) return f;
-        return -1;
-    }
+    public static int FreeFlag(RomBuffer rom, IEnumerable<int>? avoid = null) => L2FlagIndex.FreeStory(rom, false, avoid);
 
     /// <summary>A scene number the map doesn't use yet (from 0x20 up, below the F0 the test start uses).</summary>
     public static int FreeScene(RomBuffer rom, int map)

@@ -78,8 +78,8 @@ public partial class MergeWindow : Window
         WarningsText.Visibility = plan.Warnings.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         LogCheck.Content = $"Add the other project's change log lines to this one ({plan.TheirNewLog.Count})";
         LogCheck.IsEnabled = plan.TheirNewLog.Count > 0;
-        NamesCheck.Content = $"Use the other project's map names where this project has none ({plan.TheirNewMapNames.Count})";
-        NamesCheck.IsEnabled = plan.TheirNewMapNames.Count > 0;
+        // (Lufia II flag names and notes go with this box too: the window isn't told how many)
+        NamesCheck.Content = $"Use the other project's map and flag names where this project has none ({plan.TheirNewMapNames.Count} map name{(plan.TheirNewMapNames.Count == 1 ? "" : "s")})";
         LogExpander.Header = $"The other project's change log since the projects split ({plan.TheirNewLog.Count} lines)";
         LogList.ItemsSource = plan.TheirNewLog;
         _rows = plan.Items.Select(i => new Row(i)).ToList();

@@ -270,6 +270,13 @@ public static class L2EventCommands
         L2ParamDef Wd(string label, L2Kind kind, int pos) => L2ParamDef.Word(label, kind, pos);
         L2ParamDef Pk(string label, int pos, IReadOnlyList<(int, string)> options) => L2ParamDef.Pick(label, pos, options);
         L2ParamDef Who(int pos, string label = "who") => P(label, L2Kind.Who, pos);
+        // a story flag 00-FF or an extra flag 100-17F (L2ExtraFlags): the command follows the flag (1A / CD and so on)
+        L2ParamDef FlagField() => new()
+        {
+            Label = "story flag", Kind = L2Kind.Flag, Max = L2ExtraFlags.Last,
+            Get = L2ExtraFlags.FlagOf,
+            Set = L2ExtraFlags.SetFlag,
+        };
         L2ParamDef ItemOf(int lowOp) => new()
         {
             Label = "item", Kind = L2Kind.Item, Max = 0x1FF,
@@ -317,10 +324,10 @@ public static class L2EventCommands
         One(0x00, "End the event", Flow, (_, _) => "End of the event", new byte[] { 0x00 }, "Closes any text box, brings the camera back and ends.", 'G');
         One(0x42, "End the event", Flow, (_, _) => "End of the event", new byte[] { 0x42 }, "The same as the usual end.", rare: true);
         One(0x1C, "Go to a step", Flow, (_, w) => $"Go to {w.Jump(0)}", new byte[] { 0x1C, 0, 0 }, "", 'G', ps: L2ParamDef.Jump("go to", 0));
-        One(0x15, "If a story flag is on, go to a step", Flow, (b, w) => $"If {w.Flag(b[1])} is on, go to {w.Jump(0)}", new byte[] { 0x15, 0, 0, 0 },
-            "", 'G', ps: new[] { P("story flag", L2Kind.Flag, 1), L2ParamDef.Jump("go to", 0) });
-        One(0x6A, "If a story flag is off, go to a step", Flow, (b, w) => $"If {w.Flag(b[1])} is off, go to {w.Jump(0)}", new byte[] { 0x6A, 0, 0, 0 },
-            "", ps: new[] { P("story flag", L2Kind.Flag, 1), L2ParamDef.Jump("go to", 0) });
+        Add(new[] { 0x15, L2ExtraFlags.OpIfOn }, "If a story flag is on, go to a step", Flow, (b, w) => $"If {w.Flag(L2ExtraFlags.FlagOf(b))} is on, go to {w.Jump(0)}", new byte[] { 0x15, 0, 0, 0 },
+            "", 'G', ps: new[] { FlagField(), L2ParamDef.Jump("go to", 0) });
+        Add(new[] { 0x6A, L2ExtraFlags.OpIfOff }, "If a story flag is off, go to a step", Flow, (b, w) => $"If {w.Flag(L2ExtraFlags.FlagOf(b))} is off, go to {w.Jump(0)}", new byte[] { 0x6A, 0, 0, 0 },
+            "", ps: new[] { FlagField(), L2ParamDef.Jump("go to", 0) });
         l.Add(new L2CommandDef
         {
             Ops = new[] { 0x14 }, Name = "Check conditions", Category = Flow, Template = new byte[] { 0x14, 0x00, 0x00, 0x30, 0, 0, 0xFF },
@@ -344,11 +351,11 @@ public static class L2EventCommands
             "Follow it with \"If a story flag is on\" for flag FF.", ps: P("eggs", L2Kind.Number, 1));
 
         // ── story flags and counters ──
-        One(0x1A, "Turn a story flag on", Flags, (b, w) => $"Turn {w.Flag(b[1])} on", new byte[] { 0x1A, 0x00 },
-            "Story flags remember what happened (shared by the whole game).", 'G', ps: P("story flag", L2Kind.Flag, 1));
-        One(0x1B, "Turn a story flag off", Flags, (b, w) => $"Turn {w.Flag(b[1])} off", new byte[] { 0x1B, 0x00 }, "", ps: P("story flag", L2Kind.Flag, 1));
+        Add(new[] { 0x1A, L2ExtraFlags.OpOn }, "Turn a story flag on", Flags, (b, w) => $"Turn {w.Flag(L2ExtraFlags.FlagOf(b))} on", new byte[] { 0x1A, 0x00 },
+            "Story flags remember what happened (shared by the whole game).", 'G', ps: FlagField());
+        Add(new[] { 0x1B, L2ExtraFlags.OpOff }, "Turn a story flag off", Flags, (b, w) => $"Turn {w.Flag(L2ExtraFlags.FlagOf(b))} off", new byte[] { 0x1B, 0x00 }, "", ps: FlagField());
         One(0x1D, "Set a counter", Flags, (b, _) => $"Counter {b[1]:X2} = {b[2]}", new byte[] { 0x1D, 0x0F, 0x00 },
-            "Counters are event variables (0-255); the game uses 01-0E.", ps: new[] { P("counter", L2Kind.Variable, 1), P("value", L2Kind.Number, 2) });
+            "Counters are event variables (0-255); the game uses 01-0E. With the extra story flags in, counters 10-1F hold them: use 0F or below.", ps: new[] { P("counter", L2Kind.Variable, 1), P("value", L2Kind.Number, 2) });
         One(0x1E, "Add to a counter", Flags, (b, _) => $"Counter {b[1]:X2} + {b[2]}", new byte[] { 0x1E, 0x0F, 0x01 }, "", ps: new[] { P("counter", L2Kind.Variable, 1), P("add", L2Kind.Number, 2) });
         One(0x1F, "Take from a counter", Flags, (b, _) => $"Counter {b[1]:X2} - {b[2]}", new byte[] { 0x1F, 0x0F, 0x01 }, "", ps: new[] { P("counter", L2Kind.Variable, 1), P("take", L2Kind.Number, 2) });
 

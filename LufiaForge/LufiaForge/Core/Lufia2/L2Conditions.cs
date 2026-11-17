@@ -85,7 +85,7 @@ public static class L2Conditions
             }
             current.Add(c.Kind switch
             {
-                KFlag => $"{join}{w.Flag(a(1))} is {((c.Code & 1) == 0 ? "on" : "off")}",
+                KFlag => $"{join}{w.Flag(L2ExtraFlags.CheckFlag(c.Code, a(1)))} is {((c.Code & 1) == 0 ? "on" : "off")}",
                 KCounter => $"counter {a(1):X2} {Op(c.Code)} {a(2)}",
                 KItems => $"the number of {w.Item(u(1))} {Op(c.Code)} {u(3)}",
                 KHp => $"{L2EventCommands.HeroName(a(1))}'s HP {Op(c.Code)} {u(2)}",
@@ -133,7 +133,13 @@ public static class L2Conditions
                         Label = "joined", Kind = L2Kind.Choice, Options = new[] { (0x00, "replaces the result"), (0x40, "or"), (0x80, "and") },
                         Get = x => x[at] & 0xC0, Set = (x, v) => x[at] = (byte)((x[at] & 0x3F) | v),
                     });
-                    fields.Add(Byte("story flag", L2Kind.Flag, 1));
+                    // 00-FF, or an extra flag 100-17F (bit 02 of the code, L2ExtraFlags)
+                    fields.Add(new L2ParamDef
+                    {
+                        Label = "story flag", Kind = L2Kind.Flag, Max = L2ExtraFlags.Last,
+                        Get = x => L2ExtraFlags.CheckFlag(x[at], x[at + 1]),
+                        Set = (x, v) => { var (code, value) = L2ExtraFlags.CheckBytes(x[at], v); x[at] = (byte)code; x[at + 1] = (byte)value; },
+                    });
                     fields.Add(new L2ParamDef
                     {
                         Label = "is", Kind = L2Kind.Choice, Options = new[] { (0, "on"), (1, "off") },

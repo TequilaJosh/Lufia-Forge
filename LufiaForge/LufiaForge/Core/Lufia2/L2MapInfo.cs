@@ -86,13 +86,14 @@ public static class L2MapInfo
             if (target > i)
             {
                 // the step jumps past [i + 1, target) when the condition holds: the steps there need it not to
-                if (st.Op is 0x15 or 0x6A && b.Length >= 2) open.Add((target, new() { (b[1], st.Op == 0x6A) }));
+                if (st.Op is 0x15 or 0x6A or L2ExtraFlags.OpIfOn or L2ExtraFlags.OpIfOff && b.Length >= 2)
+                    open.Add((target, new() { (L2ExtraFlags.FlagOf(b), st.Op is 0x6A or L2ExtraFlags.OpIfOff) }));
                 else if (st.Op == 0x14 && Conditions(b) is { } need) open.Add((target, need));
             }
             if (st.Op is 0x68 or 0x7B && b.Length >= 3 && b[1] is >= 0x50 and < 0x80 && L2Sprites.ToEditor(rom, map, b[2]) is var spr && spr < count)
             {
                 var flags = open.SelectMany(o => o.Need).ToList();
-                list.Add(new Create(b[1], spr, string.Join(" and ", flags.Select(f => $"story flag {f.Flag:X2} {(f.On ? "on" : "off")}")), flags) { Step = i });
+                list.Add(new Create(b[1], spr, string.Join(" and ", flags.Select(f => $"story flag {L2ExtraFlags.Number(f.Flag)} {(f.On ? "on" : "off")}")), flags) { Step = i });
             }
         }
         return list;
@@ -113,7 +114,7 @@ public static class L2MapInfo
             {
                 case 0x00:
                     if ((c & 0xC0) != 0) { if (joins != 0 && joins != (c & 0xC0)) return null; joins = c & 0xC0; }
-                    tests.Add((b[i + 1], (c & 1) == 0)); i += 2; break;
+                    tests.Add((L2ExtraFlags.CheckFlag(c, b[i + 1]), (c & 1) == 0)); i += 2; break;
                 case 0x30: return tests.Count > 0 && joins != 0x40 ? tests : null;                               // else jump
                 case 0x20: return tests.Count > 0 && joins != 0x80 ? tests.Select(t => (t.Flag, !t.On)).ToList() : null;   // then jump
                 default: return null;

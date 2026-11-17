@@ -223,6 +223,11 @@ public static class L2Script
         [0xCA] = (3, "$7FD020 + xx = yy, zz", 'L'),
         [0xCB] = (1, "$0B52", 'L'),
         [0xCC] = (0, "$0B62 = max", 'L'),
+        // added by Lufia Forge's extra story flags (L2ExtraFlags): flag 100 + xx
+        [0xCD] = (1, "extra flag xx on", 'H'),
+        [0xCE] = (1, "extra flag xx off", 'H'),
+        [0xCF] = (3, "extra flag xx, p: jump if set", 'H'),
+        [0xD0] = (3, "extra flag xx, p: jump if clear", 'H'),
     };
 
     /// <summary>A command or a run of text in a script.</summary>
@@ -271,7 +276,7 @@ public static class L2Script
         {
             case 0x10: for (int i = 0; i < rom.ReadByte(p + 1); i++) t.Add(Ptr(p + 2 + i * 2)); break;
             case 0x12: for (int i = 0; i < rom.ReadByte(p + 2); i++) t.Add(Ptr(p + 3 + i * 2)); return (t, false);
-            case 0x15 or 0x6A: t.Add(Ptr(p + 2)); break;
+            case 0x15 or 0x6A or 0xCF or 0xD0: t.Add(Ptr(p + 2)); break;
             case 0x1C: t.Add(Ptr(p + 1)); return (t, false);
             case 0x14:
                 for (int q = p + 1, guard = 0; guard < 64; guard++)
