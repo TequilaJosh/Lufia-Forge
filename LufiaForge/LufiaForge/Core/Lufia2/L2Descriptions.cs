@@ -209,6 +209,8 @@ public static class L2Descriptions
         if (mine.Length <= oldLength && Enumerable.Range(0, n).All(e => e == entry || At(rom, e) is var o && (o < at || o >= at + oldLength)))
         {
             rom.WriteBytes(at, mine);
+            // what the old text left behind is cleared (it read as data of some other hack's after the last text)
+            if (mine.Length < oldLength) rom.WriteBytes(at + mine.Length, new byte[oldLength - mine.Length]);
             return null;
         }
         // the others keep their bytes; if that doesn't fit, they're all encoded again (that saves about 100 bytes)
@@ -242,6 +244,9 @@ public static class L2Descriptions
     /// <summary>Writes the descriptions packed (identical ones shared), or returns why they don't fit.</summary>
     private static string? Pack(RomBuffer rom, List<byte[]> all)
     {
+        // (packing rewrites the whole space: not over another hack's data in it)
+        if (HasOtherData(rom))
+            return "Another hack keeps data of its own in the descriptions' space ($97:8000-$97:B0A0), so they can't be packed again safely. A description no longer than before can still be changed.";
         int n = all.Count, start = TextStart(rom), end = End(rom), b = Base(rom);
         var placed = new Dictionary<string, int>();
         var blob = new List<byte>();
@@ -264,12 +269,45 @@ public static class L2Descriptions
     internal static IEnumerable<(int At, int Length)> CodeSites() =>
         new[] { (MapSite, MapOriginal.Length) }.Concat(ReadSites.Select(s => (s + 1, 3)));
 
-    /// <summary>Whether the descriptions can be moved (the reading code is still the game's).</summary>
-    public static bool CanMove(RomBuffer rom)
+    /// <summary>Whether the descriptions can be moved (the reading code is still the game's, and nothing but
+    /// descriptions lives in their space, which moving them clears).</summary>
+    public static bool CanMove(RomBuffer rom) => WhyCantMove(rom) == null;
+
+    /// <summary>Why the descriptions can't be moved, or null.</summary>
+    public static string? WhyCantMove(RomBuffer rom)
     {
-        if (IsMoved(rom)) return true;
-        if (rom.Length < MapSite + MapOriginal.Length || !rom.ReadBytes(MapSite, MapOriginal.Length).SequenceEqual(MapOriginal)) return false;
-        return ReadSites.All(s => rom.ReadByte(s) == 0xBF && rom.ReadUInt24Le(s + 1) == 0x978000);
+        if (IsMoved(rom)) return null;
+        if (rom.Length < MapSite + MapOriginal.Length || !rom.ReadBytes(MapSite, MapOriginal.Length).SequenceEqual(MapOriginal) ||
+            !ReadSites.All(s => rom.ReadByte(s) == 0xBF && rom.ReadUInt24Le(s + 1) == 0x978000))
+            return "This ROM's description code isn't the US game's (another patch changed it), so the descriptions can't be moved.";
+        if (HasOtherData(rom))
+            return "Another hack keeps data of its own in the descriptions' space ($97:8000-$97:B0A0), so the descriptions can't be moved or packed again safely.";
+        return null;
+    }
+
+    /// <summary>Bytes after the last description, besides 00 / FF fill, at most, before they count as another hack's
+    /// data. (The fan hacks fill the space to its last byte or one before; Lufia Forge's own packing leaves zeros.)</summary>
+    private const int OtherDataLimit = 64;
+
+    /// <summary>Something besides the descriptions lives in their space in the game's layout ($97:8000-$97:B0A0): more
+    /// than <see cref="OtherDataLimit"/> bytes that aren't fill after the last description, where a hack that made
+    /// them shorter would put data of its own. Moving them clears the space and packing them rewrites it, so that data
+    /// would be lost. (Checked on Frue, Spekkio, Kureji, Foomy and a randomizer: all theirs is descriptions. Bytes
+    /// left between texts by a shorter description written over a longer one aren't counted: those are old text.)</summary>
+    public static bool HasOtherData(RomBuffer rom)
+    {
+        if (IsMoved(rom) || rom.Length < DataEnd) return false;
+        int last = Table + Count * 2;
+        for (int e = 0; e < Count; e++)
+        {
+            int at = At(rom, e);
+            if (at < Table || at >= DataEnd) continue;
+            last = Math.Max(last, at + RawAt(rom, at).Length);
+        }
+        int other = 0;
+        for (int p = last; p < DataEnd; p++)
+            if (rom.ReadByte(p) is not (0x00 or 0xFF) && ++other > OtherDataLimit) return true;
+        return false;
     }
 
     /// <summary>Moves the table and the texts to the added space (once): a table of 0x400 entries indexed as the game asks
@@ -278,7 +316,7 @@ public static class L2Descriptions
     public static void Move(RomBuffer rom)
     {
         if (IsMoved(rom)) return;
-        if (!CanMove(rom)) throw new InvalidOperationException("This ROM's description code isn't the US game's (another patch changed it), so the descriptions can't be moved.");
+        if (WhyCantMove(rom) is { } why) throw new InvalidOperationException(why);
         // the game's entry for each new one: items and spells as they are; 0x300 + n is the game's 0x230 + n
         var texts = new byte[MovedCount][];
         for (int e = 0; e < MovedCount; e++)

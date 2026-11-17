@@ -136,6 +136,9 @@ public partial class PatchManagerViewModel : ObservableObject
         try
         {
             if (adding) patch.Apply(_rom); else patch.Remove!(_rom);
+            // a patch that wrote nothing (or not all of itself) isn't reported as added
+            if (adding && !patch.IsApplied(_rom))
+                throw new InvalidOperationException("the patch isn't in the ROM after adding it (another patch or a hack changed the bytes it needs).");
             _mainVm?.NotifyRomModified((adding ? "Added: " : "Removed: ") + patch.Name);
             if (patch.ReloadsAll) _mainVm?.ReloadModules();
             StatusText = (adding ? "Added: " : "Removed: ") + patch.Name + ". Save Project keeps it.";

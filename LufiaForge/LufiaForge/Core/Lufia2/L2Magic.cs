@@ -169,9 +169,14 @@ public static class L2Magic
             && Same(IpLongSites[0], new byte[] { 0xBF, 0x03, 0x00, 0x84 }) && Same(IpLongSites[1], new byte[] { 0xBF, 0x05, 0x00, 0x84 })
             && Same(IpLongSites[2], new byte[] { 0xBF, 0x06, 0x00, 0x84 });
         if (!ok) { why = "This ROM's spell or IP attack code isn't the US game's (another patch or hack changed it), so spells and IP attacks can't be added."; return false; }
-        if (!L2Descriptions.CanMove(rom) || L2Descriptions.IsMoved(rom) && Encoding.ASCII.GetString(rom.ReadBytes(BlockBAt, L2Descriptions.FreeMark.Length)) != L2Descriptions.FreeMark)
+        if (L2Descriptions.WhyCantMove(rom) is { } cant)
         {
-            why = "This ROM's description code isn't the US game's, so there is no room for the IP attacks.";
+            why = cant + " Spells and IP attacks need that space for the IP attacks.";
+            return false;
+        }
+        if (L2Descriptions.IsMoved(rom) && Encoding.ASCII.GetString(rom.ReadBytes(BlockBAt, L2Descriptions.FreeMark.Length)) != L2Descriptions.FreeMark)
+        {
+            why = "The descriptions' old space is in use, so there is no room for the IP attacks.";
             return false;
         }
         try { MakePlan(rom); }

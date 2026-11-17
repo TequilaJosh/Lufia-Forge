@@ -132,7 +132,15 @@ public static class CommunityPatches
     private const string RetryFile = "AlwaysRetryMode.ips";
     public static bool RetryApplied(RomBuffer rom) => Has(rom, Records(RetryFile));
     public static bool RetryOriginal(RomBuffer rom) => Untouched(rom, Records(RetryFile));
-    public static void ApplyRetry(RomBuffer rom) => Write(rom, Records(RetryFile));
+    public static void ApplyRetry(RomBuffer rom) { if (!RetryApplied(rom)) { Check(RetryOriginal(rom), "Always Retry Mode"); Write(rom, Records(RetryFile)); } }
+
+    /// <summary>The small patches go only where the bytes they change are still the clean ROM's: written blind, one
+    /// put over another hack (the Dutch Lufia, which has its code elsewhere) wrote into that hack's own bytes. The
+    /// Patch Manager doesn't offer them then; this keeps any other caller from doing it.</summary>
+    private static void Check(bool original, string name)
+    {
+        if (!original) throw new InvalidOperationException($"The bytes {name} changes aren't the clean game's here (another patch or a hack changed them), so it can't be added safely.");
+    }
     public static void RemoveRetry(RomBuffer rom) => Unwrite(rom, Records(RetryFile));
 
     // ---- Lufia Recolor ---------------------------------------------------------------------------
@@ -142,12 +150,12 @@ public static class CommunityPatches
     public static bool RecolorApplied(RomBuffer rom) => Has(rom, Records(RecolorFile));
     /// <summary>The colours it changes are the game's own (Just the Shadows may be in: Recolor includes it).</summary>
     public static bool RecolorOriginal(RomBuffer rom) => Untouched(rom, Records(RecolorFile), Records(ShadowsFile));
-    public static void ApplyRecolor(RomBuffer rom) => Write(rom, Records(RecolorFile));
+    public static void ApplyRecolor(RomBuffer rom) { if (!RecolorApplied(rom)) { Check(RecolorOriginal(rom), "Lufia Recolor"); Write(rom, Records(RecolorFile)); } }
     public static void RemoveRecolor(RomBuffer rom) => Unwrite(rom, Records(RecolorFile));
 
     public static bool ShadowsApplied(RomBuffer rom) => Has(rom, Records(ShadowsFile)) && !RecolorApplied(rom);
     public static bool ShadowsOriginal(RomBuffer rom) => Untouched(rom, Records(ShadowsFile));
-    public static void ApplyShadows(RomBuffer rom) => Write(rom, Records(ShadowsFile));
+    public static void ApplyShadows(RomBuffer rom) { if (!ShadowsApplied(rom) && !RecolorApplied(rom)) { Check(ShadowsOriginal(rom), "Just the Shadows"); Write(rom, Records(ShadowsFile)); } }
     public static void RemoveShadows(RomBuffer rom) => Unwrite(rom, Records(ShadowsFile));
 
     // ---- Lufia II: Frue, Spekkio and Kureji Lufia v8.2, The Wrath of Foomy ------------------------

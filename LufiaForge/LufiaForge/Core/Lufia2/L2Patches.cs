@@ -13,7 +13,15 @@ public static class L2Patches
     {
         public bool IsApplied(RomBuffer rom) => Changes.All(c => Has(rom, c.At, c.Patched));
         public bool IsOriginal(RomBuffer rom) => Changes.All(c => Has(rom, c.At, c.Original));
-        public void Apply(RomBuffer rom) { if (IsOriginal(rom)) foreach (var c in Changes) rom.WriteBytes(c.At, c.Patched); }
+        /// <summary>Adds it (nothing when it is in). Refuses when a place doesn't hold the game's bytes: before, that
+        /// did nothing without a word and the Patch Manager said "Added".</summary>
+        public void Apply(RomBuffer rom)
+        {
+            if (IsApplied(rom)) return;
+            if (!IsOriginal(rom))
+                throw new InvalidOperationException("The game's bytes this patch changes aren't the US game's here (another patch or a fan hack changed them), so it can't be added safely.");
+            foreach (var c in Changes) rom.WriteBytes(c.At, c.Patched);
+        }
         public void Remove(RomBuffer rom) { if (IsApplied(rom)) foreach (var c in Changes) rom.WriteBytes(c.At, c.Original); }
     }
 
