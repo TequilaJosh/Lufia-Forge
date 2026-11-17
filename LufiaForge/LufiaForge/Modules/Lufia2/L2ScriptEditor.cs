@@ -328,6 +328,12 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
     [ObservableProperty] private bool _canEdit;
     [ObservableProperty] private bool _hasScript;
     [ObservableProperty] private bool _isPuzzle;
+
+    /// <summary>The step list takes clicks: editable scripts, and puzzle scripts (their steps are picked to mark their
+    /// places and write their bytes, though they aren't edited as cards). Disabled for puzzles, no step could be picked.</summary>
+    public bool LinesEnabled => CanEdit || IsPuzzle;
+    partial void OnCanEditChanged(bool value) => OnPropertyChanged(nameof(LinesEnabled));
+    partial void OnIsPuzzleChanged(bool value) => OnPropertyChanged(nameof(LinesEnabled));
     [ObservableProperty] private bool _canUndo, _canRedo;
     [ObservableProperty] private string _undoTip = "Undo (Ctrl+Z)", _redoTip = "Redo (Ctrl+Y)";
     [ObservableProperty] private string _bytesDump = "";
@@ -589,6 +595,16 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
     }
 
     /// <summary>Nothing open.</summary>
+    /// <summary>No event open, but the map's characters, points and names are read (the New event window lists the
+    /// characters of the map the Events page shows, not of the last event opened).</summary>
+    public void UseMap(RomBuffer rom, MainViewModel main, int map)
+    {
+        if (map < 0) return;
+        if (NamesStale(rom)) ReadRomNames(rom);
+        _rom = rom; _main = main; _map = map;
+        try { ReadMap(); } catch (Exception) { _who.Clear(); }
+    }
+
     public void Unload()
     {
         Stop();
@@ -822,6 +838,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
     private void ReadScript(int keepLine)
     {
         Stop();
+        ClearMark();   // a range marked in another event (or before a re-read) isn't this one's
         Lines.Clear();
         _script = null; _owners = null; IsDirty = false; Status = ""; _textLine = null;
         _picked = -1;
@@ -1531,14 +1548,17 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         // the steps here were read before another page wrote this event (or moved its map's events): writing them
         // would put back what that page changed
         if (ChangedElsewhere()) { Status = "Not saved: this event was changed on another page after it was opened here. Revert reads it again; then make your changes again."; return false; }
+        // every text must be text the game can show (texts not changed are written as they are: the game's own can hold
+        // codes typed text can't). Checked before the fitting below adds steps, so the step number is the card's
+        for (int i = 0; i < _script.Steps.Count; i++)
+            if (_script.Steps[i].TextChanged && L2EventText.Check(_script.Steps[i].Text, _rom) is { } p) { Status = $"Not saved: step {i + 1}: {p}"; return false; }
+        // the fitting adds steps (split texts, ends of effects, rings, redraws): when the write then fails, the steps go
+        // back as they were, so the cards and the steps stay in step
+        var beforeFit = _script.TakeSnapshot();
         int fitted = FitTexts(all: false);
         int rings = FitRings();
         int ended = _event?.Entry != null ? FitEffects() : 0;
         int drawn = _event?.Entry != null ? FitMapDraws() : 0;
-        // every text must be text the game can show (texts not changed are written as they are: the game's own can hold
-        // codes typed text can't)
-        for (int i = 0; i < _script.Steps.Count; i++)
-            if (_script.Steps[i].TextChanged && L2EventText.Check(_script.Steps[i].Text, _rom) is { } p) { Status = $"Not saved: step {i + 1}: {p}"; return false; }
         // the last step must end the event, or the game runs on into whatever follows
         bool added = false;
         if (!_script.Steps[^1].EndsFlow) { _script.Steps.Add(new L2Step { Bytes = new byte[] { 0x00 } }); added = true; }
@@ -1567,7 +1587,8 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         }
         catch (Exception ex)
         {
-            if (added) _script.Steps.RemoveAt(_script.Steps.Count - 1);
+            _script.Restore(beforeFit);   // (the End added too)
+            if (fitted + rings + ended + drawn > 0) Changed(true);
             Status = "Not saved: " + ex.Message;
             return false;
         }
@@ -2316,6 +2337,8 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         string fixedFirst = PrepareForTest();
         if (HasPendingEdits && !SaveNow(quiet: true)) return;
         if (TestPoint == null) { Status = "The map has no preset point for the party to start on: add one on the Maps page."; return; }
+        // the preset point is added before the start is set: when that fails, the ROM goes back as it was
+        var before = _rom.ToArray();
         try
         {
             int point = TestPoint.Value;
@@ -2346,7 +2369,11 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
                 set += $" At its end the event goes to {string.Join(" or ", next.Select(n => $"{_maps.ElementAtOrDefault(n.Map)} ({n.Map:X2}) scene {n.Scene:X2}"))}, so the game carries on there.";
             Status = fixedFirst + set + " " + _main.PlayInBizHawk();
         }
-        catch (Exception ex) { Status = "Not set: " + ex.Message; }
+        catch (Exception ex)
+        {
+            if (!_rom.SameAs(before)) { _rom.ReplaceAll(before); _pointSpots = L2StoryClear.PresetPoints(_rom, _map); ReadPointChoices(); }
+            Status = "Not set: " + ex.Message;
+        }
         TestNote = NewGameNote();
     }
 

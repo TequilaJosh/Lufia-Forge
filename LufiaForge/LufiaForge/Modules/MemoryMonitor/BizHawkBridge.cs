@@ -12,7 +12,8 @@ namespace LufiaForge.Modules.MemoryMonitor;
 ///   4-7   : Frame counter (uint32 LE)
 ///   8-15  : Timestamp (int64 LE, DateTime.UtcNow.Ticks)
 ///   16-19 : WRAM size (uint32 LE, 0x20000)
-///   20-23 : Flags (uint32 LE, bit 0 = connected)
+///   20-23 : Flags (uint32 LE, bit 0 = connected, bit 1 = a frame is being written, bit 2 = the registers below
+///           are this frame's, bit 3 = the tool sets bits 1 and 2; a tool without bit 3 is read the old way)
 ///   24-25 : CPU PC (uint16 LE, low 16 bits of program counter)
 ///   26    : CPU PB (uint8, program bank register)
 ///   27    : CPU P  (uint8, processor status flags)
@@ -30,6 +31,14 @@ public sealed class BizHawkBridge : IDisposable
     private MemoryMappedFile?         _mmf;
     private MemoryMappedViewAccessor? _accessor;
     private uint _lastFrameCount;
+    /// <summary>Time since the frame counter last moved. BizHawk closed by a crash or the task manager never clears the
+    /// connected flag, and the shared memory stays open while this side holds it, so the monitor said "connected"
+    /// forever: after a few seconds with no frame, the memory is let go and opened again, which fails once nobody
+    /// else holds it.</summary>
+    private readonly System.Diagnostics.Stopwatch _sinceFrame = System.Diagnostics.Stopwatch.StartNew();
+    private const int StaleMs = 3000;
+
+    private const uint FlagConnected = 1, FlagWriting = 2, FlagRegisters = 4, FlagNewTool = 8;
 
     public bool    IsConnected  { get; private set; }
     public uint    FrameCount   { get; private set; }
@@ -69,6 +78,7 @@ public sealed class BizHawkBridge : IDisposable
         {
             _mmf      = MemoryMappedFile.OpenExisting(MmfName);
             _accessor = _mmf.CreateViewAccessor(0, 0, MemoryMappedFileAccess.Read);
+            _sinceFrame.Restart();
             return true;
         }
         catch
@@ -103,7 +113,7 @@ public sealed class BizHawkBridge : IDisposable
             }
 
             uint flags = _accessor.ReadUInt32(20);
-            IsConnected = (flags & 1) != 0;
+            IsConnected = (flags & FlagConnected) != 0;
             if (!IsConnected) return false;
 
             uint frame = _accessor.ReadUInt32(4);
@@ -111,14 +121,19 @@ public sealed class BizHawkBridge : IDisposable
 
             // Only copy WRAM if the frame counter advanced
             if (frame == _lastFrameCount && Wram != null)
+            {
+                if (_sinceFrame.ElapsedMilliseconds > StaleMs) CheckStillThere();
                 return false;
+            }
 
-            _lastFrameCount = frame;
-            PreviousWram    = Wram;
+            // The tool writes a frame while this reads it: read half way through a write, the copy was half one frame
+            // and half the next (a value seen changing that never did). A frame being written is skipped (the next
+            // tick reads it), and one that changed under the copy too.
+            bool newTool = (flags & FlagNewTool) != 0;
+            if (newTool && (flags & FlagWriting) != 0) return false;
 
             var buf = new byte[WramSize];
             _accessor.ReadArray(HeaderSize, buf, 0, WramSize);
-            Wram = buf;
 
             // Read CPU registers (bytes 24-30 in header)
             ushort pc   = _accessor.ReadUInt16(24);
@@ -127,8 +142,26 @@ public sealed class BizHawkBridge : IDisposable
             ushort d    = _accessor.ReadUInt16(28);
             byte   db   = _accessor.ReadByte(30);
 
-            int snesAddr = ((int)pb << 16) | pc;
-            CpuSnapshotReady?.Invoke(new CpuSnapshot(snesAddr, p, d, db));
+            bool registers = true;
+            if (newTool)
+            {
+                uint after = _accessor.ReadUInt32(20);
+                if ((after & FlagWriting) != 0 || _accessor.ReadUInt32(4) != frame) return false;
+                // with the Snes9x core BizHawk gives no registers: the bytes were the last frame's (or zero) and the
+                // Disassembler followed a PC that wasn't there
+                registers = (after & FlagRegisters) != 0;
+            }
+
+            _lastFrameCount = frame;
+            _sinceFrame.Restart();
+            PreviousWram    = Wram;
+            Wram = buf;
+
+            if (registers)
+            {
+                int snesAddr = ((int)pb << 16) | pc;
+                CpuSnapshotReady?.Invoke(new CpuSnapshot(snesAddr, p, d, db));
+            }
 
             return true;
         }
@@ -137,6 +170,26 @@ public sealed class BizHawkBridge : IDisposable
             IsConnected = false;
             Disconnect();
             return false;
+        }
+    }
+
+    /// <summary>No frame for a while: BizHawk paused, or gone. The memory is let go and opened again: that works while
+    /// BizHawk holds it (paused: still connected), and fails once it closed.</summary>
+    private void CheckStillThere()
+    {
+        _accessor?.Dispose();
+        _accessor = null;
+        _mmf?.Dispose();
+        _mmf = null;
+        try
+        {
+            _mmf      = MemoryMappedFile.OpenExisting(MmfName);
+            _accessor = _mmf.CreateViewAccessor(0, 0, MemoryMappedFileAccess.Read);
+            _sinceFrame.Restart();
+        }
+        catch
+        {
+            Disconnect();
         }
     }
 

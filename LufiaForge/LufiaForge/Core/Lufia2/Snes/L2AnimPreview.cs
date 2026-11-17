@@ -69,7 +69,7 @@ public static class L2AnimPreview
         // OAM buffer ($0100, high table $0300): only the monster
         for (int i = 0; i < 128; i++) { m.Wram[0x100 + i * 4] = 0; m.Wram[0x101 + i * 4] = 0xE0; m.Wram[0x102 + i * 4] = 0; m.Wram[0x103 + i * 4] = 0; }
         for (int i = 0; i < 32; i++) m.Wram[0x300 + i] = 0;
-        if (o.MonsterSprite > 0 && o.MonsterSprite < L2MonsterSprites.Count(rom))
+        if (o.MonsterSprite > 0 && o.MonsterSprite <= L2MonsterSprites.Count(rom))   // (sprites are 1 .. Count)
         {
             var data = L2MonsterSprites.Read(rom, o.MonsterSprite);
             var (w, h, px) = L2MonsterSprites.Pixels(rom, o.MonsterSprite, data);

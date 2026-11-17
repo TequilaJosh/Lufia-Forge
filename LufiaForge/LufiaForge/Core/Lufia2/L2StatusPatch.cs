@@ -106,7 +106,12 @@ public static partial class L2StatusPatch
     /// upgrades it, keeping all its data).</summary>
     public static bool HasFourthVersion(RomBuffer rom) => !IsApplied(rom) && V4.AppliedAt(rom, L2Rom.SnesToFile) >= 0;
 
-    public static void Apply(RomBuffer rom)
+    public static void Apply(RomBuffer rom) =>
+        // all or nothing: an older version's code comes out first, and moving the game's weaknesses saves scripts that
+        // can fail; a failure must leave the ROM as it was, not with the battle code half in
+        L2Rom.AllOrNothing(rom, () => { ApplyCore(rom); return 0; });
+
+    private static void ApplyCore(RomBuffer rom)
     {
         if (IsApplied(rom)) return;
         byte[]? starts = null, elemPtr = null, all = null;

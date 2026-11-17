@@ -280,15 +280,8 @@ public partial class L2AttacksPage : L2Page
         var targets = ApplyAll ? UsesOfName : new List<Use> { cur };
         try
         {
-            // all are changed on copies first, so a failure leaves every monster as it was
-            var done = new List<(Use, Block)>();
-            foreach (var u in targets)
-            {
-                var b = L2Attacks.Open(Rom, u);
-                op(b);
-                done.Add((u, b));
-            }
-            foreach (var (u, b) in done) L2Attacks.Save(Rom, u, b);
+            // all are changed on copies first (each script once), so a failure leaves every monster as it was
+            L2Attacks.ChangeAll(Rom, targets, op);
         }
         catch (Exception e) { Status = "Not changed: " + e.Message; Reshow(); return; }
         string who = targets.Count == 1 ? UseLabel(targets[0]) : $"{targets.Count} monsters";
@@ -302,10 +295,29 @@ public partial class L2AttacksPage : L2Page
     private void Reshow()
     {
         if (Rom == null) return;
-        int keep = SelectedUse;
+        // the same monster's use again, found by who it is (Revert or a script edit can take uses out or add some
+        // before it: by its place in the list the fields showed another monster's attack and edits went to it)
+        var was = CurrentUse;
+        bool all = ApplyAll;
         _uses = L2Attacks.Uses(Rom);
+        var uses = UsesOfName;
+        int at = was == null ? -1 : uses.FindIndex(u => u.Kind == was.Kind && u.Monster == was.Monster && u.Ordinal == was.Ordinal);
+        if (at < 0 && was != null) at = uses.FindIndex(u => u.Kind == was.Kind && u.Monster == was.Monster);
         Loading = true;
-        try { ShowAttack(CurrentUse); SelectedUse = keep; } finally { Loading = false; }
+        try
+        {
+            UseOptions = uses.Select((u, i) => new L2Option(i, UseLabel(u))).ToList();
+            OnPropertyChanged(nameof(UseOptions));
+            HasUses = uses.Count > 0;
+            UsedByText = uses.Count == 0 ? "No monster uses this attack. Its name can still be changed."
+                       : uses.Count == 1 ? "Used by 1 monster." : $"Used by {uses.Count} monsters.";
+            ApplyAllText = $"Change it for all {uses.Count} at once (only the part changed: each keeps its other values)";
+            ApplyAll = all;
+            SelectedUse = -1;
+            SelectedUse = at >= 0 ? at : uses.Count > 0 ? 0 : -1;
+            ShowAttack(CurrentUse);
+        }
+        finally { Loading = false; }
     }
 
     partial void OnNameTextChanged(string value)
@@ -397,15 +409,14 @@ public partial class L2AttacksPage : L2Page
         int old = NameId, made;
         try
         {
-            made = L2AttackNames.Add(Rom, _attackNames[old], L2Attacks.NameAnimation(Rom, old));
-            var done = new List<(Use, Block)>();
-            foreach (var u in targets)
+            int added = 0;
+            L2Rom.AllOrNothing(Rom, () =>
             {
-                var b = L2Attacks.Open(Rom, u);
-                b.NameStep.Args[0] = (byte)made;
-                done.Add((u, b));
-            }
-            foreach (var (u, b) in done) L2Attacks.Save(Rom, u, b);
+                added = L2AttackNames.Add(Rom, _attackNames[old], L2Attacks.NameAnimation(Rom, old));
+                L2Attacks.ChangeAll(Rom, targets, b => b.NameStep.Args[0] = (byte)added);
+                return 0;
+            });
+            made = added;
         }
         catch (Exception e) { Status = "No name added: " + e.Message; return; }
         string who = targets.Count == 1 ? UseLabel(targets[0]) : $"{targets.Count} monsters";

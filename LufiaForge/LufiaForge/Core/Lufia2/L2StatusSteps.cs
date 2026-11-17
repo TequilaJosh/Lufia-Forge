@@ -12,10 +12,14 @@ public static class L2StatusSteps
 {
     public enum What { Cause = 0x5D, Cure = 0x5E, Resist = 0x5F, Ward = 0x60 }
 
-    private static List<Step> Steps(RomBuffer rom, Kind kind, int index)
+    /// <summary>The script's steps; none: what the game does then. <paramref name="write"/>: a script that can't be
+    /// read is refused (the stand-in, saved over it, replaced the monster's real script).</summary>
+    private static List<Step> Steps(RomBuffer rom, Kind kind, int index, bool write = false)
     {
         List<Step> steps;
-        try { steps = L2AiScripts.Load(rom, kind, index).Steps; } catch (Exception) { steps = new(); }
+        try { steps = L2AiScripts.Load(rom, kind, index).Steps; }
+        catch (Exception) when (!write) { steps = new(); }
+        catch (Exception ex) { throw new InvalidOperationException("The script can't be read (a command Lufia Forge doesn't know, or a go to into the middle of one), so it isn't changed: a stand-in would replace it. Look at it in its script window.", ex); }
         if (steps.Count > 0) return steps;
         // no script: what the game does then (a weapon attacks, a monster attacks a random hero)
         return kind switch
@@ -60,7 +64,7 @@ public static class L2StatusSteps
     {
         int arg = args.Length > 0 ? args[0] : -1;
         if (HasStep(rom, kind, index, op, arg) == on) return false;
-        var steps = Steps(rom, kind, index);
+        var steps = Steps(rom, kind, index, write: true);
         foreach (var old in steps.Where(x => x.Op == op && (arg < 0 || x.Args.Length > 0 && x.Args[0] == arg)).ToList())
         {
             int i = steps.IndexOf(old);
@@ -80,7 +84,7 @@ public static class L2StatusSteps
     {
         value = Math.Clamp(value, 0, 100);
         if (Get(rom, kind, index, what, status) == value) return false;
-        var steps = Steps(rom, kind, index);
+        var steps = Steps(rom, kind, index, write: true);
         foreach (var old in steps.Where(x => x.Op == (byte)what && x.Args.Length > 0 && x.Args[0] == status).ToList())
         {
             int i = steps.IndexOf(old);

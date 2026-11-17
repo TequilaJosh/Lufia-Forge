@@ -29,6 +29,9 @@ public static partial class L2ExtraFlags
     /// <summary>The patch is in the ROM.</summary>
     public static bool IsApplied(RomBuffer rom) => Patch.AppliedAt(rom, L2Rom.SnesToFile) >= 0;
 
+    /// <summary>File offset of the patch's added code, or -1.</summary>
+    public static int BlockAt(RomBuffer rom) => Patch.AppliedAt(rom, L2Rom.SnesToFile);
+
     /// <summary>The patch can go in: the places it changes still hold the US game's bytes.</summary>
     public static bool CanApply(RomBuffer rom) => IsApplied(rom) || Patch.IsOriginal(rom);
 

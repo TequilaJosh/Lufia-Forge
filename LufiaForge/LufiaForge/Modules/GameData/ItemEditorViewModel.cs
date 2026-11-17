@@ -108,7 +108,9 @@ public partial class ItemEditorViewModel : GameDataEditorBase
         // The record ends where the next one starts (the last record: at its 00 terminator).
         // (the nearest record after this one: a record that grew may have moved to the end of the bank)
         int next = o + Core.Battle.ItemTable.Length(rom, SelectedIndex);
-        if (o >= Core.Battle.ItemTable.FreeStart && o < Core.Battle.ItemTable.FreeEnd || Core.Battle.ItemTable.InItemBank(rom, SelectedIndex)) next = -1;
+        // (a record in the item bank keeps its own length, ItemTable.Length: scanning 3-byte entries read past its end
+        // into the next record, and Apply wrote them back there)
+        if (o >= Core.Battle.ItemTable.FreeStart && o < Core.Battle.ItemTable.FreeEnd && !Core.Battle.ItemTable.InItemBank(rom, SelectedIndex)) next = -1;
         int p = o + 21, count = 0;
         while (count < 16 && p < rom.Length && rom.ReadByte(p) != 0) { p += 3; count++; }
         int parsedEnd = p + 1;
@@ -116,7 +118,9 @@ public partial class ItemEditorViewModel : GameDataEditorBase
 
         _tailLength     = next - (o + 21);
         // (a list that was shortened in place is followed by zeros up to the next record)
-        HasPropertyList = count < 16 && (parsedEnd == next || parsedEnd < next && Enumerable.Range(parsedEnd, next - parsedEnd).All(i => rom.ReadByte(i) == 0));
+        // (byte +20 is a mask of extra data pointers on usable items, as ItemTable.Properties reads it: such a record
+        // isn't a property list even when its bytes happen to parse as one, Arrows and Bombs among them)
+        HasPropertyList = rom.ReadByte(o + 20) == 0 && count < 16 && (parsedEnd == next || parsedEnd < next && Enumerable.Range(parsedEnd, next - parsedEnd).All(i => rom.ReadByte(i) == 0));
 
         Properties.Clear();
         if (HasPropertyList)

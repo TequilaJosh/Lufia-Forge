@@ -23,7 +23,16 @@ public static class EventDelete
             ? MessageBox.Show(owner, text, "Delete event", MessageBoxButton.OKCancel, MessageBoxImage.Warning, MessageBoxResult.Cancel)
             : MessageBox.Show(text, "Delete event", MessageBoxButton.OKCancel, MessageBoxImage.Warning, MessageBoxResult.Cancel);
         if (r != MessageBoxResult.OK) return null;
-        MapEvents.Delete(rom, mapId, ev, st);
+        // all or nothing: the starters are changed first, and emptying the event can still fail
+        var before = rom.ToArray();
+        try { MapEvents.Delete(rom, mapId, ev, st); }
+        catch (Exception ex)
+        {
+            if (!rom.SameAs(before)) rom.ReplaceAll(before);
+            if (owner != null) MessageBox.Show(owner, "The event couldn't be deleted, so nothing was changed: " + ex.Message, "Delete event", MessageBoxButton.OK, MessageBoxImage.Warning);
+            else MessageBox.Show("The event couldn't be deleted, so nothing was changed: " + ex.Message, "Delete event", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return null;
+        }
         return $"Deleted event {ev} of {mapLabel}" + (st.Any ? $" ({st.Areas.Count} area(s) switched off, {st.Chains.Count} run-event command(s) made an end)" : "");
     }
 }

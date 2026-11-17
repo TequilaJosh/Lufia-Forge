@@ -250,6 +250,9 @@ public static class L2Elements
         List<Step> steps;
         try { steps = L2AiScripts.Load(rom, kind, index).Steps; } catch (Exception) { return false; }
         if (steps.Count == 0) return false;
+        // a script that can't be saved again (a go to into the middle of a command: some fan hacks) keeps its element
+        // steps, and its row isn't changed: the row first, then a failing save, counted the element twice
+        if (steps.Any(st => st.OutsideTargets.Any(o => o >= 0))) return false;
         var (f, changed) = TakeElementSteps(steps);
         if (!changed) return false;
         WriteFactors(rom, who, index, f);

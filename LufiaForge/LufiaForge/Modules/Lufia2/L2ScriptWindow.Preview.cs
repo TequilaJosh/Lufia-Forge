@@ -52,7 +52,14 @@ public partial class L2ScriptWindow
     private void UpdatePreview()
     {
         int id = AnimationShown();
-        if (id == _previewId) return;
+        if (id == _previewId || _previewClosed) return;
+        // closing stops it for good: a preview still being made then never starts its timer (which kept the closed
+        // window and its frames alive, drawing at 60 Hz)
+        if (!_previewHooked)
+        {
+            _previewHooked = true;
+            Closed += (_, _) => { _previewClosed = true; _previewToken++; _previewTimer?.Stop(); _previewFrames = new(); };
+        }
         _previewId = id;
         _previewTimer?.Stop();
         if (id < 0 || id >= 0xFF || !L2Magic.IsAnimation(_rom, id)) { PreviewBox.Visibility = Visibility.Collapsed; return; }
@@ -66,7 +73,7 @@ public partial class L2ScriptWindow
             try { var m = L2Battle.ReadMonster(_rom, _index); (sprite, pal) = (m.Sprite, m.Palette); } catch (Exception) { }
         Task.Run(() => L2AnimPreview.Play(copy, id, new L2AnimPreview.Options(0, sprite, pal, MaxFrames: 600))).ContinueWith(t => Dispatcher.BeginInvoke(() =>
         {
-            if (token != _previewToken) return;
+            if (token != _previewToken || _previewClosed) return;
             if (t.Exception != null) { PreviewText.Text = $"Animation {id:X2}: {name}. It can't be played here: {t.Exception.InnerException?.Message}"; return; }
             var (frames, problem) = t.Result;
             _previewFrames = frames; _previewAt = 0;
@@ -79,11 +86,12 @@ public partial class L2ScriptWindow
             {
                 _previewTimer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromSeconds(1 / 60.0) };
                 _previewTimer.Tick += (_, _) => PreviewTick();
-                Closed += (_, _) => _previewTimer.Stop();
             }
             _previewTimer.Start();
         }));
     }
+
+    private bool _previewHooked, _previewClosed;
 
     private void PreviewTick()
     {

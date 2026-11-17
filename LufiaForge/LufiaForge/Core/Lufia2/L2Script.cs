@@ -361,6 +361,10 @@ public static class L2Script
             0x17 => $"inn ({a[0]} gold)",
             0x18 => $"shop {a[0]:X2}",
             0x1A => $"set flag {a[0]:X2}",
+            0xCD => $"set flag {L2ExtraFlags.First + a[0]:X3}",
+            0xCE => $"clear flag {L2ExtraFlags.First + a[0]:X3}",
+            0xCF => $"if flag {L2ExtraFlags.First + a[0]:X3} is set, jump to {Ptr(1)}",
+            0xD0 => $"if flag {L2ExtraFlags.First + a[0]:X3} is clear, jump to {Ptr(1)}",
             0x1B => $"clear flag {a[0]:X2}",
             0x1C => $"jump to {Ptr(0)}",
             0x1D => $"variable {a[0]:X2} = {a[1]}",
@@ -429,7 +433,7 @@ public static class L2Script
             }
             switch (c & 0x30)
             {
-                case 0x00: parts.Add($"{join}flag {a[i]:X2} is {((c & 1) == 0 ? "set" : "clear")}"); i += 1; break;
+                case 0x00: parts.Add($"{join}flag {L2ExtraFlags.Number(L2ExtraFlags.CheckFlag(c, a[i]))} is {((c & 1) == 0 ? "set" : "clear")}"); i += 1; break;
                 case 0x10: parts.Add($"{join}variable {a[i]:X2} {cmp[c & 7]} {a[i + 1]}"); i += 2; break;
                 case 0x20: parts.Add($"then jump to {jumpBase + (a[i] | a[i + 1] << 8):X6}"); i += 2; break;
                 default: parts.Add($"else jump to {jumpBase + (a[i] | a[i + 1] << 8):X6}"); i += 2; break;

@@ -87,6 +87,24 @@ public static class L2Attacks
 
     public static void Save(RomBuffer rom, Use u, Block b) => L2AiScripts.Save(rom, u.Kind, u.Monster, b.Steps);
 
+    /// <summary>Changes several uses (every monster's, "change it for all") and writes each script once: two uses in one
+    /// script were each opened on a copy of the whole script, so the second save put back the first one's old steps.
+    /// In one script the later uses are changed first (an inserted step doesn't move the earlier ones). All are changed
+    /// before anything is written, and the writes go in all together or not at all.</summary>
+    public static void ChangeAll(RomBuffer rom, IEnumerable<Use> uses, Action<Block> op)
+    {
+        var scripts = new List<(Use First, List<Step> Steps)>();
+        foreach (var g in uses.GroupBy(u => (u.Kind, u.Monster)))
+        {
+            var steps = L2AiScripts.Load(rom, g.Key.Kind, g.Key.Monster).Steps;
+            foreach (var u in g.OrderByDescending(u => u.Ordinal))
+                op(Blocks(steps).Where(b => b.NameStep.Args[0] == u.Name).ElementAtOrDefault(u.Ordinal)
+                   ?? throw new InvalidOperationException("That attack isn't in the monster's script any more."));
+            scripts.Add((g.First(), steps));
+        }
+        L2Rom.AllOrNothing(rom, () => { foreach (var (u, steps) in scripts) L2AiScripts.Save(rom, u.Kind, u.Monster, steps); return 0; });
+    }
+
     // ── changing steps where they are ─────────────────────────────────────────
 
     /// <summary>Puts a new step at <paramref name="at"/> (inside the attack, or right after it). At the attack's first

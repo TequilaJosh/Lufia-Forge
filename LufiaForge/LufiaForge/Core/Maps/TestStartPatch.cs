@@ -74,6 +74,14 @@ public static class TestStartPatch
         Array.Copy(opening, at, block, 8, Saved);
         rom.ReadBytes(LufiaMap.MapScriptTable + PrologueMap * 5, 5).CopyTo(block, 8 + Saved);
         rom.WriteBytes(b, block);
+        // map 93's events already in the added space (edited in this project): the changes below go into a copy of
+        // its block, so the block the saved entry points at stays as it is (saving moved it and freed the old one, and
+        // turning the test start off then pointed map 93 at freed bytes)
+        if (mode is Mode.SkipPrologue or Mode.ChosenMap)
+        {
+            int pb = EventScript.BlockOffset(rom, PrologueMap);
+            if (ExpansionSpace.Load(rom).Entries.Any(e => pb >= e.Start && pb < e.End)) EventScript.CopyBlockFor(rom, PrologueMap);
+        }
         rom.WriteBytes(WaitButton, WaitSkipped);
         rom.WriteBytes(ev + at, new byte[] { 0x01, (byte)tail, (byte)(tail >> 8) });
         if (mode is Mode.SkipPrologue or Mode.ChosenMap)

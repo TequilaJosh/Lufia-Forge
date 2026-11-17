@@ -226,6 +226,9 @@ public partial class L2NewCutsceneWindow : Window
         int flag = -1;
         if (LoadRadio.IsChecked == true && FlagBox.Text.Trim().Length > 0 && !int.TryParse(FlagBox.Text.Trim(), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out flag))
         { ChoiceText.Text = "Write the story flag in hex (00-EF), or leave it empty."; return; }
+        // a story flag the game keeps (not F0-FF, cleared on every map change), or an extra one when they are in
+        if (flag >= 0 && (flag is >= 0xF0 and < 0x100 || flag > L2ExtraFlags.Last || flag >= L2ExtraFlags.First && !L2ExtraFlags.IsApplied(_rom)))
+        { ChoiceText.Text = "That story flag can't be used: 00-EF" + (L2ExtraFlags.IsApplied(_rom) ? ", or the extra flags 100-17F." : " (F0-FF are cleared on every map change)."); return; }
         int character = -1;
         string madeCharacter = "";
         try

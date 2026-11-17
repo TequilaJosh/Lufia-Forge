@@ -90,9 +90,13 @@ public partial class MainViewModel
     /// <summary>Writes every tab's pending edits; returns the problems.</summary>
     private List<string> WriteAllPending()
     {
-        // a box being typed in hands its text over first (it would be put back to the old value otherwise)
+        // a box being typed in hands its text over first (it would be put back to the old value otherwise), also one
+        // in a popped-out section's window, which keeps its focus there while the main window is used
         if (System.Windows.Input.Keyboard.FocusedElement is System.Windows.Controls.TextBox tb)
             System.Windows.Data.BindingOperations.GetBindingExpression(tb, System.Windows.Controls.TextBox.TextProperty)?.UpdateSource();
+        foreach (var w in System.Windows.Application.Current?.Windows.OfType<System.Windows.Window>() ?? [])
+            if (System.Windows.Input.FocusManager.GetFocusedElement(w) is System.Windows.Controls.TextBox wb && !ReferenceEquals(wb, System.Windows.Input.Keyboard.FocusedElement))
+                System.Windows.Data.BindingOperations.GetBindingExpression(wb, System.Windows.Controls.TextBox.TextProperty)?.UpdateSource();
         var errors = new List<string>();
         foreach (var e in _editors.ToList())
         {
@@ -286,16 +290,34 @@ public partial class MainViewModel
         }
     }
 
+    private static int SafeCount(Func<int> count) { try { return count(); } catch (Exception) { return 0; } }
+
     private void FixKnownBugs(RomBuffer rom)
     {
         _openNote = "";
-        if (Core.Lufia2.L2Rom.NeedsLowBankFix(rom))
+        // (each fix on its own: one that fails says so in the note, and the project still opens with the others)
+        if (!rom.IsLufia2)
+            try
+            {
+                if (Core.Battle.EncounterPatch.FixBranch(rom))
+                {
+                    NotifyRomModified("Hold L to avoid random battles: the safe steps after a battle work again");
+                    OnPropertyChanged(nameof(RomBuffer));
+                    _openNote += " The \"Hold L to avoid random battles\" patch was fixed: the steps right after a battle rolled for battles too (Edit, Undo takes it back).";
+                }
+            }
+            catch (Exception ex) { _openNote += " The hold-L patch couldn't be fixed: " + ex.Message; }
+        try
         {
-            Core.Lufia2.L2Rom.FixLowBankReads(rom);
-            NotifyRomModified("Lufia II: battle window border fixed for the 8 MB ROM (read from bank $81, not the upper 4 MB)");
-            OnPropertyChanged(nameof(RomBuffer));
-            _openNote = " The hero's battle window border, broken on 8 MB ROMs, was fixed (Edit, Undo takes it back).";
+            if (Core.Lufia2.L2Rom.NeedsLowBankFix(rom))
+            {
+                Core.Lufia2.L2Rom.FixLowBankReads(rom);
+                NotifyRomModified("Lufia II: battle window border fixed for the 8 MB ROM (read from bank $81, not the upper 4 MB)");
+                OnPropertyChanged(nameof(RomBuffer));
+                _openNote += " The hero's battle window border, broken on 8 MB ROMs, was fixed (Edit, Undo takes it back).";
+            }
         }
+        catch (Exception ex) { _openNote += " The battle window border fix couldn't be made: " + ex.Message; }
         if (rom.IsLufia2 && Core.Lufia2.L2HighBanks.Needed(rom))
         {
             try
@@ -308,12 +330,16 @@ public partial class MainViewModel
             }
             catch (Exception ex) { _openNote += " Data in banks $40-$7D (which old Snes9x versions can't read) couldn't be moved: " + ex.Message; }
         }
-        if (rom.IsLufia2 && Core.Lufia2.L2AiScripts.UpdateHooks(rom))
+        try
         {
-            NotifyRomModified("Lufia II: battle script hooks updated (monster scripts that wrap round their bank run again)");
-            OnPropertyChanged(nameof(RomBuffer));
-            _openNote += " Lufia Forge's battle script hooks were updated: in fan hacks some monsters' scripts didn't run with the old ones (Edit, Undo takes it back).";
+            if (rom.IsLufia2 && Core.Lufia2.L2AiScripts.UpdateHooks(rom))
+            {
+                NotifyRomModified("Lufia II: battle script hooks updated (monster scripts that wrap round their bank run again)");
+                OnPropertyChanged(nameof(RomBuffer));
+                _openNote += " Lufia Forge's battle script hooks were updated: in fan hacks some monsters' scripts didn't run with the old ones (Edit, Undo takes it back).";
+            }
         }
+        catch (Exception ex) { _openNote += " The battle script hooks couldn't be updated: " + ex.Message; }
         if (rom.IsLufia2 && Core.Lufia2.L2StatusPatch.HasFourthVersion(rom))
         {
             try
@@ -325,9 +351,11 @@ public partial class MainViewModel
             }
             catch (Exception ex) { _openNote += " The Bounce and focus battle messages couldn't be fixed: " + ex.Message; }
         }
-        if (rom.IsLufia2 && Core.Lufia2.L2PuzzleBlock.OutOfReach(rom).Count > 0)
+        if (rom.IsLufia2 && SafeCount(() => Core.Lufia2.L2PuzzleBlock.OutOfReach(rom).Count) > 0)
         {
-            var (moved, problem) = Core.Lufia2.L2PuzzleBlock.MoveIntoReach(rom);
+            List<int> moved; string? problem;
+            try { (moved, problem) = Core.Lufia2.L2PuzzleBlock.MoveIntoReach(rom); }
+            catch (Exception ex) { (moved, problem) = (new(), ex.Message); }
             if (moved.Count > 0)
             {
                 string maps = moved.Count > 8 ? $"{moved.Count} maps" : (moved.Count > 1 ? "maps " : "map ") + string.Join(", ", moved.Select(m => m.ToString("X2")));
@@ -566,7 +594,12 @@ public partial class MainViewModel
             MessageBox.Show("That is this project. Pick the other project to take changes from.", "Merge", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
-        Flush(quiet: false);
+        // a merge reloads every tab afterwards: edits that couldn't be written would be lost, so it stops for them
+        if (!Flush(quiet: false) && HasPendingEdits)
+        {
+            StatusMessage = "Merge: nothing changed. Write or drop the edits that couldn't be written first.";
+            return;
+        }
         string theirName;
         byte[] theirs, theirsBase;
         List<string> theirLog;
@@ -636,6 +669,14 @@ public partial class MainViewModel
             return;
         }
         finally { System.Windows.Input.Mouse.OverrideCursor = null; }
+        // the app stayed usable while the merge was built: an edit written meanwhile (or another project opened) would be
+        // overwritten by the result, so it goes in only onto the ROM it was made from
+        if (RomBuffer == null || Project != project || !RomBuffer.SameAs(ours))
+        {
+            MessageBox.Show("The project changed while the merge was being made, so nothing was merged. Merge again.", "Merge", MessageBoxButton.OK, MessageBoxImage.Warning);
+            StatusMessage = "Merge: nothing changed.";
+            return;
+        }
         int taken = plan.Items.Count(i => i.Take), conflicts = plan.Items.Count(i => i.Take && i.Conflict), left = plan.Items.Count - taken;
         RomBuffer.ReplaceAll(result.Rom);
         string what = $"Merged \"{theirName}\" into this project: {taken} change{(taken == 1 ? "" : "s")} taken" +
@@ -670,6 +711,9 @@ public partial class MainViewModel
         if (Project == null || RomBuffer == null) return;
         var rom = RomBuffer.ToArray();
         string oldName = Project.Name, oldRom = RomBuffer.FilePath;
+        // the change log's new lines go into the file too (as Save Project does): they tell a later merge what changed
+        Project.Changes.AddRange(_pendingChanges.Select(c => $"{DateTime.Now:yyyy-MM-dd HH:mm}  {c}"));
+        _pendingChanges.Clear();
         Project.Name = Path.GetFileNameWithoutExtension(path);
         try { Project.SaveAs(path, rom); }
         catch { Project.Name = oldName; throw; }
@@ -779,6 +823,11 @@ public partial class MainViewModel
             MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
         if (answer == MessageBoxResult.Cancel) return false;
         if (answer == MessageBoxResult.No) return true;
-        return SaveProjectNow(quiet: false);
+        if (!SaveProjectNow(quiet: false)) return false;
+        // edits a tab couldn't write (shown in the save's message) would be lost by leaving: ask, staying is the default
+        if (HasPendingEdits && MessageBox.Show("Some edits in the tabs couldn't be written into the project (the message before this one says which). " +
+                "Leave anyway and lose them?", "Lufia Forge", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes)
+            return false;
+        return true;
     }
 }

@@ -433,6 +433,15 @@ public static class L2EventBlocks
         var room = new List<(int Start, int End)>();
         foreach (var (s, e) in runs)
             for (int p = s; p < e; p = (p / 0x8000 + 1) * 0x8000) room.Add((p, Math.Min(e, (p / 0x8000 + 1) * 0x8000)));
+        // a block that couldn't be built stays where it is: its bytes are taken out of the room (a neighbour's extent
+        // can reach over it, and the room is zeroed below while the map still points at it)
+        foreach (int b in mapsOf.Keys.Where(b => Chunk(rom, b) == null && !size.ContainsKey(b)))
+        {
+            int s0 = b, e0 = b + Extent(rom, b);
+            room = room.SelectMany(r => r.End <= s0 || r.Start >= e0 ? new[] { r }
+                       : new[] { (r.Start, Math.Min(r.End, s0)), (Math.Max(r.Start, e0), r.End) }.Where(x => x.Item2 > x.Item1).Select(x => (Start: x.Item1, End: x.Item2)))
+                       .ToList();
+        }
         // places: the biggest first
         var free = room.Select(r => (r.Start, r.End)).ToList();
         var placeAt = new Dictionary<int, int>();

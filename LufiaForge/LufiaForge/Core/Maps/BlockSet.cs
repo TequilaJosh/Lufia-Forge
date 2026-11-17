@@ -208,8 +208,22 @@ public sealed class BlockSet
 
     // ── saving ────────────────────────────────────────────────────────────
 
-    /// <summary>Writes the changed graphics and blocks; returns a short report.</summary>
+    /// <summary>Writes the changed graphics and blocks; returns a short report. All or nothing: the tiles went in (and
+    /// stopped counting as changed) before the blocks could fail, leaving half a write outside Undo.</summary>
     public string Save(RomBuffer rom, bool allowExpand)
+    {
+        var before = rom.ToArray();
+        bool tiles = TilesChanged, blocks = BlocksChanged;
+        try { return SaveCore(rom, allowExpand); }
+        catch
+        {
+            if (!rom.SameAs(before)) rom.ReplaceAll(before);
+            TilesChanged = tiles; BlocksChanged = blocks;
+            throw;
+        }
+    }
+
+    private string SaveCore(RomBuffer rom, bool allowExpand)
     {
         if (BlocksChanged && !IsWorld)
         {

@@ -88,17 +88,25 @@ public partial class MainViewModel : ObservableObject
     /// <summary>Writes the tabs' edits that aren't in the ROM yet, so a move in the history starts from everything the
     /// user did (otherwise reloading the tabs afterwards drops them, or writes them over the undone ROM). Returns
     /// whether that added a step.</summary>
-    private bool WritePendingBeforeHistory()
+    private bool WritePendingBeforeHistory() => WritePendingBeforeHistory("Go on", out _);
+
+    /// <summary>As above; <paramref name="go"/> false when a tab's edits couldn't be written and the user keeps them
+    /// (the history move reloads every tab, which drops edits not in the ROM: they were lost without a word).</summary>
+    private bool WritePendingBeforeHistory(string action, out bool go)
     {
         int before = History.UndoSteps.Count;
-        Flush(quiet: true);
+        bool ok = Flush(quiet: true);
+        go = ok || !HasPendingEdits || MessageBox.Show(
+            $"Some edits couldn't be written into the ROM ({StatusDetail}).\n\n{action} anyway? Those edits are lost then.",
+            "Lufia Forge", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) == MessageBoxResult.Yes;
         return History.UndoSteps.Count != before;
     }
 
     [RelayCommand(CanExecute = nameof(CanUndo))]
     private void Undo()
     {
-        WritePendingBeforeHistory();   // the edits just made are what Undo takes back first
+        WritePendingBeforeHistory("Undo", out bool go);   // the edits just made are what Undo takes back first
+        if (!go) return;
         var step = History.Undo();
         if (step == null) return;
         AfterHistoryMove("Undone: " + step.What);
@@ -107,7 +115,8 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanRedo))]
     private void Redo()
     {
-        if (WritePendingBeforeHistory()) { StatusMessage = "Your latest edits were written first, so there is nothing to redo after them."; return; }
+        if (WritePendingBeforeHistory("Redo", out bool go)) { StatusMessage = "Your latest edits were written first, so there is nothing to redo after them."; return; }
+        if (!go) return;
         var step = History.Redo();
         if (step == null) return;
         AfterHistoryMove("Redone: " + step.What);
@@ -118,7 +127,8 @@ public partial class MainViewModel : ObservableObject
     private void GoToHistory(HistoryEntry? entry)
     {
         if (entry == null) return;
-        if (WritePendingBeforeHistory()) { StatusMessage = "Your latest edits were written first; pick the step again in Edit > History."; return; }
+        if (WritePendingBeforeHistory("Move in the history", out bool go)) { StatusMessage = "Your latest edits were written first; pick the step again in Edit > History."; return; }
+        if (!go) return;
         int n = entry.IsDone ? History.UndoTo(entry.Step) : History.RedoTo(entry.Step);
         if (n > 0) AfterHistoryMove($"{(entry.IsDone ? "Undone" : "Redone")} {n} step{(n == 1 ? "" : "s")}, back to: {entry.Step.What}");
     }
@@ -221,7 +231,9 @@ public partial class MainViewModel : ObservableObject
     public bool NotifyRomModified(string? what = null)
     {
         if (History.Record(what) == null && History.IsAttached) return false;
-        if (!string.IsNullOrWhiteSpace(what)) _pendingChanges.Add(what);
+        // every change gets a line in the change log, also one with no description: Merge tells from the logs which
+        // version two projects share, and a change missing there made it pick the wrong one (and revert it)
+        _pendingChanges.Add(string.IsNullOrWhiteSpace(what) ? "A change to the ROM (not described)" : what);
         OnPropertyChanged(nameof(WindowTitle));
         StatusMessage = what == null
             ? "Changed (Save Project keeps it)."

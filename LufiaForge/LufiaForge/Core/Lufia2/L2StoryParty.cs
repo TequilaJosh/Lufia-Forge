@@ -40,7 +40,7 @@ public static class L2StoryParty
                 L2EventScript s;
                 try { s = L2EventScript.Read(rom, block + e.Offset, block); } catch (Exception) { continue; }
                 if (s.Problem != null) continue;
-                list.Add(new Ev(m, e.Head, e.Id, s, s.Steps.Where(x => x.Op == 0x1A && x.Bytes.Length >= 2).Select(x => (int)x.Bytes[1]).ToHashSet()));
+                list.Add(new Ev(m, e.Head, e.Id, s, s.Steps.Where(x => !x.IsText && L2ExtraFlags.Of(x.Bytes).Use == L2ExtraFlags.Use.On).Select(x => L2ExtraFlags.FlagOf(x.Bytes)).ToHashSet()));
             }
         }
         return list;

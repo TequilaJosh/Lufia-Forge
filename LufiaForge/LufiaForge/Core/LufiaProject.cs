@@ -123,7 +123,12 @@ public sealed class LufiaProject
         }
         catch
         {
-            try { File.Delete(tmp); } catch { }
+            // File.Replace can fail after it already moved the project to .bak (a virus scanner or backup tool holding the
+            // file): then the new save in tmp is the only copy of the project, so it takes the project's place
+            if (!File.Exists(Path) && File.Exists(tmp))
+                try { File.Move(tmp, Path); } catch { }
+            else
+                try { File.Delete(tmp); } catch { }
             throw;
         }
         MapNamesChanged = false;

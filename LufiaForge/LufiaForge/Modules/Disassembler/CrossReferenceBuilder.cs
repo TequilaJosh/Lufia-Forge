@@ -13,10 +13,15 @@ namespace LufiaForge.Modules.Disassembler;
 public sealed class CrossReferenceBuilder
 {
     /// <summary>Target → callers.  Populated after <see cref="Build"/> completes.</summary>
-    public Dictionary<int, List<int>> Xref { get; } = new();
+    /// <summary>Target to callers. Built aside and put in place whole when the build is done: filled on the worker
+    /// thread while the panel read it, the dictionary broke ("collection was modified").</summary>
+    public Dictionary<int, List<int>> Xref { get; private set; } = new();
 
     /// <summary>Indirect jumps/calls (JMP (a), JMP (a,X), JML [a], JSR (a,X)) whose target depends on RAM/registers.</summary>
-    public List<int> Unresolved { get; } = new();
+    public List<int> Unresolved { get; private set; } = new();
+
+    /// <summary>Forgets the index (a new ROM).</summary>
+    public void Clear() { Xref = new(); Unresolved = new(); }
 
     /// <summary>
     /// Run the sweep on a background thread.
@@ -40,8 +45,8 @@ public sealed class CrossReferenceBuilder
         IProgress<int>? progress,
         CancellationToken ct)
     {
-        Xref.Clear();
-        Unresolved.Clear();
+        var xref = new Dictionary<int, List<int>>();
+        var unresolved = new List<int>();
 
         // Walk ROM byte-by-byte in 32KB (LoROM) bank increments.
         // For each position, attempt to decode one instruction and collect targets.
@@ -80,18 +85,20 @@ public sealed class CrossReferenceBuilder
                 state = CpuState.Default;
 
             if (!line.IsData && line.RawBytes.Length > 0 && line.RawBytes[0] is 0x6C or 0x7C or 0xDC or 0xFC)
-                Unresolved.Add(line.SnesAddress);
+                unresolved.Add(line.SnesAddress);
 
             // Collect cross-reference entries for instructions with a resolved target
             if (!line.IsData && line.JumpTarget.HasValue)
             {
                 int from   = line.SnesAddress;
                 int target = line.JumpTarget.Value;
+                // in the lines' own banks ($80 up): a JSL $01xxxx was kept as $01xxxx while the line there is $81xxxx
+                if ((target & 0xFFFF) >= 0x8000 && (target >> 16 & 0xFF) is not (0x7E or 0x7F)) target = (target & 0x7FFFFF) | 0x800000;
 
-                if (!Xref.TryGetValue(target, out var callers))
+                if (!xref.TryGetValue(target, out var callers))
                 {
                     callers     = new List<int>();
-                    Xref[target] = callers;
+                    xref[target] = callers;
                 }
                 if (!callers.Contains(from))
                     callers.Add(from);
@@ -101,6 +108,9 @@ public sealed class CrossReferenceBuilder
             offset += step;
         }
 
+        ct.ThrowIfCancellationRequested();
+        Xref = xref;
+        Unresolved = unresolved;
         progress?.Report(100);
     }
 

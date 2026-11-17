@@ -104,11 +104,16 @@ public sealed class L2NewStatusCard : Border
                 else
                 {
                     var tb = new TextBox { Text = values[c]![s] == 0 ? "" : values[c]![s].ToString(CultureInfo.InvariantCulture), Style = TryFindResource("GdNumber") as Style, Width = 48, Margin = new Thickness(2, 1, 2, 1), HorizontalAlignment = HorizontalAlignment.Left, ToolTip = col.Tip };
+                    int shown = values[c]![s];
                     tb.LostFocus += (_, _) =>
                     {
                         string t = tb.Text.Trim();
                         if (t.Length == 0) t = "0";
-                        if (!int.TryParse(t, NumberStyles.Integer, CultureInfo.InvariantCulture, out int v) || v is < 0 or > 100) { tb.Text = ""; return; }
+                        // a wrong number shows the value the ROM has again (blanking it showed "none" while the ROM kept
+                        // the old value, and the next visit of the box then wrote 0, taking the step out)
+                        if (!int.TryParse(t, NumberStyles.Integer, CultureInfo.InvariantCulture, out int v) || v is < 0 or > 100)
+                        { tb.Text = shown == 0 ? "" : shown.ToString(CultureInfo.InvariantCulture); return; }
+                        if (v == shown) return;   // nothing typed
                         Write(col, st, v);
                     };
                     cell = tb;

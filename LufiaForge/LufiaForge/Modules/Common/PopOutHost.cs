@@ -156,6 +156,21 @@ public class PopOutHost : ContentControl
         // Ctrl+Z...), as if the section were still there
         win.PreviewKeyDown += (_, e) => e.Handled |= Forward(e, System.Windows.Input.Keyboard.PreviewKeyDownEvent);
         win.KeyDown += (_, e) => e.Handled |= Forward(e, System.Windows.Input.Keyboard.KeyDownEvent);
+        // a box typed in here and then the main window clicked (Save, another tab): the box keeps its focus in this
+        // window, so it never lost it and its text was never handed over (the boxes take it when they lose focus).
+        // Leaving the window takes the focus off the box (its text goes in); coming back puts it there again.
+        IInputElement? lastFocus = null;
+        win.Deactivated += (_, _) =>
+        {
+            lastFocus = System.Windows.Input.FocusManager.GetFocusedElement(win);
+            if (lastFocus is System.Windows.Controls.Primitives.TextBoxBase) System.Windows.Input.FocusManager.SetFocusedElement(win, null);
+            else lastFocus = null;
+        };
+        win.Activated += (_, _) =>
+        {
+            if (lastFocus is UIElement { IsVisible: true } u && System.Windows.Input.FocusManager.GetFocusedElement(win) == null) u.Focus();
+            lastFocus = null;
+        };
         win.Closing += (_, _) => Return(win);
         _window = win;
         SetValue(IsPoppedOutKey, true);

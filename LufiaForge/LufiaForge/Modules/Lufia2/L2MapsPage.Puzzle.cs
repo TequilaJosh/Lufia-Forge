@@ -85,6 +85,9 @@ public partial class L2MapsPage
         if (why != null) { Status = "Not added: the map's other changes couldn't be written: " + why; return; }
         int map = _edit.MapId;
         var t = _puzzleTarget;
+        // a builder that fails partway (no dungeon controls on the map, its info block full) has already written
+        // records: the ROM goes back as it was
+        var before = _rom.ToArray();
         try
         {
             string done = L2PuzzleBuild.AddTileChange(_rom, map, kind, sx, sy, t.X1, t.Y1, t.X2 - t.X1, t.Y2 - t.Y1, _puzzleFrom.X, _puzzleFrom.Y);
@@ -97,7 +100,7 @@ public partial class L2MapsPage
             Refresh();
             Status = done + " See it in Events (the map's puzzle scripts); test it in the game from there.";
         }
-        catch (Exception ex) { Status = "Not added: " + ex.Message; ResetPuzzle(); }
+        catch (Exception ex) { if (!_rom.SameAs(before)) _rom.ReplaceAll(before); Status = "Not added: " + ex.Message; ResetPuzzle(); }
     }
 
     // ---------------------------------------------------------------- presets (R): doors, bomb pieces, spikes
@@ -324,6 +327,7 @@ public partial class L2MapsPage
         if (why != null) { Status = "Not added: the map couldn't be written: " + why; ResetPreset(); return; }
         int map = _edit.MapId;
         var k = _presetClicks;
+        var before = _rom.ToArray();   // (taken back whole when the builder fails partway)
         try
         {
             string done;
@@ -375,7 +379,7 @@ public partial class L2MapsPage
             Refresh();
             Status = done;
         }
-        catch (Exception ex) { Status = "The pieces are painted, but the puzzle wasn't added: " + ex.Message; ResetPreset(); }
+        catch (Exception ex) { if (!_rom.SameAs(before)) _rom.ReplaceAll(before); Status = "The pieces are painted, but the puzzle wasn't added: " + ex.Message; ResetPreset(); }
     }
 }
 

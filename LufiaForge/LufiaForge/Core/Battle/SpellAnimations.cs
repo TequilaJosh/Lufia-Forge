@@ -234,7 +234,8 @@ public static partial class SpellAnimations
         if (o.Frames < 1 || o.Frames > max) throw new InvalidOperationException($"A {o.FrameWidth} x {o.FrameHeight} frame fits {max} times on the sheet.");
         Move(rom);
         int id = Count(rom), shape = ShapeCount(rom);
-        if (id >= Capacity || shape >= Capacity) throw new InvalidOperationException("No animation numbers left.");
+        // (the counts are kept in a byte: 255 at most, so the last number is FE)
+        if (id >= Capacity - 1 || shape >= Capacity - 1) throw new InvalidOperationException("No animation numbers left.");
         int b = Block(rom);
         int res = ResourceIds.Add(rom, BuildResource(idx, palette));
         b = Block(rom);

@@ -279,12 +279,12 @@ public partial class MapEditorViewModel
         {
             int x = _map.Width / 2, y = _map.Height / 2;
             if (_map.Arrivals.Count > 0) { x = Math.Min(_map.Width - 1, _map.Arrivals[0].X + 1); y = _map.Arrivals[0].Y; }
-            // talking to character n runs event n: numbers whose event is in use (a cutscene, a step-on area's) are
+            // talking to character n runs event n + 1: numbers whose event is in use (a cutscene, a step-on area's) are
             // skipped, kept as hidden characters, so the new one doesn't start someone else's event
             int index = MapEvents.FreeCharacterNumber(_rom, _map);
             if (index < 0)
             {
-                Status = "This map has no character number left below 32 whose event is free (talking to character n runs event n).";
+                Status = "This map has no character number left below 32 whose event is free (talking to a character runs the event numbered one more).";
                 return;
             }
             int first = _map.Npcs.Count;
@@ -292,7 +292,7 @@ public partial class MapEditorViewModel
             string skipped = index == first ? ""
                 : index == first + 1 ? $" Number {first + 1}'s event is taken (by another event or the step-on areas), so it stays a hidden character."
                 : $" Numbers {first + 1}-{index} have their events taken (by other events or the step-on areas), so they stay hidden characters.";
-            Status = $"Character {n.Index + 1} added (talking runs event {n.Index}, an empty one made when the map is written).{skipped} " +
+            Status = $"Character {n.Index + 1} added (talking runs event {MapEvents.TalkEvent(n.Index)}, an empty one made when the map is written).{skipped} " +
                      "Drag it into place; it's written by itself (or click Apply in the top bar).";
             MarkEdited();
             RebuildOverlays();
@@ -327,11 +327,12 @@ public partial class MapEditorViewModel
     }
 
     /// <summary>Creates an empty talk event for the selected character, then opens it.</summary>
-    private bool CreateTalkEvent(int ev)
+    private bool CreateTalkEvent(int npc)
     {
         if (_rom == null || _map == null) return false;
         if (!WritePendingFirst()) return false;
-        if (MessageBox.Show($"Character {ev + 1} has no event yet. Make one (talking to it runs event {ev})?", "New event",
+        int ev = MapEvents.TalkEvent(npc);
+        if (MessageBox.Show($"Character {npc + 1} has no event yet. Make one (talking to it runs event {ev})?", "New event",
                 MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return false;
         try
         {

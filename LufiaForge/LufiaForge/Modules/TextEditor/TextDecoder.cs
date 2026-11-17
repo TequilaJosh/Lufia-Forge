@@ -60,20 +60,25 @@ public static class TextDecoder
     /// <summary>Force-discard the cache. Call after loading a new ROM.</summary>
     public static void InvalidateDictionaryCache() => _cachedRom = null;
 
+    private static readonly object CacheLock = new();
+
     private static void EnsureCache(RomBuffer rom)
     {
         if (ReferenceEquals(rom, _cachedRom)) return;
-
-        _cachedRom  = rom;
-        _mte1Words  = ReadMteWordsFromPtrTable(rom,
-                          Lufia1Constants.Mte1PtrTableOffset,
-                          Lufia1Constants.Mte1EntryCount);
-        _mte3Words  = ReadMteWordsFromPtrTable(rom,
-                          Lufia1Constants.Mte3PtrTableOffset,
-                          Lufia1Constants.Mte3EntryCount);
-        _encodeTable = BuildEncodeTable(_mte1Words, _mte3Words);
-        _letters = Core.DutchLetters.IsApplied(rom) ? Core.DutchLetters.Map.ToDictionary(m => m.Code, m => m.Letter) : new();
-        _letterCodes = _letters.ToDictionary(kv => kv.Value, kv => kv.Key);
+        lock (CacheLock)
+        {
+            if (ReferenceEquals(rom, _cachedRom)) return;
+            // every table filled first, the ROM they belong to set last: set first, another thread (the dialogue list
+            // is built on one) saw it and used tables still empty or of the ROM before
+            var mte1 = ReadMteWordsFromPtrTable(rom, Lufia1Constants.Mte1PtrTableOffset, Lufia1Constants.Mte1EntryCount);
+            var mte3 = ReadMteWordsFromPtrTable(rom, Lufia1Constants.Mte3PtrTableOffset, Lufia1Constants.Mte3EntryCount);
+            var encode = BuildEncodeTable(mte1, mte3);
+            var letters = Core.DutchLetters.IsApplied(rom) ? Core.DutchLetters.Map.ToDictionary(m => m.Code, m => m.Letter) : new();
+            var codes = letters.ToDictionary(kv => kv.Value, kv => kv.Key);
+            _mte1Words = mte1; _mte3Words = mte3; _encodeTable = encode; _letters = letters; _letterCodes = codes;
+            System.Threading.Thread.MemoryBarrier();
+            _cachedRom = rom;
+        }
     }
 
     /// <summary>Dutch letters in the ROM's font (<see cref="Core.DutchLetters"/>): code to letter and back.</summary>

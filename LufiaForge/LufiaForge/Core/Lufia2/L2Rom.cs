@@ -307,7 +307,12 @@ public static class L2Rom
     /// fits. Files that grew and were the last ones put in the added space (one after another up to its free end) are
     /// written again from where the first of them starts, so a file that keeps growing (tiles added one piece at a time)
     /// doesn't leave a copy behind each time; any other file that grew goes to new room.</summary>
-    public static void WriteFiles(RomBuffer rom, params (int Id, byte[] Data)[] files)
+    public static void WriteFiles(RomBuffer rom, params (int Id, byte[] Data)[] files) =>
+        // all or nothing: once the space mark is set back, a file written in new room may cover a file not yet moved,
+        // so a failure partway (the ROM full) must not leave the file table pointing at it
+        AllOrNothing(rom, () => { WriteFilesCore(rom, files); return 0; });
+
+    private static void WriteFilesCore(RomBuffer rom, (int Id, byte[] Data)[] files)
     {
         bool crosses(int o, int n) => o / 0x8000 != (o + n - 1) / 0x8000;
         var grow = new List<(int Id, byte[] Packed, int At, int OldSize)>();
@@ -328,7 +333,10 @@ public static class L2Rom
             foreach (var f in grow.Where(f => f.At >= OriginalSize && f.At < mark).OrderByDescending(f => f.At))
             {
                 int fe = f.At + f.OldSize;
-                bool touches = fe == end || fe < end && end % 0x8000 == 0 && (fe - 1) / 0x8000 == end / 0x8000 - 1;
+                // (the gap before a bank start counts only while it is still untouched fill: something else put in after
+                // the file, in the same bank, sits there, and writing the file again from its start would go over it)
+                bool gapFree() { int fill = rom.ReadByte(fe); if (fill is not (0xFF or 0x00)) return false; for (int p = fe; p < end; p++) if (rom.ReadByte(p) != fill) return false; return true; }
+                bool touches = fe == end || fe < end && end % 0x8000 == 0 && (fe - 1) / 0x8000 == end / 0x8000 - 1 && gapFree();
                 if (!touches) break;
                 start = end = f.At;
             }

@@ -118,10 +118,17 @@ public static class L2MapNames
     private static (int Data, int Room, int Used)? Chunk(RomBuffer rom)
     {
         if (!IsMoved(rom)) return null;
-        int first = Enumerable.Range(0, L2Maps.Count(rom)).Min(m => NameAt(rom, m));
-        int h = first - 8;
-        if (h < 0 || System.Text.Encoding.ASCII.GetString(rom.ReadBytes(h, 4)) != ChunkMagic) return null;
-        return (first, rom.ReadUInt16Le(h + 4), rom.ReadUInt16Le(h + 6));
+        // the chunk's head is before every name, in the same bank. Not simply before the lowest name: map 00's name is
+        // the chunk's first, and once map 00 is renamed it points at the new name, further on
+        var names = Enumerable.Range(0, L2Maps.Count(rom)).Select(m => NameAt(rom, m)).ToList();
+        int first = names.Min(), last = names.Max();
+        for (int h = first - 8; h >= first / 0x8000 * 0x8000; h--)
+        {
+            if (System.Text.Encoding.ASCII.GetString(rom.ReadBytes(h, 4)) != ChunkMagic) continue;
+            int room = rom.ReadUInt16Le(h + 4);
+            if (last < h + 8 + room) return (h + 8, room, rom.ReadUInt16Le(h + 6));
+        }
+        return null;
     }
 
     /// <summary>The bytes for a name, or why it can't be one: one byte per letter of the game's font. (The box drawn on
@@ -204,10 +211,15 @@ public static class L2MapNames
         if (h < 0) return;
         var where = (Where)rom.ReadByte(h + 6);
         rom.WriteBytes(to, rom.ReadBytes(h, 8));
-        rom.WriteBytes(to + 8, HookCode(where, to + 8, out _));
+        rom.WriteBytes(to + 8, HookCode(where, to + 8, out int size));
+        rom.WriteByte(to + 7, (byte)size);   // the room made for it (CornerCode's size)
         int snes = L2Rom.FileToSnes(to + 8);
         rom.WriteBytes(CentreAt + 1, new[] { (byte)snes, (byte)(snes >> 8), (byte)(snes >> 16) });
     }
+
+    /// <summary>The longest corner code (new room holds any corner).</summary>
+    private static int MaxCornerSize => new[] { Where.TopLeft, Where.TopRight, Where.BottomLeft, Where.BottomRight }
+        .Max(w => { HookCode(w, 0x8000, out int s); return s; });
 
     /// <summary>The corner code (file offset of its magic), or -1.</summary>
     private static int Hook(RomBuffer rom)
@@ -228,10 +240,17 @@ public static class L2MapNames
             return;
         }
         int h = Hook(rom);
-        var code = HookCode(where, h >= 0 ? h + 8 : -1, out int size);
-        if (h < 0) h = L2Rom.Allocate(rom, size + 8, upper: true);
-        code = HookCode(where, h + 8, out _);
-        rom.WriteBytes(h, System.Text.Encoding.ASCII.GetBytes(HookMagic).Concat(new byte[] { 1, (byte)where, 0, 0 }).ToArray());
+        HookCode(where, h >= 0 ? h + 8 : 0, out int size);
+        // the room there: its head's last byte (0 in ROMs before 2026-11-16: the size of the corner it holds). A corner
+        // whose code is longer (a right corner after a left one) gets new room, room for any corner
+        int room = h < 0 ? 0 : rom.ReadByte(h + 7) is var r and > 0 ? r : CornerCode(rom).Size - 8;
+        if (h < 0 || size > room)
+        {
+            room = MaxCornerSize;
+            h = L2Rom.Allocate(rom, room + 8, upper: true);
+        }
+        var code = HookCode(where, h + 8, out _);
+        rom.WriteBytes(h, System.Text.Encoding.ASCII.GetBytes(HookMagic).Concat(new byte[] { 1, (byte)where, 0, (byte)room }).ToArray());
         rom.WriteBytes(h + 8, code);
         int snes = L2Rom.FileToSnes(h + 8);
         var jsl = new List<byte> { 0x22, (byte)snes, (byte)(snes >> 8), (byte)(snes >> 16) };

@@ -449,7 +449,7 @@ internal sealed class MergeAreas
         ("descriptions", L2Descriptions.Block), ("element percentages", L2Elements.TableAt), ("gold patch", L2Gold.Block),
         ("monster sprites", L2MonsterSprites.Block), ("new maps tables", L2NewMaps.Block), ("new monsters", L2NewMonsters.Block),
         ("shops", L2Shops.Block), ("spell animations", L2SpellAnims.Block), ("new sprites", L2Sprites.Block),
-        ("starting party", L2StartParty.Block), ("starting spells", L2StartSpells.Block),
+        ("starting party", L2StartParty.Block), ("starting spells", L2StartSpells.Block), ("extra story flags patch", L2ExtraFlags.BlockAt),
     };
 
     public int At(int p) => _paint[p];

@@ -77,6 +77,13 @@ public static class NpcSprites
     /// <summary>BGRA pixels of the sprite's first frame (0 = transparent) and its size, or null.</summary>
     public static (uint[] Px, int W, int H)? Render(RomBuffer rom, int sprite)
     {
+        // (one at a time: the Cutscenes tab draws its pictures on another thread while the Events tab draws too, and
+        // a Dictionary written by two threads breaks)
+        lock (Cache) return RenderLocked(rom, sprite);
+    }
+
+    private static (uint[] Px, int W, int H)? RenderLocked(RomBuffer rom, int sprite)
+    {
         if (!ReferenceEquals(rom, _rom)) { Forget(); _rom = rom; }
         if (Cache.TryGetValue(sprite, out var hit)) return hit;
         (uint[], int, int)? result = null;

@@ -34,7 +34,7 @@ public static class DialogueIndex
             int map = ids[mi];
             progress?.Invoke(mi, ids.Count);
             var npcs = new Dictionary<int, int>();
-            try { foreach (var n in LufiaMap.Load(rom, map).Npcs.Where(n => !n.IsUnused)) npcs[n.Index] = n.Sprite; } catch { }
+            try { foreach (var n in LufiaMap.Load(rom, map).Npcs.Where(n => !n.IsUnused)) npcs[MapEvents.TalkEvent(n.Index)] = n.Sprite; } catch { }
             var triggers = new Dictionary<int, string>();
             try { foreach (var (area, ev, _, _) in MapSetupScript.ReadTriggers(rom, map)) triggers.TryAdd(ev, $"Step-on area D{area}"); } catch { }
 

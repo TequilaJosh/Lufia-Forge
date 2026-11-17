@@ -36,15 +36,7 @@ public partial class L2GameStartPage : ObservableObject
     public void SetRom(RomBuffer rom, MainViewModel main)
     {
         _rom = rom; _main = main;
-        _loading = true;
-        try
-        {
-            _mapNames = Enumerable.Range(0, L2Maps.Count(rom)).Select(m => L2Maps.Name(rom, m)).ToArray();
-            MapChoices.Clear();
-            for (int m = 2; m < _mapNames.Length; m++)
-                if (L2Events.Block(rom, m) >= 0 && L2StoryClear.PresetPoints(rom, m).Count > 0) MapChoices.Add(new L2Option(m, $"{m:X2} {_mapNames[m]}"));
-        }
-        finally { _loading = false; }
+        ReadMapChoices();
         Status = "";
         var (map, _, _) = L2MapEdit.NewGame(rom);
         SelectedMap = MapChoices.FirstOrDefault(o => o.Value == map) ?? MapChoices.FirstOrDefault();
@@ -58,10 +50,32 @@ public partial class L2GameStartPage : ObservableObject
         if (_rom == null) return;
         var keep = SelectedCutscene?.Choice;
         var point = SelectedPoint?.Value;
+        // maps given their first preset point, or made, since: they can be picked too
+        int map = SelectedMap?.Value ?? -1;
+        ReadMapChoices();
+        if (SelectedMap == null || SelectedMap.Value != map) SelectedMap = MapChoices.FirstOrDefault(o => o.Value == map) ?? MapChoices.FirstOrDefault();
         OnSelectedMapChanged(SelectedMap);
         if (keep != null) SelectedCutscene = CutsceneChoices.FirstOrDefault(c => c.Choice.Head == keep.Head && c.Choice.Id == keep.Id) ?? SelectedCutscene;
         if (point != null) SelectedPoint = PointChoices.FirstOrDefault(o => o.Value == point) ?? SelectedPoint;
         ShowCurrent();
+    }
+
+    /// <summary>The maps a new game can start on (an event block and a preset point).</summary>
+    private void ReadMapChoices()
+    {
+        var rom = _rom!;
+        _loading = true;
+        try
+        {
+            _mapNames = Enumerable.Range(0, L2Maps.Count(rom)).Select(m => L2Maps.Name(rom, m)).ToArray();
+            var list = new List<L2Option>();
+            for (int m = 2; m < _mapNames.Length; m++)
+                if (L2Events.Block(rom, m) >= 0 && L2StoryClear.PresetPoints(rom, m).Count > 0) list.Add(new L2Option(m, $"{m:X2} {_mapNames[m]}"));
+            if (list.Select(o => o.Label).SequenceEqual(MapChoices.Select(o => o.Label))) return;   // (the same: the pick stays as it is)
+            MapChoices.Clear();
+            foreach (var o in list) MapChoices.Add(o);
+        }
+        finally { _loading = false; }
     }
 
     private string MapName(int m) => m < _mapNames.Length ? _mapNames[m] : "";

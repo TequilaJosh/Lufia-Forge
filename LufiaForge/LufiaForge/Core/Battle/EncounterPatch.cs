@@ -47,7 +47,7 @@ public static class EncounterPatch
     {
         0xAD, 0x8C, 0x07,           // LDA $078C      steps since the last battle
         0xC9, (byte)safeSteps,      // CMP #safe
-        0x90, 0x0A,                 // BCC done       (carry clear: no battle)
+        0x90, 0x0C,                 // BCC done       (carry clear: no battle; 0A before 2026-11-16 landed on roll)
         0xAF, 0x30, 0x00, 0x7E,     // LDA $7E0030    buttons held (low byte: A X L R)
         0x29, 0x20,                 // AND #$20       L
         0xF0, 0x02,                 // BEQ roll
@@ -58,8 +58,21 @@ public static class EncounterPatch
         0x6B,                       // done: RTL
     };
 
+    /// <summary>The routine written before 2026-11-16 had BCC done land on "roll" (SEC), so the safe steps after a
+    /// battle rolled for battles too: its branch is put right. True when it was changed.</summary>
+    public static bool FixBranch(RomBuffer rom)
+    {
+        if (!IsApplied(rom)) return false;
+        int r = RoutineOffset(rom);
+        if (r <= 0 || rom.ReadByte(r + 5) != 0x90 || rom.ReadByte(r + 6) != 0x0A || rom.ReadByte(r + 17) != 0x38 || rom.ReadByte(r + 19) != 0x6B) return false;
+        rom.WriteByte(r + 6, 0x0C);
+        rom.FixChecksum();
+        return true;
+    }
+
     public static void Apply(RomBuffer rom)
     {
+        if (FixBranch(rom)) return;
         if (IsApplied(rom)) return;
         if (!IsOriginal(rom)) throw new InvalidOperationException("The game's step code at $01:8854 isn't the original, so the hold-L patch can't be applied safely.");
         int safe = rom.ReadByte(Site + 4);

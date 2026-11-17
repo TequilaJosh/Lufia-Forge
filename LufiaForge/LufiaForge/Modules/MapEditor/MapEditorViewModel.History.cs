@@ -160,7 +160,12 @@ public partial class MapEditorViewModel
         {
             try
             {
+                // changed elsewhere since they were read here (Game Data's encounter tab): writing this copy would put
+                // the older zones back over that
+                if (!Core.Battle.Encounters.ReadZones(_rom).AsSpan().SequenceEqual(_zonesRead))
+                    return "Encounter zones: they were changed on another page since they were read here. Revert the map to read them again, then paint again.";
                 Core.Battle.Encounters.WriteZones(_rom, _zones, allowExpand: true);
+                _zonesRead = (byte[])_zones.Clone();
                 ZonesDirty = false;
                 _mainVm?.NotifyRomModified("World map encounter zones");
             }

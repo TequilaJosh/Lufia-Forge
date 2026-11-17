@@ -506,7 +506,15 @@ public static class L2AiScripts
         for (int k = 0; k < copy.Count; k++)
         {
             if (copy[k].Op != 0x43) continue;
-            if (after == null) { copy[k] = New(0x00); continue; }   // nothing after the call: end
+            if (after == null)
+            {
+                // nothing after the call: an end, and the jumps that went to the return go to it (the shared scripts
+                // jump to their 43: left pointing at it, building the script failed "a go to points at a removed step")
+                var end = New(0x00);
+                foreach (var s in copy) for (int t = 0; t < s.Targets.Length; t++) if (s.Targets[t] == copy[k]) s.Targets[t] = end;
+                copy[k] = end;
+                continue;
+            }
             var go = New(0x03); go.Targets[0] = after;
             foreach (var s in copy) for (int t = 0; t < s.Targets.Length; t++) if (s.Targets[t] == copy[k]) s.Targets[t] = go;
             copy[k] = go;
@@ -1031,7 +1039,12 @@ public static class L2AiScripts
 
     /// <summary>Writes the script for (kind, index) to the added space and points the table at it (the game's bytes
     /// stay as they are). Returns the file offset of the script.</summary>
-    public static int Save(RomBuffer rom, Kind kind, int index, IReadOnlyList<Step> steps)
+    public static int Save(RomBuffer rom, Kind kind, int index, IReadOnlyList<Step> steps) =>
+        // all or nothing: the status patch, the element rows and the game check fixes go in before the script is
+        // written, and a failure after them (a spell with no script, the table full) must not leave them behind
+        L2Rom.AllOrNothing(rom, () => SaveCore(rom, kind, index, steps));
+
+    private static int SaveCore(RomBuffer rom, Kind kind, int index, IReadOnlyList<Step> steps)
     {
         if (steps.Count == 0) throw new InvalidOperationException("The script is empty: it needs at least an End.");
         if (steps.Any(st => st.OutsideTargets.Any(o => o >= 0)))
@@ -1042,8 +1055,12 @@ public static class L2AiScripts
         if (steps.Any(st => st.Op is >= 0x5D and <= 0x61) && !L2StatusPatch.IsApplied(rom))
         {
             // the battle code goes in, and with it the element table: the game's weaknesses move there, this script's too
+            bool fresh = !L2Elements.IsIn(rom);   // no element table yet: this Apply makes it from the scripts
             L2StatusPatch.Apply(rom);
-            steps = L2Elements.MoveIncoming(rom, kind, index, steps);
+            // its element steps go to the row too (only when the row was just made from the script: an upgrade keeps
+            // the table as it was), and the script is built again without them: the old bytes would count them twice
+            if (fresh) steps = L2Elements.MoveIncoming(rom, kind, index, steps);
+            body = Build(steps, 1);
         }
         // an attack with a second element on a type's (a fire sword that is also vs dragons): the game's dragon, insect,
         // flying and hard shell checks want the element alone, so they get bit tests

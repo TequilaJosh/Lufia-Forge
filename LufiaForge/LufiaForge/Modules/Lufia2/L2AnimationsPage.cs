@@ -109,9 +109,17 @@ public partial class L2AnimationsPage : ObservableObject
 
     /// <summary>The page is shown: when the ROM changed since it read it (spells, IP attacks, items or monsters changed on
     /// their pages, Undo), the lists and the animation shown are read again, keeping the picks.</summary>
+    /// <summary>The page is on screen: the preview plays only then (it emulates the game and draws at 60 Hz).</summary>
+    private bool _visible;
+
+    /// <summary>Another page was picked: the preview stops.</summary>
+    public void Hidden() { _visible = false; _timer.Stop(); }
+
     public void Shown()
     {
-        if (_rom == null || _rom.Version == _readVersion) return;
+        bool was = _visible;
+        _visible = true;
+        if (_rom == null || _rom.Version == _readVersion) { if (!was && !_timer.IsEnabled) Play(); return; }
         var (sprite, pal) = Monster >= 0 && Monster < _monsters.Count ? _monsters[Monster] : (-1, 0);
         int spell = SpellChoice, ipc = IpChoice, item = ItemChoice;
         ReadMonsters();
@@ -177,7 +185,7 @@ public partial class L2AnimationsPage : ObservableObject
         TimingInfo = Timings.Count == 0
             ? "Its steps keep the length they start with (one frame), so it has no lengths to change here."
             : "How many frames each wait lasts in the scripts of this animation (one line per place that sets it). Longer steps play it slower. Lengths marked 1-20 take 1, 2, 3, 4, 5, 6, 8, 10 or 20.";
-        Play();
+        if (_visible) Play();   // (not while another page is shown: opening a project and every Undo read this page too)
     }
 
     // ── preview ───────────────────────────────────────────────────────────────

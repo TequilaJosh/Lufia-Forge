@@ -58,6 +58,7 @@ public partial class Lufia2ViewModel : ObservableObject
     public void PageShown(string header)
     {
         _main?.WritePendingEdits();
+        if (header != "Animations") Animations.Hidden();
         switch (header)
         {
             case "Maps": Maps.Shown(); break;

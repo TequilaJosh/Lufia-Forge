@@ -50,6 +50,19 @@ public abstract partial class L2Page : ObservableObject
     protected RomBuffer? Rom;
     protected MainViewModel? Main;
     protected bool Loading;
+
+    /// <summary>A number typed for a byte / word field, kept in its range (300 went in as 44, 70000 as 4464, -1 as 65535,
+    /// while the box still showed what was typed).</summary>
+    protected static byte B(int v) => (byte)Math.Clamp(v, 0, 0xFF);
+    protected static ushort W(int v) => (ushort)Math.Clamp(v, 0, 0xFFFF);
+
+    /// <summary>Shows values again without writing (after a value was kept in its range).</summary>
+    protected void ShowBack(Action set)
+    {
+        bool was = Loading;
+        Loading = true;
+        try { set(); } finally { Loading = was; }
+    }
     /// <summary>The ROM's <see cref="RomBuffer.Version"/> when the page last read it (or wrote it itself).</summary>
     private int _readVersion = -1;
 
@@ -504,8 +517,9 @@ public partial class L2MonstersPage : L2Page
     {
         if (_m == null) return null;
         string oldName = _m.Name;   // (before the name typed goes in: a rename is a change the other pages show)
-        _m.Name = Name; _m.Level = (byte)Level; _m.Hp = (ushort)Hp; _m.Mp = (ushort)Mp; _m.Atp = (ushort)Atp; _m.Dfp = (ushort)Dfp;
-        _m.Agl = (byte)Agl; _m.Int = (byte)Int; _m.Gut = (byte)Gut; _m.Mgr = (byte)Mgr; _m.Exp = (ushort)Exp; _m.Gold = (ushort)Gold;
+        _m.Name = Name; _m.Level = B(Level); _m.Hp = W(Hp); _m.Mp = W(Mp); _m.Atp = W(Atp); _m.Dfp = W(Dfp);
+        _m.Agl = B(Agl); _m.Int = B(Int); _m.Gut = B(Gut); _m.Mgr = B(Mgr); _m.Exp = W(Exp); _m.Gold = W(Gold);
+        ShowBack(() => { Level = _m.Level; Hp = _m.Hp; Mp = _m.Mp; Atp = _m.Atp; Dfp = _m.Dfp; Agl = _m.Agl; Int = _m.Int; Gut = _m.Gut; Mgr = _m.Mgr; Exp = _m.Exp; Gold = _m.Gold; });
         byte oldSprite = _m.Sprite, oldPalette = _m.Palette;
         _m.Sprite = (byte)Math.Clamp(Sprite, 1, L2MonsterSprites.Count(Rom!)); _m.Palette = (byte)Math.Clamp(Palette, 0, 255);
         if (HasDrop) { _m.DropItem = DropItem; _m.DropChance = DropChance; }
@@ -615,11 +629,12 @@ public partial class L2ItemsPage : L2Page
     protected override string? Write()
     {
         if (_it == null) return null;
-        _it.Name = Name; _it.Price = (ushort)Price; _it.EquipType = (byte)EquipType; _it.Icon = (byte)Icon;
+        _it.Name = Name; _it.Price = W(Price); _it.EquipType = B(EquipType); _it.Icon = B(Icon);
+        ShowBack(() => { Price = _it.Price; Icon = _it.Icon; });
         _it.Use = (byte)FlagValue(UseFlags); _it.EquipBy = (byte)FlagValue(EquipBy);
         foreach (var w in Words)
         {
-            if (w.InRecord) _it.Values[w.Bit] = (ushort)w.Value;
+            if (w.InRecord) { _it.Values[w.Bit] = W(w.Value); if (w.Value != _it.Values[w.Bit]) { var ww = w; ShowBack(() => ww.Value = _it.Values[ww.Bit]); } }
             // an added word only when it was changed here (the Animations page gives items an animation word too)
             else if (_addedAtLoad.GetValueOrDefault(w.Bit) != (w.Has, w.Value))
             {
@@ -727,7 +742,8 @@ public partial class L2SpellsPage : L2Page
         if (_s == null) return null;
         // the record as the ROM has it now (moving the spells, from any page, gives it a new place)
         _s = L2Battle.ReadSpell(Rom!, _s.Index);
-        _s.Name = Name; _s.Mp = (ushort)Mp; _s.Price = (ushort)Price; _s.Target = (byte)Target;
+        _s.Name = Name; _s.Mp = W(Mp); _s.Price = W(Price); _s.Target = B(Target);
+        ShowBack(() => { Mp = _s.Mp; Price = _s.Price; });
         _s.Flags = (byte)(_s.Flags & 0x3F | (InMenu ? 0x40 : 0) | (InBattle ? 0x80 : 0));
         _s.LearnBy = (byte)FlagValue(LearnBy);
         L2Battle.WriteSpell(Rom!, _s);

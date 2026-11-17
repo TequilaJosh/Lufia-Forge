@@ -62,13 +62,17 @@ public sealed class BookmarkStore
 
     public void Add(int snesAddress, string label, string? comment = null, string colorHex = "#C8942A")
     {
+        // a bookmark put on a line marked as data keeps the data mark (it was lost, and the line turned back into code)
+        int dataLength = _map.TryGetValue(snesAddress, out var had) ? had.DataLength : 0;
         _map[snesAddress] = new Bookmark
         {
             SnesAddress = snesAddress,
             Label       = label,
             Comment     = comment,
             ColorHex    = colorHex,
+            DataLength  = dataLength,
         };
+        _regions = null;
         Save();
     }
 

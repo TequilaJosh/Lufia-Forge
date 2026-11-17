@@ -95,7 +95,10 @@ public sealed class AudioOut : IDisposable
     public void Dispose()
     {
         _stop = true;
-        _thread?.Join(500);
+        // the playback thread still filling a buffer (a slow fill) must be gone before the device and the buffers it
+        // writes to are freed: freeing them under it was an access violation, which ends the app with no recovery copy.
+        // One that doesn't stop keeps them (a few KB left behind)
+        if (_thread != null && !_thread.Join(500) && !_thread.Join(3000)) return;
         if (_wave != IntPtr.Zero)
         {
             waveOutReset(_wave);

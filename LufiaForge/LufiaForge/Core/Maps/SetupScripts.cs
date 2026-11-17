@@ -223,14 +223,17 @@ public static class SetupScripts
         // new characters, and hidden ones given a sprite again (hiding took their 41+n out)
         var add = map.Npcs.Where(n => (n.Index >= map.LoadedNpcCount || map.HiddenAtLoad.Contains(n.Index)) && !n.IsUnused && !on.Contains(n.Index) && n.Index < 0x3F)
                           .Select(n => n.Index).ToList();
-        // talking to a character runs event n: one with no script would run whatever the slot points at (a number
-        // past the event table grows it)
-        foreach (int i in add)
-            if (!MapEvents.HasEvent(rom, map.MapId, i)) MapEvents.Create(rom, map.MapId, i);
         var off = map.Npcs.Where(n => n.IsUnused && on.Contains(n.Index)).Select(n => n.Index).ToHashSet();
+        // characters switched on that the map no longer has at all (the last one taken out, an Undo after a save)
+        off.UnionWith(on.Where(i => i >= map.Npcs.Count));
         if (add.Count == 0 && off.Count == 0) { map.MarkNpcsSaved(); return false; }
+        // (before anything is made: making the events below expands the ROM)
         if (!allowExpand && rom.Length < MapWriter.ExpandedSize)
             throw new InvalidOperationException("Switching characters on or off needs the ROM expanded to 2 MB.");
+        // talking to character n runs event n + 1: one with no script would run whatever the slot points at (a
+        // number past the event table grows it)
+        foreach (int i in add)
+            if (!MapEvents.HasEvent(rom, map.MapId, MapEvents.TalkEvent(i))) MapEvents.Create(rom, map.MapId, MapEvents.TalkEvent(i));
         var (ops, _) = Parse(s);
         var n2 = (byte[])s.Clone();
         foreach (int p in ops) if (n2[p] > Nothing && n2[p] < 0x80 && off.Contains(n2[p] - CharacterOn)) n2[p] = Nothing;

@@ -93,7 +93,7 @@ public sealed class MoveStep
     public bool UpperLayer { get => (Mode & 1) != 0; set => Mode = value ? Mode | 1 : Mode & ~1; }
 }
 
-/// <summary>An NPC (object section C, 14 bytes). NPC n runs event n of the map's script block.</summary>
+/// <summary>An NPC (object section C, 14 bytes). Talking to NPC n runs event n + 1 of the map's script block (MapEvents.TalkEvent).</summary>
 /// <summary>A step-on trigger area (object section D): walking into it runs event (event base + index + 1), once the
 /// map's setup script enables it (opcode 81+index). Bytes 0-3 are filled in by the game at run time.</summary>
 public sealed class MapTrigger
@@ -315,7 +315,11 @@ public sealed class LufiaMap
         int block = 0x18000 + (rom.ReadByte(p) | (rom.ReadByte(p + 1) << 8) | (rom.ReadByte(p + 2) << 16));
         if (block + ev * 2 + 1 >= rom.Length) return -1;
         int rel = rom.ReadUInt16Le(block + ev * 2);
-        return rel == 0xFFFF ? -1 : block + rel;
+        // FFFF: none. An entry pointing into the table itself isn't a script either: entry 0 of most maps is the event
+        // base (a marker), and 0 / 1 mean none; the table is at least base + 1 entries long. Read as a script, editing
+        // it wrote over the table
+        if (rel == 0xFFFF || rel < 2 * (EventBase(rom, mapId) + 1)) return -1;
+        return block + rel;
     }
 
     // ── Objects ────────────────────────────────────────────────────────────
@@ -744,7 +748,7 @@ public sealed class LufiaMap
         Tileset = tileset; PaletteIndex = palette;
     }
 
-    /// <summary>Adds an NPC at the end (NPC n runs event n of the map's script), or with number <paramref name="index"/>:
+    /// <summary>Adds an NPC at the end (talking to NPC n runs event n + 1 of the map's script), or with number <paramref name="index"/>:
     /// the numbers before it are kept as hidden characters (sprite FF), so it gets the event it should.</summary>
     public MapNpc AddNpc(int sprite, int x, int y, int index = -1)
     {

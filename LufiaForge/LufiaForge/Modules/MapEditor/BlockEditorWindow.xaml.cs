@@ -287,12 +287,13 @@ public partial class BlockEditorWindow : Window
             StatusText.Text = "Written: " + _set.Save(_rom, allow);
             Wrote = true;
         }
-        catch (InvalidOperationException) when (!allow)
+        // (only "no room": the work RAM check fails the same way expanded or not)
+        catch (InvalidOperationException ex) when (!allow && !ex.Message.Contains("work RAM", StringComparison.OrdinalIgnoreCase))
         {
             if (MessageBox.Show(this, "The changed graphics or blocks no longer fit in their original space. Expand the ROM to 2 MB (the game plays the same)?",
                     "Expand ROM?", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) { StatusText.Text = "Not written: the ROM wasn't expanded."; return; }
-            StatusText.Text = "Written: " + _set.Save(_rom, true);
-            Wrote = true;
+            try { StatusText.Text = "Written: " + _set.Save(_rom, true); Wrote = true; }
+            catch (Exception ex2) { StatusText.Text = "Couldn't write: " + ex2.Message; }
         }
         catch (Exception ex) { StatusText.Text = "Couldn't write: " + ex.Message; }
     }

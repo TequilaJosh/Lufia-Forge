@@ -27,6 +27,9 @@ public partial class SubgroupRow : ObservableObject
 public partial class MapGroupRow : ObservableObject
 {
     public int Offset { get; init; }
+    /// <summary>The group the setup script had there when the row was read (only a changed row is written, and only
+    /// while that byte still is a "0D group" of the same group).</summary>
+    public int LoadedGroup { get; init; }
     public string Map { get; init; } = "";
     public bool Conditional { get; init; }
     /// <summary>The map has visible monsters (then no random battles).</summary>
@@ -183,7 +186,7 @@ public partial class EncounterEditorViewModel : GameDataEditorBase
         MapGroups.Clear();
         foreach (var (id, label) in _mapLabels.OrderBy(kv => kv.Key))
             foreach (var g in Encounters.MapGroups(Ctx!.Rom, id))
-                MapGroups.Add(new MapGroupRow { Offset = g.Offset, Map = label, Conditional = g.Conditional, Group = g.Group.ToString("X2"), Monsters = VisibleMonsters.Monsters(Ctx.Rom, id).Count > 0 });
+                MapGroups.Add(new MapGroupRow { Offset = g.Offset, LoadedGroup = g.Group, Map = label, Conditional = g.Conditional, Group = g.Group.ToString("X2"), Monsters = VisibleMonsters.Monsters(Ctx.Rom, id).Count > 0 });
     }
 
     partial void OnSelectedIndexChanged(int value)
@@ -386,6 +389,9 @@ public partial class EncounterEditorViewModel : GameDataEditorBase
             return;
         }
         int n = groups.Count;
+        // every edited subgroup (the ones of other groups kept from before too) must have a monster: the game hangs on one without
+        foreach (var (s, m) in _pending)
+            if (!Encounters.HasMonster(m)) { Refuse($"Subgroup {s:X2} has no monsters: the game would hang looking for one. Pick at least one."); return; }
         bool ok = false;
         Commit($"New encounter group {n:X2}", () =>
         {
@@ -434,11 +440,19 @@ public partial class EncounterEditorViewModel : GameDataEditorBase
         foreach (var r in Rows)
             if (!Encounters.HasMonster(RowMonsters(r)))
             { Refuse($"{r.Title} has no monsters: the game would hang looking for one. Pick at least one."); return; }
+        // (the edits kept from subgroups no longer shown are written too: the same check for them)
+        if (IsGroup)
+            foreach (var (s, m) in _pending)
+                if (!Encounters.HasMonster(m)) { Refuse($"Subgroup {s:X2} has no monsters: the game would hang looking for one. Pick at least one."); return; }
         var mapEdits = new List<(int Offset, int Group)>();
         foreach (var r in MapGroups)
         {
             if (!int.TryParse(r.Group, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int g) || g < 1 || g > Count)
             { Refuse($"{r.Map}: the group must be 01-{Count:X2}."); return; }
+            if (g == r.LoadedGroup) continue;   // only the changed ones
+            // the setup script may have moved since the rows were read (another page changed it): never write there
+            if (rom.ReadByte(r.Offset - 1) != 0x0D || rom.ReadByte(r.Offset) != r.LoadedGroup)
+            { Refuse($"{r.Map}'s setup script changed since this list was read: open the tab again, then change its group."); return; }
             mapEdits.Add((r.Offset, g));
         }
         bool written;

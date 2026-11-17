@@ -130,6 +130,9 @@ public partial class PatchManagerViewModel : ObservableObject
         // the tabs' edits not written yet go in first (a reload afterwards would drop them, and a page writing them
         // later could put back bytes the patch changed)
         _mainVm?.WritePendingEdits();
+        // a patch that fails partway (the ROM full, a hack's data in the way) is taken back whole: the bytes it wrote
+        // before failing would otherwise stay, unannounced, and go into the next change's Undo step
+        var before = _rom.ToArray();
         try
         {
             if (adding) patch.Apply(_rom); else patch.Remove!(_rom);
@@ -137,7 +140,11 @@ public partial class PatchManagerViewModel : ObservableObject
             if (patch.ReloadsAll) _mainVm?.ReloadModules();
             StatusText = (adding ? "Added: " : "Removed: ") + patch.Name + ". Save Project keeps it.";
         }
-        catch (Exception ex) { StatusText = "Not changed: " + ex.Message; }
+        catch (Exception ex)
+        {
+            if (!_rom.SameAs(before)) _rom.ReplaceAll(before);
+            StatusText = "Not changed: " + ex.Message;
+        }
         RefreshBuiltIn();
     }
 
@@ -315,11 +322,21 @@ public partial class PatchManagerViewModel : ObservableObject
 
             // data Lufia Forge keeps in the added space (moved maps, scripts, patch routines, its space table):
             // a patch written for another ROM can overwrite or cut it off, leaving pointers to garbage
-            if (_rom.Length >= Core.Maps.MapWriter.ExpandedSize)
+            // (Lufia II keeps it differently: the used part of each added space, and its 16-byte mark. Lufia 1's space
+            // table sits where Lufia II has game data, so reading it there warned about the wrong bytes and missed these)
+            List<(int Start, int End)>? blocks = null;
+            if (_rom.IsLufia2)
+                blocks = Core.Lufia2.L2Rom.Spaces(_rom).SelectMany(s => new[] { (s.Start, s.Next), (s.Mark, s.Mark + 16) }).Where(b => b.Item2 > b.Item1)
+                    .Select(b => (Start: b.Item1, End: b.Item2)).ToList();
+            else if (_rom.Length >= Core.Maps.MapWriter.ExpandedSize)
             {
                 var space = Core.Maps.ExpansionSpace.Load(_rom);
-                var blocks = space.Entries.Where(b => b.Kind != Core.Maps.ExpansionSpace.Kind.Unknown)
-                    .Append(new Core.Maps.ExpansionSpace.Entry(Core.Maps.ExpansionSpace.TableStart, Core.Maps.ExpansionSpace.TableSize, Core.Maps.ExpansionSpace.Kind.Unknown, 0xFFFF));
+                blocks = space.Entries.Where(b => b.Kind != Core.Maps.ExpansionSpace.Kind.Unknown)
+                    .Append(new Core.Maps.ExpansionSpace.Entry(Core.Maps.ExpansionSpace.TableStart, Core.Maps.ExpansionSpace.TableSize, Core.Maps.ExpansionSpace.Kind.Unknown, 0xFFFF))
+                    .Select(b => (b.Start, b.End)).ToList();
+            }
+            if (blocks != null && blocks.Count > 0)
+            {
                 int hit = 0;
                 foreach (var b in blocks)
                 {
@@ -352,7 +369,7 @@ public partial class PatchManagerViewModel : ObservableObject
             if (confirm != MessageBoxResult.Yes) return;
 
             _rom.ReplaceAll(patched);
-            _mainVm?.NotifyRomModified();
+            _mainVm?.NotifyRomModified($"IPS patch \"{LoadedPatchName}\" applied");
             // every tab reloads from the patched bytes (open editors still held the old maps, names, offsets)
             _mainVm?.ReloadModules();
 

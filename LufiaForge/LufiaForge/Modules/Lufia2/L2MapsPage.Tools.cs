@@ -436,7 +436,15 @@ public partial class L2MapsPage
     /// <summary>The area being dragged or picked (x1, y1, x2, y2; x2 / y2 not included), in blocks.</summary>
     public (int X1, int Y1, int X2, int Y2)? AreaRect
     {
-        get => _areaRect;
+        // kept inside the map as it is now: an area dragged before a resize (or an Undo of one) reached past the
+        // edge, and Copy / Cut / Fill / Delete then wrote into the next row or past the end
+        get
+        {
+            if (_areaRect is not { } r) return null;
+            int w = _world != null ? L2WorldMap.Size : _edit?.Width ?? 0, h = _world != null ? L2WorldMap.Size : _edit?.Height ?? 0;
+            var c = (X1: Math.Clamp(r.X1, 0, w), Y1: Math.Clamp(r.Y1, 0, h), X2: Math.Clamp(r.X2, 0, w), Y2: Math.Clamp(r.Y2, 0, h));
+            return c.X2 > c.X1 && c.Y2 > c.Y1 ? c : null;
+        }
         set
         {
             _areaRect = value;

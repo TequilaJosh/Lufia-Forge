@@ -176,6 +176,9 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
             string? rom = PrepareRom?.Invoke() ?? _pendingRomPath;
             await _host.LaunchAsync(DefaultEmuHawkPath, rom);
             IsBizHawkRunning = _host.IsRunning;
+            // a BizHawk that was open already keeps playing what it had: the Lufia Forge tool in it loads the ROM just
+            // written (within a second)
+            if (_host.LastLaunchAttached && rom != null) { WriteLoadRomCommand(rom); ConnectionStatus = "BizHawk was open already: it loads the project's ROM now."; }
         }
         catch (Exception ex)
         {

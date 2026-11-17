@@ -150,6 +150,9 @@ public sealed class BizHawkHost : IDisposable
     /// Launches EmuHawk.exe, waits for its main window, and reparents it.
     /// If BizHawk is already running, attaches to the existing instance.
     /// </summary>
+    /// <summary>The last <see cref="LaunchAsync"/> took a BizHawk that was running already (it didn't get the ROM).</summary>
+    public bool LastLaunchAttached { get; private set; }
+
     public async Task LaunchAsync(string emuHawkPath, string? romPath = null)
     {
         // If already embedded, do nothing
@@ -161,8 +164,10 @@ public sealed class BizHawkHost : IDisposable
         }
 
         // First, check if BizHawk is already running
+        LastLaunchAttached = false;
         if (TryFindRunningBizHawk())
         {
+            LastLaunchAttached = true;
             StatusChanged?.Invoke("Found running BizHawk - embedding...");
             await Task.Delay(300);
             ReparentWindow();

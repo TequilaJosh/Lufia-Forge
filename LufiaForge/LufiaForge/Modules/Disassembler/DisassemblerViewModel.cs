@@ -110,13 +110,17 @@ public partial class DisassemblerViewModel : ObservableObject
         BizHawkBridge.CpuSnapshotReady += OnCpuSnapshot;
     }
 
+    private CancellationTokenSource? _xrefCts;
+
     public void SetRom(RomBuffer rom)
     {
         _rom = rom;
         _bookmarks.Open(rom.FilePath);
         RefreshBookmarkList();
         DisassemblyLines.Clear();
-        _xref.Xref.Clear();
+        // a build still going is for the ROM before: it is stopped, and its index never put in
+        _xrefCts?.Cancel();
+        _xref.Clear();
         IsXrefBuilt   = false;
         LivePcSnesAddress    = null;
         _currentPcLine       = null;
@@ -168,7 +172,7 @@ public partial class DisassemblerViewModel : ObservableObject
 
         // Re-apply current PC highlight
         if (LivePcSnesAddress.HasValue)
-            ApplyPcHighlight(LivePcSnesAddress.Value);
+            { if (RomPc(LivePcSnesAddress.Value) is int pc and >= 0) ApplyPcHighlight(pc); }
 
         StatusText = $"Disassembled {lines.Count} instruction(s) from ${startAddr:X6}  " +
                      $"({byteCount} bytes requested)  |  M={Bit(FlagM)} X={Bit(FlagX)}";
@@ -441,9 +445,13 @@ public partial class DisassemblerViewModel : ObservableObject
             XrefProgress = p;
         });
 
+        _xrefCts?.Cancel();
+        var cts = _xrefCts = new CancellationTokenSource();
+        var rom = _rom;
         try
         {
-            await _xref.BuildAsync(_rom, _bookmarks, progress);
+            await _xref.BuildAsync(rom, _bookmarks, progress, cts.Token);
+            if (cts.IsCancellationRequested || rom != _rom) throw new OperationCanceledException();
             IsXrefBuilt    = true;
             IsXrefBuilding = false;
             StatusText     = $"Cross-reference complete: {_xref.Xref.Count:N0} unique targets indexed; " +
@@ -472,18 +480,32 @@ public partial class DisassemblerViewModel : ObservableObject
         System.Windows.Application.Current?.Dispatcher.BeginInvoke(() =>
         {
             LivePcSnesAddress = snapshot.SnesAddress;
-            ApplyPcHighlight(snapshot.SnesAddress);
+            // the lines are labelled in banks $80 up (FileOffsetToSnesAddress); Lufia 1 runs in $00-$3F, the same ROM:
+            // compared as is, the PC never matched. A PC in RAM ($7E/$7F, or below $8000) isn't ROM code: not followed
+            int pc = RomPc(snapshot.SnesAddress);
+            if (pc < 0) { ClearPcHighlight(); return; }
+            ApplyPcHighlight(pc, snapshot.FlagM, snapshot.FlagX);
         });
     }
 
-    private void ApplyPcHighlight(int snesAddress)
+    /// <summary>A PC as the lines label it (banks $80 up), or -1 when it isn't in the ROM (RAM, below $8000).</summary>
+    private static int RomPc(int snes)
+    {
+        int bank = snes >> 16 & 0xFF, addr = snes & 0xFFFF;
+        return addr < 0x8000 || bank is 0x7E or 0x7F ? -1 : ((bank & 0x7F) | 0x80) << 16 | addr;
+    }
+
+    private void ClearPcHighlight()
+    {
+        if (_currentPcLine == null) return;
+        _currentPcLine.IsCurrentPc = false;
+        _currentPcLine = null;
+    }
+
+    private void ApplyPcHighlight(int snesAddress, bool? liveM = null, bool? liveX = null)
     {
         // Clear old highlight
-        if (_currentPcLine != null)
-        {
-            _currentPcLine.IsCurrentPc = false;
-            _currentPcLine = null;
-        }
+        ClearPcHighlight();
 
         var line = DisassemblyLines.FirstOrDefault(l => l.SnesAddress == snesAddress);
 
@@ -494,6 +516,10 @@ public partial class DisassemblerViewModel : ObservableObject
         {
             _lastFollowPcAddress = snesAddress;
             AddressText = $"${snesAddress:X6}";
+            // decoded with the CPU's own M and X flags there (with the toolbar's, LDA #$1234 in 16-bit code was read as
+            // LDA #$34 and every line after it went wrong)
+            if (liveM is bool m) FlagM = m;
+            if (liveX is bool x) FlagX = x;
             Disassemble();
             line = DisassemblyLines.FirstOrDefault(l => l.SnesAddress == snesAddress);
         }

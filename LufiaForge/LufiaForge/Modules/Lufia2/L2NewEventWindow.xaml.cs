@@ -186,6 +186,9 @@ public partial class L2NewEventWindow : Window
         if (L2EventText.Check(text, _rom) is { } problem) { ChoiceText.Text = problem; return; }
         int flag = OnceCheck.IsChecked == true && AfterRadio.IsChecked != true ? _flag : -1;
         int block = L2Events.Block(_rom, _map);
+        // the new character goes in before its event: when the event can't be added (no room), the ROM goes back as it
+        // was (else the character stayed, outside Undo and the change log)
+        var before = _rom.ToArray();
         try
         {
             if (TalkRadio.IsChecked == true || NewCharRadio.IsChecked == true)
@@ -227,7 +230,11 @@ public partial class L2NewEventWindow : Window
             }
             try { DialogResult = true; } catch (InvalidOperationException) { Close(); }
         }
-        catch (Exception ex) { ChoiceText.Text = "Not made: " + ex.Message; }
+        catch (Exception ex)
+        {
+            if (!_rom.SameAs(before)) _rom.ReplaceAll(before);
+            ChoiceText.Text = "Not made: " + ex.Message;
+        }
     }
 
     private void Cancel_Click(object sender, RoutedEventArgs e) => DialogResult = false;

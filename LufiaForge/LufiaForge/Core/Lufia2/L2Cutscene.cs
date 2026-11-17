@@ -1005,14 +1005,15 @@ public static class L2Cutscene
         if (s.Problem != null) throw new InvalidOperationException("The map's \"on entering\" event can't be changed: " + s.Problem);
         var rest = s.Steps[0];
         var add = new List<L2Step>();
-        L2Step Skip(int op, int f) { var st = new L2Step { Bytes = new byte[] { (byte)op, (byte)f, 0, 0 } }; st.Jumps.Add(new L2Jump { Step = rest }); return st; }
-        add.Add(Skip(0x15, played));
-        if (flag >= 0) add.Add(Skip(mustBeOn ? 0x6A : 0x15, flag));
-        add.Add(new L2Step { Bytes = new byte[] { 0x1A, (byte)played } });
+        // (story flags 00-FF or the extra 100-17F: L2ExtraFlags picks the command)
+        L2Step Skip(L2ExtraFlags.Use use, int f) { var st = new L2Step { Bytes = L2ExtraFlags.Step(use, f) }; st.Jumps.Add(new L2Jump { Step = rest }); return st; }
+        add.Add(Skip(L2ExtraFlags.Use.IfOn, played));
+        if (flag >= 0) add.Add(Skip(mustBeOn ? L2ExtraFlags.Use.IfOff : L2ExtraFlags.Use.IfOn, flag));
+        add.Add(new L2Step { Bytes = L2ExtraFlags.Step(L2ExtraFlags.Use.On, played) });
         add.Add(new L2Step { Bytes = new byte[] { 0x16, (byte)map, (byte)scene, (byte)point } });
         s.Steps.InsertRange(0, add);
         if (entry != null) L2EventBlocks.Save(rom, map, entry, s); else L2EventBlocks.Add(rom, map, L2EventBlocks.GameList, 1, s);
-        return $"It plays when the party enters the map{(flag >= 0 ? $" while story flag {flag:X2} is {(mustBeOn ? "on" : "off")}" : "")}, once (story flag {played:X2}), with the party on point {point}.";
+        return $"It plays when the party enters the map{(flag >= 0 ? $" while story flag {L2ExtraFlags.Number(flag)} is {(mustBeOn ? "on" : "off")}" : "")}, once (story flag {L2ExtraFlags.Number(played)}), with the party on point {point}.";
     }
 
     /// <summary>The "on entering" steps that start scene <paramref name="scene"/> of this map: (played flag, condition
@@ -1027,18 +1028,22 @@ public static class L2Cutscene
         for (int i = 0; i < st.Count; i++)
         {
             if (!Is(st[i], 0x16, 4) || st[i].Bytes[1] != map || st[i].Bytes[2] != scene) continue;
-            int played = i >= 1 && Is(st[i - 1], 0x1A, 2) ? st[i - 1].Bytes[1] : -1;
+            int played = i >= 1 && !st[i - 1].IsText && L2ExtraFlags.Of(st[i - 1].Bytes) is (L2ExtraFlags.Use.On, var pf) ? pf : -1;
             int flag = -1; bool on = true;
-            if (i >= 3 && (Is(st[i - 2], 0x6A, 4) || Is(st[i - 2], 0x15, 4)) && st[i - 2].Bytes[1] != played) { flag = st[i - 2].Bytes[1]; on = st[i - 2].Op == 0x6A; }
+            if (i >= 3 && !st[i - 2].IsText && L2ExtraFlags.Of(st[i - 2].Bytes) is (L2ExtraFlags.Use.IfOn or L2ExtraFlags.Use.IfOff, var cf) use && cf != played)
+            { flag = cf; on = use.Use == L2ExtraFlags.Use.IfOff; }
             return (played, flag, on, st[i].Bytes[3]);
         }
         return null;
     }
 
     /// <summary>The story flag a cutscene checks first to play once ("if it is on, go to the end"), or -1.</summary>
-    public static int OnceFlag(L2EventScript script) =>
-        script.Steps.Count > 1 && Is(script.Steps[0], 0x15, 4) && script.Steps.Skip(1).Take(3).Any(s => Is(s, 0x1A, 2) && s.Bytes[1] == script.Steps[0].Bytes[1])
-            ? script.Steps[0].Bytes[1] : -1;
+    public static int OnceFlag(L2EventScript script)
+    {
+        // (story flags 00-FF or the extra 100-17F: 15 / CF, then 1A / CD of the same flag)
+        if (script.Steps.Count < 2 || script.Steps[0].IsText || L2ExtraFlags.Of(script.Steps[0].Bytes) is not (L2ExtraFlags.Use.IfOn, var f)) return -1;
+        return script.Steps.Skip(1).Take(3).Any(s => !s.IsText && L2ExtraFlags.Of(s.Bytes) == (L2ExtraFlags.Use.On, f)) ? f : -1;
+    }
 
     /// <summary>The story flags an event needs on to play, when with none on it only checks and ends (the game's own
     /// cutscenes check the story so far: North Lighthouse 6F's step-on area 1 plays only with flag 37 on and 39 off):

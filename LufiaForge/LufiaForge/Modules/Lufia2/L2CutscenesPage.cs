@@ -189,7 +189,13 @@ public partial class L2CutscenesPage : ObservableObject
         HasSelection = value != null;
         if (_filling || value == null || _rom == null || _main == null) return;
         if (Editor.Event?.Entry is { } open && Editor.Map == value.Map && open.Head == value.Entry.Head && open.Id == value.Entry.Id) return;
-        if (!Editor.ConfirmLeave()) return;
+        if (!Editor.ConfirmLeave())
+        {
+            // kept: the list shows the cutscene the editor still has (else Delete would take out the other one)
+            var shown = Cutscenes.FirstOrDefault(c => Editor.Event?.Entry is { } e && c.Map == Editor.Map && c.Entry.Head == e.Head && c.Entry.Id == e.Id);
+            System.Windows.Application.Current?.Dispatcher.BeginInvoke(() => { _filling = true; Selected = shown; _filling = false; HasSelection = shown != null; });
+            return;
+        }
         if (!Editor.Load(_rom, _main, value.Map, value.Entry.Head, value.Entry.Id)) Status = "That cutscene isn't on the map any more.";
     }
 
@@ -207,6 +213,8 @@ public partial class L2CutscenesPage : ObservableObject
     public void Reload()
     {
         if (_rom == null) return;
+        // the open cutscene too (the pop-up editor may have changed it or its map), unless it has unwritten steps
+        Editor.Shown();
         Read();   // (the filter keeps the picked cutscene, by its map and entry, without opening it again)
     }
 

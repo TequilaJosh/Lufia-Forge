@@ -112,7 +112,10 @@ public static class L2GameStart
                 if (e == null) return text + ".";
             }
             if (!IsLeaderScene(rom, block + e.Offset)) return text + $". Scene {scene:X2} plays.";
-            var copy = L2EventScript.Read(rom, block + e.Offset, block).Steps.Skip(3).ToList();
+            // past the start's own steps: 2D 00, 59 18, 76 and (since 2026-11) AA
+            var all = L2EventScript.Read(rom, block + e.Offset, block).Steps;
+            int skip = all.Count > 3 && !all[3].IsText && all[3].Bytes.Length == 1 && all[3].Bytes[0] == 0xAA ? 4 : 3;
+            var copy = all.Skip(skip).ToList();
             if (copy.Count <= 1) return text + ". No cutscene plays.";
             foreach (var c in Cutscenes(rom, map).Where(c => c.Head == L2EventBlocks.TriggerList))
                 if (Script(rom, map, c) is { } s && Same(s.Steps, copy)) return text + $". {c.Title.Split(':')[0]} plays.";
@@ -148,6 +151,8 @@ public static class L2GameStart
             int op = rom.ReadByte(p);
             if (op == 0x1A) { flags.Add(rom.ReadByte(p + 1)); p += 2; }
             else if (op == L2ExtraFlags.OpOn) { flags.Add(L2ExtraFlags.First + rom.ReadByte(p + 1)); p += 2; }
+            // the party's joins and leaves with their flags (L2MapEdit.StartWithFlags writes them, as IsFlagSetter reads)
+            else if (op is 0x1B or 0x2B or 0x2C) p += 2;
             else if (op == 0x1D) p += 3;
             else if (op == 0x35) p += 4;
             else return op == 0x16 ? (flags, rom.ReadByte(p + 2)) : null;

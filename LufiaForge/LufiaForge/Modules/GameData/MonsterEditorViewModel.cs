@@ -113,6 +113,7 @@ public partial class MonsterEditorViewModel : GameDataEditorBase
     private void NewPicture()
     {
         if (Ctx == null || SelectedIndex < 0) return;
+        if (WritePendingEdits() != null) return;   // the typed values first (the record is read again after)
         int id = SelectedIndex, old = Graphic, made = -1;
         Commit($"Monster {id:X2} picture", () =>
         {
@@ -331,12 +332,15 @@ public partial class MonsterEditorViewModel : GameDataEditorBase
         if (Ctx == null || SelectedIndex < 0) return;
         if (GiveSpells.Count == 0) { Status = "Add at least one spell."; return; }
         if (GiveSpells.Sum(g => g.Percent) > 100) { Status = "The shares add up to more than 100%."; return; }
+        // the spells as picked: writing the typed values (next) reads the record again, and the list with it
+        var give = GiveSpells.Select(g => (Clamp(g.Percent, 0, 100), Clamp(g.Spell, 0, SpellNames.Count - 1))).ToList();
+        if (WritePendingEdits() != null) return;   // the typed values first (the record is read again after)
         var rom = Ctx.Rom;
         int id = SelectedIndex, at = 0;
         bool gaveMp = false;
         Commit($"Monster {id:X2}'s spells", () =>
         {
-            at = LufiaForge.Core.Battle.MonsterAi.WriteSpellScript(rom, id, GiveSpells.Select(g => (Clamp(g.Percent, 0, 100), Clamp(g.Spell, 0, SpellNames.Count - 1))).ToList());
+            at = LufiaForge.Core.Battle.MonsterAi.WriteSpellScript(rom, id, give);
             int o = Ctx.MonsterOffset(id);
             if (rom.ReadUInt16Le(o + 18) == 0) { rom.WriteUInt16Le(o + 18, 40); gaveMp = true; }   // a caster needs MP
         });

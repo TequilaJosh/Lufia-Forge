@@ -68,7 +68,15 @@ public partial class CutscenesViewModel : ObservableObject, IEventHost
         _ = BuildAsync();
     }
 
+    /// <summary>The scan, kept from failing silently (it is started without being awaited: an error left the tab on
+    /// "Finding the cutscenes…" for good).</summary>
     private async Task BuildAsync()
+    {
+        try { await BuildCore(); }
+        catch (Exception ex) { IsBusy = false; Status = "The cutscenes couldn't be listed: " + ex.Message; }
+    }
+
+    private async Task BuildCore()
     {
         if (_rom == null) return;
         var rom = _rom;
@@ -115,7 +123,7 @@ public partial class CutscenesViewModel : ObservableObject, IEventHost
                     if (stage == 0) continue;
                     string hint = "";
                     try { hint = EventHints.Summarize(rom, s); } catch { }
-                    int sprite = map?.Npcs.FirstOrDefault(n => n.Index == ev && !n.IsUnused)?.Sprite ?? -1;
+                    int sprite = map?.Npcs.FirstOrDefault(n => MapEvents.TalkEvent(n.Index) == ev && !n.IsUnused)?.Sprite ?? -1;
                     found.Add(new CutsceneEntry
                     {
                         MapId = m.MapId, Event = ev, MapLabel = m.Label, Title = KnownNames.GetValueOrDefault((m.MapId, ev), ""),

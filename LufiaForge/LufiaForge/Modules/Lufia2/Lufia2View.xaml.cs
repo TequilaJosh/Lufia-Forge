@@ -33,6 +33,9 @@ public partial class Lufia2View : UserControl
         if (!editor.Load(main.RomBuffer, main, map, head, id)) { vm.Maps.Status = $"Map {map:X2} has no such event."; return; }
         var win = new L2EventEditorWindow(editor) { Owner = System.Windows.Window.GetWindow(this) };
         win.ShowDialog();
+        // the pop-up may have written this map's info (characters, paths, points, areas): the Maps page reads the map
+        // again (it wrote its own edits before the pop-up opened), so it doesn't write its older copy back later
+        vm.Maps.Shown();
         vm.Maps.Refresh();
         vm.Events.Reload();
         vm.Cutscenes.Reload();

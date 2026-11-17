@@ -16,6 +16,7 @@ public partial class MapEditorView : UserControl, LufiaForge.Modules.Common.ILoc
     public MapEditorView()
     {
         InitializeComponent();
+        MapSurface.LostMouseCapture += MapSurface_LostMouseCapture;
         // Ctrl + wheel zooms around the mouse, middle button drags the map
         LufiaForge.Modules.Common.MapNavigation.Attach(MapScroll, () => Vm?.Zoom ?? 1, z => { if (Vm != null) Vm.Zoom = z; }, 0.25, 6);
         LufiaForge.Modules.Common.MapNavigation.Attach(PaletteScroll, () => Vm?.PaletteZoom ?? 2, z => { if (Vm != null) Vm.PaletteZoom = z; }, 1, 4);
@@ -180,8 +181,15 @@ public partial class MapEditorView : UserControl, LufiaForge.Modules.Common.ILoc
 
     private void MapSurface_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
-        MapSurface.ReleaseMouseCapture();
         Vm?.OnMouseUp();
+        MapSurface.ReleaseMouseCapture();   // (after: losing the capture ends a stroke only when one is still going)
+    }
+
+    // the capture lost mid-stroke (Alt+Tab, the Windows key, a dialog): the stroke ends as on a button up, else every
+    // later edit counted as part of it and saving refused ("a map edit is in progress")
+    private void MapSurface_LostMouseCapture(object sender, MouseEventArgs e)
+    {
+        if (Vm?.InGesture == true) Vm.OnMouseUp();
     }
 
     private void MapSurface_MouseLeave(object sender, MouseEventArgs e) => Vm?.OnMouseLeave();

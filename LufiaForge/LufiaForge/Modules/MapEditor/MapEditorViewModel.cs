@@ -97,6 +97,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost, LufiaFor
     private string? _dragMode;                    // "npc", "exit-move", "exit-resize", "arrival", "new-exit"
     private (int x, int y) _dragAnchor;
     private readonly Dictionary<int, List<MapArrival>> _arrivalCache = new();
+    private int _arrivalVersion = -1;
     private readonly List<int> _destIds = new();   // map ids behind DestinationChoices (0 = this map)
 
     /// <summary>Asks the view to open the destination picker for the selected exit.</summary>
@@ -149,6 +150,8 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost, LufiaFor
     public double ZoneImageWidth => (_map?.Width ?? 0) * 16;
     public double ZoneImageHeight => (_map?.Height ?? 0) * 16;
     private byte[] _zones = Array.Empty<byte>();
+    /// <summary>The zones as the ROM had them when read (Game Data's world map tab writes them too).</summary>
+    private byte[] _zonesRead = Array.Empty<byte>();
     private const int ZoneCell = 4;   // blocks per zone cell
 
     private void LoadZones()
@@ -157,6 +160,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost, LufiaFor
         ZonesDirty = false;
         if (_rom == null || _map?.IsWorld != true) { ZoneImage = null; _zones = Array.Empty<byte>(); return; }
         try { _zones = Core.Battle.Encounters.ReadZones(_rom); } catch { _zones = Array.Empty<byte>(); }
+        _zonesRead = (byte[])_zones.Clone();
         DrawZones();
     }
 
@@ -287,11 +291,14 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost, LufiaFor
         if (_rom == null || !IsWorldMap || _zones.Length == 0) return;
         try
         {
+            if (!Core.Battle.Encounters.ReadZones(_rom).AsSpan().SequenceEqual(_zonesRead))
+            { Status = "The encounter zones were changed on another page since they were read here: Revert the map to read them again, then paint again."; return; }
             bool allow = _rom.Length >= MapWriter.ExpandedSize;
             var size = LufiaCompression.Compress(_zones).Length;
             int slot = Core.ResourceWriter.SlotSize(_rom, Core.Battle.Encounters.ZoneResource);
             if (size > slot && !allow && !ConfirmExpand("The edited encounter zones don't fit in their original space.")) return;
             var r = Core.Battle.Encounters.WriteZones(_rom, _zones, allowExpand: true);
+            _zonesRead = (byte[])_zones.Clone();
             ZonesDirty = false;
             _mainVm?.NotifyRomModified("World map encounter zones");
             Status = r.Moved ? $"Encounter zones written at 0x{r.FileOffset:X6} (moved; {r.CompressedSize} bytes)." : $"Encounter zones written in place ({r.CompressedSize} of {r.SlotSize} bytes).";
@@ -414,8 +421,9 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost, LufiaFor
             _populatingName = false;
             return;
         }
-        // the map's edits go into the project on their own; only when they can't be written, ask
-        if (HasUnappliedChanges && !FlushPendingEdits(out var flushError) &&
+        // the map's edits (and painted world map battle zones) go into the project on their own; only when they can't
+        // be written, ask. (Zones painted without Write zones were dropped here without a word: LoadMap reads them again)
+        if (HasPendingEdits && WritePendingEdits() is string flushError &&
             MessageBox.Show($"This map's edits couldn't be written ({flushError}). Discard them?", "Unsaved map edits",
                 MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
         {
@@ -761,7 +769,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost, LufiaFor
             }
         if (ShowNpcs)
             foreach (var n in _map.Npcs.Where(n => !n.IsUnused && n.X == x && n.Y == y))
-                lines.Add($"Character {n.Index + 1} (talking runs event {n.Index})");
+                lines.Add($"Character {n.Index + 1} (talking runs event {MapEvents.TalkEvent(n.Index)})");
         return string.Join("\n", lines);
     }
 
@@ -848,6 +856,9 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost, LufiaFor
 
     private bool _picking;
 
+    /// <summary>A mouse stroke (paint, drag) is going on.</summary>
+    public bool InGesture => _inGesture;
+
     public void OnMouseUp()
     {
         AreaUp();
@@ -900,14 +911,17 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost, LufiaFor
     private void OpenEventEditor()
     {
         if (_rom == null || _map == null || _selection is not { kind: "npc" } sel) return;
-        var script = EventScript.Load(_rom, _map.MapId, sel.index);
+        // (pending map edits first: the event editor's stage can write this map's walks)
+        if (!WritePendingFirst()) return;
+        int ev = MapEvents.TalkEvent(sel.index);
+        var script = EventScript.Load(_rom, _map.MapId, ev);
         if (script == null)
         {
             if (!CreateTalkEvent(sel.index)) return;
-            script = EventScript.Load(_rom, _map.MapId, sel.index);
+            script = EventScript.Load(_rom, _map.MapId, ev);
             if (script == null) { Status = $"Character {sel.index + 1}'s event couldn't be made."; return; }
         }
-        EventEditorRequested?.Invoke(script, $"Map {_map.MapId:X2} - character {sel.index + 1} (talking runs event {sel.index})");
+        EventEditorRequested?.Invoke(script, $"Map {_map.MapId:X2} - character {sel.index + 1} (talking runs event {ev})");
     }
 
     /// <summary>
@@ -1128,10 +1142,22 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost, LufiaFor
         if (_rom == null || _map == null) return;
         int v = e.NewValue;
         if (v == e.Content.Value) return;
-        _rom.WriteByte(e.Content.ScriptOffset + 1, (byte)v);
-        _rom.WriteByte(e.Content.ScriptOffset + 2, (byte)(v >> 8));
+        // the setup script as the ROM has it now: switching an area on (its event opened) or another tab moves it, and
+        // the offset read when the map was opened then pointed at freed space or 2 bytes off. The same record (spot,
+        // flag, value) is found again; when it isn't there any more, nothing is written
+        var now = MapSetupScript.ReadSpots(_rom, _map.MapId);
+        var same = now.Where(x => x.Spot == e.Content.Spot && x.Flag == e.Content.Flag && x.Value == e.Content.Value).ToList();
+        var target = same.FirstOrDefault(x => x.ScriptOffset == e.Content.ScriptOffset) ?? (same.Count == 1 ? same[0] : null);
+        if (target == null)
+        {
+            _spotContents = now;
+            Status = "The map's setup script changed since this spot was shown: pick the spot again, then change it.";
+            return;
+        }
+        _rom.WriteByte(target.ScriptOffset + 1, (byte)v);
+        _rom.WriteByte(target.ScriptOffset + 2, (byte)(v >> 8));
         _spotContents = MapSetupScript.ReadSpots(_rom, _map.MapId);
-        var updated = _spotContents.FirstOrDefault(x => x.ScriptOffset == e.Content.ScriptOffset);
+        var updated = _spotContents.FirstOrDefault(x => x.ScriptOffset == target.ScriptOffset);
         if (updated != null) e.Refresh(updated);
         if (_selection is { kind: "spot" } sel)
         {
@@ -1141,7 +1167,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost, LufiaFor
         RebuildOverlays();
         string what = $"Map {_map.MapId:X2} spot {e.Content.Spot}: {updated?.Describe(_rom)}";
         _mainVm?.NotifyRomModified(what);
-        SpotWrittenText = $"✔ Saved in the project at 0x{e.Content.ScriptOffset + 1:X6}: {updated?.Describe(_rom)}.\n" +
+        SpotWrittenText = $"✔ Saved in the project at 0x{target.ScriptOffset + 1:X6}: {updated?.Describe(_rom)}.\n" +
                           "Save Project keeps it.";
         Status = $"Treasure changed in the ROM ({updated?.Describe(_rom)}). Save Project keeps it.";
     }
@@ -1153,7 +1179,7 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost, LufiaFor
         int dx = x - n.X, dy = y - n.Y;
         if (dx == 0 && dy == 0) return;
         n.X += dx; n.Y += dy;
-        n.BoxX1 += dx; n.BoxX2 += dx; n.BoxY1 += dy; n.BoxY2 += dy;
+        ShiftBox(n, dx, dy);
         _populating = true;
         NpcX = n.X; NpcY = n.Y;
         _populating = false;
@@ -1172,9 +1198,18 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost, LufiaFor
         x = Math.Clamp(x, 0, _map.Width - 1); y = Math.Clamp(y, 0, _map.Height - 1);
         int dx = x - n.X, dy = y - n.Y;
         n.X = x; n.Y = y;
-        n.BoxX1 += dx; n.BoxX2 += dx; n.BoxY1 += dy; n.BoxY2 += dy;
+        ShiftBox(n, dx, dy);
         MarkEdited();
         RebuildOverlays();
+    }
+
+    /// <summary>Moves a character's walking box with it, kept on the map (as AddNpc does): a character moved to the
+    /// edge took its box to -2 (written as FFFE) or past the map's width.</summary>
+    private void ShiftBox(MapNpc n, int dx, int dy)
+    {
+        if (_map == null) return;
+        n.BoxX1 = Math.Clamp(n.BoxX1 + dx, 0, _map.Width); n.BoxX2 = Math.Clamp(n.BoxX2 + dx, 0, _map.Width);
+        n.BoxY1 = Math.Clamp(n.BoxY1 + dy, 0, _map.Height); n.BoxY2 = Math.Clamp(n.BoxY2 + dy, 0, _map.Height);
     }
 
     // ── Exit / arrival editing ─────────────────────────────────────────────
@@ -1203,6 +1238,8 @@ public partial class MapEditorViewModel : ObservableObject, IEventHost, LufiaFor
     {
         if (_map != null && mapId == _map.MapId) return _map.Arrivals;
         if (_rom == null) return new();
+        // the other maps' arrivals as the ROM has them now (one deleted and applied there isn't offered any more)
+        if (_arrivalVersion != _rom.Version) { _arrivalCache.Clear(); _arrivalVersion = _rom.Version; }
         if (!_arrivalCache.TryGetValue(mapId, out var list))
         {
             try { list = LufiaMap.Load(_rom, mapId).Arrivals; } catch { list = new(); }

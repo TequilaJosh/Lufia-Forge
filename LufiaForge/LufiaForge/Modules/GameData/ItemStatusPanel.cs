@@ -41,6 +41,9 @@ public partial class ItemEditorViewModel
     [RelayCommand]
     private void ApplyStatus()
     {
+        // the item's typed values (price, name...) go in with it: writing the status reads the record again, which
+        // replaced them with the ROM's. The page's own write does both (and puts the status edits back after it)
+        if (HasPendingEdits) { if (WritePendingEdits() is string err) Status = err; return; }
         if (TryApplyStatus() is string why) Status = why;
     }
 

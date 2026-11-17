@@ -294,7 +294,8 @@ public static class L2Songs
             {
                 if (Enumerable.Range(i, len).Any(Fixed)) break;
                 int n = 1;
-                while (n < 255 && i + (n + 1) * len <= pieces.Count &&
+                // at most 254: FC FF counts down from FE, the loop's own "not counting yet" mark, so it never ends
+                while (n < 254 && i + (n + 1) * len <= pieces.Count &&
                        Enumerable.Range(0, len).All(k => !Fixed(i + n * len + k) && keys[i + n * len + k] == keys[i + k])) n++;
                 int save = (n - 1) * len * 2 - 9;   // order entries saved, less the two loop pieces and their entries
                 if (n >= 2 && save > bestSave) { bestL = len; bestN = n; bestSave = save; }

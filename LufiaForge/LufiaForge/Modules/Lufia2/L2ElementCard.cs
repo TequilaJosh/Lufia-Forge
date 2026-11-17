@@ -98,6 +98,9 @@ public sealed class L2ElementCard : Border
                     Dispatcher.BeginInvoke(Build);
                     return;
                 }
+                // the value it has now (nothing typed: clicking into the box and out again installed the status patch)
+                int now = _page?.PageRom is { } pr && L2Elements.IsIn(pr) && _page.PageIndex >= 0 ? L2Elements.Get(pr, _who, _page.PageIndex, kk) : row[kk];
+                if (v == now) return;
                 Write(kk, v);
             };
             Grid.SetRow(tb, r); Grid.SetColumn(tb, c + 1);

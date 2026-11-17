@@ -77,6 +77,8 @@ public partial class TextEditorViewModel : ObservableObject, LufiaForge.ViewMode
         _ = BuildAsync();
     }
 
+    private int _buildToken;
+
     private async Task BuildAsync()
     {
         if (_rom == null) return;
@@ -84,9 +86,22 @@ public partial class TextEditorViewModel : ObservableObject, LufiaForge.ViewMode
         StatusText = "Collecting every dialogue box in the game…";
         var rom = _rom;
         _builtVersion = rom.Version;
-        var maps = MapCatalog.ScanNamed(rom);
-        var lines = await Task.Run(() => DialogueIndex.Build(rom, maps.Select(m => m.MapId),
-            (i, n) => Application.Current?.Dispatcher.BeginInvoke(() => StatusText = $"Collecting dialogue… map {i + 1} of {n}")));
+        int build = ++_buildToken;
+        List<MapInfo> maps;
+        List<DialogueLine> lines;
+        try
+        {
+            maps = MapCatalog.ScanNamed(rom);
+            lines = await Task.Run(() => DialogueIndex.Build(rom, maps.Select(m => m.MapId),
+                (i, n) => Application.Current?.Dispatcher.BeginInvoke(() => StatusText = $"Collecting dialogue… map {i + 1} of {n}")));
+        }
+        catch (Exception ex)
+        {
+            // (an odd event in a hack): the tab says so and tries again the next time instead of staying "Collecting"
+            if (build == _buildToken) { IsBusy = false; _builtVersion = -1; StatusText = "The dialogue couldn't be collected: " + ex.Message; }
+            return;
+        }
+        if (build != _buildToken || rom != _rom) return;   // a newer build (or another ROM) took over
         // where the user is (kept when the list is rebuilt after a line moved; read now: rows can be picked meanwhile)
         var keepLine = SelectedRow?.Line;
         int keepMap = MapFilterIndex >= 0 && MapFilterIndex < _mapFilterIds.Count ? _mapFilterIds[MapFilterIndex] : -1;

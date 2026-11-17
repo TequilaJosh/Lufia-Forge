@@ -109,7 +109,13 @@ public partial class L2GraphicsPage : L2Page, LufiaForge.ViewModels.IPendingEdit
 
     protected override void Load(int index)
     {
-        if (!_refreshing && IsPainted && _asset != null) AskToWrite();
+        if (!_refreshing && IsPainted && _asset != null && !AskToWrite())
+        {
+            // the painting couldn't be written: it stays, with the picture it belongs to (and the reason on screen)
+            int back = _assets.IndexOf(_asset);
+            System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(() => { _refreshing = true; try { SelectedIndex = back; } finally { _refreshing = false; } });
+            return;
+        }
         _asset = _assets[index];
         PaletteOptions = _asset.Palettes.Select((p, i) => new L2Option(i, p.Name)).ToList();
         HasPaletteChoice = PaletteOptions.Count > 1;
@@ -529,12 +535,14 @@ public partial class L2GraphicsPage : L2Page, LufiaForge.ViewModels.IPendingEdit
         Status = "Painting thrown away: the picture is the game's again.";
     }
 
-    private void AskToWrite()
+    /// <summary>False when the painting was to be written and couldn't be (it is kept then: Status says why).</summary>
+    private bool AskToWrite()
     {
         var r = System.Windows.MessageBox.Show($"Write your painting of {_asset!.Name} into the ROM before showing another picture?\n\nNo throws the painting away.",
             "Painting not written", System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxImage.Question);
-        if (r == System.Windows.MessageBoxResult.Yes) WritePainting();
+        if (r == System.Windows.MessageBoxResult.Yes && WritePaintingNow() != null) return false;
         ForgetPainting();
+        return true;
     }
 
     // ── map sprites: their colours, new palettes, new sprites ───────────────

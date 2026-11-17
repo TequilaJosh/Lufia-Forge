@@ -61,17 +61,19 @@ public static class L2Descriptions
     /// <summary>The entry of IP attack <paramref name="ip"/> (counted from 0, as Lufia Forge's IP attack list).</summary>
     public static int IpEntry(RomBuffer rom, int ip) => (IsMoved(rom) ? 0x301 : IpBase + 1) + ip;
 
-    private static string[]? _words;
-    private static RomBuffer? _wordsRom;
+    /// <summary>The words read last with the ROM and version they come from (one object: see L2Text's cache). Keyed on
+    /// the version too: an Undo put the US word list back while the cache kept the Dutch one.</summary>
+    private sealed record Cache(RomBuffer Rom, int Version, string[] Words);
+    private static Cache? _cache;
 
     public static string[] DescriptionWords(RomBuffer rom)
     {
-        if (_words != null && ReferenceEquals(_wordsRom, rom)) return _words;
+        if (_cache is { } c && ReferenceEquals(c.Rom, rom) && c.Version == rom.Version) return c.Words;
         int list = WordsAt(rom);
         int n = rom.ReadUInt16Le(list) / 2;
         var w = new string[n];
         for (int k = 0; k < n; k++) w[k] = new string(rom.ReadUntil(list + rom.ReadUInt16Le(list + k * 2), 0, 40).Select(b => L2Charset.ToChar(rom, b) ?? '?').ToArray());
-        _wordsRom = rom; _words = w;
+        _cache = new Cache(rom, rom.Version, w);
         return w;
     }
 
@@ -113,7 +115,7 @@ public static class L2Descriptions
     {
         int snes = L2Rom.FileToSnes(at);
         foreach (int s in WordSites) rom.WriteBytes(s, new[] { (byte)snes, (byte)(snes >> 8), (byte)(snes >> 16) });
-        _words = null; _wordsRom = null;
+        _cache = null;
     }
 
     public static int At(RomBuffer rom, int entry)

@@ -99,6 +99,13 @@ public static class FontPatch
             rom.WriteBytes(at, Magic);
             rom.WriteBytes(at + 4, rom.ReadBytes(Lufia1Font, FontBytes));
             rom.WriteBytes(at + 4 + FontBytes, rom.ReadBytes(Lufia1Small, FontBytes));
+            // the Dutch letters in: their places keep the signs (from the letters' own backup), not the letters, so
+            // putting the font back after the letters were taken out shows the signs again (it showed é for #)
+            foreach (var (code, text, smallTile) in DutchLetters.SavedSigns(rom))
+            {
+                rom.WriteBytes(at + 4 + code * 16, text);
+                rom.WriteBytes(at + 4 + FontBytes + code * 16, smallTile);
+            }
             space.Save();
         }
         int changed = 0;

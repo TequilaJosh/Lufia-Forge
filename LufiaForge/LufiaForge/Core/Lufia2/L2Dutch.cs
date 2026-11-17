@@ -231,6 +231,9 @@ public static class L2Dutch
         if (fill % 2 == 1) { text.Add((byte)' '); fill--; }
         for (; fill > 0; fill -= 2) { text.Add(4); text.Add(0x80); }
         text.Add(st.End);
+        // bytes another line repeats (0A, a back-reference) stay: that line (kept in English when it didn't fit)
+        // would show the new bytes, garbled. The step keeps its old text then, as one too long for its place
+        if (L2Events.CopiedFrom(rom, new[] { (st.At + st.Bytes.Length, text.ToArray()) }) >= 0) return false;
         rom.WriteBytes(st.At + st.Bytes.Length, text.ToArray());
         return true;
     }
@@ -452,10 +455,12 @@ public static class L2Dutch
         if (starts.Min() <= h + 0x10 + L2NewMaps.GameCount * 8 || starts.Max() >= h + 0x8000) return false;
         var recs = Enumerable.Range(0, L2Maps.Count(rom)).Select(m =>
         {
+            // one byte per letter (L2MapNames.Encode): the box shown on entering a map prints every byte as a letter, so
+            // dictionary words (what L2Text.Encode makes) came out as other letters. A name that can't be written so
+            // keeps the bytes it has
             string name = m < names.Count && names[m].Length > 0 ? names[m] : L2Maps.Name(rom, m);
-            var enc = L2Text.Encode(rom, name).ToList();
-            if (enc.Count > 0 && enc[^1] == 0) enc.RemoveAt(enc.Count - 1);
-            return enc.Where(b => b != 0x0A).Append((byte)0).ToArray();
+            var (enc, _) = L2MapNames.Encode(rom, name);
+            return enc ?? rom.ReadBytes(starts[m], MapNameLength(rom, starts[m]));
         }).ToList();
         return Rewrite(rom, starts, a => MapNameLength(rom, a), recs, (m, at) => rom.WriteUInt16Le(L2Events.HeaderAt(rom, m) + 6, (ushort)(at - h)));
     }

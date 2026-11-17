@@ -247,7 +247,9 @@ public static class MonsterAi
         var (oldStart, oldLen) = ScriptRange(rom, record);
         int len = SpellScriptLength(spells.Count);
         int at;
-        if (oldLen >= len) at = At(record, oldStart);
+        // in place when it fits and no other monster uses the same bytes (as AiScript.Write: a hack's monsters can share
+        // a script, and writing here changed the other one's too)
+        if (oldLen >= len && !MonsterTable.Overlaps(rom, At(record, oldStart), oldLen, id)) at = At(record, oldStart);
         else
         {
             // free space not used by any other monster's record or script
@@ -268,13 +270,21 @@ public static class MonsterAi
 
     public static List<Command> Decode(RomBuffer rom, int record, Func<int, string>? spellName = null, Func<int, string>? itemName = null)
     {
+        // a script with a command 25 (several actions a turn) goes on after an action: read all of it so. Found during
+        // the walk only, a step right after an action seen before the 25 was left out, and saving the script dropped it
+        var list = Walk(rom, record, spellName, itemName, false);
+        return list.Any(c => c.Op == 0x25) ? Walk(rom, record, spellName, itemName, true) : list;
+    }
+
+    private static List<Command> Walk(RomBuffer rom, int record, Func<int, string>? spellName, Func<int, string>? itemName, bool multiAll)
+    {
         var list = new List<Command>();
         var home = HomeOf(rom, record);
         int start = home.Start;
         if (start == 0) return list;
         var todo = new Queue<int>(); todo.Enqueue(start);
         var seen = new HashSet<int>();
-        bool multi = false;   // a command 25 (several actions a turn): the script goes on after an action
+        bool multi = multiAll;   // a command 25 (several actions a turn): the script goes on after an action
         while (todo.Count > 0 && list.Count < 200)
         {
             int at = todo.Dequeue();

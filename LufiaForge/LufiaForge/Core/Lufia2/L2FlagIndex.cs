@@ -169,8 +169,12 @@ public static class L2FlagIndex
         for (int f = 0xEF; f >= 0x01; f--)
             if (!used.Contains(f) && Reserved(f) == null && L2FlagNotes.Name(Kind.Story, f) == null) return f;
         if (extra)
+        {
+            // not in the byte of a counter some event uses (a hack's own counters 10-1F share the extra flags' bytes)
+            var counters = All(rom).Where(u => u.Kind == Kind.Counter).Select(u => u.Number).ToHashSet();
             for (int f = L2ExtraFlags.First; f <= L2ExtraFlags.Last; f++)
-                if (!used.Contains(f) && L2FlagNotes.Name(Kind.Story, f) == null) return f;
+                if (!used.Contains(f) && L2FlagNotes.Name(Kind.Story, f) == null && !counters.Contains(L2ExtraFlags.FirstCounter + (f - L2ExtraFlags.First) / 8)) return f;
+        }
         return -1;
     }
 

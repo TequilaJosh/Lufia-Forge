@@ -66,9 +66,12 @@ public static class L2Battle
         ushort words = rom.ReadUInt16Le(o + 9);
         var values = new Dictionary<int, ushort>();
         int p = o + 0x0D;
+        // a word for every bit set, as the game's loader reads them ($81:F217: bits 0800 and 1000 too, which were
+        // skipped here, so a hack's item with them was read from the wrong bytes). The words of the mask's bytes 11-12
+        // come after these, so they aren't needed to place them
         for (int bit = 1; bit <= 0x8000; bit <<= 1)
         {
-            if ((words & bit) == 0 || bit is 0x0800 or 0x1000) continue;
+            if ((words & bit) == 0) continue;
             values[bit] = rom.ReadUInt16Le(p); p += 2;
         }
         return new Item
@@ -91,7 +94,7 @@ public static class L2Battle
         int p = o + 0x0D;
         for (int bit = 1; bit <= 0x8000; bit <<= 1)
         {
-            if ((it.Words & bit) == 0 || bit is 0x0800 or 0x1000) continue;
+            if ((it.Words & bit) == 0) continue;
             if (it.Values.TryGetValue(bit, out var v)) rom.WriteUInt16Le(p, v);
             p += 2;
         }

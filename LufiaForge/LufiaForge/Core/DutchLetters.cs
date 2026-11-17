@@ -85,6 +85,16 @@ public static class DutchLetters
         Modules.TextEditor.TextDecoder.InvalidateDictionaryCache();
     }
 
+    /// <summary>The signs the letters took the place of, as the backup keeps them: (code, text font glyph, small font
+    /// tile). Empty when the letters aren't in.</summary>
+    internal static IEnumerable<(int Code, byte[] Text, byte[] Small)> SavedSigns(RomBuffer rom)
+    {
+        int b = BackupOffset(rom);
+        if (b == 0) yield break;
+        for (int i = 0; i < Map.Length; i++)
+            yield return (Map[i].Code, rom.ReadBytes(b + 4 + i * 32, 16), rom.ReadBytes(b + 4 + i * 32 + 16, 16));
+    }
+
     /// <summary>Puts the signs back.</summary>
     public static void Remove(RomBuffer rom)
     {

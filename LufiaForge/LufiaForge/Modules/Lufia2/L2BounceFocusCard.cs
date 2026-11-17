@@ -125,7 +125,8 @@ public sealed class L2BounceFocusCard : Border
                 var vals = boxes.Select(b => int.TryParse(b.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int v) && v is >= 0 and <= 255 ? v : -1).ToArray();
                 var now = L2StatusPatch.FocusPercents(rom);
                 if (vals.Any(v => v < 0)) { Dispatcher.BeginInvoke(Build); return; }
-                if (vals.Select(v => (byte)v).SequenceEqual(now) && L2StatusPatch.IsApplied(rom)) return;
+                // the same as shown: nothing to write (and the status patch isn't put in for a box merely visited)
+                if (vals.Select(v => (byte)v).SequenceEqual(now)) return;
                 Do(() => L2StatusPatch.SetFocusPercents(rom, vals), "focus bonus " + string.Join(" / ", vals.Select(v => "+" + v + "%")));
             };
         _body.Children.Add(row);

@@ -133,26 +133,31 @@ public sealed class LufiaForgeToolForm : ToolFormBase, IExternalToolForm
         try
         {
             _frameCounter++;
+            // flags: 1 connected, 2 being written, 4 registers are this frame's, 8 this tool sets 2 and 4. Lufia Forge
+            // skips a frame read while 2 is set or whose counter changed under it (a copy half one frame, half the
+            // next), so the counter is written last, after the WRAM and the registers.
+            _mmfAccessor.Write(20, (uint)(1 | 2 | 8));
             // Magic: "LFWM"
             _mmfAccessor.Write(0,  (byte)'L');
             _mmfAccessor.Write(1,  (byte)'F');
             _mmfAccessor.Write(2,  (byte)'W');
             _mmfAccessor.Write(3,  (byte)'M');
-            _mmfAccessor.Write(4,  _frameCounter);
             _mmfAccessor.Write(8,  DateTime.UtcNow.Ticks);
             _mmfAccessor.Write(16, (uint)WramSize);
-            _mmfAccessor.Write(20, (uint)1); // flags: connected
             _mmfAccessor.WriteArray(MmfHeaderSize, _wram, 0, _wram.Length);
 
             // CPU registers (bytes 24-30) — read from BizHawk register file
-            WriteCpuRegisters();
+            bool registers = WriteCpuRegisters();
+            _mmfAccessor.Write(4,  _frameCounter);
+            _mmfAccessor.Write(20, (uint)(1 | 8 | (registers ? 4 : 0)));
         }
         catch { /* non-fatal */ }
     }
 
-    private void WriteCpuRegisters()
+    /// <summary>Writes the CPU registers; false when BizHawk gave none (the Snes9x core).</summary>
+    private bool WriteCpuRegisters()
     {
-        if (_mmfAccessor == null) return;
+        if (_mmfAccessor == null) return false;
         try
         {
             // NOTE: Requires bsnes core (Config → Cores → SNES → BSNES).
@@ -162,7 +167,7 @@ public sealed class LufiaForgeToolForm : ToolFormBase, IExternalToolForm
             {
                 if (_frameCounter % 120 == 0)
                     _statusLabel.Text = "PC unavailable — switch to BSNES core (Config → Cores → SNES).";
-                return;
+                return false;
             }
 
             regs.TryGetValue("PC", out ulong pcRaw);
@@ -191,8 +196,9 @@ public sealed class LufiaForgeToolForm : ToolFormBase, IExternalToolForm
 
             if (_frameCounter % 60 == 0)
                 _statusLabel.Text = $"PC=${((int)pb << 16) | pc:X6}  |  ROM loaded — monitoring WRAM + PC.";
+            return true;
         }
-        catch { /* non-fatal */ }
+        catch { return false; }
     }
 
     // -------------------------------------------------------------------------
@@ -278,7 +284,8 @@ public sealed class LufiaForgeToolForm : ToolFormBase, IExternalToolForm
         {
             if (item.Tag is not WatchEntry w) continue;
             int offset = w.SnesAddr - 0x7E0000;
-            if (offset < 0 || offset >= WramSize) continue;
+            // a 2- or 4-byte watch on the last bytes of WRAM would read past its end
+            if (offset < 0 || offset + SizeBytes(w.Type) > WramSize) continue;
 
             long cur  = ReadTyped(_wram,  offset, w.Type);
             long prev = _prevWram != null ? ReadTyped(_prevWram, offset, w.Type) : cur;

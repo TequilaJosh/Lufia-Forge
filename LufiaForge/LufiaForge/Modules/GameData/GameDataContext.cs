@@ -405,6 +405,9 @@ public abstract partial class GameDataEditorBase : ObservableObject
     {
         if (Ctx == null) return false;
         int before = Ctx.Rom.Version;
+        // a write that fails partway (a patch put in, then "no room" for the record) is taken back whole: else its bytes
+        // stayed in the ROM with no Undo step, and went into the next change's
+        var bytes = Ctx.Rom.ToArray();
         try
         {
             write();
@@ -416,6 +419,7 @@ public abstract partial class GameDataEditorBase : ObservableObject
         }
         catch (Exception ex)
         {
+            if (!Ctx.Rom.SameAs(bytes)) Ctx.Rom.ReplaceAll(bytes);
             Refuse($"Error: {ex.Message}");
             return false;
         }

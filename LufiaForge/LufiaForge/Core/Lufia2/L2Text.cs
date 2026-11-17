@@ -14,19 +14,22 @@ public static class L2Text
 {
     public const int Dictionary = 0x76A00, WordCount = 0x280;
 
-    private static string[]? _words;
-    private static RomBuffer? _wordsRom;
+    /// <summary>The words read last, with the ROM and its version they were read from: one object, so a merge reading
+    /// other ROMs on another thread never pairs one ROM with another's words; the version makes an Undo (or a Dutch
+    /// import) read them again.</summary>
+    private sealed record Cache(RomBuffer Rom, int Version, string[] Words);
+    private static Cache? _cache;
 
     public static string[] Words(RomBuffer rom)
     {
-        if (_words != null && ReferenceEquals(_wordsRom, rom)) return _words;
+        if (_cache is { } c && ReferenceEquals(c.Rom, rom) && c.Version == rom.Version) return c.Words;
         var w = new string[WordCount];
         for (int k = 0; k < WordCount; k++)
         {
             int at = Dictionary + rom.ReadUInt16Le(Dictionary + k * 2);
             w[k] = new string(rom.ReadUntil(at, 0, 40).Select(b => L2Charset.ToChar(rom, b) ?? '?').ToArray());
         }
-        _wordsRom = rom; _words = w;
+        _cache = new Cache(rom, rom.Version, w);
         return w;
     }
 

@@ -60,10 +60,14 @@ public static class L2MonsterTypes
         return s;
     }
 
-    private static List<Step> Load(RomBuffer rom, Kind kind, int index)
+    /// <summary>The script's steps (none: the game's default). <paramref name="write"/>: one that can't be read is refused
+    /// instead of replaced by a stand-in.</summary>
+    private static List<Step> Load(RomBuffer rom, Kind kind, int index, bool write = false)
     {
         List<Step> steps;
-        try { steps = L2AiScripts.Load(rom, kind, index).Steps; } catch (Exception) { steps = new(); }
+        try { steps = L2AiScripts.Load(rom, kind, index).Steps; }
+        catch (Exception) when (!write) { steps = new(); }
+        catch (Exception ex) { throw new InvalidOperationException("The script can't be read (a command Lufia Forge doesn't know, or a go to into the middle of one), so it isn't changed: a stand-in would replace it. Look at it in its script window.", ex); }
         if (steps.Count > 0) return steps;
         return kind == Kind.Weapon ? new() { L2AiScripts.New(0x37), L2AiScripts.New(0x00) } : new() { L2AiScripts.New(0x00) };
     }
@@ -124,7 +128,7 @@ public static class L2MonsterTypes
         foreach (var (k, pct) in t.Values) L2Elements.Set(rom, L2Elements.Who.Monster, monster, k, on ? pct : 0);
         if (t.Undead)
         {
-            var steps = Load(rom, Kind.MonsterDefense, monster);
+            var steps = Load(rom, Kind.MonsterDefense, monster, write: true);
             if (on && !steps.Any(s => Calls(s, 0x12))) steps.Insert(0, Op(0x42, 0x12));
             if (!on) foreach (var s in steps.Where(s => Calls(s, 0x12)).ToList()) Remove(steps, s);
             Save(rom, Kind.MonsterDefense, monster, steps);
@@ -216,7 +220,7 @@ public static class L2MonsterTypes
     {
         int bit = Types[type].Element;
         if (bit == 0) return false;
-        var steps = Load(rom, kind, index);
+        var steps = Load(rom, kind, index, write: true);
         if (((ElementOf(rom, kind, index) & bit) != 0) == on) return false;
         FixGameChecks(rom);
         if (on)

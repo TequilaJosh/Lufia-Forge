@@ -71,8 +71,8 @@ public partial class NewEventWindow : Window
         }
         AfterCombo.ItemsSource = after;
         AfterCombo.SelectedIndex = after.Count > 0 ? 0 : -1;
-        var talk = _map.Npcs.Where(n => !n.IsUnused && !MapEvents.HasEvent(_rom, info.MapId, n.Index))
-                            .Select(n => new Choice(n.Index, $"Character {n.Index + 1} (sprite {n.Sprite:X2}) at ({n.X}, {n.Y})")).ToList();
+        var talk = _map.Npcs.Where(n => !n.IsUnused && !MapEvents.HasEvent(_rom, info.MapId, MapEvents.TalkEvent(n.Index)))
+                            .Select(n => new Choice(MapEvents.TalkEvent(n.Index), $"Character {n.Index + 1} (sprite {n.Sprite:X2}) at ({n.X}, {n.Y})")).ToList();
         TalkCombo.ItemsSource = talk;
         TalkCombo.SelectedIndex = talk.Count > 0 ? 0 : -1;
         TalkRadio.IsEnabled = talk.Count > 0;
@@ -179,6 +179,9 @@ public partial class NewEventWindow : Window
         if (_rom.Length < MapWriter.ExpandedSize &&
             MessageBox.Show("New events go in the added space: expand the ROM to 2 MB? (Expanded ROMs work in BizHawk, Snes9x and bsnes.)",
                 Title, MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        // a failure partway (the area written, then the event not) takes the ROM back, and the map is read again (its
+        // new area was in this window's copy: OK again added a second one)
+        var before = _rom.ToArray();
         try
         {
             int ev;
@@ -200,9 +203,9 @@ public partial class NewEventWindow : Window
             }
             else if (TalkCombo.SelectedItem is Choice talk)
             {
-                ev = talk.Event;
+                ev = talk.Event;   // (character n's: n + 1, MapEvents.TalkEvent)
                 MapEvents.Create(_rom, mapId, ev);
-                how = $"talking to character {ev + 1}";
+                how = $"talking to character {ev}";
             }
             else return;
             if (OnceCheck.IsChecked == true)
@@ -225,7 +228,9 @@ public partial class NewEventWindow : Window
         }
         catch (Exception ex)
         {
-            MessageBox.Show("The event couldn't be made: " + ex.Message, Title, MessageBoxButton.OK, MessageBoxImage.Warning);
+            if (!_rom.SameAs(before)) _rom.ReplaceAll(before);
+            try { _map = LufiaMap.Load(_rom, mapId); } catch { }
+            MessageBox.Show("The event couldn't be made, so nothing was changed: " + ex.Message, Title, MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 }

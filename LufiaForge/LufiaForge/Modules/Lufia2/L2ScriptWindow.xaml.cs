@@ -738,9 +738,13 @@ public partial class L2ScriptWindow : Window
             int self = _steps.FindIndex(s => s.Op == 0x03 && s.Targets.Length > 0 && ReferenceEquals(s.Targets[0], s));
             if (self >= 0) throw new InvalidOperationException($"Step {self + 1} goes to itself: the battle would never end.");
             if (!_steps.Any(s => s.Def?.EndsPath == true)) throw new InvalidOperationException("The script never ends: add an End (or Quit) step.");
-            // names typed here go in first (they get the numbers the steps already use)
-            foreach (var t in _typed) L2AttackNames.Add(_rom, t.Text, t.Animation);
-            int at = L2AiScripts.Save(_rom, _kind, _index, _steps);
+            // names typed here go in first (they get the numbers the steps already use), together with the script or
+            // not at all: a failed save left the names in the ROM (outside Undo), and saving again added them twice
+            int at = L2Rom.AllOrNothing(_rom, () =>
+            {
+                foreach (var t in _typed) L2AttackNames.Add(_rom, t.Text, t.Animation);
+                return L2AiScripts.Save(_rom, _kind, _index, _steps);
+            });
             Change = $"{Title}: {(_edited ? "edited" : "new script")} ({L2AiScripts.Build(_steps, 1).Length} bytes at 0x{at:X6})";
             DialogResult = true;
         }

@@ -356,6 +356,8 @@ public static class L2PuzzleBuild
     public static string AddKeyDoor(RomBuffer rom, int map, int standX, int standY, int x, int y, int w, int h, int openX, int openY,
         int item, string itemName, bool takeKey, int flag)
     {
+        if (flag < 0 || flag is >= 0xF0 and < 0x100 || flag > L2ExtraFlags.Last)
+            throw new InvalidOperationException("No story flag is free for the door (to remember that it is open): free one on the Flags tab of the Events page.");
         int block = L2Events.Block(rom, map);
         if (block < 0) throw new InvalidOperationException("This map has no event block, so it can't have the door's event.");
         int areaDoor = AddArea(rom, map, x, y, w, h), areaOpen = AddArea(rom, map, openX, openY, w, h);
@@ -363,11 +365,11 @@ public static class L2PuzzleBuild
         var s = L2EventScript.New(block);
         var end = s.Steps[0];
         var lockedAt = Ev(0xB8);
-        var played = Ev(0x15, flag, 0, 0); played.Jumps.Add(new L2Jump { Step = end });
+        var played = new L2Step { Bytes = L2ExtraFlags.Step(L2ExtraFlags.Use.IfOn, flag) }; played.Jumps.Add(new L2Jump { Step = end });
         var has = Ev(0x14, 0xC2, item & 0xFF, item >> 8, 1, 0, 0x30, 0, 0, 0xFF); has.Jumps.Add(new L2Jump { Step = lockedAt });
         var steps = new List<L2Step> { played, has };
         if (takeKey) steps.Add(Ev(0x24 + (item >> 8), item & 0xFF, 1));
-        steps.AddRange(new[] { Ev(0xB8), Say($"Used the {itemName}.\nThe door opened."), Ev(0x43, areaDoor, areaOpen), Ev(0x6B), Ev(0x1A, flag), Ev(0x00),
+        steps.AddRange(new[] { Ev(0xB8), Say($"Used the {itemName}.\nThe door opened."), Ev(0x43, areaDoor, areaOpen), Ev(0x6B), new L2Step { Bytes = L2ExtraFlags.Step(L2ExtraFlags.Use.On, flag) }, Ev(0x00),
                                lockedAt, Say("It's locked.") });
         s.Steps.InsertRange(0, steps);
         int trig = L2EventBlocks.AddTrigger(rom, map, standX, standY, standX, standY, s);

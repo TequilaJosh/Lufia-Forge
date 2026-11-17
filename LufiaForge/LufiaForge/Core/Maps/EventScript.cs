@@ -189,8 +189,10 @@ public sealed class EventScript
         return _eventStarts.TryGetValue(offset, out int e) ? e : -1;
     }
 
-    private static Dictionary<int, int>? _blockEnds;
-    private static RomBuffer? _blockEndsRom;
+    /// <summary>Where each script block ends, for one ROM: a single object (the Cutscenes tab reads it on another
+    /// thread; two fields set one after the other could pair one ROM with another's ends).</summary>
+    private sealed record BlockEnds(RomBuffer Rom, Dictionary<int, int> Ends);
+    private static BlockEnds? _blockEnds;
 
     /// <summary>
     /// Event numbers that can really be used on a map: characters (0..count-1) and trigger/spot events
@@ -199,15 +201,16 @@ public sealed class EventScript
     /// </summary>
     public static List<int> PlausibleEvents(RomBuffer rom, int mapId)
     {
-        if (!ReferenceEquals(_blockEndsRom, rom) || _blockEnds == null)
+        var ends = _blockEnds;
+        if (ends == null || !ReferenceEquals(ends.Rom, rom))
         {
             var bases = MapCatalog.Scan(rom).Select(m => BlockOffset(rom, m.MapId)).Distinct().OrderBy(b => b).ToList();
-            _blockEnds = new();
-            for (int i = 0; i < bases.Count; i++) _blockEnds[bases[i]] = i + 1 < bases.Count ? bases[i + 1] : bases[i] + 0x8000;
-            _blockEndsRom = rom;
+            var d = new Dictionary<int, int>();
+            for (int i = 0; i < bases.Count; i++) d[bases[i]] = i + 1 < bases.Count ? bases[i + 1] : bases[i] + 0x8000;
+            _blockEnds = ends = new BlockEnds(rom, d);
         }
         int block = BlockOffset(rom, mapId);
-        int end = _blockEnds.TryGetValue(block, out int e) ? e : block + 0x8000;
+        int end = ends.Ends.TryGetValue(block, out int e) ? e : block + 0x8000;
         // a block moved above 1 MB: its exact length is in the space table
         if (block >= MapWriter.ExpansionStart && ExpansionSpace.Load(rom).At(block) is { } moved && moved.Start == block) end = moved.End;
         int npcs = 0, areas = 0;
@@ -246,7 +249,7 @@ public sealed class EventScript
         HashSet<int> used = new();
         try
         {
-            used.UnionWith(LufiaMap.Load(rom, mapId).Npcs.Where(n => !n.IsUnused).Select(n => n.Index));
+            used.UnionWith(LufiaMap.Load(rom, mapId).Npcs.Where(n => !n.IsUnused).Select(n => MapEvents.TalkEvent(n.Index)));
             used.UnionWith(MapSetupScript.ReadTriggers(rom, mapId).Select(t => t.Event));
         }
         catch { }
@@ -599,6 +602,21 @@ public sealed class EventScript
 
     public static readonly string[] NameTags = { "Hero", "Lufia", "Aguro", "Jerin", "Maxim", "Selan", "Guy", "Artea" };
 
+    /// <summary>A tag in typed text that encodes a byte ending the text (00-04, 08, 0E: <see cref="DecodeText"/> stops
+    /// there, and the game goes back to commands), so the rest would run as commands; or null.</summary>
+    public static string? EndingTag(string text)
+    {
+        foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(text, @"\[([^\]\[]+)\]"))
+        {
+            string tag = m.Groups[1].Value.Trim().ToUpperInvariant();
+            if (tag == "PAGE") return m.Value;
+            string code = tag.Split(':')[0];
+            if (code.Length is 1 or 2 && byte.TryParse(code, System.Globalization.NumberStyles.HexNumber, null, out byte b) && b is <= 0x04 or 0x08 or 0x0E)
+                return m.Value;
+        }
+        return null;
+    }
+
     /// <summary>Encode edited text plus its terminator.</summary>
     public byte[] EncodeText(string text, byte terminator)
     {
@@ -805,13 +823,31 @@ public sealed class EventScript
     /// <summary>Write the edited event to the ROM. Returns a description of what was done and where.</summary>
     public string Save(bool allowExpand)
     {
+        // all or nothing: expanding, the rename / emote patches and the block copy go in before the lines are laid out,
+        // and a failure after them (a go to that can't reach its step from the new place) must not leave them behind
+        var before = _rom.ToArray();
+        try { return SaveCore(allowExpand); }
+        catch
+        {
+            if (!_rom.SameAs(before)) _rom.ReplaceAll(before);
+            throw;
+        }
+    }
+
+    private string SaveCore(bool allowExpand)
+    {
         if (!MatchesRom())
             throw new InvalidOperationException($"{(IsCodeView ? "This code" : $"Event {Event} of map {MapId:X2}")} was changed somewhere else since it was " +
                                                 "opened here (another tab, Undo or a patch), so these lines would write over the newer version. " +
                                                 "Revert to read it again, then make the changes again.");
         foreach (var o in Ops.Where(o => o.IsText && (o.IsNew || o.TextChanged)))
+        {
             if (DutchLetters.Unwritable(_rom, o.Text) is string bad)
                 throw new InvalidOperationException(bad + ".");
+            if (EndingTag(o.Text) is string end)
+                throw new InvalidOperationException($"{end} in the text \"{(o.Text.Length > 40 ? o.Text[..40] + "..." : o.Text)}\" would end the text there: " +
+                                                    "the game would run the rest of the line as event commands. Take it out (use a new line, or a new text step for a new box).");
+        }
         // the rename command needs its engine patch (added the first time an event uses it)
         if (Ops.Any(o => !o.IsText && o.Bytes.Length > 0 && o.Bytes[0] == Battle.RenamePatch.Op) && !Battle.RenamePatch.IsApplied(_rom))
         {

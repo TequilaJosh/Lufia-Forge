@@ -15,7 +15,10 @@ namespace LufiaForge.Modules.MapEditor;
 public partial class MapEditorViewModel
 {
     /// <summary>A rectangle of blocks. Raw = the map's own words (copied from a map), else metatile numbers (from the palette).</summary>
-    public sealed record BlockPattern(int W, int H, ushort[] Tiles, bool Raw, int TilesetKey, string Source, int SourceMap = -1);
+    /// <summary>Blocks to stamp. <paramref name="SourceThreshold"/>: the composite threshold of the map a raw copy
+    /// came from (-1: none): a composite is threshold + its pair's number in the tileset's table, and the threshold is
+    /// the map's own (Make room raises it), so a pasted composite is moved to the target's threshold.</summary>
+    public sealed record BlockPattern(int W, int H, ushort[] Tiles, bool Raw, int TilesetKey, string Source, int SourceMap = -1, int SourceThreshold = -1);
 
     /// <summary>Shared by every map (and the Map Editor windows), like a clipboard.</summary>
     private static BlockPattern? _clipboard;
@@ -87,13 +90,25 @@ public partial class MapEditorViewModel
 
     public void ClearAreaSelection() { _area = null; _areaStart = null; ShowArea(); }
 
+    /// <summary>Keeps the area inside the map as it is now (corners included): one picked before a resize (or an Undo of
+    /// one) reached past the edge, and Copy / Fill / Cut then read and wrote the next row or past the end.</summary>
+    private void ClampArea()
+    {
+        if (_map == null || _area is not var (x1, y1, x2, y2)) return;
+        int w = _map.Width, h = _map.Height;
+        if (x1 >= w || y1 >= h) { ClearAreaSelection(); return; }
+        _area = (x1, y1, Math.Min(x2, w - 1), Math.Min(y2, h - 1));
+        if (_area != (x1, y1, x2, y2)) ShowArea();
+    }
+
     private BlockPattern? AreaPattern()
     {
+        ClampArea();
         if (_map == null || _area is not var (x1, y1, x2, y2)) return null;
         int w = x2 - x1 + 1, h = y2 - y1 + 1;
         var t = new ushort[w * h];
         for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) t[y * w + x] = _map.GetTile(x1 + x, y1 + y);
-        return new BlockPattern(w, h, t, true, TilesetKey, $"map {_map.MapId:X2}", _map.MapId);
+        return new BlockPattern(w, h, t, true, TilesetKey, $"map {_map.MapId:X2}", _map.MapId, _map.CompositeThreshold);
     }
 
     [RelayCommand(CanExecute = nameof(HasArea))]
@@ -120,6 +135,7 @@ public partial class MapEditorViewModel
 
     private void FillArea(int metatile, string verb)
     {
+        ClampArea();
         if (_map == null || _area is not var (x1, y1, x2, y2)) return;
         var stroke = new List<(int x, int y, ushort before)>();
         for (int y = y1; y <= y2; y++)
@@ -137,6 +153,7 @@ public partial class MapEditorViewModel
     [RelayCommand(CanExecute = nameof(HasArea))]
     private void SaveAreaAsPreset()
     {
+        ClampArea();
         if (_rom == null || _map == null || _area is not var (x1, y1, x2, y2)) return;
         if (_map.IsWorld) { Status = "Presets are made from town and dungeon maps (the world map has its own blocks)."; return; }
         var w = new SavePresetWindow(_rom, _map, x1, y1, x2 - x1 + 1, y2 - y1 + 1) { Owner = Application.Current?.MainWindow };
@@ -228,6 +245,14 @@ public partial class MapEditorViewModel
                 if (x < 0 || y < 0 || x >= _map.Width || y >= _map.Height) continue;
                 ushort before = _map.GetTile(x, y), t = p.Tiles[by * p.W + bx];
                 if (t == Prefabs.Keep) continue;
+                // a composite copied with another threshold (another map, or this one before Make room): the same pair
+                // under this map's threshold; one this map can't have (no composites, past 3FF) isn't stamped
+                if (p.Raw && p.SourceThreshold >= 0 && (t & 0x3FF) >= p.SourceThreshold && p.SourceThreshold != _map.CompositeThreshold)
+                {
+                    int nb = _map.CompositeThreshold < 0 ? -1 : _map.CompositeThreshold + ((t & 0x3FF) - p.SourceThreshold);
+                    if (nb < 0 || nb > 0x3FF) continue;
+                    t = (ushort)(t & ~0x3FF | nb);
+                }
                 if (p.Raw && _map.IsWorld == (p.TilesetKey == -1)) _map.Layer[y * _map.Width + x] = t;
                 else _map.SetTile(x, y, t & 0x3FF);
                 if (_map.GetTile(x, y) != before) { stroke.Add((x, y, before)); RedrawBlock(x, y); }

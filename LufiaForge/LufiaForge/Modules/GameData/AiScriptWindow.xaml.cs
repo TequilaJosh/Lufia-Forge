@@ -253,10 +253,17 @@ public partial class AiScriptWindow : Window
             f.Text = (s.Args[i] | s.Args[i + 1] << 8).ToString();
             return f;
         }
+        // a value the list doesn't have (a hack's own) is shown as one more choice: clamped, the clamped value was
+        // written into the step by merely picking it, and the script saved changed
         FieldVm Pick(int i, string label, IList<string> choices)
         {
-            var f = new FieldVm { Kind = FieldKind.List, Label = label, Choices = choices, Changed = Changed, SetValue = v => { if (v >= 0) s.Args[i] = (byte)v; } };
-            f.Value = Math.Min(s.Args[i], choices.Count - 1);
+            int raw = s.Args[i];
+            var list = choices.ToList();
+            bool other = raw >= list.Count;
+            if (other) list.Add($"{raw:X2} (other)");
+            var f = new FieldVm { Kind = FieldKind.List, Label = label, Choices = list, Changed = Changed,
+                                  SetValue = v => { if (v >= 0) s.Args[i] = (byte)(other && v == list.Count - 1 ? raw : v); } };
+            f.Value = other ? list.Count - 1 : raw;
             return f;
         }
         FieldVm Step(string label)
@@ -269,9 +276,11 @@ public partial class AiScriptWindow : Window
         var numbers = Enumerable.Range(0, 4).Select(n => $"Number {n}").ToList();
         FieldVm PickValue(int i, string label, (int Value, string Name)[] choices)
         {
-            var f = new FieldVm { Kind = FieldKind.List, Label = label, Choices = choices.Select(c => c.Name).ToList(), Changed = Changed,
-                                  SetValue = v => { if (v >= 0) s.Args[i] = (byte)choices[v].Value; } };
-            f.Value = Math.Max(0, Array.FindIndex(choices, c => c.Value == s.Args[i]));
+            int raw = s.Args[i];
+            (int Value, string Name)[] all = Array.FindIndex(choices, c => c.Value == raw) >= 0 ? choices : choices.Append((Value: raw, Name: $"{raw:X2} (other)")).ToArray();
+            var f = new FieldVm { Kind = FieldKind.List, Label = label, Choices = all.Select(c => c.Name).ToList(), Changed = Changed,
+                                  SetValue = v => { if (v >= 0) s.Args[i] = (byte)all[v].Value; } };
+            f.Value = Array.FindIndex(all, c => c.Value == raw);
             return f;
         }
         FieldVm Signed(int i, string label)

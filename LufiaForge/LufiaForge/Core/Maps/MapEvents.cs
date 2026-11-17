@@ -117,7 +117,7 @@ public static class MapEvents
     public static Starters FindStarters(RomBuffer rom, int mapId, int ev, IEnumerable<int>? allMaps = null)
     {
         var chars = new List<int>();
-        try { chars = LufiaMap.Load(rom, mapId).Npcs.Where(n => !n.IsUnused && n.Index == ev).Select(n => n.Index).ToList(); } catch { }
+        try { chars = LufiaMap.Load(rom, mapId).Npcs.Where(n => !n.IsUnused && TalkEvent(n.Index) == ev).Select(n => n.Index).ToList(); } catch { }
         var areas = MapSetupScript.ReadTriggers(rom, mapId).Where(t => t.Event == ev).Select(t => t.Area).Distinct().ToList();
         var chains = new List<(int, int, int)>();
         foreach (int m in allMaps ?? MapCatalog.Scan(rom).Select(x => x.MapId))
@@ -206,7 +206,12 @@ public static class MapEvents
 
     // ── Characters ─────────────────────────────────────────────────────────
 
-    /// <summary>The number a new character gets (talking to character n runs event n): the first one from the map's
+    /// <summary>The event talking to character <paramref name="npc"/> (its index in the map's list, 0 up) runs: n + 1, seen
+    /// in the game (the talk's $16 = actor - 7, $01:C2BA; the Ancient Cave and the visible monsters rely on it). Entry 0
+    /// of most maps' event tables is the event base, a marker, not an event.</summary>
+    public static int TalkEvent(int npc) => npc + 1;
+
+    /// <summary>The number a new character gets (talking to character n runs event n + 1): the first one from the map's
     /// count whose event slot nothing uses. Skipped: numbers with an event (a cutscene, a step-on area's, a chained
     /// one), the event base (the empty entry the step-on area events count from) and the events of the map's areas
     /// that have none yet. -1 when none is left below 32. A number past the event table grows it when the map is written.</summary>
@@ -215,7 +220,10 @@ public static class MapEvents
         int baseEv = LufiaMap.EventBase(rom, map.MapId);
         var areas = map.Triggers.Select(t => AreaEvent(rom, map.MapId, t.Index)).ToHashSet();
         for (int n = map.Npcs.Count; n < 32; n++)
-            if (n != baseEv && !areas.Contains(n) && !HasEvent(rom, map.MapId, n)) return n;
+        {
+            int ev = TalkEvent(n);
+            if (ev != baseEv && !areas.Contains(ev) && !HasEvent(rom, map.MapId, ev)) return n;
+        }
         return -1;
     }
 
@@ -232,7 +240,7 @@ public static class MapEvents
         {
             int ev = AreaEvent(rom, map.MapId, n);
             if (ev <= LufiaMap.EventBase(rom, map.MapId)) break;   // wrapped past 255
-            if (!HasEvent(rom, map.MapId, ev) && !map.Npcs.Any(c => c.Index == ev)) return n;
+            if (!HasEvent(rom, map.MapId, ev) && !map.Npcs.Any(c => TalkEvent(c.Index) == ev)) return n;
         }
         throw new InvalidOperationException("This map has no free number left for a new step-on area.");
     }
@@ -270,7 +278,10 @@ public static class MapEvents
         var added = map.Triggers.Where(t => t.Index >= map.LoadedTriggerCount && !t.IsUnused).ToList();
         var enabled = EnabledAreas(rom, map.MapId);
         var removed = map.Triggers.Where(t => t.IsUnused && enabled.Contains(t.Index)).ToList();
-        if (added.Count == 0 && removed.Count == 0) { map.MarkTriggersSaved(); return; }
+        // areas switched on that the map no longer has at all (taken off the end, an Undo after a save): switched off
+        // too, or the setup script switched on an area past the map's list
+        var gone = enabled.Where(i => i >= map.Triggers.Count).Distinct().ToList();
+        if (added.Count == 0 && removed.Count == 0 && gone.Count == 0) { map.MarkTriggersSaved(); return; }
         if (!allowExpand && rom.Length < MapWriter.ExpandedSize)
             throw new InvalidOperationException("New step-on areas need the ROM expanded to 2 MB.");
         foreach (var t in added)
@@ -279,6 +290,7 @@ public static class MapEvents
             SetAreaEnabled(rom, map.MapId, t.Index, true);
         }
         foreach (var t in removed) SetAreaEnabled(rom, map.MapId, t.Index, false);
+        foreach (int i in gone) SetAreaEnabled(rom, map.MapId, i, false);
         map.MarkTriggersSaved();
     }
 

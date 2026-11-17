@@ -234,7 +234,7 @@ public static class CutsceneStage
     /// <summary>Where the party most likely stands when the event starts (next to the character it belongs to).</summary>
     public static (int X, int Y) DefaultStart(LufiaMap map, int ev)
     {
-        if (map.Npcs.FirstOrDefault(n => n.Index == ev && !n.IsUnused) is { } npc) return (npc.X, npc.Y + 1);
+        if (map.Npcs.FirstOrDefault(n => MapEvents.TalkEvent(n.Index) == ev && !n.IsUnused) is { } npc) return (npc.X, npc.Y + 1);
         if (map.Arrivals.Count > 0) return (map.Arrivals[0].X, map.Arrivals[0].Y);
         return (map.Width / 2, map.Height / 2);
     }
