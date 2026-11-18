@@ -26,6 +26,8 @@ public partial class L2EventsPage : L2Page
 
     /// <summary>The Flags tab.</summary>
     public L2FlagsPanel FlagsPanel { get; }
+    /// <summary>The Story characters tab.</summary>
+    public L2StoryCharsPanel StoryPanel { get; }
     public LufiaForge.ViewModels.MainViewModel? MainVm => Main;
 
     public RomBuffer? CurrentRom => Rom;
@@ -38,15 +40,19 @@ public partial class L2EventsPage : L2Page
     public L2EventsPage()
     {
         FlagsPanel = new L2FlagsPanel(this);
+        StoryPanel = new L2StoryCharsPanel(this);
+        Editor.StoryCharRequested += id => { StoryPanel.ShowChar(id); StoryRequested?.Invoke(id); };
         // (the editor may show another map's event, opened from a "go to a scene" step: then the page's list is read
         // again without picking an event of its own map with the same number, which loaded that one instead)
-        Editor.Saved += _ => { FlagsPanel.Refresh(); if (Editor.Map == _map) FillEvents(Editor.Event?.Entry, Editor.Event?.IsInit == true, keepEditor: true); else FillEvents(null, false, keepEditor: true); MarkRead(); };
+        Editor.Saved += _ => { FlagsPanel.Refresh(); StoryPanel.Refresh(); if (Editor.Map == _map) FillEvents(Editor.Event?.Entry, Editor.Event?.IsInit == true, keepEditor: true); else FillEvents(null, false, keepEditor: true); MarkRead(); };
         Editor.FlagRequested += f => { FlagsPanel.ShowFlag(L2FlagIndex.Kind.Story, f); FlagRequested?.Invoke(f); };
         Editor.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(L2ScriptEditor.Status)) Status = Editor.Status; };
     }
 
     /// <summary>Asks the view to show the Flags tab on a flag.</summary>
     public event Action<int>? FlagRequested;
+    /// <summary>Asks the view to show the Story characters tab on one.</summary>
+    public event Action<int>? StoryRequested;
     /// <summary>Asks the view to show the Events tab (a use picked on the Flags tab).</summary>
     public event Action? EventsRequested;
 
@@ -73,6 +79,7 @@ public partial class L2EventsPage : L2Page
         }
         _map = index;
         FlagsPanel.Refresh();
+        StoryPanel.Refresh();
         FillEvents(null, false, keepEditor: false);
     }
 
@@ -132,6 +139,7 @@ public partial class L2EventsPage : L2Page
         if (!ChangedSinceRead || _map < 0) return;
         L2FlagUses.Invalidate();
         FlagsPanel.Refresh();
+        StoryPanel.Refresh();
         Editor.Shown();
         FillEvents(Editor.Event?.Entry, Editor.Event?.IsInit == true, keepEditor: true);
         MarkRead();

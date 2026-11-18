@@ -408,8 +408,11 @@ public static class L2EventCommands
             waits: "until the walk is done", rare: true, ps: Who(1));
         One(0x34, "Change a character's sprite", Chars, (b, w) => $"{Cap(w.Who(b[1]))} looks like sprite {b[2]:X2}", new byte[] { 0x34, 0x50, 0x0A },
             "", ps: new[] { Who(1), P("sprite", L2Kind.Sprite, 2) });
-        One(0x35, "Send a story character to another map", Chars, (b, w) => $"{Cap(w.Who(b[1]))} goes to {w.Map(b[2])}, character start {b[3]}",
-            new byte[] { 0x35, 0x10, 0x03, 0x01 }, "For story characters (10-4F): from now on they stand on that map at that start. Hidden here at once.",
+        One(0x35, "Send a story character to another map", Chars, (b, w) => L2Persistent.IsAway(b[2], b[3])
+                ? $"{Cap(w.Who(b[1]))} is sent away (to no map the party sees)"
+                : $"{Cap(w.Who(b[1]))} goes to {w.Map(b[2])}, character start {b[3]}",
+            new byte[] { 0x35, 0x10, 0x03, 0x01 }, "For story characters (10-4E): from now on they stand on that map at that start, from the next time it loads. " +
+            "Gone from the map shown at once. Map 02 starts 7-14 are \"away\": the game sends story characters it is done with there.",
             ps: new[] { P("story character", L2Kind.Who, 1, 0x4F, min: 0x10), P("map", L2Kind.Map, 2), P("start", L2Kind.Number, 3) });
         One(0x68, "Add a map character (start-up script)", Chars, (b, w) => $"Add {NoSprite(w.Who(b[1]))} with sprite {b[2]:X2}", new byte[] { 0x68, 0x50, 0x00 },
             "Only in a map's start-up script, before anything else that uses characters.", 'G', rare: true, ps: new[] { Who(1), P("sprite", L2Kind.Sprite, 2) });

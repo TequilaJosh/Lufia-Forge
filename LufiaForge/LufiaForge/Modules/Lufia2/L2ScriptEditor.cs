@@ -46,6 +46,8 @@ public partial class L2FieldVm : ObservableObject
     public bool IsPlace => L2ScriptEditor.IsPlaceField(Step, Def);
     /// <summary>A point of another map (where "Go to another map" arrives): picked on that map in a window.</summary>
     public bool IsArrival => Def.Kind == L2Kind.ArrivalPoint && !Step.IsText;
+    /// <summary>Where a "Send a story character" step sends to: picked on that map in a window.</summary>
+    public bool IsStoryPlace => !Step.IsText && Step.Op == 0x35 && Def.Label == "start";
     public int StepMap => L2EventCommands.Find(Step.Op)?.FieldsFor(Step.Bytes).FirstOrDefault(q => q.Kind == L2Kind.Map) is { } m ? m.Get(Step.Bytes) : -1;
     public bool HasHint => Hint.Length > 0;
     public List<L2Option> Choices { get; } = new();
@@ -737,6 +739,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
         foreach (var (_, b) in L2MapInfo.Records(rom, map, L2MapInfo.Characters, 8))
         {
             int id = 0x4F + b[0];
+            if (id >= 0x80) continue;   // a start made for story characters only (L2Persistent.StartAt)
             _who[id] = ($"{_speakers.Label(id)} at ({b[1]},{b[2]}){Made(id)}", _speakers.SpriteOf(id));
         }
         foreach (var kv in sprites.Where(kv => !_who.ContainsKey(kv.Key))) _who[kv.Key] = (_speakers.Label(kv.Key) + Made(kv.Key), kv.Value);
@@ -1087,6 +1090,11 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
                 pic = SpritePicture(v);
                 break;
             case L2Kind.Hex or L2Kind.Variable or L2Kind.Battle or L2Kind.Shop: hex = true; break;
+        }
+        if (StoryFieldChoices(s, p, v) is { } story)
+        {
+            choices = story;
+            if (p.Kind == L2Kind.Who && _rom != null && L2Persistent.Exists(_rom, v)) pic = SpritePicture(L2Persistent.Record(_rom, v)[1]);
         }
         return new L2FieldVm(this, s, p, choices, v, hex, pic);
     }
@@ -1499,6 +1507,8 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
     {
         _choices.Remove(L2Kind.Flag);
         _choices.Remove(L2Kind.Door);
+        _choices.Remove(L2Kind.Who);
+        _choices.Remove(L2Kind.WhoOrAll);
         if (_rom != null && _map >= 0) ReadMap();
         // the cards again with the new words and lists (the steps stay as they are: nothing is read from the ROM)
         if (_script == null || _rom == null) return;

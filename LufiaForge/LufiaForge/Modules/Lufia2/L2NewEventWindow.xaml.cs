@@ -46,7 +46,7 @@ public partial class L2NewEventWindow : Window
 
         int block = L2Events.Block(_rom, _map);
         _talked = block >= 0 ? L2EventBlocks.ReadLists(_rom, block).Where(e => e.Head == L2EventBlocks.TalkList).Select(e => e.Id).ToHashSet() : new();
-        foreach (var (id, c) in page.Characters.Where(c => c.Key >= 0x50).OrderBy(c => c.Key))
+        foreach (var (id, c) in page.Characters.Where(c => c.Key >= 0x50 || c.Key is >= L2Persistent.First and <= L2Persistent.LastUsable).OrderBy(c => c.Key))
             TalkCombo.Items.Add(new L2Option(id, L2EventCommands.Cap(c.Name) + (_talked.Contains(id) ? " (has an event already)" : "")));
         TalkCombo.SelectedIndex = TalkCombo.Items.Cast<L2Option>().ToList().FindIndex(o => !_talked.Contains(o.Value));
         foreach (var e in page.Events.Where(e => e.Entry != null)) AfterCombo.Items.Add(e);

@@ -157,7 +157,11 @@ public static class L2EventBlocks
 
     /// <summary>Writes several changed events of one map at once, in the block's added part (moving the block into the
     /// event space first). Events that share one script are given the same script object.</summary>
-    public static string SaveAll(RomBuffer rom, int map, IReadOnlyDictionary<Entry, L2EventScript> scripts)
+    public static string SaveAll(RomBuffer rom, int map, IReadOnlyDictionary<Entry, L2EventScript> scripts) => SaveAll(rom, map, scripts, null);
+
+    /// <summary><see cref="SaveAll(RomBuffer, int, IReadOnlyDictionary{Entry, L2EventScript})"/>, with events given
+    /// another id (<paramref name="newId"/>: a talk event that goes with a character whose actor id changed).</summary>
+    public static string SaveAll(RomBuffer rom, int map, IReadOnlyDictionary<Entry, L2EventScript> scripts, Func<Entry, int>? newId)
     {
         foreach (var sc in scripts.Values) NeedExtraFlags(rom, sc);
         int block = L2Events.Block(rom, map);
@@ -165,7 +169,7 @@ public static class L2EventBlocks
         var lists = ReadLists(rom, block);
         foreach (var e in scripts.Keys)
             if (!lists.Contains(e)) throw new InvalidOperationException("The event is no longer in the map's lists.");
-        return Relayout(rom, map, lists.Select(e => (e, scripts.TryGetValue(e, out var s) ? s : null)).ToList());
+        return Relayout(rom, map, lists.Select(e => (newId == null ? e : e with { Id = newId(e) }, scripts.TryGetValue(e, out var s) ? s : null)).ToList());
     }
 
     /// <summary>Adds an event to a list (talk: id = the character, trigger: id = the trigger area).</summary>

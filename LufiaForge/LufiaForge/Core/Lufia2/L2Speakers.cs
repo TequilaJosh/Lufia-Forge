@@ -31,7 +31,8 @@ public sealed class L2Speakers
     public static string? SpriteName(int sprite) => Names.Value.sprites.TryGetValue(sprite.ToString("X2"), out var n) ? n : null;
 
     /// <summary>The name of story character <paramref name="id"/> (10-4F), or null.</summary>
-    public static string? StoryName(int id) => Names.Value.story.TryGetValue(id.ToString("X2"), out var n) ? n : null;
+    /// <summary>A story character's name: the one given on the Story characters tab, else the game's own.</summary>
+    public static string? StoryName(int id) => L2FlagNotes.Name(L2FlagIndex.Kind.Character, id) ?? (Names.Value.story.TryGetValue(id.ToString("X2"), out var n) ? n : null);
 
     /// <summary>Whether <paramref name="sprite"/> still shows hero <paramref name="hero"/> (its own or one of its poses).</summary>
     public static bool ShowsHero(int hero, int sprite) =>

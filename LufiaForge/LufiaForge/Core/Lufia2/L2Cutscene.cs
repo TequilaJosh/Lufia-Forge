@@ -717,6 +717,12 @@ public static class L2Cutscene
             }
             case 0x2D when b.Length >= 2: A(b[1]).Visible = true; s.Caption = $"{name(b[1])} appears"; break;
             case 0x2E or 0x99 or 0x9D when b.Length >= 2: A(b[1]).Visible = false; s.Caption = $"{name(b[1])} leaves"; s.Frames = op == 0x2E ? 6 : 30; break;
+            // a story character sent to a map: gone from this one at once (it stands on the new map from the next time
+            // that map loads, this one too: $80:B2B1)
+            case 0x35 when b.Length >= 4 && s.Actors.TryGetValue(b[1], out var sent):
+                sent.Visible = false;
+                s.Caption = L2Persistent.IsAway(b[2], b[3]) ? $"{name(b[1])} is sent away" : $"{name(b[1])} is sent to map {b[2]:X2} (there from the next time it loads)";
+                break;
             case 0x31 when b.Length >= 3 && b[2] is >= 1 and <= 4: A(b[1]).Dir = new[] { 0, 0, 1, 2, 3 }[b[2]]; s.Caption = $"{name(b[1])} turns"; break;
             case 0x7A when b.Length >= 3 && b[2] < 8: A(b[1]).Dir = new[] { 1, 2, 0, 3 }[b[2] / 2]; s.Caption = $"{name(b[1])} turns"; break;
             case 0xA3 when b.Length >= 3:

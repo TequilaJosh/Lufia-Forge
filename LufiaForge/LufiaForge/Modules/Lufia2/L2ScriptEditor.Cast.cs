@@ -22,6 +22,11 @@ public sealed class L2CastRowVm
     public bool CanSprite { get; init; }
     /// <summary>A map character the start-up script makes once: its "When..." button sets the story flag it needs.</summary>
     public bool CanWhen { get; init; }
+    /// <summary>A story character (10-4E): "Send away" and "Story character…".</summary>
+    public bool IsStory { get; init; }
+    public bool CanSendAway { get; init; }
+    /// <summary>A map character the start-up script makes once: "Make it a story character".</summary>
+    public bool CanMakeStory { get; init; }
     public double Dim => InEvent ? 1.0 : 0.6;
     public List<L2CastLink> Links { get; init; } = new();
 }
@@ -127,6 +132,9 @@ public partial class L2ScriptEditor
                 InEvent = u != null,
                 CanSprite = CanEdit && !here && id != 0xFF,
                 CanWhen = CanEdit && id >= 0x50 && creates.Count(c => c.Id == id) == 1,
+                IsStory = id is >= L2Persistent.First and <= L2Persistent.LastUsable,
+                CanSendAway = CanEdit && !here && id is >= L2Persistent.First and <= L2Persistent.LastUsable && L2Persistent.Exists(rom, id),
+                CanMakeStory = CanEdit && id is >= 0x50 and < 0x70 && creates.Count(c => c.Id == id) == 1,
                 Links = links,
             });
         }

@@ -45,6 +45,8 @@
                             Click="PickPlace_Click" Visibility="{Binding IsPlace, Converter={StaticResource BoolToVisibilityConverter}}"/>
                     <Button Content="📍 Pick on the map…" ToolTip="Click where the party arrives, on that map (a point there is used or made)" Style="{StaticResource LufiaButton}" Padding="6,0" Margin="3,0,0,0"
                             Click="PickArrival_Click" Visibility="{Binding IsArrival, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                    <Button Content="📍 Pick on the map…" ToolTip="Click where the story character stands, on that map (a character start there is used or made)" Style="{StaticResource LufiaButton}" Padding="6,0" Margin="3,0,0,0"
+                            Click="PickStoryPlace_Click" Visibility="{Binding IsStoryPlace, Converter={StaticResource BoolToVisibilityConverter}}"/>
                     <TextBlock Text="{Binding Error}" Foreground="{StaticResource ErrorBrush}" FontSize="11" VerticalAlignment="Center" Margin="4,0,0,0"/>
                 </StackPanel>
             </DataTemplate>
@@ -215,8 +217,11 @@
                         <Button DockPanel.Dock="Left" Content="＋ Add a character…" Style="{StaticResource LufiaButton}" Click="AddCast_Click" Padding="8,1" Margin="0,0,10,0"
                                 VerticalAlignment="Top" IsEnabled="{Binding CanEdit}"
                                 ToolTip="Pick a sprite, then click a tile on the stage: a new character is made with the map (hidden) and appears there at the picked step"/>
+                        <Button DockPanel.Dock="Left" Content="＋ Story character here…" Style="{StaticResource LufiaButton}" Click="AddStory_Click" Padding="8,1" Margin="0,0,10,0"
+                                VerticalAlignment="Top" IsEnabled="{Binding CanEdit}"
+                                ToolTip="Pick a story character (or make a new one), then click a tile on the stage: from the picked step on it stands there, from the next time this map loads"/>
                         <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" VerticalAlignment="Center"
-                                   Text="Map characters are made by the start-up script; story characters (10-4F, such as Idura) are put on their map by the game itself. To show someone else in their place in this event, use Sprite… on their row."/>
+                                   Text="Map characters are made by the start-up script each time the map loads (When… picks the story flags). Story characters (10-4E, such as Tia) are put on their map by the game, which remembers where each one is: Send away and &quot;Send a story character&quot; steps move them. To show someone else in their place in this event, use Sprite… on their row."/>
                     </DockPanel>
                     <ScrollViewer MaxHeight="210" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                         <ItemsControl ItemsSource="{Binding Cast}">
@@ -247,6 +252,36 @@
                                                             <Style TargetType="Button" BasedOn="{StaticResource LufiaButton}">
                                                                 <Style.Triggers>
                                                                     <DataTrigger Binding="{Binding CanSprite}" Value="False"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Button.Style>
+                                                    </Button>
+                                                    <Button Content="Send away" Padding="6,0" Margin="0,0,4,2" Click="CastSendAway_Click"
+                                                            ToolTip="A &quot;Send a story character&quot; step at the picked step that sends it away, as the game does with Tia when she joins: gone from this map at once and seen nowhere after (a later send brings it back)">
+                                                        <Button.Style>
+                                                            <Style TargetType="Button" BasedOn="{StaticResource LufiaButton}">
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding CanSendAway}" Value="False"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Button.Style>
+                                                    </Button>
+                                                    <Button Content="Story character…" Padding="6,0" Margin="0,0,4,2" Click="CastStory_Click"
+                                                            ToolTip="Its name, its sprite, where a new game puts it and every event that moves it: the Story characters tab">
+                                                        <Button.Style>
+                                                            <Style TargetType="Button" BasedOn="{StaticResource LufiaButton}">
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsStory}" Value="False"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Button.Style>
+                                                    </Button>
+                                                    <Button Content="Make it a story character" Padding="6,0" Margin="0,0,4,2" Click="CastMakeStory_Click"
+                                                            ToolTip="Turn this map character into a story character: the game then remembers where it is, and events can send it to other maps or away">
+                                                        <Button.Style>
+                                                            <Style TargetType="Button" BasedOn="{StaticResource LufiaButton}">
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding CanMakeStory}" Value="False"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
                                                                 </Style.Triggers>
                                                             </Style>
                                                         </Button.Style>

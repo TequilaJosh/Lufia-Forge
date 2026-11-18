@@ -15,7 +15,8 @@ namespace LufiaForge.Core.Lufia2;
 /// </summary>
 public static class L2FlagIndex
 {
-    public enum Kind { Story, Counter, Chest, Switch, Door }
+    /// <summary><see cref="Character"/> is only for names and notes (<see cref="L2FlagNotes"/>): story characters 10-4E.</summary>
+    public enum Kind { Story, Counter, Chest, Switch, Door, Character }
 
     /// <summary>Where a use is: an event (its list <see cref="Head"/> and <see cref="Id"/>; head -1: the start-up
     /// script), a puzzle script (head <see cref="PuzzleHead"/>) or a map's treasure list (<see cref="ChestHead"/>).</summary>

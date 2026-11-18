@@ -496,6 +496,7 @@ public partial class L2EventEditorPanel : UserControl
         _lastTile = (x, y);
         if (_pickStart) { _pickStart = false; _editor.SetPartyStart(x, y); return; }
         if (_placeSprite >= 0) { int sprite = _placeSprite; _placeSprite = -1; _editor.AddCharacterHere(sprite, x, y); return; }
+        if (_placeStory is var (sid, sspr)) { _placeStory = null; _editor.SendStoryHere(sid, sspr, x, y); return; }
         if (_editor.IsChangingMap) { _editor.ChangeDown(x, y); Stage.CaptureMouse(); return; }
         if (_editor.IsPickingPlace) { _editor.PlaceDown(x, y); Stage.CaptureMouse(); return; }
         if (_editor.IsDrawingPath) { _editor.PathClick(x, y); return; }
@@ -513,6 +514,7 @@ public partial class L2EventEditorPanel : UserControl
         if (_editor?.IsChangingMap == true) { _editor.ChangeCancel(); return; }
         if (_editor?.IsPickingPlace == true) { _editor.PlaceCancel(); return; }
         if (_placeSprite >= 0) { _placeSprite = -1; if (_editor != null) _editor.StageInfo = "No character added."; return; }
+        if (_placeStory != null) { _placeStory = null; if (_editor != null) _editor.StageInfo = "No story character placed."; return; }
         ShowActionMenu(x, y);
     }
 
@@ -619,6 +621,80 @@ public partial class L2EventEditorPanel : UserControl
         _editor.SetWhen(row.Id, flag, whileOn.IsChecked == true);
     }
 
+    /// <summary>A story character to put on the next tile clicked on the stage: (id, sprite); id -1 = a new one.</summary>
+    private (int Id, int Sprite)? _placeStory;
+
+    private void AddStory_Click(object sender, RoutedEventArgs e)
+    {
+        if (_editor?.Rom is not { } rom) return;
+        var w = L2Ui.Window("Story character here", 520, 260);
+        w.Owner = Window.GetWindow(this);
+        var root = new StackPanel { Margin = new Thickness(14) };
+        root.Children.Add(L2Ui.Label("Pick the story character. Next, click the tile on the stage: from the picked step on it stands there " +
+                                     "(from the next time this map loads; the game remembers where each story character is).", true));
+        var box = new System.Windows.Controls.ComboBox { DisplayMemberPath = "Label", Margin = new Thickness(0, 10, 0, 4), MinWidth = 440 };
+        if (L2Ui.S("GdCombo") is { } cs) box.Style = cs;
+        var items = new List<L2Option> { new(-1, "＋ A new story character (pick its sprite next)") };
+        for (int id = L2Persistent.First; id <= L2Persistent.LastUsable; id++)
+            if (L2Persistent.Exists(rom, id)) items.Add(new L2Option(id, $"{id:X2}  {L2EventCommands.Cap(_editor.StoryLabel(id))}"));
+        box.ItemsSource = items;
+        box.SelectedIndex = 0;
+        root.Children.Add(box);
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = System.Windows.HorizontalAlignment.Right, Margin = new Thickness(0, 12, 0, 0) };
+        bool ok = false;
+        buttons.Children.Add(L2Ui.Button("Next", true, (_, _) => { ok = true; w.DialogResult = true; }));
+        var cancel = L2Ui.Button("Cancel", false, (_, _) => w.DialogResult = false); cancel.Margin = new Thickness(8, 0, 0, 0);
+        buttons.Children.Add(cancel);
+        root.Children.Add(buttons);
+        w.Content = root;
+        w.ShowDialog();
+        if (!ok || box.SelectedItem is not L2Option pick) return;
+        int sprite = -1;
+        if (pick.Value < 0)
+        {
+            sprite = PickSprite(_editor, Window.GetWindow(this), "New story character", "Use this sprite",
+                "Pick the new story character's sprite (one of the game's: a story character goes from map to map).", gameOnly: true);
+            if (sprite < 0) return;
+        }
+        _placeStory = (pick.Value, sprite);
+        if (StageRoot.Visibility != Visibility.Visible) { _stageChosen = true; StageToggle.IsChecked = true; ShowStage(true); }
+        _editor.StageInfo = "Click the tile on the stage where it stands (right-click or Esc: none).";
+    }
+
+    private void CastSendAway_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: L2CastRowVm row }) _editor?.SendAway(row.Id);
+    }
+
+    private void CastStory_Click(object sender, RoutedEventArgs e)
+    {
+        if (_editor == null || sender is not FrameworkElement { DataContext: L2CastRowVm row }) return;
+        if (!_editor.RequestStoryChar(row.Id))
+            _editor.StageInfo = $"The Events page's Story characters tab shows story character {row.Id:X2}: its name, sprite, new-game place and the events that move it.";
+    }
+
+    private void CastMakeStory_Click(object sender, RoutedEventArgs e)
+    {
+        if (_editor?.Rom is not { } rom || sender is not FrameworkElement { DataContext: L2CastRowVm row }) return;
+        if (L2Persistent.WhyNotStory(rom, _editor.Map, row.Id) is { } why) { _editor.StageInfo = "Can't: " + why; return; }
+        if (System.Windows.MessageBox.Show(Window.GetWindow(this),
+                $"Make {row.Name.Trim()} a story character?\n\nIt gets a free story character number. A new game puts it here, on its place, and the game " +
+                "remembers where it is from then on: events can send it to another map or away, and it stays there. The start-up script no longer makes it, " +
+                "and this map's events (its talk event too) use the new number.\n\nEdit > Undo takes it back.",
+                "Story character", System.Windows.MessageBoxButton.OKCancel) != System.Windows.MessageBoxResult.OK) return;
+        _editor.MakeStoryCharacter(row.Id);
+    }
+
+    private void PickStoryPlace_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: L2FieldVm f } || _editor?.Rom is not { } rom || f.Step.Bytes.Length < 4) return;
+        int map = f.Step.Bytes[2] < L2Maps.Count(rom) && !L2Persistent.IsAway(f.Step.Bytes[2], f.Step.Bytes[3]) ? f.Step.Bytes[2] : Math.Max(2, _editor.Map);
+        var at = L2MapInfo.Records(rom, map, L2MapInfo.Characters, 8).Select(r => r.Bytes).FirstOrDefault(b => b[0] == f.Step.Bytes[3]);
+        var w = new L2PickPlaceWindow(rom, map, at?[1] ?? 0, at?[2] ?? 0, m => L2Maps.Name(rom, m)) { Owner = Window.GetWindow(this), Title = "Where the story character stands - Lufia Forge" };
+        if (w.ShowDialog() != true) return;
+        _editor.PickStoryPlace(f, w.Map, w.X, w.Y);
+    }
+
     private void CastSprite_Click(object sender, RoutedEventArgs e)
     {
         if (_editor?.Rom == null || sender is not FrameworkElement { DataContext: L2CastRowVm row }) return;
@@ -666,7 +742,8 @@ public partial class L2EventEditorPanel : UserControl
     }
 
     /// <summary>A small window to pick a map sprite (with its picture); -1 when cancelled.</summary>
-    public static int PickSprite(L2ScriptEditor editor, Window? owner, string title = "New character", string button = "＋ Add the character", string? hint = null)
+    public static int PickSprite(L2ScriptEditor editor, Window? owner, string title = "New character", string button = "＋ Add the character", string? hint = null,
+        bool gameOnly = false)
     {
         var rom = editor.Rom!;
         var w = L2Ui.Window(title, 420, 560);
@@ -676,7 +753,7 @@ public partial class L2EventEditorPanel : UserControl
         DockPanel.SetDock(root.Children[0], Dock.Top);
         var list = new ListBox { Margin = new Thickness(0, 8, 0, 8) };
         if (L2Ui.S("GdRecordList") is { } ls) list.Style = ls;
-        int count = L2Sprites.Count(rom);
+        int count = gameOnly ? L2Sprites.GameCount : L2Sprites.Count(rom);
         for (int s = 0; s < count; s++)
         {
             var row = new StackPanel { Orientation = Orientation.Horizontal, Tag = s };
@@ -710,6 +787,7 @@ public partial class L2EventEditorPanel : UserControl
             else if (e.Key == Key.Escape && _editor.IsChangingMap) { _editor.ChangeCancel(); e.Handled = true; }
             else if (e.Key == Key.Escape && _editor.IsPickingPlace) { _editor.PlaceCancel(); e.Handled = true; }
             else if (e.Key == Key.Escape && _placeSprite >= 0) { _placeSprite = -1; _editor.StageInfo = "No character added."; e.Handled = true; }
+            else if (e.Key == Key.Escape && _placeStory != null) { _placeStory = null; _editor.StageInfo = "No story character placed."; e.Handled = true; }
             else if (e.Key == Key.Escape && (_editor.PickedActor >= 0 || _pickStart)) { _pickStart = false; _editor.LetGo(); e.Handled = true; }
             else if (Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase && Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
             {
