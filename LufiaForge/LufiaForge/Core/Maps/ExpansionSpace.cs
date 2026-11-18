@@ -7,7 +7,7 @@ namespace LufiaForge.Core.Maps;
 /// lists every block written there (start, length, what it is), so new data goes into real gaps and old copies of
 /// moved data are freed. Nothing is ever placed by guessing from runs of FF bytes (event tables contain FF FF entries).
 ///
-/// Table at <see cref="TableStart"/>: "LFAL", version (1), count (u16 LE), then count × 10-byte entries:
+/// Table at <see cref="TableStart"/>: "LFAL", version (1), count (u16 LE), then count x 10-byte entries:
 /// start (u24), length (u24), kind (u8), id (u16), reserved (u8).
 ///
 /// ROMs expanded by earlier versions have no table: it is rebuilt from the pointers to moved map data and script

@@ -16,7 +16,7 @@
         <SolidColorBrush x:Key="DataLineBrush"    Color="#C0392B"/>  <!-- red for data markers -->
         <SolidColorBrush x:Key="CurrentPcBrush"   Color="#2A3A1A"/>  <!-- dark green PC highlight bg -->
 
-        <!-- Bool → Visibility converter inline for operand coloring -->
+        <!-- Bool -> Visibility converter inline for operand coloring -->
 
         <!-- Disassembly row DataTemplate -->
         <DataTemplate x:Key="DisassemblyRowTemplate" DataType="{x:Type local:DisassemblyLine}">
@@ -65,7 +65,7 @@
                         </TextBlock.Style>
                     </TextBlock>
 
-                    <!-- Operand — clickable when HasJumpTarget is true -->
+                    <!-- Operand - clickable when HasJumpTarget is true -->
                     <TextBlock Grid.Column="3"
                                Text="{Binding Operand}"
                                FontFamily="Consolas"
@@ -120,7 +120,7 @@
         </Grid.RowDefinitions>
 
         <!-- ================================================================
-             TOOLBAR ROW 1 — address input, flags, disassemble
+             TOOLBAR ROW 1 - address input, flags, disassemble
              ================================================================ -->
         <Border Grid.Row="0"
                 Background="{StaticResource SurfacePurpleBrush}"
@@ -188,7 +188,7 @@
         </Border>
 
         <!-- ================================================================
-             TOOLBAR ROW 2 — live PC / auto-scroll / cross-reference
+             TOOLBAR ROW 2 - live PC / auto-scroll / cross-reference
              ================================================================ -->
         <Border Grid.Row="1"
                 Background="{StaticResource DeepPurpleBrush}"
@@ -265,7 +265,7 @@
         <Rectangle Grid.Row="2" Height="1" Fill="{StaticResource GoldAccentBrush}"/>
 
         <!-- ================================================================
-             MAIN CONTENT — disassembly list + side panels
+             MAIN CONTENT - disassembly list + side panels
              ================================================================ -->
         <Grid Grid.Row="3" common:LayoutMemory.Key="disassembler.main">
             <Grid.ColumnDefinitions>

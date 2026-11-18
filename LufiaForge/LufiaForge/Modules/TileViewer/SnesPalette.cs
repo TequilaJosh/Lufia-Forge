@@ -35,7 +35,7 @@ public static class SnesPalette
     }
 
     /// <summary>
-    /// Generate a grayscale ramp palette (black → white) for rendering
+    /// Generate a grayscale ramp palette (black -> white) for rendering
     /// without a real ROM palette.
     /// </summary>
     public static uint[] Grayscale(int colorCount)

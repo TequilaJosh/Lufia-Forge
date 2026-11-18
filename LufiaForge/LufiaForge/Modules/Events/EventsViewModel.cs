@@ -16,7 +16,7 @@ public sealed class EventEntry
     public int Event { get; init; }
     public string Source { get; init; } = "";
     public string Preview { get; init; } = "";
-    /// <summary>What the event seems to do (church, inn, gives an item, cutscene…).</summary>
+    /// <summary>What the event seems to do (church, inn, gives an item, cutscene...).</summary>
     public string Hint { get; init; } = "";
     /// <summary>Picture of the character whose event this is (or null).</summary>
     public System.Windows.Media.ImageSource? Picture { get; init; }
@@ -175,7 +175,7 @@ public partial class EventsViewModel : ObservableObject, IEventHost
         try { s = EventScript.Load(_rom, SelectedMap.MapId, ev); }
         catch (Exception ex) { Status = $"Event {ev} can't be read: {ex.Message}"; return; }
         if (s == null) { Status = $"Event {ev} of this map has no script."; return; }
-        OpenRequested?.Invoke(s, $"{SelectedMap.Label} – event {ev}" + (source.Length > 0 ? $"  ({source})" : ""), -1);
+        OpenRequested?.Invoke(s, $"{SelectedMap.Label} - event {ev}" + (source.Length > 0 ? $"  ({source})" : ""), -1);
         Status = $"Event {ev}: script at ROM 0x{s.Start:X6}.";
     }
 
@@ -355,7 +355,7 @@ public partial class EventsViewModel : ObservableObject, IEventHost
             ? EventScript.LoadAt(_rom, u.MapId, u.Event, u.RegionStart, u.JumpBase)
             : EventScript.Load(_rom, u.MapId, u.Event);
         if (s == null) return;
-        string title = $"{SelectedMap?.Label} – event {u.Event}" + (s.IsCodeView ? $" (code at 0x{s.Start:X6})" : "");
+        string title = $"{SelectedMap?.Label} - event {u.Event}" + (s.IsCodeView ? $" (code at 0x{s.Start:X6})" : "");
         OpenRequested?.Invoke(s, title, u.Line);
         Status = $"Flag {u.Flag:X2} {u.Action} at line {u.Line + 1} (highlighted).";
     }

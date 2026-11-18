@@ -14,12 +14,12 @@ public static class Cpu65816
 
     private enum AddrMode
     {
-        Imp,       // Implied — no operand
-        Acc,       // Accumulator — "A"
-        Imm_M,     // Immediate — 1 byte (M=1) or 2 bytes (M=0)
-        Imm_X,     // Immediate — 1 byte (X=1) or 2 bytes (X=0)
-        Imm8,      // Immediate — always 1 byte (REP, SEP, BRK, COP, WDM)
-        Imm16,     // Immediate — always 2 bytes (PEA)
+        Imp,       // Implied - no operand
+        Acc,       // Accumulator - "A"
+        Imm_M,     // Immediate - 1 byte (M=1) or 2 bytes (M=0)
+        Imm_X,     // Immediate - 1 byte (X=1) or 2 bytes (X=0)
+        Imm8,      // Immediate - always 1 byte (REP, SEP, BRK, COP, WDM)
+        Imm16,     // Immediate - always 2 bytes (PEA)
         Dp,        // Direct Page
         Dp_X,      // Direct Page, X
         Dp_Y,      // Direct Page, Y
@@ -44,7 +44,7 @@ public static class Cpu65816
     }
 
     // -------------------------------------------------------------------------
-    // Opcode table — 256 entries
+    // Opcode table - 256 entries
     // -------------------------------------------------------------------------
 
     private record struct OpcodeInfo(string Mnemonic, AddrMode Mode);
@@ -84,7 +84,7 @@ public static class Cpu65816
     {
         var t = new OpcodeInfo[256];
 
-        // 0x00–0x0F
+        // 0x00-0x0F
         t[0x00] = new("BRK", AddrMode.Imm8);
         t[0x01] = new("ORA", AddrMode.Dp_IndX);
         t[0x02] = new("COP", AddrMode.Imm8);
@@ -102,7 +102,7 @@ public static class Cpu65816
         t[0x0E] = new("ASL", AddrMode.Abs);
         t[0x0F] = new("ORA", AddrMode.Long);
 
-        // 0x10–0x1F
+        // 0x10-0x1F
         t[0x10] = new("BPL", AddrMode.Rel);
         t[0x11] = new("ORA", AddrMode.Dp_IndY);
         t[0x12] = new("ORA", AddrMode.Dp_Ind);
@@ -120,7 +120,7 @@ public static class Cpu65816
         t[0x1E] = new("ASL", AddrMode.Abs_X);
         t[0x1F] = new("ORA", AddrMode.Long_X);
 
-        // 0x20–0x2F
+        // 0x20-0x2F
         t[0x20] = new("JSR", AddrMode.Abs);
         t[0x21] = new("AND", AddrMode.Dp_IndX);
         t[0x22] = new("JSL", AddrMode.Long);
@@ -138,7 +138,7 @@ public static class Cpu65816
         t[0x2E] = new("ROL", AddrMode.Abs);
         t[0x2F] = new("AND", AddrMode.Long);
 
-        // 0x30–0x3F
+        // 0x30-0x3F
         t[0x30] = new("BMI", AddrMode.Rel);
         t[0x31] = new("AND", AddrMode.Dp_IndY);
         t[0x32] = new("AND", AddrMode.Dp_Ind);
@@ -156,7 +156,7 @@ public static class Cpu65816
         t[0x3E] = new("ROL", AddrMode.Abs_X);
         t[0x3F] = new("AND", AddrMode.Long_X);
 
-        // 0x40–0x4F
+        // 0x40-0x4F
         t[0x40] = new("RTI", AddrMode.Imp);
         t[0x41] = new("EOR", AddrMode.Dp_IndX);
         t[0x42] = new("WDM", AddrMode.Imm8);
@@ -174,7 +174,7 @@ public static class Cpu65816
         t[0x4E] = new("LSR", AddrMode.Abs);
         t[0x4F] = new("EOR", AddrMode.Long);
 
-        // 0x50–0x5F
+        // 0x50-0x5F
         t[0x50] = new("BVC", AddrMode.Rel);
         t[0x51] = new("EOR", AddrMode.Dp_IndY);
         t[0x52] = new("EOR", AddrMode.Dp_Ind);
@@ -192,7 +192,7 @@ public static class Cpu65816
         t[0x5E] = new("LSR", AddrMode.Abs_X);
         t[0x5F] = new("EOR", AddrMode.Long_X);
 
-        // 0x60–0x6F
+        // 0x60-0x6F
         t[0x60] = new("RTS", AddrMode.Imp);
         t[0x61] = new("ADC", AddrMode.Dp_IndX);
         t[0x62] = new("PER", AddrMode.RelL);
@@ -210,7 +210,7 @@ public static class Cpu65816
         t[0x6E] = new("ROR", AddrMode.Abs);
         t[0x6F] = new("ADC", AddrMode.Long);
 
-        // 0x70–0x7F
+        // 0x70-0x7F
         t[0x70] = new("BVS", AddrMode.Rel);
         t[0x71] = new("ADC", AddrMode.Dp_IndY);
         t[0x72] = new("ADC", AddrMode.Dp_Ind);
@@ -228,7 +228,7 @@ public static class Cpu65816
         t[0x7E] = new("ROR", AddrMode.Abs_X);
         t[0x7F] = new("ADC", AddrMode.Long_X);
 
-        // 0x80–0x8F
+        // 0x80-0x8F
         t[0x80] = new("BRA", AddrMode.Rel);
         t[0x81] = new("STA", AddrMode.Dp_IndX);
         t[0x82] = new("BRL", AddrMode.RelL);
@@ -246,7 +246,7 @@ public static class Cpu65816
         t[0x8E] = new("STX", AddrMode.Abs);
         t[0x8F] = new("STA", AddrMode.Long);
 
-        // 0x90–0x9F
+        // 0x90-0x9F
         t[0x90] = new("BCC", AddrMode.Rel);
         t[0x91] = new("STA", AddrMode.Dp_IndY);
         t[0x92] = new("STA", AddrMode.Dp_Ind);
@@ -264,7 +264,7 @@ public static class Cpu65816
         t[0x9E] = new("STZ", AddrMode.Abs_X);
         t[0x9F] = new("STA", AddrMode.Long_X);
 
-        // 0xA0–0xAF
+        // 0xA0-0xAF
         t[0xA0] = new("LDY", AddrMode.Imm_X);
         t[0xA1] = new("LDA", AddrMode.Dp_IndX);
         t[0xA2] = new("LDX", AddrMode.Imm_X);
@@ -282,7 +282,7 @@ public static class Cpu65816
         t[0xAE] = new("LDX", AddrMode.Abs);
         t[0xAF] = new("LDA", AddrMode.Long);
 
-        // 0xB0–0xBF
+        // 0xB0-0xBF
         t[0xB0] = new("BCS", AddrMode.Rel);
         t[0xB1] = new("LDA", AddrMode.Dp_IndY);
         t[0xB2] = new("LDA", AddrMode.Dp_Ind);
@@ -300,7 +300,7 @@ public static class Cpu65816
         t[0xBE] = new("LDX", AddrMode.Abs_Y);
         t[0xBF] = new("LDA", AddrMode.Long_X);
 
-        // 0xC0–0xCF
+        // 0xC0-0xCF
         t[0xC0] = new("CPY", AddrMode.Imm_X);
         t[0xC1] = new("CMP", AddrMode.Dp_IndX);
         t[0xC2] = new("REP", AddrMode.Imm8);
@@ -318,7 +318,7 @@ public static class Cpu65816
         t[0xCE] = new("DEC", AddrMode.Abs);
         t[0xCF] = new("CMP", AddrMode.Long);
 
-        // 0xD0–0xDF
+        // 0xD0-0xDF
         t[0xD0] = new("BNE", AddrMode.Rel);
         t[0xD1] = new("CMP", AddrMode.Dp_IndY);
         t[0xD2] = new("CMP", AddrMode.Dp_Ind);
@@ -336,7 +336,7 @@ public static class Cpu65816
         t[0xDE] = new("DEC", AddrMode.Abs_X);
         t[0xDF] = new("CMP", AddrMode.Long_X);
 
-        // 0xE0–0xEF
+        // 0xE0-0xEF
         t[0xE0] = new("CPX", AddrMode.Imm_X);
         t[0xE1] = new("SBC", AddrMode.Dp_IndX);
         t[0xE2] = new("SEP", AddrMode.Imm8);
@@ -354,7 +354,7 @@ public static class Cpu65816
         t[0xEE] = new("INC", AddrMode.Abs);
         t[0xEF] = new("SBC", AddrMode.Long);
 
-        // 0xF0–0xFF
+        // 0xF0-0xFF
         t[0xF0] = new("BEQ", AddrMode.Rel);
         t[0xF1] = new("SBC", AddrMode.Dp_IndY);
         t[0xF2] = new("SBC", AddrMode.Dp_Ind);
@@ -539,7 +539,7 @@ public static class Cpu65816
             AddrMode.RelL     => FormatRelativeLong(snesAddr, (short)w16()),
             AddrMode.Sr       => $"${op[0]:X2},S",
             AddrMode.Sr_IndY  => $"(${op[0]:X2},S),Y",
-            // Blk: MVP / MVN — byte[0]=dst bank, byte[1]=src bank; displayed as "src,dst"
+            // Blk: MVP / MVN - byte[0]=dst bank, byte[1]=src bank; displayed as "src,dst"
             AddrMode.Blk      => $"${op[1]:X2},${op[0]:X2}",
             _                  => "",
         };
@@ -563,14 +563,14 @@ public static class Cpu65816
 
     private static int? ResolveTarget(AddrMode mode, byte opcode, byte[] op, int snesAddr, int opSize)
     {
-        // Branches — always resolvable (relative to PC)
+        // Branches - always resolvable (relative to PC)
         if (mode == AddrMode.Rel && opSize >= 1)
             return (snesAddr + 2 + (sbyte)op[0]) & 0xFFFFFF;
 
         if (mode == AddrMode.RelL && opSize >= 2)
             return (snesAddr + 3 + (short)(op[0] | (op[1] << 8))) & 0xFFFFFF;
 
-        // Absolute JMP/JSR — target is in same bank as the instruction
+        // Absolute JMP/JSR - target is in same bank as the instruction
         if (mode == AddrMode.Abs && opSize >= 2 && opcode is 0x4C or 0x20)
         {
             int bank   = snesAddr & 0xFF0000;
@@ -578,12 +578,12 @@ public static class Cpu65816
             return bank | offset;
         }
 
-        // JSL / JML long — full 24-bit address
+        // JSL / JML long - full 24-bit address
         if (mode == AddrMode.Long && opSize >= 3 && opcode is 0x22 or 0x5C)
             return op[0] | (op[1] << 8) | (op[2] << 16);
 
-        // JSR (abs,X) — indirect, cannot resolve statically
-        // JMP (abs), JML [abs] — indirect, cannot resolve statically
+        // JSR (abs,X) - indirect, cannot resolve statically
+        // JMP (abs), JML [abs] - indirect, cannot resolve statically
 
         return null;
     }

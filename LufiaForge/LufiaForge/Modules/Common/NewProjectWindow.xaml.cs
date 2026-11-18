@@ -36,7 +36,7 @@ public partial class NewProjectWindow : Window
         Update();
     }
 
-    /// <summary>The name after this one: a number at its end counts up ("p2" → "p3", "Hack v9" → "Hack v10"), otherwise
+    /// <summary>The name after this one: a number at its end counts up ("p2" -> "p3", "Hack v9" -> "Hack v10"), otherwise
     /// " 2" goes after it; names already taken are skipped.</summary>
     public static string NextName(string name, Func<string, bool> taken)
     {

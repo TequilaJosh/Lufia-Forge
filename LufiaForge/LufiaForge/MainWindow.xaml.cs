@@ -57,7 +57,7 @@ public partial class MainWindow : Window
         if (MemoryMonitorView.DataContext is MemoryMonitorViewModel monitor)
             monitor.PrepareRom = vm.WritePlayRom;
 
-        // Wire cross-module: Disassembler "Add to Watchlist" → Memory Monitor
+        // Wire cross-module: Disassembler "Add to Watchlist" -> Memory Monitor
         if (DisassemblerView.DataContext  is DisassemblerViewModel  disVm &&
             MemoryMonitorView.DataContext is MemoryMonitorViewModel  mmVm)
         {
@@ -125,7 +125,7 @@ public partial class MainWindow : Window
         if (DisassemblerView.DataContext is DisassemblerViewModel disVm)
             disVm.SetRom(rom);
 
-        // Memory Monitor — auto-launches BizHawk with the ROM
+        // Memory Monitor - auto-launches BizHawk with the ROM
         if (MemoryMonitorView.DataContext is MemoryMonitorViewModel mmVm)
             mmVm.SetRom(rom);
     }

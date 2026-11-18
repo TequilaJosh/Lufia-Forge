@@ -7,7 +7,7 @@ namespace LufiaForge.Modules.Common;
 
 /// <summary>
 /// A section that can be popped out into a window of its own: wrap it in
-/// <c>&lt;common:PopOutHost Title="Stage"&gt;…&lt;/common:PopOutHost&gt;</c>. A small ⧉ button shows while the mouse is
+/// <c>&lt;common:PopOutHost Title="Stage"&gt;...&lt;/common:PopOutHost&gt;</c>. A small ⧉ button shows while the mouse is
 /// over the section; the section then lives in its own window (move it to another screen, make it as big as you like)
 /// while its place shows "Bring it back". Closing the window puts the section back. The section keeps working as
 /// before: same data, same code, only somewhere else. Window places are remembered per section.
@@ -22,7 +22,7 @@ public class PopOutHost : ContentControl
     public static readonly DependencyProperty TitleProperty = DependencyProperty.Register(
         nameof(Title), typeof(string), typeof(PopOutHost), new PropertyMetadata("Section"));
 
-    /// <summary>The window title and the name in "… is in its own window".</summary>
+    /// <summary>The window title and the name in "... is in its own window".</summary>
     public string Title { get => (string)GetValue(TitleProperty); set => SetValue(TitleProperty, value); }
 
     public static readonly DependencyProperty KeyProperty = DependencyProperty.Register(

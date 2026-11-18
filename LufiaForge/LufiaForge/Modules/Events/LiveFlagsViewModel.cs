@@ -25,7 +25,7 @@ public partial class LiveFlagRow : ObservableObject
     [ObservableProperty] private bool _flashOn;
     [ObservableProperty] private bool _flashOff;
     public DateTime FlashUntil { get; set; }
-    public string ValueText => !Known ? "–" : Value ? "✅" : "❌";
+    public string ValueText => !Known ? "-" : Value ? "✅" : "❌";
     partial void OnValueChanged(bool value) => OnPropertyChanged(nameof(ValueText));
     partial void OnKnownChanged(bool value) => OnPropertyChanged(nameof(ValueText));
 }

@@ -9,7 +9,7 @@ namespace LufiaForge.Core;
 /// narrative order so the text editor can present dialogue in story sequence.
 ///
 /// Scenes with no detected boundary (offset == -1) had no uniquely
-/// identifiable opening line in the scanned region — their entries may be
+/// identifiable opening line in the scanned region - their entries may be
 /// grouped under the preceding scene or under "Battle / Menu".
 /// </summary>
 public static class LufiaSceneData
@@ -138,13 +138,13 @@ public static class LufiaSceneData
         (0x0352C2, 55),  // Doom Island 1
     };
 
-    // Fast index: SceneIndex → SceneInfo
+    // Fast index: SceneIndex -> SceneInfo
     private static readonly Dictionary<int, SceneInfo> _byIndex =
         AllScenes.ToDictionary(s => s.SceneIndex);
 
     /// <summary>
     /// Returns the scene (index + name) that owns the given ROM file offset.
-    /// Uses the last boundary whose StartOffset ≤ romOffset.
+    /// Uses the last boundary whose StartOffset <= romOffset.
     /// Returns scene 0 ("Battle / Menu") when no boundary precedes the offset.
     /// </summary>
     public static SceneInfo GetScene(int romOffset)

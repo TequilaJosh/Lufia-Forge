@@ -117,7 +117,7 @@ public partial class MapEditorViewModel
         RefreshGraphicsChoices();
     }
 
-    /// <summary>" (Alekia, Treck…)": the first maps that use a tileset, to recognise it in the list.</summary>
+    /// <summary>" (Alekia, Treck...)": the first maps that use a tileset, to recognise it in the list.</summary>
     private string TilesetUsers(int t)
     {
         var users = Maps.Where(m => m.MapId != LufiaMap.WorldMap && m.Tileset == t).Take(3).Select(m => string.IsNullOrEmpty(m.Name) ? $"map {m.MapId:X2}" : m.Name).ToList();

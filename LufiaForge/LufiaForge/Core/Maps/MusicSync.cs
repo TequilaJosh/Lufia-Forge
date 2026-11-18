@@ -10,7 +10,7 @@ public static class MusicSync
 {
     public const double AverageFramesPerPoint = 89.7;
 
-    /// <summary>Song → (point → frame after the song started), measured in BizHawk.</summary>
+    /// <summary>Song -> (point -> frame after the song started), measured in BizHawk.</summary>
     private static readonly Dictionary<int, SortedDictionary<int, int>> Measured = new()
     {
         // song 1C: the opening (map 4F's music), measured 2026-10-08 from the pointer changes of the intro event
@@ -22,7 +22,7 @@ public static class MusicSync
         },
     };
 
-    /// <summary>Cutscenes whose music was already playing when they start: (map, event) → (song, frames already played).</summary>
+    /// <summary>Cutscenes whose music was already playing when they start: (map, event) -> (song, frames already played).</summary>
     private static readonly Dictionary<(int Map, int Event), (int Song, int Lead)> KnownStarts = new()
     {
         [(0x4F, 8)] = (0x1C, 58),   // the intro: song 1C starts when map 4F loads (frame 224), 58 frames before the event runs (frame 282)
@@ -44,7 +44,7 @@ public static class MusicSync
     }
 
     /// <summary>
-    /// Point → frame after the load for a song, from the game's sound driver: frames until the song starts (the
+    /// Point -> frame after the load for a song, from the game's sound driver: frames until the song starts (the
     /// upload) plus the frame on which command 06 first reports the point, plus the frame the script takes to see it.
     /// Polled once per frame for 6 minutes. Checked against song 1C's measured points: all within 1 frame.
     /// </summary>

@@ -251,7 +251,7 @@ public sealed class LufiaSound : IDisposable
         PlaySongData(d);
     }
 
-    /// <summary>Event 0A FF ($00:8F98 → command 04).</summary>
+    /// <summary>Event 0A FF ($00:8F98 -> command 04).</summary>
     public void StopMusic()
     {
         Command(0x0B);

@@ -3,7 +3,7 @@ namespace LufiaForge.Core.Maps;
 /// <summary>
 /// Map character sprites (the party and every character on the maps).
 ///
-/// Sprite number n → record pointer: u16 at $01:E25F + n*2, read only by the lookup at $01:AC50 (LDA $01E25F,X;
+/// Sprite number n -> record pointer: u16 at $01:E25F + n*2, read only by the lookup at $01:AC50 (LDA $01E25F,X;
 /// TAY), whose callers then read the record with the data bank set to 01 - so records must be in bank 01.
 /// Record (17 bytes): [0] width and [1] height in 8x8 tiles, [2] frames per pair (2), [3] which pairs of frames
 /// the map loader copies to VRAM ($01:AE7F: bit 1 = frames 2-3, 2 = 4-5, 3 = 6-7), [4] OAM attribute (low 3 bits = palette row),

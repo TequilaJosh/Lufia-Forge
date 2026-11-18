@@ -39,7 +39,7 @@ public sealed class BookmarkStore
         }
         catch
         {
-            // Corrupt file — start fresh, don't crash
+            // Corrupt file - start fresh, don't crash
         }
     }
 

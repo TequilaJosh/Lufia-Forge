@@ -6,13 +6,13 @@ namespace LufiaForge.Modules.Disassembler;
 /// Sweeps the entire ROM linearly and collects call/jump cross-references.
 /// Output: for each target address, a list of SNES addresses that call or jump to it.
 ///
-/// This is a best-effort linear sweep — it will generate false positives from data regions
+/// This is a best-effort linear sweep - it will generate false positives from data regions
 /// that happen to decode as JSR/JMP-like opcodes.  Bookmarks marked as data regions are
 /// excluded during the sweep.
 /// </summary>
 public sealed class CrossReferenceBuilder
 {
-    /// <summary>Target → callers.  Populated after <see cref="Build"/> completes.</summary>
+    /// <summary>Target -> callers.  Populated after <see cref="Build"/> completes.</summary>
     /// <summary>Target to callers. Built aside and put in place whole when the build is done: filled on the worker
     /// thread while the panel read it, the dictionary broke ("collection was modified").</summary>
     public Dictionary<int, List<int>> Xref { get; private set; } = new();
@@ -28,7 +28,7 @@ public sealed class CrossReferenceBuilder
     /// </summary>
     /// <param name="rom">Source ROM buffer.</param>
     /// <param name="bookmarks">Bookmark store used to skip data-marked regions.</param>
-    /// <param name="progress">Progress callback (0–100).</param>
+    /// <param name="progress">Progress callback (0-100).</param>
     /// <param name="ct">Cancellation token.</param>
     public Task BuildAsync(
         RomBuffer     rom,
@@ -53,7 +53,7 @@ public sealed class CrossReferenceBuilder
         int total   = rom.Length;
         int lastPct = -1;
 
-        // Use default CpuState — we can't perfectly track M/X over the entire ROM,
+        // Use default CpuState - we can't perfectly track M/X over the entire ROM,
         // so we use a conservative 8-bit assumption.  Most false-positive noise comes
         // from data, not from M/X mismatches on the opcodes we care about (JSR/JSL/JMP/JML/Bxx).
         var state = CpuState.Default;

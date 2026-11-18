@@ -47,7 +47,7 @@ public partial class EncounterEditorViewModel : GameDataEditorBase
     /// <summary>(The editor footer shows a ROM offset; this editor has none of its own.)</summary>
     public string OffsetText => "";
 
-    /// <summary>"Group 01 ..." then "Boss E6 ..."; index → group or formation number.</summary>
+    /// <summary>"Group 01 ..." then "Boss E6 ..."; index -> group or formation number.</summary>
     public ObservableCollection<string> Entries { get; } = new();
     private readonly List<int> _entryNumbers = new();
     public ObservableCollection<string> MonsterChoices { get; } = new();

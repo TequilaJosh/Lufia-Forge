@@ -564,7 +564,7 @@ public partial class TitleEditorViewModel : GameDataEditorBase
         return null;
     }
 
-    /// <summary>Full-colour picture → colour numbers: each 8x8 tile uses the row (2-7) that fits it best.</summary>
+    /// <summary>Full-colour picture -> colour numbers: each 8x8 tile uses the row (2-7) that fits it best.</summary>
     private byte[] MatchColours(uint[] px, int w, int h)
     {
         var idx = new byte[w * h];

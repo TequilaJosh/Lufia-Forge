@@ -4,9 +4,9 @@ namespace LufiaForge.Modules.TileViewer;
 /// Decodes SNES planar tile data into 8x8 arrays of palette color indices.
 ///
 /// SNES tile formats:
-///   2bpp — 16 bytes/tile — 4 colors  — used for BG layer text/UI tiles
-///   4bpp — 32 bytes/tile — 16 colors — used for most sprites and BG tiles
-///   8bpp — 64 bytes/tile — 256 colors — used for Mode 7 and large BG tiles
+///   2bpp - 16 bytes/tile - 4 colors - used for BG layer text/UI tiles
+///   4bpp - 32 bytes/tile - 16 colors - used for most sprites and BG tiles
+///   8bpp - 64 bytes/tile - 256 colors - used for Mode 7 and large BG tiles
 ///
 /// Planar layout (pairs of bitplanes are interleaved per row):
 ///   2bpp: [bp0_r0][bp1_r0] [bp0_r1][bp1_r1] ... (16 bytes)

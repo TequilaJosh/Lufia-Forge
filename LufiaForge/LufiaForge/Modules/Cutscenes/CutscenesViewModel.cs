@@ -23,8 +23,8 @@ public sealed class CutsceneEntry
     public int StageCommands { get; init; }
     public int Texts { get; init; }
     public ImageSource? Picture { get; init; }
-    public string Label => Title.Length > 0 ? Title : $"{MapLabel} – event {Event}";
-    public string Details => (Title.Length > 0 ? $"{MapLabel} – event {Event} · " : "") +
+    public string Label => Title.Length > 0 ? Title : $"{MapLabel} - event {Event}";
+    public string Details => (Title.Length > 0 ? $"{MapLabel} - event {Event} · " : "") +
                              $"{StageCommands} stage command{(StageCommands == 1 ? "" : "s")}, {Texts} text box{(Texts == 1 ? "" : "es")}";
 }
 
@@ -69,7 +69,7 @@ public partial class CutscenesViewModel : ObservableObject, IEventHost
     }
 
     /// <summary>The scan, kept from failing silently (it is started without being awaited: an error left the tab on
-    /// "Finding the cutscenes…" for good).</summary>
+    /// "Finding the cutscenes..." for good).</summary>
     private async Task BuildAsync()
     {
         try { await BuildCore(); }

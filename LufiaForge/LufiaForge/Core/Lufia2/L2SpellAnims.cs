@@ -9,8 +9,8 @@ namespace LufiaForge.Core.Lufia2;
 /// set to $95 at $81:89A4) and points at the others with 16-bit addresses.</item>
 /// <item>Tracks (30, $7E:4F8F, 0x2C bytes) and objects (64, $7E:54B7, 0x2D bytes, one hardware sprite each) run
 /// scripts; 01 waits (the step length set by 02), 00 ends.</item>
-/// <item>20 b w w: graphics: index w → file ($85:EF53) unpacked to $7E:A000 and sent to VRAM $4000 (the sprites'
-/// 256 tiles); the second to $7E:DF00 → VRAM $1800 (a background map); index 36 = none. 27 w a: file of index w to
+/// <item>20 b w w: graphics: index w -> file ($85:EF53) unpacked to $7E:A000 and sent to VRAM $4000 (the sprites'
+/// 256 tiles); the second to $7E:DF00 -> VRAM $1800 (a background map); index 36 = none. 27 w a: file of index w to
 /// $7E:a. DD / DE / DF w: 16 colours from $96:8000 + 32w into colours $10, $90 (sprite palette 1), $A0 (palette 2).</item>
 /// </list>
 /// New animations ("LF2AN", a bank of the added space): four hooks let an animation's scripts live in another bank,

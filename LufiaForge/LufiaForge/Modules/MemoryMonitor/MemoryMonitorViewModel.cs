@@ -88,7 +88,7 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
         // Load user-defined custom labels from disk
         Lufia1AddressMap.LoadCustom();
 
-        // Seed default watches for Lufia 1 — verified PAR code addresses
+        // Seed default watches for Lufia 1 - verified PAR code addresses
         Watches.Add(new WatchItem(0x7E157F, "Hero Current HP",  WatchSize.U16));
         Watches.Add(new WatchItem(0x7E15F1, "Hero Max HP",      WatchSize.U16));
         Watches.Add(new WatchItem(0x7E1587, "Hero Current MP",  WatchSize.U16));
@@ -125,7 +125,7 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
     }
 
     // -------------------------------------------------------------------------
-    // ROM propagation — called by MainWindow when user opens a ROM
+    // ROM propagation - called by MainWindow when user opens a ROM
     // -------------------------------------------------------------------------
     public void SetRom(Core.RomBuffer rom)
     {

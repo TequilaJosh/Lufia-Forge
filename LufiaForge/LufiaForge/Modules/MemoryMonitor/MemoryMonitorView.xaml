@@ -102,7 +102,7 @@
                     BorderBrush="{StaticResource BorderPurpleBrush}"
                     BorderThickness="0,0,1,0">
                 <Grid>
-                    <!-- Live embedded window — hidden while undocked -->
+                    <!-- Live embedded window - hidden while undocked -->
                     <wf:WindowsFormsHost x:Name="BizHawkFormsHost"
                                          Background="#120C1C">
                         <wf:WindowsFormsHost.Visibility>

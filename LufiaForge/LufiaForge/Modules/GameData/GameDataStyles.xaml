@@ -63,7 +63,7 @@
         <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True"/>
     </Style>
 
-    <!-- A record list with a "Find…" box above it (typing jumps to the first match, Enter to the next) -->
+    <!-- A record list with a "Find..." box above it (typing jumps to the first match, Enter to the next) -->
     <Style x:Key="GdFindList" TargetType="ListBox" BasedOn="{StaticResource GdRecordList}">
         <Setter Property="Template">
             <Setter.Value>

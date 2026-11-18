@@ -6,10 +6,10 @@ namespace LufiaForge.Core.Maps;
 /// <summary>
 /// Readable names for maps. The game only has name text for towns, so names are built from:
 /// <list type="bullet">
-/// <item>the map → town table at $01:E93E (values 01-1E are towns, see <see cref="Lufia1Constants.TownNames"/>),</item>
-/// <item>the map's tileset, which tells what kind of place it is (castle, cave, tower, shrine…),</item>
+/// <item>the map -> town table at $01:E93E (values 01-1E are towns, see <see cref="Lufia1Constants.TownNames"/>),</item>
+/// <item>the map's tileset, which tells what kind of place it is (castle, cave, tower, shrine...),</item>
 /// <item>exits: maps that connect to each other (other than towns) form one place, named after where it is
-///   entered — a world map entrance (“Cave near Treck”, nearest town entrance) or a town (“Medan Castle”).</item>
+///   entered - a world map entrance ("Cave near Treck", nearest town entrance) or a town ("Medan Castle").</item>
 /// </list>
 /// Names the user types win over generated ones. With a project open they are kept in the project (<see cref="ProjectNames"/>);
 /// names kept in %AppData%\LufiaForge\mapnames.json (from before projects had their own) apply to every project that
@@ -163,7 +163,7 @@ public static class MapNames
             placeNames.Add((order, name));
         }
 
-        // places entered from another place: "<that place> – <kind>" (a few passes for chains)
+        // places entered from another place: "<that place> - <kind>" (a few passes for chains)
         for (int pass = 0; pass < 6; pass++)
             for (int i = 0; i < placeNames.Count; i++)
             {
@@ -173,7 +173,7 @@ public static class MapNames
                 int from = int.Parse(parts[0]);
                 var parent = placeNames.FirstOrDefault(p => p.maps.Contains(from));
                 if (parent.name == null || parent.name.StartsWith('@')) continue;
-                placeNames[i] = (maps, $"{parent.name} – {parts[1].ToLowerInvariant()}");
+                placeNames[i] = (maps, $"{parent.name} - {parts[1].ToLowerInvariant()}");
             }
         for (int i = 0; i < placeNames.Count; i++)
             if (placeNames[i].name.StartsWith('@')) placeNames[i] = (placeNames[i].maps, "Connected " + placeNames[i].name.Split('|')[1].ToLowerInvariant());
@@ -185,7 +185,7 @@ public static class MapNames
             foreach (var (maps, name) in same.OrderBy(p => p.maps.Min()))
             {
                 string n = same.Count() > 1 ? $"{name} {k++}" : name;
-                for (int i = 0; i < maps.Count; i++) names[maps[i]] = maps.Count == 1 ? n : $"{n} – part {i + 1}";
+                for (int i = 0; i < maps.Count; i++) names[maps[i]] = maps.Count == 1 ? n : $"{n} - part {i + 1}";
             }
         }
         return names;

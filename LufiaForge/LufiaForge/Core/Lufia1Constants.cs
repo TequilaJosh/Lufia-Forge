@@ -5,7 +5,7 @@ namespace LufiaForge.Core;
 ///
 /// Text encoding sources:
 ///   - Vegetaman (2010): https://sites.google.com/site/vegetaman/home/dictionary
-///   - Digisalt Lufiatools 2.0 / AllOriginal.tbl (flobo, 2011) — authoritative byte map
+///   - Digisalt Lufiatools 2.0 / AllOriginal.tbl (flobo, 2011) - authoritative byte map
 /// </summary>
 public static class Lufia1Constants
 {
@@ -60,19 +60,19 @@ public static class Lufia1Constants
     //   0x0B + 1 byte    Town name       (ID: 01=Alekia, 02=Chatam, 03=Sheran...)
     //   0x0C + 1 byte    MTE3 word, lowercase  (1-byte index; word from MTE3 pointer table)
     //   0x0D + 1 byte    MTE3 word, capitalized (same index, first char uppercased)
-    //   0x10–0x1F        MTE4: Special single-byte sequences ('s, ed, ing, I'm, Sinistral...)
-    //   0x20–0x7E        Standard printable ASCII
-    //   0x80–0xBF        MTE1: Single-byte compressed words, lowercase (the, you, to, it...)
-    //   0xC0–0xFF        MTE1: Single-byte compressed words, capitalized (The, You, To, It...)
+    //   0x10-0x1F        MTE4: Special single-byte sequences ('s, ed, ing, I'm, Sinistral...)
+    //   0x20-0x7E        Standard printable ASCII
+    //   0x80-0xBF        MTE1: Single-byte compressed words, lowercase (the, you, to, it...)
+    //   0xC0-0xFF        MTE1: Single-byte compressed words, capitalized (The, You, To, It...)
     //
     // NOTE: 0x0B is TOWN names, NOT character names. Character names use 0x07.
     //       Previous Vegetaman research incorrectly identified 0x0B as char names.
     //
     // MTE = Multiple Title Entry (compression). Four tables, all in ROM bank 0x0A:
-    //   MTE1 (0x80–0xFF):  64 word pairs, ptr table at file 0x54AC0, entries at 0x54B42
+    //   MTE1 (0x80-0xFF):  64 word pairs, ptr table at file 0x54AC0, entries at 0x54B42
     //   MTE2 (0x0D XX):    same entry data as MTE3, first char capitalized by decoder
     //   MTE3 (0x0C XX):    256 words, ptr table at file 0x54C17, entries at 0x54E19
-    //   MTE4 (0x10–0x1F):  16 special sequences, ptr table at 0x54A50, entries at 0x54A72
+    //   MTE4 (0x10-0x1F):  16 special sequences, ptr table at 0x54A50, entries at 0x54A72
     //
     // Pointer format: LE 16-bit SNES bank-relative address. File offset = ptr + 0x48000.
     // (All MTE tables are in SNES bank 0x0A: file = 0x0A*0x8000 + (ptr - 0x8000) = ptr + 0x48000)
@@ -101,9 +101,9 @@ public static class Lufia1Constants
     public const int DictionaryEndOffset   = 0x0553CC;
     public const int DictionaryBaseOffset  = 0x48000;  // ptr + DictionaryBaseOffset = file offset
 
-    // Dialogue text lives in banks $84–$AF (file 0x20000–0x57FFF).
-    // Story/NPC dialogue: banks $84–$87 (0x20000–0x3FFFF)
-    // Battle messages:    banks $88–$AF (0x40000–0x57FFF)
+    // Dialogue text lives in banks $84-$AF (file 0x20000-0x57FFF).
+    // Story/NPC dialogue: banks $84-$87 (0x20000-0x3FFFF)
+    // Battle messages:    banks $88-$AF (0x40000-0x57FFF)
     public const int DialogueScanStartOffset = 0x20000;
     public const int DialogueScanEndOffset   = 0x58000;
 
@@ -148,7 +148,7 @@ public static class Lufia1Constants
         };
 
     // -------------------------------------------------------------------------
-    // Special single-byte compressed sequences (0x10–0x1F)
+    // Special single-byte compressed sequences (0x10-0x1F)
     // From AllOriginal.tbl: 10='s  11=ed  12=ing  13=I'm  etc.
     // -------------------------------------------------------------------------
     public static readonly IReadOnlyDictionary<byte, string> SpecialSequences =
@@ -173,14 +173,14 @@ public static class Lufia1Constants
         };
 
     // -------------------------------------------------------------------------
-    // Single-byte compressed words (0x80–0xFF)
-    // 0x80–0xBF = lowercase, 0xC0–0xFF = capitalized counterparts.
-    // From AllOriginal.tbl (Digisalt 2011) — 128 pairs total.
+    // Single-byte compressed words (0x80-0xFF)
+    // 0x80-0xBF = lowercase, 0xC0-0xFF = capitalized counterparts.
+    // From AllOriginal.tbl (Digisalt 2011) - 128 pairs total.
     // -------------------------------------------------------------------------
     public static readonly IReadOnlyDictionary<byte, string> SingleByteWords =
         new Dictionary<byte, string>
         {
-            // Lowercase (0x80–0xBF)
+            // Lowercase (0x80-0xBF)
             { 0x80, "the"    }, { 0x81, "you"    }, { 0x82, "to"     }, { 0x83, "it"     },
             { 0x84, "of"     }, { 0x85, "that"   }, { 0x86, "is"     }, { 0x87, "in"     },
             { 0x88, "and"    }, { 0x89, "what"   }, { 0x8A, "this"   }, { 0x8B, "go"     },
@@ -197,7 +197,7 @@ public static class Lufia1Constants
             { 0xB4, "well"   }, { 0xB5, "not"    }, { 0xB6, "all"    }, { 0xB7, "you're" },
             { 0xB8, "good"   }, { 0xB9, "want"   }, { 0xBA, "four"   }, { 0xBB, "tower"  },
             { 0xBC, "as"     }, { 0xBD, "from"   }, { 0xBE, "back"   }, { 0xBF, "by"     },
-            // Capitalized (0xC0–0xFF)
+            // Capitalized (0xC0-0xFF)
             { 0xC0, "The"    }, { 0xC1, "You"    }, { 0xC2, "To"     }, { 0xC3, "It"     },
             { 0xC4, "Of"     }, { 0xC5, "That"   }, { 0xC6, "Is"     }, { 0xC7, "In"     },
             { 0xC8, "And"    }, { 0xC9, "What"   }, { 0xCA, "This"   }, { 0xCB, "Go"     },
@@ -246,7 +246,7 @@ public static class Lufia1Constants
     public const int ScriptBankBase      = 0x18000;  // script offset T -> file 0x18000 + T
     public const int MapScriptTable      = 0x18200;  // 5 bytes per map: script block (u24), ?, event base
     public const int SpriteRecordTable   = 0x0E25F;  // bank $01: sprite id -> 17-byte record pointer
-    public const int ShortWaitTable      = 0x0DDB5;  // commands 80-87: wait × 4 frames
+    public const int ShortWaitTable      = 0x0DDB5;  // commands 80-87: wait x 4 frames
     // WRAM ($7E:xxxx)
     public const int RamStoryFlags       = 0x1296;   // 256 story flags, flag f at $1296 + f/8
     public const int RamFlagBitMasks     = 0x032B;   // 8 bit masks the engine uses for flag bits

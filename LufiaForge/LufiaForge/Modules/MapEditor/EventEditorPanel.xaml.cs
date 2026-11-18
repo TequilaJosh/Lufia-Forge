@@ -15,7 +15,7 @@ using DragDropEffects = System.Windows.DragDropEffects;
 
 namespace LufiaForge.Modules.MapEditor;
 
-/// <summary>An editable value of a command: a number, a choice (who, direction, item, map…), or a jump target line.</summary>
+/// <summary>An editable value of a command: a number, a choice (who, direction, item, map...), or a jump target line.</summary>
 public partial class ParamVm : ObservableObject
 {
     private readonly EventLineVm _line;
@@ -731,7 +731,7 @@ public partial class EventEditorPanel : UserControl, LufiaForge.ViewModels.IPend
         if (_flowRange == (b.Start, b.End) && FlowLines.ItemsSource != null) return;   // keep focus while editing
         _flowRange = (b.Start, b.End);
         FlowLines.ItemsSource = _lines.Skip(b.Start).Take(b.End - b.Start).ToList();
-        FlowLinesHeader.Text = $"Lines {b.Start + 1}{(b.End - b.Start > 1 ? $"–{b.End}" : "")}";
+        FlowLinesHeader.Text = $"Lines {b.Start + 1}{(b.End - b.Start > 1 ? $"-{b.End}" : "")}";
     }
 
     private void FlowAutoLayout_Click(object sender, RoutedEventArgs e) => Flow.AutoLayout();
@@ -762,7 +762,7 @@ public partial class EventEditorPanel : UserControl, LufiaForge.ViewModels.IPend
     /// <summary>Delete lines [start, end) after asking.</summary>
     public void DeleteLines(int start, int end)
     {
-        if (MessageBox.Show($"Delete lines {start + 1}–{end}? Jumps to them move to the line after.", "Delete lines",
+        if (MessageBox.Show($"Delete lines {start + 1}-{end}? Jumps to them move to the line after.", "Delete lines",
                 MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
         for (int i = end - 1; i >= start; i--)
         {
@@ -1031,12 +1031,12 @@ public partial class EventEditorPanel : UserControl, LufiaForge.ViewModels.IPend
         if (ev >= 0 && !Script.IsCodeView && ev != Script.Event)
         {
             target = EventScript.Load(_rom, _mapId, ev) ?? Script;
-            title = $"Map {_mapId:X2} – event {ev} (jumped to from event {Script.Event})";
+            title = $"Map {_mapId:X2} - event {ev} (jumped to from event {Script.Event})";
         }
         else
         {
             target = EventScript.LoadAt(_rom, _mapId, Script.Event, t.Absolute, Script.JumpBase);
-            title = $"Map {_mapId:X2} – code at 0x{t.Absolute:X6}, reached from event {Script.Event}";
+            title = $"Map {_mapId:X2} - code at 0x{t.Absolute:X6}, reached from event {Script.Event}";
         }
         _history.Push((Script, _title));
         Show(_rom, target, title, _owner);
@@ -1053,7 +1053,7 @@ public partial class EventEditorPanel : UserControl, LufiaForge.ViewModels.IPend
         if (!ConfirmDiscard()) return;
         _history.Push((Script, _title));
         string name = EventScript.MapLabel?.Invoke(map) ?? $"map {map:X2}";
-        Show(_rom, target, $"{name} – event {ev} (continued from event {Script.Event} of map {Script.MapId:X2})", _owner);
+        Show(_rom, target, $"{name} - event {ev} (continued from event {Script.Event} of map {Script.MapId:X2})", _owner);
         SelectLine(0);
     }
 

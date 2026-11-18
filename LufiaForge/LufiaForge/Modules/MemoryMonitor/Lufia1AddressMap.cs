@@ -75,7 +75,7 @@ public static class Lufia1AddressMap
             foreach (var e in entries)
                 _custom.Add(new KnownAddress(e.Address, e.Label, (WatchSize)e.Size, e.Category));
         }
-        catch { /* corrupt file — ignore */ }
+        catch { /* corrupt file - ignore */ }
     }
 
     private static void SaveCustom()
@@ -114,7 +114,7 @@ public static class Lufia1AddressMap
     }
 
     // -------------------------------------------------------------------------
-    // Address database — verified from PAR codes & SRAM research
+    // Address database - verified from PAR codes & SRAM research
     // Sources: Almar's Guides PAR codes, Data Crystal SRAM map,
     //          vegetaman SRAM offsets, GameHacking.org
     // -------------------------------------------------------------------------
@@ -157,7 +157,7 @@ public static class Lufia1AddressMap
         ]);
 
         // =====================================================================
-        // HERO (Player 1) — verified PAR addresses
+        // HERO (Player 1) - verified PAR addresses
         // =====================================================================
         AddRange(map, "Hero", [
             (0x7E157F, "Hero Current HP",          WatchSize.U16),
@@ -176,7 +176,7 @@ public static class Lufia1AddressMap
         ]);
 
         // =====================================================================
-        // LUFIA (Player 3 in PAR numbering) — verified PAR addresses
+        // LUFIA (Player 3 in PAR numbering) - verified PAR addresses
         // =====================================================================
         AddRange(map, "Lufia", [
             (0x7E1581, "Lufia Current HP",         WatchSize.U16),
@@ -195,7 +195,7 @@ public static class Lufia1AddressMap
         ]);
 
         // =====================================================================
-        // AGURO (Player 2 in PAR numbering) — verified PAR addresses
+        // AGURO (Player 2 in PAR numbering) - verified PAR addresses
         // =====================================================================
         AddRange(map, "Aguro", [
             (0x7E1583, "Aguro Current HP",         WatchSize.U16),
@@ -214,7 +214,7 @@ public static class Lufia1AddressMap
         ]);
 
         // =====================================================================
-        // JERIN (Player 4 in PAR numbering) — verified PAR addresses
+        // JERIN (Player 4 in PAR numbering) - verified PAR addresses
         // =====================================================================
         AddRange(map, "Jerin", [
             (0x7E1585, "Jerin Current HP",         WatchSize.U16),

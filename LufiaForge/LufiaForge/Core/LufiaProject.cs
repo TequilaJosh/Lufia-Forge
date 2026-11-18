@@ -29,12 +29,12 @@ public sealed class LufiaProject
     public uint BaseCrc { get; private set; }
     /// <summary>What was changed, oldest first (from the edits' descriptions).</summary>
     public List<string> Changes { get; } = new();
-    /// <summary>Map names given in this project (map number → name; empty = the automatic name even where a name is kept
+    /// <summary>Map names given in this project (map number -> name; empty = the automatic name even where a name is kept
     /// in %AppData% for every project). See <see cref="Maps.MapNames.ProjectNames"/>.</summary>
     public Dictionary<int, string> MapNames { get; } = new();
     /// <summary>A map was renamed since the last save (renames don't change the ROM).</summary>
     public bool MapNamesChanged { get; set; }
-    /// <summary>Names and notes given to flags ("story:105" → name, note; see <see cref="Lufia2.L2FlagNotes"/>).</summary>
+    /// <summary>Names and notes given to flags ("story:105" -> name, note; see <see cref="Lufia2.L2FlagNotes"/>).</summary>
     public Dictionary<string, FlagNote> FlagNotes { get; } = new();
     /// <summary>A flag's name or note changed since the last save (they don't change the ROM).</summary>
     public bool FlagNotesChanged { get; set; }

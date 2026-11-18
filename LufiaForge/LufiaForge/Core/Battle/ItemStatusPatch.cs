@@ -10,7 +10,7 @@ namespace LufiaForge.Core.Battle;
 /// ailments as bits and $178C the strongest multiplier; the battle's per-target table ($08:B9CB) gets that multiplier
 /// for each of those ailments.</para>
 /// <para>On hit: the unused property 12 (a = ailment bits, b = chance out of 255) on a weapon makes a party member's
-/// hits inflict the ailment: after the Gloom Pick check ($08:C170 → $08:C17D) the hook re-reads the attacker's weapon,
+/// hits inflict the ailment: after the Gloom Pick check ($08:C170 -> $08:C17D) the hook re-reads the attacker's weapon,
 /// lowers the chance by the target's resistance ($08:BA69), skips targets that can't get it ($08:C966), rolls
 /// ($08:B829), applies it ($08:C7A4) and shows the message ($08:C874).</para>
 /// </summary>

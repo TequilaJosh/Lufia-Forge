@@ -22,7 +22,7 @@ public sealed class L2CastRowVm
     public bool CanSprite { get; init; }
     /// <summary>A map character the start-up script makes once: its "When..." button sets the story flag it needs.</summary>
     public bool CanWhen { get; init; }
-    /// <summary>A story character (10-4E): "Send away" and "Story character…".</summary>
+    /// <summary>A story character (10-4E): "Send away" and "Story character...".</summary>
     public bool IsStory { get; init; }
     public bool CanSendAway { get; init; }
     /// <summary>A map character the start-up script makes once: "Make it a story character".</summary>

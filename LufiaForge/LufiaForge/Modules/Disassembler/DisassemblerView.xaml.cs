@@ -29,7 +29,7 @@ public partial class DisassemblerView : UserControl
     }
 
     // -------------------------------------------------------------------------
-    // Double-click on disassembly row → follow jump target
+    // Double-click on disassembly row -> follow jump target
     // -------------------------------------------------------------------------
 
     private void DisassemblyList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
@@ -40,7 +40,7 @@ public partial class DisassemblerView : UserControl
     }
 
     // -------------------------------------------------------------------------
-    // Click on cross-reference entry → navigate to that address
+    // Click on cross-reference entry -> navigate to that address
     // -------------------------------------------------------------------------
 
     private void XrefEntry_Click(object sender, MouseButtonEventArgs e)
@@ -48,7 +48,7 @@ public partial class DisassemblerView : UserControl
         if (DataContext is not DisassemblerViewModel vm) return;
         if (sender is not System.Windows.Controls.TextBlock tb) return;
 
-        // Entry text format: "$808000  label" — parse the address from the first token
+        // Entry text format: "$808000  label" - parse the address from the first token
         string text = tb.Text.Trim();
         if (string.IsNullOrEmpty(text)) return;
 
@@ -59,7 +59,7 @@ public partial class DisassemblerView : UserControl
     }
 
     // -------------------------------------------------------------------------
-    // Bookmark double-click → navigate
+    // Bookmark double-click -> navigate
     // -------------------------------------------------------------------------
 
     private void BookmarkItem_DoubleClick(object sender, MouseButtonEventArgs e)

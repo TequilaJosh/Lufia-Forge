@@ -15,17 +15,17 @@ namespace LufiaForge.Modules.TextEditor;
 ///   0x09 + 1 byte    Item name      (0x00=Nothing, 0x01=Leather Armor, ...)
 ///   0x0A + 1 byte    Spell name     (0x00=Flash, 0x01=Spark, 0x02=Blaze, ...)
 ///   0x0B + 1 byte    Town name      (0x01=Alekia, 0x02=Chatam, 0x03=Sheran...)
-///   0x0C + 1 byte    MTE3 word, lowercase   (1-byte index 0x00–0xFF)
+///   0x0C + 1 byte    MTE3 word, lowercase   (1-byte index 0x00-0xFF)
 ///   0x0D + 1 byte    MTE3 word, capitalized (same index, first char uppercased)
-///   0x10–0x1F        MTE4: Special single-byte sequences ('s, ed, ing, I'm, Sinistral...)
-///   0x20–0x7E        Standard printable ASCII
-///   0x80–0xBF        MTE1: Single-byte compressed words, lowercase (the, you, to, it...)
-///   0xC0–0xFF        MTE1: Single-byte compressed words, capitalized (The, You, To, It...)
+///   0x10-0x1F        MTE4: Special single-byte sequences ('s, ed, ing, I'm, Sinistral...)
+///   0x20-0x7E        Standard printable ASCII
+///   0x80-0xBF        MTE1: Single-byte compressed words, lowercase (the, you, to, it...)
+///   0xC0-0xFF        MTE1: Single-byte compressed words, capitalized (The, You, To, It...)
 ///
-/// MTE tables (Multiple Title Entry) — all in ROM bank 0x0A (file 0x50000–0x57FFF):
-///   MTE4 ptr table  0x54A50  16 words  codes 0x10–0x1F
-///   MTE1 ptr table  0x54AC0  64 words  codes 0x80–0xFF (lower 0x80–0xBF, cap 0xC0–0xFF)
-///   MTE3 ptr table  0x54C17  256 words codes 0x0C 00 – 0x0C FF
+/// MTE tables (Multiple Title Entry) - all in ROM bank 0x0A (file 0x50000-0x57FFF):
+///   MTE4 ptr table  0x54A50  16 words  codes 0x10-0x1F
+///   MTE1 ptr table  0x54AC0  64 words  codes 0x80-0xFF (lower 0x80-0xBF, cap 0xC0-0xFF)
+///   MTE3 ptr table  0x54C17  256 words codes 0x0C 00 - 0x0C FF
 ///   MTE2            (no separate table; decoder capitalizes MTE3 words for 0x0D codes)
 ///
 /// Pointer format: LE 16-bit SNES bank-relative address.  file = ptr + 0x48000
@@ -38,16 +38,16 @@ namespace LufiaForge.Modules.TextEditor;
 public static class TextDecoder
 {
     // -------------------------------------------------------------------------
-    // MTE word cache — rebuilt whenever a new ROM is loaded.
+    // MTE word cache - rebuilt whenever a new ROM is loaded.
     // All reads go through EnsureCache() so stale data is never used.
     // -------------------------------------------------------------------------
 
     private static RomBuffer? _cachedRom;
 
-    /// <summary>64 lowercase MTE1 words indexed 0–63 (codes 0x80–0xBF).</summary>
+    /// <summary>64 lowercase MTE1 words indexed 0-63 (codes 0x80-0xBF).</summary>
     private static string[] _mte1Words = Array.Empty<string>();
 
-    /// <summary>256 lowercase MTE3 words indexed 0–255 (codes 0x0C 00–0x0C FF).</summary>
+    /// <summary>256 lowercase MTE3 words indexed 0-255 (codes 0x0C 00-0x0C FF).</summary>
     private static string[] _mte3Words = Array.Empty<string>();
 
     /// <summary>
@@ -241,7 +241,7 @@ public static class TextDecoder
             }
 
             // ------------------------------------------------------------------
-            // 0x10–0x1F  MTE4: Special single-byte compressed sequences
+            // 0x10-0x1F  MTE4: Special single-byte compressed sequences
             // ('s, ed, ing, I'm, I'll, I've, Alumina, Sinistral, Dual, Falcon,
             //  Glasdar, Welcome, Raile, Lilah, Reyna, Shaia)
             // ------------------------------------------------------------------
@@ -256,7 +256,7 @@ public static class TextDecoder
             }
 
             // ------------------------------------------------------------------
-            // 0x20–0x7E  Standard printable ASCII
+            // 0x20-0x7E  Standard printable ASCII
             // ------------------------------------------------------------------
             if (b >= 0x20 && b <= 0x7E)
             {
@@ -268,9 +268,9 @@ public static class TextDecoder
             }
 
             // ------------------------------------------------------------------
-            // 0x80–0xFF  MTE1: Single-byte compressed words
-            //   0x80–0xBF  lowercase (the, you, to, it, of, that, is, in...)
-            //   0xC0–0xFF  capitalized counterparts (The, You, To, It, Of, That, Is, In...)
+            // 0x80-0xFF  MTE1: Single-byte compressed words
+            //   0x80-0xBF  lowercase (the, you, to, it, of, that, is, in...)
+            //   0xC0-0xFF  capitalized counterparts (The, You, To, It, Of, That, Is, In...)
             //
             // FIX: now reads word boundaries dynamically from the MTE1 pointer table
             //      (file 0x54AC0) instead of a hardcoded constant table.  Automatically
@@ -302,7 +302,7 @@ public static class TextDecoder
             }
 
             // ------------------------------------------------------------------
-            // Anything else — unknown control code
+            // Anything else - unknown control code
             // ------------------------------------------------------------------
             string ctrlLabel = Lufia1Constants.ControlCodeLabels.TryGetValue(b, out string? l)
                 ? l : $"[0x{b:X2}]";
@@ -335,7 +335,7 @@ public static class TextDecoder
     {
         var words  = new string[count];
         int tableEnd = ptrTableFileOffset + (count + 1) * 2;
-        if (tableEnd > rom.Length) return words;   // ROM too short — return empty strings
+        if (tableEnd > rom.Length) return words;   // ROM too short - return empty strings
 
         for (int i = 0; i < count; i++)
         {
@@ -366,7 +366,7 @@ public static class TextDecoder
     }
 
     // -------------------------------------------------------------------------
-    // ReadAllDictionaryWords — MTE3 word list (used by Dictionary tab / export)
+    // ReadAllDictionaryWords - MTE3 word list (used by Dictionary tab / export)
     // -------------------------------------------------------------------------
 
     /// <summary>
@@ -406,7 +406,7 @@ public static class TextDecoder
     }
 
     // -------------------------------------------------------------------------
-    // ReadDictionaryWord — kept for backward compatibility (reads null-terminated)
+    // ReadDictionaryWord - kept for backward compatibility (reads null-terminated)
     // -------------------------------------------------------------------------
 
     /// <summary>
@@ -445,13 +445,13 @@ public static class TextDecoder
     /// SpecialSequences table only; MTE1 and MTE3 compression is skipped.
     ///
     /// Control tags supported in the input text:
-    ///   [PAGE]        → 0x04
-    ///   \n  or [NL]   → 0x05
-    ///   [Hero]        → 0x07 0x00     [Lufia]  → 0x07 0x01
-    ///   [Aguro]       → 0x07 0x02     [Jerin]  → 0x07 0x03
-    ///   [Maxim]       → 0x07 0x04     [Selan]  → 0x07 0x05
-    ///   [Guy]         → 0x07 0x06     [Artea]  → 0x07 0x07
-    ///   [END]         → 0x00 (always appended automatically; skip if already present)
+    ///   [PAGE]        -> 0x04
+    ///   \n  or [NL]   -> 0x05
+    ///   [Hero]        -> 0x07 0x00     [Lufia]  -> 0x07 0x01
+    ///   [Aguro]       -> 0x07 0x02     [Jerin]  -> 0x07 0x03
+    ///   [Maxim]       -> 0x07 0x04     [Selan]  -> 0x07 0x05
+    ///   [Guy]         -> 0x07 0x06     [Artea]  -> 0x07 0x07
+    ///   [END]         -> 0x00 (always appended automatically; skip if already present)
     /// </summary>
     public static byte[] Encode(string text, RomBuffer? rom = null)
     {
@@ -483,7 +483,7 @@ public static class TextDecoder
                     {
                         case "PAGE":   bytes.Add(0x04); break;
                         case "NL":     bytes.Add(0x05); break;
-                        case "END":    /* terminator — added at the very end */  break;
+                        case "END":    /* terminator - added at the very end */  break;
                         case "HERO":   bytes.Add(0x07); bytes.Add(0x00); break;
                         case "LUFIA":  bytes.Add(0x07); bytes.Add(0x01); break;
                         case "AGURO":  bytes.Add(0x07); bytes.Add(0x02); break;
@@ -501,7 +501,7 @@ public static class TextDecoder
                         continue;
                     }
 
-                    // Unknown tag — fall through to write literal '[' then let
+                    // Unknown tag - fall through to write literal '[' then let
                     // the rest of the loop handle subsequent characters.
                 }
             }
@@ -585,12 +585,12 @@ public static class TextDecoder
     {
         var entries = new List<(string Word, byte[] Encoding)>();
 
-        // --- MTE4 (codes 0x10–0x1F, always available from SpecialSequences) ---
+        // --- MTE4 (codes 0x10-0x1F, always available from SpecialSequences) ---
         foreach (var (code, word) in Lufia1Constants.SpecialSequences)
             if (!string.IsNullOrEmpty(word))
                 entries.Add((word, new[] { code }));
 
-        // --- MTE1 lowercase (0x80–0xBF) and capitalized (0xC0–0xFF) ---
+        // --- MTE1 lowercase (0x80-0xBF) and capitalized (0xC0-0xFF) ---
         for (int idx = 0; idx < mte1Words.Length; idx++)
         {
             string lower = mte1Words[idx];

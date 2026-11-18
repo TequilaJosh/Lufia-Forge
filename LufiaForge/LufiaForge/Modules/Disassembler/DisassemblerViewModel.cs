@@ -21,7 +21,7 @@ public partial class DisassemblerViewModel : ObservableObject
     private readonly CrossReferenceBuilder _xref    = new();
 
     // -------------------------------------------------------------------------
-    // Observable properties — toolbar inputs
+    // Observable properties - toolbar inputs
     // -------------------------------------------------------------------------
 
     [ObservableProperty] private string _newBookmarkLabel = "";
@@ -33,7 +33,7 @@ public partial class DisassemblerViewModel : ObservableObject
     [ObservableProperty] private bool   _autoScroll    = true;
 
     // -------------------------------------------------------------------------
-    // Observable properties — state / status
+    // Observable properties - state / status
     // -------------------------------------------------------------------------
 
     [ObservableProperty]
@@ -130,7 +130,7 @@ public partial class DisassemblerViewModel : ObservableObject
         // Default to the reset vector (program entry point) if file is big enough
         if (rom.Length >= 0x8000)
         {
-            // LoROM reset vector is at $FFFC (file offset 0x7FFC) — 2-byte LE pointer
+            // LoROM reset vector is at $FFFC (file offset 0x7FFC) - 2-byte LE pointer
             ushort resetVec = rom.ReadUInt16Le(0x7FFC);
             AddressText = $"0x{Lufia1Constants.FileOffsetToSnesAddress((resetVec & 0x7FFF)):X6}";
         }
@@ -390,7 +390,7 @@ public partial class DisassemblerViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Attempts to parse a WRAM address ($7Exxxx / $7Fxxxx, or $xxxx ≤ $1FFF)
+    /// Attempts to parse a WRAM address ($7Exxxx / $7Fxxxx, or $xxxx <= $1FFF)
     /// from a formatted operand string. Returns null if no WRAM address is found.
     /// </summary>
     private static int? TryExtractWramAddress(string operand)
@@ -417,7 +417,7 @@ public partial class DisassemblerViewModel : ObservableObject
                 // Full 24-bit WRAM address
                 if (addr >= 0x7E0000 && addr <= 0x7FFFFF) return addr;
 
-                // 16-bit address in first WRAM mirror ($0000–$1FFF)
+                // 16-bit address in first WRAM mirror ($0000-$1FFF)
                 if (len == 4 && addr <= 0x1FFF) return 0x7E0000 | addr;
             }
 
@@ -509,7 +509,7 @@ public partial class DisassemblerViewModel : ObservableObject
 
         var line = DisassemblyLines.FirstOrDefault(l => l.SnesAddress == snesAddress);
 
-        // PC moved outside the current view — re-disassemble if Follow PC is on.
+        // PC moved outside the current view - re-disassemble if Follow PC is on.
         // _lastFollowPcAddress guards against re-building every frame while the PC
         // sits in an off-screen loop.
         if (line == null && FollowPc && snesAddress != _lastFollowPcAddress)

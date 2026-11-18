@@ -1034,7 +1034,7 @@ public static class VisibleMonsters
     /// <summary>The block has the behaviour table (version 2 on; before it, every monster came after the party).</summary>
     private static bool HasBehaviours(RomBuffer rom) => Block(rom) is int b && b > 0 && Layout(rom, b).Behaviours > 0;
 
-    /// <summary>Each map's paths, read from the heap (map → 16 paths, null = none).</summary>
+    /// <summary>Each map's paths, read from the heap (map -> 16 paths, null = none).</summary>
     private static Dictionary<int, (PathMode, List<(int, int)>)?[]> ReadPaths(RomBuffer rom)
     {
         var all = new Dictionary<int, (PathMode, List<(int, int)>)?[]>();

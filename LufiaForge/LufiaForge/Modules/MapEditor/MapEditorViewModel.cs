@@ -28,7 +28,7 @@ public sealed class MapOverlay
     public double Thickness { get; init; } = 2;
     public string Label { get; init; } = "";
     public string Kind { get; init; } = "";
-    /// <summary>Draw a line from (X, Y) by (LineDx, LineDy) instead of a box (exit → arrival link).</summary>
+    /// <summary>Draw a line from (X, Y) by (LineDx, LineDy) instead of a box (exit -> arrival link).</summary>
     public bool IsLine { get; init; }
     public bool IsBox => !IsLine;
     public double LineDx { get; init; }

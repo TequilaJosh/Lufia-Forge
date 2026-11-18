@@ -17,7 +17,7 @@ public sealed class StageActor
 }
 
 /// <summary>A walk drawn on the stage for one line (tiles in order).</summary>
-/// <param name="SegmentSpeeds">Speed index of each leg (Points[k-1] → Points[k]); null = <paramref name="Speed"/> everywhere.</param>
+/// <param name="SegmentSpeeds">Speed index of each leg (Points[k-1] -> Points[k]); null = <paramref name="Speed"/> everywhere.</param>
 public sealed record StageWalk(int Actor, IReadOnlyList<(int X, int Y)> Points, int PathNumber, bool Waits, int Speed, bool CameraFollows = false,
                                IReadOnlyList<int>? SegmentSpeeds = null)
 {

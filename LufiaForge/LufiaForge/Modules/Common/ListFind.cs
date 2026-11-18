@@ -8,7 +8,7 @@ using ListBox = System.Windows.Controls.ListBox;
 namespace LufiaForge.Modules.Common;
 
 /// <summary>
-/// The "Find…" box of a record list (the GdFindList style puts one above the list): typing selects the first entry
+/// The "Find..." box of a record list (the GdFindList style puts one above the list): typing selects the first entry
 /// containing the text, Enter the next one, Esc clears it. Entries are only selected, never hidden, so lists bound by
 /// index keep their numbering.
 /// </summary>

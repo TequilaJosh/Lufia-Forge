@@ -357,7 +357,7 @@ public static class EventCommands
         Add(0x44, 0x44, "Cure status", Party, (b, _) => $"Cure the status of {PartyName(b[1])}", new byte[] { 0x44, 0xFF }, "", P("who", ParamKind.PartyOrAll, 1));
         Add(0x59, 0x59, "Raise max MP", Party, (b, _) => $"{CharacterNames[b[1] & 15]}'s max MP +{b[2]}", new byte[] { 0x59, 0, 10 }, "",
             P("character", ParamKind.Character, 1, 0, 3), P("amount", ParamKind.Number, 2));
-        Add(0x58, 0x58, "Raise max HP (crashes the game)", Party, (b, _) => "Raise max HP — this command crashes the game", null);
+        Add(0x58, 0x58, "Raise max HP (crashes the game)", Party, (b, _) => "Raise max HP - this command crashes the game", null);
 
         // ── places & map ──
         Add(0x4C, 0x4C, "Warp to a map", Place, (b, w) => b[1] == 0 ? $"Move the party to arrival point {b[2]} of this map" : $"Warp to {w.Map(b[1])}, arrival point {b[2]}",

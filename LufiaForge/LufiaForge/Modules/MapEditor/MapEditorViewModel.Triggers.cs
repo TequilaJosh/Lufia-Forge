@@ -9,7 +9,7 @@ namespace LufiaForge.Modules.MapEditor;
 
 /// <summary>
 /// Step-on areas (walking in runs an event): shown in pink, selected, moved and resized like exits, added with the
-/// ＋ Area tool (T) and deleted. New areas are switched on and get an empty event when the map is applied; "Event…"
+/// ＋ Area tool (T) and deleted. New areas are switched on and get an empty event when the map is applied; "Event..."
 /// then opens it. Deleting keeps later areas' numbers (their events go by number): only a new last area is removed,
 /// others become empty and are switched off on Apply.
 /// </summary>

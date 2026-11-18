@@ -11,7 +11,7 @@ public sealed record TimelineItem(int Line, int Start, int Duration, bool Blocki
 /// <summary>
 /// Places every line of a cutscene in time (phase 6.5): when it starts, how long it lasts and on which track
 /// (a character, the camera, dialogue, screen, sound, waits, logic). Timing follows the engine: waits are exact,
-/// walks take tiles × frames-per-tile at their speed, camera scrolls likewise, fades take 32 steps, and dialogue
+/// walks take tiles x frames-per-tile at their speed, camera scrolls likewise, fades take 32 steps, and dialogue
 /// is an estimate (the player closes the boxes).
 /// </summary>
 public static class CutsceneTimeline
@@ -20,7 +20,7 @@ public static class CutsceneTimeline
 
     /// <summary>
     /// Frames per music "point" (command 6C waits until the music reaches point n). Measured in the game on the
-    /// intro: point n is reached n × 90 frames (1.5 s, one bar) after the song starts.
+    /// intro: point n is reached n x 90 frames (1.5 s, one bar) after the song starts.
     /// </summary>
     public const double FramesPerMusicPoint = 89.7;   // fitted over the intro: points 12-55 in 3858 frames
 
@@ -232,7 +232,7 @@ public static class CutsceneTimeline
         return actors.Concat(FixedTracks.Where(list.Contains)).ToList();
     }
 
-    /// <summary>Commands that wait <paramref name="frames"/> frames (0B waits up to 63 × 4 frames each).</summary>
+    /// <summary>Commands that wait <paramref name="frames"/> frames (0B waits up to 63 x 4 frames each).</summary>
     public static List<byte[]> WaitCommands(int frames)
     {
         var list = new List<byte[]>();

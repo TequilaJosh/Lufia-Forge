@@ -6,7 +6,7 @@ namespace LufiaForge.Core.Maps;
 /// The field monsters of Lufia II: Rise of the Sinistrals (USA), as map character sprites for Lufia 1 (for visible
 /// monsters, <see cref="VisibleMonsters"/>).
 /// <para>
-/// Lufia II's map sprites: sprite n → u16 at $CF:F000 + 2n → a 5-byte entry in bank CF: [kind][palette row]
+/// Lufia II's map sprites: sprite n -> u16 at $CF:F000 + 2n -> a 5-byte entry in bank CF: [kind][palette row]
 /// [LoROM address of the graphics, 4bpp, uncompressed]. Its 8 sprite palette rows are fixed, at $A6:BF00 (file
 /// 0x133F00). The monster kinds (seen in the game's dungeons and by drawing every entry):
 /// <list type="bullet">
@@ -121,7 +121,7 @@ public static class Lufia2Sprites
             }
             l2[f] = px;
         }
-        // Lufia 1's size: 16x16 → 16x24 (empty top), 16x32 → 16x24 when its top 8 rows are empty, else 32x32
+        // Lufia 1's size: 16x16 -> 16x24 (empty top), 16x32 -> 16x24 when its top 8 rows are empty, else 32x32
         int fw, fh, dx, dy;
         if (ph == 16) (fw, fh, dx, dy) = pw == 16 ? (16, 24, 0, 8) : (pw, ph, 0, 0);
         else if (pw == 16 && ph == 32 && l2.All(px => px.Take(16 * 8).All(c => c == 0))) (fw, fh, dx, dy) = (16, 24, 0, -8);

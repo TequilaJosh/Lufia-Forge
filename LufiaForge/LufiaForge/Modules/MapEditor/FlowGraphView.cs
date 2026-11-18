@@ -190,7 +190,7 @@ public sealed class FlowGraphView : Grid
         string title = b.Kind switch { "dialogue" => "💬 Dialogue", "choice" => "❓ Choice", "branch" => "⑂ Branch", "end" => "■ End", _ => "▸ Steps" };
         stack.Children.Add(new TextBlock
         {
-            Text = $"{title}   lines {b.Start + 1}{(b.End - b.Start > 1 ? $"–{b.End}" : "")}", Foreground = Brushes.Gold, FontWeight = FontWeights.SemiBold, FontSize = 11, Margin = new Thickness(0, 0, 0, 3),
+            Text = $"{title}   lines {b.Start + 1}{(b.End - b.Start > 1 ? $"-{b.End}" : "")}", Foreground = Brushes.Gold, FontWeight = FontWeights.SemiBold, FontSize = 11, Margin = new Thickness(0, 0, 0, 3),
         });
         for (int i = b.Start; i < Math.Min(b.End, b.Start + 7); i++)
         {

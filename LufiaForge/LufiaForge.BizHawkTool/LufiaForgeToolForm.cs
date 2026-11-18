@@ -82,7 +82,7 @@ public sealed class LufiaForgeToolForm : ToolFormBase, IExternalToolForm
             _mmf         = MemoryMappedFile.CreateOrOpen(MmfName, MmfTotalSize);
             _mmfAccessor = _mmf.CreateViewAccessor();
         }
-        catch { /* WPF app won't connect — not fatal */ }
+        catch { /* WPF app won't connect - not fatal */ }
     }
 
     protected override void OnFormClosing(FormClosingEventArgs e)
@@ -105,7 +105,7 @@ public sealed class LufiaForgeToolForm : ToolFormBase, IExternalToolForm
         _prevWram                = null;
         _searchCandidates        = null;
         _searchResults.Items.Clear();
-        _statusLabel.Text = "ROM loaded — monitoring WRAM.";
+        _statusLabel.Text = "ROM loaded - monitoring WRAM.";
 
     }
 
@@ -146,7 +146,7 @@ public sealed class LufiaForgeToolForm : ToolFormBase, IExternalToolForm
             _mmfAccessor.Write(16, (uint)WramSize);
             _mmfAccessor.WriteArray(MmfHeaderSize, _wram, 0, _wram.Length);
 
-            // CPU registers (bytes 24-30) — read from BizHawk register file
+            // CPU registers (bytes 24-30) - read from BizHawk register file
             bool registers = WriteCpuRegisters();
             _mmfAccessor.Write(4,  _frameCounter);
             _mmfAccessor.Write(20, (uint)(1 | 8 | (registers ? 4 : 0)));
@@ -160,13 +160,13 @@ public sealed class LufiaForgeToolForm : ToolFormBase, IExternalToolForm
         if (_mmfAccessor == null) return false;
         try
         {
-            // NOTE: Requires bsnes core (Config → Cores → SNES → BSNES).
+            // NOTE: Requires bsnes core (Config -> Cores -> SNES -> BSNES).
             // Snes9x does not implement GetCpuFlagsAndRegisters and returns empty.
             var regs = APIs.Emulation.GetRegisters();
             if (regs.Count == 0)
             {
                 if (_frameCounter % 120 == 0)
-                    _statusLabel.Text = "PC unavailable — switch to BSNES core (Config → Cores → SNES).";
+                    _statusLabel.Text = "PC unavailable - switch to BSNES core (Config → Cores → SNES).";
                 return false;
             }
 
@@ -195,7 +195,7 @@ public sealed class LufiaForgeToolForm : ToolFormBase, IExternalToolForm
             _mmfAccessor.Write(30, db);
 
             if (_frameCounter % 60 == 0)
-                _statusLabel.Text = $"PC=${((int)pb << 16) | pc:X6}  |  ROM loaded — monitoring WRAM + PC.";
+                _statusLabel.Text = $"PC=${((int)pb << 16) | pc:X6}  |  ROM loaded - monitoring WRAM + PC.";
             return true;
         }
         catch { return false; }
@@ -378,7 +378,7 @@ public sealed class LufiaForgeToolForm : ToolFormBase, IExternalToolForm
         _statusLabel.Text = _searchCandidates.Count switch
         {
             0    => "No matches.",
-            > 500 => $"{_searchCandidates.Count:N0} candidates (showing 500) — use Next Scan.",
+            > 500 => $"{_searchCandidates.Count:N0} candidates (showing 500) - use Next Scan.",
             _    => $"{_searchCandidates.Count} result(s) found.",
         };
     }

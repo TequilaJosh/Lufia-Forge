@@ -225,7 +225,7 @@ public static class StoryFlags
     {
         var sb = new System.Text.StringBuilder();
         string Where(FlagUse u) => u.IsSetup ? $"{mapLabel(u.MapId)} (map setup)" : $"{mapLabel(u.MapId)}, event {u.Event}";
-        string Said(FlagUse u) => u.Context.Length > 0 ? $" — near \"{u.Context}\"" : "";
+        string Said(FlagUse u) => u.Context.Length > 0 ? $" - near \"{u.Context}\"" : "";
         string What(FlagUse u) => u.EventHint.Length > 0 && u.EventHint != "Script" ? $" [{Short(u.EventHint, 60)}]" : "";
 
         if (flag == 0xFF)

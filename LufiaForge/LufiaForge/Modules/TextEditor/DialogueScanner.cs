@@ -38,23 +38,23 @@ public class DialogueEntry
 /// <summary>
 /// Scans a Lufia 1 ROM for dialogue strings.
 ///
-/// Strategy: Walk through the ROM in the dialogue region (banks $84–$AF,
-/// file offsets 0x20000–0x57FFF) looking for runs that look like valid
+/// Strategy: Walk through the ROM in the dialogue region (banks $84-$AF,
+/// file offsets 0x20000-0x57FFF) looking for runs that look like valid
 /// Lufia 1 text: sequences of printable ASCII bytes and known control codes
 /// terminated by 0x00, with minimum length to filter out false positives.
 ///
-/// Story/NPC dialogue lives in banks $84–$87 (0x20000–0x3FFFF).
-/// Battle messages and menus live in banks $88–$AF (0x40000–0x57FFF).
+/// Story/NPC dialogue lives in banks $84-$87 (0x20000-0x3FFFF).
+/// Battle messages and menus live in banks $88-$AF (0x40000-0x57FFF).
 ///
-/// This is a heuristic scan — it finds the majority of dialogue and some
+/// This is a heuristic scan - it finds the majority of dialogue and some
 /// false positives (item names, NPC name tables, etc.) that can be
 /// filtered in the UI.
 /// </summary>
 public static class DialogueScanner
 {
     // Dialogue data spans two ROM regions:
-    //   Banks $84–$87 (file 0x20000–0x3FFFF): story/NPC dialogue
-    //   Banks $88–$AF (file 0x40000–0x57FFF): battle messages, menus
+    //   Banks $84-$87 (file 0x20000-0x3FFFF): story/NPC dialogue
+    //   Banks $88-$AF (file 0x40000-0x57FFF): battle messages, menus
     private const int ScanStart = Lufia1Constants.DialogueScanStartOffset;
     private const int ScanEnd   = Lufia1Constants.DialogueScanEndOffset;
     private const int MinLength = 4;   // minimum decoded chars to count as dialogue

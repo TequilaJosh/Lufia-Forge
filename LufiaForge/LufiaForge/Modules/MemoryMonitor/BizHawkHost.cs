@@ -373,7 +373,7 @@ public sealed class BizHawkHost : IDisposable
         exStyle |= WS_EX_APPWINDOW;
         SetWindowLong(_bizHawkHwnd, GWL_EXSTYLE, exStyle);
 
-        // Un-parent — makes it a top-level window again
+        // Un-parent - makes it a top-level window again
         SetParent(_bizHawkHwnd, IntPtr.Zero);
 
         // Float always-on-top so it's visible over LufiaForge on any tab
