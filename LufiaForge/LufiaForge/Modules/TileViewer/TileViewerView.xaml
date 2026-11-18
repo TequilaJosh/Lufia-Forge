@@ -10,7 +10,7 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- TOOLBAR -->
+        <!-- toolbar -->
         <Border Grid.Row="0"
                 Background="{StaticResource SurfacePurpleBrush}"
                 BorderBrush="{StaticResource BorderPurpleBrush}"
@@ -18,7 +18,7 @@
                 Padding="10,7">
             <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
 
-                <!-- ROM Offset -->
+                <!-- ROM offset -->
                 <TextBlock Text="Offset:"
                            Style="{StaticResource LufiaLabel}"
                            VerticalAlignment="Center"
@@ -29,7 +29,7 @@
                          ToolTip="ROM file offset in hex (e.g. 0x050000)"
                          Margin="0,0,14,0"/>
 
-                <!-- Bit Depth -->
+                <!-- bit depth -->
                 <TextBlock Text="Bit Depth:"
                            Style="{StaticResource LufiaLabel}"
                            VerticalAlignment="Center"
@@ -40,7 +40,7 @@
                           Width="136"
                           Margin="0,0,14,0"/>
 
-                <!-- Palette from ROM checkbox + offset -->
+                <!-- palette from the ROM checkbox and its offset -->
                 <CheckBox Content="ROM Palette"
                           IsChecked="{Binding UseRomPalette}"
                           Style="{StaticResource LufiaCheckBox}"
@@ -54,7 +54,7 @@
                          ToolTip="Palette data offset in hex"
                          Margin="0,0,14,0"/>
 
-                <!-- Tiles per row -->
+                <!-- tiles per row -->
                 <TextBlock Text="Tiles/Row:"
                            Style="{StaticResource LufiaLabel}"
                            VerticalAlignment="Center"
@@ -64,7 +64,7 @@
                          Width="46"
                          Margin="0,0,14,0"/>
 
-                <!-- Tile count -->
+                <!-- tile count -->
                 <TextBlock Text="Count:"
                            Style="{StaticResource LufiaLabel}"
                            VerticalAlignment="Center"
@@ -74,7 +74,7 @@
                          Width="56"
                          Margin="0,0,14,0"/>
 
-                <!-- Zoom -->
+                <!-- zoom -->
                 <TextBlock Text="Zoom:"
                            Style="{StaticResource LufiaLabel}"
                            VerticalAlignment="Center"
@@ -94,14 +94,14 @@
             </WrapPanel>
         </Border>
 
-        <!-- TILE CANVAS -->
+        <!-- the tiles -->
         <common:PopOutHost Grid.Row="1" Title="Tiles" ButtonMargin="0,4,22,0">
         <ScrollViewer HorizontalScrollBarVisibility="Auto"
                       VerticalScrollBarVisibility="Auto"
                       Background="{StaticResource DeepPurpleBrush}">
             <Grid>
 
-                <!-- Placeholder when nothing has been rendered yet -->
+                <!-- shown before anything's been rendered -->
                 <StackPanel HorizontalAlignment="Center"
                             VerticalAlignment="Center"
                             Margin="40"
@@ -125,7 +125,7 @@
                                Margin="0,4,0,0"/>
                 </StackPanel>
 
-                <!-- Rendered tile grid image -->
+                <!-- the rendered tile grid -->
                 <Image Source="{Binding RenderedImage}"
                        RenderOptions.BitmapScalingMode="NearestNeighbor"
                        Stretch="None"
@@ -139,7 +139,7 @@
         </ScrollViewer>
         </common:PopOutHost>
 
-        <!-- STATUS BAR -->
+        <!-- status bar -->
         <Border Grid.Row="2"
                 Background="{StaticResource DeepPurpleBrush}"
                 BorderBrush="{StaticResource BorderPurpleBrush}"

@@ -5,7 +5,7 @@
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
         Background="{DynamicResource MidPurpleBrush}">
     <DockPanel Margin="16">
-        <!-- what is merged, and from where changes are counted -->
+        <!-- what gets merged, and where the changes are counted from -->
         <StackPanel DockPanel.Dock="Top">
             <TextBlock x:Name="TitleText" Style="{StaticResource LufiaCardTitle}" FontSize="16"/>
             <TextBlock x:Name="IntroText" Style="{StaticResource LufiaLabel}" TextWrapping="Wrap" Margin="0,6,0,0"/>
@@ -86,7 +86,7 @@
 
             <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="Transparent"/>
 
-            <!-- the differential of the item picked -->
+            <!-- the differences for the picked item -->
             <Grid Grid.Column="2">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>

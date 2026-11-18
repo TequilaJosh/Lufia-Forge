@@ -14,16 +14,14 @@ using Color = System.Windows.Media.Color;
 
 namespace LufiaForge.Modules.Common;
 
-/// <summary>
-/// File, Merge Another Project Into This One: what the other project changed, by map (its events one by one, the lists
-/// of its info, its layout) and by part of the game, each with its differential, ticked when it goes in. Things only the
-/// other project changed start ticked; things both changed differently (conflicts) start unticked. Changes can be
-/// counted from the version both projects were made from instead of the starting ROM (fewer conflicts). OK hands the
-/// plan back (<see cref="Plan"/>); the caller makes the merge.
-/// </summary>
+// File > Merge Another Project Into This One. shows what the other project changed, by map (its events one by one,
+// its info lists, its layout) and by part of the game, each with its differences, ticked if it goes in. things only
+// the other project changed start ticked, things both changed differently (conflicts) start unticked. the changes
+// can be counted from the version both projects were made from instead of the starting ROM (fewer conflicts that
+// way). OK hands the plan back (Plan) and the caller does the merge
 public partial class MergeWindow : Window
 {
-    /// <summary>One line of the list.</summary>
+    // one line of the list
     public sealed class Row : INotifyPropertyChanged
     {
         public MergeItem Item { get; }
@@ -42,10 +40,10 @@ public partial class MergeWindow : Window
         public event PropertyChangedEventHandler? PropertyChanged;
         public static event Action? TakeChanged;
         public void Refresh() { Changed(nameof(Take)); Changed(nameof(Status)); Changed(nameof(StatusBrush)); }
-        private void Changed(string p) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(p));
+        private void Changed(string propertyName) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
 
-    /// <summary>One line of a differential.</summary>
+    // one line of the differences
     public sealed record DetailLine(string Text, Brush Brush, FontStyle Style, Brush Back);
 
     private readonly Func<byte[]?, string?, Task<ProjectMerge>> _replan;
@@ -78,7 +76,7 @@ public partial class MergeWindow : Window
         WarningsText.Visibility = plan.Warnings.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         LogCheck.Content = $"Add the other project's change log lines to this one ({plan.TheirNewLog.Count})";
         LogCheck.IsEnabled = plan.TheirNewLog.Count > 0;
-        // (Lufia II flag names and notes go with this box too: the window isn't told how many)
+        // (Lufia II flag names and notes go with this box too, the window just isn't told how many)
         NamesCheck.Content = $"Use the other project's map and flag names where this project has none ({plan.TheirNewMapNames.Count} map name{(plan.TheirNewMapNames.Count == 1 ? "" : "s")})";
         LogExpander.Header = $"The other project's change log since the projects split ({plan.TheirNewLog.Count} lines)";
         LogList.ItemsSource = plan.TheirNewLog;
@@ -119,20 +117,20 @@ public partial class MergeWindow : Window
         var none = Brushes.Transparent;
         var red = new SolidColorBrush(Color.FromArgb(0x30, 0xE0, 0x50, 0x50));
         var green = new SolidColorBrush(Color.FromArgb(0x30, 0x50, 0xD0, 0x70));
-        DetailList.ItemsSource = lines.Select(l => l.Kind switch
+        DetailList.ItemsSource = lines.Select(line => line.Kind switch
         {
-            DiffKind.Ours => new DetailLine(l.Text, B("ErrorBrush"), FontStyles.Normal, red),
-            DiffKind.Theirs => new DetailLine(l.Text, B("SuccessBrush"), FontStyles.Normal, green),
-            DiffKind.Head => new DetailLine(l.Text, B("GoldBrush"), FontStyles.Normal, none),
-            DiffKind.Note => new DetailLine(l.Text, B("TextDisabledBrush"), FontStyles.Italic, none),
-            _ => new DetailLine(l.Text, B("TextSecondaryBrush"), FontStyles.Normal, none),
+            DiffKind.Ours => new DetailLine(line.Text, B("ErrorBrush"), FontStyles.Normal, red),
+            DiffKind.Theirs => new DetailLine(line.Text, B("SuccessBrush"), FontStyles.Normal, green),
+            DiffKind.Head => new DetailLine(line.Text, B("GoldBrush"), FontStyles.Normal, none),
+            DiffKind.Note => new DetailLine(line.Text, B("TextDisabledBrush"), FontStyles.Italic, none),
+            _ => new DetailLine(line.Text, B("TextSecondaryBrush"), FontStyles.Normal, none),
         }).ToList();
     }
 
     private void SetAll(Func<MergeItem, bool> take)
     {
-        foreach (var r in _rows) r.Item.Take = take(r.Item);
-        foreach (var r in _rows) r.Refresh();
+        foreach (var row in _rows) row.Item.Take = take(row.Item);
+        foreach (var row in _rows) row.Refresh();
         Counts();
     }
 
@@ -143,26 +141,26 @@ public partial class MergeWindow : Window
 
     private async void PickAncestor_Click(object sender, RoutedEventArgs e)
     {
-        var d = new OpenFileDialog
+        var dialog = new OpenFileDialog
         {
             Title = "Pick the version both projects were made from (a project, or a ROM)",
             Filter = $"Lufia Forge projects (*{LufiaProject.Extension})|*{LufiaProject.Extension}|SNES ROM files (*.sfc;*.smc)|*.sfc;*.smc|All files (*.*)|*.*",
         };
-        if (d.ShowDialog(this) != true) return;
+        if (dialog.ShowDialog(this) != true) return;
         byte[] bytes;
         string name;
         try
         {
-            if (d.FileName.EndsWith(LufiaProject.Extension, StringComparison.OrdinalIgnoreCase))
+            if (dialog.FileName.EndsWith(LufiaProject.Extension, StringComparison.OrdinalIgnoreCase))
             {
-                var (p, rom) = LufiaProject.Open(d.FileName);
-                bytes = rom; name = $"\"{p.Name}\"";
+                var (project, rom) = LufiaProject.Open(dialog.FileName);
+                bytes = rom; name = $"\"{project.Name}\"";
             }
             else
             {
-                var report = RomLoader.Load(d.FileName);
+                var report = RomLoader.Load(dialog.FileName);
                 bytes = report.Buffer?.ToArray() ?? throw new InvalidDataException(report.Message);
-                name = $"\"{Path.GetFileName(d.FileName)}\"";
+                name = $"\"{Path.GetFileName(dialog.FileName)}\"";
             }
         }
         catch (Exception ex) { MessageBox.Show(this, "That file couldn't be read: " + ex.Message, "Merge", MessageBoxButton.OK, MessageBoxImage.Error); return; }

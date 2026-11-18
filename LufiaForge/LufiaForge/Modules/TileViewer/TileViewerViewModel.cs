@@ -12,9 +12,7 @@ public partial class TileViewerViewModel : ObservableObject
 {
     private RomBuffer? _rom;
 
-    // -------------------------------------------------------------------------
-    // Toolbar properties
-    // -------------------------------------------------------------------------
+    // toolbar
 
     [ObservableProperty] private string _offsetText         = "0x000000";
     [ObservableProperty] private string _paletteOffsetText  = "0x000000";
@@ -41,9 +39,7 @@ public partial class TileViewerViewModel : ObservableObject
 
     public List<int> ZoomOptions { get; } = [1, 2, 3, 4];
 
-    // -------------------------------------------------------------------------
-    // Init
-    // -------------------------------------------------------------------------
+    // setup
 
     public void SetRom(RomBuffer rom)
     {
@@ -52,9 +48,7 @@ public partial class TileViewerViewModel : ObservableObject
         StatusText  = "ROM loaded. Set an offset and click Render.";
     }
 
-    // -------------------------------------------------------------------------
-    // Render command
-    // -------------------------------------------------------------------------
+    // Render
 
     [RelayCommand]
     private void Render()
@@ -84,8 +78,8 @@ public partial class TileViewerViewModel : ObservableObject
         int paletteSize = 1 << bpp;  // 4, 16, or 256
 
         uint[] palette;
-        if (UseRomPalette && TryParseHex(PaletteOffsetText, out int palOff))
-            palette = SnesPalette.ReadFromRom(_rom, palOff, paletteSize);
+        if (UseRomPalette && TryParseHex(PaletteOffsetText, out int paletteOffset))
+            palette = SnesPalette.ReadFromRom(_rom, paletteOffset, paletteSize);
         else
             palette = SnesPalette.Grayscale(paletteSize);
 
@@ -94,7 +88,7 @@ public partial class TileViewerViewModel : ObservableObject
         int count = Math.Clamp(TileCount,   1, 2048);
         int tileBytes = SnesTileDecoder.BytesPerTile(depth);
 
-        // Cap to what actually fits in the ROM
+        // no more than what actually fits in the ROM
         int maxTiles = Math.Max(0, (_rom.Length - offset) / tileBytes);
         count = Math.Min(count, maxTiles);
 
@@ -105,29 +99,29 @@ public partial class TileViewerViewModel : ObservableObject
         }
 
         int rows = (count + cols - 1) / cols;
-        int imgW = cols * SnesTileDecoder.TileWidth  * zoom;
-        int imgH = rows * SnesTileDecoder.TileHeight * zoom;
+        int imageWidth = cols * SnesTileDecoder.TileWidth  * zoom;
+        int imageHeight = rows * SnesTileDecoder.TileHeight * zoom;
 
-        if (imgW > 4096 || imgH > 4096)
+        if (imageWidth > 4096 || imageHeight > 4096)
         {
             StatusText = "Requested image is too large (>4096px). Reduce tile count or zoom.";
             return;
         }
 
-        // Read only the ROM bytes we need
-        int readLen = count * tileBytes;
-        byte[] tileData = _rom.ReadBytes(offset, readLen);
+        // only read the ROM bytes we need
+        int readLength = count * tileBytes;
+        byte[] tileData = _rom.ReadBytes(offset, readLength);
 
-        // Build pixel buffer (BGRA32: each int = one pixel, value = 0xAARRGGBB)
-        var pixelBuf = new int[imgW * imgH];
+        // the pixel buffer (BGRA32: each int is one pixel, value = 0xAARRGGBB)
+        var pixelBuffer = new int[imageWidth * imageHeight];
 
-        for (int ti = 0; ti < count; ti++)
+        for (int tile = 0; tile < count; tile++)
         {
-            int tileOff = ti * tileBytes;
-            byte[] pxIndices = SnesTileDecoder.DecodeTile(tileData, tileOff, depth);
+            int tileOffset = tile * tileBytes;
+            byte[] colorIndexes = SnesTileDecoder.DecodeTile(tileData, tileOffset, depth);
 
-            int tileCol = ti % cols;
-            int tileRow = ti / cols;
+            int tileCol = tile % cols;
+            int tileRow = tile / cols;
             int baseX   = tileCol * SnesTileDecoder.TileWidth  * zoom;
             int baseY   = tileRow * SnesTileDecoder.TileHeight * zoom;
 
@@ -135,8 +129,8 @@ public partial class TileViewerViewModel : ObservableObject
             {
                 for (int px = 0; px < SnesTileDecoder.TileWidth; px++)
                 {
-                    int colorIdx = pxIndices[py * SnesTileDecoder.TileWidth + px];
-                    int rgba     = (int)palette[colorIdx];  // BGRA32 uint cast to int
+                    int colorIndex = colorIndexes[py * SnesTileDecoder.TileWidth + px];
+                    int rgba       = (int)palette[colorIndex];  // the BGRA32 uint cast to int
 
                     for (int zy = 0; zy < zoom; zy++)
                     {
@@ -144,26 +138,22 @@ public partial class TileViewerViewModel : ObservableObject
                         for (int zx = 0; zx < zoom; zx++)
                         {
                             int destX = baseX + px * zoom + zx;
-                            pixelBuf[destY * imgW + destX] = rgba;
+                            pixelBuffer[destY * imageWidth + destX] = rgba;
                         }
                     }
                 }
             }
         }
 
-        var bmp = new WriteableBitmap(imgW, imgH, 96, 96, PixelFormats.Bgra32, null);
-        bmp.WritePixels(new Int32Rect(0, 0, imgW, imgH), pixelBuf, imgW * 4, 0);
-        bmp.Freeze();
+        var bitmap = new WriteableBitmap(imageWidth, imageHeight, 96, 96, PixelFormats.Bgra32, null);
+        bitmap.WritePixels(new Int32Rect(0, 0, imageWidth, imageHeight), pixelBuffer, imageWidth * 4, 0);
+        bitmap.Freeze();
 
-        RenderedImage = bmp;
+        RenderedImage = bitmap;
         StatusText = $"Rendered {count} tiles  |  offset 0x{offset:X6}  |  {depth}  |  " +
                      $"{cols}×{rows} grid  |  zoom {zoom}×  |  " +
-                     $"{imgW}×{imgH} px";
+                     $"{imageWidth}×{imageHeight} px";
     }
-
-    // -------------------------------------------------------------------------
-    // Helpers
-    // -------------------------------------------------------------------------
 
     private static bool TryParseHex(string text, out int value)
     {

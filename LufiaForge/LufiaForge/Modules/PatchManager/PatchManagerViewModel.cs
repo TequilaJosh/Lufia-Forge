@@ -15,17 +15,15 @@ public partial class PatchManagerViewModel : ObservableObject
     private MainViewModel? _mainVm;
     private string?       _loadedPatchPath;
 
-    // -------------------------------------------------------------------------
-    // Collections and properties
-    // -------------------------------------------------------------------------
+    // lists and properties
 
     public ObservableCollection<IpsPatchRecord> PatchRecords { get; } = new();
 
-    /// <summary>Fixes and features Lufia Forge adds with one click.</summary>
+    // fixes and features Lufia Forge adds with one click
     public List<BuiltInPatch> BuiltInPatches { get; } = BuiltInPatch.All();
+    // the patches get grouped for the cards in this order
     private static readonly string[] GroupOrder = { "Community", "Battle", "Magic", "Items", "Maps", "Events", "Testing", "Other" };
-    /// <summary>The patches grouped for the cards (in this order).</summary>
-    /// <summary>Lufia II's patches (small same-size changes, Core/Lufia2/L2Patches).</summary>
+    // Lufia II's patches (small same-size changes, Core/Lufia2/L2Patches)
     public List<BuiltInPatch> Lufia2Patches { get; } = Core.Lufia2.L2Patches.All.Select(p => new BuiltInPatch
     {
         Name = p.Name, Summary = p.Summary, Description = p.Description, Category = "Lufia II", NeedsExpandedRom = false,
@@ -33,7 +31,7 @@ public partial class PatchManagerViewModel : ObservableObject
         IsApplied = p.IsApplied, IsOriginal = p.IsOriginal, Apply = p.Apply, Remove = p.Remove,
     }).ToList();
 
-    /// <summary>Lufia II fan hacks (whole-game patches for a clean ROM, Core/CommunityPatches).</summary>
+    // Lufia II fan hacks (whole-game patches for a clean ROM, Core/CommunityPatches)
     public List<BuiltInPatch> Lufia2Community { get; } = new()
     {
         Hack("frue", "Frue Lufia v8.2", "Fixes a great many of the game's bugs and revises the translation (names, terms, dialogue).",
@@ -95,9 +93,7 @@ public partial class PatchManagerViewModel : ObservableObject
 
     public bool HasRecords => PatchRecords.Count > 0;
 
-    // -------------------------------------------------------------------------
-    // Init
-    // -------------------------------------------------------------------------
+    // setup
 
     public void SetRom(RomBuffer rom, MainViewModel mainVm)
     {
@@ -111,9 +107,7 @@ public partial class PatchManagerViewModel : ObservableObject
         RefreshBuiltIn();
     }
 
-    // -------------------------------------------------------------------------
-    // Built-in patches
-    // -------------------------------------------------------------------------
+    // built-in patches
 
     [RelayCommand]
     private void ToggleBuiltIn(BuiltInPatch? patch)
@@ -127,11 +121,11 @@ public partial class PatchManagerViewModel : ObservableObject
             MessageBox.Show($"\"{patch.Name}\" adds a small routine to the expanded part of the ROM. Expand the ROM to 2 MB (the game plays the same)?",
                 "Expand ROM?", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
         { StatusText = "Not added: the ROM wasn't expanded."; return; }
-        // the tabs' edits not written yet go in first (a reload afterwards would drop them, and a page writing them
-        // later could put back bytes the patch changed)
+        // the tabs' edits that aren't written yet go in first (a reload afterwards would drop them, and a page writing
+        // them later could put back bytes the patch changed)
         _mainVm?.WritePendingEdits();
-        // a patch that fails partway (the ROM full, a hack's data in the way) is taken back whole: the bytes it wrote
-        // before failing would otherwise stay, unannounced, and go into the next change's Undo step
+        // a patch that fails partway (ROM full, a hack's data in the way) gets taken back completely. otherwise the
+        // bytes it wrote before failing would stay, without a word, and end up in the next change's Undo step
         var before = _rom.ToArray();
         try
         {
@@ -151,25 +145,23 @@ public partial class PatchManagerViewModel : ObservableObject
         RefreshBuiltIn();
     }
 
-    /// <summary>Re-reads which built-in patches the ROM has (other tabs can add them too).</summary>
+    // re-reads which built-in patches the ROM has (other tabs can add them too)
     public void RefreshBuiltIn()
     {
-        foreach (var p in BuiltInPatches) p.Refresh(_rom);
-        foreach (var p in Lufia2Patches) p.Refresh(_rom);
-        foreach (var p in Lufia2Community) p.Refresh(_rom);
+        foreach (var patch in BuiltInPatches) patch.Refresh(_rom);
+        foreach (var patch in Lufia2Patches) patch.Refresh(_rom);
+        foreach (var patch in Lufia2Community) patch.Refresh(_rom);
         RefreshSize();
         RefreshFont();
     }
 
-    // -------------------------------------------------------------------------
     // Lufia II font
-    // -------------------------------------------------------------------------
 
     [ObservableProperty] private string _fontText = "";
     [ObservableProperty] private bool _smallFontToo = true;
     [ObservableProperty] private bool _canRestoreFont;
 
-    /// <summary>The ROM is Lufia 1 (the font and ROM size tools are for it).</summary>
+    // the ROM is Lufia 1 (the font and ROM size tools are for it)
     public bool IsLufia1 => _rom?.IsLufia2 != true;
 
     private void RefreshFont()
@@ -201,10 +193,10 @@ public partial class PatchManagerViewModel : ObservableObject
         { StatusText = "Font not changed: the ROM wasn't expanded."; return; }
         try
         {
-            var l2 = FontPatch.ReadLufia2(dialog.FileName);
-            int n = FontPatch.Apply(_rom, l2, SmallFontToo);
+            var lufia2Font = FontPatch.ReadLufia2(dialog.FileName);
+            int changed = FontPatch.Apply(_rom, lufia2Font, SmallFontToo);
             _mainVm?.NotifyRomModified("Lufia II font");
-            StatusText = $"Lufia II's font copied in ({n} letters changed). Save Project keeps it.";
+            StatusText = $"Lufia II's font copied in ({changed} letters changed). Save Project keeps it.";
         }
         catch (Exception ex) { StatusText = "Font not changed: " + ex.Message; }
         RefreshBuiltIn();
@@ -220,9 +212,7 @@ public partial class PatchManagerViewModel : ObservableObject
         RefreshBuiltIn();
     }
 
-    // -------------------------------------------------------------------------
     // ROM size
-    // -------------------------------------------------------------------------
 
     [ObservableProperty] private string _romSizeText = "";
     [ObservableProperty] private bool _canExpandTo4Mb;
@@ -237,7 +227,7 @@ public partial class PatchManagerViewModel : ObservableObject
             CanExpandTo4Mb = _rom.Length < Core.Lufia2.L2Rom.MaxSize;
             return;
         }
-        double mb = _rom.Length / 1048576.0;
+        double megabytes = _rom.Length / 1048576.0;
         string free = "";
         if (_rom.Length >= Core.Maps.MapWriter.ExpandedSize)
         {
@@ -246,7 +236,7 @@ public partial class PatchManagerViewModel : ObservableObject
             long room = _rom.Length - Core.Maps.ExpansionSpace.FirstUsable - Core.Maps.ExpansionSpace.TableSize;
             free = $" About {Math.Max(0, room - used) / 1024:N0} KB of the added space is still free.";
         }
-        RomSizeText = $"This ROM is {mb:0.#} MB.{free} Lufia Forge grows it by itself when edits need room (1 MB → 2 MB → 4 MB); " +
+        RomSizeText = $"This ROM is {megabytes:0.#} MB.{free} Lufia Forge grows it by itself when edits need room (1 MB → 2 MB → 4 MB); " +
                       "4 MB is the most a Lufia (LoROM) cartridge can address.";
         CanExpandTo4Mb = _rom.Length < Core.Maps.MapWriter.MaxSize;
     }
@@ -266,9 +256,7 @@ public partial class PatchManagerViewModel : ObservableObject
         RefreshBuiltIn();
     }
 
-    // -------------------------------------------------------------------------
-    // Load Patch
-    // -------------------------------------------------------------------------
+    // load a patch
 
     [RelayCommand]
     private void LoadPatch()
@@ -297,9 +285,7 @@ public partial class PatchManagerViewModel : ObservableObject
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Apply Patch
-    // -------------------------------------------------------------------------
+    // apply a patch
 
     [RelayCommand]
     private void ApplyPatch()
@@ -323,9 +309,9 @@ public partial class PatchManagerViewModel : ObservableObject
         {
             byte[] patched = IpsHandler.ApplyPatch(_rom, _loadedPatchPath);
 
-            // data Lufia Forge keeps in the added space (moved maps, scripts, patch routines, its space table):
-            // a patch written for another ROM can overwrite or cut it off, leaving pointers to garbage
-            // (Lufia II keeps it differently: the used part of each added space, and its 16-byte mark. Lufia 1's space
+            // the data Lufia Forge keeps in the added space (moved maps, scripts, patch routines, its space table).
+            // a patch made for another ROM can overwrite it or cut it off, leaving pointers to garbage
+            // (Lufia II keeps it differently: the used part of each added space plus its 16-byte mark. Lufia 1's space
             // table sits where Lufia II has game data, so reading it there warned about the wrong bytes and missed these)
             List<(int Start, int End)>? blocks = null;
             if (_rom.IsLufia2)
@@ -340,14 +326,14 @@ public partial class PatchManagerViewModel : ObservableObject
             }
             if (blocks != null && blocks.Count > 0)
             {
-                int hit = 0;
-                foreach (var b in blocks)
+                int overwritten = 0;
+                foreach (var block in blocks)
                 {
-                    if (b.End > patched.Length) { hit++; continue; }
-                    for (int i = b.Start; i < b.End; i++) if (patched[i] != _rom.ReadByte(i)) { hit++; break; }
+                    if (block.End > patched.Length) { overwritten++; continue; }
+                    for (int i = block.Start; i < block.End; i++) if (patched[i] != _rom.ReadByte(i)) { overwritten++; break; }
                 }
-                if (hit > 0 && MessageBox.Show(
-                        $"This patch overwrites (or cuts off) {hit} block(s) of data Lufia Forge stored in the expanded part of this ROM " +
+                if (overwritten > 0 && MessageBox.Show(
+                        $"This patch overwrites (or cuts off) {overwritten} block(s) of data Lufia Forge stored in the expanded part of this ROM " +
                         "(moved maps, events, new spells/monsters/sprites, patch routines or its space table). The game would read garbage there.\n\n" +
                         "Apply it anyway? (Usually: apply the patch to a clean ROM first, then make your Lufia Forge edits.)",
                         "Patch overwrites Lufia Forge data", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes)
@@ -386,9 +372,7 @@ public partial class PatchManagerViewModel : ObservableObject
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Export Patch
-    // -------------------------------------------------------------------------
+    // export a patch
 
     [RelayCommand]
     private void ExportPatch()
@@ -400,7 +384,7 @@ public partial class PatchManagerViewModel : ObservableObject
             return;
         }
 
-        // Step 1: Select the original (unmodified) ROM to diff against
+        // step 1: pick the original (unedited) ROM to compare against
         var openDialog = new OpenFileDialog
         {
             Title  = $"Select Original (Unmodified) {(_rom.IsLufia2 ? "Lufia II" : "Lufia 1")} ROM",
@@ -410,7 +394,7 @@ public partial class PatchManagerViewModel : ObservableObject
 
         if (openDialog.ShowDialog() != true) return;
 
-        // Step 2: Choose output path
+        // step 2: where to save it
         var saveDialog = new SaveFileDialog
         {
             Title            = "Save IPS Patch",
@@ -423,7 +407,7 @@ public partial class PatchManagerViewModel : ObservableObject
 
         try
         {
-            _mainVm?.WritePendingEdits();   // the patch holds every edit, also those still in a tab
+            _mainVm?.WritePendingEdits();   // the patch has every edit, the ones still sitting in a tab too
             IpsHandler.ExportPatch(_rom, openDialog.FileName, saveDialog.FileName);
 
             string name = Path.GetFileName(saveDialog.FileName);
@@ -439,9 +423,7 @@ public partial class PatchManagerViewModel : ObservableObject
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Parse patch records for display
-    // -------------------------------------------------------------------------
+    // reading the patch records to show them
 
     private void ParsePatchRecords(string patchPath)
     {
@@ -454,40 +436,40 @@ public partial class PatchManagerViewModel : ObservableObject
             data[2] != 'T' || data[3] != 'C' || data[4] != 'H')
             throw new InvalidDataException("Not a valid IPS file (missing PATCH header).");
 
-        int pos        = 5;
+        int position   = 5;
         int totalBytes = 0;
 
-        while (pos + 3 <= data.Length)
+        while (position + 3 <= data.Length)
         {
-            if (data[pos] == 'E' && data[pos + 1] == 'O' && data[pos + 2] == 'F') break;
-            if (pos + 5 > data.Length) break;
+            if (data[position] == 'E' && data[position + 1] == 'O' && data[position + 2] == 'F') break;
+            if (position + 5 > data.Length) break;
 
-            int offset = (data[pos] << 16) | (data[pos + 1] << 8) | data[pos + 2];
-            pos += 3;
+            int offset = (data[position] << 16) | (data[position + 1] << 8) | data[position + 2];
+            position += 3;
 
-            int size = (data[pos] << 8) | data[pos + 1];
-            pos += 2;
+            int size = (data[position] << 8) | data[position + 1];
+            position += 2;
 
             if (size == 0)
             {
-                if (pos + 3 > data.Length) break;
-                int runLen  = (data[pos] << 8) | data[pos + 1];
-                byte fill   = data[pos + 2];
-                pos += 3;
+                if (position + 3 > data.Length) break;
+                int runLength = (data[position] << 8) | data[position + 1];
+                byte fill     = data[position + 2];
+                position += 3;
 
                 PatchRecords.Add(new IpsPatchRecord
                 {
                     Offset  = offset,
-                    Size    = runLen,
+                    Size    = runLength,
                     IsRle   = true,
                     RleFill = fill
                 });
-                totalBytes += runLen;
+                totalBytes += runLength;
             }
             else
             {
-                if (pos + size > data.Length) break;
-                pos += size;
+                if (position + size > data.Length) break;
+                position += size;
 
                 PatchRecords.Add(new IpsPatchRecord
                 {

@@ -17,25 +17,19 @@ namespace LufiaForge.BizHawkTool;
 [ExternalToolApplicability.SingleSystem("SNES")]
 public sealed class LufiaForgeToolForm : ToolFormBase, IExternalToolForm
 {
-    // -------------------------------------------------------------------------
-    // BizHawk API injection
-    // -------------------------------------------------------------------------
+    // BizHawk fills this in (API injection)
     public ApiContainer? _apiContainer { get; set; }
     private ApiContainer APIs => _apiContainer!;
 
     protected override string WindowTitleStatic => "Lufia Forge Monitor";
 
-    // -------------------------------------------------------------------------
-    // WRAM constants
-    // -------------------------------------------------------------------------
+    // WRAM
     private const int    WramSize    = 0x20000; // 128 KB
     private const string WramDomain  = "WRAM";
     private const int    HexRows     = 24;
     private const int    HexCols     = 16;
 
-    // -------------------------------------------------------------------------
     // UI controls
-    // -------------------------------------------------------------------------
     private TabControl    _tabs          = null!;
     private TextBox       _hexView       = null!;
     private ListView      _watchList     = null!;
@@ -48,9 +42,7 @@ public sealed class LufiaForgeToolForm : ToolFormBase, IExternalToolForm
     private Label         _statusLabel   = null!;
     private NumericUpDown _hexOffset     = null!;
 
-    // -------------------------------------------------------------------------
-    // Shared memory (MemoryMappedFile) for Lufia Forge WPF bridge
-    // -------------------------------------------------------------------------
+    // shared memory (a MemoryMappedFile) that the Lufia Forge app reads
     private const string MmfName       = "LufiaForge_WRAM";
     private const int    MmfHeaderSize = 256;
     private const int    MmfTotalSize  = MmfHeaderSize + WramSize; // 256 + 131072
@@ -58,17 +50,13 @@ public sealed class LufiaForgeToolForm : ToolFormBase, IExternalToolForm
     private MemoryMappedViewAccessor? _mmfAccessor;
     private uint _frameCounter;
 
-    // -------------------------------------------------------------------------
-    // State
-    // -------------------------------------------------------------------------
+    // state
     private byte[]? _wram;
     private byte[]? _prevWram;
-    private List<int>? _searchCandidates; // RAM offsets surviving Next Scan
+    private List<int>? _searchCandidates; // RAM offsets still left after Next Scan
 
 
-    // -------------------------------------------------------------------------
-    // Init
-    // -------------------------------------------------------------------------
+    // setup
     public LufiaForgeToolForm()
     {
         BuildUI();
@@ -82,23 +70,21 @@ public sealed class LufiaForgeToolForm : ToolFormBase, IExternalToolForm
             _mmf         = MemoryMappedFile.CreateOrOpen(MmfName, MmfTotalSize);
             _mmfAccessor = _mmf.CreateViewAccessor();
         }
-        catch { /* WPF app won't connect - not fatal */ }
+        catch { /* the Lufia Forge app just won't connect, that's all */ }
     }
 
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
-        // Signal disconnected
+        // tell the app we're gone
         try { _mmfAccessor?.Write(20, (uint)0); } catch { }
         _mmfAccessor?.Dispose();
         _mmf?.Dispose();
         base.OnFormClosing(e);
     }
 
-    // -------------------------------------------------------------------------
     // BizHawk callbacks
-    // -------------------------------------------------------------------------
 
-    /// <summary>Called when a new ROM is loaded or the tool is opened.</summary>
+    // BizHawk calls this when a new ROM loads or the tool opens
     public override void Restart()
     {
         _wram                    = null;
@@ -110,7 +96,7 @@ public sealed class LufiaForgeToolForm : ToolFormBase, IExternalToolForm
     }
 
 
-    /// <summary>Called every frame by BizHawk.</summary>
+    // BizHawk calls this every frame
     public override void UpdateValues(ToolFormUpdateType type)
     {
         if (type is not (ToolFormUpdateType.PreFrame or ToolFormUpdateType.FastPreFrame))
@@ -134,10 +120,10 @@ public sealed class LufiaForgeToolForm : ToolFormBase, IExternalToolForm
         {
             _frameCounter++;
             // flags: 1 connected, 2 being written, 4 registers are this frame's, 8 this tool sets 2 and 4. Lufia Forge
-            // skips a frame read while 2 is set or whose counter changed under it (a copy half one frame, half the
-            // next), so the counter is written last, after the WRAM and the registers.
+            // skips a frame it read while 2 was set, or whose counter changed while it read (a copy that's half one
+            // frame and half the next), so the counter gets written last, after the WRAM and the registers
             _mmfAccessor.Write(20, (uint)(1 | 2 | 8));
-            // Magic: "LFWM"
+            // magic: "LFWM"
             _mmfAccessor.Write(0,  (byte)'L');
             _mmfAccessor.Write(1,  (byte)'F');
             _mmfAccessor.Write(2,  (byte)'W');
@@ -146,70 +132,68 @@ public sealed class LufiaForgeToolForm : ToolFormBase, IExternalToolForm
             _mmfAccessor.Write(16, (uint)WramSize);
             _mmfAccessor.WriteArray(MmfHeaderSize, _wram, 0, _wram.Length);
 
-            // CPU registers (bytes 24-30) - read from BizHawk register file
+            // CPU registers (bytes 24-30), read from BizHawk's register list
             bool registers = WriteCpuRegisters();
             _mmfAccessor.Write(4,  _frameCounter);
             _mmfAccessor.Write(20, (uint)(1 | 8 | (registers ? 4 : 0)));
         }
-        catch { /* non-fatal */ }
+        catch { /* not worth stopping for */ }
     }
 
-    /// <summary>Writes the CPU registers; false when BizHawk gave none (the Snes9x core).</summary>
+    // writes the CPU registers. false if BizHawk gave none (the Snes9x core)
     private bool WriteCpuRegisters()
     {
         if (_mmfAccessor == null) return false;
         try
         {
-            // NOTE: Requires bsnes core (Config -> Cores -> SNES -> BSNES).
-            // Snes9x does not implement GetCpuFlagsAndRegisters and returns empty.
-            var regs = APIs.Emulation.GetRegisters();
-            if (regs.Count == 0)
+            // needs the bsnes core (Config -> Cores -> SNES -> BSNES). Snes9x doesn't do
+            // GetCpuFlagsAndRegisters and gives back nothing
+            var cpuRegisters = APIs.Emulation.GetRegisters();
+            if (cpuRegisters.Count == 0)
             {
                 if (_frameCounter % 120 == 0)
                     _statusLabel.Text = "PC unavailable - switch to BSNES core (Config → Cores → SNES).";
                 return false;
             }
 
-            regs.TryGetValue("PC", out ulong pcRaw);
-            ushort pc;
-            byte   pb;
-            if (pcRaw > 0xFFFF)           // some bsnes builds pack full 24-bit into "PC"
+            cpuRegisters.TryGetValue("PC", out ulong pcRaw);
+            ushort programCounter;
+            byte   programBank;
+            if (pcRaw > 0xFFFF)           // some bsnes builds pack the full 24 bits into "PC"
             {
-                pb = (byte)((pcRaw >> 16) & 0xFF);
-                pc = (ushort)(pcRaw & 0xFFFF);
+                programBank = (byte)((pcRaw >> 16) & 0xFF);
+                programCounter = (ushort)(pcRaw & 0xFFFF);
             }
             else
             {
-                pc = (ushort)(pcRaw & 0xFFFF);
-                pb = regs.TryGetValue("PB", out ulong pbRaw) ? (byte)(pbRaw & 0xFF) : (byte)0;
+                programCounter = (ushort)(pcRaw & 0xFFFF);
+                programBank = cpuRegisters.TryGetValue("PB", out ulong pbRaw) ? (byte)(pbRaw & 0xFF) : (byte)0;
             }
 
-            byte   p  = regs.TryGetValue("P",  out ulong pRaw)  ? (byte)(pRaw  & 0xFF)    : (byte)0;
-            ushort d  = regs.TryGetValue("D",  out ulong dRaw)  ? (ushort)(dRaw & 0xFFFF) : (ushort)0;
-            byte   db = regs.TryGetValue("DB", out ulong dbRaw) ? (byte)(dbRaw  & 0xFF)   : (byte)0;
+            byte   statusFlags = cpuRegisters.TryGetValue("P",  out ulong pRaw)  ? (byte)(pRaw  & 0xFF)    : (byte)0;
+            ushort directPage  = cpuRegisters.TryGetValue("D",  out ulong dRaw)  ? (ushort)(dRaw & 0xFFFF) : (ushort)0;
+            byte   dataBank    = cpuRegisters.TryGetValue("DB", out ulong dbRaw) ? (byte)(dbRaw  & 0xFF)   : (byte)0;
 
-            _mmfAccessor.Write(24, pc);
-            _mmfAccessor.Write(26, pb);
-            _mmfAccessor.Write(27, p);
-            _mmfAccessor.Write(28, d);
-            _mmfAccessor.Write(30, db);
+            _mmfAccessor.Write(24, programCounter);
+            _mmfAccessor.Write(26, programBank);
+            _mmfAccessor.Write(27, statusFlags);
+            _mmfAccessor.Write(28, directPage);
+            _mmfAccessor.Write(30, dataBank);
 
             if (_frameCounter % 60 == 0)
-                _statusLabel.Text = $"PC=${((int)pb << 16) | pc:X6}  |  ROM loaded - monitoring WRAM + PC.";
+                _statusLabel.Text = $"PC=${((int)programBank << 16) | programCounter:X6}  |  ROM loaded - monitoring WRAM + PC.";
             return true;
         }
         catch { return false; }
     }
 
-    // -------------------------------------------------------------------------
-    // ROM auto-load command (written by LufiaForge WPF when user opens a ROM)
-    // -------------------------------------------------------------------------
+    // ROM auto-load command (the Lufia Forge app writes it when the user opens a ROM)
     private static readonly string LoadRomCommandFile =
         System.IO.Path.Combine(System.IO.Path.GetTempPath(), "LufiaForge_LoadROM.txt");
 
     private void PollLoadRomCommand()
     {
-        // Check once per second (~60 frames) to avoid filesystem overhead
+        // only check once a second (~60 frames) so we're not hitting the disk all the time
         if (_frameCounter % 60 != 0) return;
         if (!System.IO.File.Exists(LoadRomCommandFile)) return;
 
@@ -224,12 +208,10 @@ public sealed class LufiaForgeToolForm : ToolFormBase, IExternalToolForm
                 _statusLabel.Text = $"Loaded: {System.IO.Path.GetFileName(romPath)}";
             }
         }
-        catch { /* non-fatal */ }
+        catch { /* not worth stopping for */ }
     }
 
-    // -------------------------------------------------------------------------
-    // WRAM helpers
-    // -------------------------------------------------------------------------
+    // WRAM
     private bool IsWramAvailable()
     {
         try { return APIs.Memory.GetMemoryDomainList().Contains(WramDomain); }
@@ -239,14 +221,12 @@ public sealed class LufiaForgeToolForm : ToolFormBase, IExternalToolForm
     private byte[] ReadWram()
     {
         var data = APIs.Memory.ReadByteRange(0, WramSize, WramDomain);
-        var arr  = new byte[WramSize];
-        for (int i = 0; i < WramSize; i++) arr[i] = data[i];
-        return arr;
+        var copy = new byte[WramSize];
+        for (int i = 0; i < WramSize; i++) copy[i] = data[i];
+        return copy;
     }
 
-    // -------------------------------------------------------------------------
-    // Hex view
-    // -------------------------------------------------------------------------
+    // hex view
     private void RefreshHexView()
     {
         if (_wram == null || !_tabs.SelectedTab?.Text?.StartsWith("Hex") == true) return;
@@ -266,49 +246,47 @@ public sealed class LufiaForgeToolForm : ToolFormBase, IExternalToolForm
             sb.Append(' ');
             for (int col = 0; col < HexCols && row + col < end; col++)
             {
-                byte b = _wram[row + col];
-                sb.Append(b >= 0x20 && b <= 0x7E ? (char)b : '.');
+                byte cell = _wram[row + col];
+                sb.Append(cell >= 0x20 && cell <= 0x7E ? (char)cell : '.');
             }
             sb.AppendLine();
         }
         _hexView.Text = sb.ToString();
     }
 
-    // -------------------------------------------------------------------------
-    // Watchlist
-    // -------------------------------------------------------------------------
+    // watchlist
     private void RefreshWatchlist()
     {
         if (_wram == null) return;
         foreach (ListViewItem item in _watchList.Items)
         {
-            if (item.Tag is not WatchEntry w) continue;
-            int offset = w.SnesAddr - 0x7E0000;
-            // a 2- or 4-byte watch on the last bytes of WRAM would read past its end
-            if (offset < 0 || offset + SizeBytes(w.Type) > WramSize) continue;
+            if (item.Tag is not WatchEntry watch) continue;
+            int offset = watch.SnesAddr - 0x7E0000;
+            // a 2 or 4 byte watch on the last bytes of WRAM would read past the end
+            if (offset < 0 || offset + SizeBytes(watch.Type) > WramSize) continue;
 
-            long cur  = ReadTyped(_wram,  offset, w.Type);
-            long prev = _prevWram != null ? ReadTyped(_prevWram, offset, w.Type) : cur;
+            long current  = ReadTyped(_wram,  offset, watch.Type);
+            long previous = _prevWram != null ? ReadTyped(_prevWram, offset, watch.Type) : current;
 
-            item.SubItems[2].Text = cur.ToString();
-            item.SubItems[3].Text = prev.ToString();
-            item.SubItems[4].Text = (cur - prev).ToString();
+            item.SubItems[2].Text = current.ToString();
+            item.SubItems[3].Text = previous.ToString();
+            item.SubItems[4].Text = (current - previous).ToString();
         }
     }
 
     private void AddWatch_Click(object? sender, EventArgs e)
     {
-        string addrText = _watchAddr.Text.TrimStart('$', '0', 'x', 'X').Trim();
-        if (!int.TryParse(addrText, System.Globalization.NumberStyles.HexNumber,
-                          null, out int snesAddr)) return;
+        string addressText = _watchAddr.Text.TrimStart('$', '0', 'x', 'X').Trim();
+        if (!int.TryParse(addressText, System.Globalization.NumberStyles.HexNumber,
+                          null, out int snesAddress)) return;
 
-        var w    = new WatchEntry(snesAddr, _watchLabel.Text, (WatchSize)_watchType.SelectedIndex);
-        var item = new ListViewItem($"${snesAddr:X6}");
-        item.SubItems.Add(string.IsNullOrWhiteSpace(w.Label) ? $"${snesAddr:X6}" : w.Label);
+        var watch = new WatchEntry(snesAddress, _watchLabel.Text, (WatchSize)_watchType.SelectedIndex);
+        var item = new ListViewItem($"${snesAddress:X6}");
+        item.SubItems.Add(string.IsNullOrWhiteSpace(watch.Label) ? $"${snesAddress:X6}" : watch.Label);
         item.SubItems.Add("--");  // current
         item.SubItems.Add("--");  // previous
         item.SubItems.Add("0");   // delta
-        item.Tag = w;
+        item.Tag = watch;
         _watchList.Items.Add(item);
         _watchAddr.Text = "";
     }
@@ -319,9 +297,7 @@ public sealed class LufiaForgeToolForm : ToolFormBase, IExternalToolForm
             _watchList.Items.Remove(item);
     }
 
-    // -------------------------------------------------------------------------
-    // Memory search
-    // -------------------------------------------------------------------------
+    // memory search
     private void FirstScan_Click(object? sender, EventArgs e)
     {
         if (_wram == null) { _statusLabel.Text = "No ROM loaded."; return; }
@@ -365,9 +341,9 @@ public sealed class LufiaForgeToolForm : ToolFormBase, IExternalToolForm
     private void ShowSearchResults()
     {
         _searchResults.Items.Clear();
-        int show = Math.Min(500, _searchCandidates!.Count);
+        int shown = Math.Min(500, _searchCandidates!.Count);
         var size = (WatchSize)_searchType.SelectedIndex;
-        for (int i = 0; i < show; i++)
+        for (int i = 0; i < shown; i++)
         {
             int offset = _searchCandidates[i];
             var item   = new ListViewItem($"${0x7E0000 + offset:X6}");
@@ -388,21 +364,19 @@ public sealed class LufiaForgeToolForm : ToolFormBase, IExternalToolForm
         foreach (ListViewItem item in _searchResults.SelectedItems)
         {
             if (item.Tag is not int offset) continue;
-            int snesAddr = 0x7E0000 + offset;
-            var w     = new WatchEntry(snesAddr, $"${snesAddr:X6}", (WatchSize)_searchType.SelectedIndex);
-            var wItem = new ListViewItem($"${snesAddr:X6}");
-            wItem.SubItems.Add(w.Label);
-            wItem.SubItems.Add("--");
-            wItem.SubItems.Add("--");
-            wItem.SubItems.Add("0");
-            wItem.Tag = w;
-            _watchList.Items.Add(wItem);
+            int snesAddress = 0x7E0000 + offset;
+            var watch     = new WatchEntry(snesAddress, $"${snesAddress:X6}", (WatchSize)_searchType.SelectedIndex);
+            var watchItem = new ListViewItem($"${snesAddress:X6}");
+            watchItem.SubItems.Add(watch.Label);
+            watchItem.SubItems.Add("--");
+            watchItem.SubItems.Add("--");
+            watchItem.SubItems.Add("0");
+            watchItem.Tag = watch;
+            _watchList.Items.Add(watchItem);
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Typed read helpers
-    // -------------------------------------------------------------------------
+    // reading values by type
     private static long ReadTyped(byte[] ram, int offset, WatchSize size) => size switch
     {
         WatchSize.U8  => ram[offset],
@@ -422,15 +396,13 @@ public sealed class LufiaForgeToolForm : ToolFormBase, IExternalToolForm
 
     private bool TryParseSearchValue(out long value)
     {
-        string s = _searchValue.Text.Trim();
-        if (s.StartsWith("$"))  return long.TryParse(s[1..], System.Globalization.NumberStyles.HexNumber, null, out value);
-        if (s.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) return long.TryParse(s[2..], System.Globalization.NumberStyles.HexNumber, null, out value);
-        return long.TryParse(s, out value);
+        string text = _searchValue.Text.Trim();
+        if (text.StartsWith("$"))  return long.TryParse(text[1..], System.Globalization.NumberStyles.HexNumber, null, out value);
+        if (text.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) return long.TryParse(text[2..], System.Globalization.NumberStyles.HexNumber, null, out value);
+        return long.TryParse(text, out value);
     }
 
-    // -------------------------------------------------------------------------
-    // UI builder
-    // -------------------------------------------------------------------------
+    // building the UI
     private void BuildUI()
     {
         Size            = new Size(720, 560);
@@ -499,7 +471,7 @@ public sealed class LufiaForgeToolForm : ToolFormBase, IExternalToolForm
     {
         var page = new TabPage("Watchlist") { BackColor = Color.FromArgb(28, 20, 40) };
 
-        // Toolbar for adding watches
+        // toolbar for adding watches
         var toolbar = new Panel { Dock = DockStyle.Top, Height = 34, Padding = new Padding(4, 4, 4, 0) };
         _watchAddr  = MakeTextBox("7E0000", 80); _watchAddr.Left = 4;
         _watchLabel = MakeTextBox("Label",  100); _watchLabel.Left = 90;
@@ -567,9 +539,7 @@ public sealed class LufiaForgeToolForm : ToolFormBase, IExternalToolForm
         return page;
     }
 
-    // -------------------------------------------------------------------------
-    // UI helpers
-    // -------------------------------------------------------------------------
+    // small UI makers
     private TextBox MakeTextBox(string placeholder, int width)
         => new()
         {
@@ -583,7 +553,7 @@ public sealed class LufiaForgeToolForm : ToolFormBase, IExternalToolForm
 
     private Button MakeButton(string text, int width, int left, EventHandler click)
     {
-        var btn = new Button
+        var button = new Button
         {
             Text      = text,
             Width     = width,
@@ -594,14 +564,12 @@ public sealed class LufiaForgeToolForm : ToolFormBase, IExternalToolForm
             ForeColor = ForeColor,
             FlatStyle = FlatStyle.Flat,
         };
-        btn.Click += click;
-        return btn;
+        button.Click += click;
+        return button;
     }
 }
 
-// -------------------------------------------------------------------------
-// Simple data models
-// -------------------------------------------------------------------------
+// data
 
 internal enum WatchSize { U8, U16, U32, S8, S16 }
 

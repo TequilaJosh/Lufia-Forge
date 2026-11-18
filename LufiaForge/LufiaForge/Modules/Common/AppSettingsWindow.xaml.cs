@@ -3,7 +3,7 @@ using LufiaForge.Core;
 
 namespace LufiaForge.Modules.Common;
 
-/// <summary>Edit, Settings: Lufia Forge's own settings (<see cref="AppSettings"/>). OK keeps them.</summary>
+// Edit > Settings: Lufia Forge's own settings (AppSettings). OK keeps them
 public partial class AppSettingsWindow : Window
 {
     public AppSettingsWindow()
@@ -12,14 +12,14 @@ public partial class AppSettingsWindow : Window
         Snes9xCheck.IsChecked = AppSettings.Snes9x151Mode;
     }
 
-    /// <summary>Whether Snes9x 1.51 mode was turned on now (it was off).</summary>
+    // true if Snes9x 1.51 mode just got turned on (it was off before)
     public bool Snes9xTurnedOn { get; private set; }
 
     private void Ok_Click(object sender, RoutedEventArgs e)
     {
-        bool on = Snes9xCheck.IsChecked == true;
-        Snes9xTurnedOn = on && !AppSettings.Snes9x151Mode;
-        if (on != AppSettings.Snes9x151Mode) AppSettings.Snes9x151Mode = on;
+        bool snes9xMode = Snes9xCheck.IsChecked == true;
+        Snes9xTurnedOn = snes9xMode && !AppSettings.Snes9x151Mode;
+        if (snes9xMode != AppSettings.Snes9x151Mode) AppSettings.Snes9x151Mode = snes9xMode;
         DialogResult = true;
     }
 }

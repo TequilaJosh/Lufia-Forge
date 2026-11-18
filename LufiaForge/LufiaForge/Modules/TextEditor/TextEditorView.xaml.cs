@@ -7,12 +7,12 @@ public partial class TextEditorView : UserControl
     public TextEditorView()
     {
         InitializeComponent();
-        // shown again: the list is read again when another tab, Undo or a patch changed the ROM meanwhile
+        // shown again: re-read the list if another tab, Undo or a patch changed the ROM in the meantime
         IsVisibleChanged += (_, e) => { if (e.NewValue is true) (DataContext as TextEditorViewModel)?.RefreshIfStale(); };
     }
 
     private void List_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (sender is System.Windows.Controls.ListBox lb && lb.SelectedItem != null) lb.ScrollIntoView(lb.SelectedItem);
+        if (sender is System.Windows.Controls.ListBox listBox && listBox.SelectedItem != null) listBox.ScrollIntoView(listBox.SelectedItem);
     }
 }

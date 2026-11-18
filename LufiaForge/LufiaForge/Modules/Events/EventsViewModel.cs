@@ -10,22 +10,22 @@ using System.Windows;
 
 namespace LufiaForge.Modules.Events;
 
-/// <summary>One event of a map in the list: what starts it and its first line of dialogue.</summary>
+// one event of a map in the list: what starts it and its first line of dialogue
 public sealed class EventEntry
 {
     public int Event { get; init; }
     public string Source { get; init; } = "";
     public string Preview { get; init; } = "";
-    /// <summary>What the event seems to do (church, inn, gives an item, cutscene...).</summary>
+    // what the event seems to do (church, inn, gives an item, cutscene...)
     public string Hint { get; init; } = "";
-    /// <summary>Picture of the character whose event this is (or null).</summary>
+    // picture of the character whose event this is (or null)
     public System.Windows.Media.ImageSource? Picture { get; init; }
     public bool IsUsed { get; init; }
     public bool IsEmpty { get; init; }
     public string Label => $"Event {Event,3}   {Source}";
 }
 
-/// <summary>A story flag in the flags list.</summary>
+// a story flag in the flags list
 public sealed class FlagRow
 {
     public int Flag { get; init; }
@@ -33,20 +33,20 @@ public sealed class FlagRow
     public int Sets { get; init; }
     public int Clears { get; init; }
     public int Checks { get; init; }
-    /// <summary>Automatic short name (where it is set) when the user hasn't named it.</summary>
+    // automatic short name (where it gets set) if the user hasn't named it
     public string AutoName { get; init; } = "";
     public string Label => $"Flag {Flag:X2}  {(Name.Length > 0 ? Name : AutoName)}";
     public string Summary => $"set {Sets}×, cleared {Clears}×, checked {Checks}×";
 }
 
-/// <summary>One use of a flag in the uses list.</summary>
+// one use of a flag in the uses list
 public sealed class FlagUseRow
 {
     public FlagUse Use { get; init; } = null!;
     public string Label { get; init; } = "";
 }
 
-/// <summary>Events tab: every event script of a map, what triggers it, and the event editor.</summary>
+// the Events tab: every event script of a map, what triggers it, and the event editor
 public partial class EventsViewModel : ObservableObject, IEventHost
 {
     private RomBuffer? _rom;
@@ -65,10 +65,10 @@ public partial class EventsViewModel : ObservableObject, IEventHost
 
     public RomBuffer? Rom => _rom;
 
-    /// <summary>Asks the view to show an event in the editor panel (and outline a line, or -1).</summary>
+    // asks the view to show an event in the editor panel (and outline a line, or -1)
     public event Action<EventScript, string, int>? OpenRequested;
 
-    // ── story flags ──
+    // story flags
     private List<FlagUse> _flagIndex = new();
     public ObservableCollection<FlagRow> Flags { get; } = new();
     public ObservableCollection<FlagUseRow> FlagUses { get; } = new();
@@ -77,11 +77,11 @@ public partial class EventsViewModel : ObservableObject, IEventHost
     [ObservableProperty] private FlagRow? _selectedFlag;
     [ObservableProperty] private FlagUseRow? _selectedFlagUse;
     [ObservableProperty] private string _flagNameText = "";
-    /// <summary>What the selected flag is and does (worked out from its uses).</summary>
+    // what the picked flag is and does (worked out from its uses)
     [ObservableProperty] private string _flagDescription = "";
     private bool _fillingFlag;
 
-    /// <summary>Live story-flag tracker (reads the running game through BizHawk).</summary>
+    // live story flag tracker (reads the running game through BizHawk)
     public LiveFlagsViewModel LiveFlags { get; } = new();
 
     public void SetRom(RomBuffer rom, MainViewModel mainVm)
@@ -90,10 +90,10 @@ public partial class EventsViewModel : ObservableObject, IEventHost
         int? keepMap = ReferenceEquals(rom, _rom) ? SelectedMap?.MapId : null;
         _rom = rom; _mainVm = mainVm;
         Maps.Clear();
-        foreach (var m in MapCatalog.ScanNamed(rom)) Maps.Add(m);
+        foreach (var map in MapCatalog.ScanNamed(rom)) Maps.Add(map);
         EventScript.FlagName = StoryFlags.DisplayName;
         var labels = Maps.ToDictionary(m => m.MapId, m => m.Label);
-        EventScript.MapLabel = id => labels.TryGetValue(id, out var l) ? l : $"map {id:X2}";
+        EventScript.MapLabel = id => labels.TryGetValue(id, out var label) ? label : $"map {id:X2}";
         EventCommands.EventBase = id => LufiaMap.EventBase(rom, id);
         BuildFlagIndex();
         LiveFlags.SetRom(rom);
@@ -114,24 +114,24 @@ public partial class EventsViewModel : ObservableObject, IEventHost
         // what starts each event on this map
         var sources = new Dictionary<int, List<string>>();
         var npcSprites = new Dictionary<int, int>();
-        void Add(int ev, string s) => (sources.TryGetValue(ev, out var l) ? l : sources[ev] = new()).Add(s);
+        void Add(int ev, string source) => (sources.TryGetValue(ev, out var list) ? list : sources[ev] = new()).Add(source);
         try
         {
             var map = LufiaMap.Load(_rom, mapId);
-            foreach (var n in map.Npcs.Where(n => !n.IsUnused)) { Add(MapEvents.TalkEvent(n.Index), $"Character {n.Index + 1} (talk)"); npcSprites[MapEvents.TalkEvent(n.Index)] = n.Sprite; }
+            foreach (var npc in map.Npcs.Where(n => !n.IsUnused)) { Add(MapEvents.TalkEvent(npc.Index), $"Character {npc.Index + 1} (talk)"); npcSprites[MapEvents.TalkEvent(npc.Index)] = npc.Sprite; }
         }
         catch { /* map without objects */ }
-        foreach (var (area, ev, cond, _) in MapSetupScript.ReadTriggers(_rom, mapId))
-            Add(ev, $"Step-on area D{area}" + (cond ? " (story-dependent)" : ""));
+        foreach (var (area, ev, storyDependent, _) in MapSetupScript.ReadTriggers(_rom, mapId))
+            Add(ev, $"Step-on area D{area}" + (storyDependent ? " (story-dependent)" : ""));
 
         var plausible = EventScript.PlausibleEvents(_rom, mapId).ToHashSet();
         foreach (int ev in sources.Keys) plausible.Add(ev);
         foreach (int ev in plausible.OrderBy(e => e))
         {
-            EventScript? s = null;
-            try { s = EventScript.Load(_rom, mapId, ev); } catch { }
-            bool empty = s == null || s.Ops.Count == 0 || (s.Ops.Count == 1 && s.Ops[0].Bytes is [0x00]);
-            var text = s?.Ops.FirstOrDefault(o => o.IsText && o.Text.Trim().Length > 0)?.Text.Replace("\n", " ") ?? "";
+            EventScript? script = null;
+            try { script = EventScript.Load(_rom, mapId, ev); } catch { }
+            bool empty = script == null || script.Ops.Count == 0 || (script.Ops.Count == 1 && script.Ops[0].Bytes is [0x00]);
+            var text = script?.Ops.FirstOrDefault(o => o.IsText && o.Text.Trim().Length > 0)?.Text.Replace("\n", " ") ?? "";
             if (text.Length > 70) text = text[..70] + "…";
             bool used = sources.ContainsKey(ev);
             _all.Add(new EventEntry
@@ -139,8 +139,8 @@ public partial class EventsViewModel : ObservableObject, IEventHost
                 Event = ev, IsUsed = used, IsEmpty = empty,
                 Source = used ? string.Join(", ", sources[ev]) : empty ? "(empty)" : "not started by anything on this map (cutscene, shared or unused)",
                 Preview = empty ? "" : text.Length > 0 ? $"\"{text}\"" : "(no dialogue)",
-                Hint = empty || s == null ? "" : EventHints.Summarize(_rom, s),
-                Picture = npcSprites.TryGetValue(ev, out int spr) ? Picture(spr) : null,
+                Hint = empty || script == null ? "" : EventHints.Summarize(_rom, script),
+                Picture = npcSprites.TryGetValue(ev, out int sprite) ? Picture(sprite) : null,
             });
         }
         MapSummary = $"{SelectedMap.Label}: {_all.Count(e => e.IsUsed)} events used by characters / trigger areas, " +
@@ -152,7 +152,7 @@ public partial class EventsViewModel : ObservableObject, IEventHost
     {
         int? keep = SelectedEvent?.Event;
         Events.Clear();
-        foreach (var e in _all.Where(e => ShowUnused ? !e.IsEmpty || e.IsUsed : e.IsUsed)) Events.Add(e);
+        foreach (var entry in _all.Where(e => ShowUnused ? !e.IsEmpty || e.IsUsed : e.IsUsed)) Events.Add(entry);
         if (keep != null) { _suppressOpen = true; SelectedEvent = Events.FirstOrDefault(e => e.Event == keep); _suppressOpen = false; }
     }
 
@@ -171,12 +171,12 @@ public partial class EventsViewModel : ObservableObject, IEventHost
     private void Open(int ev, string source)
     {
         if (_rom == null || SelectedMap == null) return;
-        EventScript? s;
-        try { s = EventScript.Load(_rom, SelectedMap.MapId, ev); }
+        EventScript? script;
+        try { script = EventScript.Load(_rom, SelectedMap.MapId, ev); }
         catch (Exception ex) { Status = $"Event {ev} can't be read: {ex.Message}"; return; }
-        if (s == null) { Status = $"Event {ev} of this map has no script."; return; }
-        OpenRequested?.Invoke(s, $"{SelectedMap.Label} - event {ev}" + (source.Length > 0 ? $"  ({source})" : ""), -1);
-        Status = $"Event {ev}: script at ROM 0x{s.Start:X6}.";
+        if (script == null) { Status = $"Event {ev} of this map has no script."; return; }
+        OpenRequested?.Invoke(script, $"{SelectedMap.Label} - event {ev}" + (source.Length > 0 ? $"  ({source})" : ""), -1);
+        Status = $"Event {ev}: script at ROM 0x{script.Start:X6}.";
     }
 
     private readonly Dictionary<int, System.Windows.Media.ImageSource?> _pictures = new();
@@ -184,35 +184,35 @@ public partial class EventsViewModel : ObservableObject, IEventHost
     private System.Windows.Media.ImageSource? Picture(int sprite)
     {
         if (_rom == null) return null;
-        if (_pictures.TryGetValue(sprite, out var img)) return img;
-        if (NpcSprites.Render(_rom, sprite) is var (px, w, h))
+        if (_pictures.TryGetValue(sprite, out var picture)) return picture;
+        if (NpcSprites.Render(_rom, sprite) is var (pixels, width, height))
         {
-            var bmp = System.Windows.Media.Imaging.BitmapSource.Create(w, h, 96, 96, System.Windows.Media.PixelFormats.Bgra32, null, px, w * 4);
-            bmp.Freeze();
-            img = bmp;
+            var bitmap = System.Windows.Media.Imaging.BitmapSource.Create(width, height, 96, 96, System.Windows.Media.PixelFormats.Bgra32, null, pixels, width * 4);
+            bitmap.Freeze();
+            picture = bitmap;
         }
-        _pictures[sprite] = img;
-        return img;
+        _pictures[sprite] = picture;
+        return picture;
     }
 
-    // ── New / delete events ────────────────────────────────────────────────
+    // new / delete events
 
-    /// <summary>Makes a new event (New event window) on the selected map and opens it.</summary>
+    // makes a new event (New event window) on the picked map and opens it
     public void NewEvent(Window? owner)
     {
         if (_rom == null || SelectedMap == null) return;
-        var win = new NewEventWindow(_rom, Maps, SelectedMap.MapId, "New event", cutscene: false) { Owner = owner };
-        if (win.ShowDialog() != true) return;
-        _mainVm?.NotifyRomModified(win.ResultText);
-        int map = win.ResultMap, ev = win.ResultEvent;
+        var dialog = new NewEventWindow(_rom, Maps, SelectedMap.MapId, "New event", cutscene: false) { Owner = owner };
+        if (dialog.ShowDialog() != true) return;
+        _mainVm?.NotifyRomModified(dialog.ResultText);
+        int map = dialog.ResultMap, ev = dialog.ResultEvent;
         if (SelectedMap.MapId != map) SelectedMap = Maps.FirstOrDefault(m => m.MapId == map);
         else BuildList();
         BuildFlagIndex();
         Open(ev, "new");
-        Status = win.ResultText + ". It's open on the right: add its lines; it's written by itself (or click Apply in the top bar).";
+        Status = dialog.ResultText + ". It's open on the right: add its lines; it's written by itself (or click Apply in the top bar).";
     }
 
-    /// <summary>Deletes the selected event (after saying what changes).</summary>
+    // deletes the picked event (after saying what changes)
     public void DeleteSelectedEvent(Window? owner)
     {
         if (_rom == null || SelectedMap == null || SelectedEvent == null) { Status = "Pick an event first."; return; }
@@ -225,42 +225,42 @@ public partial class EventsViewModel : ObservableObject, IEventHost
 
     private string MapLabelOf(int id) => Maps.FirstOrDefault(m => m.MapId == id)?.Label ?? $"map {id:X2}";
 
-    // ── Story flags ────────────────────────────────────────────────────────
+    // story flags
 
-    /// <summary>Claims the first free flag (nothing in the game uses it) with a name of its own, ready to rename.</summary>
+    // claims the first free flag (nothing in the game uses it) and gives it a name of its own, ready to rename
     [RelayCommand]
     private void NewFlag()
     {
         if (_rom == null) return;
-        int f = Enumerable.Range(0, 0xF0).FirstOrDefault(x => StoryFlags.IsFree(_rom, x) && StoryFlags.NameOf(x) == null, -1);
-        if (f < 0) { Status = "No free story flags are left."; return; }
-        StoryFlags.SetName(f, $"My flag {f:X2}");
+        int flag = Enumerable.Range(0, 0xF0).FirstOrDefault(x => StoryFlags.IsFree(_rom, x) && StoryFlags.NameOf(x) == null, -1);
+        if (flag < 0) { Status = "No free story flags are left."; return; }
+        StoryFlags.SetName(flag, $"My flag {flag:X2}");
         FlagFilter = "";
         FillFlags();
         OnPropertyChanged(nameof(FreeFlagsText));
-        SelectedFlag = Flags.FirstOrDefault(r => r.Flag == f);
-        if (SelectedFlag == null) { ShowFreeFlags = true; SelectedFlag = Flags.FirstOrDefault(r => r.Flag == f); }
-        Status = $"Story flag {f:X2} is yours: rename it below, then use it in events (Set story flag / If flag is set).";
+        SelectedFlag = Flags.FirstOrDefault(r => r.Flag == flag);
+        if (SelectedFlag == null) { ShowFreeFlags = true; SelectedFlag = Flags.FirstOrDefault(r => r.Flag == flag); }
+        Status = $"Story flag {flag:X2} is yours: rename it below, then use it in events (Set story flag / If flag is set).";
     }
 
-    /// <summary>Gives the selected flag back: its name goes (events that use it are left as they are).</summary>
+    // gives the picked flag back: its name goes (events that use it stay as they are)
     [RelayCommand]
     private void FreeFlag()
     {
         if (_rom == null || SelectedFlag == null) return;
-        int f = SelectedFlag.Flag;
-        int uses = _flagIndex.Count(u => u.Flag == f);
-        if (StoryFlags.NameOf(f) == null && uses == 0) { Status = $"Flag {f:X2} is already free."; return; }
-        if (uses > 0 && MessageBox.Show($"Flag {f:X2} is still used in {uses} place(s) (listed below). Free it anyway? Its name goes; the events keep using it until you change them.",
+        int flag = SelectedFlag.Flag;
+        int uses = _flagIndex.Count(u => u.Flag == flag);
+        if (StoryFlags.NameOf(flag) == null && uses == 0) { Status = $"Flag {flag:X2} is already free."; return; }
+        if (uses > 0 && MessageBox.Show($"Flag {flag:X2} is still used in {uses} place(s) (listed below). Free it anyway? Its name goes; the events keep using it until you change them.",
                 "Free story flag", MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK) return;
-        StoryFlags.SetName(f, null);
+        StoryFlags.SetName(flag, null);
         FillFlags();
         OnPropertyChanged(nameof(FreeFlagsText));
-        SelectedFlag = Flags.FirstOrDefault(r => r.Flag == f);
-        Status = uses == 0 ? $"Flag {f:X2} is free again." : $"Flag {f:X2} lost its name; {uses} use(s) remain in events.";
+        SelectedFlag = Flags.FirstOrDefault(r => r.Flag == flag);
+        Status = uses == 0 ? $"Flag {flag:X2} is free again." : $"Flag {flag:X2} lost its name; {uses} use(s) remain in events.";
     }
 
-    // ── Story flags (index) ────────────────────────────────────────────────
+    // story flags (the index)
 
     private void BuildFlagIndex()
     {
@@ -275,34 +275,34 @@ public partial class EventsViewModel : ObservableObject, IEventHost
     private void FillFlags()
     {
         Flags.Clear();
-        string q = FlagFilter.Trim();
+        string term = FlagFilter.Trim();
         var groups = _flagIndex.GroupBy(u => u.Flag).ToDictionary(g => g.Key, g => g.ToList());
-        // free flags (nothing in the game uses them) can be listed too, to pick one for your own quest
+        // the free flags (nothing in the game uses them) can be listed too, to pick one for your own quest
         var flagNumbers = ShowFreeFlags && _rom != null
             ? Enumerable.Range(0, 256).Where(f => groups.ContainsKey(f) || StoryFlags.IsFree(_rom, f))
             : groups.Keys.OrderBy(k => k);
         foreach (int flag in flagNumbers)
         {
-            var g = groups.TryGetValue(flag, out var list) ? list : new List<FlagUse>();
+            var uses = groups.TryGetValue(flag, out var list) ? list : new List<FlagUse>();
             bool free = _rom != null && StoryFlags.IsFree(_rom, flag);
             var row = new FlagRow
             {
                 Flag = flag, Name = StoryFlags.NameOf(flag) ?? "", AutoName = StoryFlags.DisplayName(flag) ?? (free ? "free - not used by the game" : ""),
-                Sets = g.Count(u => u.Action == "sets"), Clears = g.Count(u => u.Action == "clears"),
-                Checks = g.Count(u => !u.Sets),
+                Sets = uses.Count(u => u.Action == "sets"), Clears = uses.Count(u => u.Action == "clears"),
+                Checks = uses.Count(u => !u.Sets),
             };
-            if (q.Length > 0 && !row.Label.Contains(q, StringComparison.OrdinalIgnoreCase) && !$"{flag:X2}".Equals(q, StringComparison.OrdinalIgnoreCase)) continue;
+            if (term.Length > 0 && !row.Label.Contains(term, StringComparison.OrdinalIgnoreCase) && !$"{flag:X2}".Equals(term, StringComparison.OrdinalIgnoreCase)) continue;
             Flags.Add(row);
         }
     }
 
     partial void OnFlagFilterChanged(string value) => FillFlags();
 
-    /// <summary>List the flags nothing in the game uses, so one can be named and used for a new quest.</summary>
+    // lists the flags nothing in the game uses, so you can name one and use it for a new quest
     [ObservableProperty] private bool _showFreeFlags;
     partial void OnShowFreeFlagsChanged(bool value) => FillFlags();
 
-    /// <summary>Free flags left (not used by the game, not named by you yet).</summary>
+    // free flags left (the game doesn't use them and you haven't named them yet)
     public string FreeFlagsText => _rom == null || StoryFlags.UsedByScripts == null ? "" :
         $"{Enumerable.Range(0, 256).Count(f => StoryFlags.IsFree(_rom, f) && StoryFlags.NameOf(f) == null)} free flags left for your own quests";
 
@@ -315,52 +315,52 @@ public partial class EventsViewModel : ObservableObject, IEventHost
         if (value == null) { FlagDescription = ""; return; }
         string MapLabel(int id) => Maps.FirstOrDefault(m => m.MapId == id)?.Label ?? $"{id:X2}";
         FlagDescription = StoryFlags.Describe(value.Flag, _flagIndex.Where(u => u.Flag == value.Flag).ToList(), MapLabel);
-        foreach (var u in _flagIndex.Where(u => u.Flag == value.Flag)
+        foreach (var use in _flagIndex.Where(u => u.Flag == value.Flag)
                      .OrderBy(u => u.Sets ? 0 : 1).ThenBy(u => u.MapId).ThenBy(u => u.Event))
             FlagUses.Add(new FlagUseRow
             {
-                Use = u,
-                Label = u.IsSetup
-                    ? $"{MapLabel(u.MapId)} · map setup script: {u.Action}"
-                    : $"{MapLabel(u.MapId)} · event {u.Event}" + (u.RegionStart >= 0 && u.RegionStart != u.JumpBase ? " (jumped-to code)" : "") +
-                      $" · line {u.Line + 1}: {u.Action}",
+                Use = use,
+                Label = use.IsSetup
+                    ? $"{MapLabel(use.MapId)} · map setup script: {use.Action}"
+                    : $"{MapLabel(use.MapId)} · event {use.Event}" + (use.RegionStart >= 0 && use.RegionStart != use.JumpBase ? " (jumped-to code)" : "") +
+                      $" · line {use.Line + 1}: {use.Action}",
             });
     }
 
-    /// <summary>Rename the selected flag (saved for every ROM copy).</summary>
+    // renames the picked flag (saved for every copy of the ROM)
     partial void OnFlagNameTextChanged(string value)
     {
         if (_fillingFlag || SelectedFlag == null) return;
         StoryFlags.SetName(SelectedFlag.Flag, value);
-        int f = SelectedFlag.Flag;
+        int flag = SelectedFlag.Flag;
         FillFlags();
         OnPropertyChanged(nameof(FreeFlagsText));
         _fillingFlag = true;
-        SelectedFlag = Flags.FirstOrDefault(r => r.Flag == f);
+        SelectedFlag = Flags.FirstOrDefault(r => r.Flag == flag);
         _fillingFlag = false;
     }
 
     partial void OnSelectedFlagUseChanged(FlagUseRow? value)
     {
         if (value == null || _rom == null) return;
-        var u = value.Use;
-        if (u.IsSetup) { Status = $"Flag {u.Flag:X2} is checked by map {u.MapId:X2}'s setup script at 0x{u.Offset:X6} (decides what the map shows)."; return; }
-        if (SelectedMap?.MapId != u.MapId)
+        var use = value.Use;
+        if (use.IsSetup) { Status = $"Flag {use.Flag:X2} is checked by map {use.MapId:X2}'s setup script at 0x{use.Offset:X6} (decides what the map shows)."; return; }
+        if (SelectedMap?.MapId != use.MapId)
         {
             _suppressOpen = true;
-            SelectedMap = Maps.FirstOrDefault(m => m.MapId == u.MapId);
+            SelectedMap = Maps.FirstOrDefault(m => m.MapId == use.MapId);
             _suppressOpen = false;
         }
-        EventScript? s = u.RegionStart >= 0 && u.RegionStart != u.JumpBase
-            ? EventScript.LoadAt(_rom, u.MapId, u.Event, u.RegionStart, u.JumpBase)
-            : EventScript.Load(_rom, u.MapId, u.Event);
-        if (s == null) return;
-        string title = $"{SelectedMap?.Label} - event {u.Event}" + (s.IsCodeView ? $" (code at 0x{s.Start:X6})" : "");
-        OpenRequested?.Invoke(s, title, u.Line);
-        Status = $"Flag {u.Flag:X2} {u.Action} at line {u.Line + 1} (highlighted).";
+        EventScript? script = use.RegionStart >= 0 && use.RegionStart != use.JumpBase
+            ? EventScript.LoadAt(_rom, use.MapId, use.Event, use.RegionStart, use.JumpBase)
+            : EventScript.Load(_rom, use.MapId, use.Event);
+        if (script == null) return;
+        string title = $"{SelectedMap?.Label} - event {use.Event}" + (script.IsCodeView ? $" (code at 0x{script.Start:X6})" : "");
+        OpenRequested?.Invoke(script, title, use.Line);
+        Status = $"Flag {use.Flag:X2} {use.Action} at line {use.Line + 1} (highlighted).";
     }
 
-    /// <summary>From the editor's ⚑ button: show the flag in the Story flags list.</summary>
+    // from the editor's flag button: show the flag in the Story flags list
     public void ShowFlag(int flag)
     {
         FlagFilter = "";
@@ -369,7 +369,7 @@ public partial class EventsViewModel : ObservableObject, IEventHost
         if (SelectedFlag == null) Status = $"Flag {flag:X2} isn't used anywhere else.";
     }
 
-    // ── IEventHost ─────────────────────────────────────────────────────────
+    // IEventHost
 
     public bool ConfirmExpand(string what) =>
         MessageBox.Show(
@@ -394,6 +394,6 @@ public partial class EventsViewModel : ObservableObject, IEventHost
             path: null, pathLabel: null,
             primaryText: _mainVm != null ? "💾 Save project now" : null, primary: () => _mainVm?.SaveNow());
 
-    /// <summary>True while the list is rebuilt after a save (the editor keeps showing the saved event).</summary>
+    // true while the list gets rebuilt after a save (the editor keeps showing the saved event)
     public bool SuppressOpen => _suppressOpen;
 }

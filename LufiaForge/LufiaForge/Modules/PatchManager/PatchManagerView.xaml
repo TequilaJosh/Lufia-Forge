@@ -17,7 +17,7 @@
             <Setter Property="FontSize" Value="14"/>
             <Setter Property="Margin" Value="2,6,0,8"/>
         </Style>
-        <!-- the status badge: colour by kind -->
+        <!-- the status badge, coloured by kind -->
         <Style x:Key="PmBadge" TargetType="Border">
             <Setter Property="CornerRadius" Value="10"/>
             <Setter Property="Padding" Value="9,2"/>

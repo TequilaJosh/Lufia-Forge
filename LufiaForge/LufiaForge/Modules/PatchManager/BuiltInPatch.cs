@@ -5,42 +5,40 @@ using LufiaForge.Core.Cave;
 
 namespace LufiaForge.Modules.PatchManager;
 
-/// <summary>
-/// A fix or feature Lufia Forge can add to the ROM with one click (the code lives in Core/Battle). Each one adds a
-/// small routine to the expanded part of the ROM, so adding one expands the ROM to 2 MB first.
-/// </summary>
+// a fix or feature Lufia Forge can add to the ROM with one click (the code is in Core/Battle). each one adds a small
+// routine in the expanded part of the ROM, so adding one expands the ROM to 2 MB first
 public partial class BuiltInPatch : ObservableObject
 {
     public required string Name { get; init; }
     public required string Description { get; init; }
-    /// <summary>Group shown in the Patch Manager (Battle, Magic, Items, Events, Testing).</summary>
+    // the group it shows under in the Patch Manager (Battle, Magic, Items, Events, Testing)
     public string Category { get; init; } = "Other";
-    /// <summary>One line for the card; the description is under Details.</summary>
+    // one line for the card, the description goes under Details
     public string Summary { get; init; } = "";
     public string Icon { get; init; } = "🔧";
-    /// <summary>Who made it (community patches), shown on the card.</summary>
+    // who made it (community patches), shown on the card
     public string Credit { get; init; } = "";
-    /// <summary>False for patches that don't put code in the added space (no 2 MB expansion first).</summary>
+    // false for patches that don't put code in the added space (so no 2 MB expansion first)
     public bool NeedsExpandedRom { get; init; } = true;
-    /// <summary>The patch rewrites much of the ROM: every tab reloads afterwards.</summary>
+    // the patch rewrites a lot of the ROM, so every tab reloads afterwards
     public bool ReloadsAll { get; init; }
-    /// <summary>Asked before adding it (null: no question).</summary>
+    // asked before adding it (null = no question)
     public string? ConfirmText { get; init; }
-    /// <summary>Shown instead of the general "can't be added" text.</summary>
+    // shown instead of the general "can't be added" text
     public string? BlockedText { get; init; }
     public required Func<RomBuffer, bool> IsApplied { get; init; }
     public required Func<RomBuffer, bool> IsOriginal { get; init; }
     public required Action<RomBuffer> Apply { get; init; }
-    /// <summary>Null when the patch can't be taken out again.</summary>
+    // null if the patch can't be taken out again
     public Action<RomBuffer>? Remove { get; init; }
-    /// <summary>When it returns true, an older version of the patch is in the ROM and Add brings it up to date.</summary>
+    // true = an older version of the patch is in the ROM and Add brings it up to date
     public Func<RomBuffer, bool>? NeedsUpdate { get; init; }
 
     [ObservableProperty] private bool _added;
     [ObservableProperty] private bool _canClick;
     [ObservableProperty] private string _state = "";
     [ObservableProperty] private string _buttonText = "Add";
-    /// <summary>Added, Update, NotAdded or Blocked (the badge's colour).</summary>
+    // Added, Update, NotAdded or Blocked (picks the badge's colour)
     [ObservableProperty] private string _kind = "NotAdded";
     [ObservableProperty] private string _badge = "";
 
@@ -49,7 +47,7 @@ public partial class BuiltInPatch : ObservableObject
         if (rom == null) { Added = false; CanClick = false; State = "Load a ROM first."; ButtonText = "Add"; return; }
         Added = IsApplied(rom);
         bool original = IsOriginal(rom);
-        // (an update is offered also for a patch that's in: an older version of it, which Add brings up to date)
+        // (an update can be offered for a patch that's in too, when it's an older version that Add brings up to date)
         bool update = NeedsUpdate?.Invoke(rom) == true;
         CanClick = update || (Added ? Remove != null : original);
         ButtonText = update ? "Update" : Added ? (Remove != null ? "Remove" : "Added") : "Add";

@@ -20,9 +20,7 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
 
     private static readonly string DefaultEmuHawkPath = FindBundledBizHawk();
 
-    // -------------------------------------------------------------------------
-    // Observable properties
-    // -------------------------------------------------------------------------
+    // bound properties
     [ObservableProperty] private bool   _isConnected;
     [ObservableProperty] private bool   _isBizHawkRunning;
     [ObservableProperty] private bool   _isBizHawkUndocked;
@@ -50,17 +48,12 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
     private const int HexCols  = 16;
     private const int WramSize = BizHawkBridge.WramSize;
 
-    // Search state
+    // search state
     private List<int>? _searchCandidates;
 
-    // -------------------------------------------------------------------------
-    // Cross-module API
-    // -------------------------------------------------------------------------
+    // for the other modules
 
-    /// <summary>
-    /// Called by the Disassembler's "Add to Watchlist" context menu item.
-    /// Adds a U16 watch if the address is not already tracked.
-    /// </summary>
+    // the Disassembler's "Add to Watchlist" menu item calls this. adds a U16 watch unless the address is on the list already
     public void AddWatch(int snesAddress, string label)
     {
         if (Watches.Any(w => w.SnesAddr == snesAddress)) return;
@@ -72,23 +65,18 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
     private static readonly string LoadRomCommandFile =
         Path.Combine(Path.GetTempPath(), "LufiaForge_LoadROM.txt");
 
-    /// <summary>
-    /// Exposes the WinForms Panel hosting BizHawk's reparented window.
-    /// The View binds this into a WindowsFormsHost.
-    /// </summary>
+    // the WinForms Panel that holds BizHawk's window. the view puts it in a WindowsFormsHost
     public Panel HostPanel { get; }
 
-    // -------------------------------------------------------------------------
-    // Init
-    // -------------------------------------------------------------------------
+    // setup
     public MemoryMonitorViewModel()
     {
         HostPanel = _host.CreateHostPanel();
 
-        // Load user-defined custom labels from disk
+        // the user's own labels
         Lufia1AddressMap.LoadCustom();
 
-        // Seed default watches for Lufia 1 - verified PAR code addresses
+        // default watches for Lufia 1, checked PAR code addresses
         Watches.Add(new WatchItem(0x7E157F, "Hero Current HP",  WatchSize.U16));
         Watches.Add(new WatchItem(0x7E15F1, "Hero Max HP",      WatchSize.U16));
         Watches.Add(new WatchItem(0x7E1587, "Hero Current MP",  WatchSize.U16));
@@ -113,7 +101,7 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
             IsConnected         = false;
             ConnectionStatus    = "BizHawk closed. Click Launch to restart.";
         };
-        _host.StatusChanged    += msg     => ConnectionStatus  = msg;
+        _host.StatusChanged    += message => ConnectionStatus  = message;
         _host.DockStateChanged += undocked => IsBizHawkUndocked = undocked;
 
         _timer = new DispatcherTimer
@@ -124,20 +112,17 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
         _timer.Start();
     }
 
-    // -------------------------------------------------------------------------
-    // ROM propagation - called by MainWindow when user opens a ROM
-    // -------------------------------------------------------------------------
+    // MainWindow calls this when the user opens a ROM
     public void SetRom(Core.RomBuffer rom)
     {
-        // Just remember which ROM is open. BizHawk will receive the path when
-        // the user manually clicks "Launch BizHawk". We don't auto-launch or
-        // auto-load so the user stays in control of when the emulator starts.
+        // just remember which ROM is open. BizHawk gets the path when the user clicks "Launch BizHawk". we don't
+        // start or load anything on our own, so the user decides when the emulator starts
         _pendingRomPath = rom.FilePath;
         Lufia1AddressMap.Game = rom.Game;
         OnPropertyChanged(nameof(AddressCategories));
     }
 
-    /// <summary>Writes the ROM BizHawk should play (the project as it is now) and returns its path.</summary>
+    // writes the ROM BizHawk should play (the project as it is right now) and returns its path
     public Func<string?>? PrepareRom { get; set; }
 
     private static void WriteLoadRomCommand(string romPath)
@@ -158,9 +143,7 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
         }
     }
 
-    // -------------------------------------------------------------------------
-    // BizHawk launch (manual button)
-    // -------------------------------------------------------------------------
+    // the Launch BizHawk button
     [RelayCommand]
     private async System.Threading.Tasks.Task LaunchBizHawk()
     {
@@ -172,13 +155,13 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
 
         try
         {
-            // Pass the project's ROM (written fresh) so BizHawk loads it immediately
-            string? rom = PrepareRom?.Invoke() ?? _pendingRomPath;
-            await _host.LaunchAsync(DefaultEmuHawkPath, rom);
+            // hand over the project's ROM (freshly written) so BizHawk loads it right away
+            string? romPath = PrepareRom?.Invoke() ?? _pendingRomPath;
+            await _host.LaunchAsync(DefaultEmuHawkPath, romPath);
             IsBizHawkRunning = _host.IsRunning;
-            // a BizHawk that was open already keeps playing what it had: the Lufia Forge tool in it loads the ROM just
-            // written (within a second)
-            if (_host.LastLaunchAttached && rom != null) { WriteLoadRomCommand(rom); ConnectionStatus = "BizHawk was open already: it loads the project's ROM now."; }
+            // a BizHawk that was already open keeps playing what it had, so the Lufia Forge tool in it loads the ROM
+            // we just wrote (within a second)
+            if (_host.LastLaunchAttached && romPath != null) { WriteLoadRomCommand(romPath); ConnectionStatus = "BizHawk was open already: it loads the project's ROM now."; }
         }
         catch (Exception ex)
         {
@@ -186,9 +169,7 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Dock / Undock toggle
-    // -------------------------------------------------------------------------
+    // dock / undock
     [RelayCommand]
     private void ToggleUndock()
     {
@@ -199,12 +180,10 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
             _host.Undock();
     }
 
-    // -------------------------------------------------------------------------
-    // Polling loop
-    // -------------------------------------------------------------------------
+    // polling
     private void Timer_Tick(object? sender, EventArgs e)
     {
-        // Check if BizHawk is still alive
+        // is BizHawk still there?
         if (IsBizHawkRunning && !_host.IsRunning)
         {
             IsBizHawkRunning = false;
@@ -214,10 +193,10 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
             return;
         }
 
-        // A BizHawk started outside Lufia Forge is left in its own window (its WRAM still streams below); it's only
-        // embedded when Launch is clicked.
+        // a BizHawk started outside Lufia Forge stays in its own window (its WRAM still streams in below). it only
+        // gets docked when you click Launch
 
-        // Poll shared memory for WRAM data
+        // check the shared memory for WRAM
         if (!_bridge.IsConnected)
         {
             _bridge.TryConnect();
@@ -248,9 +227,7 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Hex view
-    // -------------------------------------------------------------------------
+    // hex view
     private void RefreshHexView()
     {
         var wram = _bridge.Wram;
@@ -272,8 +249,8 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
             sb.Append(' ');
             for (int col = 0; col < HexCols && row + col < end; col++)
             {
-                byte b = wram[row + col];
-                sb.Append(b >= 0x20 && b <= 0x7E ? (char)b : '.');
+                byte cell = wram[row + col];
+                sb.Append(cell >= 0x20 && cell <= 0x7E ? (char)cell : '.');
             }
             sb.AppendLine();
         }
@@ -296,21 +273,19 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
 
     partial void OnHexOffsetChanged(int value) => RefreshHexView();
 
-    // -------------------------------------------------------------------------
-    // Label search (known address lookup)
-    // -------------------------------------------------------------------------
+    // label search (looking up known addresses)
     partial void OnLabelSearchTextChanged(string value)
     {
         FilteredAddresses.Clear();
-        foreach (var addr in Lufia1AddressMap.Search(value).Take(50))
-            FilteredAddresses.Add(addr);
+        foreach (var known in Lufia1AddressMap.Search(value).Take(50))
+            FilteredAddresses.Add(known);
     }
 
     [RelayCommand]
     private void AddKnownWatch(KnownAddress? known)
     {
         if (known == null) return;
-        // Avoid duplicates
+        // no duplicates
         if (Watches.Any(w => w.SnesAddr == known.Address)) return;
         Watches.Add(new WatchItem(known.Address, known.Label, known.Size));
     }
@@ -319,57 +294,55 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
     private void AddAllFromCategory(string? category)
     {
         if (string.IsNullOrEmpty(category)) return;
-        foreach (var addr in Lufia1AddressMap.ByCategory(category))
+        foreach (var known in Lufia1AddressMap.ByCategory(category))
         {
-            if (Watches.Any(w => w.SnesAddr == addr.Address)) continue;
-            Watches.Add(new WatchItem(addr.Address, addr.Label, addr.Size));
+            if (Watches.Any(w => w.SnesAddr == known.Address)) continue;
+            Watches.Add(new WatchItem(known.Address, known.Label, known.Size));
         }
     }
 
-    /// <summary>Save a watch entry as a reusable custom label for all users.</summary>
+    // saves a watch as a custom label you can reuse
     [RelayCommand]
     private void SaveAsLabel(WatchItem? item)
     {
         if (item == null) return;
         Lufia1AddressMap.AddCustom(item.SnesAddr, item.Label, item.Size);
-        // Refresh the filtered list if a search is active
+        // refresh the search results if there's a search going
         OnLabelSearchTextChanged(LabelSearchText);
         OnPropertyChanged(nameof(AddressCategories));
     }
 
-    // -------------------------------------------------------------------------
-    // Watchlist
-    // -------------------------------------------------------------------------
+    // watchlist
     private void RefreshWatches()
     {
         var wram = _bridge.Wram;
-        var prev = _bridge.PreviousWram;
+        var previousWram = _bridge.PreviousWram;
         if (wram == null) return;
 
-        foreach (var w in Watches)
+        foreach (var watch in Watches)
         {
-            int offset = w.SnesAddr - 0x7E0000;
-            if (offset < 0 || offset + SizeBytes(w.Size) > WramSize) continue;   // (a 2- or 4-byte value must end inside WRAM)
+            int offset = watch.SnesAddr - 0x7E0000;
+            if (offset < 0 || offset + SizeBytes(watch.Size) > WramSize) continue;   // (a 2 or 4 byte value has to end inside WRAM)
 
-            long cur = ReadTyped(wram, offset, w.Size);
-            long prv = prev != null ? ReadTyped(prev, offset, w.Size) : cur;
+            long current = ReadTyped(wram, offset, watch.Size);
+            long previous = previousWram != null ? ReadTyped(previousWram, offset, watch.Size) : current;
 
-            w.CurrentValue  = cur.ToString();
-            w.PreviousValue = prv.ToString();
-            w.Delta         = (cur - prv).ToString();
+            watch.CurrentValue  = current.ToString();
+            watch.PreviousValue = previous.ToString();
+            watch.Delta         = (current - previous).ToString();
         }
     }
 
     [RelayCommand]
     private void AddWatch()
     {
-        string addrText = WatchAddrText.TrimStart('$', '0', 'x', 'X').Trim();
-        if (!int.TryParse(addrText, NumberStyles.HexNumber, null, out int snesAddr))
+        string addressText = WatchAddrText.TrimStart('$', '0', 'x', 'X').Trim();
+        if (!int.TryParse(addressText, NumberStyles.HexNumber, null, out int snesAddress))
             return;
 
         var size  = (WatchSize)WatchTypeIndex;
-        string label = string.IsNullOrWhiteSpace(WatchLabelText) ? $"${snesAddr:X6}" : WatchLabelText;
-        Watches.Add(new WatchItem(snesAddr, label, size));
+        string label = string.IsNullOrWhiteSpace(WatchLabelText) ? $"${snesAddress:X6}" : WatchLabelText;
+        Watches.Add(new WatchItem(snesAddress, label, size));
         WatchAddrText  = "";
         WatchLabelText = "";
     }
@@ -381,9 +354,7 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
             Watches.Remove(item);
     }
 
-    // -------------------------------------------------------------------------
-    // Search
-    // -------------------------------------------------------------------------
+    // search
     [RelayCommand]
     private void FirstScan()
     {
@@ -429,11 +400,11 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
     private void ShowSearchResults()
     {
         SearchResults.Clear();
-        int show = Math.Min(500, _searchCandidates!.Count);
+        int shown = Math.Min(500, _searchCandidates!.Count);
         var size = (WatchSize)SearchTypeIndex;
         var wram = _bridge.Wram!;
 
-        for (int i = 0; i < show; i++)
+        for (int i = 0; i < shown; i++)
         {
             int offset = _searchCandidates[i];
             SearchResults.Add(new SearchResultItem
@@ -456,21 +427,18 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
     private void AddResultToWatchlist(SearchResultItem? item)
     {
         if (item == null) return;
-        int snesAddr = 0x7E0000 + item.Offset;
-        Watches.Add(new WatchItem(snesAddr, $"${snesAddr:X6}", (WatchSize)SearchTypeIndex));
+        int snesAddress = 0x7E0000 + item.Offset;
+        Watches.Add(new WatchItem(snesAddress, $"${snesAddress:X6}", (WatchSize)SearchTypeIndex));
     }
 
-    // -------------------------------------------------------------------------
-    // Helpers
-    // -------------------------------------------------------------------------
     private bool TryParseSearchValue(out long value)
     {
-        string s = SearchValueText.Trim();
-        if (s.StartsWith('$'))
-            return long.TryParse(s[1..], NumberStyles.HexNumber, null, out value);
-        if (s.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
-            return long.TryParse(s[2..], NumberStyles.HexNumber, null, out value);
-        return long.TryParse(s, out value);
+        string text = SearchValueText.Trim();
+        if (text.StartsWith('$'))
+            return long.TryParse(text[1..], NumberStyles.HexNumber, null, out value);
+        if (text.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+            return long.TryParse(text[2..], NumberStyles.HexNumber, null, out value);
+        return long.TryParse(text, out value);
     }
 
     internal static long ReadTyped(byte[] ram, int offset, WatchSize size) => size switch
@@ -490,29 +458,26 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
         _                              => 1,
     };
 
-    /// <summary>
-    /// Walks up from the application directory to find the bundled BizHawk folder.
-    /// Looks for a sibling "BizHawk" folder relative to the repo/solution root.
-    /// Falls back to a hardcoded path if not found.
-    /// </summary>
+    // walks up from the app's folder looking for the bundled BizHawk, a "BizHawk" folder next to the repo/solution
+    // root. falls back to a hardcoded path if there isn't one
     internal static string FindBundledBizHawk()
     {
         try
         {
-            // Start from the executable's directory and walk up looking for BizHawk\EmuHawk.exe
-            string? dir = AppDomain.CurrentDomain.BaseDirectory;
-            while (dir != null)
+            // start at the exe's folder and go up looking for BizHawk\EmuHawk.exe
+            string? folder = AppDomain.CurrentDomain.BaseDirectory;
+            while (folder != null)
             {
-                string candidate = Path.Combine(dir, "BizHawk", "EmuHawk.exe");
+                string candidate = Path.Combine(folder, "BizHawk", "EmuHawk.exe");
                 if (File.Exists(candidate))
                     return candidate;
 
-                dir = Path.GetDirectoryName(dir);
+                folder = Path.GetDirectoryName(folder);
             }
         }
-        catch { /* non-fatal */ }
+        catch { /* not worth stopping for */ }
 
-        // Fallback: check common locations
+        // fallback: the usual spots
         string localBizHawk = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BizHawk", "EmuHawk.exe");
         if (File.Exists(localBizHawk)) return localBizHawk;
 

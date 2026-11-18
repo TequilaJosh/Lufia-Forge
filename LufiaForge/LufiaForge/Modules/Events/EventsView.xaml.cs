@@ -29,7 +29,7 @@ public partial class EventsView : UserControl
 
     private void ScrollSelectedIntoView(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
     {
-        if (sender is System.Windows.Controls.ListBox lb && lb.SelectedItem != null) lb.ScrollIntoView(lb.SelectedItem);
+        if (sender is System.Windows.Controls.ListBox listBox && listBox.SelectedItem != null) listBox.ScrollIntoView(listBox.SelectedItem);
     }
 
     private void NewEvent_Click(object sender, RoutedEventArgs e) => _hooked?.NewEvent(Window.GetWindow(this));

@@ -6,7 +6,7 @@ using Button = System.Windows.Controls.Button;
 
 namespace LufiaForge.Modules.Common;
 
-/// <summary>One sound in the Settings list: its name (typed in place) and where the given name comes from.</summary>
+// one sound in the Settings list: its name (you type it right in the list) and where the given name comes from
 public partial class SoundNameRow : ObservableObject
 {
     private readonly bool _lufia2;
@@ -29,7 +29,7 @@ public partial class SoundNameRow : ObservableObject
     }
 }
 
-/// <summary>Settings: the game's sounds with their names, each renamable and with Listen. <see cref="Lufia2"/> picks the game.</summary>
+// Settings: the game's sounds with their names, each one renamable and with a Listen button. Lufia2 picks the game
 public partial class SoundNamesPanel : UserControl
 {
     private readonly List<SoundNameRow> _all = new();
@@ -55,9 +55,9 @@ public partial class SoundNamesPanel : UserControl
 
     private void Filter()
     {
-        string f = FindBox?.Text.Trim() ?? "";
-        Rows.ItemsSource = f.Length == 0 ? _all
-            : _all.Where(r => r.IdText.Equals(f, StringComparison.OrdinalIgnoreCase) || r.Name.Contains(f, StringComparison.OrdinalIgnoreCase)).ToList();
+        string term = FindBox?.Text.Trim() ?? "";
+        Rows.ItemsSource = term.Length == 0 ? _all
+            : _all.Where(r => r.IdText.Equals(term, StringComparison.OrdinalIgnoreCase) || r.Name.Contains(term, StringComparison.OrdinalIgnoreCase)).ToList();
     }
 
     private void Find_TextChanged(object sender, TextChangedEventArgs e) => Filter();
@@ -66,12 +66,12 @@ public partial class SoundNamesPanel : UserControl
 
     private void Listen_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not Button { DataContext: SoundNameRow r } b) return;
-        Note.Text = SoundPreview.Toggle(b, Rom, Lufia2, song: false, r.Id);
+        if (sender is not Button { DataContext: SoundNameRow row } button) return;
+        Note.Text = SoundPreview.Toggle(button, Rom, Lufia2, song: false, row.Id);
     }
 
     private void Reset_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is FrameworkElement { DataContext: SoundNameRow r }) r.Name = "";
+        if (sender is FrameworkElement { DataContext: SoundNameRow row }) row.Name = "";
     }
 }

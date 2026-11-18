@@ -6,11 +6,8 @@ using System.Text.Json;
 
 namespace LufiaForge.Modules.MemoryMonitor;
 
-/// <summary>
-/// Known SNES WRAM addresses for Lufia &amp; The Fortress of Doom (US).
-/// All addresses are absolute SNES ($7Exxxx). To get WRAM offset: addr - 0x7E0000.
-/// Supports user-added custom labels that persist to a JSON file.
-/// </summary>
+// known WRAM addresses for Lufia & The Fortress of Doom (US). they're full SNES addresses ($7Exxxx), so the WRAM
+// offset is address - 0x7E0000. the user can add their own labels too, those get saved to a JSON file
 public static class Lufia1AddressMap
 {
     private static readonly List<KnownAddress> _builtIn = BuildMap();
@@ -18,41 +15,38 @@ public static class Lufia1AddressMap
     private static readonly List<KnownAddress> _custom  = new();
     private static readonly string _customPath = GetCustomPath();
 
-    /// <summary>Which game's addresses are listed (set when a ROM is loaded).</summary>
+    // which game's addresses we list (set when a ROM loads)
     public static Core.GameKind Game { get; set; } = Core.GameKind.Lufia1;
 
     public static IReadOnlyList<KnownAddress> All => (Game == Core.GameKind.Lufia2 ? _lufia2 : _builtIn).Concat(_custom).ToList();
 
-    /// <summary>Search by partial label (case-insensitive).</summary>
+    // search by part of the label (any case)
     public static IEnumerable<KnownAddress> Search(string query)
     {
         var all = All;
         if (string.IsNullOrWhiteSpace(query)) return all;
-        var q = query.Trim();
+        var term = query.Trim();
         return all.Where(a =>
-            a.Label.Contains(q, StringComparison.OrdinalIgnoreCase) ||
-            a.Category.Contains(q, StringComparison.OrdinalIgnoreCase) ||
-            a.AddressHex.Contains(q, StringComparison.OrdinalIgnoreCase));
+            a.Label.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+            a.Category.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+            a.AddressHex.Contains(term, StringComparison.OrdinalIgnoreCase));
     }
 
-    /// <summary>Get all entries in a specific category.</summary>
     public static IEnumerable<KnownAddress> ByCategory(string category)
         => All.Where(a => a.Category.Equals(category, StringComparison.OrdinalIgnoreCase));
 
-    /// <summary>All distinct categories.</summary>
     public static IReadOnlyList<string> Categories =>
         All.Select(a => a.Category).Distinct().OrderBy(c => c).ToList();
 
-    /// <summary>Add a user-defined address label and persist to disk.</summary>
+    // adds a label of the user's own and saves it
     public static void AddCustom(int address, string label, WatchSize size, string category = "Custom")
     {
-        // Don't add duplicates
+        // no duplicates
         if (_custom.Any(a => a.Address == address && a.Label == label)) return;
         _custom.Add(new KnownAddress(address, label, size, category));
         SaveCustom();
     }
 
-    /// <summary>Remove a user-defined address label.</summary>
     public static bool RemoveCustom(int address, string label)
     {
         var match = _custom.FirstOrDefault(a => a.Address == address && a.Label == label);
@@ -62,7 +56,7 @@ public static class Lufia1AddressMap
         return true;
     }
 
-    /// <summary>Load user-defined labels from disk.</summary>
+    // loads the user's own labels from disk
     public static void LoadCustom()
     {
         _custom.Clear();
@@ -72,18 +66,18 @@ public static class Lufia1AddressMap
             var json = File.ReadAllText(_customPath);
             var entries = JsonSerializer.Deserialize<List<CustomEntry>>(json);
             if (entries == null) return;
-            foreach (var e in entries)
-                _custom.Add(new KnownAddress(e.Address, e.Label, (WatchSize)e.Size, e.Category));
+            foreach (var entry in entries)
+                _custom.Add(new KnownAddress(entry.Address, entry.Label, (WatchSize)entry.Size, entry.Category));
         }
-        catch { /* corrupt file - ignore */ }
+        catch { /* broken file, ignore it */ }
     }
 
     private static void SaveCustom()
     {
         try
         {
-            var dir = Path.GetDirectoryName(_customPath)!;
-            if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+            var folder = Path.GetDirectoryName(_customPath)!;
+            if (!Directory.Exists(folder)) Directory.CreateDirectory(folder);
 
             var entries = _custom.Select(a => new CustomEntry
             {
@@ -96,7 +90,7 @@ public static class Lufia1AddressMap
             var json = JsonSerializer.Serialize(entries, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(_customPath, json);
         }
-        catch { /* non-fatal */ }
+        catch { /* not worth stopping for */ }
     }
 
     private static string GetCustomPath()
@@ -113,52 +107,39 @@ public static class Lufia1AddressMap
         public string Category { get; set; } = "Custom";
     }
 
-    // -------------------------------------------------------------------------
-    // Address database - verified from PAR codes & SRAM research
-    // Sources: Almar's Guides PAR codes, Data Crystal SRAM map,
-    //          vegetaman SRAM offsets, GameHacking.org
-    // -------------------------------------------------------------------------
+    // the address list, checked against PAR codes and SRAM research. sources: Almar's Guides PAR codes, the Data
+    // Crystal SRAM map, vegetaman's SRAM offsets, GameHacking.org
     private static List<KnownAddress> BuildMap()
     {
         var map = new List<KnownAddress>();
 
-        // =====================================================================
-        // SYSTEM / TIMER
-        // =====================================================================
+        // system / timer
         AddRange(map, "System", [
             (0x7E0543, "In-Game Timer (byte 1)",   WatchSize.U8),
             (0x7E0544, "In-Game Timer (byte 2)",   WatchSize.U8),
         ]);
 
-        // =====================================================================
-        // BATTLE / ENCOUNTERS
-        // =====================================================================
+        // battle / encounters
         AddRange(map, "Battle", [
             (0x7E078C, "Random Encounter Flag",    WatchSize.U8),  // 05 = no encounters
         ]);
 
-        // =====================================================================
-        // GOLD (3 bytes, little-endian at $7E14CF)
-        // =====================================================================
+        // gold (3 bytes, little-endian at $7E14CF)
         AddRange(map, "Inventory", [
             (0x7E14CF, "Gold (low byte)",          WatchSize.U8),
             (0x7E14D0, "Gold (mid byte)",          WatchSize.U8),
             (0x7E14D1, "Gold (high byte)",         WatchSize.U8),
-            (0x7E14CF, "Gold (full)",              WatchSize.U16), // low 2 bytes readable as U16
+            (0x7E14CF, "Gold (full)",              WatchSize.U16), // the low 2 bytes read as a U16
         ]);
 
-        // =====================================================================
-        // EXPERIENCE (party-wide)
-        // =====================================================================
+        // experience (whole party)
         AddRange(map, "Party", [
             (0x7E141A, "Experience (low byte)",    WatchSize.U8),
             (0x7E141B, "Experience (high byte)",   WatchSize.U8),
             (0x7E141A, "Experience",               WatchSize.U16),
         ]);
 
-        // =====================================================================
-        // HERO (Player 1) - verified PAR addresses
-        // =====================================================================
+        // hero (player 1), checked PAR addresses
         AddRange(map, "Hero", [
             (0x7E157F, "Hero Current HP",          WatchSize.U16),
             (0x7E1587, "Hero Current MP",          WatchSize.U16),
@@ -175,9 +156,7 @@ public static class Lufia1AddressMap
             (0x7E1699, "Hero EXP (high)",          WatchSize.U8),
         ]);
 
-        // =====================================================================
-        // LUFIA (Player 3 in PAR numbering) - verified PAR addresses
-        // =====================================================================
+        // Lufia (player 3 in the PAR numbering), checked PAR addresses
         AddRange(map, "Lufia", [
             (0x7E1581, "Lufia Current HP",         WatchSize.U16),
             (0x7E1589, "Lufia Current MP",         WatchSize.U16),
@@ -194,9 +173,7 @@ public static class Lufia1AddressMap
             (0x7E169B, "Lufia EXP (high)",         WatchSize.U8),
         ]);
 
-        // =====================================================================
-        // AGURO (Player 2 in PAR numbering) - verified PAR addresses
-        // =====================================================================
+        // Aguro (player 2 in the PAR numbering), checked PAR addresses
         AddRange(map, "Aguro", [
             (0x7E1583, "Aguro Current HP",         WatchSize.U16),
             (0x7E158B, "Aguro Current MP",         WatchSize.U16),
@@ -213,9 +190,7 @@ public static class Lufia1AddressMap
             (0x7E169A, "Aguro EXP (high)",         WatchSize.U8),
         ]);
 
-        // =====================================================================
-        // JERIN (Player 4 in PAR numbering) - verified PAR addresses
-        // =====================================================================
+        // Jerin (player 4 in the PAR numbering), checked PAR addresses
         AddRange(map, "Jerin", [
             (0x7E1585, "Jerin Current HP",         WatchSize.U16),
             (0x7E158D, "Jerin Current MP",         WatchSize.U16),
@@ -235,8 +210,8 @@ public static class Lufia1AddressMap
         return map;
     }
 
-    /// <summary>Lufia II (US): LEdit's RAM notes (researched on the German game), checked in the US game in Tia's shop
-    /// (2026-10-22): map 04 at 9,13, gold 120, the hero's name, level 1 with 20 HP, his equipment and the item list.</summary>
+    // Lufia II (US). LEdit's RAM notes (worked out on the German game), I checked them in the US game in Tia's shop
+    // (2026-10-22): map 04 at 9,13, gold 120, the hero's name, level 1 with 20 HP, his equipment and the item list
     private static List<KnownAddress> BuildLufia2Map()
     {
         var map = new List<KnownAddress>();
@@ -282,10 +257,10 @@ public static class Lufia1AddressMap
     }
 
     private static void AddRange(List<KnownAddress> map, string category,
-        (int addr, string label, WatchSize size)[] entries)
+        (int address, string label, WatchSize size)[] entries)
     {
-        foreach (var (addr, label, size) in entries)
-            map.Add(new KnownAddress(addr, label, size, category));
+        foreach (var (address, label, size) in entries)
+            map.Add(new KnownAddress(address, label, size, category));
     }
 }
 

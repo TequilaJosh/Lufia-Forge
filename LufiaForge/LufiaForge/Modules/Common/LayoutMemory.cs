@@ -8,12 +8,10 @@ using GridSplitter = System.Windows.Controls.GridSplitter;
 
 namespace LufiaForge.Modules.Common;
 
-/// <summary>
-/// Remembers how a grid's sections were sized with its splitters: set <c>common:LayoutMemory.Key="tab.part"</c> on
-/// the Grid. Sizes are kept when a splitter is let go (%AppData%\LufiaForge\layout.json) and put back the next time
-/// the grid loads; a double-click on a splitter puts the grid back as it was designed. Views that size their rows or
-/// columns themselves (showing and hiding a part) use <see cref="Get"/> / <see cref="Set"/> instead.
-/// </summary>
+// remembers how you sized a grid's sections with its splitters. set common:LayoutMemory.Key="tab.part" on the Grid.
+// the sizes get saved when a splitter is let go (%AppData%\LufiaForge\layout.json) and put back next time the grid
+// loads. double-click a splitter to put the grid back the way it was designed. views that size their own rows or
+// columns (showing and hiding a part) use Get / Set instead
 public static class LayoutMemory
 {
     public static readonly DependencyProperty KeyProperty = DependencyProperty.RegisterAttached(
@@ -38,10 +36,10 @@ public static class LayoutMemory
         return _store ??= new();
     }
 
-    /// <summary>A remembered value (null = none).</summary>
-    public static string? Get(string key) => Store().TryGetValue(key, out var v) ? v : null;
+    // a remembered value (null = none)
+    public static string? Get(string key) => Store().TryGetValue(key, out var saved) ? saved : null;
 
-    /// <summary>Remembers a value (null forgets it).</summary>
+    // remembers a value (null forgets it)
     public static void Set(string key, string? value)
     {
         if (value == null) Store().Remove(key); else Store()[key] = value;
@@ -50,7 +48,7 @@ public static class LayoutMemory
             Directory.CreateDirectory(Path.GetDirectoryName(StorePath)!);
             File.WriteAllText(StorePath, JsonSerializer.Serialize(Store(), new JsonSerializerOptions { WriteIndented = true }));
         }
-        catch { /* not fatal: sizes are a convenience */ }
+        catch { /* fine, the sizes are just a convenience */ }
     }
 
     public static string Format(GridLength g) => g.GridUnitType switch
@@ -65,60 +63,60 @@ public static class LayoutMemory
         if (string.IsNullOrWhiteSpace(s)) return null;
         if (s == "auto") return GridLength.Auto;
         bool star = s.EndsWith('*');
-        if (!double.TryParse(star ? s[..^1] : s, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double v) || v < 0) return null;
-        return new GridLength(v, star ? GridUnitType.Star : GridUnitType.Pixel);
+        if (!double.TryParse(star ? s[..^1] : s, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double size) || size < 0) return null;
+        return new GridLength(size, star ? GridUnitType.Star : GridUnitType.Pixel);
     }
 
     private static void OnKeyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
-        if (d is not Grid g) return;
-        g.Loaded -= Grid_Loaded;
-        g.RemoveHandler(Thumb.DragCompletedEvent, new DragCompletedEventHandler(Grid_DragCompleted));
-        g.RemoveHandler(UIElement.PreviewMouseLeftButtonDownEvent, new MouseButtonEventHandler(Grid_PreviewMouseDown));
+        if (d is not Grid grid) return;
+        grid.Loaded -= Grid_Loaded;
+        grid.RemoveHandler(Thumb.DragCompletedEvent, new DragCompletedEventHandler(Grid_DragCompleted));
+        grid.RemoveHandler(UIElement.PreviewMouseLeftButtonDownEvent, new MouseButtonEventHandler(Grid_PreviewMouseDown));
         if (e.NewValue is not string) return;
-        g.Loaded += Grid_Loaded;
-        g.AddHandler(Thumb.DragCompletedEvent, new DragCompletedEventHandler(Grid_DragCompleted));
-        g.AddHandler(UIElement.PreviewMouseLeftButtonDownEvent, new MouseButtonEventHandler(Grid_PreviewMouseDown), true);
+        grid.Loaded += Grid_Loaded;
+        grid.AddHandler(Thumb.DragCompletedEvent, new DragCompletedEventHandler(Grid_DragCompleted));
+        grid.AddHandler(UIElement.PreviewMouseLeftButtonDownEvent, new MouseButtonEventHandler(Grid_PreviewMouseDown), true);
     }
 
-    private static List<GridLength> Sizes(Grid g) =>
-        g.ColumnDefinitions.Select(c => c.Width).Concat(g.RowDefinitions.Select(r => r.Height)).ToList();
+    private static List<GridLength> Sizes(Grid grid) =>
+        grid.ColumnDefinitions.Select(c => c.Width).Concat(grid.RowDefinitions.Select(r => r.Height)).ToList();
 
-    private static void Apply(Grid g, IReadOnlyList<GridLength> sizes)
+    private static void Apply(Grid grid, IReadOnlyList<GridLength> sizes)
     {
-        int nc = g.ColumnDefinitions.Count;
-        for (int i = 0; i < sizes.Count && i < nc + g.RowDefinitions.Count; i++)
-            if (i < nc) g.ColumnDefinitions[i].Width = sizes[i]; else g.RowDefinitions[i - nc].Height = sizes[i];
+        int columnCount = grid.ColumnDefinitions.Count;
+        for (int i = 0; i < sizes.Count && i < columnCount + grid.RowDefinitions.Count; i++)
+            if (i < columnCount) grid.ColumnDefinitions[i].Width = sizes[i]; else grid.RowDefinitions[i - columnCount].Height = sizes[i];
     }
 
     private static void Grid_Loaded(object sender, RoutedEventArgs e)
     {
-        var g = (Grid)sender;
-        if (g.GetValue(DefaultsProperty) == null) g.SetValue(DefaultsProperty, Sizes(g).ToArray());
-        if (GetKey(g) is not string key || Get(key) is not string saved) return;
+        var grid = (Grid)sender;
+        if (grid.GetValue(DefaultsProperty) == null) grid.SetValue(DefaultsProperty, Sizes(grid).ToArray());
+        if (GetKey(grid) is not string key || Get(key) is not string saved) return;
         var parts = saved.Split(';').Select(Parse).ToList();
-        // a layout from another version of the view (other rows or columns) is dropped
-        if (parts.Count != g.ColumnDefinitions.Count + g.RowDefinitions.Count || parts.Any(p => p == null)) return;
-        Apply(g, parts.Select(p => p!.Value).ToList());
+        // a layout saved from another version of the view (different rows or columns) gets dropped
+        if (parts.Count != grid.ColumnDefinitions.Count + grid.RowDefinitions.Count || parts.Any(p => p == null)) return;
+        Apply(grid, parts.Select(p => p!.Value).ToList());
     }
 
     private static void Grid_DragCompleted(object sender, DragCompletedEventArgs e)
     {
-        if (!Moved(e) || e.OriginalSource is not GridSplitter s || sender is not Grid g || s.Parent != g || GetKey(g) is not string key) return;
-        // a section popped out into its own window shrank its row or column: keep the size it has when it is back
-        var sizes = g.ColumnDefinitions.Select(c => PopOutHost.SizeBeforePopOut(c, g) ?? c.Width)
-                     .Concat(g.RowDefinitions.Select(r => PopOutHost.SizeBeforePopOut(r, g) ?? r.Height));
+        if (!Moved(e) || e.OriginalSource is not GridSplitter splitter || sender is not Grid grid || splitter.Parent != grid || GetKey(grid) is not string key) return;
+        // a section popped out into its own window shrank its row or column, so save the size it gets back when it returns
+        var sizes = grid.ColumnDefinitions.Select(c => PopOutHost.SizeBeforePopOut(c, grid) ?? c.Width)
+                     .Concat(grid.RowDefinitions.Select(r => PopOutHost.SizeBeforePopOut(r, grid) ?? r.Height));
         Set(key, string.Join(";", sizes.Select(Format)));
     }
 
-    /// <summary>A drag that really moved the splitter (a click, or the first click of a double-click, doesn't).</summary>
+    // a drag that really moved the splitter (a click doesn't, and neither does the first click of a double-click)
     public static bool Moved(DragCompletedEventArgs e) => !e.Canceled && (Math.Abs(e.HorizontalChange) >= 1 || Math.Abs(e.VerticalChange) >= 1);
 
     private static void Grid_PreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (e.ClickCount != 2 || sender is not Grid g || GetKey(g) is not string key) return;
-        if (Splitter(e.OriginalSource as DependencyObject) is not { } s || s.Parent != g) return;
-        if (g.GetValue(DefaultsProperty) is GridLength[] defaults) Apply(g, defaults);
+        if (e.ClickCount != 2 || sender is not Grid grid || GetKey(grid) is not string key) return;
+        if (Splitter(e.OriginalSource as DependencyObject) is not { } splitter || splitter.Parent != grid) return;
+        if (grid.GetValue(DefaultsProperty) is GridLength[] defaults) Apply(grid, defaults);
         Set(key, null);
         e.Handled = true;
     }
@@ -126,7 +124,7 @@ public static class LayoutMemory
     private static GridSplitter? Splitter(DependencyObject? o)
     {
         for (; o != null; o = o is System.Windows.Media.Visual or System.Windows.Media.Media3D.Visual3D ? System.Windows.Media.VisualTreeHelper.GetParent(o) : LogicalTreeHelper.GetParent(o))
-            if (o is GridSplitter s) return s;
+            if (o is GridSplitter splitter) return splitter;
         return null;
     }
 }

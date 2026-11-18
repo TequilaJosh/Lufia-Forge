@@ -5,13 +5,11 @@ using Button = System.Windows.Controls.Button;
 
 namespace LufiaForge.Modules.Common;
 
-/// <summary>
-/// A section that can be popped out into a window of its own: wrap it in
-/// <c>&lt;common:PopOutHost Title="Stage"&gt;...&lt;/common:PopOutHost&gt;</c>. A small ⧉ button shows while the mouse is
-/// over the section; the section then lives in its own window (move it to another screen, make it as big as you like)
-/// while its place shows "Bring it back". Closing the window puts the section back. The section keeps working as
-/// before: same data, same code, only somewhere else. Window places are remembered per section.
-/// </summary>
+// a section that can pop out into its own window. wrap it in <common:PopOutHost Title="Stage">...</common:PopOutHost>.
+// a small pop-out button shows while the mouse is over the section. click it and the section lives in its own window
+// (move it to another screen, make it as big as you like) while its old spot shows "Bring it back". closing the
+// window puts the section back. the section works just like before, same data and same code, only somewhere else.
+// window positions are remembered per section
 public class PopOutHost : ContentControl
 {
     static PopOutHost()
@@ -22,19 +20,19 @@ public class PopOutHost : ContentControl
     public static readonly DependencyProperty TitleProperty = DependencyProperty.Register(
         nameof(Title), typeof(string), typeof(PopOutHost), new PropertyMetadata("Section"));
 
-    /// <summary>The window title and the name in "... is in its own window".</summary>
+    // the window title, and the name in "... is in its own window"
     public string Title { get => (string)GetValue(TitleProperty); set => SetValue(TitleProperty, value); }
 
     public static readonly DependencyProperty KeyProperty = DependencyProperty.Register(
         nameof(Key), typeof(string), typeof(PopOutHost), new PropertyMetadata(null));
 
-    /// <summary>Where the window's place is remembered (defaults to the title).</summary>
+    // the key the window position is saved under (the title if not set)
     public string? Key { get => (string?)GetValue(KeyProperty); set => SetValue(KeyProperty, value); }
 
     public static readonly DependencyProperty ButtonMarginProperty = DependencyProperty.Register(
         nameof(ButtonMargin), typeof(Thickness), typeof(PopOutHost), new PropertyMetadata(new Thickness(0, 2, 20, 0)));
 
-    /// <summary>Where the ⧉ button sits in the top right corner (moved in where it would cover a button).</summary>
+    // where the pop-out button sits in the top right corner (moved in where it would cover another button)
     public Thickness ButtonMargin { get => (Thickness)GetValue(ButtonMarginProperty); set => SetValue(ButtonMarginProperty, value); }
 
     private static readonly DependencyPropertyKey IsPoppedOutKey = DependencyProperty.RegisterReadOnly(
@@ -51,43 +49,43 @@ public class PopOutHost : ContentControl
     private object? _content;
     private (DefinitionBase Def, GridLength Size)? _shrunk;
 
-    /// <summary>While the section is out, its row or column in the grid it sits in only takes what the "Bring it back"
-    /// note needs, so the sections next to it get the room (put back when it returns).</summary>
+    // while the section is out, its row or column in the grid only takes what the "Bring it back" note needs, so the
+    // sections next to it get the room (put back when it returns)
     private void Shrink()
     {
-        if (Parent is not Grid g) return;
-        if (g.ColumnDefinitions.Count > 1 && Grid.GetColumnSpan(this) == 1 && Grid.GetColumn(this) < g.ColumnDefinitions.Count)
+        if (Parent is not Grid grid) return;
+        if (grid.ColumnDefinitions.Count > 1 && Grid.GetColumnSpan(this) == 1 && Grid.GetColumn(this) < grid.ColumnDefinitions.Count)
         {
-            var c = g.ColumnDefinitions[Grid.GetColumn(this)];
-            if (!c.Width.IsAuto) { _shrunk = (c, c.Width); c.Width = GridLength.Auto; }
+            var column = grid.ColumnDefinitions[Grid.GetColumn(this)];
+            if (!column.Width.IsAuto) { _shrunk = (column, column.Width); column.Width = GridLength.Auto; }
         }
-        else if (g.RowDefinitions.Count > 1 && Grid.GetRowSpan(this) == 1 && Grid.GetRow(this) < g.RowDefinitions.Count)
+        else if (grid.RowDefinitions.Count > 1 && Grid.GetRowSpan(this) == 1 && Grid.GetRow(this) < grid.RowDefinitions.Count)
         {
-            var r = g.RowDefinitions[Grid.GetRow(this)];
-            if (!r.Height.IsAuto) { _shrunk = (r, r.Height); r.Height = GridLength.Auto; }
+            var row = grid.RowDefinitions[Grid.GetRow(this)];
+            if (!row.Height.IsAuto) { _shrunk = (row, row.Height); row.Height = GridLength.Auto; }
         }
     }
 
     private void Unshrink()
     {
-        if (_shrunk is not { } s) return;
-        // a view that sized the row or column itself meanwhile (showing or hiding a part) keeps its size, and so
-        // does one whose section is hidden now (the view sizes it again when it shows it)
+        if (_shrunk is not { } shrunk) return;
+        // if the view sized the row or column itself in the meantime (showing or hiding a part) it keeps that size,
+        // same if the section is hidden now (the view sizes it again when it shows it)
         _shrunk = null;
         if (Content is UIElement { Visibility: not Visibility.Visible }) return;
-        if (s.Def is ColumnDefinition c && c.Width.IsAuto) c.Width = s.Size;
-        else if (s.Def is RowDefinition r && r.Height.IsAuto) r.Height = s.Size;
+        if (shrunk.Def is ColumnDefinition column && column.Width.IsAuto) column.Width = shrunk.Size;
+        else if (shrunk.Def is RowDefinition row && row.Height.IsAuto) row.Height = shrunk.Size;
     }
 
-    /// <summary>The size a popped-out section's row or column had before it shrank (what LayoutMemory keeps).</summary>
+    // the size a popped-out section's row or column had before it shrank (that's what LayoutMemory saves)
     public static GridLength? SizeBeforePopOut(DefinitionBase d, Grid g) =>
-        g.Children.OfType<PopOutHost>().FirstOrDefault(h => h._shrunk is { } s && ReferenceEquals(s.Def, d))?._shrunk?.Size;
+        g.Children.OfType<PopOutHost>().FirstOrDefault(host => host._shrunk is { } shrunk && ReferenceEquals(shrunk.Def, d))?._shrunk?.Size;
 
-    /// <summary>Whether a section inside <paramref name="root"/> is in its own window now.</summary>
+    // true if some section inside root is in its own window right now
     public static bool AnyPoppedOut(DependencyObject root)
     {
-        foreach (var c in LogicalTreeHelper.GetChildren(root).OfType<DependencyObject>())
-            if (c is PopOutHost { IsPoppedOut: true } || AnyPoppedOut(c)) return true;
+        foreach (var child in LogicalTreeHelper.GetChildren(root).OfType<DependencyObject>())
+            if (child is PopOutHost { IsPoppedOut: true } || AnyPoppedOut(child)) return true;
         return false;
     }
 
@@ -103,41 +101,41 @@ public class PopOutHost : ContentControl
 
     private string PlaceKey => "popout." + (Key ?? Title);
 
-    /// <summary>Moves the section into its own window (or brings that window forward).</summary>
+    // moves the section into its own window (or brings that window to the front)
     public void PopOut()
     {
         if (_window != null) { _window.Activate(); return; }
         if (Content is not UIElement body) return;
         var owner = Window.GetWindow(this);
-        // at least a good working size (a section is usually popped out to get more room), at most the screen
-        double w = Math.Min(Math.Max(ActualWidth, 900), SystemParameters.WorkArea.Width - 60);
-        double h = Math.Min(Math.Max(ActualHeight, 650), SystemParameters.WorkArea.Height - 60);
-        Point at = IsVisible ? PointToScreen(new Point(0, 0)) : new Point(100, 100);
+        // at least a good size to work in (you usually pop a section out to get more room), at most the screen
+        double width = Math.Min(Math.Max(ActualWidth, 900), SystemParameters.WorkArea.Width - 60);
+        double height = Math.Min(Math.Max(ActualHeight, 650), SystemParameters.WorkArea.Height - 60);
+        Point topLeft = IsVisible ? PointToScreen(new Point(0, 0)) : new Point(100, 100);
         // screen pixels to WPF units
-        if (PresentationSource.FromVisual(this)?.CompositionTarget is { } ct) at = ct.TransformFromDevice.Transform(at);
+        if (PresentationSource.FromVisual(this)?.CompositionTarget is { } target) topLeft = target.TransformFromDevice.Transform(topLeft);
 
         _content = Content;
-        // the section sees the same data as here (also a section whose own DataContext binds to a part of it) and finds
-        // the names its bindings use (ElementName) in the view it came from
-        // (a UserControl, so bindings that look for "the view I am in" still find one with the same data)
+        // the section sees the same data as here (also a section whose own DataContext binds to a part of it) and
+        // finds the names its bindings use (ElementName) in the view it came from
+        // (a UserControl, so bindings that look for "the view I'm in" still find one with the same data)
         var frame = new UserControl { Padding = new Thickness(6) };
         frame.SetBinding(DataContextProperty, new System.Windows.Data.Binding(nameof(DataContext)) { Source = this });
-        for (DependencyObject? p = this; p != null; p = LogicalTreeHelper.GetParent(p) ?? System.Windows.Media.VisualTreeHelper.GetParent(p))
-            if (NameScope.GetNameScope(p) is { } names) { NameScope.SetNameScope(frame, names); break; }
+        for (DependencyObject? node = this; node != null; node = LogicalTreeHelper.GetParent(node) ?? System.Windows.Media.VisualTreeHelper.GetParent(node))
+            if (NameScope.GetNameScope(node) is { } names) { NameScope.SetNameScope(frame, names); break; }
         var resources = new ResourceDictionary();
-        // the styles and templates the section found where it was (its view's resources) go with it
-        for (DependencyObject? p = this; p != null; p = LogicalTreeHelper.GetParent(p) ?? System.Windows.Media.VisualTreeHelper.GetParent(p))
-            if (p is FrameworkElement f && (f.Resources.Count > 0 || f.Resources.MergedDictionaries.Count > 0) && p is not Window)
-                resources.MergedDictionaries.Insert(0, f.Resources);
+        // the styles and templates the section had where it was (its view's resources) come along
+        for (DependencyObject? node = this; node != null; node = LogicalTreeHelper.GetParent(node) ?? System.Windows.Media.VisualTreeHelper.GetParent(node))
+            if (node is FrameworkElement element && (element.Resources.Count > 0 || element.Resources.MergedDictionaries.Count > 0) && node is not Window)
+                resources.MergedDictionaries.Insert(0, element.Resources);
         Content = null;
         frame.Content = body;
 
         var win = new Window
         {
             Title = $"{Title} - Lufia Forge",
-            Width = w, Height = h,
-            Left = Math.Max(SystemParameters.WorkArea.Left, Math.Min(at.X + 30, SystemParameters.WorkArea.Right - w)),
-            Top = Math.Max(SystemParameters.WorkArea.Top, Math.Min(at.Y + 30, SystemParameters.WorkArea.Bottom - h)),
+            Width = width, Height = height,
+            Left = Math.Max(SystemParameters.WorkArea.Left, Math.Min(topLeft.X + 30, SystemParameters.WorkArea.Right - width)),
+            Top = Math.Max(SystemParameters.WorkArea.Top, Math.Min(topLeft.Y + 30, SystemParameters.WorkArea.Bottom - height)),
             WindowStartupLocation = WindowStartupLocation.Manual,
             Background = TryFindResource("MidPurpleBrush") as System.Windows.Media.Brush,
             Resources = resources,
@@ -145,20 +143,20 @@ public class PopOutHost : ContentControl
             ShowInTaskbar = true,
             Content = frame,
         };
-        if (LayoutMemory.Get(PlaceKey) is string place && place.Split(',') is { Length: 4 } p4 &&
-            p4.Select(s => double.TryParse(s, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : double.NaN).ToArray() is var r &&
-            r.All(v => !double.IsNaN(v)) && r[2] >= 200 && r[3] >= 150 && OnScreen(r[0], r[1], r[2]))
+        if (LayoutMemory.Get(PlaceKey) is string place && place.Split(',') is { Length: 4 } parts &&
+            parts.Select(s => double.TryParse(s, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : double.NaN).ToArray() is var bounds &&
+            bounds.All(v => !double.IsNaN(v)) && bounds[2] >= 200 && bounds[3] >= 150 && OnScreen(bounds[0], bounds[1], bounds[2]))
         {
-            win.Left = r[0]; win.Top = r[1]; win.Width = r[2]; win.Height = r[3];
+            win.Left = bounds[0]; win.Top = bounds[1]; win.Width = bounds[2]; win.Height = bounds[3];
         }
         if (owner != null && owner.IsVisible) win.Owner = owner;
-        // keys pressed in the window go on to the view the section came from (its shortcuts, then the app's: Ctrl+S,
-        // Ctrl+Z...), as if the section were still there
+        // keys pressed in the window go on to the view the section came from (its shortcuts, then the app's, Ctrl+S,
+        // Ctrl+Z...), like the section was still there
         win.PreviewKeyDown += (_, e) => e.Handled |= Forward(e, System.Windows.Input.Keyboard.PreviewKeyDownEvent);
         win.KeyDown += (_, e) => e.Handled |= Forward(e, System.Windows.Input.Keyboard.KeyDownEvent);
-        // a box typed in here and then the main window clicked (Save, another tab): the box keeps its focus in this
-        // window, so it never lost it and its text was never handed over (the boxes take it when they lose focus).
-        // Leaving the window takes the focus off the box (its text goes in); coming back puts it there again.
+        // you type in a box here and then click the main window (Save, another tab). the box keeps its focus in this
+        // window, so it never lost it and its text never got handed over (the boxes hand it over when they lose
+        // focus). so leaving the window takes the focus off the box (its text goes in), and coming back puts it back
         IInputElement? lastFocus = null;
         win.Deactivated += (_, _) =>
         {
@@ -168,7 +166,7 @@ public class PopOutHost : ContentControl
         };
         win.Activated += (_, _) =>
         {
-            if (lastFocus is UIElement { IsVisible: true } u && System.Windows.Input.FocusManager.GetFocusedElement(win) == null) u.Focus();
+            if (lastFocus is UIElement { IsVisible: true } focused && System.Windows.Input.FocusManager.GetFocusedElement(win) == null) focused.Focus();
             lastFocus = null;
         };
         win.Closing += (_, _) => Return(win);
@@ -182,11 +180,11 @@ public class PopOutHost : ContentControl
     private bool Forward(System.Windows.Input.KeyEventArgs e, RoutedEvent kind)
     {
         if (e.Handled) return false;
-        // the section's home view, or the main window when its tab isn't on screen (the app's keys still work)
-        UIElement? to = IsLoaded ? this : Application.Current?.MainWindow;
-        if (to == null || PresentationSource.FromVisual(to) is not { } source) return false;
+        // the section's home view, or the main window if its tab isn't on screen (so the app's keys still work)
+        UIElement? target = IsLoaded ? this : Application.Current?.MainWindow;
+        if (target == null || PresentationSource.FromVisual(target) is not { } source) return false;
         var copy = new System.Windows.Input.KeyEventArgs(e.KeyboardDevice, source, e.Timestamp, e.Key) { RoutedEvent = kind };
-        to.RaiseEvent(copy);
+        target.RaiseEvent(copy);
         return copy.Handled;
     }
 
@@ -200,7 +198,7 @@ public class PopOutHost : ContentControl
         if (win.WindowState == WindowState.Normal)
             LayoutMemory.Set(PlaceKey, string.Join(",", new[] { win.Left, win.Top, win.Width, win.Height }
                 .Select(v => v.ToString("0", System.Globalization.CultureInfo.InvariantCulture))));
-        if (win.Content is UserControl b) b.Content = null;
+        if (win.Content is UserControl frame) frame.Content = null;
         win.Content = null;
         Content = _content;
         _content = null;

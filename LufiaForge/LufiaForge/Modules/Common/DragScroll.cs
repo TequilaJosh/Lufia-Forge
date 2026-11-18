@@ -7,12 +7,10 @@ using Point = System.Windows.Point;
 
 namespace LufiaForge.Modules.Common;
 
-/// <summary>
-/// While something is dragged over a list (a step being moved), holding it near the top or bottom of the list scrolls
-/// it slowly, faster the closer to the edge: <c>common:DragScroll.Edges="True"</c> on the ScrollViewer. It keeps
-/// scrolling while the mouse is held still there (the cursor is read every frame, as the drag doesn't report a mouse
-/// that doesn't move) and stops when the mouse leaves the edge or the button is let go.
-/// </summary>
+// when you drag something over a list (moving a step), holding it near the top or bottom scrolls the list, slowly
+// at first and faster the closer you get to the edge. turn it on with common:DragScroll.Edges="True" on the
+// ScrollViewer. it keeps scrolling while the mouse sits still there (we read the cursor every frame, the drag doesn't
+// report a mouse that isn't moving) and stops when the mouse leaves the edge or the button is let go
 public static class DragScroll
 {
     public static readonly DependencyProperty EdgesProperty = DependencyProperty.RegisterAttached(
@@ -21,7 +19,7 @@ public static class DragScroll
     public static bool GetEdges(DependencyObject o) => (bool)o.GetValue(EdgesProperty);
     public static void SetEdges(DependencyObject o, bool v) => o.SetValue(EdgesProperty, v);
 
-    /// <summary>The edge band, and the speed at its inner side and at the edge, in pixels a frame.</summary>
+    // how tall the edge band is, and the speed at its inner side and right at the edge, in pixels a frame
     private const double Zone = 56, Slow = 1, Fast = 8;
 
     private static ScrollViewer? _active;
@@ -29,15 +27,15 @@ public static class DragScroll
 
     private static void OnChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
-        if (d is not ScrollViewer sv) return;
-        sv.PreviewDragOver -= OnDragOver;
-        if ((bool)e.NewValue) sv.PreviewDragOver += OnDragOver;
+        if (d is not ScrollViewer scroller) return;
+        scroller.PreviewDragOver -= OnDragOver;
+        if ((bool)e.NewValue) scroller.PreviewDragOver += OnDragOver;
     }
 
     private static void OnDragOver(object sender, DragEventArgs e)
     {
-        if (sender is not ScrollViewer sv || Speed(sv) == 0) return;
-        _active = sv;
+        if (sender is not ScrollViewer scroller || Speed(scroller) == 0) return;
+        _active = scroller;
         if (_timer != null) return;
         _timer = new DispatcherTimer(DispatcherPriority.Normal) { Interval = TimeSpan.FromMilliseconds(16) };
         _timer.Tick += Tick;
@@ -46,10 +44,10 @@ public static class DragScroll
 
     private static void Tick(object? sender, EventArgs e)
     {
-        var sv = _active;
-        double speed = sv != null && (GetAsyncKeyState(0x01) & 0x8000) != 0 && sv.IsVisible ? Speed(sv) : 0;
+        var scroller = _active;
+        double speed = scroller != null && (GetAsyncKeyState(0x01) & 0x8000) != 0 && scroller.IsVisible ? Speed(scroller) : 0;
         if (speed == 0) { Stop(); return; }
-        sv!.ScrollToVerticalOffset(Math.Clamp(sv.VerticalOffset + speed, 0, sv.ScrollableHeight));
+        scroller!.ScrollToVerticalOffset(Math.Clamp(scroller.VerticalOffset + speed, 0, scroller.ScrollableHeight));
     }
 
     private static void Stop()
@@ -59,18 +57,18 @@ public static class DragScroll
         _active = null;
     }
 
-    /// <summary>How fast to scroll for where the cursor is now: negative up, positive down, 0 away from the edges
-    /// (or outside the list).</summary>
-    private static double Speed(ScrollViewer sv)
+    // how fast to scroll for where the cursor is right now. negative = up, positive = down, 0 away from the edges
+    // (or outside the list)
+    private static double Speed(ScrollViewer scroller)
     {
-        if (!GetCursorPos(out var c) || PresentationSource.FromVisual(sv) == null) return 0;
+        if (!GetCursorPos(out var cursor) || PresentationSource.FromVisual(scroller) == null) return 0;
         Point p;
-        try { p = sv.PointFromScreen(new Point(c.X, c.Y)); } catch (InvalidOperationException) { return 0; }
-        double h = sv.ActualHeight;
-        if (p.X < 0 || p.X > sv.ActualWidth || p.Y < -Zone || p.Y > h + Zone || h < Zone * 3) return 0;
+        try { p = scroller.PointFromScreen(new Point(cursor.X, cursor.Y)); } catch (InvalidOperationException) { return 0; }
+        double height = scroller.ActualHeight;
+        if (p.X < 0 || p.X > scroller.ActualWidth || p.Y < -Zone || p.Y > height + Zone || height < Zone * 3) return 0;
         double zone = Zone;
-        if (p.Y < zone && sv.VerticalOffset > 0) return -(Slow + (Fast - Slow) * Math.Min(1, (zone - p.Y) / zone));
-        if (p.Y > h - zone && sv.VerticalOffset < sv.ScrollableHeight) return Slow + (Fast - Slow) * Math.Min(1, (p.Y - (h - zone)) / zone);
+        if (p.Y < zone && scroller.VerticalOffset > 0) return -(Slow + (Fast - Slow) * Math.Min(1, (zone - p.Y) / zone));
+        if (p.Y > height - zone && scroller.VerticalOffset < scroller.ScrollableHeight) return Slow + (Fast - Slow) * Math.Min(1, (p.Y - (height - zone)) / zone);
         return 0;
     }
 

@@ -11,13 +11,13 @@ using System.Windows.Media.Imaging;
 
 namespace LufiaForge.Modules.Cutscenes;
 
-/// <summary>A cutscene in the list.</summary>
+// a cutscene in the list
 public sealed class CutsceneEntry
 {
     public int MapId { get; init; }
     public int Event { get; init; }
     public string MapLabel { get; init; } = "";
-    /// <summary>A known name ("Opening intro") or empty.</summary>
+    // a known name ("Opening intro") or empty
     public string Title { get; init; } = "";
     public string Hint { get; init; } = "";
     public int StageCommands { get; init; }
@@ -28,10 +28,8 @@ public sealed class CutsceneEntry
                              $"{StageCommands} stage command{(StageCommands == 1 ? "" : "s")}, {Texts} text box{(Texts == 1 ? "" : "es")}";
 }
 
-/// <summary>
-/// The Cutscenes tab: every event that moves characters, the camera or the screen, opened in the event editor's
-/// cutscene layout (stage + timeline).
-/// </summary>
+// the Cutscenes tab: every event that moves characters, the camera or the screen, opened in the event editor's
+// cutscene layout (stage + timeline)
 public partial class CutscenesViewModel : ObservableObject, IEventHost
 {
     private RomBuffer? _rom;
@@ -50,10 +48,10 @@ public partial class CutscenesViewModel : ObservableObject, IEventHost
     [ObservableProperty] private string _status = "Open a ROM to list its cutscenes.";
     [ObservableProperty] private bool _isBusy;
 
-    /// <summary>Raised to open a cutscene in the editor.</summary>
+    // fires to open a cutscene in the editor
     public event Action<EventScript, string>? OpenRequested;
 
-    /// <summary>Names for cutscenes everyone knows.</summary>
+    // names for the cutscenes everyone knows
     private static readonly Dictionary<(int Map, int Ev), string> KnownNames = new()
     {
         [(0x4F, 8)] = "Opening intro (before the title)",
@@ -68,8 +66,8 @@ public partial class CutscenesViewModel : ObservableObject, IEventHost
         _ = BuildAsync();
     }
 
-    /// <summary>The scan, kept from failing silently (it is started without being awaited: an error left the tab on
-    /// "Finding the cutscenes..." for good).</summary>
+    // the scan, wrapped so it can't fail silently (nothing awaits it, so an error left the tab stuck on
+    // "Finding the cutscenes..." for good)
     private async Task BuildAsync()
     {
         try { await BuildCore(); }
@@ -84,50 +82,50 @@ public partial class CutscenesViewModel : ObservableObject, IEventHost
         Status = "Finding the cutscenes…";
         var maps = MapCatalog.ScanNamed(rom);
         var labels = maps.ToDictionary(m => m.MapId, m => m.Label);
-        EventScript.MapLabel ??= id => labels.TryGetValue(id, out var l) ? l : $"map {id:X2}";
+        EventScript.MapLabel ??= id => labels.TryGetValue(id, out var label) ? label : $"map {id:X2}";
         EventCommands.EventBase = id => LufiaMap.EventBase(rom, id);
         var list = await Task.Run(() =>
         {
             var found = new List<CutsceneEntry>();
-            // events other events continue with (command 51): not reached by a character or area, so find them first
+            // events that other events continue with (command 51). no character or area reaches them, so find them first
             var chained = new HashSet<(int Map, int Ev)>();
-            foreach (var m in maps)
-                foreach (int ev in EventScript.PlausibleEvents(rom, m.MapId))
+            foreach (var mapInfo in maps)
+                foreach (int ev in EventScript.PlausibleEvents(rom, mapInfo.MapId))
                 {
-                    var s0 = EventScript.Load(rom, m.MapId, ev);
-                    if (s0 == null) continue;
-                    foreach (var o in s0.Ops.Where(o => !o.IsText && o.Bytes.Length == 3 && o.Bytes[0] == 0x51))
-                        chained.Add((o.Bytes[1], EventCommands.ChainedEvent(o.Bytes)));
+                    var script = EventScript.Load(rom, mapInfo.MapId, ev);
+                    if (script == null) continue;
+                    foreach (var op in script.Ops.Where(o => !o.IsText && o.Bytes.Length == 3 && o.Bytes[0] == 0x51))
+                        chained.Add((op.Bytes[1], EventCommands.ChainedEvent(op.Bytes)));
                 }
-            foreach (var m in maps)
+            foreach (var mapInfo in maps)
             {
                 LufiaMap? map = null;
-                try { map = LufiaMap.Load(rom, m.MapId); } catch { }
-                // known cutscenes the game starts from code (the intro) aren't reached by a character or area
-                var events = EventScript.PlausibleEvents(rom, m.MapId)
-                    .Concat(KnownNames.Keys.Where(k => k.Map == m.MapId).Select(k => k.Ev))
-                    .Concat(chained.Where(c => c.Map == m.MapId).Select(c => c.Ev)).Distinct().OrderBy(e => e);
+                try { map = LufiaMap.Load(rom, mapInfo.MapId); } catch { }
+                // known cutscenes the game starts from code (the intro) aren't reached by a character or area either
+                var events = EventScript.PlausibleEvents(rom, mapInfo.MapId)
+                    .Concat(KnownNames.Keys.Where(k => k.Map == mapInfo.MapId).Select(k => k.Ev))
+                    .Concat(chained.Where(c => c.Map == mapInfo.MapId).Select(c => c.Ev)).Distinct().OrderBy(e => e);
                 foreach (int ev in events)
                 {
-                    EventScript? s;
-                    try { s = EventScript.Load(rom, m.MapId, ev); } catch { continue; }
-                    if (s == null) continue;
-                    int stage = CutsceneStage.StageCommandCount(s);
-                    bool known = KnownNames.ContainsKey((m.MapId, ev));
-                    // the intro starts with a jump into its code: count what it jumps to
-                    if (stage == 0 && known && s.Ops.Count > 0 && s.Ops[0].Targets.Count > 0)
+                    EventScript? script;
+                    try { script = EventScript.Load(rom, mapInfo.MapId, ev); } catch { continue; }
+                    if (script == null) continue;
+                    int stage = CutsceneStage.StageCommandCount(script);
+                    bool known = KnownNames.ContainsKey((mapInfo.MapId, ev));
+                    // the intro starts with a jump into its code, so count what it jumps to
+                    if (stage == 0 && known && script.Ops.Count > 0 && script.Ops[0].Targets.Count > 0)
                     {
-                        var code = EventScript.LoadAt(rom, m.MapId, ev, s.Ops[0].Targets[0].Absolute, s.JumpBase);
+                        var code = EventScript.LoadAt(rom, mapInfo.MapId, ev, script.Ops[0].Targets[0].Absolute, script.JumpBase);
                         stage = CutsceneStage.StageCommandCount(code);
                     }
                     if (stage == 0) continue;
                     string hint = "";
-                    try { hint = EventHints.Summarize(rom, s); } catch { }
+                    try { hint = EventHints.Summarize(rom, script); } catch { }
                     int sprite = map?.Npcs.FirstOrDefault(n => MapEvents.TalkEvent(n.Index) == ev && !n.IsUnused)?.Sprite ?? -1;
                     found.Add(new CutsceneEntry
                     {
-                        MapId = m.MapId, Event = ev, MapLabel = m.Label, Title = KnownNames.GetValueOrDefault((m.MapId, ev), ""),
-                        Hint = hint, StageCommands = stage, Texts = s.Ops.Count(o => o.IsText), Picture = Picture(rom, sprite),
+                        MapId = mapInfo.MapId, Event = ev, MapLabel = mapInfo.Label, Title = KnownNames.GetValueOrDefault((mapInfo.MapId, ev), ""),
+                        Hint = hint, StageCommands = stage, Texts = script.Ops.Count(o => o.IsText), Picture = Picture(rom, sprite),
                     });
                 }
             }
@@ -148,10 +146,10 @@ public partial class CutscenesViewModel : ObservableObject, IEventHost
 
     private static ImageSource? Picture(RomBuffer rom, int sprite)
     {
-        if (sprite < 0 || NpcSprites.Render(rom, sprite) is not var (px, w, h)) return null;
-        var bmp = BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgra32, null, px, w * 4);
-        bmp.Freeze();
-        return bmp;
+        if (sprite < 0 || NpcSprites.Render(rom, sprite) is not var (pixels, width, height)) return null;
+        var bitmap = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgra32, null, pixels, width * 4);
+        bitmap.Freeze();
+        return bitmap;
     }
 
     partial void OnSearchChanged(string value) => ApplyFilter();
@@ -163,13 +161,13 @@ public partial class CutscenesViewModel : ObservableObject, IEventHost
         var keep = Selected;
         Cutscenes.Clear();
         int map = MapFilterIndex >= 0 && MapFilterIndex < _mapFilterIds.Count ? _mapFilterIds[MapFilterIndex] : -1;
-        string q = Search.Trim();
-        foreach (var c in _all)
+        string term = Search.Trim();
+        foreach (var cutscene in _all)
         {
-            if (map >= 0 && c.MapId != map) continue;
-            if (OnlyBig && c.StageCommands < 6) continue;
-            if (q.Length > 0 && !c.Label.Contains(q, StringComparison.OrdinalIgnoreCase) && !c.Hint.Contains(q, StringComparison.OrdinalIgnoreCase)) continue;
-            Cutscenes.Add(c);
+            if (map >= 0 && cutscene.MapId != map) continue;
+            if (OnlyBig && cutscene.StageCommands < 6) continue;
+            if (term.Length > 0 && !cutscene.Label.Contains(term, StringComparison.OrdinalIgnoreCase) && !cutscene.Hint.Contains(term, StringComparison.OrdinalIgnoreCase)) continue;
+            Cutscenes.Add(cutscene);
         }
         if (keep != null && Cutscenes.Contains(keep)) { _suppressOpen = true; Selected = keep; _suppressOpen = false; }
         if (!IsBusy) Status = $"{Cutscenes.Count} of {_all.Count} cutscenes shown.";
@@ -180,49 +178,49 @@ public partial class CutscenesViewModel : ObservableObject, IEventHost
     partial void OnSelectedChanged(CutsceneEntry? value)
     {
         if (value == null || _rom == null || _suppressOpen) return;
-        // whole event: the code its jumps lead to is part of it (the intro is one jump to its real code)
-        var s = EventScript.LoadWhole(_rom, value.MapId, value.Event);
-        if (s == null) return;
-        OpenRequested?.Invoke(s, value.Label);
+        // the whole event: the code its jumps go to is part of it (the intro is one jump to its real code)
+        var script = EventScript.LoadWhole(_rom, value.MapId, value.Event);
+        if (script == null) return;
+        OpenRequested?.Invoke(script, value.Label);
     }
 
-    // ── New / delete ──
+    // new / delete
 
-    /// <summary>A new cutscene: a new event on a map (New event window), listed at the top and opened on the stage.</summary>
+    // a new cutscene: a new event on a map (New event window), listed at the top and opened on the stage
     public void NewCutscene(Window? owner)
     {
         if (_rom == null) return;
         var maps = MapCatalog.ScanNamed(_rom);
         int map = Selected?.MapId ?? (MapFilterIndex > 0 && MapFilterIndex < _mapFilterIds.Count ? _mapFilterIds[MapFilterIndex] : 0x04);
-        var win = new Events.NewEventWindow(_rom, maps, map, "New cutscene", cutscene: true) { Owner = owner };
-        if (win.ShowDialog() != true) return;
-        _mainVm?.NotifyRomModified(win.ResultText);
-        string label = maps.FirstOrDefault(m => m.MapId == win.ResultMap)?.Label ?? $"map {win.ResultMap:X2}";
-        var entry = new CutsceneEntry { MapId = win.ResultMap, Event = win.ResultEvent, MapLabel = label, Title = $"New cutscene: {label}, event {win.ResultEvent}", Hint = win.ResultText };
+        var dialog = new Events.NewEventWindow(_rom, maps, map, "New cutscene", cutscene: true) { Owner = owner };
+        if (dialog.ShowDialog() != true) return;
+        _mainVm?.NotifyRomModified(dialog.ResultText);
+        string label = maps.FirstOrDefault(m => m.MapId == dialog.ResultMap)?.Label ?? $"map {dialog.ResultMap:X2}";
+        var entry = new CutsceneEntry { MapId = dialog.ResultMap, Event = dialog.ResultEvent, MapLabel = label, Title = $"New cutscene: {label}, event {dialog.ResultEvent}", Hint = dialog.ResultText };
         _all.Insert(0, entry);
         Search = ""; OnlyBig = false; MapFilterIndex = 0;
         ApplyFilter();
         Selected = entry;
-        Status = win.ResultText + ". Add its moves, camera and dialogue on the stage; it's written by itself (or click Apply in the top bar).";
+        Status = dialog.ResultText + ". Add its moves, camera and dialogue on the stage; it's written by itself (or click Apply in the top bar).";
     }
 
-    /// <summary>Deletes the selected cutscene's event (after saying what changes).</summary>
+    // deletes the picked cutscene's event (after saying what changes)
     public bool DeleteSelected(Window? owner)
     {
-        if (_rom == null || Selected is not { } c) { Status = "Pick a cutscene first."; return false; }
+        if (_rom == null || Selected is not { } cutscene) { Status = "Pick a cutscene first."; return false; }
         var maps = MapCatalog.ScanNamed(_rom);
         string Label(int id) => maps.FirstOrDefault(m => m.MapId == id)?.Label ?? $"map {id:X2}";
-        string? done = Events.EventDelete.Run(owner, _rom, c.MapId, c.Event, Label(c.MapId), Label);
+        string? done = Events.EventDelete.Run(owner, _rom, cutscene.MapId, cutscene.Event, Label(cutscene.MapId), Label);
         if (done == null) return false;
         _mainVm?.NotifyRomModified(done);
-        _all.Remove(c);
+        _all.Remove(cutscene);
         _suppressOpen = true; Selected = null; _suppressOpen = false;
         ApplyFilter();
         Status = done + ".";
         return true;
     }
 
-    // ── IEventHost ──
+    // IEventHost
     public bool ConfirmExpand(string what) =>
         MessageBox.Show(
             $"{what}\n\nTo store it, Lufia Forge needs to expand the ROM from 1 MB to 2 MB and use the new space. " +

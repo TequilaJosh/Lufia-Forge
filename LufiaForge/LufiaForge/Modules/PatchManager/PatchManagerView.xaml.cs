@@ -8,6 +8,6 @@ public partial class PatchManagerView : UserControl
     {
         InitializeComponent();
         // other tabs (Game Settings, Encounters) can add the built-in patches too
-        IsVisibleChanged += (_, e) => { if (e.NewValue is true && DataContext is PatchManagerViewModel vm) vm.RefreshBuiltIn(); };
+        IsVisibleChanged += (_, e) => { if (e.NewValue is true && DataContext is PatchManagerViewModel viewModel) viewModel.RefreshBuiltIn(); };
     }
 }

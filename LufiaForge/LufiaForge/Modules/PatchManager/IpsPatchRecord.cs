@@ -1,8 +1,6 @@
 namespace LufiaForge.Modules.PatchManager;
 
-/// <summary>
-/// Represents one decoded record from an IPS patch file, for display in the UI.
-/// </summary>
+// one decoded record of an IPS patch file, for showing in the UI
 public class IpsPatchRecord
 {
     public int  Offset  { get; init; }

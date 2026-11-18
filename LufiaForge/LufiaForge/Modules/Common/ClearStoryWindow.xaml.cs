@@ -6,8 +6,8 @@ using System.Windows.Controls;
 
 namespace LufiaForge.Modules.Common;
 
-/// <summary>Picks where a new game starts after the story is cleared (<see cref="StoryClear"/> for Lufia 1, an arrival
-/// point; <see cref="L2StoryClear"/> for Lufia II, a preset point).</summary>
+// picks where a new game starts once the story is cleared. Lufia 1 uses an arrival point (StoryClear), Lufia II a
+// preset point (L2StoryClear)
 public partial class ClearStoryWindow : Window
 {
     private sealed record Choice(int Id, string Label);
@@ -31,38 +31,38 @@ public partial class ClearStoryWindow : Window
             MapCombo.SelectedItem = maps.FirstOrDefault(m => m.Id == 0x03) ?? maps.FirstOrDefault();
             return;
         }
-        var l1 = MapCatalog.ScanNamed(rom).Where(m => m.MapId != StoryClear.OpeningMap && m.MapId != LufiaMap.WorldMap).Select(m => new Choice(m.MapId, m.Label)).ToList();
-        MapCombo.ItemsSource = l1;
-        MapCombo.SelectedItem = l1.FirstOrDefault(m => m.Id == 0x04) ?? l1.FirstOrDefault();
+        var lufia1Maps = MapCatalog.ScanNamed(rom).Where(m => m.MapId != StoryClear.OpeningMap && m.MapId != LufiaMap.WorldMap).Select(m => new Choice(m.MapId, m.Label)).ToList();
+        MapCombo.ItemsSource = lufia1Maps;
+        MapCombo.SelectedItem = lufia1Maps.FirstOrDefault(m => m.Id == 0x04) ?? lufia1Maps.FirstOrDefault();
     }
 
     private void MapCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        var list = new List<Choice>();
+        var points = new List<Choice>();
         if (MapCombo.SelectedItem is Choice map)
         {
             try
             {
                 if (_rom.IsLufia2)
-                    foreach (var p in L2StoryClear.PresetPoints(_rom, map.Id))
-                        list.Add(new Choice(p.Id, $"{p.Id:X2}  at ({p.X}, {p.Y})"));
+                    foreach (var preset in L2StoryClear.PresetPoints(_rom, map.Id))
+                        points.Add(new Choice(preset.Id, $"{preset.Id:X2}  at ({preset.X}, {preset.Y})"));
                 else
-                    // arrival points are numbered from 1 in the warp commands
-                    foreach (var a in LufiaMap.Load(_rom, map.Id).Arrivals)
-                        list.Add(new Choice(a.Index + 1, $"{a.Index + 1}  at ({a.X}, {a.Y})"));
+                    // the warp commands number arrival points from 1
+                    foreach (var arrival in LufiaMap.Load(_rom, map.Id).Arrivals)
+                        points.Add(new Choice(arrival.Index + 1, $"{arrival.Index + 1}  at ({arrival.X}, {arrival.Y})"));
             }
             catch { }
         }
-        ArrivalCombo.ItemsSource = list;
-        ArrivalCombo.SelectedIndex = list.Count > 0 ? 0 : -1;
-        OkButton.IsEnabled = list.Count > 0;
+        ArrivalCombo.ItemsSource = points;
+        ArrivalCombo.SelectedIndex = points.Count > 0 ? 0 : -1;
+        OkButton.IsEnabled = points.Count > 0;
     }
 
     private void Ok_Click(object sender, RoutedEventArgs e)
     {
-        if (MapCombo.SelectedItem is not Choice m || ArrivalCombo.SelectedItem is not Choice a) return;
-        StartMap = m.Id;
-        StartArrival = a.Id;
+        if (MapCombo.SelectedItem is not Choice map || ArrivalCombo.SelectedItem is not Choice point) return;
+        StartMap = map.Id;
+        StartArrival = point.Id;
         DialogResult = true;
     }
 }

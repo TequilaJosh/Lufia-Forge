@@ -13,7 +13,7 @@ using System.Windows.Media.Imaging;
 
 namespace LufiaForge.Modules.TextEditor;
 
-/// <summary>One dialogue box in the list.</summary>
+// one dialogue box in the list
 public partial class DialogueRow : ObservableObject
 {
     public DialogueLine Line { get; init; } = null!;
@@ -25,10 +25,8 @@ public partial class DialogueRow : ObservableObject
     [ObservableProperty] private bool _isEdited;
 }
 
-/// <summary>
-/// One entry of the character picker: everyone who speaks, recognised by their sprite (the same character keeps
-/// their sprite on every map) or as a party member.
-/// </summary>
+// one entry of the character picker. that's everyone who speaks, recognised by their sprite (a character keeps the
+// same sprite on every map) or as a party member
 public sealed class CharacterOption
 {
     public string Key { get; init; } = "";
@@ -37,10 +35,8 @@ public sealed class CharacterOption
     public ImageSource? Picture { get; init; }
 }
 
-/// <summary>
-/// Text editor: every dialogue box of the game in one list (where it happens, who says it, with a picture
-/// of the character), and an editor for the selected box. Saving goes through the event script writer.
-/// </summary>
+// the text editor: every dialogue box in the game in one list (where it happens, who says it, with a picture of the
+// character) and an editor for the picked box. saving goes through the event script writer
 public partial class TextEditorViewModel : ObservableObject, LufiaForge.ViewModels.IPendingEdits
 {
     private RomBuffer? _rom;
@@ -51,7 +47,7 @@ public partial class TextEditorViewModel : ObservableObject, LufiaForge.ViewMode
 
     public ObservableCollection<DialogueRow> Rows { get; } = new();
     public ObservableCollection<string> MapFilters { get; } = new();
-    /// <summary>Everyone who speaks; picking one lists all their lines on every map.</summary>
+    // everyone who speaks. pick one to list all their lines on every map
     public ObservableCollection<CharacterOption> CharacterFilters { get; } = new();
     [ObservableProperty] private CharacterOption? _characterFilter;
     private readonly List<int> _mapFilterIds = new();
@@ -93,27 +89,29 @@ public partial class TextEditorViewModel : ObservableObject, LufiaForge.ViewMode
         {
             maps = MapCatalog.ScanNamed(rom);
             lines = await Task.Run(() => DialogueIndex.Build(rom, maps.Select(m => m.MapId),
-                (i, n) => Application.Current?.Dispatcher.BeginInvoke(() => StatusText = $"Collecting dialogue… map {i + 1} of {n}")));
+                (mapIndex, mapCount) => Application.Current?.Dispatcher.BeginInvoke(() => StatusText = $"Collecting dialogue… map {mapIndex + 1} of {mapCount}")));
         }
         catch (Exception ex)
         {
-            // (an odd event in a hack): the tab says so and tries again the next time instead of staying "Collecting"
+            // (some odd event in a hack) the tab says so and tries again next time, instead of sitting on "Collecting"
             if (build == _buildToken) { IsBusy = false; _builtVersion = -1; StatusText = "The dialogue couldn't be collected: " + ex.Message; }
             return;
         }
         if (build != _buildToken || rom != _rom) return;   // a newer build (or another ROM) took over
-        // where the user is (kept when the list is rebuilt after a line moved; read now: rows can be picked meanwhile)
+        // where the user is (kept when the list gets rebuilt after a line moved). read it now, rows can get picked in
+        // the meantime
         var keepLine = SelectedRow?.Line;
         int keepMap = MapFilterIndex >= 0 && MapFilterIndex < _mapFilterIds.Count ? _mapFilterIds[MapFilterIndex] : -1;
         string? keepCharacter = CharacterFilter?.Key;
         string keepText = EditText;
-        _replacingList = true;   // (the rows go away and come back: nothing is written for that)
+        _replacingList = true;   // (the rows go away and come back, nothing gets written for that)
         try { FillList(lines, maps, keepMap, keepCharacter); }
         finally { _replacingList = false; }
         IsBusy = false;
         StatusText = $"{_all.Count} dialogue boxes on {MapFilters.Count - 1} maps. Pick one to edit it.";
-        // the same box again, found by its text (lines added or removed before it elsewhere move its number; a box whose
-        // text was changed elsewhere isn't picked by number: typing would go into another box)
+        // pick the same box again, found by its text. lines added or removed before it somewhere else change its
+        // number, and a box whose text got changed somewhere else isn't picked by number (typing would go into
+        // another box)
         if (keepLine != null && Rows.FirstOrDefault(r => r.Line.MapId == keepLine.MapId && r.Line.Event == keepLine.Event &&
                                                          r.Line.IsCodeView == keepLine.IsCodeView && r.Line.Text == keepLine.Text) is { } again)
         {
@@ -123,7 +121,7 @@ public partial class TextEditorViewModel : ObservableObject, LufiaForge.ViewMode
         else if (keepLine != null && keepText.Replace("\r", "") != keepLine.Text)
         {
             StatusText = "The box you were editing was changed somewhere else (another tab, Undo or a patch), so your text wasn't written.";
-            // there is no box to keep it in: shown so it can be copied (Ctrl+C copies a message box) and put in again
+            // there's no box to keep it in, so show it so it can be copied (Ctrl+C copies a message box) and put back in
             if (Application.Current != null)
                 MessageBox.Show(StatusText + " Your text (Ctrl+C copies this message):\n\n" + keepText.Replace("\r", ""), "Dialogue not written",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -133,31 +131,31 @@ public partial class TextEditorViewModel : ObservableObject, LufiaForge.ViewMode
     private void FillList(List<DialogueLine> lines, List<MapInfo> maps, int keepMap, string? keepCharacter)
     {
         var labels = maps.ToDictionary(m => m.MapId, m => m.Label);
-        _all = lines.Select(l => new DialogueRow
+        _all = lines.Select(line => new DialogueRow
         {
-            Line = l,
-            MapLabel = labels.GetValueOrDefault(l.MapId, $"{l.MapId:X2}"),
-            Picture = PictureFor(l.Sprite),
-            Preview = Flatten(l.Text),
+            Line = line,
+            MapLabel = labels.GetValueOrDefault(line.MapId, $"{line.MapId:X2}"),
+            Picture = PictureFor(line.Sprite),
+            Preview = Flatten(line.Text),
         }).ToList();
 
         MapFilters.Clear(); _mapFilterIds.Clear();
         MapFilters.Add("All maps"); _mapFilterIds.Add(-1);
-        foreach (var m in maps.Where(m => lines.Any(l => l.MapId == m.MapId)))
+        foreach (var map in maps.Where(m => lines.Any(l => l.MapId == m.MapId)))
         {
-            MapFilters.Add(m.Label); _mapFilterIds.Add(m.MapId);
+            MapFilters.Add(map.Label); _mapFilterIds.Add(map.MapId);
         }
         MapFilterIndex = Math.Max(0, _mapFilterIds.IndexOf(keepMap));
         BuildCharacterFilters();
-        if (keepCharacter != null && CharacterFilters.FirstOrDefault(c => c.Key == keepCharacter) is { } cf) CharacterFilter = cf;
+        if (keepCharacter != null && CharacterFilters.FirstOrDefault(c => c.Key == keepCharacter) is { } character) CharacterFilter = character;
         ApplyFilter();
     }
 
-    /// <summary><see cref="RomBuffer.Version"/> when the list was read.</summary>
+    // RomBuffer.Version when the list was read
     private int _builtVersion = -1;
 
-    /// <summary>The tab is shown again: when another tab, Undo or a patch changed the ROM since the list was read, it is
-    /// read again (not while a box has text not written yet: writing finds that box again, see <see cref="Locate"/>).</summary>
+    // the tab is shown again. if another tab, Undo or a patch changed the ROM since the list was read, read it again
+    // (not while a box has text that isn't written yet, writing finds that box again, see Locate)
     public void RefreshIfStale()
     {
         if (_rom == null || IsBusy || _rom.Version == _builtVersion || HasPendingEdits) return;
@@ -166,22 +164,22 @@ public partial class TextEditorViewModel : ObservableObject, LufiaForge.ViewMode
 
     private static string Flatten(string text)
     {
-        var t = text.Replace("\n", " ").Trim();
-        return t.Length > 140 ? t[..140] + "…" : t;
+        var flat = text.Replace("\n", " ").Trim();
+        return flat.Length > 140 ? flat[..140] + "…" : flat;
     }
 
     private ImageSource? PictureFor(int sprite)
     {
         if (_rom == null || sprite < 0) return null;
-        if (_pictures.TryGetValue(sprite, out var img)) return img;
-        if (NpcSprites.Render(_rom, sprite) is var (px, w, h))
+        if (_pictures.TryGetValue(sprite, out var picture)) return picture;
+        if (NpcSprites.Render(_rom, sprite) is var (pixels, width, height))
         {
-            var bmp = BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgra32, null, px, w * 4);
-            bmp.Freeze();
-            img = bmp;
+            var bitmap = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgra32, null, pixels, width * 4);
+            bitmap.Freeze();
+            picture = bitmap;
         }
-        _pictures[sprite] = img;
-        return img;
+        _pictures[sprite] = picture;
+        return picture;
     }
 
     partial void OnSearchTextChanged(string value) => ApplyFilter();
@@ -189,11 +187,11 @@ public partial class TextEditorViewModel : ObservableObject, LufiaForge.ViewMode
     partial void OnOnlyCharactersChanged(bool value) => ApplyFilter();
     partial void OnCharacterFilterChanged(CharacterOption? value) => ApplyFilter();
 
-    /// <summary>Who a line belongs to: the sprite of the character speaking, or the party member.</summary>
-    private static string CharacterKey(DialogueLine l)
+    // who a line belongs to: the sprite of the character speaking, or the party member
+    private static string CharacterKey(DialogueLine line)
     {
-        if (l.Speaker.StartsWith("Party actor ") && int.TryParse(l.Speaker.AsSpan(12, 1), out int a)) return $"party:{a}";
-        return l.Sprite >= 0 ? $"sprite:{l.Sprite}" : "";
+        if (line.Speaker.StartsWith("Party actor ") && int.TryParse(line.Speaker.AsSpan(12, 1), out int actor)) return $"party:{actor}";
+        return line.Sprite >= 0 ? $"sprite:{line.Sprite}" : "";
     }
 
     private static string PartyName(int actor) => actor switch
@@ -208,18 +206,18 @@ public partial class TextEditorViewModel : ObservableObject, LufiaForge.ViewMode
         CharacterFilters.Add(new CharacterOption { Key = "", Label = "Everyone", Detail = $"{_all.Count} lines" });
         var groups = _all.GroupBy(r => CharacterKey(r.Line)).Where(g => g.Key.Length > 0)
                          .OrderBy(g => g.Key.StartsWith("party") ? 0 : 1).ThenByDescending(g => g.Count());
-        foreach (var g in groups)
+        foreach (var group in groups)
         {
-            int maps = g.Select(r => r.Line.MapId).Distinct().Count();
-            int events = g.Select(r => (r.Line.MapId, r.Line.Event)).Distinct().Count();
-            bool party = g.Key.StartsWith("party");
-            int n = int.Parse(g.Key[(g.Key.IndexOf(':') + 1)..]);
+            int maps = group.Select(r => r.Line.MapId).Distinct().Count();
+            int events = group.Select(r => (r.Line.MapId, r.Line.Event)).Distinct().Count();
+            bool party = group.Key.StartsWith("party");
+            int number = int.Parse(group.Key[(group.Key.IndexOf(':') + 1)..]);
             CharacterFilters.Add(new CharacterOption
             {
-                Key = g.Key,
-                Label = party ? PartyName(n) : $"Sprite {n:X2}",
-                Detail = $"{g.Count()} lines · {events} events · {maps} maps",
-                Picture = party ? null : g.First().Picture,
+                Key = group.Key,
+                Label = party ? PartyName(number) : $"Sprite {number:X2}",
+                Detail = $"{group.Count()} lines · {events} events · {maps} maps",
+                Picture = party ? null : group.First().Picture,
             });
         }
         CharacterFilter = CharacterFilters[0];
@@ -230,15 +228,15 @@ public partial class TextEditorViewModel : ObservableObject, LufiaForge.ViewMode
         var keep = SelectedRow;
         Rows.Clear();
         int map = MapFilterIndex >= 0 && MapFilterIndex < _mapFilterIds.Count ? _mapFilterIds[MapFilterIndex] : -1;
-        string q = SearchText.Trim();
-        foreach (var r in _all)
+        string term = SearchText.Trim();
+        foreach (var row in _all)
         {
-            if (map >= 0 && r.Line.MapId != map) continue;
-            if (OnlyCharacters && !r.Line.Source.StartsWith("Character") && !r.Line.Speaker.StartsWith("Character")) continue;
-            if (CharacterFilter is { Key.Length: > 0 } cf && CharacterKey(r.Line) != cf.Key) continue;
-            if (q.Length > 0 && !r.Line.Text.Contains(q, StringComparison.OrdinalIgnoreCase) &&
-                !r.Header.Contains(q, StringComparison.OrdinalIgnoreCase)) continue;
-            Rows.Add(r);
+            if (map >= 0 && row.Line.MapId != map) continue;
+            if (OnlyCharacters && !row.Line.Source.StartsWith("Character") && !row.Line.Speaker.StartsWith("Character")) continue;
+            if (CharacterFilter is { Key.Length: > 0 } character && CharacterKey(row.Line) != character.Key) continue;
+            if (term.Length > 0 && !row.Line.Text.Contains(term, StringComparison.OrdinalIgnoreCase) &&
+                !row.Header.Contains(term, StringComparison.OrdinalIgnoreCase)) continue;
+            Rows.Add(row);
         }
         if (keep != null && Rows.Contains(keep)) SelectedRow = keep;
         if (!IsBusy) StatusText = $"{Rows.Count} of {_all.Count} dialogue boxes shown.";
@@ -252,12 +250,12 @@ public partial class TextEditorViewModel : ObservableObject, LufiaForge.ViewMode
         _loadingSelection = false;
         SelectedPicture = value?.Picture;
         if (value == null) { LocationText = ""; SizeText = ""; KeepTyping(); return; }
-        var l = value.Line;
-        LocationText = $"{value.MapLabel} · event {l.Event}" + (l.Source.Length > 0 ? $" ({l.Source})" : "") +
-                       $" · line {l.Line + 1}" + (l.IsCodeView ? $" of the code at 0x{l.RegionStart:X6}" : "") +
-                       $"\n{l.Speaker} · ROM 0x{l.Offset:X6}";
+        var line = value.Line;
+        LocationText = $"{value.MapLabel} · event {line.Event}" + (line.Source.Length > 0 ? $" ({line.Source})" : "") +
+                       $" · line {line.Line + 1}" + (line.IsCodeView ? $" of the code at 0x{line.RegionStart:X6}" : "") +
+                       $"\n{line.Speaker} · ROM 0x{line.Offset:X6}";
         UpdateSize();
-        KeepTyping();   // (the box left couldn't be written: back to it)
+        KeepTyping();   // (the box we left couldn't be written, so go back to it)
     }
 
     partial void OnEditTextChanged(string value)
@@ -266,56 +264,54 @@ public partial class TextEditorViewModel : ObservableObject, LufiaForge.ViewMode
         UpdateSize();
     }
 
-    private EventScript? LoadScript(DialogueLine l) =>
+    private EventScript? LoadScript(DialogueLine line) =>
         _rom == null ? null
-        : l.IsCodeView ? EventScript.LoadAt(_rom, l.MapId, l.Event, l.RegionStart, l.JumpBase)
-        : EventScript.Load(_rom, l.MapId, l.Event);
+        : line.IsCodeView ? EventScript.LoadAt(_rom, line.MapId, line.Event, line.RegionStart, line.JumpBase)
+        : EventScript.Load(_rom, line.MapId, line.Event);
 
-    /// <summary>
-    /// Where a row's box is in its event now: its line number while that line still holds the box's text, else the one
-    /// line of the event with that text (another tab added or removed lines before it); -1 when it can't be told (the box
-    /// was changed elsewhere, or the event that jumps to the code it is in moved). The list is read when the tab opens,
-    /// so a row's number alone could point at another box by now.
-    /// </summary>
-    public static int Locate(RomBuffer rom, EventScript? s, DialogueLine l)
+    // where a row's box is in its event right now. its line number while that line still has the box's text,
+    // otherwise the one line of the event with that text (another tab added or removed lines before it). -1 if we
+    // can't tell (the box got changed somewhere else, or the event that jumps to the code it's in moved). the list is
+    // read when the tab opens, so a row's number alone could point at a different box by now
+    public static int Locate(RomBuffer rom, EventScript? script, DialogueLine line)
     {
-        if (s == null) return -1;
-        if (l.IsCodeView && LufiaMap.EventScriptOffset(rom, l.MapId, l.Event) != l.JumpBase) return -1;
-        if (l.Line < s.Ops.Count && s.Ops[l.Line].IsText && s.Ops[l.Line].OriginalText == l.Text) return l.Line;
-        var same = Enumerable.Range(0, s.Ops.Count).Where(i => s.Ops[i].IsText && s.Ops[i].OriginalText == l.Text).ToList();
+        if (script == null) return -1;
+        if (line.IsCodeView && LufiaMap.EventScriptOffset(rom, line.MapId, line.Event) != line.JumpBase) return -1;
+        if (line.Line < script.Ops.Count && script.Ops[line.Line].IsText && script.Ops[line.Line].OriginalText == line.Text) return line.Line;
+        var same = Enumerable.Range(0, script.Ops.Count).Where(i => script.Ops[i].IsText && script.Ops[i].OriginalText == line.Text).ToList();
         return same.Count == 1 ? same[0] : -1;
     }
 
     private void UpdateSize()
     {
         if (SelectedRow == null || _rom == null) { SizeText = ""; return; }
-        var s = LoadScript(SelectedRow.Line);
-        int at = Locate(_rom, s, SelectedRow.Line);
-        if (at < 0) { SizeText = "This box was changed somewhere else: it can't be written from here."; return; }
-        var op = s!.Ops[at];
-        int was = op.RawLength - op.Bytes.Length;
-        if (Core.DutchLetters.Unwritable(_rom, EditText) is string bad) { SizeText = "Can't be saved: " + bad + "."; return; }
-        int now = s.EncodeText(EditText, op.Terminator).Length;
-        SizeText = EditText.Replace("\r", "") == op.OriginalText ? $"{was} bytes"
-                 : now == was ? $"{now} bytes (same size: saved in place)"
-                 : $"{now} bytes (was {was}: the event will be moved{(SelectedRow.Line.IsCodeView ? ": not possible for this line, keep the same size" : "")})";
+        var script = LoadScript(SelectedRow.Line);
+        int lineIndex = Locate(_rom, script, SelectedRow.Line);
+        if (lineIndex < 0) { SizeText = "This box was changed somewhere else: it can't be written from here."; return; }
+        var op = script!.Ops[lineIndex];
+        int oldLength = op.RawLength - op.Bytes.Length;
+        if (Core.DutchLetters.Unwritable(_rom, EditText) is string problem) { SizeText = "Can't be saved: " + problem + "."; return; }
+        int newLength = script.EncodeText(EditText, op.Terminator).Length;
+        SizeText = EditText.Replace("\r", "") == op.OriginalText ? $"{oldLength} bytes"
+                 : newLength == oldLength ? $"{newLength} bytes (same size: saved in place)"
+                 : $"{newLength} bytes (was {oldLength}: the event will be moved{(SelectedRow.Line.IsCodeView ? ": not possible for this line, keep the same size" : "")})";
     }
 
-    /// <summary>The whole event the selected line is part of, in the event editor.</summary>
+    // opens the whole event the picked line is in, in the event editor
     [RelayCommand]
     private void OpenEvent()
     {
         if (_rom == null || SelectedRow == null) return;
-        var l = SelectedRow.Line;
+        var line = SelectedRow.Line;
         EventScript? script = null;
-        try { script = EventScript.Load(_rom, l.MapId, l.Event); } catch { }
+        try { script = EventScript.Load(_rom, line.MapId, line.Event); } catch { }
         if (script == null) { StatusText = "This line's event couldn't be opened."; return; }
-        var win = new LufiaForge.Modules.MapEditor.EventEditorWindow(_rom, script, $"{SelectedRow.MapLabel} · event {l.Event}", new Host(this))
+        var editor = new LufiaForge.Modules.MapEditor.EventEditorWindow(_rom, script, $"{SelectedRow.MapLabel} · event {line.Event}", new Host(this))
         { Owner = Application.Current?.MainWindow };
-        win.Show();
+        editor.Show();
     }
 
-    /// <summary>What the event editor needs when it's opened from here.</summary>
+    // what the event editor needs when it's opened from here
     private sealed class Host : LufiaForge.Modules.MapEditor.IEventHost
     {
         private readonly TextEditorViewModel _vm;
@@ -329,7 +325,7 @@ public partial class TextEditorViewModel : ObservableObject, LufiaForge.ViewMode
                 path: null, pathLabel: null);
     }
 
-    /// <summary>The line being edited differs from the ROM.</summary>
+    // the line being edited isn't what the ROM has
     public bool HasPendingEdits => _rom != null && SelectedRow != null && EditText.Replace("\r", "") != SelectedRow.Line.Text;
 
     public string? WritePendingEdits()
@@ -338,13 +334,12 @@ public partial class TextEditorViewModel : ObservableObject, LufiaForge.ViewMode
         return Write(SelectedRow!, quiet: true) ? null : StatusText;
     }
 
-    /// <summary>A box whose text couldn't be written when another one was picked: it is picked again with the text.</summary>
+    // a box whose text couldn't be written when another one got picked. it gets picked again with that text
     private (DialogueRow Row, string Text)? _keepTyping;
     private bool _restoringRow, _replacingList;
 
-    /// <summary>Picking another line: the one being edited is written first. When that fails, the text stays: the
-    /// box is picked again with it (see <see cref="OnSelectedRowChanged"/>). Not while the list is read again (it picks
-    /// the box again itself).</summary>
+    // picking another line writes the one being edited first. if that fails the text stays and the box gets picked
+    // again with it (see OnSelectedRowChanged). not while the list is being re-read (that picks the box again itself)
     partial void OnSelectedRowChanging(DialogueRow? oldValue, DialogueRow? newValue)
     {
         if (_restoringRow || _replacingList) return;
@@ -354,22 +349,22 @@ public partial class TextEditorViewModel : ObservableObject, LufiaForge.ViewMode
 
     private void KeepTyping()
     {
-        if (_keepTyping is not { } k) return;
+        if (_keepTyping is not { } kept) return;
         _keepTyping = null;
         string why = StatusText;
         void Back()
         {
-            if (!Rows.Contains(k.Row)) Rows.Insert(0, k.Row);   // (filtered out meanwhile: listed while it is being edited)
+            if (!Rows.Contains(kept.Row)) Rows.Insert(0, kept.Row);   // (filtered out in the meantime, so list it while it's being edited)
             _restoringRow = true;
-            try { SelectedRow = k.Row; }
+            try { SelectedRow = kept.Row; }
             finally { _restoringRow = false; }
             _loadingSelection = true;
-            EditText = k.Text;
+            EditText = kept.Text;
             _loadingSelection = false;
             UpdateSize();
             StatusText = why + " Your text is kept: change it so it can be written, or Revert.";
         }
-        if (Application.Current?.Dispatcher is { } d) d.BeginInvoke(Back); else Back();
+        if (Application.Current?.Dispatcher is { } dispatcher) dispatcher.BeginInvoke(Back); else Back();
     }
 
     [RelayCommand]
@@ -379,27 +374,27 @@ public partial class TextEditorViewModel : ObservableObject, LufiaForge.ViewMode
         Write(SelectedRow, quiet: false);
     }
 
-    /// <summary>Writes the text into the row's box; false (with the reason in the status) when it couldn't be.</summary>
+    // writes the text into the row's box. false (with the reason in the status) if it couldn't
     private bool Write(DialogueRow row, bool quiet)
     {
         if (_rom == null) return false;
-        var l = row.Line;
+        var line = row.Line;
         try
         {
             bool current = _rom.Version == _builtVersion;
-            var s = LoadScript(l);
-            int at = Locate(_rom, s, l);
-            if (at < 0)
+            var script = LoadScript(line);
+            int lineIndex = Locate(_rom, script, line);
+            if (lineIndex < 0)
             {
                 StatusText = "Not applied: this box was changed somewhere else since the list was read (another tab, Undo or a patch)." +
                              (quiet ? " Apply reads the list again." : "");
-                // the list is read again; the box is picked again by its text when it's still there, else the text is shown to copy
+                // re-read the list. the box gets picked again by its text if it's still there, otherwise the text is shown to copy
                 if (!quiet && !IsBusy) _ = BuildAsync();
                 return false;
             }
-            s!.Ops[at].Text = EditText.Replace("\r", "");
-            if (!s.IsModified) { StatusText = "Nothing changed."; return true; }
-            bool fits = s.FitsInPlace();
+            script!.Ops[lineIndex].Text = EditText.Replace("\r", "");
+            if (!script.IsModified) { StatusText = "Nothing changed."; return true; }
+            bool fits = script.FitsInPlace();
             bool expand = _rom.Length >= MapWriter.ExpandedSize || quiet;
             if (!fits && !expand)
             {
@@ -410,13 +405,13 @@ public partial class TextEditorViewModel : ObservableObject, LufiaForge.ViewMode
                 { StatusText = "Not applied."; return false; }
                 expand = true;
             }
-            string result = s.Save(expand);
-            // only this write since the list was read, the box where the list has it: the list is still right
-            if (current && fits && at == l.Line) _builtVersion = _rom.Version;
-            l.Text = EditText.Replace("\r", "");
-            row.Preview = Flatten(l.Text);
+            string result = script.Save(expand);
+            // nothing but this write since the list was read, and the box is where the list has it, so the list is still right
+            if (current && fits && lineIndex == line.Line) _builtVersion = _rom.Version;
+            line.Text = EditText.Replace("\r", "");
+            row.Preview = Flatten(line.Text);
             row.IsEdited = true;
-            string what = $"Dialogue: {row.MapLabel}, event {l.Event}, line {l.Line + 1}";
+            string what = $"Dialogue: {row.MapLabel}, event {line.Event}, line {line.Line + 1}";
             _mainVm?.NotifyRomModified(what);
             StatusText = "✔ Saved in the project.";
             UpdateSize();
@@ -424,7 +419,7 @@ public partial class TextEditorViewModel : ObservableObject, LufiaForge.ViewMode
                 result + "\n\nIt's in your project now: saving the project keeps it (Ctrl+S, or on its own every 5 minutes), and File > Export ROM writes a playable ROM.",
                 path: null, pathLabel: null,
                 primaryText: _mainVm != null ? "💾 Save project now" : null, primary: () => _mainVm?.SaveNow());
-            if ((!s.IsCodeView && !fits) || at != l.Line) _ = BuildAsync();   // the event moved (line offsets changed), or the box's number did
+            if ((!script.IsCodeView && !fits) || lineIndex != line.Line) _ = BuildAsync();   // the event moved (line offsets changed), or the box's number did
             return true;
         }
         catch (Exception ex)
@@ -448,15 +443,15 @@ public partial class TextEditorViewModel : ObservableObject, LufiaForge.ViewMode
     private void ExportAll()
     {
         if (_all.Count == 0) return;
-        var dlg = new SaveFileDialog { Title = "Export all dialogue", Filter = "Text file (*.txt)|*.txt", FileName = "Lufia dialogue.txt" };
-        if (dlg.ShowDialog() != true) return;
-        using var w = new StreamWriter(dlg.FileName);
-        foreach (var r in _all)
+        var dialog = new SaveFileDialog { Title = "Export all dialogue", Filter = "Text file (*.txt)|*.txt", FileName = "Lufia dialogue.txt" };
+        if (dialog.ShowDialog() != true) return;
+        using var writer = new StreamWriter(dialog.FileName);
+        foreach (var row in _all)
         {
-            w.WriteLine($"== {r.Header} · {r.Line.Speaker} · ROM 0x{r.Line.Offset:X6}");
-            w.WriteLine(r.Line.Text);
-            w.WriteLine();
+            writer.WriteLine($"== {row.Header} · {row.Line.Speaker} · ROM 0x{row.Line.Offset:X6}");
+            writer.WriteLine(row.Line.Text);
+            writer.WriteLine();
         }
-        StatusText = $"Exported {_all.Count} dialogue boxes to {dlg.FileName}.";
+        StatusText = $"Exported {_all.Count} dialogue boxes to {dialog.FileName}.";
     }
 }
