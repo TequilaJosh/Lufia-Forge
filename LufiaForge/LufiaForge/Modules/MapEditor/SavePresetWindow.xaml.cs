@@ -6,7 +6,7 @@ using System.Windows.Media.Imaging;
 
 namespace LufiaForge.Modules.MapEditor;
 
-/// <summary>Names a piece of the map (the Area tool's selection) and saves it as a preset (<see cref="CustomPresets"/>).</summary>
+// names a piece of the map (the Area tool's selection) and saves it as a preset (CustomPresets)
 public partial class SavePresetWindow : Window
 {
     private readonly RomBuffer _rom;
@@ -28,18 +28,18 @@ public partial class SavePresetWindow : Window
     private CustomPresets.Preset Make() =>
         CustomPresets.FromArea(_rom, _map, _x, _y, _w, _h, NameBox.Text.Trim());
 
-    /// <summary>What will be saved: every block of the selection.</summary>
+    // shows what gets saved: every block of the selection
     private void Preview()
     {
         if (PreviewImage == null || _rom == null) return;
-        var p = Make();
-        var ts = MapTileset.ForMap(_rom, _map);
+        var preset = Make();
+        var tileset = MapTileset.ForMap(_rom, _map);
         int pw = _w * 16, ph = _h * 16;
         var px = new uint[pw * ph];
-        for (int i = 0; i < p.Cells.Length; i++)
+        for (int i = 0; i < preset.Cells.Length; i++)
         {
             int bx = i % _w * 16, by = i / _w * 16;
-            var block = ts.MetatilePixels(_map.GetTile(_x + i % _w, _y + i / _w) & 0x3FF);
+            var block = tileset.MetatilePixels(_map.GetTile(_x + i % _w, _y + i / _w) & 0x3FF);
             for (int y = 0; y < 16; y++) for (int x = 0; x < 16; x++) px[(by + y) * pw + bx + x] = block[y * 16 + x] | 0xFF000000;
         }
         var bmp = BitmapSource.Create(pw, ph, 96, 96, PixelFormats.Bgra32, null, px, pw * 4);

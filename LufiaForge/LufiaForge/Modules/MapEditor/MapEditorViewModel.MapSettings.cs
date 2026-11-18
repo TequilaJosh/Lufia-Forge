@@ -6,14 +6,14 @@ using System.Windows;
 
 namespace LufiaForge.Modules.MapEditor;
 
-/// <summary>Map settings (tileset, palette, size), new maps and tilesets, and adding / hiding characters.</summary>
+// map settings (tileset, palette, size), new maps and tilesets, adding / hiding characters
 public partial class MapEditorViewModel
 {
     public ObservableCollection<string> TilesetChoices { get; } = new();
     public ObservableCollection<string> SpriteChoices { get; } = new();
     public ObservableCollection<string> PaletteChoices { get; } = new();
 
-    /// <summary>Picking a tileset or palette shows the map with it at once (Apply writes it; Undo takes it back).</summary>
+    // picking a tileset or palette shows the map with it right away (Apply writes it, Undo takes it back)
     partial void OnTilesetChoiceChanged(int value) => PreviewGraphics();
     partial void OnMapPaletteChanged(int value) => PreviewGraphics();
 
@@ -54,22 +54,22 @@ public partial class MapEditorViewModel
     {
         if (_rom == null) return;
         var mode = TestStartPatch.Current(_rom);
-        var (m, e) = TestStartPatch.Target(_rom);
-        bool old = TestStartPatch.IsOldStyle(_rom);
+        var (targetMap, targetArrival) = TestStartPatch.Target(_rom);
+        bool oldStyle = TestStartPatch.IsOldStyle(_rom);
         _populating = true;
         TestStartMode = (int)mode;
-        if (mode == TestStartPatch.Mode.ChosenMap) TestStartArrival = Math.Max(1, e);
+        if (mode == TestStartPatch.Mode.ChosenMap) TestStartArrival = Math.Max(1, targetArrival);
         _populating = false;
         TestStartNote = mode switch
         {
             TestStartPatch.Mode.Off => "Power-on plays the opening as usual.",
             TestStartPatch.Mode.Fortress => "Power-on goes straight to the file select (Initial = new game with the Hero's name, Continue = load a save); a new game starts the prologue at the Fortress of Doom.",
             TestStartPatch.Mode.SkipPrologue => "Power-on goes straight to the file select; a new game (after the Hero's name) skips the prologue: the Hero's game starts.",
-            _ => $"Power-on goes straight to the file select; a new game puts the prologue party on map {m:X2} at arrival {e} (after the prologue's first scene).",
-        } + (old ? " (Made by an older Lufia Forge that skipped the game's start-up: click Apply to update it.)" : "");
+            _ => $"Power-on goes straight to the file select; a new game puts the prologue party on map {targetMap:X2} at arrival {targetArrival} (after the prologue's first scene).",
+        } + (oldStyle ?" (Made by an older Lufia Forge that skipped the game's start-up: click Apply to update it.)" : "");
     }
 
-    /// <summary>Sets the "test start" patch (see <see cref="TestStartPatch"/>).</summary>
+    // sets the "test start" patch (see TestStartPatch)
     [RelayCommand]
     private void ApplyTestStart()
     {
@@ -90,22 +90,22 @@ public partial class MapEditorViewModel
         catch (Exception ex) { Status = "Test start: " + ex.Message; }
     }
 
-    /// <summary>Fills the map settings from the loaded map (called after a map loads).</summary>
+    // fills the map settings from the loaded map (runs after a map loads)
     private void RefreshMapSettings()
     {
         if (_rom == null || _map == null) return;
         IsTownMap = !_map.IsWorld;
         TilesetChoices.Clear();
-        for (int t = 0, n = Tilesets.Count(_rom); t < n; t++) TilesetChoices.Add($"Tileset {t}" + TilesetUsers(t));
+        for (int tileset = 0, count = Tilesets.Count(_rom); tileset < count; tileset++) TilesetChoices.Add($"Tileset {tileset}" + TilesetUsers(tileset));
         if (PaletteChoices.Count != LufiaMap.MapPaletteCount)
         {
             PaletteChoices.Clear();
-            for (int p = 0; p < LufiaMap.MapPaletteCount; p++) PaletteChoices.Add($"Palette {p}");
+            for (int palette = 0; palette < LufiaMap.MapPaletteCount; palette++) PaletteChoices.Add($"Palette {palette}");
         }
         if (SpriteChoices.Count != NpcSprites.Count(_rom))
         {
             SpriteChoices.Clear();
-            for (int s = 0, n = NpcSprites.Count(_rom); s < n; s++) SpriteChoices.Add($"{s:X2}");
+            for (int sprite = 0, count = NpcSprites.Count(_rom); sprite < count; sprite++) SpriteChoices.Add($"{sprite:X2}");
         }
         _populating = true;
         TilesetChoice = _map.IsWorld ? -1 : _map.Tileset;
@@ -117,15 +117,15 @@ public partial class MapEditorViewModel
         RefreshGraphicsChoices();
     }
 
-    /// <summary>" (Alekia, Treck...)": the first maps that use a tileset, to recognise it in the list.</summary>
-    private string TilesetUsers(int t)
+    // " (Alekia, Treck...)": the first maps that use a tileset, so you can recognise it in the list
+    private string TilesetUsers(int tileset)
     {
-        var users = Maps.Where(m => m.MapId != LufiaMap.WorldMap && m.Tileset == t).Take(3).Select(m => string.IsNullOrEmpty(m.Name) ? $"map {m.MapId:X2}" : m.Name).ToList();
-        int more = Maps.Count(m => m.MapId != LufiaMap.WorldMap && m.Tileset == t) - users.Count;
+        var users = Maps.Where(m => m.MapId != LufiaMap.WorldMap && m.Tileset == tileset).Take(3).Select(m => string.IsNullOrEmpty(m.Name) ? $"map {m.MapId:X2}" : m.Name).ToList();
+        int more = Maps.Count(m => m.MapId != LufiaMap.WorldMap && m.Tileset == tileset) - users.Count;
         return users.Count == 0 ? "  (no map uses it)" : $"  ({string.Join(", ", users)}{(more > 0 ? $" +{more}" : "")})";
     }
 
-    /// <summary>Writes the tileset, palette and size (and any other edits of this map).</summary>
+    // writes the tileset, palette and size (and any other edits of this map)
     [RelayCommand]
     private void ApplyMapSettings()
     {
@@ -150,7 +150,7 @@ public partial class MapEditorViewModel
         catch (Exception ex) { Status = "Map settings: " + ex.Message; }
     }
 
-    /// <summary>A new tileset copied from this map's (graphics and blocks), used by this map from now on.</summary>
+    // a new tileset copied from this map's (graphics and blocks), this map uses it from now on
     [RelayCommand]
     private void NewTileset()
     {
@@ -161,17 +161,17 @@ public partial class MapEditorViewModel
                             MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;
         try
         {
-            int t = Tilesets.Add(_rom, _map.Tileset);
-            _map.SetTilesetAndPalette(t, _map.PaletteIndex);
+            int newTileset = Tilesets.Add(_rom, _map.Tileset);
+            _map.SetTilesetAndPalette(newTileset, _map.PaletteIndex);
             MarkEdited();
             ApplyToRom();
-            _mainVm?.NotifyRomModified($"New tileset {t}");
-            Status = $"Tileset {t} made (a copy of the old one) and given to map {_map?.MapId:X2}. Edit it with Edit blocks.";
+            _mainVm?.NotifyRomModified($"New tileset {newTileset}");
+            Status = $"Tileset {newTileset} made (a copy of the old one) and given to map {_map?.MapId:X2}. Edit it with Edit blocks.";
         }
         catch (Exception ex) { Status = "New tileset: " + ex.Message; }
     }
 
-    /// <summary>Deletes the open map (after listing what still leads to it).</summary>
+    // deletes the open map (after listing what still leads to it)
     [RelayCommand]
     private void DeleteMap()
     {
@@ -180,17 +180,17 @@ public partial class MapEditorViewModel
         if (_map.IsWorld) { Status = "The world map can't be deleted."; return; }
         string label = SelectedMap?.Label ?? $"map {id:X2}";
         Status = "Looking for what leads to this map...";
-        string Label(int m) => Maps.FirstOrDefault(x => x.MapId == m)?.Label ?? $"map {m:X2}";
+        string Label(int mapId) => Maps.FirstOrDefault(x => x.MapId == mapId)?.Label ?? $"map {mapId:X2}";
         var refs = MapFactory.References(_rom, id, Label);
-        bool mine = MapFactory.IsNewMap(_rom, id);
+        bool madeHere = MapFactory.IsNewMap(_rom, id);
         string text = $"Delete {label}?\n\n" +
-            (mine ? "It was made with Lufia Forge; its number becomes free for a new map and its space is given back."
+            (madeHere ? "It was made with Lufia Forge; its number becomes free for a new map and its space is given back."
                   : "It is one of the game's own maps: the story may take the party there, and deleting it can break the game.") +
             (refs.Count == 0 ? "\n\nNothing else leads to it." :
                 $"\n\nThese still lead to it and would crash the game until you change them:\n  " + string.Join("\n  ", refs.Take(15)) +
                 (refs.Count > 15 ? $"\n  ...and {refs.Count - 15} more" : "")) +
             "\n\nEdit > Undo takes it back.";
-        if (MessageBox.Show(text, "Delete map", MessageBoxButton.OKCancel, mine && refs.Count == 0 ? MessageBoxImage.Question : MessageBoxImage.Warning,
+        if (MessageBox.Show(text, "Delete map", MessageBoxButton.OKCancel, madeHere && refs.Count == 0 ? MessageBoxImage.Question : MessageBoxImage.Warning,
                 MessageBoxResult.Cancel) != MessageBoxResult.OK) { Status = "Not deleted."; return; }
         try
         {
@@ -210,11 +210,11 @@ public partial class MapEditorViewModel
         catch (Exception ex) { Status = "Delete map: " + ex.Message; }
     }
 
-    /// <summary>Room for new blocks on a map whose tileset has composite blocks (see <see cref="BlockRoom"/>).</summary>
+    // room for new blocks on a map whose tileset has composite blocks (see BlockRoom)
     [RelayCommand]
     private void MakeRoom() => MakeRoomFor(null);
 
-    /// <summary>Asks, then makes room; true when there's room now. <paramref name="why"/> starts the question.</summary>
+    // asks, then makes room. true if there's room now. why starts the question
     private bool MakeRoomFor(string? why)
     {
         if (_rom == null || _map == null) return false;
@@ -229,7 +229,7 @@ public partial class MapEditorViewModel
         try
         {
             int id = _map.MapId;
-            string done = BlockRoom.MakeRoom(_rom, id);
+            string doneText = BlockRoom.MakeRoom(_rom, id);
             _mainVm?.NotifyRomModified($"Map {id:X2}: room for new blocks");
             Maps.Clear();
             foreach (var m in MapCatalog.ScanNamed(_rom)) Maps.Add(m);
@@ -237,7 +237,7 @@ public partial class MapEditorViewModel
             SelectedMap = Maps.FirstOrDefault(m => m.MapId == id);
             _populatingName = false;
             LoadMap(id);
-            Status = "Room made: " + done;
+            Status = "Room made: " + doneText;
             return true;
         }
         catch (Exception ex) { Status = "Make room: " + ex.Message; return false; }
@@ -270,7 +270,7 @@ public partial class MapEditorViewModel
         catch (Exception ex) { Status = "New map: " + ex.Message; }
     }
 
-    /// <summary>Adds a character in the middle of the map (or at the first arrival point).</summary>
+    // adds a character in the middle of the map (or next to the first arrival point)
     [RelayCommand]
     private void AddNpc()
     {
@@ -279,8 +279,8 @@ public partial class MapEditorViewModel
         {
             int x = _map.Width / 2, y = _map.Height / 2;
             if (_map.Arrivals.Count > 0) { x = Math.Min(_map.Width - 1, _map.Arrivals[0].X + 1); y = _map.Arrivals[0].Y; }
-            // talking to character n runs event n + 1: numbers whose event is in use (a cutscene, a step-on area's) are
-            // skipped, kept as hidden characters, so the new one doesn't start someone else's event
+            // talking to character n runs event n + 1. numbers whose event is already used (a cutscene, a step-on
+            // area's) get skipped and kept as hidden characters, so the new one doesn't start someone else's event
             int index = MapEvents.FreeCharacterNumber(_rom, _map);
             if (index < 0)
             {
@@ -288,27 +288,27 @@ public partial class MapEditorViewModel
                 return;
             }
             int first = _map.Npcs.Count;
-            var n = _map.AddNpc(NpcSprite >= 0 ? NpcSprite : 0x0C, x, y, index);
+            var npc = _map.AddNpc(NpcSprite >= 0 ? NpcSprite : 0x0C, x, y, index);
             string skipped = index == first ? ""
                 : index == first + 1 ? $" Number {first + 1}'s event is taken (by another event or the step-on areas), so it stays a hidden character."
                 : $" Numbers {first + 1}-{index} have their events taken (by other events or the step-on areas), so they stay hidden characters.";
-            Status = $"Character {n.Index + 1} added (talking runs event {MapEvents.TalkEvent(n.Index)}, an empty one made when the map is written).{skipped} " +
+            Status = $"Character {npc.Index + 1} added (talking runs event {MapEvents.TalkEvent(npc.Index)}, an empty one made when the map is written).{skipped} " +
                      "Drag it into place; it's written by itself (or click Apply in the top bar).";
             MarkEdited();
             RebuildOverlays();
-            SelectNpc(n);
+            SelectNpc(npc);
         }
         catch (Exception ex) { Status = "Add character: " + ex.Message; }
     }
 
-    /// <summary>Hides the selected character (removes it if it is the last one).</summary>
+    // hides the selected character (removes it if it's the last one)
     [RelayCommand]
     private void HideNpc()
     {
         if (_map == null || _selection is not { kind: "npc" } sel) return;
-        var n = _map.Npcs[sel.index];
-        bool last = _map.Npcs.Count > 0 && _map.Npcs[^1] == n;
-        _map.RemoveNpc(n);
+        var npc = _map.Npcs[sel.index];
+        bool last = _map.Npcs.Count > 0 && _map.Npcs[^1] == npc;
+        _map.RemoveNpc(npc);
         MarkEdited();
         ClearSelection();
         RebuildOverlays();
@@ -318,26 +318,26 @@ public partial class MapEditorViewModel
     partial void OnNpcSpriteChanged(int value)
     {
         if (_populating || _map == null || value < 0 || _selection is not { kind: "npc" } sel) return;
-        var n = _map.Npcs[sel.index];
-        if (n.Sprite == value) return;
-        n.Sprite = value;
+        var npc = _map.Npcs[sel.index];
+        if (npc.Sprite == value) return;
+        npc.Sprite = value;
         MarkEdited();
         RebuildOverlays();
         Status = $"Character {sel.index + 1} now uses sprite {value:X2} (not yet applied).";
     }
 
-    /// <summary>Creates an empty talk event for the selected character, then opens it.</summary>
+    // makes an empty talk event for the selected character, then opens it
     private bool CreateTalkEvent(int npc)
     {
         if (_rom == null || _map == null) return false;
         if (!WritePendingFirst()) return false;
-        int ev = MapEvents.TalkEvent(npc);
-        if (MessageBox.Show($"Character {npc + 1} has no event yet. Make one (talking to it runs event {ev})?", "New event",
+        int eventNumber = MapEvents.TalkEvent(npc);
+        if (MessageBox.Show($"Character {npc + 1} has no event yet. Make one (talking to it runs event {eventNumber})?", "New event",
                 MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return false;
         try
         {
-            EventScript.CreateEvent(_rom, _map.MapId, ev);
-            _mainVm?.NotifyRomModified($"Map {_map.MapId:X2} event {ev}");
+            EventScript.CreateEvent(_rom, _map.MapId, eventNumber);
+            _mainVm?.NotifyRomModified($"Map {_map.MapId:X2} event {eventNumber}");
             return true;
         }
         catch (Exception ex) { Status = "New event: " + ex.Message; return false; }

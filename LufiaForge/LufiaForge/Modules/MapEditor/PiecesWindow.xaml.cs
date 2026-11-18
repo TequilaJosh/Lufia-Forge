@@ -9,7 +9,7 @@ using MouseEventArgs = System.Windows.Input.MouseEventArgs;
 
 namespace LufiaForge.Modules.MapEditor;
 
-/// <summary>Copy a piece of another map with the same tileset (drag a rectangle) to use as a stamp brush.</summary>
+// copy a piece of another map with the same tileset (drag a rectangle) to use as a stamp brush
 public partial class PiecesWindow : Window
 {
     private readonly RomBuffer _rom;
@@ -27,10 +27,10 @@ public partial class PiecesWindow : Window
     {
         InitializeComponent();
         _rom = rom;
-        var same = maps.Where(m => m.MapId != LufiaMap.WorldMap && m.Tileset == tileset).ToList();
-        HeaderText.Text = $"Pieces from other maps (tileset {tileset}: {same.Count} maps)";
-        MapList.ItemsSource = same;
-        MapList.SelectedItem = same.FirstOrDefault(m => m.MapId != currentMap) ?? same.FirstOrDefault();
+        var sameTileset = maps.Where(m => m.MapId != LufiaMap.WorldMap && m.Tileset == tileset).ToList();
+        HeaderText.Text = $"Pieces from other maps (tileset {tileset}: {sameTileset.Count} maps)";
+        MapList.ItemsSource = sameTileset;
+        MapList.SelectedItem = sameTileset.FirstOrDefault(m => m.MapId != currentMap) ?? sameTileset.FirstOrDefault();
     }
 
     private void MapList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -50,31 +50,31 @@ public partial class PiecesWindow : Window
     private (int x, int y)? Cell(MouseEventArgs e)
     {
         if (_shown == null) return null;
-        var p = e.GetPosition(MapImage);
-        int x = (int)(p.X / 16), y = (int)(p.Y / 16);
+        var pos = e.GetPosition(MapImage);
+        int x = (int)(pos.X / 16), y = (int)(pos.Y / 16);
         return x < 0 || y < 0 || x >= _shown.Width || y >= _shown.Height ? null : (x, y);
     }
 
     private void Surface_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (Cell(e) is not { } c) return;
-        _from = c;
+        if (Cell(e) is not { } cell) return;
+        _from = cell;
         Surface.CaptureMouse();
-        SetRect(c, c);
+        SetRect(cell, cell);
     }
 
     private void Surface_MouseMove(object sender, MouseEventArgs e)
     {
-        if (Cell(e) is not { } c) return;
-        HoverText.Text = $"Block ({c.x}, {c.y})";
-        if (_from is { } f && e.LeftButton == MouseButtonState.Pressed) SetRect(f, c);
+        if (Cell(e) is not { } cell) return;
+        HoverText.Text = $"Block ({cell.x}, {cell.y})";
+        if (_from is { } start && e.LeftButton == MouseButtonState.Pressed) SetRect(start, cell);
     }
 
     private void Surface_MouseLeftButtonUp(object sender, MouseButtonEventArgs e) { _from = null; Surface.ReleaseMouseCapture(); }
 
-    private void SetRect((int x, int y) a, (int x, int y) b)
+    private void SetRect((int x, int y) start, (int x, int y) end)
     {
-        int x1 = Math.Min(a.x, b.x), y1 = Math.Min(a.y, b.y), x2 = Math.Max(a.x, b.x), y2 = Math.Max(a.y, b.y);
+        int x1 = Math.Min(start.x, end.x), y1 = Math.Min(start.y, end.y), x2 = Math.Max(start.x, end.x), y2 = Math.Max(start.y, end.y);
         _rect = (x1, y1, x2, y2);
         Canvas.SetLeft(Pick, x1 * 16); Canvas.SetTop(Pick, y1 * 16);
         Pick.Width = (x2 - x1 + 1) * 16; Pick.Height = (y2 - y1 + 1) * 16;
@@ -89,13 +89,13 @@ public partial class PiecesWindow : Window
 
     private void Ok_Click(object sender, RoutedEventArgs e)
     {
-        if (_shown == null || _rect is not { } r) return;
-        int w = r.x2 - r.x1 + 1, h = r.y2 - r.y1 + 1;
-        var t = new ushort[w * h];
+        if (_shown == null || _rect is not { } rect) return;
+        int w = rect.x2 - rect.x1 + 1, h = rect.y2 - rect.y1 + 1;
+        var blocks = new ushort[w * h];
         for (int y = 0; y < h; y++)
             for (int x = 0; x < w; x++)
-                t[y * w + x] = (ushort)(_shown.GetTile(r.x1 + x, r.y1 + y) & 0x3FF);
-        ResultW = w; ResultH = h; ResultBlocks = t; ResultMap = _shown;
+                blocks[y * w + x] = (ushort)(_shown.GetTile(rect.x1 + x, rect.y1 + y) & 0x3FF);
+        ResultW = w; ResultH = h; ResultBlocks = blocks; ResultMap = _shown;
         ResultSource = (MapList.SelectedItem as MapInfo)?.Label ?? $"map {_shown.MapId:X2}";
         DialogResult = true;
         Close();

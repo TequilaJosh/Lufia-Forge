@@ -1,14 +1,14 @@
 namespace LufiaForge.Modules.MapEditor;
 
-/// <summary>What the event editor needs from the screen that opened it.</summary>
+// what the event editor needs from the screen that opened it
 public interface IEventHost
 {
-    /// <summary>Ask whether the ROM may be expanded to 2 MB.</summary>
+    // ask if the ROM can be expanded to 2 MB
     bool ConfirmExpand(string what);
-    /// <summary>The event was written to the ROM (for the save list / window title).</summary>
+    // the event got written to the ROM (for the save list / window title)
     void EventSaved(string what);
-    /// <summary>Show the "saved in the project" confirmation.</summary>
+    // show the "saved in the project" confirmation
     void ConfirmWritten(string heading, string details);
-    /// <summary>Show where a story flag is used (optional).</summary>
+    // show where a story flag is used (optional)
     void ShowFlag(int flag) { }
 }

@@ -9,7 +9,7 @@ using System.Windows.Media.Imaging;
 
 namespace LufiaForge.Modules.MapEditor;
 
-/// <summary>Ready-made structures from the game's maps (<see cref="Prefabs"/>), shown as they will look on this map; pick one to stamp it.</summary>
+// ready-made structures from the game's maps (Prefabs), drawn the way they'll look on this map. pick one to stamp it
 public partial class BuildingsWindow : Window
 {
     public sealed partial class Item : ObservableObject
@@ -18,7 +18,7 @@ public partial class BuildingsWindow : Window
         public required ImageSource Thumb { get; init; }
         public required string Label { get; init; }
         public required string Tip { get; init; }
-        /// <summary>A preset of the user's (can be deleted).</summary>
+        // set for the user's own presets (those can be deleted)
         public string? CustomId { get; init; }
         public Visibility DeleteVisibility => CustomId != null ? Visibility.Visible : Visibility.Collapsed;
         public double MaxW => Math.Min(176, Placement.Prefab.W * 16 * 1.5);
@@ -39,34 +39,34 @@ public partial class BuildingsWindow : Window
         var tilesets = new Dictionary<int, MapTileset>();
         var items = new List<Item>();
         var seen = new HashSet<string>();
-        foreach (var p in Prefabs.ForTileset(rom, map.Tileset, maps))
+        foreach (var prefab in Prefabs.ForTileset(rom, map.Tileset, maps))
         {
-            if (placer.Place(p) is not { } pl) continue;
-            if (!seen.Add(p.W + "x" + p.H + ":" + string.Join(",", pl.Cells))) continue;   // the same thing from a tileset with the same graphics
-            if (!tilesets.TryGetValue(pl.Threshold, out var ts))
-                tilesets[pl.Threshold] = ts = new MapTileset(rom, map.Tileset, map.PaletteIndex, pl.Threshold);
+            if (placer.Place(prefab) is not { } placement) continue;
+            if (!seen.Add(prefab.W + "x" + prefab.H + ":" + string.Join(",", placement.Cells))) continue;   // the same thing from a tileset with the same graphics
+            if (!tilesets.TryGetValue(placement.Threshold, out var tileset))
+                tilesets[placement.Threshold] = tileset = new MapTileset(rom, map.Tileset, map.PaletteIndex, placement.Threshold);
             items.Add(new Item
             {
-                Placement = pl,
-                Thumb = Render(ts, p.W, p.H, pl.Cells),
-                Label = $"{p.W} x {p.H}" + (p.Count > 1 ? $"  ({p.Count}x in the game)" : ""),
-                Tip = $"{p.W} x {p.H} blocks, from {p.Source}" + (p.Count > 1 ? $" ({p.Count} times in the game)" : ""),
+                Placement = placement,
+                Thumb = Render(tileset, prefab.W, prefab.H, placement.Cells),
+                Label = $"{prefab.W} x {prefab.H}" + (prefab.Count > 1 ? $"  ({prefab.Count}x in the game)" : ""),
+                Tip = $"{prefab.W} x {prefab.H} blocks, from {prefab.Source}" + (prefab.Count > 1 ? $" ({prefab.Count} times in the game)" : ""),
             });
         }
         // the user's own presets (made with the Area tool's Save as preset), on maps with the same graphics
         var mine = new List<Item>();
         uint graphics = CustomPresets.GraphicsOf(rom, map.Tileset);
-        foreach (var c in CustomPresets.Load().Where(c => c.Graphics == graphics).OrderByDescending(c => c.Made))
+        foreach (var preset in CustomPresets.Load().Where(c => c.Graphics == graphics).OrderByDescending(c => c.Made))
         {
-            if (placer.Place(c) is not { } pl) continue;
-            if (!tilesets.TryGetValue(pl.Threshold, out var ts))
-                tilesets[pl.Threshold] = ts = new MapTileset(rom, map.Tileset, map.PaletteIndex, pl.Threshold);
+            if (placer.Place(preset) is not { } placement) continue;
+            if (!tilesets.TryGetValue(placement.Threshold, out var tileset))
+                tilesets[placement.Threshold] = tileset = new MapTileset(rom, map.Tileset, map.PaletteIndex, placement.Threshold);
             mine.Add(new Item
             {
-                Placement = pl, CustomId = c.Id,
-                Thumb = Render(ts, c.W, c.H, pl.Cells),
-                Label = c.Name,
-                Tip = $"{c.Name}: {c.W} x {c.H} blocks, made from {c.From} on {c.Made:yyyy-MM-dd} (right-click to delete)",
+                Placement = placement, CustomId = preset.Id,
+                Thumb = Render(tileset, preset.W, preset.H, placement.Cells),
+                Label = preset.Name,
+                Tip = $"{preset.Name}: {preset.W} x {preset.H} blocks, made from {preset.From} on {preset.Made:yyyy-MM-dd} (right-click to delete)",
             });
         }
         var groups = items.GroupBy(i => i.Placement.Prefab.Category)
@@ -79,15 +79,15 @@ public partial class BuildingsWindow : Window
         if (groups.Count == 0) ChoiceText.Text = "No structures were found for this tileset.";
     }
 
-    private static ImageSource Render(MapTileset ts, int w, int h, ushort[] cells)
+    private static ImageSource Render(MapTileset tileset, int w, int h, ushort[] cells)
     {
         int pw = w * 16, ph = h * 16;
         var px = new uint[pw * ph];
-        for (int c = 0; c < cells.Length; c++)
+        for (int cell = 0; cell < cells.Length; cell++)
         {
-            if (cells[c] == Prefabs.Keep) continue;
-            var block = ts.MetatilePixels(cells[c]);
-            int bx = c % w * 16, by = c / w * 16;
+            if (cells[cell] == Prefabs.Keep) continue;
+            var block = tileset.MetatilePixels(cells[cell]);
+            int bx = cell % w * 16, by = cell / w * 16;
             for (int y = 0; y < 16; y++)
                 for (int x = 0; x < 16; x++)
                     px[(by + y) * pw + bx + x] = block[y * 16 + x] | 0xFF000000;
@@ -121,10 +121,10 @@ public partial class BuildingsWindow : Window
         if ((sender as FrameworkElement)?.DataContext is not Item { CustomId: { } id } item) return;
         if (MessageBox.Show($"Delete the preset \"{item.Label}\"?", "My presets", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
         CustomPresets.Remove(id);
-        if (GroupList.SelectedItem is Group g)
+        if (GroupList.SelectedItem is Group group)
         {
-            g.Items.Remove(item);
-            Gallery.ItemsSource = null; Gallery.ItemsSource = g.Items;
+            group.Items.Remove(item);
+            Gallery.ItemsSource = null; Gallery.ItemsSource = group.Items;
         }
         if (_selected == item) { _selected = null; OkButton.IsEnabled = false; ChoiceText.Text = "Preset deleted."; }
     }

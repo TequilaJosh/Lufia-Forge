@@ -3,29 +3,20 @@ using System.Text.Json;
 
 namespace LufiaForge.Modules.Disassembler;
 
-/// <summary>
-/// Persists address bookmarks (labels) to a sidecar file next to the ROM.
-/// Filename: <c>&lt;rom-filename&gt;.lfbookmarks.json</c>
-///
-/// Bookmarks are automatically overlaid onto the disassembly: any decoded address
-/// with a matching bookmark shows its label as a comment.
-/// </summary>
+// keeps address bookmarks (labels) in a file next to the ROM: <rom-filename>.lfbookmarks.json
+// they go on top of the disassembly by themselves: any decoded address with a bookmark shows its label as a comment
 public sealed class BookmarkStore
 {
-    private readonly Dictionary<int, Bookmark> _map = new();
+    private readonly Dictionary<int, Bookmark> _bookmarks = new();
     private string? _filePath;
 
-    // -------------------------------------------------------------------------
-    // Load / Save
-    // -------------------------------------------------------------------------
+    // load / save
 
-    /// <summary>
-    /// Associate this store with a ROM file path and load any existing bookmarks.
-    /// </summary>
+    // ties the store to a ROM file path and loads the bookmarks already there
     public void Open(string romFilePath)
     {
         _filePath = Path.ChangeExtension(romFilePath, null) + ".lfbookmarks.json";
-        _map.Clear();
+        _bookmarks.Clear();
 
         if (!File.Exists(_filePath)) return;
 
@@ -34,37 +25,34 @@ public sealed class BookmarkStore
             string json = File.ReadAllText(_filePath);
             var list    = JsonSerializer.Deserialize<List<Bookmark>>(json);
             if (list == null) return;
-            foreach (var b in list)
-                _map[b.SnesAddress] = b;
+            foreach (var bookmark in list)
+                _bookmarks[bookmark.SnesAddress] = bookmark;
         }
         catch
         {
-            // Corrupt file - start fresh, don't crash
+            // broken file, just start fresh instead of crashing
         }
     }
 
-    /// <summary>Persist the current bookmark set to disk.</summary>
     public void Save()
     {
         if (_filePath == null) return;
         try
         {
-            string json = JsonSerializer.Serialize(_map.Values.ToList(),
+            string json = JsonSerializer.Serialize(_bookmarks.Values.ToList(),
                 new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(_filePath, json);
         }
-        catch { /* non-fatal */ }
+        catch { /* not worth crashing over */ }
     }
 
-    // -------------------------------------------------------------------------
-    // CRUD
-    // -------------------------------------------------------------------------
+    // add / remove / look up
 
     public void Add(int snesAddress, string label, string? comment = null, string colorHex = "#C8942A")
     {
         // a bookmark put on a line marked as data keeps the data mark (it was lost, and the line turned back into code)
-        int dataLength = _map.TryGetValue(snesAddress, out var had) ? had.DataLength : 0;
-        _map[snesAddress] = new Bookmark
+        int dataLength = _bookmarks.TryGetValue(snesAddress, out var existing) ? existing.DataLength : 0;
+        _bookmarks[snesAddress] = new Bookmark
         {
             SnesAddress = snesAddress,
             Label       = label,
@@ -78,52 +66,50 @@ public sealed class BookmarkStore
 
     public void Remove(int snesAddress)
     {
-        _map.Remove(snesAddress);
+        _bookmarks.Remove(snesAddress);
         _regions = null;
         Save();
     }
 
     public Bookmark? GetByAddress(int snesAddress)
-        => _map.TryGetValue(snesAddress, out var b) ? b : null;
+        => _bookmarks.TryGetValue(snesAddress, out var bookmark) ? bookmark : null;
 
     public IReadOnlyList<Bookmark> GetAll()
-        => _map.Values.OrderBy(b => b.SnesAddress).ToList();
+        => _bookmarks.Values.OrderBy(b => b.SnesAddress).ToList();
 
     public bool HasAddress(int snesAddress)
-        => _map.ContainsKey(snesAddress);
+        => _bookmarks.ContainsKey(snesAddress);
 
-    // -------------------------------------------------------------------------
-    // Data regions
-    // -------------------------------------------------------------------------
+    // data regions
 
     private List<(int Start, int End, int Snes)>? _regions;
 
-    private List<(int Start, int End, int Snes)> Regions => _regions ??= _map.Values
+    private List<(int Start, int End, int Snes)> Regions => _regions ??= _bookmarks.Values
         .Where(b => b.DataLength > 0)
-        .Select(b => { int fo = LufiaForge.Core.Lufia1Constants.SnesAddressToFileOffset(b.SnesAddress); return (fo, fo + b.DataLength, b.SnesAddress); })
+        .Select(b => { int fileOffset = LufiaForge.Core.Lufia1Constants.SnesAddressToFileOffset(b.SnesAddress); return (fileOffset, fileOffset + b.DataLength, b.SnesAddress); })
         .Where(r => r.Item1 >= 0)
         .OrderBy(r => r.Item1).ToList();
 
-    /// <summary>The data region (file offsets, end exclusive) containing <paramref name="fileOffset"/>, or null.</summary>
+    // the data region (file offsets, end exclusive) that has fileOffset in it, or null
     public (int Start, int End)? DataRegionAtFile(int fileOffset)
     {
-        foreach (var r in Regions)
+        foreach (var region in Regions)
         {
-            if (r.Start > fileOffset) break;
-            if (fileOffset < r.End) return (r.Start, r.End);
+            if (region.Start > fileOffset) break;
+            if (fileOffset < region.End) return (region.Start, region.End);
         }
         return null;
     }
 
-    /// <summary>Mark bytes as data. Joins a region that ends right before them or starts right after them.</summary>
+    // marks bytes as data. joins a region that ends right before them or starts right after them
     public void MarkData(int snesAddress, int length)
     {
-        int fo = LufiaForge.Core.Lufia1Constants.SnesAddressToFileOffset(snesAddress);
-        if (fo < 0 || length <= 0) return;
-        var before = Regions.FirstOrDefault(r => r.End == fo);
-        var after = Regions.FirstOrDefault(r => r.Start == fo + length);
+        int fileOffset = LufiaForge.Core.Lufia1Constants.SnesAddressToFileOffset(snesAddress);
+        if (fileOffset < 0 || length <= 0) return;
+        var before = Regions.FirstOrDefault(r => r.End == fileOffset);
+        var after = Regions.FirstOrDefault(r => r.Start == fileOffset + length);
         Bookmark target;
-        if (before.End == fo && before.End != 0 && _map.TryGetValue(before.Snes, out var prev))
+        if (before.End == fileOffset && before.End != 0 && _bookmarks.TryGetValue(before.Snes, out var prev))
         {
             prev.DataLength += length;
             target = prev;
@@ -131,36 +117,32 @@ public sealed class BookmarkStore
         else
         {
             target = new Bookmark { SnesAddress = snesAddress, Label = $"DATA_{snesAddress:X6}", Comment = "Marked as data", ColorHex = "#C0392B", DataLength = length };
-            _map[snesAddress] = target;
+            _bookmarks[snesAddress] = target;
         }
-        if (after.Start == fo + length && after.End != 0 && _map.TryGetValue(after.Snes, out var next) && next != target)
+        if (after.Start == fileOffset + length && after.End != 0 && _bookmarks.TryGetValue(after.Snes, out var next) && next != target)
         {
             target.DataLength += next.DataLength;
-            _map.Remove(after.Snes);
+            _bookmarks.Remove(after.Snes);
         }
         _regions = null;
         Save();
     }
 
-    // -------------------------------------------------------------------------
-    // Annotation helper
-    // -------------------------------------------------------------------------
+    // labels in the listing
 
-    /// <summary>
-    /// Apply bookmark labels to a list of decoded lines as inline comments.
-    /// Lines whose SNES address matches a bookmark get the label prepended to their comment.
-    /// </summary>
+    // puts the bookmark labels on decoded lines as inline comments: a line whose SNES address has a bookmark
+    // gets the label in front of its comment
     public void AnnotateLines(IEnumerable<DisassemblyLine> lines)
     {
         foreach (var line in lines)
         {
-            if (!_map.TryGetValue(line.SnesAddress, out var bm)) continue;
+            if (!_bookmarks.TryGetValue(line.SnesAddress, out var bookmark)) continue;
 
-            string bookmarkComment = $"; {bm.Label}";
-            if (!string.IsNullOrEmpty(bm.Comment))
-                bookmarkComment += $"  ({bm.Comment})";
+            string bookmarkComment = $"; {bookmark.Label}";
+            if (!string.IsNullOrEmpty(bookmark.Comment))
+                bookmarkComment += $"  ({bookmark.Comment})";
 
-            // Prepend bookmark label; keep existing comment (e.g. REP/SEP annotation)
+            // label goes first, the comment already there stays (like the REP/SEP note)
             line.Comment = string.IsNullOrEmpty(line.Comment)
                 ? bookmarkComment
                 : $"{bookmarkComment}  {line.Comment}";

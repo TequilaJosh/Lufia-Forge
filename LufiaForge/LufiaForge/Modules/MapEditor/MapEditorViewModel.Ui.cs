@@ -5,24 +5,24 @@ using CommunityToolkit.Mvvm.Input;
 
 namespace LufiaForge.Modules.MapEditor;
 
-/// <summary>The editor's layout helpers: map search, zoom text, tool hints and tool keys.</summary>
+// map search, zoom text, tool hints and tool keys
 public partial class MapEditorViewModel
 {
     [ObservableProperty] private string _mapSearch = "";
     private ICollectionView? _mapsView;
 
-    /// <summary>The map list, filtered by the search box (name or number).</summary>
+    // the map list filtered by the search box (name or number)
     public ICollectionView MapsView
     {
         get
         {
             if (_mapsView != null) return _mapsView;
             _mapsView = CollectionViewSource.GetDefaultView(Maps);
-            _mapsView.Filter = o =>
+            _mapsView.Filter = item =>
             {
-                if (string.IsNullOrWhiteSpace(MapSearch) || o is not Core.Maps.MapInfo m) return true;
-                string q = MapSearch.Trim();
-                return m.Label.Contains(q, StringComparison.OrdinalIgnoreCase) || m.MapId.ToString("X2").Equals(q, StringComparison.OrdinalIgnoreCase);
+                if (string.IsNullOrWhiteSpace(MapSearch) || item is not Core.Maps.MapInfo map) return true;
+                string query = MapSearch.Trim();
+                return map.Label.Contains(query, StringComparison.OrdinalIgnoreCase) || map.MapId.ToString("X2").Equals(query, StringComparison.OrdinalIgnoreCase);
             };
             return _mapsView;
         }
@@ -33,7 +33,7 @@ public partial class MapEditorViewModel
     public string ZoomText => $"{Zoom * 100:0}%";
     partial void OnZoomChanged(double value) => OnPropertyChanged(nameof(ZoomText));
 
-    /// <summary>One line under the map: what the current tool does and its keys.</summary>
+    // the line under the map: what the current tool does and its keys
     public string ToolHint => Tool switch
     {
         MapTool.Select => "Select / move (S): click a character, exit, arrival point or treasure to edit it; drag to move; click the same block again for the next thing on it. Double-click an exit to go there.",
@@ -47,10 +47,10 @@ public partial class MapEditorViewModel
         _ => "",
     };
 
-    /// <summary>Single-key tool shortcuts (when no text box has the keyboard).</summary>
+    // single-key tool shortcuts (when no text box has the keyboard)
     public bool ToolKey(System.Windows.Input.Key key)
     {
-        MapTool? t = key switch
+        MapTool? tool = key switch
         {
             System.Windows.Input.Key.S or System.Windows.Input.Key.V => MapTool.Select,
             System.Windows.Input.Key.B or System.Windows.Input.Key.P => MapTool.Paint,
@@ -62,10 +62,10 @@ public partial class MapEditorViewModel
             System.Windows.Input.Key.G => MapTool.Fill,
             _ => null,
         };
-        if (t == null && IsMapLoaded && BrushSizeKey(key)) return true;
-        if (t == null && IsMapLoaded && TurnKey(key)) return true;
-        if (t == null || !IsMapLoaded) return false;
-        Tool = t.Value;
+        if (tool == null && IsMapLoaded && BrushSizeKey(key)) return true;
+        if (tool == null && IsMapLoaded && TurnKey(key)) return true;
+        if (tool == null || !IsMapLoaded) return false;
+        Tool = tool.Value;
         return true;
     }
 

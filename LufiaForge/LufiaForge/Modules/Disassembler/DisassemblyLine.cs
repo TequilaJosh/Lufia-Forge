@@ -2,35 +2,28 @@ using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace LufiaForge.Modules.Disassembler;
 
-/// <summary>
-/// One decoded 65816 instruction (or data annotation) in the disassembly.
-/// Extends ObservableObject so IsCurrentPc can drive live-PC highlighting without a full list rebuild.
-/// </summary>
+// one decoded 65816 instruction (or data line) in the disassembly
+// it's an ObservableObject so IsCurrentPc can move the live PC highlight without rebuilding the whole list
 public sealed partial class DisassemblyLine : ObservableObject
 {
-    // -------------------------------------------------------------------------
-    // Immutable decode-time fields (set via init)
-    // -------------------------------------------------------------------------
+    // set once when decoding
 
-    /// <summary>File offset in the ROM where this instruction starts.</summary>
+    // file offset in the ROM where the instruction starts
     public int FileOffset { get; init; }
 
-    /// <summary>SNES (LoROM) address for display, e.g. $808000.</summary>
+    // SNES (LoROM) address for display, like $808000
     public int SnesAddress { get; init; }
 
-    /// <summary>Raw bytes of the instruction (opcode + operand bytes).</summary>
+    // the instruction's bytes (opcode + operand bytes)
     public byte[] RawBytes { get; init; } = Array.Empty<byte>();
 
     public string Mnemonic { get; init; } = string.Empty;
     public string Operand  { get; init; } = string.Empty;
 
-    /// <summary>User-attached or auto-generated annotation (bookmark label, flag-change note).</summary>
+    // the user's note or one we made up (bookmark label, flag change note)
     public string? Comment { get; set; }
 
-    /// <summary>
-    /// Resolved target SNES address for branches and calls.
-    /// Null for indirect jumps or data lines.
-    /// </summary>
+    // SNES address a branch or call goes to. null for indirect jumps or data lines
     public int? JumpTarget { get; init; }
 
     public bool IsJump        { get; init; }
@@ -38,36 +31,30 @@ public sealed partial class DisassemblyLine : ObservableObject
     public bool IsReturn      { get; init; }
     public bool IsConditional { get; init; }
 
-    /// <summary>true when this byte could not be decoded as a valid instruction.</summary>
+    // true when the byte couldn't be decoded as a real instruction
     public bool IsData { get; init; }
 
-    /// <summary>
-    /// If this is a REP or SEP instruction, the CPU state after it executes.
-    /// Used by LinearDisassembler to propagate flag state through the routine.
-    /// </summary>
+    // for a REP or SEP, the CPU state after it runs.
+    // LinearDisassembler uses it to carry the flag state through the routine
     public CpuState? StateAfter { get; init; }
 
-    /// <summary>Base cycle count of the instruction (0 for data lines); 16-bit registers and page crossings add more.</summary>
+    // base cycle count (0 for data lines), 16-bit registers and page crossings add more
     public int BaseCycles { get; init; }
     public string CyclesText => IsData || BaseCycles == 0 ? "" : $"{BaseCycles} cycles (base; +1 per 16-bit byte, direct page not aligned or page crossed)";
 
-    // -------------------------------------------------------------------------
-    // Mutable live-tracking state
-    // -------------------------------------------------------------------------
+    // live tracking
 
-    /// <summary>Set to true when the live BizHawk PC is at this instruction's address.</summary>
+    // true when the live BizHawk PC is at this instruction's address
     [ObservableProperty] private bool _isCurrentPc;
 
-    // -------------------------------------------------------------------------
-    // Derived display helpers
-    // -------------------------------------------------------------------------
+    // for display
 
-    /// <summary>Formatted raw bytes, e.g. "AD 10 21".</summary>
+    // the raw bytes formatted, like "AD 10 21"
     public string RawBytesHex => string.Join(" ", RawBytes.Select(b => b.ToString("X2")));
 
-    /// <summary>Formatted SNES address, e.g. "$808000".</summary>
+    // the SNES address formatted, like "$808000"
     public string SnesAddressHex => $"${SnesAddress:X6}";
 
-    /// <summary>True when there is a statically-resolved jump/call target to navigate to.</summary>
+    // true when there's a known jump/call target to go to
     public bool HasJumpTarget => JumpTarget.HasValue && !IsData;
 }

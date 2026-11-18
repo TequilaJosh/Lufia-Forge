@@ -1,26 +1,24 @@
 namespace LufiaForge.Modules.Disassembler;
 
-/// <summary>
-/// The subset of 65816 CPU state that affects instruction decoding.
-/// M=false means 16-bit accumulator; X=false means 16-bit index registers.
-/// </summary>
+// the bits of 65816 CPU state that change how instructions decode
+// M=false means a 16-bit accumulator, X=false means 16-bit index registers
 public record CpuState
 {
-    /// <summary>Accumulator size flag. true = 8-bit, false = 16-bit.</summary>
+    // accumulator size flag. true = 8-bit, false = 16-bit
     public bool M { get; init; } = true;
 
-    /// <summary>Index register size flag. true = 8-bit, false = 16-bit.</summary>
+    // index register size flag. true = 8-bit, false = 16-bit
     public bool X { get; init; } = true;
 
-    /// <summary>Direct page register (D). Affects DP address display.</summary>
+    // direct page register (D), changes how DP addresses are shown
     public int DirectPage { get; init; } = 0;
 
-    /// <summary>Data bank register (DB). Affects absolute address resolution for display.</summary>
+    // data bank register (DB), changes how absolute addresses are shown
     public int DataBank { get; init; } = 0;
 
-    /// <summary>Default state: 8-bit M and X (native mode after reset / emulation mode).</summary>
+    // default state: 8-bit M and X (native mode after reset / emulation mode)
     public static readonly CpuState Default = new();
 
-    /// <summary>Fully 16-bit mode: M=false, X=false (after REP #$30).</summary>
+    // all 16-bit: M=false, X=false (after REP #$30)
     public static readonly CpuState Bits16 = new() { M = false, X = false };
 }
