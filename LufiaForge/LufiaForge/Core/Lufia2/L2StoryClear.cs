@@ -1,45 +1,40 @@
 namespace LufiaForge.Core.Lufia2;
 
-/// <summary>
-/// Lufia II: "Start from a clean slate" (Edit menu). Every map keeps what it is built of (tiles, collision, exits,
-/// doors, secret passages, preset points, puzzles) and loses its people, its events and cutscenes, and its treasure;
-/// a new game starts on a chosen map at one of its preset points.
-/// <list type="bullet">
-/// <item>People: the map's start-up script (map header's second u24, from $87:8000) creates them with 68 / 7B id
-/// sprite. Each of those becomes 1C, a jump to the next command (start-up jumps count from the start of the script's
-/// bank: $87:8000, or the event space bank an edited one was moved to), so the rest of
-/// the script (map mode 69, music 4B and its story conditions, battle background 74) runs as before.</item>
-/// <item>Events: the map's event block ("PH") lists +2 (run as the map loads; entries with id 03 are the key item of
-/// its locked doors and stay), +4 (scenes), +6 (talking), +8 (stepping on a trigger), +A and +C are emptied (FF).</item>
-/// <item>Treasure, cutscene triggers and the characters' places: the map info block's lists +0x26 (chests), +0x0C
-/// (cutscene triggers) and +0x10 (character starts: a character listed there still shows up without a create) are
-/// emptied.</item>
-/// <item>New game: the code at $83:ACCD loads map 02 and runs its scene 01 at preset point 06 (LDA #$02 / STA $05AC /
-/// STA $05AE ... LDA #$01 / STA $05B8 / LDA #$06 / STA $05B0); the map and the preset point are changed there, and
-/// the start map gets a scene 01 (show the leader, fade in) where its old scripts were (a scene that isn't there
-/// would leave the script pointer at $FFFF, $80:C18F).</item>
-/// </list>
-/// </summary>
+// lufia 2: "Start from a clean slate" (Edit menu). every map keeps what it's built of (tiles, collision, exits, doors,
+// secret passages, preset points, puzzles) and loses its people, its events and cutscenes, and its treasure. a new
+// game starts on a chosen map at one of its preset points
+// - people: the map's start-up script (map header's second u24, from $87:8000) creates them with 68 / 7B id sprite.
+//   each of those becomes 1C, a jump to the next command (start-up jumps count from the start of the script's bank:
+//   $87:8000, or the event space bank an edited one got moved to), so the rest of the script (map mode 69, music 4B
+//   and its story conditions, battle background 74) runs like before
+// - events: the map's event block ("PH") lists +2 (run as the map loads, entries with id 03 are the key item of its
+//   locked doors and stay), +4 (scenes), +6 (talking), +8 (stepping on a trigger), +A and +C get emptied (FF)
+// - treasure, cutscene triggers and the characters' places: the map info block's lists +0x26 (chests), +0x0C
+//   (cutscene triggers) and +0x10 (character starts, a character listed there still shows up without a create) get
+//   emptied
+// - new game: the code at $83:ACCD loads map 02 and runs its scene 01 at preset point 06 (LDA #$02 / STA $05AC /
+//   STA $05AE ... LDA #$01 / STA $05B8 / LDA #$06 / STA $05B0). the map and the preset point get changed there, and
+//   the start map gets a scene 01 (show the leader, fade in) where its old scripts were (a scene that isn't there
+//   would leave the script pointer at $FFFF, $80:C18F)
 public static class L2StoryClear
 {
     public const int NewGameMapAt = 0x1ACCE, NewGameSceneAt = 0x1ACD9, NewGamePresetAt = 0x1ACDE;
 
     public sealed record Result(int Maps, int People, int Events, int Treasure);
 
-    /// <summary>A map's preset points (map info list +0x0E: id, x, y), where a new game or a scene can put the party.</summary>
+    // a map's preset points (map info list +0x0E: id, x, y), where a new game or a scene can put the party
     public static List<(int Id, int X, int Y)> PresetPoints(RomBuffer rom, int map)
     {
         var list = new List<(int, int, int)>();
-        int b = L2MapInfo.Block(rom, map);
-        if (b < 0 || b + 0x30 > rom.Length) return list;
-        int size = rom.ReadUInt16Le(b);
-        for (int p = b + rom.ReadUInt16Le(b + 0x0E), guard = 0; guard < 64 && p > b && p + 3 <= b + size && rom.ReadByte(p) != 0xFF; guard++, p += 3)
+        int block = L2MapInfo.Block(rom, map);
+        if (block < 0 || block + 0x30 > rom.Length) return list;
+        int size = rom.ReadUInt16Le(block);
+        for (int p = block + rom.ReadUInt16Le(block + 0x0E), guard = 0; guard < 64 && p > block && p + 3 <= block + size && rom.ReadByte(p) != 0xFF; guard++, p += 3)
             list.Add((rom.ReadByte(p), rom.ReadByte(p + 1), rom.ReadByte(p + 2)));
         return list;
     }
 
-    /// <summary>The arrival scene a new game runs on the start map: show Maxim (2D 00), fade in (59 18), wait for the
-    /// fade (76), end.</summary>
+    // the arrival scene a new game runs on the start map: show Maxim (2D 00), fade in (59 18), wait for the fade (76), end
     private static readonly byte[] StartScene = { 0x2D, 0x00, 0x59, 0x18, 0x76, 0x00 };
 
     public static bool CanStart(RomBuffer rom) =>
@@ -65,18 +60,18 @@ public static class L2StoryClear
         {
             bool any = false;
             // people: the start-up script's 68 / 7B become a jump to the next command
-            // (start-up jumps count from the start of the script's bank: $87:8000, or the event space bank it was moved to)
-            int init = L2EventBlocks.InitScript(rom, m), initBase = L2EventBlocks.InitBase(init);
+            // (start-up jumps count from the start of the script's bank: $87:8000, or the event space bank it got moved to)
+            int initScript = L2EventBlocks.InitScript(rom, m), initBase = L2EventBlocks.InitBase(initScript);
             foreach (var (title, ops) in L2Script.MapScripts(rom, m))
             {
                 if (!title.StartsWith("Start-up")) continue;
-                foreach (var o in ops)
+                foreach (var scriptOp in ops)
                 {
-                    if (o.IsText || o.Length != 3 || o.At < initBase || o.At + 3 > initBase + 0x8000) continue;
-                    byte op = rom.ReadByte(o.At);
+                    if (scriptOp.IsText || scriptOp.Length != 3 || scriptOp.At < initBase || scriptOp.At + 3 > initBase + 0x8000) continue;
+                    byte op = rom.ReadByte(scriptOp.At);
                     if (op is not (0x68 or 0x7B)) continue;
-                    int next = o.At + 3 - initBase;
-                    rom.WriteBytes(o.At, new byte[] { 0x1C, (byte)next, (byte)(next >> 8) });
+                    int next = scriptOp.At + 3 - initBase;
+                    rom.WriteBytes(scriptOp.At, new byte[] { 0x1C, (byte)next, (byte)(next >> 8) });
                     people++; any = true;
                 }
             }
@@ -87,13 +82,13 @@ public static class L2StoryClear
                 events += L2Events.Entries(rom, block).Count;
                 foreach (int head in new[] { 2, 4, 6, 8, 0x0A, 0x0C })
                 {
-                    int at = block + rom.ReadUInt16Le(block + head);
-                    if (at <= block || at >= rom.Length) continue;
+                    int listAt = block + rom.ReadUInt16Le(block + head);
+                    if (listAt <= block || listAt >= rom.Length) continue;
                     var keep = new List<byte>();
-                    for (int i = 0; i < 128 && rom.ReadByte(at + i * 3) != 0xFF; i++)
-                        if (head == 2 && rom.ReadByte(at + i * 3) == 3) keep.AddRange(rom.ReadBytes(at + i * 3, 3));
+                    for (int i = 0; i < 128 && rom.ReadByte(listAt + i * 3) != 0xFF; i++)
+                        if (head == 2 && rom.ReadByte(listAt + i * 3) == 3) keep.AddRange(rom.ReadBytes(listAt + i * 3, 3));
                     keep.Add(0xFF);
-                    rom.WriteBytes(at, keep.ToArray());
+                    rom.WriteBytes(listAt, keep.ToArray());
                 }
                 any = true;
             }
@@ -104,8 +99,8 @@ public static class L2StoryClear
                 treasure += L2MapInfo.Read(rom, m).Count(e => e.Kind == "Treasure");
                 foreach (int head in new[] { 0x26, 0x0C, 0x10 })
                 {
-                    int at = info + rom.ReadUInt16Le(info + head);
-                    if (at > info && at < info + rom.ReadUInt16Le(info)) rom.WriteByte(at, 0xFF);
+                    int listAt = info + rom.ReadUInt16Le(info + head);
+                    if (listAt > info && listAt < info + rom.ReadUInt16Le(info)) rom.WriteByte(listAt, 0xFF);
                 }
                 any = true;
             }

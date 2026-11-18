@@ -2,36 +2,32 @@ using LufiaForge.Core.Audio;
 
 namespace LufiaForge.Core.Lufia2;
 
-/// <summary>
-/// Lufia II's songs: packed files 00-3E, each a 2-byte length and the image the SNES sends to sound RAM $4400
-/// ($80:941A). Same sequence format as Lufia 1 (<see cref="SongCodec"/>) with these differences, read from the driver:
-/// <code>
-/// header  "S2C", tempo, name +04-+0F, channel table +10-+17, +18 non-zero = the song's samples replace the shared
-///         ones, +19 echo setting, order-list offsets from $4400 at +20 (u16), sample list +30-+4F (FF ends; ids
-///         from 80 are drum notes)
-/// order   hh ll = phrase at ($44 + hh) &lt;&lt; 8 | ll, 80+t = transpose t, FF = channel stops
-/// phrase  F0 d x  vibrato depth x, wait d     F3 d    wait d (2 bytes)       F4 d t  tempo t
-///         F6 d m  pitch multiplier m/128       FE      this channel ends      FC 01   does nothing
-/// </code>
-/// Loops ($37D2 / $3813): FB takes the outer slot when it's free, else the inner one when that's free; FC n uses the
-/// inner slot while it's taken, and frees the slot it used when its count runs out.
-/// </summary>
+// lufia 2's songs: packed files 00-3E, each a 2-byte length and the image the snes sends to sound RAM $4400
+// ($80:941A). same sequence format as lufia 1 (SongCodec) with these differences, read from the driver:
+//   header  "S2C", tempo, name +04-+0F, channel table +10-+17, +18 non-zero = the song's samples replace the shared
+//           ones, +19 echo setting, order list offsets from $4400 at +20 (u16), sample list +30-+4F (FF ends, ids
+//           from 80 are drum notes)
+//   order   hh ll = phrase at ($44 + hh) << 8 | ll, 80+t = transpose t, FF = channel stops
+//   phrase  F0 d x  vibrato depth x, wait d     F3 d    wait d (2 bytes)       F4 d t  tempo t
+//           F6 d m  pitch multiplier m/128       FE      this channel ends      FC 01   does nothing
+// loops ($37D2 / $3813): FB takes the outer slot if it's free, otherwise the inner one if that's free. FC n uses the
+// inner slot while it's taken, and frees the slot it used when its count runs out
 public static class L2Songs
 {
     public const int Count = L2Sound.SongCount;
     public const int Base = L2Sound.SongAddress;
-    /// <summary>Room for a song between $4400 and the samples at $5800.</summary>
+    // room for a song between $4400 and the samples at $5800
     public const int MaxSize = 0x1400;
 
-    /// <summary>The unpacked file (2-byte length, then the image).</summary>
+    // the unpacked file (2-byte length, then the image)
     public static byte[] Read(RomBuffer rom, int song) => L2Rom.ReadFile(rom, song);
 
-    /// <summary>The name in the song's header (+04-+0F), e.g. "FIELD".</summary>
+    // the name in the song's header (+04-+0F), like "FIELD"
     public static string Name(byte[] file)
     {
         if (file.Length < 2 + 0x10) return "";
         var sb = new System.Text.StringBuilder();
-        for (int i = 4; i < 0x10; i++) { byte b = file[2 + i]; sb.Append(b is >= 0x20 and < 0x7F ? (char)b : ' '); }
+        for (int i = 4; i < 0x10; i++) { byte letter = file[2 + i]; sb.Append(letter is >= 0x20 and < 0x7F ? (char)letter : ' '); }
         return sb.ToString().Trim();
     }
 
@@ -40,169 +36,165 @@ public static class L2Songs
         try { return Name(Read(rom, song)); } catch { return ""; }
     }
 
-    /// <summary>The song's own sample list (+30, FF ends): ids below 80 are samples, 80 and up drum notes.</summary>
+    // the song's own sample list (+30, FF ends): ids below 80 are samples, 80 and up are drum notes
     public static List<int> SampleList(byte[] file)
     {
         var list = new List<int>();
         for (int i = 0x30; i < 0x50 && 2 + i < file.Length; i++)
         {
-            int v = file[2 + i];
-            if (v == 0xFF) break;
-            list.Add(v);
+            int entry = file[2 + i];
+            if (entry == 0xFF) break;
+            list.Add(entry);
         }
         return list;
     }
 
-    /// <summary>
-    /// The song as <see cref="SongCodec"/> events (one pass per channel; a loop that repeats forever ends in
-    /// LoopEnd), so <see cref="SongCodec.ToMidi"/> can write it. Commands MIDI has no word for (vibrato F0, tempo
-    /// F4, pitch multiplier F6, effects FF) become Raw events with their wait byte set to 0; channel 0's phrase ends
-    /// are Raw FD 00 markers (<see cref="PhraseEnd"/>).
-    /// </summary>
+    // the song as SongCodec events (one pass per channel, a loop that repeats forever ends in LoopEnd), so
+    // SongCodec.ToMidi can write it. commands MIDI has no word for (vibrato F0, tempo F4, pitch multiplier F6,
+    // effects FF) become Raw events with their wait byte set to 0. channel 0's phrase ends are Raw FD 00 markers
+    // (PhraseEnd)
     public static SongCodec.Song Decode(byte[] file, int maxTicks = 48 * 4 * 400)
     {
-        var m = new byte[0x10000];
-        Array.Copy(file, 2, m, Base, Math.Min(file.Length - 2, 0x10000 - Base));
-        var song = new SongCodec.Song { Tempo = m[Base + 3] };
-        Array.Copy(m, Base, song.Header, 0, 0x40);
+        var memory = new byte[0x10000];
+        Array.Copy(file, 2, memory, Base, Math.Min(file.Length - 2, 0x10000 - Base));
+        var song = new SongCodec.Song { Tempo = memory[Base + 3] };
+        Array.Copy(memory, Base, song.Header, 0, 0x40);
         for (int ch = 0; ch < 8; ch++)
         {
-            int voice = m[Base + 0x10 + ch];
+            int voice = memory[Base + 0x10 + ch];
             if (voice == 0xFF) continue;
             song.Drum[ch] = (voice & 0x80) != 0;
-            int order = Base + (m[Base + 0x20 + ch * 2] | m[Base + 0x21 + ch * 2] << 8);
+            int order = Base + (memory[Base + 0x20 + ch * 2] | memory[Base + 0x21 + ch * 2] << 8);
             if (order >= 0xFFFF) continue;
-            DecodeChannel(m, order & 0xFFFF, song.Channels[ch], maxTicks, ch == 0);
+            DecodeChannel(memory, order & 0xFFFF, song.Channels[ch], maxTicks, ch == 0);
             KeepForeverLoop(song.Channels[ch]);
         }
         return song;
     }
 
-    /// <summary>Marker for a phrase end on channel 0 (exported as the MIDI text "lufia: FD00").</summary>
+    // marker for a phrase end on channel 0 (exported as the MIDI text "lufia: FD00")
     public static byte[] PhraseEnd => new byte[] { 0xFD, 0x00 };
     private static bool IsPhraseEnd(SongCodec.Event e) => e.Kind == SongCodec.Kind.Raw && e.Raw is [0xFD, 0x00];
 
-    /// <summary>
-    /// Loop markers say where the channel repeats forever: only the start of the loop that the LoopEnd closes stays
-    /// (finite loops are played out in the events), both as slot 0. The music is the same; it makes the events
-    /// independent of how the loops were nested, so encoding them and decoding again gives the same list.
-    /// </summary>
-    private static void KeepForeverLoop(List<SongCodec.Event> ev)
+    // loop markers say where the channel repeats forever: only the start of the loop that the LoopEnd closes stays
+    // (finite loops get played out in the events), both as slot 0. the music is the same, it just makes the events
+    // not depend on how the loops were nested, so encoding them and decoding again gives the same list
+    private static void KeepForeverLoop(List<SongCodec.Event> events)
     {
-        int end = ev.FindLastIndex(e => e.Kind == SongCodec.Kind.LoopEnd);
-        int start = end < 0 ? -1 : ev.FindLastIndex(end, e => e.Kind == SongCodec.Kind.LoopStart && e.A == ev[end].A);
-        for (int i = ev.Count - 1; i >= 0; i--)
+        int end = events.FindLastIndex(e => e.Kind == SongCodec.Kind.LoopEnd);
+        int start = end < 0 ? -1 : events.FindLastIndex(end, e => e.Kind == SongCodec.Kind.LoopStart && e.A == events[end].A);
+        for (int i = events.Count - 1; i >= 0; i--)
         {
-            if (ev[i].Kind == SongCodec.Kind.LoopStart && i != start) ev.RemoveAt(i);
-            else if (ev[i].Kind is SongCodec.Kind.LoopStart or SongCodec.Kind.LoopEnd) ev[i] = ev[i] with { A = 0 };
+            if (events[i].Kind == SongCodec.Kind.LoopStart && i != start) events.RemoveAt(i);
+            else if (events[i].Kind is SongCodec.Kind.LoopStart or SongCodec.Kind.LoopEnd) events[i] = events[i] with { A = 0 };
         }
     }
 
-    private static void DecodeChannel(byte[] m, int order, List<SongCodec.Event> ev, int maxTicks, bool markPhrases)
+    private static void DecodeChannel(byte[] memory, int order, List<SongCodec.Event> events, int maxTicks, bool markPhrases)
     {
         int tick = 0, transpose = 0, p;
         int lastDelay = 0, lastGate = 0, lastVel = 0;
         // loop slots 0 = outer, 1 = inner: taken, order entry, phrase position, counter (FE = new, FF = forever), transpose
-        var taken = new bool[2]; var lo = new int[2]; var lp = new int[2]; var lc = new int[2]; var lt = new int[2];
+        var taken = new bool[2]; var loopOrder = new int[2]; var loopPos = new int[2]; var loopCount = new int[2]; var loopTranspose = new int[2];
 
-        // the order entry at 'order' (transpose bytes before it are taken); -1 at FF
+        // the order entry at 'order' (transpose bytes before it get taken), -1 at FF
         int Phrase()
         {
             while (true)
             {
-                if (order + 1 >= m.Length) return -1;
-                int b = m[order];
-                if (b == 0xFF) return -1;
-                if ((b & 0x80) != 0) { transpose = b & 0x7F; order++; continue; }
-                return ((b + 0x44) << 8 | m[order + 1]) & 0xFFFF;
+                if (order + 1 >= memory.Length) return -1;
+                int entry = memory[order];
+                if (entry == 0xFF) return -1;
+                if ((entry & 0x80) != 0) { transpose = entry & 0x7F; order++; continue; }
+                return ((entry + 0x44) << 8 | memory[order + 1]) & 0xFFFF;
             }
         }
         p = Phrase();
         if (p < 0) return;
         for (int guard = 0; tick < maxTicks && guard < 200000; guard++)
         {
-            if (p + 3 >= m.Length) { ev.Add(new(tick, SongCodec.Kind.End)); return; }
-            int e = m[p];
-            if (e < 0x80)
+            if (p + 3 >= memory.Length) { events.Add(new(tick, SongCodec.Kind.End)); return; }
+            int cmd = memory[p];
+            if (cmd < 0x80)
             {
-                lastDelay = m[p + 1]; lastGate = m[p + 2]; lastVel = m[p + 3];
-                ev.Add(new(tick, SongCodec.Kind.Note, e + transpose & 0x7F, lastGate, lastVel));
+                lastDelay = memory[p + 1]; lastGate = memory[p + 2]; lastVel = memory[p + 3];
+                events.Add(new(tick, SongCodec.Kind.Note, cmd + transpose & 0x7F, lastGate, lastVel));
                 tick += lastDelay; p += 4;
                 continue;
             }
-            if (e < 0xF0)
+            if (cmd < 0xF0)
             {
-                ev.Add(new(tick, SongCodec.Kind.Note, (e & 0x7F) + transpose & 0x7F, lastGate, lastVel));
+                events.Add(new(tick, SongCodec.Kind.Note, (cmd & 0x7F) + transpose & 0x7F, lastGate, lastVel));
                 tick += lastDelay; p += 1;
                 continue;
             }
-            switch (e)
+            switch (cmd)
             {
-                case 0xF0: ev.Add(new(tick, SongCodec.Kind.Raw, Raw: new byte[] { 0xF0, 0, m[p + 2] })); tick += m[p + 1]; p += 3; break;
-                case 0xF1: ev.Add(new(tick, SongCodec.Kind.Volume, m[p + 2])); tick += m[p + 1]; p += 3; break;
-                case 0xF2: ev.Add(new(tick, SongCodec.Kind.Pan, m[p + 2])); tick += m[p + 1]; p += 3; break;
-                case 0xF3: tick += m[p + 1]; p += 2; break;
-                case 0xF4: ev.Add(new(tick, SongCodec.Kind.Raw, Raw: new byte[] { 0xF4, 0, m[p + 2] })); tick += m[p + 1]; p += 3; break;
-                case 0xF6: ev.Add(new(tick, SongCodec.Kind.Raw, Raw: new byte[] { 0xF6, 0, m[p + 2] })); tick += m[p + 1]; p += 3; break;
-                case 0xF7: ev.Add(new(tick, SongCodec.Kind.Program, m[p + 2])); tick += m[p + 1]; p += 3; break;
+                case 0xF0: events.Add(new(tick, SongCodec.Kind.Raw, Raw: new byte[] { 0xF0, 0, memory[p + 2] })); tick += memory[p + 1]; p += 3; break;
+                case 0xF1: events.Add(new(tick, SongCodec.Kind.Volume, memory[p + 2])); tick += memory[p + 1]; p += 3; break;
+                case 0xF2: events.Add(new(tick, SongCodec.Kind.Pan, memory[p + 2])); tick += memory[p + 1]; p += 3; break;
+                case 0xF3: tick += memory[p + 1]; p += 2; break;
+                case 0xF4: events.Add(new(tick, SongCodec.Kind.Raw, Raw: new byte[] { 0xF4, 0, memory[p + 2] })); tick += memory[p + 1]; p += 3; break;
+                case 0xF6: events.Add(new(tick, SongCodec.Kind.Raw, Raw: new byte[] { 0xF6, 0, memory[p + 2] })); tick += memory[p + 1]; p += 3; break;
+                case 0xF7: events.Add(new(tick, SongCodec.Kind.Program, memory[p + 2])); tick += memory[p + 1]; p += 3; break;
                 case 0xFB:
                 {
-                    int s = !taken[0] ? 0 : !taken[1] ? 1 : -1;
-                    if (s >= 0)
+                    int slot = !taken[0] ? 0 : !taken[1] ? 1 : -1;
+                    if (slot >= 0)
                     {
-                        taken[s] = true; lo[s] = order; lp[s] = p + 1; lc[s] = 0xFE; lt[s] = transpose;
-                        ev.Add(new(tick, SongCodec.Kind.LoopStart, s));
+                        taken[slot] = true; loopOrder[slot] = order; loopPos[slot] = p + 1; loopCount[slot] = 0xFE; loopTranspose[slot] = transpose;
+                        events.Add(new(tick, SongCodec.Kind.LoopStart, slot));
                     }
                     p += 1;
                     break;
                 }
                 case 0xFC:
                 {
-                    int n = m[p + 1] - 1 & 0xFF;
-                    if (n == 0) { p += 2; break; }   // FC 01
-                    int s = taken[1] ? 1 : 0;
+                    int count = memory[p + 1] - 1 & 0xFF;
+                    if (count == 0) { p += 2; break; }   // FC 01
+                    int slot = taken[1] ? 1 : 0;
                     bool back;
-                    if (lc[s] == 0xFF) back = true;
-                    else if (lc[s] == 0xFE) { lc[s] = n; back = true; }
+                    if (loopCount[slot] == 0xFF) back = true;
+                    else if (loopCount[slot] == 0xFE) { loopCount[slot] = count; back = true; }
                     else
                     {
-                        lc[s] = lc[s] - 1 & 0xFF;
-                        back = lc[s] != 0;
-                        if (!back) taken[s] = false;
+                        loopCount[slot] = loopCount[slot] - 1 & 0xFF;
+                        back = loopCount[slot] != 0;
+                        if (!back) taken[slot] = false;
                     }
-                    if (back && lc[s] == 0xFF)
+                    if (back && loopCount[slot] == 0xFF)
                     {
                         // forever: one pass ends here
-                        ev.Add(new(tick, SongCodec.Kind.LoopEnd, s));
+                        events.Add(new(tick, SongCodec.Kind.LoopEnd, slot));
                         return;
                     }
-                    if (back) { order = lo[s]; p = lp[s]; transpose = lt[s]; }
+                    if (back) { order = loopOrder[slot]; p = loopPos[slot]; transpose = loopTranspose[slot]; }
                     else p += 2;
                     break;
                 }
                 case 0xFD:
                     // channel 0's phrase ends are the song's sync points (driver $386C counts them in $8D, command 08
-                    // reports it, event 4D waits for it): kept as markers so a re-encoded song ends phrases there too
-                    if (markPhrases) ev.Add(new(tick, SongCodec.Kind.Raw, Raw: PhraseEnd));
+                    // reports it, event 4D waits for it). kept as markers so a re-encoded song ends phrases there too
+                    if (markPhrases) events.Add(new(tick, SongCodec.Kind.Raw, Raw: PhraseEnd));
                     transpose = 0; order += 2;
                     p = Phrase();
-                    if (p < 0) { ev.Add(new(tick, SongCodec.Kind.End)); return; }
+                    if (p < 0) { events.Add(new(tick, SongCodec.Kind.End)); return; }
                     break;
-                case 0xFE: ev.Add(new(tick, SongCodec.Kind.End)); return;
-                case 0xFF: ev.Add(new(tick, SongCodec.Kind.Raw, Raw: new byte[] { 0xFF, m[p + 1], m[p + 2] })); p += 3; break;
+                case 0xFE: events.Add(new(tick, SongCodec.Kind.End)); return;
+                case 0xFF: events.Add(new(tick, SongCodec.Kind.Raw, Raw: new byte[] { 0xFF, memory[p + 1], memory[p + 2] })); p += 3; break;
                 default: p += 1; break;   // F5, F8-FA
             }
         }
     }
 
-    /// <summary>The game plays note n an octave up: the samples' pitch multipliers are their loop length / 16 (one cycle
-    /// per loop), so note n sounds as MIDI note n + 12 (measured 2026-11-01 on every looping sample: the driver's pitch
-    /// table at $4366, 0x217D-0x3F38, against each sample's period).</summary>
+    // the game plays note n an octave up. the samples' pitch multipliers are their loop length / 16 (one cycle per
+    // loop), so note n sounds as MIDI note n + 12 (measured 2026-11-01 on every looping sample: the driver's pitch
+    // table at $4366, 0x217D-0x3F38, against each sample's period)
     public const int MidiTranspose = 12;
 
-    /// <summary>A General MIDI program like each sample (00-38), so an exported song sounds near the game in a MIDI
-    /// player. Guessed from the samples' overtones, range and the songs that use them (2026-11-01); -1 = no guess
-    /// (piano). Samples 00-06 are the drum kit, 07-0C, 17, 18, 1A, 1B and 25 empty.</summary>
+    // a General MIDI program like each sample (00-38), so an exported song sounds close to the game in a MIDI player.
+    // guessed from the samples' overtones, range and the songs that use them (2026-11-01), -1 = no guess (piano).
+    // samples 00-06 are the drum kit, 07-0C, 17, 18, 1A, 1B and 25 are empty
     private static readonly int[] GmPrograms =
     {
         116, 118, 117, 115, 0, 47, 80, -1, -1, -1, -1, -1, -1, 0,      // 00-0D: drum kit (taiko, synth drum...), 06 square lead
@@ -210,12 +202,12 @@ public static class L2Songs
         115, 75, 21, 4, 40, -1, 71, 77, 0, 43, 10, 46, 46, 73, 34, 24, 55, 47, 60, 9, 42, 14, 73, 89, 72,   // 20-38
     };
 
-    /// <summary>The General MIDI program for sample <paramref name="sample"/>.</summary>
+    // the General MIDI program for that sample
     public static int GmProgram(int sample) => sample >= 0 && sample < GmPrograms.Length && GmPrograms[sample] >= 0 ? GmPrograms[sample] : 0;
 
-    /// <summary>The song as a MIDI file (48 ticks per quarter note, one track per channel, drums on MIDI channel 10): the
-    /// notes where the game sounds them (<see cref="MidiTranspose"/>) and a General MIDI program like each instrument's
-    /// sample (<see cref="GmProgram"/>; slots 00-1F are samples 00-1F, slots 20+ the song's own list).</summary>
+    // the song as a MIDI file (48 ticks per quarter note, one track per channel, drums on MIDI channel 10): the notes
+    // where the game sounds them (MidiTranspose) and a General MIDI program like each instrument's sample (GmProgram,
+    // slots 00-1F are samples 00-1F, slots 20+ the song's own list)
     public static byte[] ToMidi(byte[] file)
     {
         var own = SampleList(file).TakeWhile(x => x < 0x80).ToList();
@@ -223,96 +215,92 @@ public static class L2Songs
         return SongCodec.ToMidi(Decode(file), Name(file), MidiTranspose, Program, fullLevel: true);
     }
 
-    // ── encode ──
+    // encode
 
     public const int HeaderSize = 0x50;
 
-    /// <summary>
-    /// The song file (2-byte length, then the image for $4400) from per-channel events. Header bytes come from
-    /// <paramref name="header"/> (0x50 bytes: name, +18, +19, sample list...) with the song's tempo; the channel table keeps
-    /// each channel's voice with the drum bit from <see cref="SongCodec.Song.Drum"/>. A channel loops forever
-    /// (FB ... FC 00) or ends with FE, as one phrase or cut into pieces, whichever is smaller; a piece that repeats (also
-    /// at another pitch) is stored once and the order list plays it again. Throws when the image is bigger than the
-    /// driver's room ($4400-$57FF) and <paramref name="checkSize"/> is set.
-    /// </summary>
+    // the song file (2-byte length, then the image for $4400) from per-channel events. header bytes come from header
+    // (0x50 bytes: name, +18, +19, sample list...) with the song's tempo, and the channel table keeps each channel's
+    // voice with the drum bit from SongCodec.Song.Drum. a channel loops forever (FB ... FC 00) or ends with FE, as one
+    // phrase or cut into pieces, whichever is smaller. a piece that repeats (also at another pitch) is stored once and
+    // the order list plays it again. throws if the image is bigger than the driver's room ($4400-$57FF) and checkSize is set
     public static byte[] Encode(SongCodec.Song song, byte[] header, bool checkSize = true)
     {
         var used = Enumerable.Range(0, 8).Select(ch => song.Channels[ch].Any(e => e.Kind is not (SongCodec.Kind.LoopStart or SongCodec.Kind.LoopEnd or SongCodec.Kind.End))).ToArray();
         var plan = new List<Piece>[8];
         int[] grids = { 0, 24, 32, 48, 64, 96, 128, 192, 256, 384, 576, 768 };
         var none = Enumerable.Range(0, 8).Select(_ => new List<Piece>()).ToArray();
-        int Size(int ch, List<Piece> p) { var one = (List<Piece>[])none.Clone(); one[ch] = p; return Layout(one).Count; }
+        int Size(int ch, List<Piece> pieces) { var one = (List<Piece>[])none.Clone(); one[ch] = pieces; return Layout(one).Count; }
         for (int ch = 0; ch < 8; ch++)
             plan[ch] = !used[ch] ? new List<Piece>()
                 : song.Channels[ch].Any(IsPhraseEnd) ? EncodeChannel(song.Channels[ch], -1)   // phrases end where the markers say
                 : grids.Select(g => Repeats(EncodeChannel(song.Channels[ch], g))).OrderBy(p => Size(ch, p)).First();
-        var img = Layout(plan);
-        for (int i = 0; i < HeaderSize; i++) if (i is < 0x10 or >= 0x18 and < 0x20 or >= 0x30) img[i] = i < header.Length ? header[i] : (byte)0xFF;
-        img[3] = (byte)Math.Clamp(song.Tempo, 1, 255);
+        var image = Layout(plan);
+        for (int i = 0; i < HeaderSize; i++) if (i is < 0x10 or >= 0x18 and < 0x20 or >= 0x30) image[i] = i < header.Length ? header[i] : (byte)0xFF;
+        image[3] = (byte)Math.Clamp(song.Tempo, 1, 255);
         for (int ch = 0; ch < 8; ch++)
         {
             int was = ch < header.Length - 0x10 ? header[0x10 + ch] : 0xFF;
-            img[0x10 + ch] = !used[ch] ? (byte)was : (byte)((was == 0xFF ? ch : was & 0x7F) | (song.Drum[ch] ? 0x80 : 0));
+            image[0x10 + ch] = !used[ch] ? (byte)was : (byte)((was == 0xFF ? ch : was & 0x7F) | (song.Drum[ch] ? 0x80 : 0));
         }
-        if (checkSize && img.Count > MaxSize)
-            throw new InvalidOperationException($"The song needs {img.Count:N0} bytes; the sound driver has room for {MaxSize:N0} ($4400-$57FF).");
-        var data = new byte[img.Count + 2];
-        data[0] = (byte)img.Count; data[1] = (byte)(img.Count >> 8);
-        img.CopyTo(data, 2);
+        if (checkSize && image.Count > MaxSize)
+            throw new InvalidOperationException($"The song needs {image.Count:N0} bytes; the sound driver has room for {MaxSize:N0} ($4400-$57FF).");
+        var data = new byte[image.Count + 2];
+        data[0] = (byte)image.Count; data[1] = (byte)(image.Count >> 8);
+        image.CopyTo(data, 2);
         return data;
     }
 
-    /// <summary>A phrase's bytes and where its note numbers are (pieces that differ only by a transposition share one phrase).</summary>
+    // a phrase's bytes and where its note numbers are (pieces that only differ by a transposition share one phrase)
     private sealed record Piece(List<byte> Bytes, List<int> Notes)
     {
         public int Low => Notes.Count == 0 ? 0 : Notes.Min(i => Bytes[i] & 0x7F);
         public string Shape()
         {
-            var b = Bytes.ToArray(); int low = Low;
-            foreach (int i in Notes) b[i] = (byte)(b[i] & 0x80 | (b[i] & 0x7F) - low);
-            return Convert.ToHexString(b);
+            var bytes = Bytes.ToArray(); int low = Low;
+            foreach (int i in Notes) bytes[i] = (byte)(bytes[i] & 0x80 | (bytes[i] & 0x7F) - low);
+            return Convert.ToHexString(bytes);
         }
     }
 
-    /// <summary>
-    /// Pieces that follow each other again and again (a bar played 8 times, ...) become a finite loop: a piece "FB FD",
-    /// the body once, then "FC n FD". The loop-back lands on the FD after FB and the order list carries on with the body.
-    /// A loop before the forever loop's start takes the outer slot and frees it; one inside takes the inner slot ($37D2 /
-    /// $3813). Not used where phrase ends are kept (channel 0's sync points): the two extra pieces would add phrase ends.
-    /// </summary>
+    // pieces that follow each other again and again (a bar played 8 times, ...) become a finite loop: a piece "FB FD",
+    // the body once, then "FC n FD". the loop-back lands on the FD after FB and the order list carries on with the body.
+    // a loop before the forever loop's start takes the outer slot and frees it, one inside takes the inner slot
+    // ($37D2 / $3813). not used where phrase ends are kept (channel 0's sync points), the two extra pieces would add
+    // phrase ends
     private static List<Piece> Repeats(List<Piece> pieces)
     {
         if (pieces.Count < 3) return pieces;
         var keys = pieces.Select(p => Convert.ToHexString(p.Bytes.ToArray())).ToList();
         // the forever loop's own piece and the last piece (FC 00 / FE) stay where they are
         bool Fixed(int i) => i == pieces.Count - 1 || keys[i] == "FBFD";
-        var outp = new List<Piece>();
+        var output = new List<Piece>();
         for (int i = 0; i < pieces.Count;)
         {
-            int bestL = 0, bestN = 0, bestSave = 0;
-            for (int len = 1; len <= 16 && i + 2 * len <= pieces.Count; len++)
+            int bestLength = 0, bestTimes = 0, bestSave = 0;
+            for (int length = 1; length <= 16 && i + 2 * length <= pieces.Count; length++)
             {
-                if (Enumerable.Range(i, len).Any(Fixed)) break;
-                int n = 1;
-                // at most 254: FC FF counts down from FE, the loop's own "not counting yet" mark, so it never ends
-                while (n < 254 && i + (n + 1) * len <= pieces.Count &&
-                       Enumerable.Range(0, len).All(k => !Fixed(i + n * len + k) && keys[i + n * len + k] == keys[i + k])) n++;
-                int save = (n - 1) * len * 2 - 9;   // order entries saved, less the two loop pieces and their entries
-                if (n >= 2 && save > bestSave) { bestL = len; bestN = n; bestSave = save; }
+                if (Enumerable.Range(i, length).Any(Fixed)) break;
+                int times = 1;
+                // 254 at most: FC FF counts down from FE, the loop's own "not counting yet" mark, so it would never end
+                while (times < 254 && i + (times + 1) * length <= pieces.Count &&
+                       Enumerable.Range(0, length).All(k => !Fixed(i + times * length + k) && keys[i + times * length + k] == keys[i + k])) times++;
+                int save = (times - 1) * length * 2 - 9;   // order entries saved, minus the two loop pieces and their entries
+                if (times >= 2 && save > bestSave) { bestLength = length; bestTimes = times; bestSave = save; }
             }
-            if (bestN == 0) { outp.Add(pieces[i]); i++; continue; }
-            outp.Add(new Piece(new List<byte> { 0xFB, 0xFD }, new List<int>()));
-            outp.AddRange(pieces.Skip(i).Take(bestL));
-            outp.Add(new Piece(new List<byte> { 0xFC, (byte)bestN, 0xFD }, new List<int>()));
-            i += bestL * bestN;
+            if (bestTimes == 0) { output.Add(pieces[i]); i++; continue; }
+            output.Add(new Piece(new List<byte> { 0xFB, 0xFD }, new List<int>()));
+            output.AddRange(pieces.Skip(i).Take(bestLength));
+            output.Add(new Piece(new List<byte> { 0xFC, (byte)bestTimes, 0xFD }, new List<int>()));
+            i += bestLength * bestTimes;
         }
-        return outp;
+        return output;
     }
 
-    /// <summary>The image from $4400: header (order offsets filled in), order lists, phrases.</summary>
+    // the image from $4400: header (order offsets filled in), order lists, phrases
     private static List<byte> Layout(List<Piece>[] plan)
     {
-        var img = new List<byte>(new byte[HeaderSize]);
+        var image = new List<byte>(new byte[HeaderSize]);
         var shapes = plan.Select(p => p.Select(x => x.Shape()).ToArray()).ToArray();
         var lowest = new Dictionary<string, int>();
         for (int ch = 0; ch < 8; ch++)
@@ -330,17 +318,17 @@ public static class L2Songs
         var orders = new List<byte>();
         for (int ch = 0; ch < 8; ch++)
         {
-            int o = HeaderSize + orders.Count;   // offset from $4400
-            img[0x20 + ch * 2] = (byte)o; img[0x21 + ch * 2] = (byte)(o >> 8);
+            int orderOffset = HeaderSize + orders.Count;   // offset from $4400
+            image[0x20 + ch * 2] = (byte)orderOffset; image[0x21 + ch * 2] = (byte)(orderOffset >> 8);
             for (int k = 0; k < plan[ch].Count; k++)
             {
                 var piece = plan[ch][k]; string key = shapes[ch][k]; int low = lowest[key];
                 if (!where.TryGetValue(key, out int at))
                 {
                     at = phraseBase + store.Count; where[key] = at;
-                    var b = piece.Bytes.ToArray(); int shift = piece.Low - low;
-                    foreach (int i in piece.Notes) b[i] = (byte)(b[i] & 0x80 | (b[i] & 0x7F) - shift);
-                    store.AddRange(b);
+                    var bytes = piece.Bytes.ToArray(); int shift = piece.Low - low;
+                    foreach (int i in piece.Notes) bytes[i] = (byte)(bytes[i] & 0x80 | (bytes[i] & 0x7F) - shift);
+                    store.AddRange(bytes);
                 }
                 if (piece.Low > low) orders.Add((byte)(0x80 | piece.Low - low));
                 // the driver adds $44 to the high byte
@@ -348,13 +336,13 @@ public static class L2Songs
             }
             orders.Add(0xFF);
         }
-        img.AddRange(orders);
-        img.AddRange(store);
-        return img;
+        image.AddRange(orders);
+        image.AddRange(store);
+        return image;
     }
 
-    /// <summary>A channel's phrases (see <see cref="SongCodec"/>'s encoder; waits are F3, notes 70-7F always in full).
-    /// Grid -1: a phrase ends at each phrase-end marker and nowhere else.</summary>
+    // a channel's phrases (see SongCodec's encoder, waits are F3, notes 70-7F always in full).
+    // grid -1 = a phrase ends at each phrase end marker and nowhere else
     private static List<Piece> EncodeChannel(List<SongCodec.Event> events, int grid)
     {
         var ordered = events.Select((e, i) => (e, i)).OrderBy(x => x.e.Tick).ThenBy(x => x.i).Select(x => x.e).ToList();
@@ -367,85 +355,82 @@ public static class L2Songs
             int endAt = ordered.IndexOf(loopEnd);
             loopStartIndex = ordered.FindLastIndex(endAt, e => e.Kind == SongCodec.Kind.LoopStart && e.A == loopEnd.A);
         }
-        var ev = new List<SongCodec.Event>();
+        var notesAndCommands = new List<SongCodec.Event>();
         int fbBefore = 0, loopTick = 0;
         bool fbAtEnd = false;
         for (int i = 0; i < ordered.Count; i++)
         {
-            if (i == loopStartIndex) { fbBefore = ev.Count; loopTick = ordered[i].Tick; }
-            if (ordered[i].Kind is not (SongCodec.Kind.LoopStart or SongCodec.Kind.LoopEnd or SongCodec.Kind.End)) ev.Add(ordered[i]);
+            if (i == loopStartIndex) { fbBefore = notesAndCommands.Count; loopTick = ordered[i].Tick; }
+            if (ordered[i].Kind is not (SongCodec.Kind.LoopStart or SongCodec.Kind.LoopEnd or SongCodec.Kind.End)) notesAndCommands.Add(ordered[i]);
         }
-        if (loopStartIndex >= 0 && fbBefore >= ev.Count) fbAtEnd = true;   // nothing inside the loop
+        if (loopStartIndex >= 0 && fbBefore >= notesAndCommands.Count) fbAtEnd = true;   // nothing inside the loop
         if (loopStartIndex < 0) { fbBefore = 0; loopTick = 0; }
         bool loops = stop == null;
-        int end = stop?.Tick ?? loopEnd?.Tick ?? (ev.Count == 0 ? 0 : ev[^1].Tick + (ev[^1].Kind == SongCodec.Kind.Note ? Math.Max(1, ev[^1].B) : 1));
+        int end = stop?.Tick ?? loopEnd?.Tick ?? (notesAndCommands.Count == 0 ? 0 : notesAndCommands[^1].Tick + (notesAndCommands[^1].Kind == SongCodec.Kind.Note ? Math.Max(1, notesAndCommands[^1].B) : 1));
         if (fbAtEnd && end <= loopTick) { fbBefore = 0; loopTick = 0; fbAtEnd = false; }   // an empty loop would hang the driver
 
         var phrases = new List<Piece>();
-        var o = new List<byte>();
+        var bytes = new List<byte>();
         var notes = new List<int>();
         int time = 0, step = -1;
         int lastDelay = -1, lastGate = -1, lastVel = -1;
-        void Wait(int n) { for (; n > 0; n -= Math.Min(n, 255)) o.AddRange(new byte[] { 0xF3, (byte)Math.Min(n, 255) }); }
-        void Cut() { if (o.Count > 0) { o.Add(0xFD); phrases.Add(new Piece(o, notes)); o = new List<byte>(); notes = new List<int>(); } lastDelay = -1; }
+        void Wait(int frames) { for (; frames > 0; frames -= Math.Min(frames, 255)) bytes.AddRange(new byte[] { 0xF3, (byte)Math.Min(frames, 255) }); }
+        void Cut() { if (bytes.Count > 0) { bytes.Add(0xFD); phrases.Add(new Piece(bytes, notes)); bytes = new List<byte>(); notes = new List<int>(); } lastDelay = -1; }
         void LoopStart()
         {
             if (grid > 0) Cut();
             Wait(loopTick - time); time = Math.Max(time, loopTick);
             if (grid > 0) Cut();
-            o.Add(0xFB);
+            bytes.Add(0xFB);
             if (grid > 0) Cut();
             lastDelay = -1;   // the pass after a loop-back starts with whatever note ended the last one
         }
-        for (int i = 0; i < ev.Count; i++)
+        for (int i = 0; i < notesAndCommands.Count; i++)
         {
             if (loops && !fbAtEnd && i == fbBefore) LoopStart();
-            var e = ev[i];
+            var e = notesAndCommands[i];
             if (grid > 0 && e.Tick / grid != step) { step = e.Tick / grid; Cut(); }
             Wait(e.Tick - time); time = Math.Max(time, e.Tick);
-            int next = loops && !fbAtEnd && i + 1 == fbBefore ? loopTick : i + 1 < ev.Count ? ev[i + 1].Tick : fbAtEnd && loops ? loopTick : end;
-            int d = Math.Clamp(next - e.Tick, 0, 255);
+            int next = loops && !fbAtEnd && i + 1 == fbBefore ? loopTick : i + 1 < notesAndCommands.Count ? notesAndCommands[i + 1].Tick : fbAtEnd && loops ? loopTick : end;
+            int delay = Math.Clamp(next - e.Tick, 0, 255);
             switch (e.Kind)
             {
                 case SongCodec.Kind.Note:
                 {
-                    int gate = Math.Clamp(e.B, 0, 255), vel = Math.Clamp(e.C, 0, 255), n = e.A & 0x7F;
-                    notes.Add(o.Count);
-                    if (n < 0x70 && d == lastDelay && gate == lastGate && vel == lastVel) o.Add((byte)(0x80 | n));
-                    else { o.AddRange(new[] { (byte)n, (byte)d, (byte)gate, (byte)vel }); lastDelay = d; lastGate = gate; lastVel = vel; }
+                    int gate = Math.Clamp(e.B, 0, 255), vel = Math.Clamp(e.C, 0, 255), note = e.A & 0x7F;
+                    notes.Add(bytes.Count);
+                    if (note < 0x70 && delay == lastDelay && gate == lastGate && vel == lastVel) bytes.Add((byte)(0x80 | note));
+                    else { bytes.AddRange(new[] { (byte)note, (byte)delay, (byte)gate, (byte)vel }); lastDelay = delay; lastGate = gate; lastVel = vel; }
                     break;
                 }
-                case SongCodec.Kind.Volume: o.AddRange(new byte[] { 0xF1, (byte)d, (byte)Math.Clamp(e.A, 0, 255) }); break;
-                case SongCodec.Kind.Pan: o.AddRange(new byte[] { 0xF2, (byte)d, (byte)Math.Clamp(e.A, 0, 255) }); break;
-                case SongCodec.Kind.Program: o.AddRange(new byte[] { 0xF7, (byte)d, (byte)e.A }); break;
+                case SongCodec.Kind.Volume: bytes.AddRange(new byte[] { 0xF1, (byte)delay, (byte)Math.Clamp(e.A, 0, 255) }); break;
+                case SongCodec.Kind.Pan: bytes.AddRange(new byte[] { 0xF2, (byte)delay, (byte)Math.Clamp(e.A, 0, 255) }); break;
+                case SongCodec.Kind.Program: bytes.AddRange(new byte[] { 0xF7, (byte)delay, (byte)e.A }); break;
                 case SongCodec.Kind.Raw:
                 {
-                    var r = e.Raw;
-                    if (IsPhraseEnd(e)) { if (grid < 0) Cut(); d = 0; break; }
-                    if (r is { Length: 3 } && r[0] is 0xF0 or 0xF4 or 0xF6) o.AddRange(new[] { r[0], (byte)d, r[2] });
-                    else if (r is { Length: 3 } && r[0] == 0xFF) { o.AddRange(r); d = 0; }   // no wait of its own
-                    else d = 0;                                                             // not a Lufia II command
+                    var raw = e.Raw;
+                    if (IsPhraseEnd(e)) { if (grid < 0) Cut(); delay = 0; break; }
+                    if (raw is { Length: 3 } && raw[0] is 0xF0 or 0xF4 or 0xF6) bytes.AddRange(new[] { raw[0], (byte)delay, raw[2] });
+                    else if (raw is { Length: 3 } && raw[0] == 0xFF) { bytes.AddRange(raw); delay = 0; }   // no wait of its own
+                    else delay = 0;                                                                 // not a lufia 2 command
                     break;
                 }
-                default: d = 0; break;
+                default: delay = 0; break;
             }
-            time += d;
+            time += delay;
         }
         if (loops && fbAtEnd) LoopStart();
         Wait(end - time);
-        o.AddRange(loops ? new byte[] { 0xFC, 0x00, 0xFD } : new byte[] { 0xFE });
-        phrases.Add(new Piece(o, notes));
+        bytes.AddRange(loops ? new byte[] { 0xFC, 0x00, 0xFD } : new byte[] { 0xFE });
+        phrases.Add(new Piece(bytes, notes));
         return phrases;
     }
 
-    // ── MIDI import ──
+    // MIDI import
 
-    /// <summary>
-    /// A song file from a MIDI file for the place of <paramref name="current"/> (the song file it replaces): keeps its
-    /// header (name, sample list, +18, +19) and channel voices; the tempo comes from the MIDI when it has one. Commands
-    /// travel as "lufia:" texts like the MIDI export writes them. Notes in <paramref name="warnings"/> what may not
-    /// sound as meant.
-    /// </summary>
+    // a song file from a MIDI file to go in the place of current (the song file it replaces). keeps its header (name,
+    // sample list, +18, +19) and channel voices, the tempo comes from the MIDI if it has one. commands travel as
+    // "lufia:" texts the same way the MIDI export writes them. warnings gets notes on what may not sound as meant
     public static byte[] FromMidi(byte[] midi, byte[] current, out List<string> warnings)
     {
         var song = SongCodec.FromMidi(midi, out warnings, MidiTranspose);
@@ -454,31 +439,29 @@ public static class L2Songs
         return Build(song, current, warnings);
     }
 
-    /// <summary>
-    /// The song file for <paramref name="song"/> in the place of <paramref name="current"/> (MIDI import, the note
-    /// editor): keeps its header (name, sample list, +18, +19) and channel voices with the song's tempo; leaves out
-    /// commands that aren't Lufia II's, gives a channel that never picks a sample the one it started with, adds drum
-    /// samples a song with its own samples needs, and notes in <paramref name="warnings"/> what may not sound as meant.
-    /// </summary>
+    // the song file for song in the place of current (MIDI import, the note editor). keeps its header (name, sample
+    // list, +18, +19) and channel voices with the song's tempo, leaves out commands that aren't lufia 2's, gives a
+    // channel that never picks a sample the one it started with, adds drum samples a song with its own samples needs,
+    // and puts notes in warnings on what may not sound as meant
     public static byte[] Build(SongCodec.Song song, byte[] current, List<string> warnings, bool checkSize = true)
     {
         var header = new byte[HeaderSize];
         Array.Fill(header, (byte)0xFF);
         Array.Copy(current, 2, header, 0, Math.Min(HeaderSize, current.Length - 2));
 
-        // commands from a Lufia 1 export (F6 with 4 bytes, ...) mean something else here
+        // commands from a lufia 1 export (F6 with 4 bytes, ...) mean something else here
         int dropped = 0;
-        foreach (var c in song.Channels)
-            dropped += c.RemoveAll(e => e.Kind == SongCodec.Kind.Raw && !(e.Raw is { Length: 3 } r && r[0] is 0xF0 or 0xF4 or 0xF6 or 0xFF) && !IsPhraseEnd(e));
+        foreach (var channel in song.Channels)
+            dropped += channel.RemoveAll(e => e.Kind == SongCodec.Kind.Raw && !(e.Raw is { Length: 3 } r && r[0] is 0xF0 or 0xF4 or 0xF6 or 0xFF) && !IsPhraseEnd(e));
         if (dropped > 0) warnings.Add($"{dropped} \"lufia:\" commands aren't Lufia II commands and were left out.");
-        // MIDI puts the loop start first within its tick; a phrase end at that tick closed the phrase before the
-        // loop (inside it the driver would count it again on every pass)
-        foreach (var c in song.Channels)
+        // MIDI puts the loop start first within its tick. a phrase end at that tick closed the phrase before the loop
+        // (inside it the driver would count it again on every pass)
+        foreach (var channel in song.Channels)
         {
-            int ls = c.FindIndex(e => e.Kind == SongCodec.Kind.LoopStart);
-            if (ls < 0) continue;
-            var moved = c.Skip(ls + 1).TakeWhile(e => e.Tick == c[ls].Tick).Where(IsPhraseEnd).ToList();
-            foreach (var e in moved) { c.Remove(e); c.Insert(ls, e); }
+            int loopStart = channel.FindIndex(e => e.Kind == SongCodec.Kind.LoopStart);
+            if (loopStart < 0) continue;
+            var moved = channel.Skip(loopStart + 1).TakeWhile(e => e.Tick == channel[loopStart].Tick).Where(IsPhraseEnd).ToList();
+            foreach (var e in moved) { channel.Remove(e); channel.Insert(loopStart, e); }
         }
 
         var list = SampleList(current);
@@ -487,18 +470,18 @@ public static class L2Songs
         var template = Decode(current);
         for (int ch = 0; ch < 8; ch++)
         {
-            var ev = song.Channels[ch];
-            if (!ev.Any(e => e.Kind == SongCodec.Kind.Note)) continue;
+            var events = song.Channels[ch];
+            if (!events.Any(e => e.Kind == SongCodec.Kind.Note)) continue;
             // a channel that never picks a sample plays the one the song's channel started with
-            int first = ev.Where(e => e.Kind == SongCodec.Kind.Note).Min(e => e.Tick);
-            if (!song.Drum[ch] && !ev.Any(e => e.Kind == SongCodec.Kind.Program && e.Tick <= first))
+            int first = events.Where(e => e.Kind == SongCodec.Kind.Note).Min(e => e.Tick);
+            if (!song.Drum[ch] && !events.Any(e => e.Kind == SongCodec.Kind.Program && e.Tick <= first))
             {
-                var p = template.Channels[ch].FirstOrDefault(e => e.Kind == SongCodec.Kind.Program)
+                var program = template.Channels[ch].FirstOrDefault(e => e.Kind == SongCodec.Kind.Program)
                         ?? template.Channels.SelectMany(c => c).FirstOrDefault(e => e.Kind == SongCodec.Kind.Program);
-                if (p != null) ev.Insert(0, new SongCodec.Event(0, SongCodec.Kind.Program, p.A));
+                if (program != null) events.Insert(0, new SongCodec.Event(0, SongCodec.Kind.Program, program.A));
             }
         }
-        // drum notes: the driver knows these (its list at $3C10); a song whose samples replace the shared ones loads
+        // drum notes: the driver knows these (its list at $3C10). a song whose samples replace the shared ones loads
         // the drum samples it lists
         var drumNotes = new HashSet<int> { 0x24, 0x26, 0x2A, 0x2E, 0x30, 0x2D, 0x29, 0x31, 0x28 };
         var used = song.Channels.Where((c, ch) => song.Drum[ch]).SelectMany(c => c).Where(e => e.Kind == SongCodec.Kind.Note && e.B > 0).Select(e => e.A).Distinct().ToList();
@@ -507,10 +490,10 @@ public static class L2Songs
         if (replaced)
         {
             var have = list.Where(x => x >= 0x80).Select(x => x & 0x7F).ToHashSet();
-            foreach (int n in used.Where(n => drumNotes.Contains(n) && !have.Contains(n)).OrderBy(n => n))
+            foreach (int note in used.Where(n => drumNotes.Contains(n) && !have.Contains(n)).OrderBy(n => n))
             {
-                if (list.Count < 0x20) { list.Add(0x80 | n); have.Add(n); }
-                else warnings.Add($"Drum note {n:X2} can't be added to the sample list (32 entries).");
+                if (list.Count < 0x20) { list.Add(0x80 | note); have.Add(note); }
+                else warnings.Add($"Drum note {note:X2} can't be added to the sample list (32 entries).");
             }
             for (int i = 0; i < 0x20; i++) header[0x30 + i] = (byte)(i < list.Count ? list[i] : 0xFF);
         }
@@ -522,11 +505,8 @@ public static class L2Songs
         return Encode(song, header, checkSize);
     }
 
-    /// <summary>
-    /// Whether shared slot <paramref name="slot"/> holds a sample in a song whose samples replace the shared ones (+18):
-    /// only the drum samples its list names are sent again, each into the slot of its number ($80:94AA, lists $80:9A34 /
-    /// $80:9A59).
-    /// </summary>
+    // true if shared slot slot still holds a sample in a song whose samples replace the shared ones (+18). only the
+    // drum samples its list names get sent again, each into the slot of its number ($80:94AA, lists $80:9A34 / $80:9A59)
     private static bool SharedSurvives(List<int> list, int slot)
     {
         int[] notes = { 0x24, 0x26, 0x2A, 0x2E, 0x30, 0x2D, 0x29, 0x31, 0x28 }, samples = { 0, 1, 3, 4, 5, 5, 5, 6, 2 };

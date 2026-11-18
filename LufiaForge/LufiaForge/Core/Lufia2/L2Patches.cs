@@ -1,10 +1,8 @@
 namespace LufiaForge.Core.Lufia2;
 
-/// <summary>
-/// Small Lufia II patches (US ROM, from the game's code 2026-10-23; see docs/lufia2/settings.md). Each is a list of
-/// same-size changes: added only when every place still has the game's bytes, taken out only when every place has
-/// the patch's.
-/// </summary>
+// small lufia 2 patches (US rom, from the game's code 2026-10-23, see docs/lufia2/settings.md). each one is a list of
+// same-size changes. it only goes in if every place still has the game's bytes, and only comes out if every place
+// has the patch's
 public static class L2Patches
 {
     public sealed record Change(int At, byte[] Original, byte[] Patched);
@@ -13,8 +11,8 @@ public static class L2Patches
     {
         public bool IsApplied(RomBuffer rom) => Changes.All(c => Has(rom, c.At, c.Patched));
         public bool IsOriginal(RomBuffer rom) => Changes.All(c => Has(rom, c.At, c.Original));
-        /// <summary>Adds it (nothing when it is in). Refuses when a place doesn't hold the game's bytes: before, that
-        /// did nothing without a word and the Patch Manager said "Added".</summary>
+        // adds it (does nothing if it's in). refuses if a place doesn't hold the game's bytes. it used to just do
+        // nothing without a word there, and the Patch Manager said "Added"
         public void Apply(RomBuffer rom)
         {
             if (IsApplied(rom)) return;
@@ -25,7 +23,7 @@ public static class L2Patches
         public void Remove(RomBuffer rom) { if (IsApplied(rom)) foreach (var c in Changes) rom.WriteBytes(c.At, c.Original); }
     }
 
-    private static bool Has(RomBuffer rom, int at, byte[] b) => at + b.Length <= rom.Length && rom.ReadBytes(at, b.Length).SequenceEqual(b);
+    private static bool Has(RomBuffer rom, int at, byte[] expected) => at + expected.Length <= rom.Length && rom.ReadBytes(at, expected.Length).SequenceEqual(expected);
     private static Change C(int at, string original, string patched) => new(at, Bytes(original), Bytes(patched));
     private static byte[] Bytes(string hex) => hex.Split(' ', StringSplitOptions.RemoveEmptyEntries).Select(h => Convert.ToByte(h, 16)).ToArray();
 

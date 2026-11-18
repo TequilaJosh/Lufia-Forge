@@ -1,15 +1,13 @@
 namespace LufiaForge.Core.Lufia2;
 
-/// <summary>
-/// Lufia II dungeon puzzle scripts (US ROM, read from the code 2026-10-23; all 3007 scripts parse): switches,
-/// pressure plates, doors, movable objects, tile changes, bomb / sword / arrow / hammer / action-button spots. Run by
-/// the third interpreter ($80:CC35, table $80:E5A4, opcodes 00-BE) in up to 8 threads. Map table $8F:8000 (file
-/// 0x78000): 3 bytes per map (u16 lo, u8 hi; block at file 0x78000 + hi * 0x8000 + lo, FFFFFF = none). A block
-/// starts with 16 u16 offsets, one per category (00 engine events: id 02 sets the room up on load; 02 action
-/// button, 04 sword, 06 arrow, 08 bomb, 0E hammer spots by the map info's spot id; 0A object groups, byte lists),
-/// each to (id, u16 offset) records ended by FF. All offsets and jumps count from the block start.
-/// Puzzle flags are bits at $7F:D100, variables bytes at $7F:D074.
-/// </summary>
+// lufia 2 dungeon puzzle scripts (US rom, read from the code 2026-10-23, all 3007 scripts parse): switches, pressure
+// plates, doors, movable objects, tile changes, bomb / sword / arrow / hammer / action button spots. the third
+// interpreter runs them ($80:CC35, table $80:E5A4, opcodes 00-BE) in up to 8 threads.
+// map table $8F:8000 (file 0x78000): 3 bytes per map (u16 lo, u8 hi, block at file 0x78000 + hi * 0x8000 + lo,
+// FFFFFF = none). a block starts with 16 u16 offsets, one per category (00 engine events, id 02 sets the room up on
+// load. 02 action button, 04 sword, 06 arrow, 08 bomb, 0E hammer spots by the map info's spot id. 0A object groups,
+// byte lists), each pointing to (id, u16 offset) records ended by FF. all offsets and jumps count from the block start.
+// puzzle flags are bits at $7F:D100, variables are bytes at $7F:D074
 public static class L2Puzzles
 {
     public const int Table = 0x78000;
@@ -19,9 +17,8 @@ public static class L2Puzzles
         "(category 10)", "(category 12)", "(category 14)", "(category 16)", "(category 18)", "(category 1A)", "(category 1C)", "(category 1E)",
     };
 
-    /// <summary>Argument bytes (-1: an FF-ended list then a u16 target), where its u16 targets sit among the
-    /// arguments, the argument letters (f flag, p place, w target, v variable, b byte, r rectangle, o object,
-    /// a actor) and the meaning.</summary>
+    // argument bytes (-1 = an FF-ended list then a u16 target), where its u16 targets sit among the arguments, the
+    // argument letters (f flag, p place, w target, v variable, b byte, r rectangle, o object, a actor) and the meaning
     public static readonly Dictionary<int, (int Args, int[] Jumps, string Form, string Name)> Ops = new()
     {
         [0x00] = (0, new int[] {  }, "0", "end thread (also 07 2C 2D 2E 56 62 93 9B AC AD, same handler)"),
@@ -219,11 +216,11 @@ public static class L2Puzzles
 
     private static readonly HashSet<int> Ends = new() { 0x00, 0x07, 0x2C, 0x2D, 0x2E, 0x56, 0x62, 0x93, 0x9B, 0xAC, 0xAD, 0x0A, 0x63, 0xAA };
 
-    /// <summary>File offset of map <paramref name="map"/>'s puzzle block, or -1.</summary>
+    // file offset of the map's puzzle block, or -1
     public static int Block(RomBuffer rom, int map)
     {
-        int e = L2NewMaps.Entry(rom, L2MapTable.Puzzle, map);
-        int lo = rom.ReadUInt16Le(e), hi = rom.ReadByte(e + 2);
+        int entry = L2NewMaps.Entry(rom, L2MapTable.Puzzle, map);
+        int lo = rom.ReadUInt16Le(entry), hi = rom.ReadByte(entry + 2);
         if (lo == 0xFFFF && hi == 0xFF) return -1;
         int at = Table + hi * 0x8000 + lo;
         return at < rom.Length ? at : -1;
@@ -232,40 +229,40 @@ public static class L2Puzzles
     public static List<(int Category, int Id, int Offset)> Entries(RomBuffer rom, int block)
     {
         var list = new List<(int, int, int)>();
-        for (int c = 0; c < 16; c++)
+        for (int category = 0; category < 16; category++)
         {
-            int at = block + rom.ReadUInt16Le(block + c * 2);
-            for (int i = 0; i < 128 && at + i * 3 < rom.Length; i++)
+            int listAt = block + rom.ReadUInt16Le(block + category * 2);
+            for (int i = 0; i < 128 && listAt + i * 3 < rom.Length; i++)
             {
-                int id = rom.ReadByte(at + i * 3);
+                int id = rom.ReadByte(listAt + i * 3);
                 if (id == 0xFF) break;
-                list.Add((c, id, rom.ReadUInt16Le(at + i * 3 + 1)));
+                list.Add((category, id, rom.ReadUInt16Le(listAt + i * 3 + 1)));
             }
         }
         return list;
     }
 
-    public static int Length(RomBuffer rom, int p)
+    public static int Length(RomBuffer rom, int at)
     {
-        int op = rom.ReadByte(p);
-        if (!Ops.TryGetValue(op, out var d)) return 1;
-        if (d.Args >= 0) return 1 + d.Args;
-        int q = p + 1;
-        while (q < rom.Length && rom.ReadByte(q) != 0xFF) q++;
-        return q + 1 + 2 - p;
+        int op = rom.ReadByte(at);
+        if (!Ops.TryGetValue(op, out var def)) return 1;
+        if (def.Args >= 0) return 1 + def.Args;
+        int listEnd = at + 1;
+        while (listEnd < rom.Length && rom.ReadByte(listEnd) != 0xFF) listEnd++;
+        return listEnd + 1 + 2 - at;
     }
 
-    public static List<int> Targets(RomBuffer rom, int p, int len, int block)
+    public static List<int> Targets(RomBuffer rom, int at, int length, int block)
     {
-        int op = rom.ReadByte(p);
-        var t = new List<int>();
-        if (!Ops.TryGetValue(op, out var d)) return t;
-        if (d.Args < 0) t.Add(block + rom.ReadUInt16Le(p + len - 2));
-        else foreach (int j in d.Jumps) t.Add(block + rom.ReadUInt16Le(p + 1 + j));
-        return t;
+        int op = rom.ReadByte(at);
+        var targets = new List<int>();
+        if (!Ops.TryGetValue(op, out var def)) return targets;
+        if (def.Args < 0) targets.Add(block + rom.ReadUInt16Le(at + length - 2));
+        else foreach (int j in def.Jumps) targets.Add(block + rom.ReadUInt16Le(at + 1 + j));
+        return targets;
     }
 
-    /// <summary>Every command reachable from <paramref name="start"/>, in address order, as listing lines.</summary>
+    // every command reachable from start, in address order, as listing lines
     public static List<L2Script.Op> Walk(RomBuffer rom, int start, int block, int blockEnd)
     {
         var ops = new SortedDictionary<int, L2Script.Op>();
@@ -273,31 +270,31 @@ public static class L2Puzzles
         var seen = new HashSet<int>();
         while (todo.Count > 0)
         {
-            int p = todo.Pop();
-            for (int guard = 0; guard < 2000 && p >= block && p < blockEnd && seen.Add(p); guard++)
+            int at = todo.Pop();
+            for (int guard = 0; guard < 2000 && at >= block && at < blockEnd && seen.Add(at); guard++)
             {
-                int op = rom.ReadByte(p), len = Length(rom, p);
-                var targets = Targets(rom, p, len, block);
-                foreach (var t in targets) todo.Push(t);
-                string bytes = string.Join(" ", rom.ReadBytes(p + 1, len - 1).Select(b => b.ToString("X2")));
-                string name = Ops.TryGetValue(op, out var d) ? d.Name : "(not a command)";
+                int op = rom.ReadByte(at), length = Length(rom, at);
+                var targets = Targets(rom, at, length, block);
+                foreach (var target in targets) todo.Push(target);
+                string bytes = string.Join(" ", rom.ReadBytes(at + 1, length - 1).Select(b => b.ToString("X2")));
+                string name = Ops.TryGetValue(op, out var def) ? def.Name : "(not a command)";
                 string jumps = targets.Count > 0 ? "  -> " + string.Join(", ", targets.Select(t => t.ToString("X6"))) : "";
-                ops[p] = new L2Script.Op(p, len, $"{op:X2} {bytes,-24} {name}{jumps}");
-                p += len;
+                ops[at] = new L2Script.Op(at, length, $"{op:X2} {bytes,-24} {name}{jumps}");
+                at += length;
                 if (Ends.Contains(op) || !Ops.ContainsKey(op)) break;
             }
         }
         return ops.Values.ToList();
     }
 
-    /// <summary>When each category's scripts run, and the map-info list of their spots (id, x, y), if any.</summary>
+    // when each category's scripts run, and the map info list of their spots (id, x, y), if there is one
     private static readonly (string When, int List)[] Triggers =
     {
         ("", -1), ("Pressing the action button facing action spot", 0x20), ("A sword hit on sword spot", 0x1C), ("An arrow on arrow spot", 0x1E),
         ("A bomb on bomb spot", 0x1A), ("", -1), ("", -1), ("A hammer on hammer spot", 0x2A),
     };
 
-    /// <summary>What starts a category-00 script (by id; the callers of $80:E722 with category 00).</summary>
+    // what starts a category 00 script (by id, the callers of $80:E722 with category 00)
     private static string EngineEvent(int id) => id switch
     {
         0x00 => "Room check (runs while the room's puzzles are active, and after a warp)",
@@ -306,8 +303,8 @@ public static class L2Puzzles
         _ => $"Game event {id:X2} (started by the game's own code)",
     };
 
-    /// <summary>A map's puzzle scripts by category and id, each command in words (<see cref="L2PuzzleText"/>) with its
-    /// jumps as step numbers; a step started from elsewhere says so. Object groups are shown as their member lists.</summary>
+    // a map's puzzle scripts by category and id, each command in words (L2PuzzleText) with its jumps as step numbers,
+    // and a step started from somewhere else says so. object groups show as their member lists
     public static List<(string Title, List<L2Script.Op> Ops, string Preview)> MapScripts(RomBuffer rom, int map)
     {
         var list = new List<(string, List<L2Script.Op>, string)>();
@@ -315,51 +312,51 @@ public static class L2Puzzles
         if (block < 0) return list;
         int end = End(rom, block);
         var words = new L2PuzzleText(rom, map);
-        foreach (var (cat, id, off) in Entries(rom, block))
+        foreach (var (category, id, offset) in Entries(rom, block))
         {
-            if (cat == 5)
+            if (category == 5)
             {
                 var members = new List<int>();
-                for (int p = block + off; p < end && rom.ReadByte(p) != 0xFF && members.Count < 64; p++) members.Add(rom.ReadByte(p));
+                for (int p = block + offset; p < end && rom.ReadByte(p) != 0xFF && members.Count < 64; p++) members.Add(rom.ReadByte(p));
                 string text = $"Group {id} is {string.Join(", ", members.Select(m => words.Place(m + 0x60)))}: a command given this group (place {0x80 + id:X2}) works on all of them.";
-                list.Add(($"Puzzle: group {id}", new List<L2Script.Op> { new(block + off, members.Count + 1, text) }, $"{members.Count} places that commands use together"));
+                list.Add(($"Puzzle: group {id}", new List<L2Script.Op> { new(block + offset, members.Count + 1, text) }, $"{members.Count} places that commands use together"));
                 continue;
             }
             string when;
-            if (cat == 0) when = EngineEvent(id);
-            else if (cat < Triggers.Length && Triggers[cat].List >= 0)
+            if (category == 0) when = EngineEvent(id);
+            else if (category < Triggers.Length && Triggers[category].List >= 0)
             {
-                var spot = L2MapInfo.Records(rom, map, Triggers[cat].List, 3).FirstOrDefault(r => r.Bytes[0] == id).Bytes;
-                when = $"{Triggers[cat].When} {id}" + (spot != null ? $" ({spot[1]}, {spot[2]})" : "");
+                var spot = L2MapInfo.Records(rom, map, Triggers[category].List, 3).FirstOrDefault(r => r.Bytes[0] == id).Bytes;
+                when = $"{Triggers[category].When} {id}" + (spot != null ? $" ({spot[1]}, {spot[2]})" : "");
             }
-            else when = $"{Categories[cat]} {id:X2}";
-            var raw = Walk(rom, block + off, block, end);
-            var step = new Dictionary<int, int>();
-            for (int i = 0; i < raw.Count; i++) step[raw[i].At] = i;
-            string Step(int a) => step.TryGetValue(a, out int i) ? $"step {i + 1}" : $"ROM 0x{a:X6}";
-            // where each step is started from (other than the step before it)
+            else when = $"{Categories[category]} {id:X2}";
+            var raw = Walk(rom, block + offset, block, end);
+            var stepIndex = new Dictionary<int, int>();
+            for (int i = 0; i < raw.Count; i++) stepIndex[raw[i].At] = i;
+            string Step(int at) => stepIndex.TryGetValue(at, out int i) ? $"step {i + 1}" : $"ROM 0x{at:X6}";
+            // where each step gets started from (other than the step before it)
             var from = new Dictionary<int, List<string>>();
             for (int i = 0; i < raw.Count; i++)
             {
                 int op = rom.ReadByte(raw[i].At);
-                foreach (int t in Targets(rom, raw[i].At, raw[i].Length, block))
+                foreach (int target in Targets(rom, raw[i].At, raw[i].Length, block))
                 {
-                    if (!from.TryGetValue(t, out var l)) from[t] = l = new();
-                    l.Add(op is 0x26 or 0x27 ? $"started as its own thread by step {i + 1}" : op == 0xA9 ? $"run by step {i + 1}" : $"reached from step {i + 1}");
+                    if (!from.TryGetValue(target, out var sources)) from[target] = sources = new();
+                    sources.Add(op is 0x26 or 0x27 ? $"started as its own thread by step {i + 1}" : op == 0xA9 ? $"run by step {i + 1}" : $"reached from step {i + 1}");
                 }
             }
             var ops = new List<L2Script.Op>();
             for (int i = 0; i < raw.Count; i++)
             {
-                // the place a "keep the answer" step stores for: the one the test before it (going up the list) read
+                // the place a "keep the answer" step stores for: whatever the test before it (going up the list) read
                 int tested = -1;
                 for (int k = i - 1; k >= 0 && tested < 0; k--)
                     if (rom.ReadByte(raw[k].At) is 0x13 or 0x15 or 0x17 or 0x72 && raw[k].Length > 1) tested = rom.ReadByte(raw[k].At + 1);
-                if (tested >= 0xA0) tested = -1;   // (known only as it runs)
+                if (tested >= 0xA0) tested = -1;   // only known while it runs
                 string text = raw[i].Text.StartsWith("(not") ? raw[i].Text : words.Describe(rom, raw[i].At, block, Step, tested);
                 var notes = from.TryGetValue(raw[i].At, out var by) ? by.Distinct().ToList() : new List<string>();
-                // (the steps are in ROM order: a script with steps put before it starts further down)
-                if (raw[i].At == block + off && i > 0) notes.Insert(0, "the script starts here");
+                // the steps are in rom order, so a script with steps put before it starts further down
+                if (raw[i].At == block + offset && i > 0) notes.Insert(0, "the script starts here");
                 if (notes.Count > 0) text += "\n(" + string.Join("; ", notes) + ")";
                 ops.Add(new L2Script.Op(raw[i].At, raw[i].Length, text));
             }
@@ -368,15 +365,15 @@ public static class L2Puzzles
         return list;
     }
 
-    /// <summary>Where <paramref name="block"/>'s bytes end at the latest: the next map's block, the end of the game's
-    /// puzzle data, or for a block written in added space (<see cref="L2PuzzleBlock"/>, never across a bank) its bank's end.</summary>
+    // where the block's bytes end at the latest: the next map's block, the end of the game's puzzle data, or for a
+    // block written in added space (L2PuzzleBlock, never across a bank) its bank's end
     public static int End(RomBuffer rom, int block)
     {
         int next = block < DataEnd ? DataEnd : Math.Min(rom.Length, (block / 0x8000 + 1) * 0x8000);
-        for (int m = 0; m < 0xF2; m++) { int b = Block(rom, m); if (b > block && b < next) next = b; }
+        for (int m = 0; m < 0xF2; m++) { int otherBlock = Block(rom, m); if (otherBlock > block && otherBlock < next) next = otherBlock; }
         return next;
     }
 
-    /// <summary>The end of the game's own puzzle data.</summary>
+    // the end of the game's own puzzle data
     public const int DataEnd = 0x83E64;
 }

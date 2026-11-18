@@ -2,20 +2,18 @@ using System.Text;
 
 namespace LufiaForge.Core.Lufia2;
 
-/// <summary>
-/// Lufia II event scripts (US ROM, read from the game's code 2026-10-23; every map's scripts parse with these
-/// lengths). The interpreter ($80:9D32) reads a command byte and jumps through the table at $80:CA14 (commands
-/// 00-CC). Commands 08, 13 xx, 61-67, 9E xx and 10 (a choice) switch to text: there 10-7F are letters, 80-FF
-/// dictionary words, 00-0F still commands (01 back to commands, 00 the end, 0B the choice cursor). Pointers are u16
-/// offsets from the map's event block ("PH"), and from $87:8000 (file 0x38000) in a map's start-up script.
-/// Flags: 256 bits at $7E:077E; variables: bytes at $7E:079E.
-/// </summary>
+// lufia 2 event scripts (US rom, read from the game's code 2026-10-23, every map's scripts parse with these lengths).
+// the interpreter ($80:9D32) reads a command byte and jumps through the table at $80:CA14 (commands 00-CC).
+// commands 08, 13 xx, 61-67, 9E xx and 10 (a choice) switch to text. in text 10-7F are letters, 80-FF dictionary
+// words, and 00-0F are still commands (01 back to commands, 00 the end, 0B the choice cursor). pointers are u16
+// offsets from the map's event block ("PH"), and from $87:8000 (file 0x38000) in a map's start-up script.
+// flags are 256 bits at $7E:077E, variables are bytes at $7E:079E
 public static class L2Script
 {
     public const int InitBase = 0x38000;
 
-    /// <summary>Argument bytes (-1: worked out from the bytes), meaning, and how sure (H: read from the code,
-    /// M: from what it touches, L: a guess).</summary>
+    // argument bytes (-1 = worked out from the bytes), meaning, and how sure we are (H = read from the code,
+    // M = from what it touches, L = a guess)
     public static readonly Dictionary<int, (int Args, string Name, char Sure)> Commands = new()
     {
         [0x00] = (0, "end (return from 05/06/09 call if active; else close text, restore camera, end script)", 'H'),
@@ -223,91 +221,90 @@ public static class L2Script
         [0xCA] = (3, "$7FD020 + xx = yy, zz", 'L'),
         [0xCB] = (1, "$0B52", 'L'),
         [0xCC] = (0, "$0B62 = max", 'L'),
-        // added by Lufia Forge's extra story flags (L2ExtraFlags): flag 100 + xx
+        // added by our extra story flags (L2ExtraFlags): flag 100 + xx
         [0xCD] = (1, "extra flag xx on", 'H'),
         [0xCE] = (1, "extra flag xx off", 'H'),
         [0xCF] = (3, "extra flag xx, p: jump if set", 'H'),
         [0xD0] = (3, "extra flag xx, p: jump if clear", 'H'),
     };
 
-    /// <summary>A command or a run of text in a script.</summary>
+    // a command or a run of text in a script
     public sealed record Op(int At, int Length, string Text, bool IsText = false);
 
     private static readonly HashSet<int> TextStart = new() { 0x08, 0x13, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x9E, 0x10 };
-    // (not B8: it makes the next message stay up while the player walks on, and that message follows it)
+    // not B8: it makes the next message stay up while the player walks on, and that message comes after it
     private static readonly HashSet<int> Ends = new() { 0x00, 0x42, 0x84, 0x16, 0x5E, 0x83, 0xA5, 0x02, 0x11, 0x5C, 0x5D, 0x18, 0x19, 0x81, 0xBC };
 
     private static int Condition14(RomBuffer rom, int p)
     {
         for (int guard = 0; guard < 64; guard++)
         {
-            int c = rom.ReadByte(p++);
-            if (c == 0xFF) return p;
-            if ((c & 0xC0) == 0xC0) p += (c & 0xF8) switch { 0xC0 => 4, 0xC8 or 0xD0 or 0xD8 => 3, _ => 2 };
-            else p += (c & 0x30) == 0 ? 1 : 2;
+            int test = rom.ReadByte(p++);
+            if (test == 0xFF) return p;
+            if ((test & 0xC0) == 0xC0) p += (test & 0xF8) switch { 0xC0 => 4, 0xC8 or 0xD0 or 0xD8 => 3, _ => 2 };
+            else p += (test & 0x30) == 0 ? 1 : 2;
         }
         return p;
     }
 
-    /// <summary>The length of the command at <paramref name="p"/> (in command mode).</summary>
+    // the length of the command at p (in command mode)
     public static int Length(RomBuffer rom, int p)
     {
-        int c = rom.ReadByte(p);
-        switch (c)
+        int op = rom.ReadByte(p);
+        switch (op)
         {
             case 0x10: return 2 + 2 * rom.ReadByte(p + 1);
             case 0x12: return 3 + 2 * rom.ReadByte(p + 2);
             case 0x14: return Condition14(rom, p + 1) - p;
             case 0x41: return (rom.ReadByte(p + 1) & 0xF0) == 0x60 && rom.ReadByte(p + 2) != 0xFF ? 4 : 3;
             case 0x5B: return rom.ReadByte(p + 1) is 3 or 6 ? 2 : 3;
-            case 0x6D or 0x6E: { int q = p + 3; while (q < rom.Length && rom.ReadByte(q) != 0) q++; return q + 1 - p; }
+            case 0x6D or 0x6E: { int end = p + 3; while (end < rom.Length && rom.ReadByte(end) != 0) end++; return end + 1 - p; }
         }
-        return Commands.TryGetValue(c, out var d) && d.Args >= 0 ? 1 + d.Args : 1;
+        return Commands.TryGetValue(op, out var def) && def.Args >= 0 ? 1 + def.Args : 1;
     }
 
-    /// <summary>Pointer targets of the command at <paramref name="p"/> (file offsets), and whether running carries on
-    /// after it.</summary>
+    // pointer targets of the command at p (file offsets), and whether running carries on after it
     public static (List<int> Targets, bool FallsThrough) Flow(RomBuffer rom, int p, int jumpBase)
     {
-        var t = new List<int>();
-        int c = rom.ReadByte(p);
+        var targets = new List<int>();
+        int op = rom.ReadByte(p);
         int Ptr(int at) => jumpBase + rom.ReadUInt16Le(at);
-        switch (c)
+        switch (op)
         {
-            case 0x10: for (int i = 0; i < rom.ReadByte(p + 1); i++) t.Add(Ptr(p + 2 + i * 2)); break;
-            case 0x12: for (int i = 0; i < rom.ReadByte(p + 2); i++) t.Add(Ptr(p + 3 + i * 2)); return (t, false);
-            case 0x15 or 0x6A or 0xCF or 0xD0: t.Add(Ptr(p + 2)); break;
-            case 0x1C: t.Add(Ptr(p + 1)); return (t, false);
+            case 0x10: for (int i = 0; i < rom.ReadByte(p + 1); i++) targets.Add(Ptr(p + 2 + i * 2)); break;
+            case 0x12: for (int i = 0; i < rom.ReadByte(p + 2); i++) targets.Add(Ptr(p + 3 + i * 2)); return (targets, false);
+            case 0x15 or 0x6A or 0xCF or 0xD0: targets.Add(Ptr(p + 2)); break;
+            case 0x1C: targets.Add(Ptr(p + 1)); return (targets, false);
             case 0x14:
                 for (int q = p + 1, guard = 0; guard < 64; guard++)
                 {
-                    int k = rom.ReadByte(q++);
-                    if (k == 0xFF) break;
-                    if ((k & 0xC0) == 0xC0) q += (k & 0xF8) switch { 0xC0 => 4, 0xC8 or 0xD0 or 0xD8 => 3, _ => 2 };
-                    else if ((k & 0x30) is 0x20 or 0x30) { t.Add(Ptr(q)); q += 2; }
-                    else q += (k & 0x30) == 0 ? 1 : 2;
+                    int test = rom.ReadByte(q++);
+                    if (test == 0xFF) break;
+                    if ((test & 0xC0) == 0xC0) q += (test & 0xF8) switch { 0xC0 => 4, 0xC8 or 0xD0 or 0xD8 => 3, _ => 2 };
+                    else if ((test & 0x30) is 0x20 or 0x30) { targets.Add(Ptr(q)); q += 2; }
+                    else q += (test & 0x30) == 0 ? 1 : 2;
                 }
                 break;
-            case 0x5B when rom.ReadByte(p + 1) is 3 or 6: return (t, false);
+            case 0x5B when rom.ReadByte(p + 1) is 3 or 6: return (targets, false);
         }
-        return (t, !Ends.Contains(c) && Commands.ContainsKey(c));
+        return (targets, !Ends.Contains(op) && Commands.ContainsKey(op));
     }
 
-    /// <summary>Reads text from <paramref name="p"/> (text mode) up to the code that leaves it; returns its end.</summary>
+    // reads text from p (text mode) up to the code that leaves it, returns where it ends
     private static int TextEnd(RomBuffer rom, int p, out byte last)
     {
         last = 0;
         for (int guard = 0; guard < 2000 && p < rom.Length; guard++)
         {
-            byte b = rom.ReadByte(p);
-            if (b >= 0x10) { p++; continue; }
-            if (b is 0x00 or 0x01 or 0x0B) { last = b; return p + 1; }
-            p += b switch { 0x04 or 0x05 or 0x06 or 0x07 => 2, 0x0A => 3, _ => 1 };
+            byte textByte = rom.ReadByte(p);
+            if (textByte >= 0x10) { p++; continue; }
+            if (textByte is 0x00 or 0x01 or 0x0B) { last = textByte; return p + 1; }
+            p += textByte switch { 0x04 or 0x05 or 0x06 or 0x07 => 2, 0x0A => 3, _ => 1 };
         }
         return p;
     }
 
-    /// <summary>Every command and text reachable from <paramref name="starts"/>, in address order.</summary>
+    // every command and text reachable from starts, in address order
     public static List<Op> Walk(RomBuffer rom, IEnumerable<int> starts, int jumpBase, Func<int, string>? describe = null)
     {
         var ops = new SortedDictionary<int, Op>();
@@ -315,149 +312,149 @@ public static class L2Script
         var seen = new HashSet<int>();
         while (todo.Count > 0)
         {
-            int p = todo.Pop();
-            for (int guard = 0; guard < 3000 && p > 0 && p < rom.Length && seen.Add(p); guard++)
+            int at = todo.Pop();
+            for (int guard = 0; guard < 3000 && at > 0 && at < rom.Length && seen.Add(at); guard++)
             {
-                int c = rom.ReadByte(p);
-                int len = Length(rom, p);
-                var (targets, falls) = Flow(rom, p, jumpBase);
-                foreach (var t in targets) todo.Push(t);
-                ops[p] = new Op(p, len, Describe(rom, p, len, jumpBase));
-                p += len;
+                int op = rom.ReadByte(at);
+                int length = Length(rom, at);
+                var (targets, falls) = Flow(rom, at, jumpBase);
+                foreach (var target in targets) todo.Push(target);
+                ops[at] = new Op(at, length, Describe(rom, at, length, jumpBase));
+                at += length;
                 if (!falls) break;
-                if (!TextStart.Contains(c)) continue;
-                int end = TextEnd(rom, p, out byte last);
-                ops[p] = new Op(p, end - p, L2Text.Decode(rom, p, out _), true);
-                p = end;
+                if (!TextStart.Contains(op)) continue;
+                int end = TextEnd(rom, at, out byte last);
+                ops[at] = new Op(at, end - at, L2Text.Decode(rom, at, out _), true);
+                at = end;
                 if (last == 0) break;
             }
         }
         return ops.Values.ToList();
     }
 
-    /// <summary>One command as text: its bytes and meaning.</summary>
+    // one command as text: its bytes and what it means
     public static string Describe(RomBuffer rom, int p, int len, int jumpBase)
     {
-        int c = rom.ReadByte(p);
-        var a = rom.ReadBytes(p + 1, len - 1);
-        string bytes = string.Join(" ", a.Select(b => b.ToString("X2")));
-        string name = Commands.TryGetValue(c, out var d) ? d.Name : "(not a command)";
-        var n = Names.For(rom);
-        string Ptr(int i) => $"{jumpBase + (a[i] | a[i + 1] << 8):X6}";
-        int W(int i) => a[i] | a[i + 1] << 8;
-        string Item(int id) => id < n.Items.Length ? n.Items[id] : $"item {id:X3}";
+        int op = rom.ReadByte(p);
+        var args = rom.ReadBytes(p + 1, len - 1);
+        string bytes = string.Join(" ", args.Select(b => b.ToString("X2")));
+        string name = Commands.TryGetValue(op, out var def) ? def.Name : "(not a command)";
+        var names = Names.For(rom);
+        string Ptr(int i) => $"{jumpBase + (args[i] | args[i + 1] << 8):X6}";
+        int W(int i) => args[i] | args[i + 1] << 8;
+        string Item(int id) => id < names.Items.Length ? names.Items[id] : $"item {id:X3}";
         string Hero(int id) => id < L2Characters.Names.Length ? L2Characters.Names[id] : $"hero {id:X2}";
         string Actor(int id) => id < 7 ? $"actor {id:X2} ({L2Characters.Names[id]})" : id == 0xFF ? "all actors" : $"actor {id:X2}";
-        string Map(int id) => id < n.Maps.Length ? $"map {id:X2} {n.Maps[id]}" : $"map {id:X2}";
-        string what = c switch
+        string Map(int id) => id < names.Maps.Length ? $"map {id:X2} {names.Maps[id]}" : $"map {id:X2}";
+        string what = op switch
         {
             0x08 => "text, spoken by the current speaker (the one talked to in a talk, else the last one named)",
-            0x10 => $"choice of {a[0]}: " + string.Join(", ", Enumerable.Range(0, a[0]).Select(i => Ptr(1 + i * 2))),
-            0x12 => $"by variable {a[0]:X2} (then +1), jump to one of: " + string.Join(", ", Enumerable.Range(0, a[1]).Select(i => Ptr(2 + i * 2))),
-            0x13 => $"text, spoken by {Actor(a[0])}",
-            0x14 => "if " + Conditions(a, jumpBase, n),
-            0x15 => $"if flag {a[0]:X2} is set, jump to {Ptr(1)}",
-            0x16 => $"go to {Map(a[0])} ({a[1]}, {a[2]})",
-            0x17 => $"inn ({a[0]} gold)",
-            0x18 => $"shop {a[0]:X2}",
-            0x1A => $"set flag {a[0]:X2}",
-            0xCD => $"set flag {L2ExtraFlags.First + a[0]:X3}",
-            0xCE => $"clear flag {L2ExtraFlags.First + a[0]:X3}",
-            0xCF => $"if flag {L2ExtraFlags.First + a[0]:X3} is set, jump to {Ptr(1)}",
-            0xD0 => $"if flag {L2ExtraFlags.First + a[0]:X3} is clear, jump to {Ptr(1)}",
-            0x1B => $"clear flag {a[0]:X2}",
+            0x10 => $"choice of {args[0]}: " + string.Join(", ", Enumerable.Range(0, args[0]).Select(i => Ptr(1 + i * 2))),
+            0x12 => $"by variable {args[0]:X2} (then +1), jump to one of: " + string.Join(", ", Enumerable.Range(0, args[1]).Select(i => Ptr(2 + i * 2))),
+            0x13 => $"text, spoken by {Actor(args[0])}",
+            0x14 => "if " + Conditions(args, jumpBase, names),
+            0x15 => $"if flag {args[0]:X2} is set, jump to {Ptr(1)}",
+            0x16 => $"go to {Map(args[0])} ({args[1]}, {args[2]})",
+            0x17 => $"inn ({args[0]} gold)",
+            0x18 => $"shop {args[0]:X2}",
+            0x1A => $"set flag {args[0]:X2}",
+            0xCD => $"set flag {L2ExtraFlags.First + args[0]:X3}",
+            0xCE => $"clear flag {L2ExtraFlags.First + args[0]:X3}",
+            0xCF => $"if flag {L2ExtraFlags.First + args[0]:X3} is set, jump to {Ptr(1)}",
+            0xD0 => $"if flag {L2ExtraFlags.First + args[0]:X3} is clear, jump to {Ptr(1)}",
+            0x1B => $"clear flag {args[0]:X2}",
             0x1C => $"jump to {Ptr(0)}",
-            0x1D => $"variable {a[0]:X2} = {a[1]}",
-            0x1E => $"variable {a[0]:X2} += {a[1]}",
-            0x1F => $"variable {a[0]:X2} -= {a[1]}",
-            0x20 => $"give {Item(a[0])} x{a[1]}",
-            0x21 => $"give {Item(0x100 + a[0])} x{a[1]}",
+            0x1D => $"variable {args[0]:X2} = {args[1]}",
+            0x1E => $"variable {args[0]:X2} += {args[1]}",
+            0x1F => $"variable {args[0]:X2} -= {args[1]}",
+            0x20 => $"give {Item(args[0])} x{args[1]}",
+            0x21 => $"give {Item(0x100 + args[0])} x{args[1]}",
             0x22 => $"give {W(0)} gold",
-            0x23 => $"{Hero(a[0])} learns {(a[1] < n.Spells.Length ? n.Spells[a[1]] : $"spell {a[1]:X2}")}",
-            0x24 => $"take {Item(a[0])} x{a[1]}",
-            0x25 => $"take {Item(0x100 + a[0])} x{a[1]}",
+            0x23 => $"{Hero(args[0])} learns {(args[1] < names.Spells.Length ? names.Spells[args[1]] : $"spell {args[1]:X2}")}",
+            0x24 => $"take {Item(args[0])} x{args[1]}",
+            0x25 => $"take {Item(0x100 + args[0])} x{args[1]}",
             0x26 => $"take {W(0)} gold",
-            0x2B => $"{Hero(a[0])} joins the party",
-            0x2C => $"{Hero(a[0])} leaves the party",
-            0x2D => $"show {Actor(a[0])}",
-            0x2E => $"hide {Actor(a[0])}",
-            0x2F => $"place {Actor(a[0])} at ({a[1]}, {a[2]})",
-            0x30 => $"place {Actor(a[0])} at preset point {a[1]:X2}",
-            0x31 => $"{Actor(a[0])} turns {(a[1] is >= 1 and <= 4 ? new[] { "up", "down", "left", "right" }[a[1] - 1] : $"to {a[1]:X2}")}",
-            0x33 => $"{Actor(a[1])} walks path {a[0]:X2}",
-            0x34 => $"{Actor(a[0])} uses map sprite {a[1]:X2}",
-            0x36 => $"wait until {Actor(a[0])} stops",
-            0x37 => $"wait {a[0]} frames",
-            0x38 => $"wait {a[0]} seconds",
-            0x4B => $"play music {a[0]:X2}{(a[0] < n.Songs.Length ? " " + n.Songs[a[0]] : "")}",
-            0x6F => $"change music to {a[0]:X2}{(a[0] < n.Songs.Length ? " " + n.Songs[a[0]] : "")}",
-            0x4C => $"sound effect {a[0]:X2}",
-            0x53 => $"battle {a[0]:X2}",
-            0x5E => $"use exit {a[0]:X2}",
-            >= 0x61 and <= 0x67 => $"text, spoken by {Actor(new[] { 0, 1, 2, 3, 5, 4, 6 }[c - 0x61])}",
-            0x68 or 0x7B => $"create actor {a[0]:X2} with map sprite {a[1]:X2}",
-            0x6A => $"if flag {a[0]:X2} is clear, jump to {Ptr(1)}",
-            0x81 => $"capsule monster {a[0]:X2} joins",
-            0x9E => $"text (narration), at row {a[0]}",
+            0x2B => $"{Hero(args[0])} joins the party",
+            0x2C => $"{Hero(args[0])} leaves the party",
+            0x2D => $"show {Actor(args[0])}",
+            0x2E => $"hide {Actor(args[0])}",
+            0x2F => $"place {Actor(args[0])} at ({args[1]}, {args[2]})",
+            0x30 => $"place {Actor(args[0])} at preset point {args[1]:X2}",
+            0x31 => $"{Actor(args[0])} turns {(args[1] is >= 1 and <= 4 ? new[] { "up", "down", "left", "right" }[args[1] - 1] : $"to {args[1]:X2}")}",
+            0x33 => $"{Actor(args[1])} walks path {args[0]:X2}",
+            0x34 => $"{Actor(args[0])} uses map sprite {args[1]:X2}",
+            0x36 => $"wait until {Actor(args[0])} stops",
+            0x37 => $"wait {args[0]} frames",
+            0x38 => $"wait {args[0]} seconds",
+            0x4B => $"play music {args[0]:X2}{(args[0] < names.Songs.Length ? " " + names.Songs[args[0]] : "")}",
+            0x6F => $"change music to {args[0]:X2}{(args[0] < names.Songs.Length ? " " + names.Songs[args[0]] : "")}",
+            0x4C => $"sound effect {args[0]:X2}",
+            0x53 => $"battle {args[0]:X2}",
+            0x5E => $"use exit {args[0]:X2}",
+            >= 0x61 and <= 0x67 => $"text, spoken by {Actor(new[] { 0, 1, 2, 3, 5, 4, 6 }[op - 0x61])}",
+            0x68 or 0x7B => $"create actor {args[0]:X2} with map sprite {args[1]:X2}",
+            0x6A => $"if flag {args[0]:X2} is clear, jump to {Ptr(1)}",
+            0x81 => $"capsule monster {args[0]:X2} joins",
+            0x9E => $"text (narration), at row {args[0]}",
             _ => name,
         };
-        return $"{c:X2} {bytes,-24} {what}";
+        return $"{op:X2} {bytes,-24} {what}";
     }
 
-    /// <summary>Command 14's condition list written out.</summary>
-    private static string Conditions(byte[] a, int jumpBase, Names n)
+    // command 14's condition list written out
+    private static string Conditions(byte[] args, int jumpBase, Names names)
     {
         var parts = new List<string>();
         string[] cmp = { "==", "!=", ">=", "<=", ">", "<", "<", "<" };
         int i = 0;
-        while (i < a.Length && a[i] != 0xFF)
+        while (i < args.Length && args[i] != 0xFF)
         {
-            int c = a[i++];
-            string join = (c & 0xC0) switch { 0x40 => "or ", 0x80 => "and ", _ => "" };
-            if ((c & 0xC0) == 0xC0)
+            int test = args[i++];
+            string join = (test & 0xC0) switch { 0x40 => "or ", 0x80 => "and ", _ => "" };
+            if ((test & 0xC0) == 0xC0)
             {
-                int g = c & 0xF8;
-                string op = cmp[c & 7];
-                switch (g)
+                int group = test & 0xF8;
+                string op = cmp[test & 7];
+                switch (group)
                 {
-                    case 0xC0: { int item = a[i] | a[i + 1] << 8, v = a[i + 2] | a[i + 3] << 8; parts.Add($"count of {(item < n.Items.Length ? n.Items[item] : $"item {item:X3}")} {op} {v}"); i += 4; break; }
-                    case 0xC8: parts.Add($"{L2Characters.Names.ElementAtOrDefault(a[i]) ?? "hero"} HP {op} {a[i + 1] | a[i + 2] << 8}"); i += 3; break;
-                    case 0xD0: parts.Add($"{L2Characters.Names.ElementAtOrDefault(a[i]) ?? "hero"} MP {op} {a[i + 1] | a[i + 2] << 8}"); i += 3; break;
+                    case 0xC0: { int item = args[i] | args[i + 1] << 8, v = args[i + 2] | args[i + 3] << 8; parts.Add($"count of {(item < names.Items.Length ? names.Items[item] : $"item {item:X3}")} {op} {v}"); i += 4; break; }
+                    case 0xC8: parts.Add($"{L2Characters.Names.ElementAtOrDefault(args[i]) ?? "hero"} HP {op} {args[i + 1] | args[i + 2] << 8}"); i += 3; break;
+                    case 0xD0: parts.Add($"{L2Characters.Names.ElementAtOrDefault(args[i]) ?? "hero"} MP {op} {args[i + 1] | args[i + 2] << 8}"); i += 3; break;
                     case 0xD8: parts.Add("(unused test)"); i += 3; break;
-                    case 0xE0: parts.Add($"{L2Characters.Names.ElementAtOrDefault(a[i]) ?? "hero"} knows spell {a[i + 1]:X2}"); i += 2; break;
-                    case 0xE8: parts.Add($"{L2Characters.Names.ElementAtOrDefault(a[i]) ?? "hero"} level {op} {a[i + 1]}"); i += 2; break;
-                    case 0xF0: parts.Add($"vehicle {op} {a[i + 1]}"); i += 2; break;
-                    default: parts.Add($"actor {a[i]:X2} flag 20"); i += 2; break;
+                    case 0xE0: parts.Add($"{L2Characters.Names.ElementAtOrDefault(args[i]) ?? "hero"} knows spell {args[i + 1]:X2}"); i += 2; break;
+                    case 0xE8: parts.Add($"{L2Characters.Names.ElementAtOrDefault(args[i]) ?? "hero"} level {op} {args[i + 1]}"); i += 2; break;
+                    case 0xF0: parts.Add($"vehicle {op} {args[i + 1]}"); i += 2; break;
+                    default: parts.Add($"actor {args[i]:X2} flag 20"); i += 2; break;
                 }
                 continue;
             }
-            switch (c & 0x30)
+            switch (test & 0x30)
             {
-                case 0x00: parts.Add($"{join}flag {L2ExtraFlags.Number(L2ExtraFlags.CheckFlag(c, a[i]))} is {((c & 1) == 0 ? "set" : "clear")}"); i += 1; break;
-                case 0x10: parts.Add($"{join}variable {a[i]:X2} {cmp[c & 7]} {a[i + 1]}"); i += 2; break;
-                case 0x20: parts.Add($"then jump to {jumpBase + (a[i] | a[i + 1] << 8):X6}"); i += 2; break;
-                default: parts.Add($"else jump to {jumpBase + (a[i] | a[i + 1] << 8):X6}"); i += 2; break;
+                case 0x00: parts.Add($"{join}flag {L2ExtraFlags.Number(L2ExtraFlags.CheckFlag(test, args[i]))} is {((test & 1) == 0 ? "set" : "clear")}"); i += 1; break;
+                case 0x10: parts.Add($"{join}variable {args[i]:X2} {cmp[test & 7]} {args[i + 1]}"); i += 2; break;
+                case 0x20: parts.Add($"then jump to {jumpBase + (args[i] | args[i + 1] << 8):X6}"); i += 2; break;
+                default: parts.Add($"else jump to {jumpBase + (args[i] | args[i + 1] << 8):X6}"); i += 2; break;
             }
         }
         return string.Join(" ", parts);
     }
 
-    /// <summary>Songs are packed files 00-3E ($80:941A); each starts "S2C", tempo, then a 12-letter name.</summary>
+    // songs are packed files 00-3E ($80:941A), each starts "S2C", tempo, then a 12-letter name
     public const int SongCount = 0x3F;
 
     public static string SongName(RomBuffer rom, int song)
     {
         try
         {
-            var f = L2Rom.ReadFile(rom, song);
-            for (int k = 0; k + 16 <= f.Length && k < 8; k++)
-                if (f[k] == 'S' && f[k + 1] == '2' && f[k + 2] == 'C') return Encoding.ASCII.GetString(f, k + 4, 12).Trim(' ', '\0');
+            var file = L2Rom.ReadFile(rom, song);
+            for (int k = 0; k + 16 <= file.Length && k < 8; k++)
+                if (file[k] == 'S' && file[k + 1] == '2' && file[k + 2] == 'C') return Encoding.ASCII.GetString(file, k + 4, 12).Trim(' ', '\0');
         }
         catch (Exception) { }
         return "";
     }
 
-    /// <summary>Names used in listings, read once per ROM.</summary>
+    // names used in listings, read once per rom
     private sealed class Names
     {
         public string[] Items = Array.Empty<string>(), Spells = Array.Empty<string>(), Maps = Array.Empty<string>(), Songs = Array.Empty<string>();
@@ -467,28 +464,28 @@ public static class L2Script
         public static Names For(RomBuffer rom)
         {
             if (_last != null && ReferenceEquals(_rom, rom)) return _last;
-            var n = new Names
+            var names = new Names
             {
                 Items = L2Battle.Items(rom).Select(i => i.Name.Trim()).ToArray(),
                 Spells = L2Battle.Spells(rom).Select(s => s.Name.Trim()).ToArray(),
                 Maps = Enumerable.Range(0, L2Maps.Count(rom)).Select(m => L2Maps.Name(rom, m)).ToArray(),
                 Songs = Enumerable.Range(0, SongCount).Select(i => SongName(rom, i)).ToArray(),
             };
-            _rom = rom; _last = n;
-            return n;
+            _rom = rom; _last = names;
+            return names;
         }
     }
 
-    /// <summary>A map's scripts: the start-up script, then the event block's load, talk and trigger lists.</summary>
+    // a map's scripts: the start-up script, then the event block's load, talk and trigger lists
     public static List<(string Title, List<Op> Ops)> MapScripts(RomBuffer rom, int map)
     {
         var list = new List<(string, List<Op>)>();
-        int init = L2EventBlocks.InitScript(rom, map);
-        list.Add(("Start-up script", Walk(rom, new[] { init }, L2EventBlocks.InitBase(init))));
+        int initScript = L2EventBlocks.InitScript(rom, map);
+        list.Add(("Start-up script", Walk(rom, new[] { initScript }, L2EventBlocks.InitBase(initScript))));
         int block = L2Events.Block(rom, map);
         if (block < 0) return list;
-        foreach (var (kind, id, off) in L2Events.Entries(rom, block))
-            list.Add(($"{kind switch { "talk" => "Talk to", "load" => "On load", "scene" => "Scene", "trigger" => "Trigger", _ => kind }} {id:X2}", Walk(rom, new[] { block + off }, block)));
+        foreach (var (kind, id, offset) in L2Events.Entries(rom, block))
+            list.Add(($"{kind switch { "talk" => "Talk to", "load" => "On load", "scene" => "Scene", "trigger" => "Trigger", _ => kind }} {id:X2}", Walk(rom, new[] { block + offset }, block)));
         return list;
     }
 }

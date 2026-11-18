@@ -1,23 +1,22 @@
 namespace LufiaForge.Core.Lufia2;
 
-/// <summary>
-/// Lufia II maps (LEdit's L2Map / L2MapHeader / L2MapBlockSet, US addresses). Map n (0-0xF1, and F2 up when made with
-/// New map; 0 and 1 are the world and sea-floor maps) is packed file 0x3F + n (new maps: <see cref="L2NewMaps.FileOf"/>) on the US ROM (LEdit's 0x40 + n is the German numbering; checked
-/// in the game: Tia's shop, map 04, is file 0x43): a 6-byte head, then two layers of 16x16 blocks (u16 head,
-/// u8 width, u8 height, then width x height cells of block-low, flags). Per-map lists at $CF:F72E... pick its block
-/// set, tile set and palettes; the header table at $87:8000 names it.
-/// </summary>
+// lufia 2 maps (LEdit's L2Map / L2MapHeader / L2MapBlockSet, US addresses). map n (0-0xF1, plus F2 up if made with
+// New map, 0 and 1 are the world and sea floor maps) is packed file 0x3F + n on the US rom (new maps:
+// L2NewMaps.FileOf). LEdit's 0x40 + n is the German numbering, checked in the game: Tia's shop, map 04, is file 0x43.
+// the file is a 6-byte head, then two layers of 16x16 blocks (u16 head, u8 width, u8 height, then width x height
+// cells of block-low, flags). per-map lists at $CF:F72E... pick its block set, tile set and palettes, and the header
+// table at $87:8000 names it
 public static class L2Maps
 {
     public const int MapFileBase = 0x3F;
     public const int HeaderTable = 0x38000, AnimData = 0x27F9FE, PaletteSetPointers = 0x27FAFA;
     public const int BlockSetFileBase = 0x130, TileSetFileBase = 0x14B;
 
-    /// <summary>How many maps the ROM has: the game's 242 (00-F1) and those made with New map (<see cref="L2NewMaps"/>).</summary>
+    // how many maps the rom has: the game's 242 (00-F1) plus the ones made with New map (L2NewMaps)
     public static int Count(RomBuffer rom) => L2NewMaps.Count(rom);
 
-    /// <summary>File offsets of map <paramref name="id"/>'s bytes in the per-map graphics lists ($CF:F72E block set,
-    /// $CF:F81E tile set, $CF:F90E animation, $CF:FA08 palette set, $CF:FBA6 colour animation; moved by New map).</summary>
+    // file offsets of the map's bytes in the per-map graphics lists ($CF:F72E block set, $CF:F81E tile set,
+    // $CF:F90E animation, $CF:FA08 palette set, $CF:FBA6 colour animation, New map moves them)
     public static int BlockSetAt(RomBuffer rom, int id) => L2NewMaps.Entry(rom, L2MapTable.BlockSet, id);
     public static int TileSetAt(RomBuffer rom, int id) => L2NewMaps.Entry(rom, L2MapTable.TileSet, id);
     public static int AnimIndexAt(RomBuffer rom, int id) => L2NewMaps.Entry(rom, L2MapTable.AnimIndex, id);
@@ -28,10 +27,10 @@ public static class L2Maps
     {
         public int Width { get; init; }
         public int Height { get; init; }
-        /// <summary>Block number (10 bits) per cell, row-major.</summary>
+        // block number (10 bits) per cell, row-major
         public int[] Blocks { get; init; } = Array.Empty<int>();
-        /// <summary>The cell's flag byte (bits 0-1 are the block's high bits; 04 wall above, 08 wall left, 10 room
-        /// border, 20 doorway, 40 upper level, 80 obstacle).</summary>
+        // the cell's flag byte: bits 0-1 are the block's high bits, 04 wall above, 08 wall left, 10 room border,
+        // 20 doorway, 40 upper level, 80 obstacle
         public byte[] Flags { get; init; } = Array.Empty<byte>();
     }
 
@@ -42,57 +41,57 @@ public static class L2Maps
         public Layer[] Layers { get; init; } = Array.Empty<Layer>();
         public int BlockSet { get; init; }
         public int TileSet { get; init; }
-        /// <summary>The palette set to draw it with (-1: the one the ROM gives the map).</summary>
+        // palette set to draw it with (-1 = the one the rom gives the map)
         public int PaletteSet { get; init; } = -1;
-        /// <summary>The tile animation to draw it with (it picks where the palettes start; -1: the map's own).</summary>
+        // tile animation to draw it with (it picks where the palettes start, -1 = the map's own)
         public int AnimIndex { get; init; } = -1;
     }
 
-    /// <summary>A map's name: zero-terminated at the header table + u16. It can use the text dictionary (05 / 06 /
-    /// 80-FF, as dialogue does) and 0A xx yy = the first (yyxx &gt;&gt; 12) + 2 letters of another name, at the header
-    /// table + (yyxx &amp; 0FFF) (e.g. "Elcid" for the houses of Elcid, "Cave" + " to Sundletan B" + "2").</summary>
+    // a map's name, zero-terminated at the header table + u16. it can use the text dictionary (05 / 06 / 80-FF, like
+    // dialogue does) and 0A xx yy = the first (yyxx >> 12) + 2 letters of another name at the header table +
+    // (yyxx & 0FFF). like "Elcid" for the houses of Elcid, or "Cave" + " to Sundletan B" + "2"
     public static string Name(RomBuffer rom, int id) => NameAt(rom, L2MapNames.NameAt(rom, id), 0);
 
     private static string NameAt(RomBuffer rom, int at, int depth, bool keepSpaces = false)
     {
         var words = L2Text.Words(rom);
         var sb = new System.Text.StringBuilder();
-        for (int p = at; p < at + 48 && depth < 4; )
+        for (int offset = at; offset < at + 48 && depth < 4; )
         {
-            byte b = rom.ReadByte(p++);
-            if (b == 0) break;
-            if (b == 0x0A)
+            byte nameByte = rom.ReadByte(offset++);
+            if (nameByte == 0) break;
+            if (nameByte == 0x0A)
             {
-                int w = rom.ReadUInt16Le(p); p += 2;
-                string part = NameAt(rom, L2MapNames.Base(rom) + (w & 0x0FFF), depth + 1, keepSpaces: true);
-                int n = (w >> 12) + 2;
-                sb.Append(part.Length > n ? part[..n] : part);
+                int pieceWord = rom.ReadUInt16Le(offset); offset += 2;
+                string part = NameAt(rom, L2MapNames.Base(rom) + (pieceWord & 0x0FFF), depth + 1, keepSpaces: true);
+                int pieceLength = (pieceWord >> 12) + 2;
+                sb.Append(part.Length > pieceLength ? part[..pieceLength] : part);
             }
-            else if (b == 5) sb.Append(words[rom.ReadByte(p++)]);
-            else if (b == 6) sb.Append(words[0x100 + rom.ReadByte(p++)]);
-            else if (b >= 0x80) sb.Append(words[0x200 + (b & 0x7F)]);
-            else sb.Append(L2Charset.ToChar(rom, b) ?? '~');
+            else if (nameByte == 5) sb.Append(words[rom.ReadByte(offset++)]);
+            else if (nameByte == 6) sb.Append(words[0x100 + rom.ReadByte(offset++)]);
+            else if (nameByte >= 0x80) sb.Append(words[0x200 + (nameByte & 0x7F)]);
+            else sb.Append(L2Charset.ToChar(rom, nameByte) ?? '~');
         }
         return keepSpaces ? sb.ToString() : sb.ToString().Trim();
     }
 
     public static Map Read(RomBuffer rom, int id)
     {
-        byte[] f = L2Rom.ReadFile(rom, L2NewMaps.FileOf(id));
+        byte[] file = L2Rom.ReadFile(rom, L2NewMaps.FileOf(id));
         var layers = new List<Layer>();
-        int p = 6;
-        for (int l = 0; l < 2 && p + 4 <= f.Length; l++)
+        int offset = 6;
+        for (int l = 0; l < 2 && offset + 4 <= file.Length; l++)
         {
-            int w = f[p + 2], h = f[p + 3];
-            p += 4;
-            var blocks = new int[w * h];
-            var flags = new byte[w * h];
-            for (int i = 0; i < w * h && p + 1 < f.Length; i++, p += 2)
+            int width = file[offset + 2], height = file[offset + 3];
+            offset += 4;
+            var blocks = new int[width * height];
+            var flags = new byte[width * height];
+            for (int i = 0; i < width * height && offset + 1 < file.Length; i++, offset += 2)
             {
-                flags[i] = f[p + 1];
-                blocks[i] = f[p] | (f[p + 1] & 3) << 8;
+                flags[i] = file[offset + 1];
+                blocks[i] = file[offset] | (file[offset + 1] & 3) << 8;
             }
-            layers.Add(new Layer { Width = w, Height = h, Blocks = blocks, Flags = flags });
+            layers.Add(new Layer { Width = width, Height = height, Blocks = blocks, Flags = flags });
         }
         return new Map
         {
@@ -101,165 +100,164 @@ public static class L2Maps
         };
     }
 
-    /// <summary>Writes the map's two layers back (block numbers and cell flags): its packed file is rebuilt and put back
-    /// (<see cref="L2Rom.WriteFile"/>). A map whose size changed gets its file laid out again (the 6-byte head and each
-    /// layer's u16 head kept, the new width and height, the cells).</summary>
-    /// <summary>The word at the head of layer <paramref name="layer"/> in the map's file: low byte the scroll mode (0 =
-    /// scrolls with the map; the game's mountains, towers and Shrine of Daos floors give their ground layer 02 or 03, a
-    /// parallax background far below, table $8E:BE6E), high byte its parallax speeds.</summary>
+    // the word at the head of that layer in the map's file. low byte is the scroll mode (0 = scrolls with the map,
+    // the game's mountains, towers and Shrine of Daos floors give their ground layer 02 or 03, a parallax background
+    // far below, table $8E:BE6E), high byte is its parallax speeds
     public static int LayerMode(RomBuffer rom, int id, int layer)
     {
-        byte[] f = L2Rom.ReadFile(rom, L2NewMaps.FileOf(id));
-        int p = 6;
-        for (int l = 0; l < layer && p + 4 <= f.Length; l++) p += 4 + f[p + 2] * f[p + 3] * 2;
-        return p + 1 < f.Length ? f[p] | f[p + 1] << 8 : 0;
+        byte[] file = L2Rom.ReadFile(rom, L2NewMaps.FileOf(id));
+        int offset = 6;
+        for (int l = 0; l < layer && offset + 4 <= file.Length; l++) offset += 4 + file[offset + 2] * file[offset + 3] * 2;
+        return offset + 1 < file.Length ? file[offset] | file[offset + 1] << 8 : 0;
     }
 
-    /// <summary>The ground layer scroll mode most of the game's mountains and towers have (mode 02, speeds 11).</summary>
+    // the ground layer scroll mode most of the game's mountains and towers have (mode 02, speeds 11)
     public const int ParallaxMode = 0x1102;
 
+    // writes the map's two layers back (block numbers and cell flags): its packed file is rebuilt and put back
+    // (L2Rom.WriteFile). if the map's size changed its file gets laid out again (the 6-byte head and each layer's
+    // u16 head kept, then the new width and height, then the cells)
     public static void Write(RomBuffer rom, Map map, int groundMode = -1)
     {
-        byte[] f = L2Rom.ReadFile(rom, L2NewMaps.FileOf(map.Id));
-        var outp = new List<byte>(f.Take(6));
-        int p = 6;
+        byte[] file = L2Rom.ReadFile(rom, L2NewMaps.FileOf(map.Id));
+        var output = new List<byte>(file.Take(6));
+        int offset = 6;
         for (int l = 0; l < 2 && l < map.Layers.Length; l++)
         {
-            var L = map.Layers[l];
-            int ow = f[p + 2], oh = f[p + 3];
-            if (l == 0 && groundMode >= 0) { outp.Add((byte)groundMode); outp.Add((byte)(groundMode >> 8)); }
-            else { outp.Add(f[p]); outp.Add(f[p + 1]); }
-            outp.Add((byte)L.Width); outp.Add((byte)L.Height);
-            p += 4 + ow * oh * 2;
-            for (int i = 0; i < L.Width * L.Height; i++)
+            var layer = map.Layers[l];
+            int oldWidth = file[offset + 2], oldHeight = file[offset + 3];
+            if (l == 0 && groundMode >= 0) { output.Add((byte)groundMode); output.Add((byte)(groundMode >> 8)); }
+            else { output.Add(file[offset]); output.Add(file[offset + 1]); }
+            output.Add((byte)layer.Width); output.Add((byte)layer.Height);
+            offset += 4 + oldWidth * oldHeight * 2;
+            for (int i = 0; i < layer.Width * layer.Height; i++)
             {
-                outp.Add((byte)L.Blocks[i]);
-                outp.Add((byte)(L.Flags[i] & 0xFC | L.Blocks[i] >> 8 & 3));
+                output.Add((byte)layer.Blocks[i]);
+                output.Add((byte)(layer.Flags[i] & 0xFC | layer.Blocks[i] >> 8 & 3));
             }
         }
-        if (p < f.Length) outp.AddRange(f.Skip(p));
-        L2Rom.WriteFile(rom, L2NewMaps.FileOf(map.Id), outp.ToArray());
+        if (offset < file.Length) output.AddRange(file.Skip(offset));
+        L2Rom.WriteFile(rom, L2NewMaps.FileOf(map.Id), output.ToArray());
     }
 
-    /// <summary>How many blocks the map's block set has.</summary>
+    // how many blocks the map's block set has
     public static int BlockCount(RomBuffer rom, int id)
     {
-        byte[] bs = L2Rom.ReadFile(rom, BlockSetFileBase + rom.ReadByte(BlockSetAt(rom, id)));
-        return (short)(bs[2] | bs[3] << 8);
+        byte[] blockSet = L2Rom.ReadFile(rom, BlockSetFileBase + rom.ReadByte(BlockSetAt(rom, id)));
+        return (short)(blockSet[2] | blockSet[3] << 8);
     }
 
-    /// <summary>Block <paramref name="block"/> of the map's block set as 16x16 ARGB pixels (for a block picker).</summary>
+    // one block of the map's block set as 16x16 ARGB pixels (for a block picker)
     public static uint[] BlockPixels(RomBuffer rom, int id, int block)
     {
         var map = Read(rom, id);
         byte[] blockSet = L2Rom.ReadFile(rom, map.BlockSet), tiles = L2Rom.ReadFile(rom, map.TileSet);
-        var pals = Palettes(rom, id);
-        var px = new uint[256];
-        int rec = 0x10 + block * 8;
-        if (rec + 8 > blockSet.Length) return px;
-        for (int q = 0; q < 4; q++)
-            DrawTile(px, 16, q >= 2 ? 8 : 0, (q & 1) * 8, blockSet[rec + q * 2] | blockSet[rec + q * 2 + 1] << 8, tiles, pals);
-        return px;
+        var palettes = Palettes(rom, id);
+        var pixels = new uint[256];
+        int blockRecord = 0x10 + block * 8;
+        if (blockRecord + 8 > blockSet.Length) return pixels;
+        for (int quarter = 0; quarter < 4; quarter++)
+            DrawTile(pixels, 16, quarter >= 2 ? 8 : 0, (quarter & 1) * 8, blockSet[blockRecord + quarter * 2] | blockSet[blockRecord + quarter * 2 + 1] << 8, tiles, palettes);
+        return pixels;
     }
 
-    /// <summary>Every block of the map's block set (as the map is drawn: its block set, tile set and palette set), 16x16
-    /// ARGB pixels each (0 = see-through).</summary>
+    // every block of the map's block set the way the map is drawn (its block set, tile set and palette set),
+    // 16x16 ARGB pixels each (0 = see-through)
     public static uint[][] AllBlocks(RomBuffer rom, Map map)
     {
         byte[] blockSet = L2Rom.ReadFile(rom, map.BlockSet), tiles = L2Rom.ReadFile(rom, map.TileSet);
-        var pals = Palettes(rom, map.Id, map.PaletteSet, map.AnimIndex);
+        var palettes = Palettes(rom, map.Id, map.PaletteSet, map.AnimIndex);
         int count = blockSet.Length >= 4 ? Math.Max(0, (int)(short)(blockSet[2] | blockSet[3] << 8)) : 0;
         var all = new uint[count][];
-        for (int b = 0; b < count; b++)
+        for (int block = 0; block < count; block++)
         {
-            var px = new uint[256];
-            int rec = 0x10 + b * 8;
-            if (rec + 8 <= blockSet.Length)
-                for (int q = 0; q < 4; q++)
-                    DrawTile(px, 16, q >= 2 ? 8 : 0, (q & 1) * 8, blockSet[rec + q * 2] | blockSet[rec + q * 2 + 1] << 8, tiles, pals);
-            all[b] = px;
+            var pixels = new uint[256];
+            int blockRecord = 0x10 + block * 8;
+            if (blockRecord + 8 <= blockSet.Length)
+                for (int quarter = 0; quarter < 4; quarter++)
+                    DrawTile(pixels, 16, quarter >= 2 ? 8 : 0, (quarter & 1) * 8, blockSet[blockRecord + quarter * 2] | blockSet[blockRecord + quarter * 2 + 1] << 8, tiles, palettes);
+            all[block] = pixels;
         }
         return all;
     }
 
-    /// <summary>The map's 6 background palettes (CGRAM rows 2-7), 16 ARGB colours each.</summary>
+    // the map's 6 background palettes (CGRAM rows 2-7), 16 ARGB colours each
     public static uint[][] Palettes(RomBuffer rom, int id, int paletteSet = -1, int animIndex = -1)
     {
         int set = paletteSet >= 0 ? paletteSet : rom.ReadByte(PaletteSetAt(rom, id));
         int anim = animIndex >= 0 ? animIndex : rom.ReadByte(AnimIndexAt(rom, id));
-        int v29 = rom.ReadByte(AnimData + anim * 2 + 1);
-        int palOff = (v29 >> 4) != 0 ? 0x20 : 0x10;
-        int ptr = rom.ReadUInt16Le(PaletteSetPointers + Math.Max(0, set - 1) * 2);
-        int at = L2Rom.SnesToFile(0x9B0000 | ptr) + palOff;
-        var pals = new uint[6][];
-        for (int r = 0; r < 6; r++)
+        int animByte = rom.ReadByte(AnimData + anim * 2 + 1);
+        int paletteOffset = (animByte >> 4) != 0 ? 0x20 : 0x10;
+        int pointer = rom.ReadUInt16Le(PaletteSetPointers + Math.Max(0, set - 1) * 2);
+        int paletteAt = L2Rom.SnesToFile(0x9B0000 | pointer) + paletteOffset;
+        var palettes = new uint[6][];
+        for (int row = 0; row < 6; row++)
         {
-            pals[r] = new uint[16];
+            palettes[row] = new uint[16];
             for (int c = 0; c < 16; c++)
             {
-                int v = rom.ReadUInt16Le(at + r * 32 + c * 2);
-                pals[r][c] = 0xFF000000u | (uint)((v & 31) * 255 / 31) << 16 | (uint)((v >> 5 & 31) * 255 / 31) << 8 | (uint)((v >> 10 & 31) * 255 / 31);
+                int colour = rom.ReadUInt16Le(paletteAt + row * 32 + c * 2);
+                palettes[row][c] = 0xFF000000u | (uint)((colour & 31) * 255 / 31) << 16 | (uint)((colour >> 5 & 31) * 255 / 31) << 8 | (uint)((colour >> 10 & 31) * 255 / 31);
             }
         }
-        return pals;
+        return palettes;
     }
 
-    /// <summary>Draws the map as ARGB pixels: the first layer (the ground) first, then the second (walls, furniture,
-    /// roofs; its flags hold the collision) over it; block 0 is left out. (Checked against the game's own tile maps
-    /// in Tia's shop.)</summary>
+    // draws the map as ARGB pixels: the first layer (the ground) first, then the second (walls, furniture, roofs,
+    // its flags hold the collision) over it. block 0 is left out. checked against the game's own tile maps in Tia's shop
     public static (int Width, int Height, uint[] Pixels) Render(RomBuffer rom, int id, bool layer0 = true, bool layer1 = true) =>
         Render(rom, Read(rom, id), layer0, layer1);
 
-    /// <summary>Draws a map as given (an edited copy before it is written).</summary>
+    // draws a map as given (an edited copy before it's written)
     public static (int Width, int Height, uint[] Pixels) Render(RomBuffer rom, Map map, bool layer0 = true, bool layer1 = true)
     {
         int id = map.Id;
         byte[] blockSet = L2Rom.ReadFile(rom, map.BlockSet);
         byte[] tiles = L2Rom.ReadFile(rom, map.TileSet);
-        var pals = Palettes(rom, id, map.PaletteSet, map.AnimIndex);
+        var palettes = Palettes(rom, id, map.PaletteSet, map.AnimIndex);
         int w = map.Layers.Max(l => l.Width) * 16, h = map.Layers.Max(l => l.Height) * 16;
-        var px = new uint[w * h];
+        var pixels = new uint[w * h];
         int blockCount = blockSet.Length >= 4 ? (short)(blockSet[2] | blockSet[3] << 8) : 0;
-        foreach (int li in new[] { 0, 1 })
+        foreach (int layerIndex in new[] { 0, 1 })
         {
-            if (li >= map.Layers.Length) continue;
-            if (li == 0 && !layer0 || li == 1 && !layer1) continue;
-            var L = map.Layers[li];
-            for (int cy = 0; cy < L.Height; cy++)
-                for (int cx = 0; cx < L.Width; cx++)
+            if (layerIndex >= map.Layers.Length) continue;
+            if (layerIndex == 0 && !layer0 || layerIndex == 1 && !layer1) continue;
+            var layer = map.Layers[layerIndex];
+            for (int cy = 0; cy < layer.Height; cy++)
+                for (int cx = 0; cx < layer.Width; cx++)
                 {
-                    int b = L.Blocks[cy * L.Width + cx];
-                    if (b == 0 || b >= blockCount) continue;
-                    int rec = 0x10 + b * 8;
-                    for (int q = 0; q < 4; q++)
+                    int block = layer.Blocks[cy * layer.Width + cx];
+                    if (block == 0 || block >= blockCount) continue;
+                    int blockRecord = 0x10 + block * 8;
+                    for (int quarter = 0; quarter < 4; quarter++)
                     {
-                        int word = blockSet[rec + q * 2] | blockSet[rec + q * 2 + 1] << 8;
-                        int qx = q >= 2 ? 8 : 0, qy = (q & 1) * 8;   // TL, BL, TR, BR
-                        DrawTile(px, w, cx * 16 + qx, cy * 16 + qy, word, tiles, pals);
+                        int word = blockSet[blockRecord + quarter * 2] | blockSet[blockRecord + quarter * 2 + 1] << 8;
+                        int qx = quarter >= 2 ? 8 : 0, qy = (quarter & 1) * 8;   // TL, BL, TR, BR
+                        DrawTile(pixels, w, cx * 16 + qx, cy * 16 + qy, word, tiles, palettes);
                     }
                 }
         }
-        return (w, h, px);
+        return (w, h, pixels);
     }
 
-    private static void DrawTile(uint[] px, int w, int x0, int y0, int word, byte[] tiles, uint[][] pals)
+    private static void DrawTile(uint[] pixels, int w, int x0, int y0, int word, byte[] tiles, uint[][] palettes)
     {
-        int tile = word & 0x3FF, pal = word >> 10 & 7;
-        bool hf = (word & 0x4000) != 0, vf = (word & 0x8000) != 0;
-        int row = pal >= 2 ? pal - 2 : 5;
-        int at = tile * 32;
-        if (at + 32 > tiles.Length) return;
+        int tile = word & 0x3FF, palette = word >> 10 & 7;
+        bool flipX = (word & 0x4000) != 0, flipY = (word & 0x8000) != 0;
+        int row = palette >= 2 ? palette - 2 : 5;
+        int tileAt = tile * 32;
+        if (tileAt + 32 > tiles.Length) return;
         for (int r = 0; r < 8; r++)
         {
-            int sr = vf ? 7 - r : r;
-            byte p0 = tiles[at + sr * 2], p1 = tiles[at + sr * 2 + 1], p2 = tiles[at + 0x10 + sr * 2], p3 = tiles[at + 0x11 + sr * 2];
+            int sourceRow = flipY ? 7 - r : r;
+            byte plane0 = tiles[tileAt + sourceRow * 2], plane1 = tiles[tileAt + sourceRow * 2 + 1], plane2 = tiles[tileAt + 0x10 + sourceRow * 2], plane3 = tiles[tileAt + 0x11 + sourceRow * 2];
             for (int c = 0; c < 8; c++)
             {
-                int bit = hf ? c : 7 - c;
-                int ci = (p0 >> bit & 1) | (p1 >> bit & 1) << 1 | (p2 >> bit & 1) << 2 | (p3 >> bit & 1) << 3;
-                if (ci == 0) continue;
+                int bit = flipX ? c : 7 - c;
+                int colourIndex = (plane0 >> bit & 1) | (plane1 >> bit & 1) << 1 | (plane2 >> bit & 1) << 2 | (plane3 >> bit & 1) << 3;
+                if (colourIndex == 0) continue;
                 int x = x0 + c, y = y0 + r;
-                if (x < w && y * w + x < px.Length) px[y * w + x] = pals[row][ci];
+                if (x < w && y * w + x < pixels.Length) pixels[y * w + x] = palettes[row][colourIndex];
             }
         }
     }

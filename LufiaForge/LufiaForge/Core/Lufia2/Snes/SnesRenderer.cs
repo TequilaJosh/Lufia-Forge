@@ -1,11 +1,9 @@
 namespace LufiaForge.Core.Lufia2.Snes;
 
-/// <summary>
-/// Draws the picture the console shows from <see cref="SnesMachine"/>'s memories and registers, line by line with HDMA:
-/// background modes 0-1 (and 2-6 as 4 / 8 bit layers without offset-per-tile), 8x8 and 16x16 tiles, sprites with their
-/// sizes, priorities and flips, the two windows, colour maths (add / subtract, half, fixed colour) and brightness.
-/// No mode 7, mosaic or interlace. Output: 256 x 224, 0xAARRGGBB.
-/// </summary>
+// draws the picture the console shows from SnesMachine's memories and registers, line by line with HDMA: background
+// modes 0-1 (and 2-6 as 4 / 8 bit layers without offset-per-tile), 8x8 and 16x16 tiles, sprites with their sizes,
+// priorities and flips, the two windows, colour maths (add / subtract, half, fixed colour) and brightness.
+// no mode 7, mosaic or interlace. output is 256 x 224, 0xAARRGGBB
 public static class SnesRenderer
 {
     public const int Width = 256, Height = 224;
@@ -24,9 +22,9 @@ public static class SnesRenderer
     [ThreadStatic] private static int[]? _objCol, _objPri, _objPal;
     [ThreadStatic] private static bool[,]? _win;
 
-    /// <param name="underlay">A picture (0xAARRGGBB, alpha 0 = nothing) shown as a sprite of priority 2 behind the real
-    /// ones, e.g. the monster a spell lands on.</param>
-    /// <param name="hideTable1">Leave out the sprites from the second name table (the battle's own characters).</param>
+    // underlay = a picture (0xAARRGGBB, alpha 0 = nothing) shown as a sprite of priority 2 behind the real ones, like
+    // the monster a spell lands on. hideTable1 leaves out the sprites from the second name table (the battle's own
+    // characters)
     public static uint[] Render(SnesMachine m, uint[]? underlay = null, bool hideTable1 = false)
     {
         _under = underlay; _hideT1 = hideTable1;
@@ -214,30 +212,30 @@ public static class SnesRenderer
             int scx = (tx >> 5) & (wide ? 1 : 0), scy = (ty >> 5) & (tall ? 1 : 0);
             int screen = scx + scy * (wide ? 2 : 1);
             int entryAddr = mapBase + screen * 0x800 + ((ty & 31) * 32 + (tx & 31)) * 2;
-            int e = m.Vram[entryAddr & 0xFFFF] | m.Vram[(entryAddr + 1) & 0xFFFF] << 8;
-            int tile = e & 0x3FF, pal = e >> 10 & 7, p = e >> 13 & 1;
-            bool hf = (e & 0x4000) != 0, vf = (e & 0x8000) != 0;
+            int entry = m.Vram[entryAddr & 0xFFFF] | m.Vram[(entryAddr + 1) & 0xFFFF] << 8;
+            int tile = entry & 0x3FF, pal = entry >> 10 & 7, priority = entry >> 13 & 1;
+            bool flipX = (entry & 0x4000) != 0, flipY = (entry & 0x8000) != 0;
             int px = xx % ts, py = yy % ts;
-            if (hf) px = ts - 1 - px;
-            if (vf) py = ts - 1 - py;
+            if (flipX) px = ts - 1 - px;
+            if (flipY) py = ts - 1 - py;
             if (big) { tile += (px >> 3) + (py >> 3) * 16; px &= 7; py &= 7; }
-            int ci = TilePixel(m.Vram, (charBase + (tile & 0x3FF) * tileBytes) & 0xFFFF, bpp, px, py);
-            if (ci == 0) continue;
-            col[bg, x] = bpp == 8 ? ci : palBase + pal * (1 << bpp) + ci;
-            pri[bg, x] = p;
+            int colourIndex = TilePixel(m.Vram, (charBase + (tile & 0x3FF) * tileBytes) & 0xFFFF, bpp, px, py);
+            if (colourIndex == 0) continue;
+            col[bg, x] = bpp == 8 ? colourIndex : palBase + pal * (1 << bpp) + colourIndex;
+            pri[bg, x] = priority;
         }
     }
 
     private static int TilePixel(byte[] vram, int at, int bpp, int x, int y)
     {
-        int bit = 7 - x, v = 0;
+        int bit = 7 - x, colourIndex = 0;
         for (int plane = 0; plane < bpp; plane += 2)
         {
-            int o = (at + plane * 8 + y * 2) & 0xFFFF;
-            v |= ((vram[o] >> bit) & 1) << plane;
-            v |= ((vram[(o + 1) & 0xFFFF] >> bit) & 1) << (plane + 1);
+            int rowAt = (at + plane * 8 + y * 2) & 0xFFFF;
+            colourIndex |= ((vram[rowAt] >> bit) & 1) << plane;
+            colourIndex |= ((vram[(rowAt + 1) & 0xFFFF] >> bit) & 1) << (plane + 1);
         }
-        return v;
+        return colourIndex;
     }
 
     private static void DrawObj(SnesMachine m, int line, int[] col, int[] pri, int[] palOut)
@@ -248,32 +246,32 @@ public static class SnesRenderer
         // lower numbers are in front: draw from 127 down
         for (int i = 127; i >= 0; i--)
         {
-            int o = i * 4;
+            int oamAt = i * 4;
             int hi = m.Oam[0x200 + i / 4] >> ((i & 3) * 2) & 3;
-            int x = m.Oam[o] | (hi & 1) << 8;
+            int x = m.Oam[oamAt] | (hi & 1) << 8;
             if (x >= 256) x -= 512;
-            int y = m.Oam[o + 1];
-            int tile = m.Oam[o + 2] | (m.Oam[o + 3] & 1) << 8;
+            int y = m.Oam[oamAt + 1];
+            int tile = m.Oam[oamAt + 2] | (m.Oam[oamAt + 3] & 1) << 8;
             if (_hideT1 && tile >= 0x100) continue;
-            int attr = m.Oam[o + 3];
+            int attr = m.Oam[oamAt + 3];
             var (w, h) = ObjSizes[sizeSel, (hi >> 1) & 1];
             int dy = (line - y) & 0xFF;
             if (dy >= h) continue;
-            bool hf = (attr & 0x40) != 0, vf = (attr & 0x80) != 0;
-            int p = attr >> 4 & 3, pal = attr >> 1 & 7;
-            int sy = vf ? h - 1 - dy : dy;
+            bool flipX = (attr & 0x40) != 0, flipY = (attr & 0x80) != 0;
+            int priority = attr >> 4 & 3, pal = attr >> 1 & 7;
+            int sy = flipY ? h - 1 - dy : dy;
             for (int dx = 0; dx < w; dx++)
             {
                 int sx = x + dx;
                 if (sx < 0 || sx >= Width) continue;
-                int tx = hf ? w - 1 - dx : dx;
-                int t = tile & 0xFF;
-                int row = ((t >> 4) + (sy >> 3)) & 15, column = ((t & 15) + (tx >> 3)) & 15;
+                int tx = flipX ? w - 1 - dx : dx;
+                int tileLow = tile & 0xFF;
+                int row = ((tileLow >> 4) + (sy >> 3)) & 15, column = ((tileLow & 15) + (tx >> 3)) & 15;
                 int addr = nameBase + ((tile & 0x100) != 0 ? nameGap : 0) + (row * 16 + column) * 32;
-                int ci = TilePixel(m.Vram, addr & 0xFFFF, 4, tx & 7, sy & 7);
-                if (ci == 0) continue;
-                col[sx] = 128 + pal * 16 + ci;
-                pri[sx] = p;
+                int colourIndex = TilePixel(m.Vram, addr & 0xFFFF, 4, tx & 7, sy & 7);
+                if (colourIndex == 0) continue;
+                col[sx] = 128 + pal * 16 + colourIndex;
+                pri[sx] = priority;
                 palOut[sx] = pal;
             }
         }

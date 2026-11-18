@@ -1,11 +1,9 @@
 namespace LufiaForge.Core.Lufia2.Snes;
 
-/// <summary>
-/// The console around <see cref="SnesCpu"/>, enough to run the game's battle animation code and see what it draws:
-/// the ROM (LoROM, and the upper 4 MB of an 8 MB ExLoROM), work RAM, cartridge RAM, the picture unit's memories
-/// (VRAM, colours, sprites) and registers, DMA and HDMA, the multiply / divide unit. The sound chip only answers back
-/// what it was sent (the game's sound commands wait for that echo), so animations play silent.
-/// </summary>
+// the console around SnesCpu, enough to run the game's battle animation code and see what it draws: the rom (LoROM,
+// and the upper 4 MB of an 8 MB ExLoROM), work RAM, cartridge RAM, the picture unit's memories (VRAM, colours,
+// sprites) and registers, DMA and HDMA, the multiply / divide unit. the sound chip only answers back what it was sent
+// (the game's sound commands wait for that echo), so animations play silent
 public sealed class SnesMachine : ISnesBus
 {
     public readonly byte[] Rom;
@@ -32,7 +30,7 @@ public sealed class SnesMachine : ISnesBus
     private int _mulResult, _divQuot, _divRem;
     private bool _vblankToggle;
     public bool NmiFlag;
-    /// <summary>For tests: when set, which work RAM bytes were written, and the ones read before any write.</summary>
+    // for tests: when set, which work RAM bytes got written, and the ones read before any write
     public bool[]? Written;
     public SortedDictionary<int, int>? ReadUnwritten;
     private void Note(int w) { if (Written != null && !Written[w] && ReadUnwritten != null) { ReadUnwritten.TryGetValue(w, out int n); ReadUnwritten[w] = n + 1; } }
@@ -49,8 +47,8 @@ public sealed class SnesMachine : ISnesBus
         int bank = addr >> 16, a = addr & 0xFFFF;
         if (_exLo && bank < 0x7E && a >= 0x8000)
         {
-            int o = 0x400000 + (bank & 0x7F) * 0x8000 + (a & 0x7FFF);
-            return o < Rom.Length ? o : -1;
+            int upperIndex = 0x400000 + (bank & 0x7F) * 0x8000 + (a & 0x7FFF);
+            return upperIndex < Rom.Length ? upperIndex : -1;
         }
         int off = (bank & 0x7F) * 0x8000 + (a & 0x7FFF);
         return off < Rom.Length ? off : off % Rom.Length;
@@ -70,8 +68,8 @@ public sealed class SnesMachine : ISnesBus
             return 0;
         }
         if (a < 0x8000 && (bank & 0x7F) >= 0x70 && (bank & 0x7F) < 0x7E) return Sram[a & 0x7FFF];
-        int o = RomIndex(addr);
-        return o >= 0 ? Rom[o] : (byte)0;
+        int romIndex = RomIndex(addr);
+        return romIndex >= 0 ? Rom[romIndex] : (byte)0;
     }
 
     public void Write(int addr, byte v)
@@ -89,7 +87,7 @@ public sealed class SnesMachine : ISnesBus
         if (a < 0x8000 && (bank & 0x7F) >= 0x70 && (bank & 0x7F) < 0x7E) Sram[a & 0x7FFF] = v;
     }
 
-    // ── PPU ports ─────────────────────────────────────────────────────────
+    // PPU ports
     private int VramStep => (Regs[0x15] & 3) switch { 0 => 1, 1 => 32, _ => 128 };
 
     private void WritePpu(int r, byte v)
@@ -180,7 +178,7 @@ public sealed class SnesMachine : ISnesBus
                 OamAddr = (OamAddr + 1) & 0x3FF; if (OamAddr >= 0x220) OamAddr &= 0x1FF;
                 return v;
             }
-            // Lufia II waits for its sound driver to say CD EF (ready) on ports 2 and 3, and for echoes on 0 and 1
+            // lufia 2 waits for its sound driver to say CD EF (ready) on ports 2 and 3, and for echoes on 0 and 1
             case 0x42: return (byte)(_apuAck[0] ? 0xCD : 0);
             case 0x43: return (byte)(_apuAck[1] ? 0xEF : 0);
             case 0x40: case 0x41: return _apu[r - 0x40];
@@ -190,7 +188,7 @@ public sealed class SnesMachine : ISnesBus
         return 0;
     }
 
-    // ── CPU registers, DMA ─────────────────────────────────────────────────
+    // CPU registers, DMA
     private byte ReadIo(int a)
     {
         switch (a)
@@ -232,10 +230,10 @@ public sealed class SnesMachine : ISnesBus
 
     private void Dma(int c)
     {
-        int b = 0x100 + c * 0x10;
-        int ctrl = Io[b], bb = Io[b + 1];
-        int addr = Io[b + 2] | Io[b + 3] << 8, bank = Io[b + 4];
-        int size = Io[b + 5] | Io[b + 6] << 8;
+        int regs = 0x100 + c * 0x10;
+        int ctrl = Io[regs], bb = Io[regs + 1];
+        int addr = Io[regs + 2] | Io[regs + 3] << 8, bank = Io[regs + 4];
+        int size = Io[regs + 5] | Io[regs + 6] << 8;
         if (size == 0) size = 0x10000;
         var pat = Pattern[ctrl & 7];
         bool toA = (ctrl & 0x80) != 0, fixedA = (ctrl & 0x08) != 0;
@@ -248,35 +246,35 @@ public sealed class SnesMachine : ISnesBus
             else Write(reg, Read(src));
             addr = (addr + step) & 0xFFFF;
         }
-        Io[b + 2] = (byte)addr; Io[b + 3] = (byte)(addr >> 8);
-        Io[b + 5] = 0; Io[b + 6] = 0;
+        Io[regs + 2] = (byte)addr; Io[regs + 3] = (byte)(addr >> 8);
+        Io[regs + 5] = 0; Io[regs + 6] = 0;
     }
 
-    // ── HDMA (run by the renderer, line by line) ─────────────────────────────
+    // HDMA (the renderer runs it, line by line)
     private readonly int[] _hAddr = new int[8], _hInd = new int[8], _hLine = new int[8];
     private readonly bool[] _hDo = new bool[8], _hOn = new bool[8];
 
     public void HdmaInit()
     {
-        int en = Io[0x0C];
+        int enabled = Io[0x0C];
         for (int c = 0; c < 8; c++)
         {
-            _hOn[c] = (en & 1 << c) != 0;
+            _hOn[c] = (enabled & 1 << c) != 0;
             if (!_hOn[c]) continue;
-            int b = 0x100 + c * 0x10;
-            _hAddr[c] = Io[b + 2] | Io[b + 3] << 8;
+            int regs = 0x100 + c * 0x10;
+            _hAddr[c] = Io[regs + 2] | Io[regs + 3] << 8;
             HdmaLoad(c);
         }
     }
 
     private void HdmaLoad(int c)
     {
-        int b = 0x100 + c * 0x10, bank = Io[b + 4];
-        int n = Read(bank << 16 | _hAddr[c]);
+        int regs = 0x100 + c * 0x10, bank = Io[regs + 4];
+        int lineCount = Read(bank << 16 | _hAddr[c]);
         _hAddr[c] = (_hAddr[c] + 1) & 0xFFFF;
-        _hLine[c] = n;
-        if (n == 0) { _hOn[c] = false; return; }
-        if ((Io[b] & 0x40) != 0)
+        _hLine[c] = lineCount;
+        if (lineCount == 0) { _hOn[c] = false; return; }
+        if ((Io[regs] & 0x40) != 0)
         {
             _hInd[c] = Read(bank << 16 | _hAddr[c]) | Read(bank << 16 | ((_hAddr[c] + 1) & 0xFFFF)) << 8;
             _hAddr[c] = (_hAddr[c] + 2) & 0xFFFF;
@@ -289,17 +287,17 @@ public sealed class SnesMachine : ISnesBus
         for (int c = 0; c < 8; c++)
         {
             if (!_hOn[c]) continue;
-            int b = 0x100 + c * 0x10;
-            int ctrl = Io[b], bb = Io[b + 1];
+            int regs = 0x100 + c * 0x10;
+            int ctrl = Io[regs], bb = Io[regs + 1];
             if (_hDo[c])
             {
                 var pat = Pattern[ctrl & 7];
-                bool ind = (ctrl & 0x40) != 0;
+                bool indirect = (ctrl & 0x40) != 0;
                 for (int i = 0; i < pat.Length; i++)
                 {
                     int src;
-                    if (ind) { src = Io[b + 7] << 16 | _hInd[c]; _hInd[c] = (_hInd[c] + 1) & 0xFFFF; }
-                    else { src = Io[b + 4] << 16 | _hAddr[c]; _hAddr[c] = (_hAddr[c] + 1) & 0xFFFF; }
+                    if (indirect) { src = Io[regs + 7] << 16 | _hInd[c]; _hInd[c] = (_hInd[c] + 1) & 0xFFFF; }
+                    else { src = Io[regs + 4] << 16 | _hAddr[c]; _hAddr[c] = (_hAddr[c] + 1) & 0xFFFF; }
                     Write(0x2100 | ((bb + pat[i]) & 0xFF), Read(src));
                 }
             }
@@ -311,6 +309,6 @@ public sealed class SnesMachine : ISnesBus
         }
     }
 
-    /// <summary>The PPU registers as the renderer needs them, read from <see cref="Regs"/>.</summary>
+    // the PPU registers the way the renderer needs them, read from Regs
     public byte Reg(int r) => Regs[r & 0xFF];
 }

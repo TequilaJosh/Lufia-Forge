@@ -3,45 +3,41 @@ using System.Text;
 
 namespace LufiaForge.Core.Lufia2;
 
-/// <summary>
-/// "Tidy the hack's data" (2026-10-27): the Lufia II fan hacks (Spekkio, Kureji Lufia) keep monster battle scripts in
-/// the unused end of other monsters' name fields and inside other records, and their spell scripts run on into the
-/// spell table's spare entries (Frue, Spekkio, Kureji, Foomy). Lufia Forge reads and edits them where they are, but a
-/// name can't grow over a script and the data is hard to take apart. Tidying moves them into clean space and points
-/// the game at the new places:
-/// <list type="bullet">
-/// <item>Monster scripts that use bytes of a name field or of a record go to one block in the monsters' own bank (a
-/// script's offset is added to its record in that bank, so it can't leave it): the largest empty run there (all 00 or
-/// FF, at least 4 KB, the rule Lufia Forge's added space follows; the fan hacks have about 4.4 KB of zeros after the
-/// monster attack names at $D0:8E35). Each script is laid out again from its steps for its own record (the steps a
-/// path reaches; endings without jumps that several scripts share are written once, as they read the same from any
-/// record), and the record's offset (tag 07 its turn, 08 when hit) is rewritten. Name field bytes no script uses any
-/// more are cleared to 00, so every such name can have 13 letters.</item>
-/// <item>Spell scripts that run into the spell table or another spell's record: the spells move to Lufia Forge's spell
-/// block with each script right after its spell (<see cref="L2Magic.Install"/>, which moves the IP attacks and the
-/// descriptions too).</item>
-/// </list>
-/// Nothing is written until the tidied ROM, built in memory, is proven to read the same: every monster's stats, name,
-/// drop and both scripts (old and new walked side by side from the bytes, every path, each pair of steps the same
-/// command and arguments, a "go to" counted as the step it leads to: <see cref="SameRun"/>), every item, spell, IP attack and IP effect with its scripts, every description, shop and monster attack name;
-/// and every byte that changed is one of: a moved script's new bytes in empty space, a rewritten offset, a cleared name
-/// byte no script uses, or (spells) the code places and space the spell move is known to change.
-/// </summary>
+// "Tidy the hack's data" (2026-10-27): the lufia 2 fan hacks (Spekkio, Kureji Lufia) keep monster battle scripts in
+// the unused end of other monsters' name fields and inside other records, and their spell scripts run on into the
+// spell table's spare entries (Frue, Spekkio, Kureji, Foomy). we read and edit them where they are, but a name can't
+// grow over a script and the data is hard to take apart. tidying moves them into clean space and points the game at
+// the new places:
+// - monster scripts that use bytes of a name field or of a record go to one block in the monsters' own bank (a
+//   script's offset is added to its record in that bank, so it can't leave it): the largest empty run there (all 00
+//   or FF, at least 4 KB, the same rule our added space follows. the fan hacks have about 4.4 KB of zeros after the
+//   monster attack names at $D0:8E35). each script is laid out again from its steps for its own record (the steps a
+//   path reaches, endings without jumps that several scripts share get written once since they read the same from
+//   any record), and the record's offset (tag 07 its turn, 08 when hit) is rewritten. name field bytes no script uses
+//   any more get cleared to 00, so every such name can have 13 letters
+// - spell scripts that run into the spell table or another spell's record: the spells move to our spell block with
+//   each script right after its spell (L2Magic.Install, which moves the IP attacks and the descriptions too)
+// nothing gets written until the tidied rom, built in memory, is proven to read the same: every monster's stats, name,
+// drop and both scripts (old and new walked side by side from the bytes, every path, each pair of steps the same
+// command and arguments, a "go to" counted as the step it leads to: SameRun), every item, spell, IP attack and IP
+// effect with its scripts, every description, shop and monster attack name. and every byte that changed has to be one
+// of: a moved script's new bytes in empty space, a rewritten offset, a cleared name byte no script uses, or (spells)
+// the code places and space the spell move is known to change
 public static class L2Tidy
 {
     public sealed class Result
     {
-        /// <summary>The tidied ROM, or null (nothing to tidy, or <see cref="Refused"/>).</summary>
+        // the tidied rom, or null (nothing to tidy, or Refused)
         public byte[]? Tidied { get; set; }
-        /// <summary>Why it can't be done, or null.</summary>
+        // why it can't be done, or null
         public string? Refused { get; set; }
-        /// <summary>What moves (lines for the preview).</summary>
+        // what moves (lines for the preview)
         public List<string> Moves { get; } = new();
-        /// <summary>What becomes possible.</summary>
+        // what becomes possible
         public List<string> Gains { get; } = new();
-        /// <summary>What was proven to read the same.</summary>
+        // what was proven to read the same
         public List<string> Checked { get; } = new();
-        /// <summary>What stays as it is (and why).</summary>
+        // what stays as it is (and why)
         public List<string> Left { get; } = new();
         public int MonsterScripts { get; set; }
         public int MonsterBytes { get; set; }
@@ -56,65 +52,65 @@ public static class L2Tidy
             if (Tidied == null)
             {
                 sb.AppendLine("Nothing to tidy: every battle script already sits on its own, outside names and other records.");
-                foreach (var l in Left) sb.AppendLine("- " + l);
+                foreach (var line in Left) sb.AppendLine("- " + line);
                 return sb.ToString().TrimEnd();
             }
             sb.AppendLine("What moves:");
-            foreach (var l in Moves) sb.AppendLine("- " + l);
-            if (Gains.Count > 0) { sb.AppendLine(); sb.AppendLine("What it makes possible:"); foreach (var l in Gains) sb.AppendLine("- " + l); }
-            if (Left.Count > 0) { sb.AppendLine(); sb.AppendLine("Left where it is:"); foreach (var l in Left) sb.AppendLine("- " + l); }
+            foreach (var line in Moves) sb.AppendLine("- " + line);
+            if (Gains.Count > 0) { sb.AppendLine(); sb.AppendLine("What it makes possible:"); foreach (var line in Gains) sb.AppendLine("- " + line); }
+            if (Left.Count > 0) { sb.AppendLine(); sb.AppendLine("Left where it is:"); foreach (var line in Left) sb.AppendLine("- " + line); }
             sb.AppendLine(); sb.AppendLine("Checked on the tidied ROM before anything is written:");
-            foreach (var l in Checked) sb.AppendLine("- " + l);
+            foreach (var line in Checked) sb.AppendLine("- " + line);
             return sb.ToString().TrimEnd();
         }
     }
 
-    // ── monsters ─────────────────────────────────────────────────────────────
+    // monsters
 
     private sealed record Rec(int At, int End, int NameLength, List<int> Ids);
 
-    /// <summary>The monster records (each once, in table order of their first id): the record runs to the 00 ending its
-    /// tags; its name to its 00 (13 letters when it has none).</summary>
+    // the monster records (each once, in table order of their first id). a record runs to the 00 that ends its tags,
+    // its name to its 00 (13 letters if it has none)
     private static List<Rec> Records(RomBuffer rom)
     {
         var byAt = new Dictionary<int, Rec>();
         var list = new List<Rec>();
         for (int i = 0, n = L2Battle.MonsterCountIn(rom); i < n; i++)
         {
-            int o = L2Battle.MonsterAt(rom, i);
-            if (byAt.TryGetValue(o, out var r)) { r.Ids.Add(i); continue; }
-            int p = o + 0x21;
-            for (int g = 0; g < 16 && rom.ReadByte(p) != 0; g++) p += 3;
-            int len = Array.IndexOf(rom.ReadBytes(o, L2Battle.MonsterNameLength), (byte)0);
-            r = new Rec(o, p + 1, len < 0 ? L2Battle.MonsterNameLength : len, new List<int> { i });
-            byAt[o] = r;
-            list.Add(r);
+            int recordAt = L2Battle.MonsterAt(rom, i);
+            if (byAt.TryGetValue(recordAt, out var rec)) { rec.Ids.Add(i); continue; }
+            int tag = recordAt + 0x21;
+            for (int guard = 0; guard < 16 && rom.ReadByte(tag) != 0; guard++) tag += 3;
+            int nameLength = Array.IndexOf(rom.ReadBytes(recordAt, L2Battle.MonsterNameLength), (byte)0);
+            rec = new Rec(recordAt, tag + 1, nameLength < 0 ? L2Battle.MonsterNameLength : nameLength, new List<int> { i });
+            byAt[recordAt] = rec;
+            list.Add(rec);
         }
         return list;
     }
 
-    /// <summary>Where tag <paramref name="tag"/> is in a record's tag list, or -1.</summary>
-    private static int TagAt(RomBuffer rom, Rec r, byte tag)
+    // where tag is in a record's tag list, or -1
+    private static int TagAt(RomBuffer rom, Rec rec, byte tag)
     {
-        for (int p = r.At + 0x21; p < r.End - 1; p += 3)
+        for (int p = rec.At + 0x21; p < rec.End - 1; p += 3)
             if (rom.ReadByte(p) == tag) return p;
         return -1;
     }
 
-    /// <summary>The file offsets a script's steps are read from (as <see cref="L2AiScripts.Parse"/> reads it).</summary>
+    // the file offsets a script's steps are read from (the way L2AiScripts.Parse reads it)
     private static HashSet<int> Bytes(List<L2AiScripts.Step> steps, int baseAt)
     {
-        var s = new HashSet<int>();
+        var offsets = new HashSet<int>();
         foreach (var st in steps)
             if (st.Offset >= 0)
-                for (int k = 0; k < st.Length; k++) s.Add(L2Rom.InBank(baseAt, st.Offset + k));
-        return s;
+                for (int k = 0; k < st.Length; k++) offsets.Add(L2Rom.InBank(baseAt, st.Offset + k));
+        return offsets;
     }
 
     private sealed record Move(Rec Rec, int Tag, int TagPos, int Start, List<L2AiScripts.Step> Steps);
 
-    /// <summary>The steps the runner can reach from the first one (in their order): a script read straight on to its
-    /// furthest jump can hold bytes no path runs (another script's tail, data), which a copy leaves out.</summary>
+    // the steps the runner can reach from the first one (in their order). a script read straight on to its furthest
+    // jump can hold bytes no path runs (another script's tail, data), and a copy leaves those out
     internal static List<L2AiScripts.Step> Reachable(List<L2AiScripts.Step> steps)
     {
         if (steps.Count == 0) return steps;
@@ -128,29 +124,29 @@ public static class L2Tidy
             int i = todo.Pop();
             if (seen[i]) continue;
             seen[i] = true;
-            var s = steps[i];
-            foreach (var t in s.Targets) if (t != null && index.TryGetValue(t, out int k)) todo.Push(k);
-            if (s.Def?.EndsPath != true && i + 1 < steps.Count) todo.Push(i + 1);
+            var step = steps[i];
+            foreach (var target in step.Targets) if (target != null && index.TryGetValue(target, out int k)) todo.Push(k);
+            if (step.Def?.EndsPath != true && i + 1 < steps.Count) todo.Push(i + 1);
         }
         return steps.Where((s, i) => seen[i]).ToList();
     }
 
-    /// <summary>Every monster script (record, tag 07/08) with its steps, read from the tag's offset; offset 0 (none) is
-    /// left out. A script that can't be read comes back with null steps.</summary>
+    // every monster script (record, tag 07/08) with its steps, read from the tag's offset. offset 0 (none) is left
+    // out, and a script that can't be read comes back with null steps
     private static List<(Rec Rec, int Tag, int TagPos, int Start, List<L2AiScripts.Step>? Steps)> Scripts(RomBuffer rom, List<Rec> recs)
     {
-        var l = new List<(Rec, int, int, int, List<L2AiScripts.Step>?)>();
-        foreach (var r in recs)
+        var scripts = new List<(Rec, int, int, int, List<L2AiScripts.Step>?)>();
+        foreach (var rec in recs)
             foreach (byte tag in new byte[] { 7, 8 })
             {
-                int p = TagAt(rom, r, tag);
-                if (p < 0 || rom.ReadUInt16Le(p + 1) == 0) continue;
-                int start = L2Rom.InBank(r.At, rom.ReadUInt16Le(p + 1));
+                int tagPos = TagAt(rom, rec, tag);
+                if (tagPos < 0 || rom.ReadUInt16Le(tagPos + 1) == 0) continue;
+                int start = L2Rom.InBank(rec.At, rom.ReadUInt16Le(tagPos + 1));
                 List<L2AiScripts.Step>? steps;
-                try { steps = start < 0 ? null : L2AiScripts.Parse(rom, start, r.At); } catch (InvalidDataException) { steps = null; }
-                l.Add((r, tag, p, start, steps));
+                try { steps = start < 0 ? null : L2AiScripts.Parse(rom, start, rec.At); } catch (InvalidDataException) { steps = null; }
+                scripts.Add((rec, tag, tagPos, start, steps));
             }
-        return l;
+        return scripts;
     }
 
     private static string Count(int n, string what) => $"{n} {what}{(n == 1 ? "" : "s")}";
@@ -158,7 +154,7 @@ public static class L2Tidy
     private static string MonsterName(RomBuffer rom, Rec r) =>
         $"{r.Ids[0]:X2} {L2Rom.Name(rom, r.At, L2Battle.MonsterNameLength)}";
 
-    /// <summary>Moves the monster scripts that use name or record bytes (see the class). Returns the bytes it may change.</summary>
+    // moves the monster scripts that use name or record bytes (see the top of the class). returns the bytes it may change
     private static HashSet<int> TidyMonsters(RomBuffer w, Result res)
     {
         var changed = new HashSet<int>();
@@ -180,8 +176,8 @@ public static class L2Tidy
         {
             string what = $"{MonsterName(w, s.Rec)}'s {(s.Tag == 7 ? "turn" : "when-hit")} script";
             if (s.Steps == null) { res.Left.Add($"{what} can't be read, so it stays where it is."); continue; }
-            var b = Bytes(s.Steps, s.Rec.At);
-            if (!b.Overlaps(names) && !b.Overlaps(data)) continue;
+            var scriptBytes = Bytes(s.Steps, s.Rec.At);
+            if (!scriptBytes.Overlaps(names) && !scriptBytes.Overlaps(data)) continue;
             if (s.Steps.Any(st => st.OutsideTargets.Any(o => o >= 0)))
             {
                 res.Left.Add($"{what} jumps into the middle of a step, so it stays where it is.");
@@ -198,14 +194,14 @@ public static class L2Tidy
         int bestStart = -1, bestLen = 0;
         for (int p = bank; p < bank + 0x8000;)
         {
-            byte v = w.ReadByte(p);
-            if (v is not (0x00 or 0xFF) || used.Contains(p)) { p++; continue; }
-            int q = p;
-            while (q < bank + 0x8000 && w.ReadByte(q) == v && !used.Contains(q)) q++;
-            // a run that ends at Lufia Forge's own space mark is its added space
-            bool lfSpace = q + 4 <= w.Length && Encoding.ASCII.GetString(w.ReadBytes(q, 4)) == "LF2X";
-            if (!lfSpace && q - p > bestLen) { bestStart = p; bestLen = q - p; }
-            p = q;
+            byte fill = w.ReadByte(p);
+            if (fill is not (0x00 or 0xFF) || used.Contains(p)) { p++; continue; }
+            int runEnd = p;
+            while (runEnd < bank + 0x8000 && w.ReadByte(runEnd) == fill && !used.Contains(runEnd)) runEnd++;
+            // a run that ends at our own space mark is our added space
+            bool lfSpace = runEnd + 4 <= w.Length && Encoding.ASCII.GetString(w.ReadBytes(runEnd, 4)) == "LF2X";
+            if (!lfSpace && runEnd - p > bestLen) { bestStart = p; bestLen = runEnd - p; }
+            p = runEnd;
         }
         if (bestLen < 0x1000)
             throw new InvalidOperationException($"The monsters' bank (${L2Rom.FileToSnes(bank) >> 16:X2}) has no empty space for the moved scripts (the largest empty run is {bestLen} bytes; 4 KB is the least Lufia Forge counts as unused).");
@@ -214,16 +210,16 @@ public static class L2Tidy
         var placedSame = new Dictionary<(int, int), int>();   // (record, old start) -> new start
         var pieces = new Dictionary<string, int>();          // a piece without jumps -> where it is
         var movedRecs = new HashSet<int>();
-        foreach (var m in moves)
+        foreach (var move in moves)
         {
-            if (!placedSame.TryGetValue((m.Rec.At, m.Start), out int newStart))
+            if (!placedSame.TryGetValue((move.Rec.At, move.Start), out int newStart))
             {
-                newStart = LayOut(w, m.Steps, m.Rec.At, ref at, areaEnd, pieces);
-                placedSame[(m.Rec.At, m.Start)] = newStart;
+                newStart = LayOut(w, move.Steps, move.Rec.At, ref at, areaEnd, pieces);
+                placedSame[(move.Rec.At, move.Start)] = newStart;
             }
-            w.WriteUInt16Le(m.TagPos + 1, (ushort)L2Rom.OffsetInBank(m.Rec.At, newStart));
-            changed.Add(m.TagPos + 1); changed.Add(m.TagPos + 2);
-            movedRecs.Add(m.Rec.At);
+            w.WriteUInt16Le(move.TagPos + 1, (ushort)L2Rom.OffsetInBank(move.Rec.At, newStart));
+            changed.Add(move.TagPos + 1); changed.Add(move.TagPos + 2);
+            movedRecs.Add(move.Rec.At);
         }
         for (int p = areaStart; p < at; p++) changed.Add(p);
 
@@ -231,10 +227,10 @@ public static class L2Tidy
         var after = new HashSet<int>();
         foreach (var s in Scripts(w, recs)) if (s.Steps != null) after.UnionWith(Bytes(s.Steps, s.Rec.At));
         int cleared = 0;
-        foreach (var r in recs)
-            for (int k = r.NameLength + 1; k < L2Battle.MonsterNameLength; k++)
+        foreach (var rec in recs)
+            for (int k = rec.NameLength + 1; k < L2Battle.MonsterNameLength; k++)
             {
-                int p = r.At + k;
+                int p = rec.At + k;
                 if (!allScriptBytes.Contains(p) || after.Contains(p) || w.ReadByte(p) == 0) continue;
                 w.WriteByte(p, 0);
                 changed.Add(p);
@@ -250,15 +246,15 @@ public static class L2Tidy
         return changed;
     }
 
-    /// <summary>Writes a script for the record at <paramref name="recAt"/> from <paramref name="at"/> on and returns where it
-    /// starts. It is laid out in pieces that end where a path ends (00, 4F, 43, a "go to"), so nothing runs from one
-    /// piece into the next; a piece without jumps reads the same from any record, so one already written (by this or
-    /// another script) is used again instead of written twice.</summary>
+    // writes a script for the record at recAt from at on and returns where it starts. it's laid out in pieces that end
+    // where a path ends (00, 4F, 43, a "go to"), so nothing runs from one piece into the next. a piece without jumps
+    // reads the same from any record, so one already written (by this script or another) gets used again instead of
+    // written twice
     internal static int LayOut(RomBuffer w, List<L2AiScripts.Step> steps, int recAt, ref int at, int areaEnd, Dictionary<string, int> pieces)
     {
         var blocks = new List<(int From, int To)>();
-        for (int i = 1, b0 = 0; i <= steps.Count; i++)
-            if (i == steps.Count || steps[i - 1].Def?.EndsPath == true) { blocks.Add((b0, i)); b0 = i; }
+        for (int i = 1, blockStart = 0; i <= steps.Count; i++)
+            if (i == steps.Count || steps[i - 1].Def?.EndsPath == true) { blocks.Add((blockStart, i)); blockStart = i; }
         var addr = new Dictionary<L2AiScripts.Step, int>(ReferenceEqualityComparer.Instance);
         var write = new List<(int From, int To, int At, bool End)>();
         byte[] Raw(int from, int to) => steps.Skip(from).Take(to - from).SelectMany(s => new[] { s.Op }.Concat(s.Args)).ToArray();
@@ -266,16 +262,16 @@ public static class L2Tidy
         {
             bool ends = steps[to - 1].Def?.EndsPath == true;
             bool pure = ends && steps.Skip(from).Take(to - from).All(s => s.Def?.IsJump != true);
-            int len = steps.Skip(from).Take(to - from).Sum(s => s.Length) + (ends ? 0 : 1);
+            int length = steps.Skip(from).Take(to - from).Sum(s => s.Length) + (ends ? 0 : 1);
             int place;
             string key = pure ? Convert.ToHexString(Raw(from, to)) : "";
             if (pure && pieces.TryGetValue(key, out place)) { }
             else
             {
-                if (at + len > areaEnd)
+                if (at + length > areaEnd)
                     throw new InvalidOperationException($"The moved monster scripts need more room than the monsters' bank has free ({areaEnd - at} bytes left).");
                 place = at;
-                at += len;
+                at += length;
                 write.Add((from, to, place, !ends));
                 if (pure) pieces[key] = place;
             }
@@ -286,17 +282,17 @@ public static class L2Tidy
             var bytes = new List<byte>();
             for (int i = from; i < to; i++)
             {
-                var s = steps[i];
-                var args = (byte[])s.Args.Clone();
-                var d = s.Def!;
-                for (int a = 0, j = 0; a < d.Args.Length; a++)
+                var step = steps[i];
+                var args = (byte[])step.Args.Clone();
+                var def = step.Def!;
+                for (int a = 0, j = 0; a < def.Args.Length; a++)
                 {
-                    if (d.Args[a] != L2AiScripts.Arg.Jump) continue;
-                    var t = s.Targets[j++] ?? throw new InvalidOperationException("A \"go to\" has no step to go to.");
-                    int off = L2Rom.OffsetInBank(recAt, addr[t]), k = L2AiScripts.ArgAt(d, a);
-                    args[k] = (byte)off; args[k + 1] = (byte)(off >> 8);
+                    if (def.Args[a] != L2AiScripts.Arg.Jump) continue;
+                    var target = step.Targets[j++] ?? throw new InvalidOperationException("A \"go to\" has no step to go to.");
+                    int offset = L2Rom.OffsetInBank(recAt, addr[target]), k = L2AiScripts.ArgAt(def, a);
+                    args[k] = (byte)offset; args[k + 1] = (byte)(offset >> 8);
                 }
-                bytes.Add(s.Op);
+                bytes.Add(step.Op);
                 bytes.AddRange(args);
             }
             if (end) bytes.Add(0);   // a last step that doesn't end the script still stops here
@@ -305,88 +301,88 @@ public static class L2Tidy
         return addr[steps[0]];
     }
 
-    /// <summary>Records whose name can have <paramref name="room"/> letters (by first id, placeholders left out).</summary>
+    // how many letters each record's name can have (by record, placeholders left out)
     private static Dictionary<int, int> NameRooms(RomBuffer rom)
     {
         var used = L2AiScripts.MonsterScriptBytes(rom);
-        var d = new Dictionary<int, int>();
-        foreach (var r in Records(rom))
+        var rooms = new Dictionary<int, int>();
+        foreach (var rec in Records(rom))
         {
-            var m = L2Battle.ReadMonster(rom, r.Ids[0]);
-            if (m.Unused) continue;
-            d[r.At] = L2Battle.NameRoom(rom, m, used);
+            var monster = L2Battle.ReadMonster(rom, rec.Ids[0]);
+            if (monster.Unused) continue;
+            rooms[rec.At] = L2Battle.NameRoom(rom, monster, used);
         }
-        return d;
+        return rooms;
     }
 
-    // ── spells ───────────────────────────────────────────────────────────────
+    // spells
 
-    /// <summary>The spells whose script runs into the spell table or another spell's record.</summary>
+    // the spells whose script runs into the spell table or another spell's record
     private static List<int> UntidySpells(RomBuffer rom)
     {
-        var l = new List<int>();
-        if (L2Magic.BlockA(rom) >= 0) return l;
-        int n = L2Battle.SpellCount(rom);
-        var recs = Enumerable.Range(0, n).Select(i => L2Battle.SpellOffset(rom, i)).ToList();
+        var list = new List<int>();
+        if (L2Magic.BlockA(rom) >= 0) return list;
+        int count = L2Battle.SpellCount(rom);
+        var recs = Enumerable.Range(0, count).Select(i => L2Battle.SpellOffset(rom, i)).ToList();
         int table = L2Rom.SnesToFile((int)rom.ReadUInt24Le(0xF451));
         int first = recs.Count == 0 ? table : recs.Min();
-        for (int i = 0; i < n; i++)
+        for (int i = 0; i < count; i++)
         {
-            int w = rom.ReadUInt16Le(recs[i] + 0x11);
-            if (w == 0) continue;
+            int scriptOffset = rom.ReadUInt16Le(recs[i] + 0x11);
+            if (scriptOffset == 0) continue;
             List<L2AiScripts.Step> steps;
-            try { steps = L2AiScripts.Parse(rom, L2Rom.InBank(recs[i], w), recs[i]); } catch (InvalidDataException) { continue; }
-            var b = Bytes(steps, recs[i]);
-            if (b.Any(p => p >= table && p < first || recs.Any(o => o != recs[i] && p >= o && p < o + 0x13))) l.Add(i);
+            try { steps = L2AiScripts.Parse(rom, L2Rom.InBank(recs[i], scriptOffset), recs[i]); } catch (InvalidDataException) { continue; }
+            var scriptBytes = Bytes(steps, recs[i]);
+            if (scriptBytes.Any(p => p >= table && p < first || recs.Any(o => o != recs[i] && p >= o && p < o + 0x13))) list.Add(i);
         }
-        return l;
+        return list;
     }
 
-    // ── checks ───────────────────────────────────────────────────────────────
+    // checks
 
-    /// <summary>One step as the runner reads it at <paramref name="rel"/> (from the base): its command and arguments other
-    /// than jumps, and where it can go on (each jump, then the next step unless the path ends there), a "go to" counted
-    /// as the step it leads to.</summary>
+    // one step the way the runner reads it at rel (from the base): its command and arguments other than jumps, and
+    // where it can go on (each jump, then the next step unless the path ends there), a "go to" counted as the step it
+    // leads to
     private static (string Text, int[] Next) StepAt(RomBuffer rom, int baseAt, int rel)
     {
-        int At(int r)
+        int At(int offset)
         {
-            int f = L2Rom.InBank(baseAt, r & 0xFFFF);
-            return f >= 0 && f < rom.Length ? f : throw new InvalidDataException($"Offset {r & 0xFFFF:X4} from 0x{baseAt:X6} isn't in the ROM.");
+            int file = L2Rom.InBank(baseAt, offset & 0xFFFF);
+            return file >= 0 && file < rom.Length ? file : throw new InvalidDataException($"Offset {offset & 0xFFFF:X4} from 0x{baseAt:X6} isn't in the ROM.");
         }
         byte op = rom.ReadByte(At(rel));
-        var d = L2AiScripts.Def(op) ?? throw new InvalidDataException($"Unknown command {op:X2} at 0x{At(rel):X6}.");
+        var def = L2AiScripts.Def(op) ?? throw new InvalidDataException($"Unknown command {op:X2} at 0x{At(rel):X6}.");
         var sb = new StringBuilder(op.ToString("X2"));
         var next = new List<int>();
-        int a = 1;
-        foreach (var arg in d.Args)
+        int argAt = 1;
+        foreach (var arg in def.Args)
         {
             int size = L2AiScripts.Size(arg);
-            if (arg == L2AiScripts.Arg.Jump) { sb.Append(" j"); next.Add(Resolve(rom, baseAt, rom.ReadByte(At(rel + a)) | rom.ReadByte(At(rel + a + 1)) << 8)); }
-            else for (int q = 0; q < size; q++) sb.Append(' ').Append(rom.ReadByte(At(rel + a + q)).ToString("X2"));
-            a += size;
+            if (arg == L2AiScripts.Arg.Jump) { sb.Append(" j"); next.Add(Resolve(rom, baseAt, rom.ReadByte(At(rel + argAt)) | rom.ReadByte(At(rel + argAt + 1)) << 8)); }
+            else for (int q = 0; q < size; q++) sb.Append(' ').Append(rom.ReadByte(At(rel + argAt + q)).ToString("X2"));
+            argAt += size;
         }
-        if (!d.EndsPath) { sb.Append(" >"); next.Add(Resolve(rom, baseAt, rel + d.Length)); }
+        if (!def.EndsPath) { sb.Append(" >"); next.Add(Resolve(rom, baseAt, rel + def.Length)); }
         return (sb.ToString(), next.ToArray());
     }
 
-    /// <summary>Where a "go to" (or a chain of them) at <paramref name="rel"/> leads.</summary>
+    // where a "go to" (or a chain of them) at rel leads
     private static int Resolve(RomBuffer rom, int baseAt, int rel)
     {
-        for (int g = 0; g < 64; g++)
+        for (int guard = 0; guard < 64; guard++)
         {
-            int f = L2Rom.InBank(baseAt, rel & 0xFFFF);
-            if (f < 0 || f + 2 >= rom.Length) throw new InvalidDataException($"Offset {rel & 0xFFFF:X4} from 0x{baseAt:X6} isn't in the ROM.");
-            if (rom.ReadByte(f) != 0x03) return rel & 0xFFFF;
-            int f1 = L2Rom.InBank(baseAt, (rel + 1) & 0xFFFF), f2 = L2Rom.InBank(baseAt, (rel + 2) & 0xFFFF);
-            rel = rom.ReadByte(f1) | rom.ReadByte(f2) << 8;
+            int file = L2Rom.InBank(baseAt, rel & 0xFFFF);
+            if (file < 0 || file + 2 >= rom.Length) throw new InvalidDataException($"Offset {rel & 0xFFFF:X4} from 0x{baseAt:X6} isn't in the ROM.");
+            if (rom.ReadByte(file) != 0x03) return rel & 0xFFFF;
+            int lowAt = L2Rom.InBank(baseAt, (rel + 1) & 0xFFFF), highAt = L2Rom.InBank(baseAt, (rel + 2) & 0xFFFF);
+            rel = rom.ReadByte(lowAt) | rom.ReadByte(highAt) << 8;
         }
         throw new InvalidDataException("A loop of \"go to\"s.");
     }
 
-    /// <summary>Whether two scripts do the same: walked side by side from their starts, every pair of steps reached the
-    /// same way has the same command and arguments and goes on to pairs that do too (the same steps in the same order on
-    /// every path, wherever their bytes are and however often a piece is shared). Returns how many steps the first has.</summary>
+    // true if two scripts do the same: walked side by side from their starts, every pair of steps reached the same way
+    // has the same command and arguments and goes on to pairs that do too (the same steps in the same order on every
+    // path, wherever their bytes are and however often a piece is shared). steps = how many steps the first one has
     public static bool SameRun(RomBuffer a, int baseA, int startA, RomBuffer b, int baseB, int startB, out int steps, out string where)
     {
         var seen = new HashSet<(int, int)>();
@@ -413,7 +409,7 @@ public static class L2Tidy
         return true;
     }
 
-    /// <summary>Where a script runs from now: Lufia Forge's edited copy, or the game's (base, start); null for none.</summary>
+    // where a script runs from now: our edited copy, or the game's (base, start). null for none
     private static (int Base, int Start)? Runs(RomBuffer rom, L2AiScripts.Kind kind, int index)
     {
         if (L2AiScripts.Override(rom, kind, index) is int far) return (far, far + 1);
@@ -436,9 +432,9 @@ public static class L2Tidy
         return n;
     }
 
-    /// <summary>Proves the tidied ROM reads like the old one (throws <see cref="Mismatch"/> with what differs).</summary>
-    /// <param name="moved">The records moved to another bank (<see cref="L2NewMonsters.MoveHackBank"/>): the new file
-    /// offset of an old record's byte; every byte of a record (offsets too) must then read the same there.</param>
+    // proves the tidied rom reads like the old one (throws Mismatch with what's different).
+    // moved = for records moved to another bank (L2NewMonsters.MoveHackBank), the new file offset of an old record's
+    // byte. every byte of a record (offsets too) then has to read the same there
     internal static void Prove(RomBuffer old, RomBuffer w, Result res, Func<int, int>? moved = null)
     {
         int At(int p) => moved == null || p < 0 ? p : moved(p);
@@ -528,7 +524,7 @@ public static class L2Tidy
             SameScript(old, w, (x, x + 1), (y, y + 1), $"IP effect {e:X2}");
         }
 
-        // descriptions (by the number the game asks for: the move puts IP attacks at 0x300 + n)
+        // descriptions (by the number the game asks for, the move puts IP attacks at 0x300 + n)
         bool movedA = L2Descriptions.IsMoved(old), movedB = L2Descriptions.IsMoved(w);
         int dn = L2Descriptions.EntryCount(old);
         for (int e = 0; e < dn; e++)
@@ -550,31 +546,31 @@ public static class L2Tidy
         res.Checked.Add($"{dn} descriptions, {sa.Count} shops and the monster attack names: the same");
     }
 
-    /// <summary>The bytes that differ between two ROMs (and the ones past the shorter one's end).</summary>
+    // the bytes that differ between two roms (and the ones past the shorter one's end)
     private static List<int> Diff(byte[] a, byte[] b)
     {
-        var l = new List<int>();
-        int n = Math.Min(a.Length, b.Length);
-        for (int i = 0; i < n; i++) if (a[i] != b[i]) l.Add(i);
-        return l;
+        var differ = new List<int>();
+        int length = Math.Min(a.Length, b.Length);
+        for (int i = 0; i < length; i++) if (a[i] != b[i]) differ.Add(i);
+        return differ;
     }
 
-    /// <summary>What a check of the spell move allows to change: the code places it changes, the descriptions' old space
-    /// ($97:8000-$97:B0A0, where the IP attacks go), Lufia Forge's script block, and the added space (empty runs of
-    /// at least 4 KB past the game's 2.5 MB, the "LF2X" marks, and anything past the ROM's old end).</summary>
+    // what a check of the spell move allows to change: the code places it changes, the descriptions' old space
+    // ($97:8000-$97:B0A0, where the IP attacks go), our script block, and the added space (empty runs of at least 4 KB
+    // past the game's 2.5 MB, the "LF2X" marks, and anything past the rom's old end)
     private static Func<int, bool> MagicAllowed(byte[] before, RomBuffer beforeRom)
     {
         var sites = new HashSet<int>();
-        foreach (var (at, len) in L2Magic.CodeSites()) for (int k = 0; k < len; k++) sites.Add(at + k);
+        foreach (var (at, length) in L2Magic.CodeSites()) for (int k = 0; k < length; k++) sites.Add(at + k);
         var runs = new List<(int, int)>();
         for (int p = L2Rom.OriginalSize; p < Math.Min(before.Length, L2Rom.MaxSize);)
         {
-            byte v = before[p];
-            if (v is not (0x00 or 0xFF)) { p++; continue; }
-            int q = p;
-            while (q < before.Length && before[q] == v) q++;
-            if (q - p >= 0x1000) runs.Add((p, q));
-            p = q;
+            byte fill = before[p];
+            if (fill is not (0x00 or 0xFF)) { p++; continue; }
+            int runEnd = p;
+            while (runEnd < before.Length && before[runEnd] == fill) runEnd++;
+            if (runEnd - p >= 0x1000) runs.Add((p, runEnd));
+            p = runEnd;
         }
         for (int p = L2Rom.OriginalSize; p + 16 <= before.Length; p += 16)
             if (before[p] == 'L' && before[p + 1] == 'F' && before[p + 2] == '2' && before[p + 3] == 'X') runs.Add((p, p + 16));
@@ -583,10 +579,9 @@ public static class L2Tidy
                     || block is { } bl && i >= bl.At && i < bl.At + bl.Length || i >= before.Length || runs.Any(r => i >= r.Item1 && i < r.Item2);
     }
 
-    // ── the action ───────────────────────────────────────────────────────────
+    // the action
 
-    /// <summary>Builds the tidied ROM in memory and proves it reads the same (see the class). Nothing in
-    /// <paramref name="rom"/> changes.</summary>
+    // builds the tidied rom in memory and proves it reads the same (see the top of the class). nothing in rom changes
     public static Result Prepare(RomBuffer rom)
     {
         var res = new Result();
@@ -661,7 +656,7 @@ public static class L2Tidy
         return res;
     }
 
-    /// <summary>Puts a prepared result in the ROM (the caller records it as one Undo step).</summary>
+    // puts a prepared result in the rom (the caller records it as one Undo step)
     public static void Apply(RomBuffer rom, Result res)
     {
         if (res.Tidied == null) throw new InvalidOperationException(res.Refused ?? "Nothing to tidy.");

@@ -2,9 +2,9 @@ namespace LufiaForge.Core.Lufia2.Snes;
 
 internal static class L2AnimSeed
 {
-    /// <summary>Work RAM of a battle (a new game's first one, Maxim against one monster) at the moment the game starts a spell
-    /// animation, as the game's code leaves it: $0000-$1FFF, $2800-$2EFF, $4F00-$4FFF, deflated, base64. Measured in
-    /// BizHawk. Graphics, colours and texts are put in by <see cref="L2AnimPreview"/>.</summary>
+    // work RAM of a battle (a new game's first one, Maxim against one monster) at the moment the game starts a spell
+    // animation, the way the game's code leaves it: $0000-$1FFF, $2800-$2EFF, $4F00-$4FFF, deflated, base64. measured
+    // in BizHawk. L2AnimPreview puts in the graphics, colours and texts
     public const string Wram =
         "7VoJWFNXFj7v5SUkQEJYAmFR3oOgiIoJqIBiExAXUBEBGQSroqB1tyI2uJCkSA0VFTdA21Ecl7rhuNQZmW/U1AU3RIZ+tW5Tcat1xoVxnC6O8Oa+F0IChkU7" +
         "08/Ox39yc3PvPfeec8+7y7n3hSBw8I3WwozoIgygjgYOAJAoFAHYQQ76wZUVA6AygJxlOGhVOFRqZVoAjuFDVPw9cYYLLGgE4y9UCI40W0UIt3LgAWA+Z1bm" +

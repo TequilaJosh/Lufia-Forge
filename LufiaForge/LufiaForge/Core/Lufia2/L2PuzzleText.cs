@@ -1,16 +1,17 @@
 namespace LufiaForge.Core.Lufia2;
 
-/// <summary>
-/// Puzzle commands (<see cref="L2Puzzles"/>) in plain words, with their places looked up on the map: a place operand
-/// 20-5F is spot n-20 of the map's spot list (map info +22: id, x, y), 60-7F area n-60 (+24: id, x1, y1, x2, y2, the
-/// end not included: $80:E15A), 80-9F every member of object group n-80 (the puzzle block's category 0A lists; members
-/// are places again, +60: $80:E566), A0-BF the place in variable n-A0, E0-FF rectangle register n-E0, FB the spot that
-/// set the script off, FC-FE the values passed to it. "Leader on" tests ($80:E132/E15A) compare the leader's tile
-/// ($06BA, $06E2); "standing on" tests read the collision map (bit 01 a character, 08 a movable object). A tile copy
-/// (06, 0E, 7A, 95, 96) takes record b of the map's tile-copy list (+16, 10 bytes: id, layers, x, y, width, height;
-/// $83:8B40) and puts that rectangle of the map at the place: maps keep the changed look of a floor or wall off to the
-/// side. An exit (1A) is record b of the exit list (+06). Switches are the puzzle flags at $7F:D100, not story flags.
-/// </summary>
+// puzzle commands (L2Puzzles) in plain words, with their places looked up on the map. a place operand:
+// - 20-5F = spot n-20 of the map's spot list (map info +22: id, x, y)
+// - 60-7F = area n-60 (+24: id, x1, y1, x2, y2, the end not included, $80:E15A)
+// - 80-9F = every member of object group n-80 (the puzzle block's category 0A lists, members are places again, +60, $80:E566)
+// - A0-BF = the place in variable n-A0
+// - E0-FF = rectangle register n-E0
+// - FB = the spot that set the script off, FC-FE = the values passed to it
+// "leader on" tests ($80:E132/E15A) compare the leader's tile ($06BA, $06E2), "standing on" tests read the collision
+// map (bit 01 a character, 08 a movable object). a tile copy (06, 0E, 7A, 95, 96) takes record b of the map's tile
+// copy list (+16, 10 bytes: id, layers, x, y, width, height, $83:8B40) and puts that rectangle of the map at the
+// place, maps keep the changed look of a floor or wall off to the side. an exit (1A) is record b of the exit list
+// (+06). switches are the puzzle flags at $7F:D100, not story flags
 public sealed class L2PuzzleText
 {
     private readonly Dictionary<int, (int X, int Y)> _spots = new(), _doors = new(), _objects = new();
@@ -22,26 +23,26 @@ public sealed class L2PuzzleText
 
     public L2PuzzleText(RomBuffer rom, int map)
     {
-        foreach (var (_, b) in L2MapInfo.Records(rom, map, 0x22, 3)) _spots[b[0]] = (b[1], b[2]);
-        foreach (var (_, b) in L2MapInfo.Records(rom, map, 0x24, 5)) _areas[b[0]] = (b[1], b[2], b[3], b[4]);
-        foreach (var (_, b) in L2MapInfo.Records(rom, map, 0x16, 10)) _copies[b[0]] = (b[1], b[2], b[3], b[4], b[5]);
-        foreach (var (_, b) in L2MapInfo.Records(rom, map, L2MapInfo.Exits, 9)) _exits[b[0]] = (b[8], b[6], b[7]);
-        foreach (var (_, b) in L2MapInfo.Records(rom, map, L2MapInfo.Doors, 15)) _doors[b[0]] = (b[1], b[2]);
-        foreach (var (_, b) in L2MapInfo.Records(rom, map, 0x28, 3)) _objects[b[0]] = (b[1], b[2]);
+        foreach (var (_, record) in L2MapInfo.Records(rom, map, 0x22, 3)) _spots[record[0]] = (record[1], record[2]);
+        foreach (var (_, record) in L2MapInfo.Records(rom, map, 0x24, 5)) _areas[record[0]] = (record[1], record[2], record[3], record[4]);
+        foreach (var (_, record) in L2MapInfo.Records(rom, map, 0x16, 10)) _copies[record[0]] = (record[1], record[2], record[3], record[4], record[5]);
+        foreach (var (_, record) in L2MapInfo.Records(rom, map, L2MapInfo.Exits, 9)) _exits[record[0]] = (record[8], record[6], record[7]);
+        foreach (var (_, record) in L2MapInfo.Records(rom, map, L2MapInfo.Doors, 15)) _doors[record[0]] = (record[1], record[2]);
+        foreach (var (_, record) in L2MapInfo.Records(rom, map, 0x28, 3)) _objects[record[0]] = (record[1], record[2]);
         int block = L2Puzzles.Block(rom, map);
         if (block >= 0)
-            foreach (var (cat, id, off) in L2Puzzles.Entries(rom, block).Where(e => e.Category == 5))
+            foreach (var (category, id, offset) in L2Puzzles.Entries(rom, block).Where(e => e.Category == 5))
             {
-                var l = new List<int>();
-                for (int p = block + off; p < rom.Length && rom.ReadByte(p) != 0xFF && l.Count < 64; p++) l.Add(rom.ReadByte(p));
-                _groups[id] = l;
+                var members = new List<int>();
+                for (int p = block + offset; p < rom.Length && rom.ReadByte(p) != 0xFF && members.Count < 64; p++) members.Add(rom.ReadByte(p));
+                _groups[id] = members;
             }
         _mapName = m => { try { return $"{L2Maps.Name(rom, m)} ({m:X2})"; } catch (Exception) { return $"map {m:X2}"; } };
     }
 
-    /// <summary>How a command reads its place operand: a spot only ($80:EA09: every value 20-DF is spot n-20), the same
-    /// after a variable is looked up (A0-BF: the place in the variable), a spot or an area ($80:E92A: 60-7F are areas),
-    /// or a test that also takes groups (80-9F, $80:E566).</summary>
+    // how a command reads its place operand: a spot only ($80:EA09, every value 20-DF is spot n-20), the same after a
+    // variable gets looked up (A0-BF = the place in the variable), a spot or an area ($80:E92A, 60-7F are areas), or
+    // a test that takes groups too (80-9F, $80:E566)
     public enum PlaceKind { Spot, SpotVar, Area, Test }
 
     public static PlaceKind KindOf(int op) => op switch
@@ -53,9 +54,9 @@ public sealed class L2PuzzleText
     };
 
     private string SpotText(int id) =>
-        _spots.TryGetValue(id, out var s) ? $"spot {id} ({s.X}, {s.Y})" : $"spot {id} (not in this map's list)";
+        _spots.TryGetValue(id, out var spot) ? $"spot {id} ({spot.X}, {spot.Y})" : $"spot {id} (not in this map's list)";
 
-    /// <summary>Where a place operand is, in words ("spot 2 (34, 21)", "area 0 (34, 20)").</summary>
+    // where a place operand is, in words ("spot 2 (34, 21)", "area 0 (34, 20)")
     public string Place(int p, PlaceKind kind = PlaceKind.Test)
     {
         switch (p)
@@ -71,52 +72,52 @@ public sealed class L2PuzzleText
         if (kind is PlaceKind.Spot or PlaceKind.SpotVar || p < 0x60) return SpotText(p - 0x20);
         if (p < 0x80)
         {
-            if (!_areas.TryGetValue(p - 0x60, out var a)) return $"area {p - 0x60} (not in this map's list)";
-            return a.X2 - a.X1 <= 1 && a.Y2 - a.Y1 <= 1 ? $"area {p - 0x60} ({a.X1}, {a.Y1})" : $"area {p - 0x60} ({a.X1}, {a.Y1})-({a.X2 - 1}, {a.Y2 - 1})";
+            if (!_areas.TryGetValue(p - 0x60, out var area)) return $"area {p - 0x60} (not in this map's list)";
+            return area.X2 - area.X1 <= 1 && area.Y2 - area.Y1 <= 1 ? $"area {p - 0x60} ({area.X1}, {area.Y1})" : $"area {p - 0x60} ({area.X1}, {area.Y1})-({area.X2 - 1}, {area.Y2 - 1})";
         }
         if (p < 0xA0 && kind == PlaceKind.Test)
-            return _groups.TryGetValue(p - 0x80, out var g) ? $"any of group {p - 0x80} ({string.Join(", ", g.Select(m => Place(m + 0x60)))})" : $"group {p - 0x80}";
+            return _groups.TryGetValue(p - 0x80, out var group) ? $"any of group {p - 0x80} ({string.Join(", ", group.Select(m => Place(m + 0x60)))})" : $"group {p - 0x80}";
         return $"place {p:X2}";
     }
 
-    /// <summary>The tiles a place covers with a short label, for marking it on the map; empty when it is only known as
-    /// the game runs (a variable, a rectangle register, the spot that set it off).</summary>
+    // the tiles a place covers with a short label, for marking it on the map. empty if it's only known while the game
+    // runs (a variable, a rectangle register, the spot that set it off)
     public List<(int X, int Y, int W, int H, string Label)> Tiles(int p, PlaceKind kind = PlaceKind.Test)
     {
-        var l = new List<(int, int, int, int, string)>();
-        if (p < 0x20 || p >= 0xE0 || p >= 0xA0 && p < 0xC0 && kind != PlaceKind.Spot) return l;
+        var tiles = new List<(int, int, int, int, string)>();
+        if (p < 0x20 || p >= 0xE0 || p >= 0xA0 && p < 0xC0 && kind != PlaceKind.Spot) return tiles;
         if (kind is PlaceKind.Spot or PlaceKind.SpotVar || p < 0x60)
         {
-            if (_spots.TryGetValue(p - 0x20, out var s)) l.Add((s.X, s.Y, 1, 1, $"spot {p - 0x20}"));
+            if (_spots.TryGetValue(p - 0x20, out var spot)) tiles.Add((spot.X, spot.Y, 1, 1, $"spot {p - 0x20}"));
         }
         else if (p < 0x80)
         {
-            if (_areas.TryGetValue(p - 0x60, out var a)) l.Add((a.X1, a.Y1, Math.Max(1, a.X2 - a.X1), Math.Max(1, a.Y2 - a.Y1), $"area {p - 0x60}"));
+            if (_areas.TryGetValue(p - 0x60, out var area)) tiles.Add((area.X1, area.Y1, Math.Max(1, area.X2 - area.X1), Math.Max(1, area.Y2 - area.Y1), $"area {p - 0x60}"));
         }
-        else if (p < 0xA0 && kind == PlaceKind.Test && _groups.TryGetValue(p - 0x80, out var g))
-            foreach (int m in g) l.AddRange(Tiles(m + 0x60));
-        return l;
+        else if (p < 0xA0 && kind == PlaceKind.Test && _groups.TryGetValue(p - 0x80, out var group))
+            foreach (int m in group) tiles.AddRange(Tiles(m + 0x60));
+        return tiles;
     }
 
-    /// <summary>What a command touches on the map, for the stage: its places, a tile copy's source, a door, a movable
-    /// object; each with a short label.</summary>
+    // what a command touches on the map, for the stage: its places, a tile copy's source, a door, a movable object,
+    // each with a short label
     public List<(int X, int Y, int W, int H, string Label)> Marks(RomBuffer rom, int at)
     {
         var marks = new List<(int, int, int, int, string)>();
         int op = rom.ReadByte(at);
-        if (!L2Puzzles.Ops.TryGetValue(op, out var d) || d.Args <= 0) return marks;
-        var b = rom.ReadBytes(at, 1 + d.Args);
-        var letters = d.Form.Split(' ');
-        for (int i = 0; i < letters.Length && i + 1 < b.Length; i++)
-            if (letters[i] == "p") marks.AddRange(Tiles(b[i + 1], KindOf(op)));
-        if (op is 0x06 or 0x0E or 0x7A or 0x94 or 0x95 or 0x96 && b.Length > 2 && _copies.TryGetValue(b[2], out var c))
-            marks.Add((c.X, c.Y, Math.Max(1, c.W), Math.Max(1, c.H), "copied from"));
-        if (op is 0x02 or 0x03 or 0x28 or 0xA0 or 0xA1 && _doors.TryGetValue(b[1], out var dr)) marks.Add((dr.X, dr.Y, 1, 1, $"door {b[1]}"));
-        if (op is 0x25 && b.Length > 2 && _objects.TryGetValue(b[2], out var o)) marks.Add((o.X, o.Y, 1, 1, $"object {b[2]:X2}"));
+        if (!L2Puzzles.Ops.TryGetValue(op, out var def) || def.Args <= 0) return marks;
+        var bytes = rom.ReadBytes(at, 1 + def.Args);
+        var letters = def.Form.Split(' ');
+        for (int i = 0; i < letters.Length && i + 1 < bytes.Length; i++)
+            if (letters[i] == "p") marks.AddRange(Tiles(bytes[i + 1], KindOf(op)));
+        if (op is 0x06 or 0x0E or 0x7A or 0x94 or 0x95 or 0x96 && bytes.Length > 2 && _copies.TryGetValue(bytes[2], out var copy))
+            marks.Add((copy.X, copy.Y, Math.Max(1, copy.W), Math.Max(1, copy.H), "copied from"));
+        if (op is 0x02 or 0x03 or 0x28 or 0xA0 or 0xA1 && _doors.TryGetValue(bytes[1], out var door)) marks.Add((door.X, door.Y, 1, 1, $"door {bytes[1]}"));
+        if (op is 0x25 && bytes.Length > 2 && _objects.TryGetValue(bytes[2], out var obj)) marks.Add((obj.X, obj.Y, 1, 1, $"object {bytes[2]:X2}"));
         return marks;
     }
 
-    /// <summary>A puzzle switch operand (FB: the one numbered like the place tested last; FC-FE: passed in).</summary>
+    // a puzzle switch operand (FB = the one numbered like the place tested last, FC-FE = passed in)
     public static string Switch(int f) => f switch
     {
         0xFB => "the switch of the place tested last",
@@ -124,44 +125,44 @@ public sealed class L2PuzzleText
         _ => $"switch {f:X2}",
     };
 
-    private string Copy(int b) =>
-        b >= 0xFC && b <= 0xFE ? $"the tile copy passed in ({b - 0xFB})" :
-        _copies.TryGetValue(b, out var c) ? $"the {c.W}x{c.H} tiles from ({c.X}, {c.Y})" : $"tile copy {b:X2} (not in this map's list)";
+    private string Copy(int copyId) =>
+        copyId >= 0xFC && copyId <= 0xFE ? $"the tile copy passed in ({copyId - 0xFB})" :
+        _copies.TryGetValue(copyId, out var copy) ? $"the {copy.W}x{copy.H} tiles from ({copy.X}, {copy.Y})" : $"tile copy {copyId:X2} (not in this map's list)";
 
-    private string Exit(int b) =>
-        _exits.TryGetValue(b, out var e) ? $"exit {b} to {_mapName(e.Map)} at ({e.X}, {e.Y})" : $"exit {b}";
+    private string Exit(int exitId) =>
+        _exits.TryGetValue(exitId, out var exit) ? $"exit {exitId} to {_mapName(exit.Map)} at ({exit.X}, {exit.Y})" : $"exit {exitId}";
 
-    /// <summary>A door operand: C0-FA are door n-C0 ($80:E9B0), FB-FE a value passed in.</summary>
-    private string Door(int b)
+    // a door operand: C0-FA are door n-C0 ($80:E9B0), FB-FE a value passed in
+    private string Door(int doorId)
     {
-        if (b >= 0xFB) return "the door passed in";
-        if (b >= 0xC0) b -= 0xC0;
-        return _doors.TryGetValue(b, out var d) ? $"door {b} ({d.X}, {d.Y})" : $"door {b}";
+        if (doorId >= 0xFB) return "the door passed in";
+        if (doorId >= 0xC0) doorId -= 0xC0;
+        return _doors.TryGetValue(doorId, out var door) ? $"door {doorId} ({door.X}, {door.Y})" : $"door {doorId}";
     }
 
     private static string Var(int v) => $"variable {v:X2}";
     private static string Value(int x) => x >= 0xA0 && x < 0xC0 ? Var(x) : x >= 0xFC && x <= 0xFE ? $"the value passed in ({x - 0xFB})" : x.ToString();
     private static string Rect(int r) => r >= 0xE0 && r < 0xFB ? $"rectangle {r - 0xE0}" : r >= 0xFC && r <= 0xFE ? $"the rectangle passed in ({r - 0xFB})" : $"rectangle {r:X2}";
-    /// <summary>Directions of the move commands (64-67 and the like: 0 up, 1 down, 2 left, 3 right, as the actors'; North
-    /// Lighthouse 5F's block goes "1" three times from (34, 20) into the hole at (34, 21)-(34, 22)). The one-step
-    /// commands 97-9A are read from their code as down, left, up, right.</summary>
+    // directions of the move commands (64-67 and the like: 0 up, 1 down, 2 left, 3 right, same as the actors'. North
+    // Lighthouse 5F's block goes "1" three times from (34, 20) into the hole at (34, 21)-(34, 22)). the one-step
+    // commands 97-9A read from their code as down, left, up, right
     private static readonly string[] Dirs = { "up", "down", "left", "right" };
     private static readonly string[] StepDirs = { "down", "left", "up", "right" };
     private static string Who(int a) => a >= 0xA0 && a < 0xC0 ? $"the character in {Var(a)}" : a >= 0xFC && a <= 0xFE ? $"the character passed in ({a - 0xFB})" : $"character {a:X2}";
 
-    /// <summary>One command in words. <paramref name="step"/> names the step at a file offset ("step 9").</summary>
+    // one command in words. step names the step at a file offset ("step 9")
     public string Describe(RomBuffer rom, int at, int block, Func<int, string> step, int lastTested = -1)
     {
         int op = rom.ReadByte(at);
         var kind = KindOf(op);
         string P(int v) => Place(v, kind);
-        int len = L2Puzzles.Length(rom, at);
-        var b = rom.ReadBytes(at, len);
-        int A(int i) => i < b.Length ? b[i] : 0;
+        int length = L2Puzzles.Length(rom, at);
+        var bytes = rom.ReadBytes(at, length);
+        int A(int i) => i < bytes.Length ? bytes[i] : 0;
         string W(int i) => step(block + (A(i) | A(i + 1) << 8));
-        string Tail() => step(block + (A(len - 2) | A(len - 1) << 8));
-        List<int> ListArgs() { var l = new List<int>(); for (int i = 1; i < len - 3 && b[i] != 0xFF; i++) l.Add(b[i]); return l; }
-        string Passed() { var l = ListArgs(); return l.Count == 0 ? "" : $" (passing {string.Join(", ", l.Select(x => x < 0x20 || P(x).Contains("not in") ? x.ToString("X2") : P(x)))})"; }
+        string Tail() => step(block + (A(length - 2) | A(length - 1) << 8));
+        List<int> ListArgs() { var args = new List<int>(); for (int i = 1; i < length - 3 && bytes[i] != 0xFF; i++) args.Add(bytes[i]); return args; }
+        string Passed() { var args = ListArgs(); return args.Count == 0 ? "" : $" (passing {string.Join(", ", args.Select(x => x < 0x20 || P(x).Contains("not in") ? x.ToString("X2") : P(x)))})"; }
         switch (op)
         {
             case 0x00 or 0x07 or 0x2C or 0x2D or 0x2E or 0x56 or 0x62 or 0x93 or 0x9B or 0xAC or 0xAD: return "End (this thread stops)";
@@ -271,7 +272,7 @@ public sealed class L2PuzzleText
             case 0x23: return $"Leader action {A(1):X2} (by room)";
             case 0x57: return "Nothing";
         }
-        // the rest: the reference name
-        return L2Puzzles.Ops.TryGetValue(op, out var d) ? d.Name : "(not a command)";
+        // everything else: the reference name
+        return L2Puzzles.Ops.TryGetValue(op, out var def) ? def.Name : "(not a command)";
     }
 }

@@ -4,20 +4,18 @@ using System.Security.Cryptography;
 
 namespace LufiaForge.Core.Lufia2;
 
-/// <summary>
-/// Maps CF and F1 (shrines) are drawn with blocks the US game's block set 17 and tile set 11 don't have, so they show as
-/// garbage; the European release (Lufia, 1996) changed those two sets (block set 17: 0x2CF blocks to 0x30D; tile set
-/// 11: 802 tiles to 819) and renumbered the blocks of the other maps that use them (E7-EB), leaving CF and F1 as they
-/// were. Found by comparing the two ROMs (2026-10-27; the European packed files are numbered one higher from 0x40).
-/// <para>The fix puts the European sets in (data in Fixes/Lufia2_ShrineSets.bin: the block set, and the tile set as
-/// tiles of the US tile set 11 by number plus the 17 it lacks) and gives every other map using block set 17 the block
-/// of the new set that looks the same (pixels and priority); every block those maps use has one. Only done while both
-/// sets are still the US game's (the fan hacks already carry the European block set).</para>
-/// </summary>
+// maps CF and F1 (shrines) are drawn with blocks the US game's block set 17 and tile set 11 don't have, so they show
+// as garbage. the European release (Lufia, 1996) changed those two sets (block set 17: 0x2CF blocks to 0x30D, tile set
+// 11: 802 tiles to 819) and renumbered the blocks of the other maps that use them (E7-EB), leaving CF and F1 as they
+// were. found by comparing the two roms (2026-10-27, the European packed files are numbered one higher from 0x40).
+// the fix puts the European sets in (data in Fixes/Lufia2_ShrineSets.bin: the block set, and the tile set as tiles of
+// the US tile set 11 by number plus the 17 it doesn't have) and gives every other map on block set 17 the block of the
+// new set that looks the same (pixels and priority). every block those maps use has one. only done while both sets
+// are still the US game's (the fan hacks already carry the European block set)
 public static class L2ShrineFix
 {
     public const int BlockSet = 0x17, TileSet = 0x11;
-    /// <summary>The maps made for the European sets (drawn as they are); other maps on block set 17 are renumbered.</summary>
+    // the maps made for the European sets (drawn as they are), other maps on block set 17 get renumbered
     public static readonly int[] FixedMaps = { 0xCF, 0xF1 };
 
     private const string UsBlockSet = "43AFB9F2722CFD8DB6B3320764E9C73DC472BA02", UsTileSet = "53949EAF191784E075E86E84482145C0466C36D9",
@@ -26,9 +24,9 @@ public static class L2ShrineFix
     private static int BlockSetFile => L2Maps.BlockSetFileBase + BlockSet;
     private static int TileSetFile => L2Maps.TileSetFileBase + TileSet;
 
-    private static string Sha(byte[] b) => Convert.ToHexString(SHA1.HashData(b));
+    private static string Sha(byte[] data) => Convert.ToHexString(SHA1.HashData(data));
 
-    /// <summary>Whether the ROM still has the US game's sets 17 and 11 with map CF on them (the fix applies).</summary>
+    // true if the rom still has the US game's sets 17 and 11 with map CF on them (the fix applies)
     public static bool Needed(RomBuffer rom)
     {
         try
@@ -40,8 +38,8 @@ public static class L2ShrineFix
         catch (Exception) { return false; }
     }
 
-    /// <summary>Puts the European sets in and renumbers the other maps on them. Returns what was done; on a problem the
-    /// ROM is left as it was and the reason thrown.</summary>
+    // puts the European sets in and renumbers the other maps on them. returns what was done. if there's a problem the
+    // rom is left as it was and the reason gets thrown
     public static string Apply(RomBuffer rom)
     {
         if (!Needed(rom)) throw new InvalidOperationException("This ROM doesn't have the US game's block set 17 and tile set 11.");
@@ -58,15 +56,15 @@ public static class L2ShrineFix
                 var map = L2Maps.Read(rom, m);
                 var newLooks = Looks(rom, m);
                 var byLook = new Dictionary<string, int>();
-                for (int b = newLooks.Length - 1; b >= 0; b--) byLook[newLooks[b]] = b;
+                for (int block = newLooks.Length - 1; block >= 0; block--) byLook[newLooks[block]] = block;
                 var old = oldLooks[m];
                 foreach (var layer in map.Layers)
                     for (int i = 0; i < layer.Blocks.Length; i++)
                     {
-                        int b = layer.Blocks[i];
-                        if (b >= old.Length || !byLook.TryGetValue(old[b], out int nb))
-                            throw new InvalidOperationException($"Map {m:X2} uses block {b:X3}, which the European block set has no copy of.");
-                        layer.Blocks[i] = nb;
+                        int block = layer.Blocks[i];
+                        if (block >= old.Length || !byLook.TryGetValue(old[block], out int newBlock))
+                            throw new InvalidOperationException($"Map {m:X2} uses block {block:X3}, which the European block set has no copy of.");
+                        layer.Blocks[i] = newBlock;
                     }
                 L2Maps.Write(rom, map);
             }
@@ -79,40 +77,40 @@ public static class L2ShrineFix
         }
     }
 
-    /// <summary>Each block of the map's block set as it looks: its pixels and the priority of its four tiles.</summary>
+    // what each block of the map's block set looks like: its pixels and the priority of its four tiles
     private static string[] Looks(RomBuffer rom, int map)
     {
-        var m = L2Maps.Read(rom, map);
-        var pixels = L2Maps.AllBlocks(rom, m);
-        var set = L2Rom.ReadFile(rom, m.BlockSet);
+        var mapData = L2Maps.Read(rom, map);
+        var pixels = L2Maps.AllBlocks(rom, mapData);
+        var set = L2Rom.ReadFile(rom, mapData.BlockSet);
         var looks = new string[pixels.Length];
-        for (int b = 0; b < pixels.Length; b++)
+        for (int block = 0; block < pixels.Length; block++)
         {
-            int rec = 0x10 + b * 8, prio = 0;
-            for (int q = 0; q < 4 && rec + q * 2 + 1 < set.Length; q++) if ((set[rec + q * 2 + 1] & 0x20) != 0) prio |= 1 << q;
-            looks[b] = prio + ":" + Convert.ToBase64String(pixels[b].SelectMany(BitConverter.GetBytes).ToArray());
+            int record = 0x10 + block * 8, priority = 0;
+            for (int quarter = 0; quarter < 4 && record + quarter * 2 + 1 < set.Length; quarter++) if ((set[record + quarter * 2 + 1] & 0x20) != 0) priority |= 1 << quarter;
+            looks[block] = priority + ":" + Convert.ToBase64String(pixels[block].SelectMany(BitConverter.GetBytes).ToArray());
         }
         return looks;
     }
 
-    /// <summary>The European block set and tile set, from the fix data and this ROM's tile set 11.</summary>
+    // the European block set and tile set, built from the fix data and this rom's tile set 11
     private static (byte[] BlockSet, byte[] TileSet) Build(RomBuffer rom)
     {
-        using var s = typeof(L2ShrineFix).Assembly.GetManifestResourceStream("Fixes.Lufia2_ShrineSets.bin")
+        using var resource = typeof(L2ShrineFix).Assembly.GetManifestResourceStream("Fixes.Lufia2_ShrineSets.bin")
                       ?? throw new InvalidOperationException("The shrine fix data is missing from Lufia Forge.");
-        using var z = new DeflateStream(s, CompressionMode.Decompress);
+        using var inflate = new DeflateStream(resource, CompressionMode.Decompress);
         using var ms = new MemoryStream();
-        z.CopyTo(ms);
-        var r = new BinaryReader(new MemoryStream(ms.ToArray()));
-        var blockSet = r.ReadBytes(r.ReadUInt16());
-        var us = L2Rom.ReadFile(rom, TileSetFile);
-        int n = r.ReadUInt16();
-        var tiles = new byte[n * 32];
-        for (int i = 0; i < n; i++)
+        inflate.CopyTo(ms);
+        var reader = new BinaryReader(new MemoryStream(ms.ToArray()));
+        var blockSet = reader.ReadBytes(reader.ReadUInt16());
+        var usTiles = L2Rom.ReadFile(rom, TileSetFile);
+        int tileCount = reader.ReadUInt16();
+        var tiles = new byte[tileCount * 32];
+        for (int i = 0; i < tileCount; i++)
         {
-            int from = r.ReadUInt16();
-            if (from == 0xFFFF) r.ReadBytes(32).CopyTo(tiles, i * 32);
-            else Array.Copy(us, from * 32, tiles, i * 32, 32);
+            int from = reader.ReadUInt16();
+            if (from == 0xFFFF) reader.ReadBytes(32).CopyTo(tiles, i * 32);
+            else Array.Copy(usTiles, from * 32, tiles, i * 32, 32);
         }
         if (Sha(blockSet) != EuBlockSet || Sha(tiles) != EuTileSet) throw new InvalidOperationException("The shrine fix data didn't build the European sets.");
         return (blockSet, tiles);

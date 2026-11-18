@@ -1,16 +1,14 @@
 namespace LufiaForge.Core.Lufia2.Snes;
 
-/// <summary>What the CPU reads and writes (24-bit addresses).</summary>
+// what the CPU reads and writes (24-bit addresses)
 public interface ISnesBus
 {
     byte Read(int addr);
     void Write(int addr, byte value);
 }
 
-/// <summary>
-/// A 65816 interpreter, enough to run the game's own code (the battle animation engine) inside Lufia Forge: every
-/// opcode, native and emulation mode, decimal arithmetic. No cycle timing: <see cref="Instructions"/> counts steps.
-/// </summary>
+// a 65816 interpreter, enough to run the game's own code (the battle animation engine) inside lufia forge: every
+// opcode, native and emulation mode, decimal arithmetic. no cycle timing, Instructions just counts steps
 public sealed class SnesCpu
 {
     public int A, X, Y, S = 0x1FF, D, PC, DB, PB;
@@ -18,7 +16,7 @@ public sealed class SnesCpu
     public bool FN, FV, FM = true, FX = true, FD, FI = true, FZ, FC;
     public long Instructions;
     public bool Stopped, Waiting;
-    /// <summary>Set when BRK / COP / STP runs (the code went wrong): the address it ran at.</summary>
+    // set when BRK / COP / STP runs (the code went wrong): the address it ran at
     public int Crashed = -1;
     private readonly ISnesBus _bus;
 
@@ -36,7 +34,7 @@ public sealed class SnesCpu
         }
     }
 
-    // ── memory ────────────────────────────────────────────────────────────
+    // memory
     private int R8(int a) => _bus.Read(a & 0xFFFFFF);
     private void W8(int a, int v) => _bus.Write(a & 0xFFFFFF, (byte)v);
     private int R16(int a) => R8(a) | R8(a + 1) << 8;
@@ -57,7 +55,7 @@ public sealed class SnesCpu
     private void Push16(int v) { Push8(v >> 8); Push8(v); }
     private int Pull16() { int lo = Pull8(); return lo | Pull8() << 8; }
 
-    // ── addressing (24-bit effective addresses) ─────────────────────────────
+    // addressing (24-bit effective addresses)
     private int Dp() => (D + Fetch8()) & 0xFFFF;
     private int DpX() => (D + Fetch8() + X) & 0xFFFF;
     private int DpY() => (D + Fetch8() + Y) & 0xFFFF;
@@ -74,7 +72,7 @@ public sealed class SnesCpu
     private int Sr() => (S + Fetch8()) & 0xFFFF;
     private int SrIndY() => ((DB << 16 | R16Bank0(Sr())) + Y) & 0xFFFFFF;
 
-    /// <summary>Effective address of the ALU group's addressing column (op &amp; 0x1F).</summary>
+    // effective address for the ALU group's addressing column (op & 0x1F)
     private int AluEa(int col) => col switch
     {
         0x01 => DpIndX(), 0x03 => Sr(), 0x05 => Dp(), 0x07 => DpIndL(), 0x0D => Abs(), 0x0F => Long(),
@@ -107,7 +105,7 @@ public sealed class SnesCpu
     }
     private int Acc { get => FM ? A & 0xFF : A; set => A = FM ? (A & 0xFF00) | (value & 0xFF) : value & 0xFFFF; }
 
-    // ── ALU ───────────────────────────────────────────────────────────────
+    // ALU
     private void Adc(int v)
     {
         if (FM)
@@ -238,7 +236,7 @@ public sealed class SnesCpu
         if (cond) PC = (PC + off) & 0xFFFF;
     }
 
-    /// <summary>Takes an interrupt (NMI when <paramref name="nmi"/>), as the console does between two instructions.</summary>
+    // takes an interrupt (NMI if nmi), like the console does between two instructions
     public void Interrupt(bool nmi)
     {
         Waiting = false;
@@ -249,7 +247,6 @@ public sealed class SnesCpu
         PC = R16(E ? (nmi ? 0xFFFA : 0xFFFE) : (nmi ? 0xFFEA : 0xFFEE));
     }
 
-    /// <summary>Runs one instruction.</summary>
     public void Step()
     {
         if (Stopped || Waiting) return;
@@ -267,12 +264,12 @@ public sealed class SnesCpu
                 return;
             }
             int ea = AluEa(col);
-            bool b0 = IsBank0Mode(col);
-            if (grp == 4) WriteM(ea, Acc, b0);
-            else Alu(grp, ReadM(ea, b0));
+            bool bank0 = IsBank0Mode(col);
+            if (grp == 4) WriteM(ea, Acc, bank0);
+            else Alu(grp, ReadM(ea, bank0));
             return;
         }
-        int t;
+        int memValue;
         switch (op)
         {
             case 0x00: Crashed = pcAt; Stopped = true; return;                       // BRK
@@ -428,10 +425,10 @@ public sealed class SnesCpu
             case 0x34: BitMem(DpX(), true); return;
             case 0x2C: BitMem(Abs(), false); return;
             case 0x3C: BitMem(AbsX(), false); return;
-            case 0x04: { int ea = Dp(); t = ReadM(ea, true); FZ = (t & Acc) == 0; WriteM(ea, t | Acc, true); return; }
-            case 0x0C: { int ea = Abs(); t = ReadM(ea, false); FZ = (t & Acc) == 0; WriteM(ea, t | Acc, false); return; }
-            case 0x14: { int ea = Dp(); t = ReadM(ea, true); FZ = (t & Acc) == 0; WriteM(ea, t & ~Acc, true); return; }
-            case 0x1C: { int ea = Abs(); t = ReadM(ea, false); FZ = (t & Acc) == 0; WriteM(ea, t & ~Acc, false); return; }
+            case 0x04: { int ea = Dp(); memValue = ReadM(ea, true); FZ = (memValue & Acc) == 0; WriteM(ea, memValue | Acc, true); return; }
+            case 0x0C: { int ea = Abs(); memValue = ReadM(ea, false); FZ = (memValue & Acc) == 0; WriteM(ea, memValue | Acc, false); return; }
+            case 0x14: { int ea = Dp(); memValue = ReadM(ea, true); FZ = (memValue & Acc) == 0; WriteM(ea, memValue & ~Acc, true); return; }
+            case 0x1C: { int ea = Abs(); memValue = ReadM(ea, false); FZ = (memValue & Acc) == 0; WriteM(ea, memValue & ~Acc, false); return; }
 
             // block moves
             case 0x54:                                                               // MVN dest, src
@@ -441,8 +438,8 @@ public sealed class SnesCpu
                 DB = dst;
                 W8(dst << 16 | Y, R8(src << 16 | X));
                 int step = op == 0x54 ? 1 : -1;
-                int m = FX ? 0xFF : 0xFFFF;
-                X = (X + step) & m; Y = (Y + step) & m;
+                int mask = FX ? 0xFF : 0xFFFF;
+                X = (X + step) & mask; Y = (Y + step) & mask;
                 A = (A - 1) & 0xFFFF;
                 if (A != 0xFFFF) PC = (PC - 3) & 0xFFFF;
                 return;
@@ -451,11 +448,11 @@ public sealed class SnesCpu
         Crashed = pcAt; Stopped = true;
     }
 
-    private void BitMem(int ea, bool b0)
+    private void BitMem(int ea, bool bank0)
     {
-        int v = ReadM(ea, b0);
-        FZ = (v & Acc) == 0;
-        if (FM) { FN = (v & 0x80) != 0; FV = (v & 0x40) != 0; }
-        else { FN = (v & 0x8000) != 0; FV = (v & 0x4000) != 0; }
+        int value = ReadM(ea, bank0);
+        FZ = (value & Acc) == 0;
+        if (FM) { FN = (value & 0x80) != 0; FV = (value & 0x40) != 0; }
+        else { FN = (value & 0x8000) != 0; FV = (value & 0x4000) != 0; }
     }
 }
