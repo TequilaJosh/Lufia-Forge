@@ -17,6 +17,6 @@ public partial class L2AnimationsView : UserControl
 
     private void Swatch_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
-        if (sender is FrameworkElement { Tag: int i }) Vm?.PickColour(i);
+        if (sender is FrameworkElement { Tag: int colourIndex }) Vm?.PickColour(colourIndex);
     }
 }

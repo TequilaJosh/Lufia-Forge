@@ -6,14 +6,14 @@ using Color = System.Windows.Media.Color;
 
 namespace LufiaForge.Modules.Lufia2;
 
-/// <summary>A row of numbers (a growth row: 7 stats and the EXP growth).</summary>
+// a row of numbers (a growth row: 7 stats + the EXP growth)
 public sealed class L2Row
 {
     public string Label { get; init; } = "";
     public List<L2Word> Cells { get; init; } = new();
 }
 
-/// <summary>A band of levels and how much a stat grows per level in it (shown as a decimal or a percentage).</summary>
+// a band of levels and how much a stat grows per level in it (shown as a decimal or a percentage)
 public partial class L2Band : ObservableObject
 {
     public string Label { get; init; } = "";
@@ -23,9 +23,8 @@ public partial class L2Band : ObservableObject
     partial void OnValueChanged(double value) => Changed?.Invoke();
 }
 
-/// <summary>The heroes: starting stats, growth per level (as a chart and as gains per level), the EXP curve, what each
-/// starts the game with (level, EXP, magic, equipment), the Ancient Cave's bonuses, and the party, gold and items of a
-/// new game.</summary>
+// the heroes: starting stats, growth per level (as a chart and as gains per level), the EXP curve, what each one
+// starts the game with (level, EXP, magic, equipment), the Ancient Cave's bonuses, and a new game's party, gold and items
 public partial class L2CharactersPage : L2Page
 {
     private L2Characters.Start? _start;
@@ -49,7 +48,7 @@ public partial class L2CharactersPage : L2Page
     [ObservableProperty] private List<L2Band> _bands = new();
     [ObservableProperty] private string _bandsHint = "";
     [ObservableProperty] private IReadOnlyList<ChartSeries>? _chart;
-    /// <summary>The levels the chart's line can be dragged at: the end of each band (none for EXP).</summary>
+    // the levels where you can drag the chart's line: the end of each band (none for EXP)
     [ObservableProperty] private IReadOnlyList<int>? _chartHandles;
     [ObservableProperty] private string _levelTable = "";
 
@@ -74,16 +73,16 @@ public partial class L2CharactersPage : L2Page
         _cave = L2Characters.ReadCave(rom);
         var items = L2Battle.Items(rom).Select(i => new L2Option(i.Index, $"{i.Index:X3} {i.Name}")).ToList();
 
-        var v = L2Characters.Read(rom, index);
-        Hp = v[0]; Mp = v[1]; Str = v[2]; Agl = v[3]; Int = v[4]; Gut = v[5]; Mgr = v[6];
+        var baseStats = L2Characters.Read(rom, index);
+        Hp = baseStats[0]; Mp = baseStats[1]; Str = baseStats[2]; Agl = baseStats[3]; Int = baseStats[4]; Gut = baseStats[5]; Mgr = baseStats[6];
         ExpBase = L2Characters.ReadExpBase(rom, index);
         _rows = Enumerable.Range(0, L2Characters.GrowthRows).Select(r => L2Characters.ReadGrowth(rom, index, r)).ToArray();
 
-        var h = _start.Heroes[index];
-        Name = h.Name; Level = h.Level; Exp = h.Exp; Ip = h.Ip;
-        Equipment = h.Words.Select((w, i) => new L2Slot { Label = L2Characters.EquipSlots[i], Options = items, Value = w, Changed = Edited }).ToList();
+        var hero = _start.Heroes[index];
+        Name = hero.Name; Level = hero.Level; Exp = hero.Exp; Ip = hero.Ip;
+        Equipment = hero.Words.Select((w, i) => new L2Slot { Label = L2Characters.EquipSlots[i], Options = items, Value = w, Changed = Edited }).ToList();
 
-        // starting magic: every spell, ticked when known at the start (in the order the game lists them)
+        // starting magic: every spell, ticked if known at the start (in the order the game lists them)
         _spellOrder = L2StartSpells.Of(rom, index);
         StartSpells = L2Battle.Spells(rom).Select(s => new L2Flag { Label = $"{s.Index:X2} {s.Name}", Bit = s.Index, IsChecked = _spellOrder.Contains(s.Index), Changed = Edited }).ToList();
         SpellsHint = L2StartSpells.CanChange(rom)
@@ -101,29 +100,29 @@ public partial class L2CharactersPage : L2Page
         Refresh();
     }
 
-    /// <summary>The levels a growth row is used for: row r takes a hero from level 8r (at least 1) to the next, so it
-    /// makes levels 8r+1 to 8r+8.</summary>
-    private string BandLabel(int r) => $"Levels {Math.Max(2, r * 8 + 1)}-{BandEnd(r)}";
+    // the levels a growth row is used for: row r takes a hero from level 8r (at least 1) to the next, so it
+    // makes levels 8r+1 to 8r+8
+    private string BandLabel(int row) => $"Levels {Math.Max(2, row * 8 + 1)}-{BandEnd(row)}";
 
-    /// <summary>The highest level: 99, or 255 with the higher limits (the last row goes on to it).</summary>
+    // the highest level: 99, or 255 with the higher limits (the last row goes on up to it)
     private int MaxLv => Rom != null ? L2Characters.MaxLevelOf(Rom) : L2Characters.MaxLevel;
 
-    partial void OnGrowthStatChanged(int value) { if (Rom != null && SelectedIndex >= 0) { bool l = Loading; Loading = true; try { ShowBands(); } finally { Loading = l; } Refresh(); } }
+    partial void OnGrowthStatChanged(int value) { if (Rom != null && SelectedIndex >= 0) { bool wasLoading = Loading; Loading = true; try { ShowBands(); } finally { Loading = wasLoading; } Refresh(); } }
 
     private void ShowBands()
     {
-        int s = Math.Clamp(GrowthStat, 0, 7);
-        bool exp = s == 7;
+        int stat = Math.Clamp(GrowthStat, 0, 7);
+        bool exp = stat == 7;
         Bands = Enumerable.Range(0, _rows.Length).Select(r => new L2Band
         {
             Label = BandLabel(r),
-            Unit = exp ? "% more EXP each level" : $"{L2Characters.Stats[s]} per level",
-            Value = exp ? Math.Round((_rows[r][7] + 1) * 100.0 / 256, 1) : Math.Round(_rows[r][s] / 16.0, 2),
+            Unit = exp ? "% more EXP each level" : $"{L2Characters.Stats[stat]} per level",
+            Value = exp ? Math.Round((_rows[r][7] + 1) * 100.0 / 256, 1) : Math.Round(_rows[r][stat] / 16.0, 2),
             Changed = Edited,
         }).ToList();
         BandsHint = exp
             ? "How much more EXP each level needs than the one before, in each band of levels (the game keeps it the same for every hero). The curve starts at 'EXP curve start'."
-            : s == 5
+            : stat == 5
                 ? "GUT grows by exactly this much each level."
                 : "Each level adds this much, plus 0 to 4 at random (the chart and the table leave the random part out).";
     }
@@ -131,34 +130,34 @@ public partial class L2CharactersPage : L2Page
     private void Refresh()
     {
         if (Rom == null || SelectedIndex < 0) return;
-        int c = SelectedIndex;
+        int hero = SelectedIndex;
         var levels = Enumerable.Range(1, MaxLv).ToArray();
-        var stats = levels.Select(lv => L2Characters.StatsAt(Rom, c, lv)).ToArray();
+        var stats = levels.Select(lv => L2Characters.StatsAt(Rom, hero, lv)).ToArray();
         ChartHandles = GrowthStat == 7 ? null : Enumerable.Range(0, _rows.Length).Select(BandEnd).ToList();
         if (GrowthStat == 7)
-            Chart = new[] { new ChartSeries("EXP for the next level", levels.Take(MaxLv > 99 ? MaxLv - 1 : 97).Select(lv => (double)L2Characters.ExpNeeded(Rom, c, lv)).ToArray(), StatColors[7], true) };
+            Chart = new[] { new ChartSeries("EXP for the next level", levels.Take(MaxLv > 99 ? MaxLv - 1 : 97).Select(lv => (double)L2Characters.ExpNeeded(Rom, hero, lv)).ToArray(), StatColors[7], true) };
         else
             Chart = Enumerable.Range(0, 7).Select(i => new ChartSeries(L2Characters.Stats[i], stats.Select(x => (double)x[i]).ToArray(), StatColors[i], i == GrowthStat)).ToList();
-        string Row(int lv) => $"{lv,5}  " + string.Join("", stats[lv - 1].Select(x => $"{x,6}")) + $"  {L2Characters.ExpNeeded(Rom, c, lv),12:N0}";
+        string Row(int lv) => $"{lv,5}  " + string.Join("", stats[lv - 1].Select(x => $"{x,6}")) + $"  {L2Characters.ExpNeeded(Rom, hero, lv),12:N0}";
         LevelTable = "Level" + string.Join("", L2Characters.Stats.Select(x => $"{x,6}")) + "  EXP for next\n" +
                      string.Join("\n", new[] { 1, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 99 }.Concat(MaxLv > 99 ? new[] { 120, 150, 200, MaxLv } : Array.Empty<int>()).Select(Row));
-        int lo = Level <= 1 ? 0 : L2Characters.ExpNeeded(Rom, c, Level - 1), hi = L2Characters.ExpNeeded(Rom, c, Level);
-        ExpHint = Exp >= lo && Exp < hi
-            ? $"Level {Level} covers {lo:N0} to {hi - 1:N0} EXP."
-            : $"Level {Level} needs {lo:N0} to {hi - 1:N0} EXP: with {Exp:N0} the game would put the hero at another level.";
+        int lowExp = Level <= 1 ? 0 : L2Characters.ExpNeeded(Rom, hero, Level - 1), highExp = L2Characters.ExpNeeded(Rom, hero, Level);
+        ExpHint = Exp >= lowExp && Exp < highExp
+            ? $"Level {Level} covers {lowExp:N0} to {highExp - 1:N0} EXP."
+            : $"Level {Level} needs {lowExp:N0} to {highExp - 1:N0} EXP: with {Exp:N0} the game would put the hero at another level.";
     }
 
-    private int BandEnd(int r) => r == L2Characters.GrowthRows - 1 ? MaxLv : Math.Min(r * 8 + 8, MaxLv);
+    private int BandEnd(int row) => row == L2Characters.GrowthRows - 1 ? MaxLv : Math.Min(row * 8 + 8, MaxLv);
 
-    /// <summary>A handle of the chart was dragged to <paramref name="value"/>: the band before it gets the gain that
-    /// reaches that value, the band after it the gain that still reaches the next handle (the rest stays).</summary>
+    // a chart handle got dragged to value. the band before it gets the gain that reaches that value, the band after
+    // it the gain that still reaches the next handle (the rest stay as they are)
     public void DragBand(int band, double value)
     {
         if (Rom == null || SelectedIndex < 0 || GrowthStat is < 0 or > 6 || band < 0 || band >= Bands.Count) return;
-        int c = SelectedIndex, s = GrowthStat;
-        int Stat(int lv) => L2Characters.StatsAt(Rom, c, lv)[s];
+        int hero = SelectedIndex, stat = GrowthStat;
+        int Stat(int lv) => L2Characters.StatsAt(Rom, hero, lv)[stat];
         int start = band == 0 ? 1 : BandEnd(band - 1), end = BandEnd(band);
-        double Clamp(double g) => Math.Round(Math.Clamp(g, 0, 255 / 16.0), 2);
+        double Clamp(double gain) => Math.Round(Math.Clamp(gain, 0, 255 / 16.0), 2);
         double after = band + 1 < Bands.Count ? Stat(BandEnd(band + 1)) : 0;
         Loading = true;
         try
@@ -177,26 +176,26 @@ public partial class L2CharactersPage : L2Page
     {
         if (_start == null) return null;
         var rom = Rom!;
-        int c = SelectedIndex;
-        L2Characters.Write(rom, c, new[] { Hp, Mp, Str, Agl, Int, Gut, Mgr });
-        L2Characters.WriteExpBase(rom, c, ExpBase);
-        int s = Math.Clamp(GrowthStat, 0, 7);
-        for (int r = 0; r < Bands.Count && r < _rows.Length; r++)
-            _rows[r][s] = s == 7 ? Math.Clamp((int)Math.Round(Bands[r].Value * 256 / 100) - 1, 0, 255) : Math.Clamp((int)Math.Round(Bands[r].Value * 16), 0, 255);
-        for (int r = 0; r < _rows.Length; r++) L2Characters.WriteGrowth(rom, c, r, _rows[r]);
-        var h = _start.Heroes[c];
-        h.Name = Name; h.Level = Level; h.Exp = Exp; h.Ip = Ip;
-        for (int i = 0; i < Equipment.Count; i++) h.Words[i] = Equipment[i].Value;
-        L2Characters.WriteRecord(rom, h);
-        // magic: the ticked spells, the ones already known keeping their place, new ones added at the end
+        int heroIndex = SelectedIndex;
+        L2Characters.Write(rom, heroIndex, new[] { Hp, Mp, Str, Agl, Int, Gut, Mgr });
+        L2Characters.WriteExpBase(rom, heroIndex, ExpBase);
+        int stat = Math.Clamp(GrowthStat, 0, 7);
+        for (int row = 0; row < Bands.Count && row < _rows.Length; row++)
+            _rows[row][stat] = stat == 7 ? Math.Clamp((int)Math.Round(Bands[row].Value * 256 / 100) - 1, 0, 255) : Math.Clamp((int)Math.Round(Bands[row].Value * 16), 0, 255);
+        for (int row = 0; row < _rows.Length; row++) L2Characters.WriteGrowth(rom, heroIndex, row, _rows[row]);
+        var hero = _start.Heroes[heroIndex];
+        hero.Name = Name; hero.Level = Level; hero.Exp = Exp; hero.Ip = Ip;
+        for (int i = 0; i < Equipment.Count; i++) hero.Words[i] = Equipment[i].Value;
+        L2Characters.WriteRecord(rom, hero);
+        // magic: the ticked spells, ones already known keep their place, new ones go at the end
         var ticked = StartSpells.Where(f => f.IsChecked).Select(f => f.Bit).ToList();
         _spellOrder = _spellOrder.Where(ticked.Contains).Concat(ticked.Where(x => !_spellOrder.Contains(x))).Take(L2StartSpells.Slots).ToList();
-        if (L2StartSpells.CanChange(rom)) L2StartSpells.Set(rom, c, _spellOrder);
-        var cave = _cave[c];
+        if (L2StartSpells.CanChange(rom)) L2StartSpells.Set(rom, heroIndex, _spellOrder);
+        var cave = _cave[heroIndex];
         for (int i = 0; i < CaveBonuses.Count; i++) cave.Words[i] = CaveBonuses[i].Value;
         L2Characters.WriteRecord(rom, cave);
         Refresh();
-        return L2Characters.Names[c];
+        return L2Characters.Names[heroIndex];
     }
 
     partial void OnGoldChanged(int value) => PartyEdited();
@@ -206,11 +205,11 @@ public partial class L2CharactersPage : L2Page
         if (Loading || Rom == null || Main == null || _start == null) return;
         _start.Gold = Gold;
         for (int i = 0; i < 4 && i < Party.Count; i++) _start.Party[i] = Party[i].Value;
-        // the party is packed to the front; its size is how many are in it
-        var ids = _start.Party.Where(p => p != 0xFF).ToList();
-        if (ids.Count == 0) ids.Add(0);
-        for (int i = 0; i < 4; i++) _start.Party[i] = i < ids.Count ? ids[i] : 0xFF;
-        _start.PartySize = ids.Count;
+        // the party gets packed to the front, its size = how many are in it
+        var members = _start.Party.Where(p => p != 0xFF).ToList();
+        if (members.Count == 0) members.Add(0);
+        for (int i = 0; i < 4; i++) _start.Party[i] = i < members.Count ? members[i] : 0xFF;
+        _start.PartySize = members.Count;
         for (int i = 0; i < _start.Inventory.Count; i++) _start.Inventory[i] = (Inventory[i].Value, InventoryCounts[i].Value);
         L2Characters.WriteStart(Rom, _start);
         L2StartParty.Keep(Rom);

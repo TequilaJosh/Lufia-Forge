@@ -16,7 +16,7 @@ namespace LufiaForge.Modules.Lufia2;
 public partial class L2AttacksView : UserControl
 {
     private L2AttacksPage? _vm;
-    private int _shownAnim = -2, _shownMonster = -2, _token, _at;
+    private int _shownAnim = -2, _shownMonster = -2, _token, _frameIndex;
     private List<uint[]> _frames = new();
     private WriteableBitmap? _bitmap;
     private readonly DispatcherTimer _timer = new(DispatcherPriority.Render) { Interval = TimeSpan.FromSeconds(1 / 60.0) };
@@ -45,11 +45,11 @@ public partial class L2AttacksView : UserControl
     {
         if (_vm == null) return;
         var menu = new ContextMenu { PlacementTarget = AddEffectButton };
-        foreach (var k in _vm.EffectKinds)
+        foreach (var effectKind in _vm.EffectKinds)
         {
-            string help = _vm.EffectHelp(k.Value);
-            var item = new MenuItem { Header = k.Label, ToolTip = help.Length > 0 ? help : null };
-            var kind = k;
+            string help = _vm.EffectHelp(effectKind.Value);
+            var item = new MenuItem { Header = effectKind.Label, ToolTip = help.Length > 0 ? help : null };
+            var kind = effectKind;
             item.Click += (_, _) => _vm.AddEffectCommand.Execute(kind);
             menu.Items.Add(item);
         }
@@ -58,13 +58,13 @@ public partial class L2AttacksView : UserControl
 
     private void Listen_Click(object sender, RoutedEventArgs e)
     {
-        if (_vm?.CurrentRom is not { } rom || sender is not Button b) return;
+        if (_vm?.CurrentRom is not { } rom || sender is not Button button) return;
         if (_vm.Sound < 0) { _vm.Status = "It has no sound of its own."; return; }
-        string note = Common.SoundPreview.Toggle(b, rom, lufia2: true, song: false, _vm.Sound);
+        string note = Common.SoundPreview.Toggle(button, rom, lufia2: true, song: false, _vm.Sound);
         if (note.Length > 0) _vm.Status = note;
     }
 
-    // ── the animation preview (the game's own code, as in the battle script window) ──
+    // the animation preview (runs the game's own code, same as the battle script window)
 
     private void UpdatePreview()
     {
@@ -77,15 +77,15 @@ public partial class L2AttacksView : UserControl
         PreviewBox.Visibility = Visibility.Visible;
         PreviewText.Text = $"Animation {id:X2}: playing the game's code...";
         int token = ++_token;
-        var copy = new RomBuffer(rom.ToArray(), "preview");
-        var (sprite, pal) = (-1, 0);
-        try { var m = L2Battle.ReadMonster(rom, monster); (sprite, pal) = (m.Sprite, m.Palette); } catch (Exception) { }
-        Task.Run(() => L2AnimPreview.Play(copy, id, new L2AnimPreview.Options(0, sprite, pal, MaxFrames: 600))).ContinueWith(t => Dispatcher.BeginInvoke(() =>
+        var romCopy = new RomBuffer(rom.ToArray(), "preview");
+        var (sprite, palette) = (-1, 0);
+        try { var record = L2Battle.ReadMonster(rom, monster); (sprite, palette) = (record.Sprite, record.Palette); } catch (Exception) { }
+        Task.Run(() => L2AnimPreview.Play(romCopy, id, new L2AnimPreview.Options(0, sprite, palette, MaxFrames: 600))).ContinueWith(task => Dispatcher.BeginInvoke(() =>
         {
             if (token != _token) return;
-            if (t.Exception != null) { PreviewText.Text = $"Animation {id:X2} can't be played here: {t.Exception.InnerException?.Message}"; return; }
-            var (frames, problem) = t.Result;
-            _frames = frames; _at = 0;
+            if (task.Exception != null) { PreviewText.Text = $"Animation {id:X2} can't be played here: {task.Exception.InnerException?.Message}"; return; }
+            var (frames, problem) = task.Result;
+            _frames = frames; _frameIndex = 0;
             PreviewText.Text = $"Animation {id:X2}, {frames.Count / 60.0:0.0} s" + (problem != null ? $" ({problem})" : "") + ". The heroes and windows aren't drawn.";
             if (frames.Count == 0) return;
             _bitmap ??= new WriteableBitmap(SnesRenderer.Width, SnesRenderer.Height, 96, 96, PixelFormats.Bgra32, null);
@@ -97,9 +97,9 @@ public partial class L2AttacksView : UserControl
     private void Tick()
     {
         if (_bitmap == null || _frames.Count == 0) { _timer.Stop(); return; }
-        if (_at >= _frames.Count + LoopPause) _at = 0;
-        int f = Math.Min(_at, _frames.Count - 1);
-        _bitmap.WritePixels(new Int32Rect(0, 0, SnesRenderer.Width, SnesRenderer.Height), _frames[f], SnesRenderer.Width * 4, 0);
-        _at++;
+        if (_frameIndex >= _frames.Count + LoopPause) _frameIndex = 0;
+        int frame = Math.Min(_frameIndex, _frames.Count - 1);
+        _bitmap.WritePixels(new Int32Rect(0, 0, SnesRenderer.Width, SnesRenderer.Height), _frames[frame], SnesRenderer.Width * 4, 0);
+        _frameIndex++;
     }
 }

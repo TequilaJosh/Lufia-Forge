@@ -3,7 +3,7 @@ using LufiaForge.Core.Lufia2;
 
 namespace LufiaForge.Modules.Lufia2;
 
-/// <summary>One exit: where on this map it is, and the map and place it leads to.</summary>
+// one exit: where it is on this map, and the map and place it leads to
 public partial class L2ExitRow : ObservableObject
 {
     public string Label { get; init; } = "";
@@ -15,7 +15,7 @@ public partial class L2ExitRow : ObservableObject
     partial void OnYChanged(int value) => Changed?.Invoke();
 }
 
-/// <summary>Map exits (the map info's exit list): each one's destination map and place can be changed.</summary>
+// map exits (the map info's exit list), you can change where each one leads (map and place)
 public partial class L2ExitsPage : L2Page
 {
     private List<int> _maps = new();
@@ -30,34 +30,34 @@ public partial class L2ExitsPage : L2Page
 
     protected override void Load(int index)
     {
-        var maps = Enumerable.Range(0, L2Maps.Count(Rom!)).Select(m => new L2Option(m, $"{m:X2} {L2Maps.Name(Rom!, m)}")).ToList();
+        var mapOptions = Enumerable.Range(0, L2Maps.Count(Rom!)).Select(m => new L2Option(m, $"{m:X2} {L2Maps.Name(Rom!, m)}")).ToList();
         _exits = L2MapInfo.Read(Rom!, _maps[index]).Where(e => e.Kind == "Exit").ToList();
         Rows = _exits.Select(e => new L2ExitRow
         {
             Label = $"Exit {e.Id:X2} at ({e.X1},{e.Y1}){(e.X2 != e.X1 || e.Y2 != e.Y1 ? $"-({e.X2},{e.Y2})" : "")}",
-            MapOptions = maps, Map = e.DestMap, X = e.DestX, Y = e.DestY, Changed = Edited,
+            MapOptions = mapOptions, Map = e.DestMap, X = e.DestX, Y = e.DestY, Changed = Edited,
         }).ToList();
     }
 
-    protected override bool IsField(string p) => false;
+    protected override bool IsField(string property) => false;
 
-    /// <summary>Writes the rows changed here only, each to its exit as the ROM has it now (the Maps tab edits the same
-    /// list and may have moved it), so an exit changed there keeps its change.</summary>
+    // only writes the rows changed here, each one to its exit as the ROM has it now (the Maps tab edits the same
+    // list and may have moved it), so an exit changed over there keeps its change
     protected override string? Write()
     {
         int map = _maps[SelectedIndex];
-        var now = L2MapInfo.Read(Rom!, map).Where(e => e.Kind == "Exit").ToList();
+        var exitsNow = L2MapInfo.Read(Rom!, map).Where(e => e.Kind == "Exit").ToList();
         bool any = false;
         for (int i = 0; i < _exits.Count && i < Rows.Count; i++)
         {
-            var r = Rows[i];
-            var (m, x, y) = (Math.Clamp(r.Map, 0, 255), Math.Clamp(r.X, 0, 255), Math.Clamp(r.Y, 0, 255));
+            var row = Rows[i];
+            var (destMap, x, y) = (Math.Clamp(row.Map, 0, 255), Math.Clamp(row.X, 0, 255), Math.Clamp(row.Y, 0, 255));
             var was = _exits[i];
-            if (m == was.DestMap && x == was.DestX && y == was.DestY) continue;
-            var exit = now.FirstOrDefault(e => e.Id == was.Id);
-            if (exit == null) continue;   // taken out on the Maps tab meanwhile
-            L2MapInfo.WriteExit(Rom!, exit, m, x, y);
-            _exits[i] = exit with { DestMap = m, DestX = x, DestY = y };
+            if (destMap == was.DestMap && x == was.DestX && y == was.DestY) continue;
+            var exit = exitsNow.FirstOrDefault(e => e.Id == was.Id);
+            if (exit == null) continue;   // taken out on the Maps tab in the meantime
+            L2MapInfo.WriteExit(Rom!, exit, destMap, x, y);
+            _exits[i] = exit with { DestMap = destMap, DestX = x, DestY = y };
             any = true;
         }
         return any ? $"exits of map {map:X2}" : null;

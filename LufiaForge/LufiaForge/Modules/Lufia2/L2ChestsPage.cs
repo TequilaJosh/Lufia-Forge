@@ -3,43 +3,43 @@ using LufiaForge.Core.Lufia2;
 
 namespace LufiaForge.Modules.Lufia2;
 
-/// <summary>One treasure on the Treasure page: an item, or gold with its amount.</summary>
+// one treasure on the Treasure page: an item, or gold with its amount
 public partial class L2ChestRow : ObservableObject
 {
     public const int GoldChoice = -2;
     public int Spot { get; init; }
     public string Label { get; init; } = "";
     public List<L2Option> Options { get; init; } = new();
-    /// <summary>The item, or <see cref="GoldChoice"/>.</summary>
+    // the item, or GoldChoice
     [ObservableProperty] private int _value;
     [ObservableProperty] private int _goldAmount = 100;
     public bool IsGold => Value == GoldChoice;
     public Action? Changed { get; set; }
-    /// <summary>The treasure as the editors keep it (gold: <see cref="L2Gold.EditorBase"/> + amount).</summary>
+    // the treasure the way the editors keep it (gold = L2Gold.EditorBase + amount)
     public int EditorItem => IsGold ? L2Gold.Item(GoldAmount) : Value;
     partial void OnValueChanged(int value) { OnPropertyChanged(nameof(IsGold)); Changed?.Invoke(); }
     partial void OnGoldAmountChanged(int value) { if (IsGold) Changed?.Invoke(); }
 }
 
-/// <summary>Treasure chests: the maps that have some, and for the picked map each chest's place and item (or gold).
-/// It shares the ROM with the Maps tab: the Maps tab's edits are written before this page reads a map
-/// (<see cref="BeforeRead"/>), and a change here is written by spot over what the ROM holds then, so neither page
-/// writes over the other's changes.</summary>
+// treasure chests: the maps that have some, and for the picked map each chest's place and item (or gold).
+// it shares the ROM with the Maps tab. the Maps tab's edits get written before this page reads a map (BeforeRead),
+// and a change here is written by spot over whatever the ROM holds at that point, so neither page writes over the
+// other's changes
 public partial class L2ChestsPage : L2Page
 {
     private List<int> _maps = new();
     private int _map = -1;
-    /// <summary>What each shown treasure held when the page read it (spot -> editor item).</summary>
+    // what each shown treasure held when we read it (spot -> editor item)
     private Dictionary<int, int> _shown = new();
     [ObservableProperty] private List<L2ChestRow> _rows = new();
     [ObservableProperty] private string _info = "";
     [ObservableProperty] private string _goldNote = "";
 
-    /// <summary>Called before the page reads the ROM (the Maps tab writes what it hasn't written yet).</summary>
+    // called before the page reads the ROM (the Maps tab writes whatever it hasn't written yet)
     public Func<string?>? BeforeRead { get; set; }
 
-    /// <summary>The page is shown: the Maps tab's edits go in first, then (when the ROM changed since the page read it)
-    /// the list and the picked map are read again.</summary>
+    // page shown: the Maps tab's edits go in first, then if the ROM changed since we read it, the list and the
+    // picked map get read again
     public override void Shown()
     {
         if (Rom == null) return;
@@ -47,11 +47,11 @@ public partial class L2ChestsPage : L2Page
         if (!ChangedSinceRead) return;
         int map = _map;
         Loading = true;
-        try { Names.Clear(); foreach (var n in ReadNames()) Names.Add(n); }
+        try { Names.Clear(); foreach (var name in ReadNames()) Names.Add(name); }
         finally { Loading = false; }
-        int i = _maps.IndexOf(map);
+        int listIndex = _maps.IndexOf(map);
         SelectedIndex = -1;
-        SelectedIndex = i >= 0 ? i : Names.Count > 0 ? 0 : -1;
+        SelectedIndex = listIndex >= 0 ? listIndex : Names.Count > 0 ? 0 : -1;
     }
 
     protected override IEnumerable<string> ReadNames()
@@ -68,14 +68,14 @@ public partial class L2ChestsPage : L2Page
         var chests = L2Chests.Read(Rom!, _map);
         _shown = new();
         var rows = new List<L2ChestRow>();
-        foreach (var c in chests)
+        foreach (var chest in chests)
         {
-            int item = L2Gold.ToEditor(Rom!, c.Item);
-            _shown[c.Spot] = item;
+            int item = L2Gold.ToEditor(Rom!, chest.Item);
+            _shown[chest.Spot] = item;
             rows.Add(new L2ChestRow
             {
-                Spot = c.Spot,
-                Label = $"Chest {c.Spot:X2}{(c.X >= 0 ? $" at ({c.X},{c.Y})" : "")}{(c.Special ? " *" : "")}",
+                Spot = chest.Spot,
+                Label = $"Chest {chest.Spot:X2}{(chest.X >= 0 ? $" at ({chest.X},{chest.Y})" : "")}{(chest.Special ? " *" : "")}",
                 Options = options, Value = L2Gold.IsGold(item) ? L2ChestRow.GoldChoice : item,
                 GoldAmount = L2Gold.IsGold(item) ? L2Gold.AmountOf(item) : 100, Changed = Edited,
             });
@@ -92,16 +92,16 @@ public partial class L2ChestsPage : L2Page
     protected override string? Write()
     {
         if (_map < 0) return null;
-        var changed = Rows.Where(r => !_shown.TryGetValue(r.Spot, out var was) || was != r.EditorItem).ToDictionary(r => r.Spot, r => r.EditorItem);
+        var changed = Rows.Where(r => !_shown.TryGetValue(r.Spot, out var before) || before != r.EditorItem).ToDictionary(r => r.Spot, r => r.EditorItem);
         if (changed.Count == 0) return null;
         try
         {
-            // read the list again (the Maps tab may have moved or changed it) and change only these spots
-            var recs = L2MapEdit.EditorRecords(Rom!, _map).Select(r => changed.TryGetValue(r.Spot, out int it) ? r with { Item = it } : r).ToList();
-            L2Chests.WriteList(Rom!, _map, L2Gold.ToRom(Rom!, _map, recs));
+            // read the list again (the Maps tab may have moved or changed it) and only change these spots
+            var records = L2MapEdit.EditorRecords(Rom!, _map).Select(r => changed.TryGetValue(r.Spot, out int newItem) ? r with { Item = newItem } : r).ToList();
+            L2Chests.WriteList(Rom!, _map, L2Gold.ToRom(Rom!, _map, records));
         }
         catch (Exception ex) { GoldNote = "Not written: " + ex.Message; return null; }
-        foreach (var kv in changed) _shown[kv.Key] = kv.Value;
+        foreach (var spotItem in changed) _shown[spotItem.Key] = spotItem.Value;
         return $"chests of map {_map:X2}";
     }
 }

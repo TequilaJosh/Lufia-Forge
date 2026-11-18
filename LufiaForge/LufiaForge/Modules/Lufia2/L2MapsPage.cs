@@ -13,7 +13,7 @@ using LufiaForge.ViewModels;
 
 namespace LufiaForge.Modules.Lufia2;
 
-/// <summary>A box (or label) drawn over the map: pixel place and size, colour, label.</summary>
+// a box (or label) drawn over the map: where and how big in pixels, colour, label
 public sealed class L2Overlay
 {
     public double X { get; init; }
@@ -25,7 +25,7 @@ public sealed class L2Overlay
     public string Label { get; init; } = "";
 }
 
-/// <summary>A map in the list.</summary>
+// one map in the list
 public sealed class L2MapItem
 {
     public int Id { get; init; }
@@ -33,7 +33,7 @@ public sealed class L2MapItem
     public override string ToString() => Label;
 }
 
-/// <summary>A chest picture + Chest can use (closed and open, as drawn on its map).</summary>
+// a chest picture "+ Chest" can use (closed and open, as it's drawn on its map)
 public sealed class L2ChestLookChoice
 {
     public L2ChestLooks.Look Look { get; init; } = null!;
@@ -41,7 +41,7 @@ public sealed class L2ChestLookChoice
     public BitmapSource? Image { get; init; }
 }
 
-/// <summary>A block button (recent brushes, blocks that go with the brush).</summary>
+// a block button (recent brushes, blocks that go with the brush)
 public sealed class L2BlockChoice
 {
     public int Block { get; init; }
@@ -55,14 +55,12 @@ public sealed class L2BlockRow
     public List<L2BlockChoice> Blocks { get; init; } = new();
 }
 
-/// <summary>
-/// The Lufia II Maps tab (as Lufia 1's map editor): tools to select and move what is on the map, paint blocks (one or
-/// a rectangle of them) on either layer, pick, copy / cut / paste / fill areas, paint collision, add exits, step-on
-/// areas, characters and preset points; an inspector for the picked thing; zoom, camera, overlays per kind; block
-/// order, recent brushes and blocks that go with the brush; map settings (graphics, size, name, test start). Edits are
-/// kept here (with Undo / Redo) and written by themselves when another map is picked or the project is saved, or by
-/// Apply (<see cref="L2MapEdit"/>).
-/// </summary>
+// the Lufia II Maps tab, works like Lufia 1's map editor. tools to select and move stuff on the map, paint blocks
+// (one or a rectangle) on either layer, pick, copy / cut / paste / fill areas, paint collision, add exits, step-on
+// areas, characters and preset points. plus an inspector for whatever's picked, zoom, camera, overlays per kind, block
+// order, recent brushes, blocks that go with the brush, and map settings (graphics, size, name, test start).
+// edits stay here (with Undo / Redo) and get written by themselves when another map is picked or the project is saved,
+// or on Apply (L2MapEdit)
 public partial class L2MapsPage : ObservableObject, IPendingEdits
 {
     private RomBuffer? _rom;
@@ -74,7 +72,7 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
     public ObservableCollection<L2MapItem> Maps { get; } = new();
     [ObservableProperty] private L2MapItem? _selectedMap;
     [ObservableProperty] private string _mapSearch = "";
-    /// <summary>The map shown (its id), -1 for none.</summary>
+    // id of the map shown, -1 = none
     [ObservableProperty] private int _selectedIndex = -1;
     private List<string> _names = new();
 
@@ -98,28 +96,28 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
     [RelayCommand] private void ZoomIn() => Zoom = Zooms.FirstOrDefault(z => z > Zoom + 0.001, Zooms[^1]);
     [RelayCommand] private void ZoomOut() => Zoom = Zooms.LastOrDefault(z => z < Zoom - 0.001, Zooms[0]);
     [RelayCommand] private void ZoomReset() => Zoom = 1;
-    /// <summary>The zoom that shows the whole map in a view of this size.</summary>
-    public void Fit(double w, double h)
+    // zooms so the whole map fits in a view this size
+    public void Fit(double viewWidth, double viewHeight)
     {
-        if (_edit == null && _world == null || w <= 0 || h <= 0) return;
-        double z = _world != null ? Math.Min(w, h) / (double)WorldPixels : Math.Min(w / (_edit!.Width * 16.0), h / (_edit.Height * 16.0));
-        Zoom = Math.Clamp(Math.Floor(z * 20) / 20, 0.1, 4);
+        if (_edit == null && _world == null || viewWidth <= 0 || viewHeight <= 0) return;
+        double fitZoom = _world != null ? Math.Min(viewWidth, viewHeight) / (double)WorldPixels : Math.Min(viewWidth / (_edit!.Width * 16.0), viewHeight / (_edit.Height * 16.0));
+        Zoom = Math.Clamp(Math.Floor(fitZoom * 20) / 20, 0.1, 4);
     }
     public void WheelZoom(int delta) { if (delta > 0) ZoomIn(); else ZoomOut(); }
 
-    /// <summary>Asks the Lufia II tab to show an event of a map (map, list +6 / +8 / +4, id).</summary>
+    // asks the Lufia II tab to show one of a map's events (map, list +6 / +8 / +4, id)
     public event Action<int, int, int>? OpenEventRequested;
 
-    // ---------------------------------------------------------------- loading
+    // loading
 
     public void SetRom(RomBuffer rom, MainViewModel main)
     {
-        // the same ROM read again (Undo, a patch, a tidy): the map shown stays. Edits not written by now (the operations
-        // that read every page again write them first) belong to the bytes before, so they go, with what the world
-        // map and its zones hold
-        bool same = ReferenceEquals(rom, _rom);
-        int keep = same && SelectedIndex >= 0 ? SelectedIndex : 3;
-        bool dropped = HasPendingEdits;
+        // same ROM read again (Undo, a patch, a tidy) = the map shown stays. edits still not written by now belong to
+        // the old bytes, so they get dropped, along with what the world map and its zones hold (the operations that
+        // reload every page write them first anyway)
+        bool sameRom = ReferenceEquals(rom, _rom);
+        int keepMap = sameRom && SelectedIndex >= 0 ? SelectedIndex : 3;
+        bool hadPendingEdits = HasPendingEdits;
         _rom = rom; _main = main;
         main.Register(this);
         _names = Enumerable.Range(0, L2Maps.Count(rom)).Select(id => RomName(rom, id)).ToList();
@@ -131,37 +129,37 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
         ItemChoices.Clear(); SpriteChoices.Clear(); DestinationChoices.Clear();
         FillList();
         SelectedIndex = -1;
-        SelectedIndex = keep;
-        if (same && dropped) Status = "Map edits that couldn't be written before the ROM was read again were dropped. " + Status;
+        SelectedIndex = keepMap;
+        if (sameRom && hadPendingEdits) Status = "Map edits that couldn't be written before the ROM was read again were dropped. " + Status;
     }
 
-    /// <summary>The ROM's version when the map shown was read (or written here).</summary>
+    // the ROM's version when the map shown was read (or written here)
     private int _readVersion = -1;
 
     private static string RomName(RomBuffer rom, int id)
     {
         if (L2NewMaps.IsFree(rom, id)) return "(free: the next new map takes this number)";
-        string n = L2Maps.Name(rom, id);
-        return n.Length > 0 && !n.Contains('~') ? n : id < 2 ? (id == 0 ? "World map" : "Sea floor") : "Map " + id.ToString("X2");
+        string name = L2Maps.Name(rom, id);
+        return name.Length > 0 && !name.Contains('~') ? name : id < 2 ? (id == 0 ? "World map" : "Sea floor") : "Map " + id.ToString("X2");
     }
 
-    /// <summary>The name shown: the project's own name for it, else the game's.</summary>
+    // the name we show: the project's own name if it has one, else the game's
     public string NameOf(int id) =>
-        LufiaForge.Core.Maps.MapNames.ProjectNames is { } p && p.TryGetValue(id, out var n) && !string.IsNullOrWhiteSpace(n) ? n : _names.ElementAtOrDefault(id) ?? $"Map {id:X2}";
+        LufiaForge.Core.Maps.MapNames.ProjectNames is { } projectNames && projectNames.TryGetValue(id, out var name) && !string.IsNullOrWhiteSpace(name) ? name : _names.ElementAtOrDefault(id) ?? $"Map {id:X2}";
 
     private void FillList()
     {
-        string q = MapSearch.Trim();
-        var keep = SelectedIndex;
+        string search = MapSearch.Trim();
+        var keepId = SelectedIndex;
         _filling = true;
         Maps.Clear();
         for (int id = 0; id < L2Maps.Count(_rom!); id++)
         {
             string label = $"{id:X2}  {NameOf(id)}";
-            if (q.Length > 0 && !label.Contains(q, StringComparison.OrdinalIgnoreCase) && !(int.TryParse(q, System.Globalization.NumberStyles.HexNumber, null, out int h) && h == id)) continue;
+            if (search.Length > 0 && !label.Contains(search, StringComparison.OrdinalIgnoreCase) && !(int.TryParse(search, System.Globalization.NumberStyles.HexNumber, null, out int hexId) && hexId == id)) continue;
             Maps.Add(new L2MapItem { Id = id, Label = label });
         }
-        SelectedMap = Maps.FirstOrDefault(m => m.Id == keep);
+        SelectedMap = Maps.FirstOrDefault(m => m.Id == keepId);
         _filling = false;
     }
     private bool _filling;
@@ -171,7 +169,7 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
 
     partial void OnSelectedIndexChanging(int oldValue, int newValue)
     {
-        // what wasn't written yet goes in by itself (as Lufia 1's editor)
+        // whatever isn't written yet goes in by itself (like Lufia 1's editor)
         if ((_edit?.HasChanges == true || _world?.Changed == true) && _rom != null)
         {
             var why = WritePendingEdits();
@@ -210,24 +208,24 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
             : "The sea floor: paint, pick and copy its big blocks.";
         else if (_rom != null && TableGuard.LockReason(_rom, "Maps") is { } locked) Status = locked;
         else if (_edit != null) Status = $"{NameOf(value)}. Pick a tool above; Ctrl+Z takes back each change.";
-        // a new map made from a mountain, tower or Shrine of Daos floor keeps its ground layer far below: in the game
-        // it then shows out of line with the walls, which a flat map built here won't want
+        // a new map made from a mountain, tower or Shrine of Daos floor keeps its ground layer far below, so in the game
+        // it shows out of line with the walls. a flat map built here won't want that
         if (_edit != null && value >= L2NewMaps.GameCount && GroundParallax)
             Status = $"{NameOf(value)}: its ground layer scrolls as a far-off background in the game (as on the map it was made from), so the game shows it out of line with the walls. " +
                      "For a town or any flat map, untick \"Ground layer is a far-off background\" in Map settings.";
         _readVersion = _rom?.Version ?? -1;
     }
 
-    // ---------------------------------------------------------------- the story so far
+    // the story so far
 
-    /// <summary>The story points the map's start-up script tells apart (its creates' flag checks): the first choice
-    /// shows each character's first look, the others the characters the game makes while those flags are so.</summary>
+    // the story points the map's start-up script tells apart (the flag checks on its creates). the first choice shows
+    // each character's first look, the others show the characters the game makes while those flags are set that way
     public ObservableCollection<L2Option> StoryChoices { get; } = new();
     [ObservableProperty] private L2Option? _storyChoice;
     [ObservableProperty] private bool _hasStory;
     private List<L2MapInfo.Create> _stages = new();
     private readonly List<List<(int Flag, bool On)>> _storyNeeds = new();
-    /// <summary>Persistent characters (10-4F) that stand on this map at some point, on a character start of it.</summary>
+    // persistent characters (10-4F) that stand on this map at some point, on one of its character starts
     private List<L2Persistent.Place> _persistent = new();
 
     private void FillStory()
@@ -239,10 +237,10 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
             _stages = _rom != null && _edit != null && _world == null ? L2MapInfo.Stages(_rom, _edit.MapId) : new();
             _persistent = _rom != null && _edit != null && _world == null ? L2Persistent.On(L2Persistent.All(_rom), _edit.MapId) : new();
             StoryChoices.Add(new L2Option(0, "Any point (each character's first look)"));
-            foreach (var g in _stages.Where(c => c.Flags.Count > 0).GroupBy(c => c.When))
+            foreach (var whenGroup in _stages.Where(c => c.Flags.Count > 0).GroupBy(c => c.When))
             {
-                _storyNeeds.Add(g.First().Flags.ToList());
-                StoryChoices.Add(new L2Option(_storyNeeds.Count, "While " + g.Key));
+                _storyNeeds.Add(whenGroup.First().Flags.ToList());
+                StoryChoices.Add(new L2Option(_storyNeeds.Count, "While " + whenGroup.Key));
             }
             HasStory = StoryChoices.Count > 1;
             StoryChoice = StoryChoices[0];
@@ -252,32 +250,32 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
 
     partial void OnStoryChoiceChanged(L2Option? value) { if (!_filling) { Refresh(); if (Selection != null) UpdateInspector(); } }
 
-    /// <summary>The sprite a character shows at the story point picked (null: the game doesn't make it then). A
-    /// character no create of the start-up script makes (one added here) shows as it is.</summary>
+    // the sprite a character shows at the story point picked (null = the game doesn't make it then). a character
+    // none of the start-up script's creates makes (one added here) shows as it is
     private int? StorySprite(int id)
     {
         if (_edit == null) return null;
         var creates = _stages.Where(c => c.Id == id).ToList();
         bool edited = _edit.SpritesEdited(id);
-        if (creates.Count == 0 && !_edit.Sprites.ContainsKey(id) && _persistent.FirstOrDefault(p => p.Spot == id - 0x4F) is { } pc)
-            return pc.Sprite;   // a persistent character's start
-        if (StoryChoice is not { Value: > 0 } k || creates.Count == 0 || edited)
-            return _edit.Sprites.TryGetValue(id, out int s) ? s : null;
-        var need = _storyNeeds[k.Value - 1];
-        var c = creates.FirstOrDefault(c => !c.Flags.Any(f => need.Any(n => n.Flag == f.Flag && n.On != f.On)));
-        return c?.Sprite;
+        if (creates.Count == 0 && !_edit.Sprites.ContainsKey(id) && _persistent.FirstOrDefault(p => p.Spot == id - 0x4F) is { } persistentChar)
+            return persistentChar.Sprite;   // a persistent character's start
+        if (StoryChoice is not { Value: > 0 } story || creates.Count == 0 || edited)
+            return _edit.Sprites.TryGetValue(id, out int sprite) ? sprite : null;
+        var need = _storyNeeds[story.Value - 1];
+        var create = creates.FirstOrDefault(c => !c.Flags.Any(f => need.Any(n => n.Flag == f.Flag && n.On != f.On)));
+        return create?.Sprite;
     }
 
-    /// <summary>The character is on the map at the story point picked (always, with the first choice).</summary>
+    // true if the character is on the map at the story point picked (always true with the first choice)
     private bool AtStoryPoint(int id) => StoryChoice is not { Value: > 0 } || !_stages.Any(c => c.Id == id) || StorySprite(id) != null;
 
-    /// <summary>When the game makes a character, for the inspector.</summary>
+    // when the game makes a character, for the inspector
     private string StoryNote(int id)
     {
         var creates = _stages.Where(c => c.Id == id).ToList();
-        var here = _persistent.Where(p => p.Spot == id - 0x4F).ToList();
-        if (creates.Count == 0 && here.Count > 0 && _edit?.Sprites.ContainsKey(id) != true)
-            return " " + string.Join(" ", here.Select(p => $"Persistent character {p.Id:X2} (sprite {L2Sprites.Name(p.Sprite)}) stands here " +
+        var persistentHere = _persistent.Where(p => p.Spot == id - 0x4F).ToList();
+        if (creates.Count == 0 && persistentHere.Count > 0 && _edit?.Sprites.ContainsKey(id) != true)
+            return " " + string.Join(" ", persistentHere.Select(p => $"Persistent character {p.Id:X2} (sprite {L2Sprites.Name(p.Sprite)}) stands here " +
                 (p.From < 0 ? "from the start of a new game" : $"once an event on map {p.From:X2} {NameOf(p.From)} sends it here") + ".")) +
                 " Persistent characters (10-4F) aren't made by the map: the game keeps where each one is and puts it on this character start.";
         if (creates.Count == 0) return _edit?.Sprites.ContainsKey(id) == true ? "" : " The map's start-up script doesn't make it: an event does, or the game never shows it.";
@@ -287,7 +285,7 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
         return note;
     }
 
-    /// <summary>The block pictures of the map's block set (as drawn now), and the picker.</summary>
+    // reads the block pictures of the map's block set (as drawn right now) and redraws the picker
     private void ReloadBlocks()
     {
         if (_world != null) { DrawWorldPicker(); return; }
@@ -301,7 +299,7 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
         UpdateRecent();
     }
 
-    // ---------------------------------------------------------------- pending edits
+    // pending edits
 
     public bool HasPendingEdits => _edit?.HasChanges == true || _world?.Changed == true;
 
@@ -313,18 +311,18 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
         if (TableGuard.LockReason(_rom, "Maps") is { } locked) return locked;
         try
         {
-            int before = _rom.Length;
-            string what = _edit.Apply(_rom);
+            int lengthBefore = _rom.Length;
+            string written = _edit.Apply(_rom);
             _main.NotifyRomModified($"Lufia II: map {_edit.MapId:X2} ({NameOf(_edit.MapId)})");
             int id = _edit.MapId;
-            var keep = Selection;
-            // read it back as the ROM has it now (the edit's "before" becomes this)
+            var keepSelection = Selection;
+            // read it back the way the ROM has it now (that becomes the edit's "before")
             _edit = new L2MapEdit(_rom, id);
             _readVersion = _rom.Version;
             _history.Clear(); _redo.Clear();
-            if (keep != null) Selection = Find(keep.Kind, keep.Index);
+            if (keepSelection != null) Selection = Find(keepSelection.Kind, keepSelection.Index);
             UpdateUndoState();
-            Status = what + (_rom.Length > before ? " (the ROM grew to make room)." : "");
+            Status = written + (_rom.Length > lengthBefore ? " (the ROM grew to make room)." : "");
             return null;
         }
         catch (Exception ex) { return ex.Message; }
@@ -352,21 +350,21 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
         Status = "Back to the map as the project has it.";
     }
 
-    /// <summary>The tab is shown again: treasure the Treasure tab changed meanwhile comes into this map's edit (for the
-    /// treasure not changed here, also in the Undo steps), so the inspector shows it and Apply keeps it.</summary>
+    // the tab is shown again. treasure the Treasure tab changed in the meantime comes into this map's edit (and into
+    // the Undo steps, for treasure not changed here), so the inspector shows it and Apply keeps it
     public void Shown()
     {
         if (_rom == null) return;
-        // nothing unwritten here and the ROM changed since the map was read (another page, Undo): read it again
+        // nothing unwritten here and the ROM changed since we read the map (another page, Undo): read it again
         if (_rom.Version != _readVersion && !HasPendingEdits && SelectedIndex >= 0)
         {
-            var keep = Selection;
+            var keepSelection = Selection;
             _itemNames = null; _gameLooks = null; _stats.Clear();
             ItemChoices.Clear(); SpriteChoices.Clear();
             int id = SelectedIndex;
             SelectedIndex = -1;
             SelectedIndex = id;
-            if (keep != null) Selection = Find(keep.Kind, keep.Index);
+            if (keepSelection != null) Selection = Find(keepSelection.Kind, keepSelection.Index);
             return;
         }
         if (_edit == null || _world != null) return;
@@ -376,12 +374,12 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
         DrawOverlays(); UpdateInspector(); UpdateUndoState();
     }
 
-    // ---------------------------------------------------------------- undo
+    // undo
 
     private readonly List<(L2MapEdit.State State, string What)> _history = new(), _redo = new();
     [ObservableProperty] private string _mapUndoText = "Nothing to undo", _mapRedoText = "Nothing to redo";
 
-    /// <summary>Remembers the map as it is, before a change described by <paramref name="what"/>.</summary>
+    // remembers the map as it is right before a change (what = how the Undo menu names it)
     private void Record(string what)
     {
         if (_world != null) { WorldRecord(what); return; }
@@ -392,7 +390,7 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
         UpdateUndoState();
     }
 
-    /// <summary>Drops the last remembered step when nothing changed after all (a click that didn't move anything).</summary>
+    // drops the last remembered step if nothing changed after all (a click that didn't move anything)
     private void DropIfSame()
     {
         if (_world != null) { WorldDropIfSame(); return; }
@@ -417,7 +415,7 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
     [RelayCommand(CanExecute = nameof(CanRedo))]
     private void Redo() => RedoPaint();
 
-    /// <summary>Ctrl+Z: takes back the last change to the map (false when there is none, so Edit &gt; Undo gets it).</summary>
+    // Ctrl+Z: takes back the last change to the map. false if there's none, so Edit > Undo gets it
     public bool UndoPaint()
     {
         if (_world != null) return WorldUndo(false);
@@ -441,19 +439,19 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
         return true;
     }
 
-    private void Restore(L2MapEdit.State s)
+    private void Restore(L2MapEdit.State state)
     {
-        bool sets = _edit!.BlockSetIndex != s.BlockSet || _edit.TileSetIndex != s.TileSet || _edit.PaletteSetIndex != s.PaletteSet || _edit.AnimIndex != s.Anim;
-        _edit.Restore(s);
+        bool setsChanged = _edit!.BlockSetIndex != state.BlockSet || _edit.TileSetIndex != state.TileSet || _edit.PaletteSetIndex != state.PaletteSet || _edit.AnimIndex != state.Anim;
+        _edit.Restore(state);
         if (Selection != null) Selection = Find(Selection.Kind, Selection.Index);
         LoadSettings();
-        if (sets) ReloadBlocks();
+        if (setsChanged) ReloadBlocks();
         Refresh(); UpdateUndoState();
     }
 
-    // ---------------------------------------------------------------- drawing
+    // drawing
 
-    /// <summary>Draws the map again (after any change) and its overlays.</summary>
+    // redraws the map and its overlays (after any change)
     public void Refresh()
     {
         ReadEventOwners();
@@ -463,7 +461,7 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
         UpdateInspector();
     }
 
-    /// <summary>The characters that have a talk event and the step-on areas that have an event (marked on the map).</summary>
+    // characters with a talk event and step-on areas with an event (they get a mark on the map)
     private HashSet<int> _talkIds = new(), _triggerIds = new();
 
     private void ReadEventOwners()
@@ -474,19 +472,19 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
         {
             int block = L2Events.Block(_rom, _edit.MapId);
             if (block < 0) return;
-            foreach (var e in L2EventBlocks.ReadLists(_rom, block))
+            foreach (var entry in L2EventBlocks.ReadLists(_rom, block))
             {
-                if (e.Head == L2EventBlocks.TalkList) _talkIds.Add(e.Id);
-                else if (e.Head == L2EventBlocks.TriggerList) _triggerIds.Add(e.Id);
+                if (entry.Head == L2EventBlocks.TalkList) _talkIds.Add(entry.Id);
+                else if (entry.Head == L2EventBlocks.TriggerList) _triggerIds.Add(entry.Id);
             }
         }
         catch (Exception) { }
     }
 
-    /// <summary>Kept for callers that only want a redraw.</summary>
+    // kept for callers that only want a redraw
     public void Draw() => Refresh();
 
-    private static void Dot(uint[] px, int w, int h, int x, int y, uint c) { if (x >= 0 && y >= 0 && x < w && y < h) px[y * w + x] = c; }
+    private static void Dot(uint[] pixels, int w, int h, int x, int y, uint colour) { if (x >= 0 && y >= 0 && x < w && y < h) pixels[y * w + x] = colour; }
 
     private void DrawMap()
     {
@@ -496,53 +494,53 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
         try
         {
             var map = _edit.ForDrawing;
-            var (w, h, px) = L2Maps.Render(_rom, map, ShowGround, ShowUpper);
-            // ground block 0 draws nothing in the game (the screen keeps what was there, grass from elsewhere): a purple
-            // stripe pattern here, so it doesn't pass for the black the game's maps put around their rooms
+            var (w, h, pixels) = L2Maps.Render(_rom, map, ShowGround, ShowUpper);
+            // ground block 0 draws nothing in the game (the screen keeps whatever was there, grass from elsewhere). we
+            // draw purple stripes there so it doesn't pass for the black the game's maps put around their rooms
             if (ShowGround && map.Layers.Length > 0)
             {
-                var G = map.Layers[0];
-                for (int cy = 0; cy < G.Height; cy++)
-                    for (int cx = 0; cx < G.Width; cx++)
+                var ground = map.Layers[0];
+                for (int cy = 0; cy < ground.Height; cy++)
+                    for (int cx = 0; cx < ground.Width; cx++)
                     {
-                        if (G.Blocks[cy * G.Width + cx] != 0) continue;
+                        if (ground.Blocks[cy * ground.Width + cx] != 0) continue;
                         for (int y = 0; y < 16; y++)
                             for (int x = 0; x < 16; x++)
                             {
                                 int i = (cy * 16 + y) * w + cx * 16 + x;
-                                if (i < px.Length && px[i] == 0) px[i] = (x + y) % 8 < 3 ? 0xFF6A2A78u : 0xFF1A0A20u;
+                                if (i < pixels.Length && pixels[i] == 0) pixels[i] = (x + y) % 8 < 3 ? 0xFF6A2A78u : 0xFF1A0A20u;
                             }
                     }
             }
             if (ShowCollision && map.Layers.Length > 1)
             {
-                var L = map.Layers[1];
-                for (int cy = 0; cy < L.Height; cy++)
-                    for (int cx = 0; cx < L.Width; cx++)
+                var upper = map.Layers[1];
+                for (int cy = 0; cy < upper.Height; cy++)
+                    for (int cx = 0; cx < upper.Width; cx++)
                     {
-                        byte f = L.Flags[cy * L.Width + cx];
-                        uint tint = (f & 0x80) != 0 ? 0xFFFF3030u : (f & 0x20) != 0 ? 0xFF30C0FFu : (f & 0x0C) != 0 ? 0xFFFFC030u : 0;
+                        byte flags = upper.Flags[cy * upper.Width + cx];
+                        uint tint = (flags & 0x80) != 0 ? 0xFFFF3030u : (flags & 0x20) != 0 ? 0xFF30C0FFu : (flags & 0x0C) != 0 ? 0xFFFFC030u : 0;
                         if (tint == 0) continue;
                         for (int y = 0; y < 16; y++)
                             for (int x = 0; x < 16; x++)
                             {
-                                bool edge = (f & 0x80) != 0 || (f & 0x20) != 0 || (f & 0x04) != 0 && y < 2 || (f & 0x08) != 0 && x < 2;
-                                if (!edge || (x + y) % 2 == 1 && (f & 0xA0) != 0) continue;
+                                bool edge = (flags & 0x80) != 0 || (flags & 0x20) != 0 || (flags & 0x04) != 0 && y < 2 || (flags & 0x08) != 0 && x < 2;
+                                if (!edge || (x + y) % 2 == 1 && (flags & 0xA0) != 0) continue;
                                 int i = (cy * 16 + y) * w + cx * 16 + x;
-                                if (i < px.Length) px[i] = tint;
+                                if (i < pixels.Length) pixels[i] = tint;
                             }
                     }
             }
             if (ShowCharacters)
-                foreach (var (_, b) in _edit.Records(L2MapEdit.Characters))
+                foreach (var (_, charBytes) in _edit.Records(L2MapEdit.Characters))
                 {
-                    if (StorySprite(0x4F + b[0]) is not int spr || L2Graphics.MapSprite(_rom, spr) is not var (sw, sh, spx)) continue;
-                    int x0 = b[1] * 16 + 8 - sw / 2, y0 = b[2] * 16 + 16 - sh;
-                    for (int y = 0; y < sh; y++)
-                        for (int x = 0; x < sw; x++)
-                            if (spx[y * sw + x] != 0) Dot(px, w, h, x0 + x, y0 + y, spx[y * sw + x]);
+                    if (StorySprite(0x4F + charBytes[0]) is not int sprite || L2Graphics.MapSprite(_rom, sprite) is not var (spriteW, spriteH, spritePixels)) continue;
+                    int x0 = charBytes[1] * 16 + 8 - spriteW / 2, y0 = charBytes[2] * 16 + 16 - spriteH;
+                    for (int y = 0; y < spriteH; y++)
+                        for (int x = 0; x < spriteW; x++)
+                            if (spritePixels[y * spriteW + x] != 0) Dot(pixels, w, h, x0 + x, y0 + y, spritePixels[y * spriteW + x]);
                 }
-            MapImage = BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgra32, null, px.Select(c => (int)(c == 0 ? 0xFF000000u : c)).ToArray(), w * 4);
+            MapImage = BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgra32, null, pixels.Select(c => (int)(c == 0 ? 0xFF000000u : c)).ToArray(), w * 4);
             int chars = _edit.Records(L2MapEdit.Characters).Count, exits = _edit.Records(L2MapEdit.Exits).Count, areas = _edit.Records(L2MapEdit.Triggers).Count;
             MapSummary = $"{_edit.Width} x {_edit.Height} blocks; block set {_edit.BlockSetIndex}, tile set {_edit.TileSetIndex}, palette set {_edit.PaletteSetIndex}; " +
                          $"{chars} characters, {exits} exits, {areas} step-on areas.";
@@ -554,17 +552,17 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
         TreasureBrush = Freeze(Color.FromRgb(0xFF, 0x60, 0xFF)), CharBrush = Freeze(Color.FromRgb(0x40, 0xC0, 0xFF)),
         TriggerBrush = Freeze(Color.FromRgb(0xFF, 0x90, 0x40)), PointBrush = Freeze(Color.FromRgb(0x40, 0xFF, 0xFF)),
         WalkBrush = Freeze(Color.FromArgb(0x90, 0x40, 0xC0, 0xFF)), SelectedBrush = Freeze(Colors.White), HiddenBrush = Freeze(Color.FromRgb(0xFF, 0xB0, 0xFF));
-    private static Brush Freeze(Color c) { var b = new SolidColorBrush(c); b.Freeze(); return b; }
+    private static Brush Freeze(Color color) { var brush = new SolidColorBrush(color); brush.Freeze(); return brush; }
 
     private void DrawOverlays()
     {
         Overlays.Clear();
         if (_edit == null) return;
-        void Box(int x1, int y1, int x2, int y2, Brush b, string label, bool selected)
+        void Box(int x1, int y1, int x2, int y2, Brush brush, string label, bool selected)
         {
-            Overlays.Add(new L2Overlay { X = x1 * 16, Y = y1 * 16, W = Math.Max(1, x2 - x1) * 16, H = Math.Max(1, y2 - y1) * 16, Stroke = selected ? SelectedBrush : b, Thickness = selected ? 2.5 : 1.2, Label = label });
+            Overlays.Add(new L2Overlay { X = x1 * 16, Y = y1 * 16, W = Math.Max(1, x2 - x1) * 16, H = Math.Max(1, y2 - y1) * 16, Stroke = selected ? SelectedBrush : brush, Thickness = selected ? 2.5 : 1.2, Label = label });
         }
-        bool Sel(SelKind k, int i) => Selection?.Kind == k && Selection.Index == i;
+        bool Sel(SelKind kind, int i) => Selection?.Kind == kind && Selection.Index == i;
         if (ShowExits)
         {
             var exits = _edit.Records(L2MapEdit.Exits);
@@ -581,48 +579,48 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
         }
         if (ShowTriggers)
         {
-            var t = _edit.Records(L2MapEdit.Triggers);
-            for (int i = 0; i < t.Count; i++) { var b = t[i].Bytes; Box(b[1], b[2], b[3], b[4], TriggerBrush, $"T{b[0]}" + (_triggerIds.Contains(b[0]) ? " ▶" : ""), Sel(SelKind.Trigger, i)); }
+            var triggers = _edit.Records(L2MapEdit.Triggers);
+            for (int i = 0; i < triggers.Count; i++) { var b = triggers[i].Bytes; Box(b[1], b[2], b[3], b[4], TriggerBrush, $"T{b[0]}" + (_triggerIds.Contains(b[0]) ? " ▶" : ""), Sel(SelKind.Trigger, i)); }
         }
         if (ShowTreasure)
         {
-            var t = _edit.Records(L2MapEdit.Treasure);
-            for (int i = 0; i < t.Count; i++) { var b = t[i].Bytes; Box(b[1], b[2], b[1] + 1, b[2] + 1, _edit.IsHidden(b) ? HiddenBrush : TreasureBrush, TreasureLabel(b), Sel(SelKind.Treasure, i)); }
+            var treasure = _edit.Records(L2MapEdit.Treasure);
+            for (int i = 0; i < treasure.Count; i++) { var b = treasure[i].Bytes; Box(b[1], b[2], b[1] + 1, b[2] + 1, _edit.IsHidden(b) ? HiddenBrush : TreasureBrush, TreasureLabel(b), Sel(SelKind.Treasure, i)); }
         }
         if (ShowPoints)
         {
-            var p = _edit.Records(L2MapEdit.Points);
-            for (int i = 0; i < p.Count; i++) { var b = p[i].Bytes; Box(b[1], b[2], b[1] + 1, b[2] + 1, PointBrush, $"P{b[0]}", Sel(SelKind.Point, i)); }
+            var points = _edit.Records(L2MapEdit.Points);
+            for (int i = 0; i < points.Count; i++) { var b = points[i].Bytes; Box(b[1], b[2], b[1] + 1, b[2] + 1, PointBrush, $"P{b[0]}", Sel(SelKind.Point, i)); }
         }
         if (ShowCharacters)
         {
-            var c = _edit.Records(L2MapEdit.Characters);
-            for (int i = 0; i < c.Count; i++)
+            var characters = _edit.Records(L2MapEdit.Characters);
+            for (int i = 0; i < characters.Count; i++)
             {
-                var b = c[i].Bytes;
-                bool s = Sel(SelKind.Character, i);
-                if (!s && !AtStoryPoint(0x4F + b[0])) continue;   // not on the map at the story point picked
-                if (s) Box(b[3], b[4], b[5], b[6], WalkBrush, "", false);
-                // a speech mark: talking to it plays an event (double-click to open it)
-                Box(b[1], b[2], b[1] + 1, b[2] + 1, CharBrush, $"C{b[0]}" + (_talkIds.Contains(0x4F + b[0]) ? " 💬" : ""), s);
+                var b = characters[i].Bytes;
+                bool selected = Sel(SelKind.Character, i);
+                if (!selected && !AtStoryPoint(0x4F + b[0])) continue;   // not on the map at the story point picked
+                if (selected) Box(b[3], b[4], b[5], b[6], WalkBrush, "", false);
+                // speech mark = talking to it plays an event (double-click to open it)
+                Box(b[1], b[2], b[1] + 1, b[2] + 1, CharBrush, $"C{b[0]}" + (_talkIds.Contains(0x4F + b[0]) ? " 💬" : ""), selected);
             }
         }
     }
 
-    /// <summary>An exit's label: the map it leads to (by name on the world map, where there are many).</summary>
+    // an exit's label: the map it leads to (just the name on the world map, there are lots of them there)
     private string ExitLabel(byte[] b)
     {
         if (b[8] == 0) return _world != null ? $"E{b[0]}: pick where" : $"E{b[0]}→World map";
-        if (_world != null) { string n = NameOf(b[8]); return n.Length > 16 ? n[..16] : n; }
+        if (_world != null) { string name = NameOf(b[8]); return name.Length > 16 ? name[..16] : name; }
         return $"E{b[0]}→{b[8]:X2} {Short(NameOf(b[8]))}";
     }
 
-    private static string Short(string n) => n.Length > 12 ? n[..12] : n;
+    private static string Short(string name) => name.Length > 12 ? name[..12] : name;
 
     private string TreasureLabel(byte[] b)
     {
-        var c = _edit?.ChestOf(b[0] & 0x1F);
-        string item = c == null ? "empty" : ItemName(c.Item);
+        var chest = _edit?.ChestOf(b[0] & 0x1F);
+        string item = chest == null ? "empty" : ItemName(chest.Item);
         return (_edit!.IsHidden(b) ? "?" : "$") + Short(item);
     }
 
@@ -634,7 +632,7 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
         return item >= 0 && item < _itemNames.Count ? _itemNames[item] : $"item {item:X3}";
     }
 
-    // ---------------------------------------------------------------- map list: names
+    // map list: names
 
     [ObservableProperty] private string _mapNameText = "";
     public string MapNameHint => LufiaForge.Core.Maps.MapNames.ProjectNames == null
@@ -644,7 +642,7 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
     [ObservableProperty] private string _gameNameText = "", _gameNameHint = "";
     private bool _settingGameName;
 
-    /// <summary>The name the game shows (written when the box loses focus).</summary>
+    // the name the game shows (written when the box loses focus)
     partial void OnGameNameTextChanged(string value)
     {
         if (_settingGameName || _rom == null || _main == null || SelectedIndex < 2) return;
@@ -657,10 +655,10 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
         var item = Maps.FirstOrDefault(m => m.Id == id);
         if (item != null)
         {
-            int at = Maps.IndexOf(item);
+            int listIndex = Maps.IndexOf(item);
             _filling = true;
-            Maps[at] = new L2MapItem { Id = id, Label = $"{id:X2}  {NameOf(id)}" };
-            SelectedMap = Maps[at];
+            Maps[listIndex] = new L2MapItem { Id = id, Label = $"{id:X2}  {NameOf(id)}" };
+            SelectedMap = Maps[listIndex];
             _filling = false;
         }
         GameNameHint = $"Map {id:X2} is called \"{L2Maps.Name(_rom, id)}\" in the game now.";
@@ -670,16 +668,16 @@ public partial class L2MapsPage : ObservableObject, IPendingEdits
     partial void OnMapNameTextChanged(string value)
     {
         if (SelectedIndex < 0 || LufiaForge.Core.Maps.MapNames.ProjectNames is not { } names) return;
-        string had = names.GetValueOrDefault(SelectedIndex) ?? "";
-        if (had == value.Trim()) return;
+        string oldName = names.GetValueOrDefault(SelectedIndex) ?? "";
+        if (oldName == value.Trim()) return;
         LufiaForge.Core.Maps.MapNames.SetProjectName(SelectedIndex, value.Trim());
         var item = Maps.FirstOrDefault(m => m.Id == SelectedIndex);
         if (item != null)
         {
-            int at = Maps.IndexOf(item);
+            int listIndex = Maps.IndexOf(item);
             _filling = true;
-            Maps[at] = new L2MapItem { Id = item.Id, Label = $"{item.Id:X2}  {NameOf(item.Id)}" };
-            SelectedMap = Maps[at];
+            Maps[listIndex] = new L2MapItem { Id = item.Id, Label = $"{item.Id:X2}  {NameOf(item.Id)}" };
+            SelectedMap = Maps[listIndex];
             _filling = false;
         }
     }

@@ -9,25 +9,25 @@ public partial class L2GraphicsView : UserControl
     public L2GraphicsView()
     {
         InitializeComponent();
-        // the canvas gives pixel positions; the page paints (also while the picture is popped out)
+        // the canvas hands us pixel positions and the page does the painting (also while the picture is popped out)
         Canvas.PixelPressed += (x, y, right) => Vm?.PaintPress(x, y, right);
         Canvas.PixelDragged += (x, y) => Vm?.PaintDrag(x, y);
         Canvas.PixelReleased += () => Vm?.PaintRelease();
         Canvas.PixelHover += (x, y) => Vm?.PaintHover(x, y);
-        Canvas.ZoomWheel += d => (d > 0 ? Vm?.ZoomInCommand : Vm?.ZoomOutCommand)?.Execute(null);
+        Canvas.ZoomWheel += delta => (delta > 0 ? Vm?.ZoomInCommand : Vm?.ZoomOutCommand)?.Execute(null);
     }
 
     private L2GraphicsPage? Vm => Canvas.DataContext as L2GraphicsPage;
 
-    /// <summary>Keeps the picked picture in sight (a new sprite or palette picks one far down the list).</summary>
+    // keeps the picked picture in sight (a new sprite or palette picks one far down the list)
     private void List_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (sender is not System.Windows.Controls.ListBox lb || lb.SelectedItem == null) return;
-        // after the list has laid out its new items (a refresh replaces them all)
-        Dispatcher.BeginInvoke(() => { if (lb.SelectedItem != null) lb.ScrollIntoView(lb.SelectedItem); }, System.Windows.Threading.DispatcherPriority.Background);
+        if (sender is not System.Windows.Controls.ListBox list || list.SelectedItem == null) return;
+        // wait until the list has laid out its new items (a refresh replaces them all)
+        Dispatcher.BeginInvoke(() => { if (list.SelectedItem != null) list.ScrollIntoView(list.SelectedItem); }, System.Windows.Threading.DispatcherPriority.Background);
     }
 
-    /// <summary>Ctrl+Z / Ctrl+Y take painting strokes back while there are some; else the keys go on to the app's Undo.</summary>
+    // Ctrl+Z / Ctrl+Y take painting strokes back while there are some, otherwise the keys go on to the app's Undo
     private void Picture_KeyDown(object sender, KeyEventArgs e)
     {
         if (Vm == null || Keyboard.FocusedElement is System.Windows.Controls.Primitives.TextBoxBase || !Keyboard.Modifiers.HasFlag(ModifierKeys.Control)) return;

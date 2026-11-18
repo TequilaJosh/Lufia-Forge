@@ -5,7 +5,7 @@ using LufiaForge.Core.Lufia2;
 
 namespace LufiaForge.Modules.Lufia2;
 
-/// <summary>The Encounters page's story battles (event command 53 xx): the six monsters of each and their places.</summary>
+// the Encounters page's story battles (event command 53 xx): the six monsters of each one and their places
 public partial class L2EncountersPage
 {
     private List<L2Option> _storyMonsters = new();
@@ -15,21 +15,21 @@ public partial class L2EncountersPage
     [ObservableProperty] private int _selectedStory = -1;
     [ObservableProperty] private List<L2StorySlot> _storySlots = new();
     [ObservableProperty] private string _storyText = "";
-    /// <summary>The squares of the battle sprite buffer the battle's kinds need, and whether it is too much.</summary>
+    // the squares of the battle sprite buffer the battle's kinds need, and whether that's too much
     [ObservableProperty] private string _storyRoom = "";
     [ObservableProperty] private bool _storyRoomWarn;
 
-    private void ShowStoryRoom(int b)
+    private void ShowStoryRoom(int battle)
     {
-        var n = L2BattleRoom.Story(_rom!, b, Sizes);
-        StoryRoomWarn = n.TooBig || n.TooManyKinds;
-        StoryRoom = n.Monsters.Count == 0 ? "" :
-            n.TooManyKinds
-                ? $"Too many kinds: {n.Kinds} different monsters. The game keeps {L2BattleRoom.MaxKinds} kinds per battle and drops back to its title screen on a 4th. Use at most {L2BattleRoom.MaxKinds} different monsters." +
-                  (n.TooBig ? $" Their sprites would also need {n.Squares} of the {L2BattleRoom.Squares} squares." : "")
-                : n.TooBig
-                ? $"Too big: its kinds need {L2BattleRoom.Describe(n, _monsterList)}. All the kinds of monster in one battle share {L2BattleRoom.Squares} squares of 16 x 16 for their sprites; past that their pictures come out wrong."
-                : $"Sprite room: its {n.Kinds} kind{(n.Kinds == 1 ? " of monster needs" : "s of monster need")} {n.Squares} of the {L2BattleRoom.Squares} squares of 16 x 16 (at most {L2BattleRoom.MaxKinds} kinds in a battle).";
+        var room = L2BattleRoom.Story(_rom!, battle, Sizes);
+        StoryRoomWarn = room.TooBig || room.TooManyKinds;
+        StoryRoom = room.Monsters.Count == 0 ? "" :
+            room.TooManyKinds
+                ? $"Too many kinds: {room.Kinds} different monsters. The game keeps {L2BattleRoom.MaxKinds} kinds per battle and drops back to its title screen on a 4th. Use at most {L2BattleRoom.MaxKinds} different monsters." +
+                  (room.TooBig ? $" Their sprites would also need {room.Squares} of the {L2BattleRoom.Squares} squares." : "")
+                : room.TooBig
+                ? $"Too big: its kinds need {L2BattleRoom.Describe(room, _monsterList)}. All the kinds of monster in one battle share {L2BattleRoom.Squares} squares of 16 x 16 for their sprites; past that their pictures come out wrong."
+                : $"Sprite room: its {room.Kinds} kind{(room.Kinds == 1 ? " of monster needs" : "s of monster need")} {room.Squares} of the {L2BattleRoom.Squares} squares of 16 x 16 (at most {L2BattleRoom.MaxKinds} kinds in a battle).";
     }
 
     private void InitStory()
@@ -38,17 +38,17 @@ public partial class L2EncountersPage
             .Select(m => new L2Option(m.Index, $"{m.Index:X2} " + (m.Unused ? "(unused slot)" : m.Name.Trim())))).ToList();
         _storyLoading = true;
         StoryNames.Clear();
-        for (int b = 0; b < L2Encounters.StoryBattleCount(_rom!); b++) StoryNames.Add(StoryLabel(b));
+        for (int battle = 0; battle < L2Encounters.StoryBattleCount(_rom!); battle++) StoryNames.Add(StoryLabel(battle));
         _storyLoading = false;
         SelectedStory = -1; SelectedStory = 4;
     }
 
-    private string StoryLabel(int b)
+    private string StoryLabel(int battle)
     {
-        var n = L2BattleRoom.Story(_rom!, b, Sizes);
-        return $"{b:X2}  " + string.Join(", ", L2Encounters.StoryBattle(_rom!, b).Where(s => s.Monster != 0xFF)
+        var room = L2BattleRoom.Story(_rom!, battle, Sizes);
+        return $"{battle:X2}  " + string.Join(", ", L2Encounters.StoryBattle(_rom!, battle).Where(s => s.Monster != 0xFF)
             .Select(s => _storyMonsters.FirstOrDefault(o => o.Value == s.Monster)?.Label[3..] ?? s.Monster.ToString("X2"))) +
-               (n.TooManyKinds ? $"  (! {n.Kinds} kinds)" : n.TooBig ? $"  (! {n.Squares} squares)" : "");
+               (room.TooManyKinds ? $"  (! {room.Kinds} kinds)" : room.TooBig ? $"  (! {room.Squares} squares)" : "");
     }
 
     partial void OnSelectedStoryChanged(int value)
@@ -64,7 +64,7 @@ public partial class L2EncountersPage
         ShowStoryRoom(value);
     }
 
-    /// <summary>A new story battle: a copy of the one shown (its settings stay valid), then picked.</summary>
+    // a new story battle: a copy of the one shown (so its settings stay valid), then picked
     [RelayCommand]
     private void AddStory()
     {
@@ -72,17 +72,17 @@ public partial class L2EncountersPage
         if (L2Encounters.CantAddStoryBattle(_rom) is { } why) { StoryText = "Not added: " + why; return; }
         try
         {
-            bool moved = L2Encounters.StoryTable(_rom) != L2Encounters.StoryBattles;
-            int from = Math.Max(0, SelectedStory);
-            int b = L2Encounters.AddStoryBattle(_rom, from);
-            _main.NotifyRomModified($"Lufia II: new story battle {b:X2}");
+            bool alreadyMoved = L2Encounters.StoryTable(_rom) != L2Encounters.StoryBattles;
+            int copiedFrom = Math.Max(0, SelectedStory);
+            int battle = L2Encounters.AddStoryBattle(_rom, copiedFrom);
+            _main.NotifyRomModified($"Lufia II: new story battle {battle:X2}");
             _readVersion = _rom.Version;
             _storyLoading = true;
-            StoryNames.Add(StoryLabel(b));
+            StoryNames.Add(StoryLabel(battle));
             _storyLoading = false;
-            SelectedStory = b;
-            StoryText = $"New story battle {b:X2}, a copy of battle {from:X2}: change its monsters below. An event starts it with \"Start a story battle\" (53 {b:X2}) on the Events or Cutscenes page." +
-                        (moved ? "" : " The story battles moved to space of their own to make room (up to 256).");
+            SelectedStory = battle;
+            StoryText = $"New story battle {battle:X2}, a copy of battle {copiedFrom:X2}: change its monsters below. An event starts it with \"Start a story battle\" (53 {battle:X2}) on the Events or Cutscenes page." +
+                        (alreadyMoved ? "" : " The story battles moved to space of their own to make room (up to 256).");
         }
         catch (Exception ex) { StoryText = "Not added: " + ex.Message; }
     }
@@ -93,11 +93,11 @@ public partial class L2EncountersPage
         L2Encounters.WriteStoryBattle(_rom, SelectedStory, StorySlots.Select(s => (s.Monster, Math.Clamp(s.X, 0, 255), Math.Clamp(s.Y, 0, 255))).ToList());
         _main.NotifyRomModified($"Lufia II: story battle {SelectedStory:X2}");
         _readVersion = _rom.Version;
-        int keep = SelectedStory;
+        int edited = SelectedStory;
         _storyLoading = true;
-        foreach (int b in L2Encounters.StorySharing(_rom, keep).Append(keep)) StoryNames[b] = StoryLabel(b);
-        SelectedStory = keep;
+        foreach (int battle in L2Encounters.StorySharing(_rom, edited).Append(edited)) StoryNames[battle] = StoryLabel(battle);
+        SelectedStory = edited;
         _storyLoading = false;
-        ShowStoryRoom(keep);
+        ShowStoryRoom(edited);
     }
 }

@@ -6,7 +6,7 @@ using LufiaForge.ViewModels;
 
 namespace LufiaForge.Modules.Lufia2;
 
-/// <summary>The staff roll as text, one line per element; Apply writes it back.</summary>
+// the staff roll as text, one line per element. Apply writes it back
 public partial class L2CreditsPage : ObservableObject
 {
     private RomBuffer? _rom;

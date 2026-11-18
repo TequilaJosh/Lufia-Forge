@@ -11,14 +11,14 @@ namespace LufiaForge.Modules.Lufia2;
 
 public enum L2Tool { Select, Paint, Fill, Pick, Area, Collision, AddExit, AddTrigger, AddCharacter, AddPoint, AddChest, AddHidden, AddPuzzle, AddPreset }
 
-/// <summary>What can be picked on the map: its list in the info block and the record's index there.</summary>
+// what can be picked on the map: which list of the info block it's in, and the record's index there
 public enum SelKind { Exit, Door, Trigger, Character, Point, Treasure }
 
 public sealed record L2Selection(SelKind Kind, int Index);
 
 public partial class L2MapsPage
 {
-    // ---------------------------------------------------------------- tools
+    // tools
 
     [ObservableProperty] private L2Tool _tool = L2Tool.Select;
     public bool IsSelectTool { get => Tool == L2Tool.Select; set { if (value) Tool = L2Tool.Select; } }
@@ -36,14 +36,14 @@ public partial class L2MapsPage
 
     partial void OnToolChanged(L2Tool value)
     {
-        if (value == L2Tool.AddChest) FillChestLooks();   // (this map's own chests as they are now)
+        if (value == L2Tool.AddChest) FillChestLooks();   // (this map's own chests as they are right now)
         if (value == L2Tool.AddPreset) FillPresets();
         _presetClicks.Clear(); _spikeRect = null; _presetCells = null;
         NotifyPresetOptions();
         OnPropertyChanged(nameof(ChestLookVisible));
-        foreach (var n in new[] { nameof(IsSelectTool), nameof(IsPaintTool), nameof(IsFillTool), nameof(IsPickTool), nameof(IsAreaTool), nameof(IsCollisionTool),
+        foreach (var property in new[] { nameof(IsSelectTool), nameof(IsPaintTool), nameof(IsFillTool), nameof(IsPickTool), nameof(IsAreaTool), nameof(IsCollisionTool),
                                   nameof(IsAddExitTool), nameof(IsAddTriggerTool), nameof(IsAddCharacterTool), nameof(IsAddPointTool), nameof(IsAddChestTool), nameof(IsAddHiddenTool), nameof(IsAddPuzzleTool), nameof(PuzzleOptionsVisible), nameof(IsAddPresetTool), nameof(PresetOptionsVisible) })
-            OnPropertyChanged(n);
+            OnPropertyChanged(property);
         if (value != L2Tool.Area) AreaRect = null;
         _puzzleStep = 0;
         StopStamp();
@@ -92,15 +92,15 @@ public partial class L2MapsPage
     // collision paint
     public static readonly string[] CollisionKinds = { "Wall line (draw along the grid lines)", "Can't walk here (obstacle)", "Doorway", "Wall on the top edge", "Wall on the left edge", "Upper level", "Room border" };
     private static readonly byte[] CollisionBits = { 0x00, 0x80, 0x20, 0x04, 0x08, 0x40, 0x10 };
-    /// <summary>Wall line: the mouse draws walls on the grid lines it runs along (a wall is the top or left edge of a
-    /// cell, 04 / 08; the line under a cell is the top edge of the cell below), as the game's borders are.</summary>
+    // Wall line: the mouse draws walls on the grid lines it runs along, like the game's borders. a wall is the top or
+    // left edge of a cell (04 / 08), so the line under a cell is the top edge of the cell below
     private bool WallLine => CollisionKind == 0;
     private (int X, int Y, byte Bit)? _lastEdge;
     public IReadOnlyList<string> CollisionChoices => CollisionKinds;
     [ObservableProperty] private int _collisionKind;
     partial void OnCollisionKindChanged(int value) => OnPropertyChanged(nameof(ToolHint));
 
-    // ---------------------------------------------------------------- mouse
+    // mouse
 
     private bool _dragging;
     private int _dragStartX, _dragStartY, _lastX = -1, _lastY = -1;
@@ -109,7 +109,7 @@ public partial class L2MapsPage
     private (int X, int Y)? _areaStart;
     private string _strokeWhat = "";
 
-    /// <summary>A press on the map at pixel (<paramref name="px"/>, <paramref name="py"/>) of the unzoomed map.</summary>
+    // a press on the map at pixel (px, py) of the unzoomed map
     public void MouseDown(double px, double py, bool right, bool ctrl, bool doubleClick)
     {
         if (_world != null)
@@ -205,7 +205,7 @@ public partial class L2MapsPage
             case L2Tool.AddTrigger:
             case L2Tool.AddPuzzle when _puzzleStep == 0:
             case L2Tool.AddPreset when _spikeRect == null:
-                if (_areaStart is { } s) AreaRect = (Math.Min(s.X, cx), Math.Min(s.Y, cy), Math.Max(s.X, cx) + 1, Math.Max(s.Y, cy) + 1);
+                if (_areaStart is { } start) AreaRect = (Math.Min(start.X, cx), Math.Min(start.Y, cy), Math.Max(start.X, cx) + 1, Math.Max(start.Y, cy) + 1);
                 break;
             case L2Tool.Select: DragSelection(cx, cy); break;
         }
@@ -222,10 +222,10 @@ public partial class L2MapsPage
             case L2Tool.Collision:
                 DropIfSame();
                 break;
-            case L2Tool.AddExit when AreaRect is { } r:
-                AddExit(r.X1, r.Y1, r.X2, r.Y2); AreaRect = null; break;
-            case L2Tool.AddTrigger when AreaRect is { } r:
-                AddTrigger(r.X1, r.Y1, r.X2, r.Y2); AreaRect = null; break;
+            case L2Tool.AddExit when AreaRect is { } area:
+                AddExit(area.X1, area.Y1, area.X2, area.Y2); AreaRect = null; break;
+            case L2Tool.AddTrigger when AreaRect is { } area:
+                AddTrigger(area.X1, area.Y1, area.X2, area.Y2); AreaRect = null; break;
             case L2Tool.AddPuzzle when _puzzleStep == 0:
                 PuzzleUp(); break;
             case L2Tool.AddPreset when _spikeRect == null:
@@ -243,37 +243,37 @@ public partial class L2MapsPage
 
     public void MouseLeave() { HoverText = ""; BrushPreviewVisible = false; CameraVisible = false; }
 
-    // ---------------------------------------------------------------- hover
+    // hover
 
     private void UpdateHover(int cx, int cy, bool inside)
     {
         if (_edit == null || !inside) { HoverText = ""; BrushPreviewVisible = false; CameraVisible = false; return; }
-        var g = _edit.Map.Layers[0]; var u = _edit.Map.Layers.Length > 1 ? _edit.Map.Layers[1] : null;
+        var ground = _edit.Map.Layers[0]; var upper = _edit.Map.Layers.Length > 1 ? _edit.Map.Layers[1] : null;
         int i = cy * _edit.Width + cx;
-        string text = $"({cx},{cy})  ground {g.Blocks[i]:X3}" + (g.Blocks[i] == 0 ? " (nothing: the game draws no ground here, so whatever was on the screen shows; paint a block, a black one for the space around rooms)" : "") +
-                      (u != null ? $", upper {u.Blocks[i]:X3}" : "");
-        byte f = u?.Flags[i] ?? 0;
+        string text = $"({cx},{cy})  ground {ground.Blocks[i]:X3}" + (ground.Blocks[i] == 0 ? " (nothing: the game draws no ground here, so whatever was on the screen shows; paint a block, a black one for the space around rooms)" : "") +
+                      (upper != null ? $", upper {upper.Blocks[i]:X3}" : "");
+        byte flags = upper?.Flags[i] ?? 0;
         var walls = new List<string>();
-        if ((f & 0x80) != 0) walls.Add("can't walk"); if ((f & 0x20) != 0) walls.Add("doorway"); if ((f & 0x04) != 0) walls.Add("wall on top");
-        if ((f & 0x08) != 0) walls.Add("wall on the left"); if ((f & 0x40) != 0) walls.Add("upper level"); if ((f & 0x10) != 0) walls.Add("room border");
+        if ((flags & 0x80) != 0) walls.Add("can't walk"); if ((flags & 0x20) != 0) walls.Add("doorway"); if ((flags & 0x04) != 0) walls.Add("wall on top");
+        if ((flags & 0x08) != 0) walls.Add("wall on the left"); if ((flags & 0x40) != 0) walls.Add("upper level"); if ((flags & 0x10) != 0) walls.Add("room border");
         if (walls.Count > 0) text += "; " + string.Join(", ", walls);
-        foreach (var (kind, idx) in HitsAt(cx, cy)) text += "; " + Describe(kind, idx);
+        foreach (var (kind, index) in HitsAt(cx, cy)) text += "; " + Describe(kind, index);
         HoverText = text;
         if (Tool == L2Tool.Paint && !Stamping)
         {
-            var (pw, ph, _, po) = Painted();
-            BrushPreviewX = (cx + po) * 16; BrushPreviewY = (cy + po) * 16;
-            BrushPreviewW = pw * 16; BrushPreviewH = ph * 16;
+            var (paintW, paintH, _, offset) = Painted();
+            BrushPreviewX = (cx + offset) * 16; BrushPreviewY = (cy + offset) * 16;
+            BrushPreviewW = paintW * 16; BrushPreviewH = paintH * 16;
             BrushPreviewVisible = BrushPreviewImage != null;
         }
         else BrushPreviewVisible = false;
         if (Stamping) { StampX = cx * 16; StampY = cy * 16; }
         if (ShowCamera)
         {
-            int mw = _edit.Width * 16, mh = _edit.Height * 16;
-            CameraX = Math.Clamp(cx * 16 + 8 - 128, 0, Math.Max(0, mw - 256));
-            CameraY = Math.Clamp(cy * 16 + 8 - 112, 0, Math.Max(0, mh - 224));
-            var outer = new RectangleGeometry(new Rect(0, 0, mw, mh));
+            int mapPixelsW = _edit.Width * 16, mapPixelsH = _edit.Height * 16;
+            CameraX = Math.Clamp(cx * 16 + 8 - 128, 0, Math.Max(0, mapPixelsW - 256));
+            CameraY = Math.Clamp(cy * 16 + 8 - 112, 0, Math.Max(0, mapPixelsH - 224));
+            var outer = new RectangleGeometry(new Rect(0, 0, mapPixelsW, mapPixelsH));
             var inner = new RectangleGeometry(new Rect(CameraX, CameraY, 256, 224));
             CameraShade = new CombinedGeometry(GeometryCombineMode.Exclude, outer, inner);
             CameraText = $"The screen with the party at ({cx},{cy})";
@@ -299,46 +299,46 @@ public partial class L2MapsPage
     partial void OnShowTriggersChanged(bool value) => DrawOverlays();
     partial void OnShowPointsChanged(bool value) => DrawOverlays();
 
-    // ---------------------------------------------------------------- painting
+    // painting
 
     private void PaintBrush(int cx, int cy)
     {
         if (_edit == null) return;
         int layer = EditUpper ? 1 : 0;
         if (layer >= _edit.Map.Layers.Length) return;
-        var L = _edit.Map.Layers[layer];
+        var mapLayer = _edit.Map.Layers[layer];
         bool any = false;
-        var (bw, bh, cells, off) = Painted();
-        for (int by = 0; by < bh; by++)
-            for (int bx = 0; bx < bw; bx++)
+        var (paintW, paintH, cells, offset) = Painted();
+        for (int by = 0; by < paintH; by++)
+            for (int bx = 0; bx < paintW; bx++)
             {
-                int x = cx + off + bx, y = cy + off + by;
-                if (x < 0 || y < 0 || x >= L.Width || y >= L.Height) continue;
-                int b = cells[by * bw + bx];
-                if (L.Blocks[y * L.Width + x] == b) continue;
-                L.Blocks[y * L.Width + x] = b; any = true;
+                int x = cx + offset + bx, y = cy + offset + by;
+                if (x < 0 || y < 0 || x >= mapLayer.Width || y >= mapLayer.Height) continue;
+                int block = cells[by * paintW + bx];
+                if (mapLayer.Blocks[y * mapLayer.Width + x] == block) continue;
+                mapLayer.Blocks[y * mapLayer.Width + x] = block; any = true;
             }
         if (any) { RememberBrush(); DrawMap(); UpdateUndoState(); }
     }
 
-    /// <summary>Fill (G): the block at (cx, cy) and every block joined to it (side by side) that is the same become the
-    /// brush, on the layer painted; <paramref name="all"/>: every block of the layer. One Undo step.</summary>
+    // Fill (G): the block at (cx, cy) and every same block joined to it (side by side) become the brush, on the layer
+    // being painted. all = every block of the layer. one Undo step
     private void FillAt(int cx, int cy, bool all)
     {
         if (_edit == null) return;
         int layer = EditUpper ? 1 : 0;
         if (layer >= _edit.Map.Layers.Length) return;
-        var L = _edit.Map.Layers[layer];
+        var mapLayer = _edit.Map.Layers[layer];
         Record(all ? "filling the layer" : "filling");
-        int n = Fill(L.Blocks, L.Width, L.Height, cx, cy, all);
+        int changed = Fill(mapLayer.Blocks, mapLayer.Width, mapLayer.Height, cx, cy, all);
         DropIfSame();
-        if (n > 0) { RememberBrush(); DrawMap(); }
+        if (changed > 0) { RememberBrush(); DrawMap(); }
         UpdateUndoState();
-        Status = n == 0 ? "Nothing to fill: it is the brush already." : $"{n} block{(n == 1 ? "" : "s")} of the {(EditUpper ? "upper" : "ground")} layer filled with the brush (Undo takes it back).";
+        Status = changed == 0 ? "Nothing to fill: it is the brush already." : $"{changed} block{(changed == 1 ? "" : "s")} of the {(EditUpper ? "upper" : "ground")} layer filled with the brush (Undo takes it back).";
     }
 
-    /// <summary>Fills a grid of blocks with the brush from (cx, cy): the cells joined to it with the same block, or every
-    /// cell. A brush of several blocks repeats, lined up with the grid's corner. Returns how many changed.</summary>
+    // fills a grid of blocks with the brush starting from (cx, cy): the cells joined to it with the same block, or every
+    // cell. a brush of several blocks repeats, lined up with the grid's corner. returns how many changed
     private int Fill(int[] grid, int w, int h, int cx, int cy, bool all)
     {
         int Brush(int x, int y) => _brush[y % BrushH * BrushW + x % BrushW];
@@ -346,7 +346,7 @@ public partial class L2MapsPage
         if (all) cells.AddRange(Enumerable.Range(0, w * h));
         else
         {
-            int from = grid[cy * w + cx];
+            int startBlock = grid[cy * w + cx];
             var seen = new bool[w * h];
             var todo = new Stack<int>();
             todo.Push(cy * w + cx); seen[cy * w + cx] = true;
@@ -359,21 +359,21 @@ public partial class L2MapsPage
                 {
                     if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
                     int j = ny * w + nx;
-                    if (seen[j] || grid[j] != from) continue;
+                    if (seen[j] || grid[j] != startBlock) continue;
                     seen[j] = true; todo.Push(j);
                 }
             }
         }
-        int n = 0;
+        int changed = 0;
         foreach (int i in cells)
         {
-            int b = Brush(i % w, i / w);
-            if (grid[i] != b) { grid[i] = b; n++; }
+            int block = Brush(i % w, i / w);
+            if (grid[i] != block) { grid[i] = block; changed++; }
         }
-        return n;
+        return changed;
     }
 
-    /// <summary>Fills the whole layer painted (or the world map) with the brush.</summary>
+    // fills the whole layer being painted (or the world map) with the brush
     [RelayCommand]
     private void FillLayer()
     {
@@ -385,22 +385,22 @@ public partial class L2MapsPage
     private void PaintCollision(int cx, int cy)
     {
         if (_edit == null || _edit.Map.Layers.Length < 2) return;
-        var L = _edit.Map.Layers[1];
-        int i = cy * L.Width + cx;
-        byte old = L.Flags[i];
-        byte v = _collisionClear ? (byte)(old & 0x03) : (byte)(old | CollisionBits[Math.Clamp(CollisionKind, 0, CollisionBits.Length - 1)]);
-        if (v == old) return;
-        L.Flags[i] = v;
+        var upper = _edit.Map.Layers[1];
+        int i = cy * upper.Width + cx;
+        byte oldFlags = upper.Flags[i];
+        byte newFlags = _collisionClear ? (byte)(oldFlags & 0x03) : (byte)(oldFlags | CollisionBits[Math.Clamp(CollisionKind, 0, CollisionBits.Length - 1)]);
+        if (newFlags == oldFlags) return;
+        upper.Flags[i] = newFlags;
         if (!ShowCollision) ShowCollision = true; else DrawMap();
         UpdateUndoState();
     }
 
-    /// <summary>Wall line: the grid line near pixel (<paramref name="px"/>, <paramref name="py"/>) gets a wall (or loses
-    /// it on a right-drag). Only a line within 5 pixels counts; where two cross, the drag keeps the line it was on.</summary>
+    // Wall line: the grid line near pixel (px, py) gets a wall (or loses it on a right-drag). only a line within 5 pixels
+    // counts, and where two cross the drag keeps the line it was on
     private void PaintEdge(double px, double py)
     {
         if (_edit == null || _edit.Map.Layers.Length < 2) return;
-        var L = _edit.Map.Layers[1];
+        var upper = _edit.Map.Layers[1];
         double fx = px / 16, fy = py / 16;
         double dx = Math.Abs(fx - Math.Round(fx)) * 16, dy = Math.Abs(fy - Math.Round(fy)) * 16;
         int x, y; byte bit;
@@ -410,14 +410,14 @@ public partial class L2MapsPage
         if (across) { x = (int)Math.Floor(fx); y = (int)Math.Round(fy); bit = 0x04; }
         else if (down) { x = (int)Math.Round(fx); y = (int)Math.Floor(fy); bit = 0x08; }
         else return;
-        // the map's own edges stop the party anyway: a line there needs no cell (and the bottom / right ones have none)
-        if (x < 0 || y < 0 || x >= L.Width || y >= L.Height) return;
+        // the map's own edges stop the party anyway, so a line there needs no cell (and the bottom / right ones have none)
+        if (x < 0 || y < 0 || x >= upper.Width || y >= upper.Height) return;
         if (_lastEdge == (x, y, bit)) return;
         _lastEdge = (x, y, bit);
-        int i = y * L.Width + x;
-        byte old = L.Flags[i], v = _collisionClear ? (byte)(old & ~bit) : (byte)(old | bit);
-        if (v == old) return;
-        L.Flags[i] = v;
+        int i = y * upper.Width + x;
+        byte oldFlags = upper.Flags[i], newFlags = _collisionClear ? (byte)(oldFlags & ~bit) : (byte)(oldFlags | bit);
+        if (newFlags == oldFlags) return;
+        upper.Flags[i] = newFlags;
         if (!ShowCollision) ShowCollision = true; else DrawMap();
         UpdateUndoState();
     }
@@ -426,96 +426,95 @@ public partial class L2MapsPage
     {
         if (_edit == null) return;
         int layer = EditUpper ? 1 : 0;
-        var L = _edit.Map.Layers[Math.Min(layer, _edit.Map.Layers.Length - 1)];
-        SetBrush(L.Blocks[cy * L.Width + cx]);
+        var mapLayer = _edit.Map.Layers[Math.Min(layer, _edit.Map.Layers.Length - 1)];
+        SetBrush(mapLayer.Blocks[cy * mapLayer.Width + cx]);
         Status = $"Block {SelectedBlock:X3} picked from ({cx},{cy}).";
     }
 
-    // ---------------------------------------------------------------- areas, copy and paste
+    // areas, copy and paste
 
-    /// <summary>The area being dragged or picked (x1, y1, x2, y2; x2 / y2 not included), in blocks.</summary>
+    // the area being dragged or picked, in blocks (x1, y1, x2, y2, x2 / y2 not included)
     public (int X1, int Y1, int X2, int Y2)? AreaRect
     {
-        // kept inside the map as it is now: an area dragged before a resize (or an Undo of one) reached past the
-        // edge, and Copy / Cut / Fill / Delete then wrote into the next row or past the end
+        // clamped to the map as it is now. an area dragged before a resize (or an Undo of one) used to reach past the
+        // edge, and then Copy / Cut / Fill / Delete wrote into the next row or past the end
         get
         {
-            if (_areaRect is not { } r) return null;
+            if (_areaRect is not { } area) return null;
             int w = _world != null ? L2WorldMap.Size : _edit?.Width ?? 0, h = _world != null ? L2WorldMap.Size : _edit?.Height ?? 0;
-            var c = (X1: Math.Clamp(r.X1, 0, w), Y1: Math.Clamp(r.Y1, 0, h), X2: Math.Clamp(r.X2, 0, w), Y2: Math.Clamp(r.Y2, 0, h));
-            return c.X2 > c.X1 && c.Y2 > c.Y1 ? c : null;
+            var clamped = (X1: Math.Clamp(area.X1, 0, w), Y1: Math.Clamp(area.Y1, 0, h), X2: Math.Clamp(area.X2, 0, w), Y2: Math.Clamp(area.Y2, 0, h));
+            return clamped.X2 > clamped.X1 && clamped.Y2 > clamped.Y1 ? clamped : null;
         }
         set
         {
             _areaRect = value;
             AreaVisible = value != null;
-            int u = AreaUnit;
-            if (value is { } r) { AreaX = r.X1 * u; AreaY = r.Y1 * u; AreaW = (r.X2 - r.X1) * u; AreaH = (r.Y2 - r.Y1) * u; }
+            int unit = AreaUnit;
+            if (value is { } area) { AreaX = area.X1 * unit; AreaY = area.Y1 * unit; AreaW = (area.X2 - area.X1) * unit; AreaH = (area.Y2 - area.Y1) * unit; }
             OnPropertyChanged();
         }
     }
     private (int X1, int Y1, int X2, int Y2)? _areaRect;
-    /// <summary>Pixels per unit of the area: big blocks for the world map's Area tool, else 16-pixel blocks.</summary>
+    // pixels per area unit: big blocks for the world map's Area tool, 16-pixel blocks otherwise
     private int AreaUnit => _world != null && Tool == L2Tool.Area ? Cell : 16;
     [ObservableProperty] private double _areaX, _areaY, _areaW, _areaH;
     [ObservableProperty] private bool _areaVisible;
 
-    /// <summary>Blocks copied (both layers, with their cell flags), shared by every map; the graphics they came from.</summary>
-    /// <summary>Copied blocks: both layers and the upper layer's flags, in block set / tile set <see cref="BlockSet"/> /
-    /// <see cref="TileSet"/> (as a map with them, <see cref="SourceMap"/>, draws them with palette set
-    /// <see cref="PaletteSet"/>; -1: not known, any map with those sets).</summary>
+    // copied blocks, shared by every map: both layers and the upper layer's cell flags, plus the graphics they came
+    // from. they're in block set / tile set BlockSet / TileSet, and a map with those (SourceMap) draws them with palette
+    // set PaletteSet. -1 = not known, any map with those sets
     public sealed record Clip(int W, int H, int[] Ground, int[] Upper, byte[] Flags, int BlockSet, int TileSet, int SourceMap = -1, int PaletteSet = -1);
     private static Clip? _clip;
 
     [RelayCommand]
     private void CopyArea()
     {
-        if (_world != null && AreaRect is { } wr) { _clip = WorldCut(wr); Status = $"Copied {wr.X2 - wr.X1} x {wr.Y2 - wr.Y1} big blocks."; return; }
-        if (_edit == null || AreaRect is not { } r) { Status = "Drag an area with the Area tool first."; return; }
-        _clip = Cut(r);
-        Status = $"Copied {r.X2 - r.X1} x {r.Y2 - r.Y1} blocks. Paste (Ctrl+V) places them, on this map or another with the same graphics.";
+        if (_world != null && AreaRect is { } worldArea) { _clip = WorldCut(worldArea); Status = $"Copied {worldArea.X2 - worldArea.X1} x {worldArea.Y2 - worldArea.Y1} big blocks."; return; }
+        if (_edit == null || AreaRect is not { } area) { Status = "Drag an area with the Area tool first."; return; }
+        _clip = Cut(area);
+        Status = $"Copied {area.X2 - area.X1} x {area.Y2 - area.Y1} blocks. Paste (Ctrl+V) places them, on this map or another with the same graphics.";
     }
 
-    private Clip Cut((int X1, int Y1, int X2, int Y2) r)
+    private Clip Cut((int X1, int Y1, int X2, int Y2) area)
     {
-        int w = r.X2 - r.X1, h = r.Y2 - r.Y1;
-        var g = new int[w * h]; var u = new int[w * h]; var f = new byte[w * h];
+        int w = area.X2 - area.X1, h = area.Y2 - area.Y1;
+        var ground = new int[w * h]; var upper = new int[w * h]; var flags = new byte[w * h];
         var L0 = _edit!.Map.Layers[0]; var L1 = _edit.Map.Layers.Length > 1 ? _edit.Map.Layers[1] : null;
         for (int y = 0; y < h; y++)
             for (int x = 0; x < w; x++)
             {
-                int i = (r.Y1 + y) * L0.Width + r.X1 + x;
-                g[y * w + x] = L0.Blocks[i];
-                if (L1 != null) { u[y * w + x] = L1.Blocks[i]; f[y * w + x] = L1.Flags[i]; }
+                int i = (area.Y1 + y) * L0.Width + area.X1 + x;
+                ground[y * w + x] = L0.Blocks[i];
+                if (L1 != null) { upper[y * w + x] = L1.Blocks[i]; flags[y * w + x] = L1.Flags[i]; }
             }
-        return new Clip(w, h, g, u, f, _edit.BlockSetIndex, _edit.TileSetIndex, _edit.MapId, _edit.PaletteSetIndex);
+        return new Clip(w, h, ground, upper, flags, _edit.BlockSetIndex, _edit.TileSetIndex, _edit.MapId, _edit.PaletteSetIndex);
     }
 
     [RelayCommand]
     private void CutArea()
     {
-        if (_world != null && AreaRect is { } wr) { _clip = WorldCut(wr); WorldRecord("cutting an area"); WorldFill(wr); return; }
-        if (_edit == null || AreaRect is not { } r) { Status = "Drag an area with the Area tool first."; return; }
-        _clip = Cut(r);
+        if (_world != null && AreaRect is { } worldArea) { _clip = WorldCut(worldArea); WorldRecord("cutting an area"); WorldFill(worldArea); return; }
+        if (_edit == null || AreaRect is not { } area) { Status = "Drag an area with the Area tool first."; return; }
+        _clip = Cut(area);
         Record("cutting an area");
-        FillRect(r, SelectedBlock);
+        FillRect(area, SelectedBlock);
         Status = "Cut: copied, then filled with the brush block.";
     }
 
     [RelayCommand]
     private void FillArea()
     {
-        if (_world != null && AreaRect is { } wr) { WorldRecord("filling an area"); WorldFill(wr); return; }
-        if (_edit == null || AreaRect is not { } r) { Status = "Drag an area with the Area tool first."; return; }
+        if (_world != null && AreaRect is { } worldArea) { WorldRecord("filling an area"); WorldFill(worldArea); return; }
+        if (_edit == null || AreaRect is not { } area) { Status = "Drag an area with the Area tool first."; return; }
         Record("filling an area");
-        FillRect(r, SelectedBlock);
+        FillRect(area, SelectedBlock);
         Status = $"Filled with block {SelectedBlock:X3} on the {(EditUpper ? "upper" : "ground")} layer.";
     }
 
     [RelayCommand]
-    private void WorldFill((int X1, int Y1, int X2, int Y2) r)
+    private void WorldFill((int X1, int Y1, int X2, int Y2) area)
     {
-        for (int y = r.Y1; y < r.Y2; y++) for (int x = r.X1; x < r.X2; x++) _world!.Cells[y * L2WorldMap.Size + x] = SelectedBlock;
+        for (int y = area.Y1; y < area.Y2; y++) for (int x = area.X1; x < area.X2; x++) _world!.Cells[y * L2WorldMap.Size + x] = SelectedBlock;
         DrawWorld(); WorldUndoState();
     }
 
@@ -523,17 +522,17 @@ public partial class L2MapsPage
     private void DeleteArea()
     {
         if (_world != null) return;
-        if (_edit == null || AreaRect is not { } r) return;
+        if (_edit == null || AreaRect is not { } area) return;
         Record("clearing an area");
-        FillRect(r, 0);
+        FillRect(area, 0);
         Status = $"Cleared the {(EditUpper ? "upper" : "ground")} layer there (block 000 draws nothing).";
     }
 
-    private void FillRect((int X1, int Y1, int X2, int Y2) r, int block)
+    private void FillRect((int X1, int Y1, int X2, int Y2) area, int block)
     {
         int layer = EditUpper ? 1 : 0;
-        var L = _edit!.Map.Layers[Math.Min(layer, _edit.Map.Layers.Length - 1)];
-        for (int y = r.Y1; y < r.Y2; y++) for (int x = r.X1; x < r.X2; x++) L.Blocks[y * L.Width + x] = block;
+        var mapLayer = _edit!.Map.Layers[Math.Min(layer, _edit.Map.Layers.Length - 1)];
+        for (int y = area.Y1; y < area.Y2; y++) for (int x = area.X1; x < area.X2; x++) mapLayer.Blocks[y * mapLayer.Width + x] = block;
         DropIfSame();
         DrawMap(); UpdateUndoState();
     }
@@ -556,7 +555,7 @@ public partial class L2MapsPage
         var clip = _clip;
         if (clip.BlockSet != _edit.BlockSetIndex || clip.TileSet != _edit.TileSetIndex)
         {
-            // copied on other graphics: its blocks in this map's block set first, as presets and From are
+            // copied on other graphics: bring its blocks into this map's block set first, same as presets and From
             if (WritePendingEdits() is { } why) { Status = "The map couldn't be written first: " + why; return; }
             clip = BringIn(clip, "copy");
             if (clip == null) return;
@@ -568,37 +567,37 @@ public partial class L2MapsPage
         StartStamp(clip);
     }
 
-    /// <summary>Starts placing <paramref name="clip"/> (from Copy, Pieces... or a preset).</summary>
+    // starts placing clip (from Copy, Pieces... or a preset)
     public void StartStamp(Clip clip)
     {
         if (_world != null)
         {
             _clip = clip;
-            int ww = clip.W * Cell, wh = clip.H * Cell;
-            var wpx = new uint[ww * wh];
+            int imageW = clip.W * Cell, imageH = clip.H * Cell;
+            var worldPixels = new uint[imageW * imageH];
             for (int y = 0; y < clip.H; y++)
                 for (int x = 0; x < clip.W; x++)
                 {
-                    var bp = Big(clip.Ground[y * clip.W + x]);
-                    for (int yy = 0; yy < Cell; yy++) Array.Copy(bp, yy * Cell, wpx, (y * Cell + yy) * ww + x * Cell, Cell);
+                    var bigPixels = Big(clip.Ground[y * clip.W + x]);
+                    for (int yy = 0; yy < Cell; yy++) Array.Copy(bigPixels, yy * Cell, worldPixels, (y * Cell + yy) * imageW + x * Cell, Cell);
                 }
-            StampImage = BitmapSource.Create(ww, wh, 96, 96, PixelFormats.Bgra32, null, wpx.Select(c => (int)c).ToArray(), ww * 4);
+            StampImage = BitmapSource.Create(imageW, imageH, 96, 96, PixelFormats.Bgra32, null, worldPixels.Select(c => (int)c).ToArray(), imageW * 4);
             Stamping = true;
             return;
         }
         if (_edit == null) return;
         _clip = clip;
-        var px = new uint[clip.W * 16 * clip.H * 16];
+        var pixels = new uint[clip.W * 16 * clip.H * 16];
         int w = clip.W * 16;
         for (int y = 0; y < clip.H; y++)
             for (int x = 0; x < clip.W; x++)
-                foreach (int b in new[] { clip.Ground[y * clip.W + x], clip.Upper[y * clip.W + x] })
+                foreach (int block in new[] { clip.Ground[y * clip.W + x], clip.Upper[y * clip.W + x] })
                 {
-                    if (b <= 0 || b >= _blocks.Length) continue;
-                    var bp = _blocks[b];
-                    for (int yy = 0; yy < 16; yy++) for (int xx = 0; xx < 16; xx++) if (bp[yy * 16 + xx] != 0) px[(y * 16 + yy) * w + x * 16 + xx] = bp[yy * 16 + xx];
+                    if (block <= 0 || block >= _blocks.Length) continue;
+                    var blockPixels = _blocks[block];
+                    for (int yy = 0; yy < 16; yy++) for (int xx = 0; xx < 16; xx++) if (blockPixels[yy * 16 + xx] != 0) pixels[(y * 16 + yy) * w + x * 16 + xx] = blockPixels[yy * 16 + xx];
                 }
-        StampImage = BitmapSource.Create(w, clip.H * 16, 96, 96, PixelFormats.Bgra32, null, px.Select(c => (int)c).ToArray(), w * 4);
+        StampImage = BitmapSource.Create(w, clip.H * 16, 96, 96, PixelFormats.Bgra32, null, pixels.Select(c => (int)c).ToArray(), w * 4);
         Stamping = true;
         Status = clip.BlockSet != _edit.BlockSetIndex || clip.TileSet != _edit.TileSetIndex
             ? $"These blocks come from block set {clip.BlockSet} / tile set {clip.TileSet}; this map uses {_edit.BlockSetIndex} / {_edit.TileSetIndex}, so they may look different here. Click to place them; Esc stops."
@@ -610,23 +609,23 @@ public partial class L2MapsPage
 
     private void Stamp(int cx, int cy)
     {
-        if (_edit == null || _clip is not { } c) return;
+        if (_edit == null || _clip is not { } clip) return;
         Record("placing copied blocks");
         var L0 = _edit.Map.Layers[0]; var L1 = _edit.Map.Layers.Length > 1 ? _edit.Map.Layers[1] : null;
-        for (int y = 0; y < c.H; y++)
-            for (int x = 0; x < c.W; x++)
+        for (int y = 0; y < clip.H; y++)
+            for (int x = 0; x < clip.W; x++)
             {
                 int mx = cx + x, my = cy + y;
                 if (mx >= L0.Width || my >= L0.Height) continue;
                 int i = my * L0.Width + mx;
-                L0.Blocks[i] = c.Ground[y * c.W + x];
-                if (L1 != null) { L1.Blocks[i] = c.Upper[y * c.W + x]; L1.Flags[i] = c.Flags[y * c.W + x]; }
+                L0.Blocks[i] = clip.Ground[y * clip.W + x];
+                if (L1 != null) { L1.Blocks[i] = clip.Upper[y * clip.W + x]; L1.Flags[i] = clip.Flags[y * clip.W + x]; }
             }
         DropIfSame();
         DrawMap(); UpdateUndoState();
     }
 
-    /// <summary>Esc: stops placing, drops the area, the picked thing.</summary>
+    // Esc: stops placing, else drops the area, else the picked thing
     public void Escape()
     {
         if (Stamping) { StopStamp(); return; }
@@ -634,14 +633,14 @@ public partial class L2MapsPage
         Selection = null; DrawOverlays(); UpdateInspector();
     }
 
-    // ---------------------------------------------------------------- adding things
+    // adding things
 
     private void AddExit(int x1, int y1, int x2, int y2)
     {
         if (_edit == null) return;
         var exits = _edit.Records(L2MapEdit.Exits);
         int id = exits.Select(e => (int)e.Bytes[0]).DefaultIfEmpty(-1).Max() + 1;
-        // the arrival style most exits of the map use (F3: the usual)
+        // the arrival style most of the map's exits use (F3 = the usual one)
         byte style = exits.GroupBy(e => e.Bytes[5]).OrderByDescending(g => g.Count()).Select(g => g.Key).DefaultIfEmpty(_edit.IsWorld ? (byte)0x40 : (byte)0xF3).First();
         if (id > 0xFE) { Status = "The map has no free exit number."; return; }
         Record(_edit.IsWorld ? "adding an entrance" : "adding an exit");
@@ -716,10 +715,10 @@ public partial class L2MapsPage
         catch (Exception ex) { UndoPaint(); _redo.Clear(); _worldRedo.Clear(); UpdateUndoState(); Status = "No chest added: " + ex.Message; return; }
         if (!hidden && look != null && look.Map != _edit.MapId && note.Contains("added to block set"))
         {
-            // the chest's blocks went into the block set, and its tiles into the tile set when it had none of their shape
-            // (in the ROM, as the block editor's changes; one Edit > Undo step takes both out)
-            _main.NotifyRomModified(L2ChestLooks.LastTiles is { } t
-                ? $"Lufia II: chest tiles added to tile set {t.TileSet} and blocks to block set {_edit.BlockSetIndex}"
+            // the chest's blocks went into the block set, and its tiles into the tile set if it had none of that shape.
+            // that's in the ROM already, like the block editor's changes, and one Edit > Undo step takes both out
+            _main.NotifyRomModified(L2ChestLooks.LastTiles is { } lastTiles
+                ? $"Lufia II: chest tiles added to tile set {lastTiles.TileSet} and blocks to block set {_edit.BlockSetIndex}"
                 : $"Lufia II: chest blocks added to block set {_edit.BlockSetIndex}");
             ReloadBlocks();
         }
@@ -732,40 +731,40 @@ public partial class L2MapsPage
                  + (note.Length > 0 ? " " + note : "") + " Pick what it holds in the inspector.";
     }
 
-    // ---------------------------------------------------------------- chest pictures
+    // chest pictures
 
     private List<L2ChestLooks.Look>? _gameLooks;
-    /// <summary>Whether the chest picture list shows (the + Chest tool on a town or dungeon map).</summary>
+    // the chest picture list only shows for the + Chest tool on a town or dungeon map
     public bool ChestLookVisible => Tool == L2Tool.AddChest && _world == null && _edit != null;
 
-    /// <summary>The chest pictures + Chest can use: this map's own, then the game's other chests.</summary>
+    // the chest pictures + Chest can use: this map's own first, then the game's other chests
     public System.Collections.ObjectModel.ObservableCollection<L2ChestLookChoice> ChestLookChoices { get; } = new();
     [ObservableProperty] private L2ChestLookChoice? _selectedChestLook;
 
-    /// <summary>Fills the chest picture list for the map (the game's looks are read once per ROM).</summary>
+    // fills the chest picture list for the map (the game's looks are only read once per ROM)
     private void FillChestLooks()
     {
         if (_rom == null || _edit == null || _edit.IsWorld) { ChestLookChoices.Clear(); SelectedChestLook = null; return; }
         _gameLooks ??= L2ChestLooks.GameLooks(_rom);
         ChestLookChoices.Clear();
-        int bs = _edit.BlockSetIndex, ts = _edit.TileSetIndex, ps = _edit.PaletteSetIndex;
-        // this map's own chests as the edit has them now, then the other maps'
+        int blockSet = _edit.BlockSetIndex, tileSet = _edit.TileSetIndex, paletteSet = _edit.PaletteSetIndex;
+        // this map's own chests the way the edit has them now, then the other maps'
         var all = L2ChestLooks.LooksOf(_edit).Concat(_gameLooks.Where(l => l.Map != _edit.MapId));
-        foreach (var l in all.OrderBy(l => l.Map == _edit.MapId ? 0 : l.BlockSet == bs && l.TileSet == ts && l.PaletteSet == ps ? 1 : l.TileSet == ts ? 2 : 3).ThenBy(l => l.Map))
+        foreach (var look in all.OrderBy(l => l.Map == _edit.MapId ? 0 : l.BlockSet == blockSet && l.TileSet == tileSet && l.PaletteSet == paletteSet ? 1 : l.TileSet == tileSet ? 2 : 3).ThenBy(l => l.Map))
         {
-            string where = l.Map == _edit.MapId ? "This map's chest" : $"{l.Map:X2} {NameOf(l.Map)}";
-            string fit = l.Map == _edit.MapId ? "" : l.BlockSet == bs && l.TileSet == ts && l.PaletteSet == ps ? " (same graphics)" : l.TileSet == ts ? " (same tiles)" : "";
-            var (w, h, px) = L2ChestLooks.Picture(_rom, l);
-            var img = BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgra32, null, px.Select(c => (int)(c == 0 ? 0xFF000000u : c)).ToArray(), w * 4);
-            img.Freeze();
-            ChestLookChoices.Add(new L2ChestLookChoice { Look = l, Label = where + fit, Image = img });
+            string where = look.Map == _edit.MapId ? "This map's chest" : $"{look.Map:X2} {NameOf(look.Map)}";
+            string fit = look.Map == _edit.MapId ? "" : look.BlockSet == blockSet && look.TileSet == tileSet && look.PaletteSet == paletteSet ? " (same graphics)" : look.TileSet == tileSet ? " (same tiles)" : "";
+            var (w, h, pixels) = L2ChestLooks.Picture(_rom, look);
+            var image = BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgra32, null, pixels.Select(c => (int)(c == 0 ? 0xFF000000u : c)).ToArray(), w * 4);
+            image.Freeze();
+            ChestLookChoices.Add(new L2ChestLookChoice { Look = look, Label = where + fit, Image = image });
         }
         SelectedChestLook = ChestLookChoices.FirstOrDefault();
     }
 
-    // ---------------------------------------------------------------- keys
+    // keys
 
-    /// <summary>A key on the map (tool letters, Del, Esc, Ctrl+C / X / V). True when used.</summary>
+    // a key pressed on the map (tool letters, Del, Esc, Ctrl+C / X / V). returns true if we used it
     public bool Key(System.Windows.Input.Key key, bool ctrl)
     {
         if (ctrl)

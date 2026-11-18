@@ -7,7 +7,7 @@ using Kind = LufiaForge.Core.Lufia2.L2FlagIndex.Kind;
 
 namespace LufiaForge.Modules.Lufia2;
 
-/// <summary>A flag in the Flags tab's list.</summary>
+// a flag in the Flags tab's list
 public sealed partial class L2FlagRow : ObservableObject
 {
     public Kind Kind { get; init; }
@@ -15,23 +15,21 @@ public sealed partial class L2FlagRow : ObservableObject
     public string NumberText { get; init; } = "";
     [ObservableProperty] private string _label = "";
     [ObservableProperty] private string _detail = "";
-    /// <summary>Nothing uses it (and no one named it): free to take.</summary>
+    // nothing uses it and nobody named it, so it's free to take
     public bool Free { get; set; }
     public bool Named { get; set; }
     public double Dim => Free ? 0.6 : 1.0;
 }
 
-/// <summary>A place a flag is used, in the Flags tab.</summary>
+// a place a flag is used, in the Flags tab
 public sealed record L2FlagUseRow(string Text, L2FlagIndex.Use Use)
 {
     public bool CanOpen => Use.Head is not (L2FlagIndex.PuzzleHead or L2FlagIndex.ChestHead or L2FlagIndex.DoorHead);
 }
 
-/// <summary>
-/// The Flags tab of the Events page: every kind of Lufia II flag (story flags and the extra ones, event counters,
-/// treasure chest flags, puzzle switches, doors) with where each is used, a name and a note of your own (kept in the
-/// project), "New flag" to take a free one, and the extra story flags patch (<see cref="L2ExtraFlags"/>).
-/// </summary>
+// the Flags tab of the Events page. every kind of Lufia II flag (story flags plus the extra ones, event counters,
+// treasure chest flags, puzzle switches, doors) with where each one is used, your own name and note for it (kept in
+// the project), "New flag" to grab a free one, and the extra story flags patch (L2ExtraFlags)
 public sealed partial class L2FlagsPanel : ObservableObject
 {
     private readonly L2EventsPage _page;
@@ -71,7 +69,7 @@ public sealed partial class L2FlagsPanel : ObservableObject
 
     private Kind Current => (Kind)KindIndex;
 
-    /// <summary>A name or note changed since the event editor last showed them (it makes its cards again when shown).</summary>
+    // a name or note changed since the event editor last showed them (it rebuilds its cards when shown)
     public bool NamesDirty { get; set; }
     private RomBuffer? Rom => _page.CurrentRom;
 
@@ -98,7 +96,7 @@ public sealed partial class L2FlagsPanel : ObservableObject
     partial void OnShowChanged(int value) => Fill();
     partial void OnFilterChanged(string value) => Fill();
 
-    /// <summary>Reads the list again (the ROM changed, or the page is shown).</summary>
+    // reads the list again (the ROM changed, or the page is shown)
     public void Refresh()
     {
         OnPropertyChanged(nameof(ShowExtra));
@@ -106,7 +104,7 @@ public sealed partial class L2FlagsPanel : ObservableObject
         Fill();
     }
 
-    /// <summary>Shows one flag (from the event editor).</summary>
+    // shows one flag (the event editor calls this)
     public void ShowFlag(Kind kind, int number)
     {
         _filling = true;
@@ -116,24 +114,24 @@ public sealed partial class L2FlagsPanel : ObservableObject
         Selected = Rows.FirstOrDefault(r => r.Number == number);
     }
 
-    private string ItemName(RomBuffer rom, int i)
+    private string ItemName(RomBuffer rom, int item)
     {
         if (_itemsVersion != rom.Version)
         {
             try { _items = L2Battle.Items(rom).Select(x => x.Name.Trim()).ToArray(); } catch (Exception) { _items = Array.Empty<string>(); }
             _itemsVersion = rom.Version;
         }
-        return i < _items.Length && _items[i].Length > 0 ? _items[i] : $"item {i:X3}";
+        return item < _items.Length && _items[item].Length > 0 ? _items[item] : $"item {item:X3}";
     }
 
-    private static string MapName(RomBuffer rom, int m) => $"{m:X2} {L2ScriptEditor.MapNameOf(rom, m)}";
+    private static string MapName(RomBuffer rom, int map) => $"{map:X2} {L2ScriptEditor.MapNameOf(rom, map)}";
 
-    public static string NumberOf(Kind kind, int n) => kind switch
+    public static string NumberOf(Kind kind, int number) => kind switch
     {
-        Kind.Story => L2ExtraFlags.Number(n),
-        Kind.Chest => n.ToString("X3"),
-        Kind.Door => $"{n >> 8:X2}:{n & 0xFF}",
-        _ => n.ToString("X2"),
+        Kind.Story => L2ExtraFlags.Number(number),
+        Kind.Chest => number.ToString("X3"),
+        Kind.Door => $"{number >> 8:X2}:{number & 0xFF}",
+        _ => number.ToString("X2"),
     };
 
     private IEnumerable<int> Numbers(RomBuffer rom, Kind kind, ILookup<int, L2FlagIndex.Use> uses) => kind switch
@@ -145,52 +143,52 @@ public sealed partial class L2FlagsPanel : ObservableObject
         _ => uses.Select(g => g.Key).Concat(L2FlagNotes.Named(Kind.Door)).Distinct().OrderBy(x => x),
     };
 
-    /// <summary>What the game itself does with it, or null.</summary>
-    private string? GameUse(RomBuffer rom, Kind kind, int n) => kind switch
+    // what the game itself does with it, or null
+    private string? GameUse(RomBuffer rom, Kind kind, int number) => kind switch
     {
-        Kind.Story => L2FlagIndex.Reserved(n),
-        Kind.Counter => L2FlagIndex.CounterReserved(rom, n),
-        Kind.Switch when n >= 0x20 => "this map only (cleared when a map loads)",
+        Kind.Story => L2FlagIndex.Reserved(number),
+        Kind.Counter => L2FlagIndex.CounterReserved(rom, number),
+        Kind.Switch when number >= 0x20 => "this map only (cleared when a map loads)",
         _ => null,
     };
 
     private void Fill()
     {
         if (_filling) return;
-        var keep = Selected?.Number;
+        var keepNumber = Selected?.Number;
         var keepKind = Selected?.Kind;
         Rows.Clear();
         var rom = Rom;
         if (rom == null) { CountText = ""; return; }
         var kind = Current;
         var uses = L2FlagIndex.All(rom).Where(u => u.Kind == kind).ToLookup(u => u.Number);
-        string q = Filter.Trim();
+        string search = Filter.Trim();
         int free = 0, named = 0;
         foreach (int n in Numbers(rom, kind, uses))
         {
-            var u = uses[n].ToList();
+            var flagUses = uses[n].ToList();
             string? name = L2FlagNotes.Name(kind, n);
-            string? game = kind switch { Kind.Story => L2StoryFlags.GameLabel(n), Kind.Counter => L2StoryFlags.GameCounterLabel(n), _ => null };
+            string? gameLabel = kind switch { Kind.Story => L2StoryFlags.GameLabel(n), Kind.Counter => L2StoryFlags.GameCounterLabel(n), _ => null };
             string? gameUse = GameUse(rom, kind, n);
-            bool isFree = u.Count == 0 && name == null && gameUse == null && !(kind == Kind.Story && n == 0) && !(kind == Kind.Counter && n is >= 1 and <= 0x0E);
+            bool isFree = flagUses.Count == 0 && name == null && gameUse == null && !(kind == Kind.Story && n == 0) && !(kind == Kind.Counter && n is >= 1 and <= 0x0E);
             if (isFree) free++;
             if (name != null) named++;
             string detail = kind switch
             {
-                Kind.Chest => u.Count == 0 ? "free" : string.Join("; ", u.Select(x => $"{MapName(rom, x.Map)}, {ItemName(rom, ItemOf(x.Where))}")) + (u.Count > 1 ? $"  (shared by {u.Count} chests)" : ""),
-                Kind.Door => (u.FirstOrDefault(x => x.Head == L2FlagIndex.DoorHead) is { } d ? MapName(rom, d.Map) : MapName(rom, n >> 8)) +
-                             (u.Count(x => x.Head != L2FlagIndex.DoorHead) is var k and > 0 ? $", used {k}x" : ", not used by events"),
-                _ => u.Count == 0 ? (gameUse ?? (isFree ? "free" : "not used by events")) :
-                     $"{Count(u, true)} {(kind == Kind.Counter ? "change" : "turn on/off")}, {Count(u, false)} check" + (gameUse != null ? $"  (game: {gameUse})" : ""),
+                Kind.Chest => flagUses.Count == 0 ? "free" : string.Join("; ", flagUses.Select(x => $"{MapName(rom, x.Map)}, {ItemName(rom, ItemOf(x.Where))}")) + (flagUses.Count > 1 ? $"  (shared by {flagUses.Count} chests)" : ""),
+                Kind.Door => (flagUses.FirstOrDefault(x => x.Head == L2FlagIndex.DoorHead) is { } door ? MapName(rom, door.Map) : MapName(rom, n >> 8)) +
+                             (flagUses.Count(x => x.Head != L2FlagIndex.DoorHead) is var useCount and > 0 ? $", used {useCount}x" : ", not used by events"),
+                _ => flagUses.Count == 0 ? (gameUse ?? (isFree ? "free" : "not used by events")) :
+                     $"{Count(flagUses, true)} {(kind == Kind.Counter ? "change" : "turn on/off")}, {Count(flagUses, false)} check" + (gameUse != null ? $"  (game: {gameUse})" : ""),
             };
             var row = new L2FlagRow
             {
                 Kind = kind, Number = n, NumberText = NumberOf(kind, n), Free = isFree, Named = name != null,
-                Label = name ?? game ?? (kind == Kind.Story && n >= L2ExtraFlags.First ? "extra flag" : kind == Kind.Door ? DoorPlace(u) : ""), Detail = detail,
+                Label = name ?? gameLabel ?? (kind == Kind.Story && n >= L2ExtraFlags.First ? "extra flag" : kind == Kind.Door ? DoorPlace(flagUses) : ""), Detail = detail,
             };
-            if (Show == 1 && u.Count == 0 || Show == 2 && !isFree || Show == 3 && name == null) continue;
-            if (q.Length > 0 && !row.NumberText.Equals(q, StringComparison.OrdinalIgnoreCase) && !row.Label.Contains(q, StringComparison.OrdinalIgnoreCase) &&
-                !row.Detail.Contains(q, StringComparison.OrdinalIgnoreCase) && !(L2FlagNotes.Note(kind, n)?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false)) continue;
+            if (Show == 1 && flagUses.Count == 0 || Show == 2 && !isFree || Show == 3 && name == null) continue;
+            if (search.Length > 0 && !row.NumberText.Equals(search, StringComparison.OrdinalIgnoreCase) && !row.Label.Contains(search, StringComparison.OrdinalIgnoreCase) &&
+                !row.Detail.Contains(search, StringComparison.OrdinalIgnoreCase) && !(L2FlagNotes.Note(kind, n)?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false)) continue;
             Rows.Add(row);
         }
         CountText = kind switch
@@ -199,59 +197,59 @@ public sealed partial class L2FlagsPanel : ObservableObject
             Kind.Door => $"{Rows.Count} doors listed, {named} named by you",
             _ => $"{free} free, {named} named by you",
         };
-        Selected = keep != null && keepKind == kind ? Rows.FirstOrDefault(r => r.Number == keep) : null;
+        Selected = keepNumber != null && keepKind == kind ? Rows.FirstOrDefault(r => r.Number == keepNumber) : null;
         if (Selected == null) ShowSelected(null);
     }
 
-    /// <summary>"Door 3 at (12, 5)" from the door's record.</summary>
-    private static string DoorPlace(List<L2FlagIndex.Use> u) => u.FirstOrDefault(x => x.Head == L2FlagIndex.DoorHead)?.Where ?? "";
+    // "Door 3 at (12, 5)" from the door's record
+    private static string DoorPlace(List<L2FlagIndex.Use> flagUses) => flagUses.FirstOrDefault(x => x.Head == L2FlagIndex.DoorHead)?.Where ?? "";
 
-    private static int Count(List<L2FlagIndex.Use> u, bool writes) => u.Count(x => x.Writes == writes && x.Head != L2FlagIndex.DoorHead);
+    private static int Count(List<L2FlagIndex.Use> flagUses, bool writes) => flagUses.Count(x => x.Writes == writes && x.Head != L2FlagIndex.DoorHead);
 
     private static int ItemOf(string where)
     {
-        int i = where.LastIndexOf("item ", StringComparison.Ordinal);
-        return i >= 0 && int.TryParse(where[(i + 5)..], System.Globalization.NumberStyles.HexNumber, null, out int v) ? v : 0;
+        int itemAt = where.LastIndexOf("item ", StringComparison.Ordinal);
+        return itemAt >= 0 && int.TryParse(where[(itemAt + 5)..], System.Globalization.NumberStyles.HexNumber, null, out int item) ? item : 0;
     }
 
     partial void OnSelectedChanged(L2FlagRow? value) => ShowSelected(value);
 
-    private void ShowSelected(L2FlagRow? r)
+    private void ShowSelected(L2FlagRow? row)
     {
         Uses.Clear();
         _filling = true;
-        NameText = r != null ? L2FlagNotes.Name(r.Kind, r.Number) ?? "" : "";
-        NoteText = r != null ? L2FlagNotes.Note(r.Kind, r.Number) ?? "" : "";
+        NameText = row != null ? L2FlagNotes.Name(row.Kind, row.Number) ?? "" : "";
+        NoteText = row != null ? L2FlagNotes.Note(row.Kind, row.Number) ?? "" : "";
         _filling = false;
         var rom = Rom;
-        if (r == null || rom == null) { Title = ""; About = ""; return; }
-        string kindName = r.Kind switch { Kind.Story => r.Number >= L2ExtraFlags.First ? "Extra story flag" : "Story flag", Kind.Counter => "Event counter", Kind.Chest => "Chest flag", Kind.Switch => "Puzzle switch", _ => "Door" };
-        Title = $"{kindName} {r.NumberText}";
+        if (row == null || rom == null) { Title = ""; About = ""; return; }
+        string kindName = row.Kind switch { Kind.Story => row.Number >= L2ExtraFlags.First ? "Extra story flag" : "Story flag", Kind.Counter => "Event counter", Kind.Chest => "Chest flag", Kind.Switch => "Puzzle switch", _ => "Door" };
+        Title = $"{kindName} {row.NumberText}";
         var about = new List<string>();
-        if (r.Kind == Kind.Story)
+        if (row.Kind == Kind.Story)
         {
-            var (addr, mask) = L2ExtraFlags.Ram(r.Number);
-            if (L2StoryFlags.GameLabel(r.Number) is { } gl) about.Add($"In the game: {gl}." + (L2StoryFlags.Note(r.Number) is { } gn ? " " + gn : ""));
-            if (L2FlagIndex.Reserved(r.Number) is { } why) about.Add($"The game's own code uses it: {why}. Don't use it for your own story.");
-            about.Add($"RAM $7E:{addr:X4}, bit {mask:X2}" + (r.Number >= L2ExtraFlags.First ? $" (counter {0x10 + (r.Number - L2ExtraFlags.First) / 8:X2}'s byte)." : "."));
+            var (address, mask) = L2ExtraFlags.Ram(row.Number);
+            if (L2StoryFlags.GameLabel(row.Number) is { } gameLabel) about.Add($"In the game: {gameLabel}." + (L2StoryFlags.Note(row.Number) is { } gameNote ? " " + gameNote : ""));
+            if (L2FlagIndex.Reserved(row.Number) is { } why) about.Add($"The game's own code uses it: {why}. Don't use it for your own story.");
+            about.Add($"RAM $7E:{address:X4}, bit {mask:X2}" + (row.Number >= L2ExtraFlags.First ? $" (counter {0x10 + (row.Number - L2ExtraFlags.First) / 8:X2}'s byte)." : "."));
         }
-        else if (r.Kind == Kind.Counter)
+        else if (row.Kind == Kind.Counter)
         {
-            if (L2StoryFlags.GameCounterLabel(r.Number) is { } gl) about.Add($"In the game: {gl}." + (L2StoryFlags.CounterNote(r.Number) is { } gn ? " " + gn : ""));
-            if (L2FlagIndex.CounterReserved(rom, r.Number) is { } why) about.Add($"It {why}: don't use it as a counter.");
-            about.Add($"RAM $7E:{0x079E + r.Number:X4}.");
+            if (L2StoryFlags.GameCounterLabel(row.Number) is { } gameLabel) about.Add($"In the game: {gameLabel}." + (L2StoryFlags.CounterNote(row.Number) is { } gameNote ? " " + gameNote : ""));
+            if (L2FlagIndex.CounterReserved(rom, row.Number) is { } why) about.Add($"It {why}: don't use it as a counter.");
+            about.Add($"RAM $7E:{0x079E + row.Number:X4}.");
         }
-        else if (r.Kind == Kind.Chest) about.Add($"RAM $7E:{0x093B + (r.Number >> 3):X4}, bit {1 << (r.Number & 7):X2}. Chests are changed on the Maps page.");
-        else if (r.Kind == Kind.Switch) about.Add(r.Number < 0x20 ? "Kept in the save, shared by every map." : "Cleared whenever a map loads: the map's own.");
-        if (r.Free) about.Add("Free: nothing uses it.");
-        if (r.Kind == Kind.Door && L2FlagIndex.Of(rom, r.Kind, r.Number).FirstOrDefault(u => u.Head == L2FlagIndex.DoorHead) is { } rec)
-            about.Insert(0, $"{rec.Where} on {MapName(rom, rec.Map)}.");
+        else if (row.Kind == Kind.Chest) about.Add($"RAM $7E:{0x093B + (row.Number >> 3):X4}, bit {1 << (row.Number & 7):X2}. Chests are changed on the Maps page.");
+        else if (row.Kind == Kind.Switch) about.Add(row.Number < 0x20 ? "Kept in the save, shared by every map." : "Cleared whenever a map loads: the map's own.");
+        if (row.Free) about.Add("Free: nothing uses it.");
+        if (row.Kind == Kind.Door && L2FlagIndex.Of(rom, row.Kind, row.Number).FirstOrDefault(u => u.Head == L2FlagIndex.DoorHead) is { } doorRecord)
+            about.Insert(0, $"{doorRecord.Where} on {MapName(rom, doorRecord.Map)}.");
         About = string.Join("\n", about);
-        foreach (var u in L2FlagIndex.Of(rom, r.Kind, r.Number).Where(u => u.Head != L2FlagIndex.DoorHead || r.Kind != Kind.Door)
+        foreach (var use in L2FlagIndex.Of(rom, row.Kind, row.Number).Where(u => u.Head != L2FlagIndex.DoorHead || row.Kind != Kind.Door)
                      .OrderBy(u => u.Writes ? 0 : 1).ThenBy(u => u.Map).ThenBy(u => u.At))
-            Uses.Add(new L2FlagUseRow($"{u.How,-11} {MapName(rom, u.Map)} · " +
-                                      (u.Kind == Kind.Chest ? u.Where[..u.Where.LastIndexOf(", item ", StringComparison.Ordinal)] + ", " + ItemName(rom, ItemOf(u.Where)) : u.Where), u));
-        if (Uses.Count == 0 && r.Kind != Kind.Door) Uses.Add(new L2FlagUseRow("(nothing uses it)", new L2FlagIndex.Use(r.Kind, r.Number, "", -1, L2FlagIndex.DoorHead, -1, -1, "")));
+            Uses.Add(new L2FlagUseRow($"{use.How,-11} {MapName(rom, use.Map)} · " +
+                                      (use.Kind == Kind.Chest ? use.Where[..use.Where.LastIndexOf(", item ", StringComparison.Ordinal)] + ", " + ItemName(rom, ItemOf(use.Where)) : use.Where), use));
+        if (Uses.Count == 0 && row.Kind != Kind.Door) Uses.Add(new L2FlagUseRow("(nothing uses it)", new L2FlagIndex.Use(row.Kind, row.Number, "", -1, L2FlagIndex.DoorHead, -1, -1, "")));
     }
 
     partial void OnNameTextChanged(string value) => SaveNote();
@@ -259,58 +257,58 @@ public sealed partial class L2FlagsPanel : ObservableObject
 
     private void SaveNote()
     {
-        if (_filling || Selected is not { } r) return;
+        if (_filling || Selected is not { } row) return;
         _filling = true;
         try
         {
-            L2FlagNotes.Set(r.Kind, r.Number, NameText, NoteText);
-            r.Named = NameText.Trim().Length > 0;
-            r.Label = L2FlagNotes.Name(r.Kind, r.Number) ?? (r.Kind switch { Kind.Story => L2StoryFlags.GameLabel(r.Number), Kind.Counter => L2StoryFlags.GameCounterLabel(r.Number), _ => null }) ?? "";
+            L2FlagNotes.Set(row.Kind, row.Number, NameText, NoteText);
+            row.Named = NameText.Trim().Length > 0;
+            row.Label = L2FlagNotes.Name(row.Kind, row.Number) ?? (row.Kind switch { Kind.Story => L2StoryFlags.GameLabel(row.Number), Kind.Counter => L2StoryFlags.GameCounterLabel(row.Number), _ => null }) ?? "";
         }
         finally { _filling = false; }
         OnPropertyChanged(nameof(KeptText));
     }
 
-    /// <summary>Takes a free flag of the kind shown and gives it a name to change.</summary>
+    // takes a free flag of the kind shown and gives it a name you can change
     [RelayCommand]
     private void NewFlag()
     {
         var rom = Rom;
         if (rom == null) return;
         var kind = Current;
-        int n = -1;
+        int number = -1;
         string added = "";
         switch (kind)
         {
             case Kind.Story:
-                n = L2FlagIndex.FreeStory(rom, L2ExtraFlags.IsApplied(rom));
-                if (n < 0 && !L2ExtraFlags.IsApplied(rom) && L2ExtraFlags.CanApply(rom))
+                number = L2FlagIndex.FreeStory(rom, L2ExtraFlags.IsApplied(rom));
+                if (number < 0 && !L2ExtraFlags.IsApplied(rom) && L2ExtraFlags.CanApply(rom))
                 {
                     if (System.Windows.MessageBox.Show("Every free story flag is taken. Add 128 extra story flags (100-17F) to the game? They are kept in counters 10-1F, which the game never uses.",
                             "New story flag", System.Windows.MessageBoxButton.OKCancel) != System.Windows.MessageBoxResult.OK) return;
                     if (!AddExtra()) return;
-                    n = L2FlagIndex.FreeStory(rom, true);
+                    number = L2FlagIndex.FreeStory(rom, true);
                     added = " (the extra flags were added to the game for it)";
                 }
                 break;
             case Kind.Counter:
-                for (int c = 0x1F; c >= 0 && n < 0; c--)
-                    if (c is not (>= 1 and <= 0x0E) && L2FlagIndex.CounterReserved(rom, c) == null && L2FlagNotes.Name(kind, c) == null && !L2FlagIndex.Of(rom, kind, c).Any()) n = c;
+                for (int c = 0x1F; c >= 0 && number < 0; c--)
+                    if (c is not (>= 1 and <= 0x0E) && L2FlagIndex.CounterReserved(rom, c) == null && L2FlagNotes.Name(kind, c) == null && !L2FlagIndex.Of(rom, kind, c).Any()) number = c;
                 break;
             case Kind.Switch:
-                for (int c = 0; c < 0x20 && n < 0; c++)
-                    if (L2FlagNotes.Name(kind, c) == null && !L2FlagIndex.Of(rom, kind, c).Any()) n = c;
+                for (int c = 0; c < 0x20 && number < 0; c++)
+                    if (L2FlagNotes.Name(kind, c) == null && !L2FlagIndex.Of(rom, kind, c).Any()) number = c;
                 break;
         }
-        if (n < 0) { Status = "None is free."; return; }
-        L2FlagNotes.Set(kind, n, $"My {(kind == Kind.Story ? "flag" : kind == Kind.Counter ? "counter" : "switch")} {NumberOf(kind, n)}", "");
+        if (number < 0) { Status = "None is free."; return; }
+        L2FlagNotes.Set(kind, number, $"My {(kind == Kind.Story ? "flag" : kind == Kind.Counter ? "counter" : "switch")} {NumberOf(kind, number)}", "");
         _filling = true; Show = 0; Filter = ""; _filling = false;
         Fill();
-        Selected = Rows.FirstOrDefault(r => r.Number == n);
-        Status = $"{NumberOf(kind, n)} is yours{added}: give it a name and a note on the right, then use it in events.";
+        Selected = Rows.FirstOrDefault(r => r.Number == number);
+        Status = $"{NumberOf(kind, number)} is yours{added}: give it a name and a note on the right, then use it in events.";
     }
 
-    /// <summary>Adds the extra story flags patch.</summary>
+    // adds the extra story flags patch
     [RelayCommand]
     private void AddExtraFlags()
     {
@@ -339,23 +337,23 @@ public sealed partial class L2FlagsPanel : ObservableObject
         catch (Exception ex) { Status = "Not added: " + ex.Message; return false; }
     }
 
-    /// <summary>Opens the event that uses the flag, at the step.</summary>
+    // opens the event that uses the flag, at that step
     [RelayCommand]
     private void OpenUse(L2FlagUseRow? row)
     {
         row ??= SelectedUse;
         if (row == null || Rom == null) return;
-        var u = row.Use;
+        var use = row.Use;
         if (!row.CanOpen)
         {
-            Status = u.Head switch
+            Status = use.Head switch
             {
-                L2FlagIndex.PuzzleHead => $"A puzzle script of map {u.Map:X2}: the Maps page shows the map's puzzles.",
-                L2FlagIndex.ChestHead => $"A treasure of map {u.Map:X2}: the Maps page changes it.",
+                L2FlagIndex.PuzzleHead => $"A puzzle script of map {use.Map:X2}: the Maps page shows the map's puzzles.",
+                L2FlagIndex.ChestHead => $"A treasure of map {use.Map:X2}: the Maps page changes it.",
                 _ => "",
             };
             return;
         }
-        _page.ShowEventAt(u.Map, u.Head, u.Id, u.At);
+        _page.ShowEventAt(use.Map, use.Head, use.Id, use.At);
     }
 }

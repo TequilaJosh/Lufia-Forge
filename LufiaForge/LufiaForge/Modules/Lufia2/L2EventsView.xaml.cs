@@ -19,15 +19,15 @@ public partial class L2EventsView : UserControl
 
     private void ShowFlags(int flag)
     {
-        foreach (var o in Tabs.Items) if (o is TabItem { Header: "Flags" } t) t.IsSelected = true;
+        foreach (var tab in Tabs.Items) if (tab is TabItem { Header: "Flags" } flagsTab) flagsTab.IsSelected = true;
     }
 
-    // back on the Events tab after names were given on the Flags tab: the editor's cards and lists use them
+    // back on the Events tab after names were given on the Flags tab: the editor's cards and lists pick them up
     private void Tabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (e.OriginalSource != Tabs || Page is not { } p || !p.FlagsPanel.NamesDirty) return;
-        if (Tabs.SelectedItem is TabItem { Header: "Events" }) { p.FlagsPanel.NamesDirty = false; p.Editor.NamesChanged(); }
-        else if (Tabs.SelectedItem is TabItem { Header: "Story characters" }) p.StoryPanel.Refresh();
+        if (e.OriginalSource != Tabs || Page is not { } page || !page.FlagsPanel.NamesDirty) return;
+        if (Tabs.SelectedItem is TabItem { Header: "Events" }) { page.FlagsPanel.NamesDirty = false; page.Editor.NamesChanged(); }
+        else if (Tabs.SelectedItem is TabItem { Header: "Story characters" }) page.StoryPanel.Refresh();
     }
 
     private void FlagList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -37,7 +37,7 @@ public partial class L2EventsView : UserControl
 
     private void ShowStory(int id)
     {
-        foreach (var o in Tabs.Items) if (o is TabItem { Header: "Story characters" } t) t.IsSelected = true;
+        foreach (var tab in Tabs.Items) if (tab is TabItem { Header: "Story characters" } storyTab) storyTab.IsSelected = true;
     }
 
     private void StoryList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -54,14 +54,14 @@ public partial class L2EventsView : UserControl
     {
         if (Page?.CurrentRom is not { } rom || Page.StoryPanel.Selected == null) return;
         var (map, x, y) = Page.StoryPanel.PlaceForWindow();
-        var w = new L2PickPlaceWindow(rom, map, x, y, m => Core.Lufia2.L2Maps.Name(rom, m)) { Owner = Window.GetWindow(this), Title = "Where a new game puts the story character - Lufia Forge" };
-        if (w.ShowDialog() != true) return;
-        Page.StoryPanel.SetPlace(w.Map, w.X, w.Y);
+        var window = new L2PickPlaceWindow(rom, map, x, y, m => Core.Lufia2.L2Maps.Name(rom, m)) { Owner = Window.GetWindow(this), Title = "Where a new game puts the story character - Lufia Forge" };
+        if (window.ShowDialog() != true) return;
+        Page.StoryPanel.SetPlace(window.Map, window.X, window.Y);
     }
 
     private void ShowEvents()
     {
-        foreach (var o in Tabs.Items) if (o is TabItem { Header: "Events" } t) t.IsSelected = true;
+        foreach (var tab in Tabs.Items) if (tab is TabItem { Header: "Events" } eventsTab) eventsTab.IsSelected = true;
     }
 
     private void UseList_DoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
@@ -72,8 +72,8 @@ public partial class L2EventsView : UserControl
     private void NewEvent_Click(object sender, RoutedEventArgs e)
     {
         if (Page?.CurrentRom == null || Page.CurrentMap < 0) return;
-        if (!Page.AskBeforeLeaving()) return;   // the new event is opened after: unsaved steps are written first
-        var w = new L2NewEventWindow(Page) { Owner = Window.GetWindow(this) };
-        w.ShowDialog();
+        if (!Page.AskBeforeLeaving()) return;   // the new event gets opened afterwards, so unsaved steps are written first
+        var window = new L2NewEventWindow(Page) { Owner = Window.GetWindow(this) };
+        window.ShowDialog();
     }
 }

@@ -10,7 +10,7 @@ using Color = System.Windows.Media.Color;
 
 namespace LufiaForge.Modules.Lufia2;
 
-/// <summary>A monster to pick: its number, name and battle picture (drawn when first shown).</summary>
+// a monster to pick: its number, name and battle picture (drawn the first time it's shown)
 public sealed class L2MonsterChoice
 {
     private readonly Func<BitmapSource?>? _draw;
@@ -23,7 +23,7 @@ public sealed class L2MonsterChoice
     public override string ToString() => Label;
 }
 
-/// <summary>One monster of the group being edited.</summary>
+// one monster of the group being edited
 public partial class L2GroupMonster : ObservableObject
 {
     public int Slot { get; init; }
@@ -35,7 +35,7 @@ public partial class L2GroupMonster : ObservableObject
     partial void OnMonsterChanged(L2MonsterChoice? value) => Changed?.Invoke(this);
 }
 
-/// <summary>One of a zone's 5 group slots.</summary>
+// one of a zone's 5 group slots
 public partial class L2ZoneSlotVm : ObservableObject
 {
     public int Index { get; init; }
@@ -49,7 +49,7 @@ public partial class L2ZoneSlotVm : ObservableObject
     partial void OnWeightChanged(int value) => Changed?.Invoke();
 }
 
-/// <summary>A dungeon map's field monster and the group it fights.</summary>
+// a dungeon map's field monster and the group it fights
 public partial class L2FieldMonsterVm : ObservableObject
 {
     public int Index { get; init; }
@@ -61,12 +61,10 @@ public partial class L2FieldMonsterVm : ObservableObject
     partial void OnGroupChanged(int value) => Changed?.Invoke(this);
 }
 
-/// <summary>
-/// Lufia II encounters in plain terms: the world map's battle zones (where they are, which monster groups come up there
-/// and how often, <see cref="L2Encounters.Zone"/>), the dungeons' field monsters (which group each one fights), and the
-/// monster groups themselves (up to 8 monsters that fight together), each monster shown with its picture and picked
-/// from a list. Changes go straight into the ROM (Edit &gt; Undo takes them back).
-/// </summary>
+// Lufia II encounters in plain terms: the world map's battle zones (where they are, which monster groups come up
+// there and how often, L2Encounters.Zone), the dungeons' field monsters (which group each one fights) and the monster
+// groups themselves (up to 8 monsters that fight together). each monster is shown with its picture and picked from a
+// list. changes go straight into the ROM (Edit > Undo takes them back)
 public partial class L2EncountersPage : ObservableObject
 {
     private RomBuffer? _rom;
@@ -84,7 +82,7 @@ public partial class L2EncountersPage : ObservableObject
     [ObservableProperty] private int _selectedZone = -1;
     [ObservableProperty] private int _selectedMapRow = -1;
     [ObservableProperty] private int _selectedGroup = -1;
-    /// <summary>0 = a zone is shown in the middle, 1 = a dungeon map.</summary>
+    // 0 = a zone is shown in the middle, 1 = a dungeon map
     [ObservableProperty] private int _middleMode;
     [ObservableProperty] private int _listTab;
 
@@ -92,7 +90,7 @@ public partial class L2EncountersPage : ObservableObject
     [ObservableProperty] private string _zoneTitle = "";
     [ObservableProperty] private string _zoneText = "";
     [ObservableProperty] private BitmapSource? _zoneMapImage;
-    /// <summary>The zone's groups in use (chance above 0); <see cref="_allSlots"/> holds all 5.</summary>
+    // the zone's groups in use (chance above 0), _allSlots holds all 5
     [ObservableProperty] private List<L2ZoneSlotVm> _zoneSlots = new();
     private List<L2ZoneSlotVm> _allSlots = new();
     // the dungeon map
@@ -103,7 +101,7 @@ public partial class L2EncountersPage : ObservableObject
     [ObservableProperty] private string _groupTitle = "";
     [ObservableProperty] private string _groupUsers = "";
     [ObservableProperty] private string _groupNote = "";
-    /// <summary>The squares of the battle sprite buffer the group's battles need (<see cref="L2BattleRoom"/>).</summary>
+    // the squares of the battle sprite buffer the group's battles need (L2BattleRoom)
     [ObservableProperty] private string _groupRoom = "";
     [ObservableProperty] private bool _groupRoomWarn;
     [ObservableProperty] private ObservableCollection<L2GroupMonster> _groupMonsters = new();
@@ -125,16 +123,16 @@ public partial class L2EncountersPage : ObservableObject
         OnPropertyChanged(nameof(MonsterChoices));
         _sizes = null;
         if (!_keepWorld)
-            try { var (w, h, px) = L2WorldMap.Render(rom, 8); _worldSmall = Bitmap(w, h, px); } catch { _worldSmall = null; }
+            try { var (width, height, pixels) = L2WorldMap.Render(rom, 8); _worldSmall = Bitmap(width, height, pixels); } catch { _worldSmall = null; }
         RefreshLists();
         _mapIds.Clear(); MapNames.Clear();
-        for (int m = 0; m < L2Maps.Count(rom); m++)
+        for (int map = 0; map < L2Maps.Count(rom); map++)
         {
-            int n = L2Encounters.MapList(rom, m).Length;
-            if (n == 0) continue;
-            _mapIds.Add(m);
-            string name = L2Maps.Name(rom, m);
-            MapNames.Add($"{m:X2}  {(name.Length > 0 && !name.Contains('~') ? name : "Map " + m.ToString("X2"))}  ({n} monsters)");
+            int monsterCount = L2Encounters.MapList(rom, map).Length;
+            if (monsterCount == 0) continue;
+            _mapIds.Add(map);
+            string name = L2Maps.Name(rom, map);
+            MapNames.Add($"{map:X2}  {(name.Length > 0 && !name.Contains('~') ? name : "Map " + map.ToString("X2"))}  ({monsterCount} monsters)");
         }
         SelectedGroup = -1; SelectedGroup = 0;
         SelectedZone = -1; SelectedZone = 1;
@@ -143,46 +141,46 @@ public partial class L2EncountersPage : ObservableObject
     }
 
     private bool _keepWorld;
-    /// <summary>The ROM's version when the page read it (or wrote it itself).</summary>
+    // the ROM's version when the page read it (or last wrote it itself)
     private int _readVersion = -1;
 
-    /// <summary>The page is shown: when the ROM changed since it read it (monsters renamed or added, zones painted on the
-    /// Maps tab, Undo), everything is read again, keeping the picks.</summary>
+    // the page is shown: if the ROM changed since we read it (monsters renamed or added, zones painted on the
+    // Maps tab, Undo), everything gets read again, keeping the picks
     public void Shown()
     {
         if (_rom == null || _main == null || _rom.Version == _readVersion) return;
-        int g = SelectedGroup, z = SelectedZone, st = SelectedStory, row = SelectedMapRow, mode = MiddleMode;
+        int group = SelectedGroup, zone = SelectedZone, story = SelectedStory, row = SelectedMapRow, mode = MiddleMode;
         SetRom(_rom, _main);
-        // (a zone picks its first group: the zone or map first, then the group that was shown)
-        SelectedZone = -1; SelectedZone = z;
+        // (a zone picks its first group, so the zone or map goes first, then the group that was shown)
+        SelectedZone = -1; SelectedZone = zone;
         if (mode == 1 && row >= 0) { SelectedMapRow = -1; SelectedMapRow = row; }
-        SelectedGroup = -1; SelectedGroup = g;
-        SelectedStory = -1; SelectedStory = st;
+        SelectedGroup = -1; SelectedGroup = group;
+        SelectedStory = -1; SelectedStory = story;
     }
 
-    /// <summary>After monsters were added or renamed on the Monsters page, or their sprites changed (Monsters or
-    /// Graphics page): the lists offer them, with their pictures and sprite room (the picks are kept).</summary>
+    // after monsters were added or renamed on the Monsters page, or their sprites changed (Monsters or Graphics
+    // page): the lists offer them with their pictures and sprite room (the picks are kept)
     public void RefreshMonsters()
     {
         if (_rom == null || _main == null) return;
-        int g = SelectedGroup, z = SelectedZone, st = SelectedStory;
+        int group = SelectedGroup, zone = SelectedZone, story = SelectedStory;
         _keepWorld = _worldSmall != null;
         try { SetRom(_rom, _main); } finally { _keepWorld = false; }
-        SelectedGroup = -1; SelectedGroup = g;
-        SelectedZone = -1; SelectedZone = z;
-        SelectedStory = -1; SelectedStory = st;
+        SelectedGroup = -1; SelectedGroup = group;
+        SelectedZone = -1; SelectedZone = zone;
+        SelectedStory = -1; SelectedStory = story;
     }
 
-    private static BitmapSource Bitmap(int w, int h, uint[] px)
+    private static BitmapSource Bitmap(int width, int height, uint[] pixels)
     {
-        var b = BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgra32, null, px.Select(c => (int)c).ToArray(), w * 4);
-        b.Freeze();
-        return b;
+        var bitmap = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgra32, null, pixels.Select(c => (int)c).ToArray(), width * 4);
+        bitmap.Freeze();
+        return bitmap;
     }
 
-    private static BitmapSource? Picture(RomBuffer rom, L2Battle.Monster m)
+    private static BitmapSource? Picture(RomBuffer rom, L2Battle.Monster monster)
     {
-        try { return L2Graphics.MonsterSprite(rom, m.Sprite, m.Palette) is var (w, h, px) && w > 0 ? Bitmap(w, h, px) : null; }
+        try { return L2Graphics.MonsterSprite(rom, monster.Sprite, monster.Palette) is var (width, height, pixels) && width > 0 ? Bitmap(width, height, pixels) : null; }
         catch { return null; }
     }
 
@@ -191,57 +189,57 @@ public partial class L2EncountersPage : ObservableObject
     private L2BattleRoom.Sizes? _sizes;
     private L2BattleRoom.Sizes Sizes => _sizes ??= new L2BattleRoom.Sizes(_rom!);
 
-    private string GroupLabel(int g)
+    private string GroupLabel(int group)
     {
-        var all = L2Encounters.Group(_rom!, g);
-        var ms = all.Where(m => m != 0xFF).ToList();
-        var need = ms.Count == 0 ? null : L2BattleRoom.Group(all, Sizes);
-        return $"{g:X2}  " + (ms.Count == 0 ? "(empty)" : string.Join(", ", ms.GroupBy(m => m).Select(x => MonsterName(x.Key) + (x.Count() > 1 ? $" x{x.Count()}" : "")))) +
-               (need is { TooBig: true, Fixed: false } ? $"  (! {need.Squares} squares)" : "");
+        var all = L2Encounters.Group(_rom!, group);
+        var monsters = all.Where(m => m != 0xFF).ToList();
+        var room = monsters.Count == 0 ? null : L2BattleRoom.Group(all, Sizes);
+        return $"{group:X2}  " + (monsters.Count == 0 ? "(empty)" : string.Join(", ", monsters.GroupBy(m => m).Select(x => MonsterName(x.Key) + (x.Count() > 1 ? $" x{x.Count()}" : "")))) +
+               (room is { TooBig: true, Fixed: false } ? $"  (! {room.Squares} squares)" : "");
     }
 
-    /// <summary>The squares of the battle sprite buffer a group's battles need, in words.</summary>
-    private void ShowGroupRoom(int[] ms)
+    // the squares of the battle sprite buffer a group's battles need, in words
+    private void ShowGroupRoom(int[] monsters)
     {
-        var n = L2BattleRoom.Group(ms, Sizes);
-        GroupRoomWarn = n.TooBig && !n.Fixed;
-        GroupRoom = n.Fixed ? "" : n.Monsters.Count == 0 ? "" :
+        var room = L2BattleRoom.Group(monsters, Sizes);
+        GroupRoomWarn = room.TooBig && !room.Fixed;
+        GroupRoom = room.Fixed ? "" : room.Monsters.Count == 0 ? "" :
             GroupRoomWarn
-                ? $"Too big: a battle of this group can need {L2BattleRoom.Describe(n, _monsterList)}. All the kinds of monster in one battle share {L2BattleRoom.Squares} squares of 16 x 16 for their sprites; past that their pictures come out wrong. Use smaller sprites or fewer big kinds together."
-                : $"Sprite room: a battle of this group needs at most {n.Squares} of the {L2BattleRoom.Squares} squares of 16 x 16 the kinds of monster share (with {string.Join(", ", n.Monsters.Distinct().Select(MonsterName))}).";
+                ? $"Too big: a battle of this group can need {L2BattleRoom.Describe(room, _monsterList)}. All the kinds of monster in one battle share {L2BattleRoom.Squares} squares of 16 x 16 for their sprites; past that their pictures come out wrong. Use smaller sprites or fewer big kinds together."
+                : $"Sprite room: a battle of this group needs at most {room.Squares} of the {L2BattleRoom.Squares} squares of 16 x 16 the kinds of monster share (with {string.Join(", ", room.Monsters.Distinct().Select(MonsterName))}).";
     }
 
-    private List<L2MonsterChoice> GroupPictures(int g) =>
-        L2Encounters.Group(_rom!, g).Where(m => m != 0xFF && m < MonsterChoices.Count).Select(m => MonsterChoices[m]).ToList();
+    private List<L2MonsterChoice> GroupPictures(int group) =>
+        L2Encounters.Group(_rom!, group).Where(m => m != 0xFF && m < MonsterChoices.Count).Select(m => MonsterChoices[m]).ToList();
 
     private void RefreshLists()
     {
         if (_rom == null) return;
         _loading = true;
-        int keepG = SelectedGroup, keepZ = SelectedZone;
+        int keptGroup = SelectedGroup, keptZone = SelectedZone;
         GroupNames.Clear();
-        for (int g = 0; g < L2Encounters.GroupCount; g++) GroupNames.Add(GroupLabel(g));
+        for (int group = 0; group < L2Encounters.GroupCount; group++) GroupNames.Add(GroupLabel(group));
         _groupOptions = Enumerable.Range(0, L2Encounters.GroupCount).Select(g => new L2Option(g, GroupLabel(g))).ToList();
         ZoneNames.Clear();
         var sizes = ZoneSizes();
-        for (int z = 0; z < L2Encounters.ZoneCountIn(_rom); z++)
+        for (int zone = 0; zone < L2Encounters.ZoneCountIn(_rom); zone++)
         {
-            var groups = L2Encounters.ZoneGroups(_rom, z);
-            ZoneNames.Add($"Zone {z:X2}  " + (groups.Count == 0 ? "no battles" : $"{groups.Count} group{(groups.Count > 1 ? "s" : "")}") + (sizes[z] == 0 ? ", not on the map" : ""));
+            var groups = L2Encounters.ZoneGroups(_rom, zone);
+            ZoneNames.Add($"Zone {zone:X2}  " + (groups.Count == 0 ? "no battles" : $"{groups.Count} group{(groups.Count > 1 ? "s" : "")}") + (sizes[zone] == 0 ? ", not on the map" : ""));
         }
-        SelectedGroup = keepG; SelectedZone = keepZ;
+        SelectedGroup = keptGroup; SelectedZone = keptZone;
         _loading = false;
     }
 
     private byte[] ZoneMap() { try { return L2Rom.ReadFile(_rom!, L2Encounters.ZoneFile); } catch { return new byte[4096]; } }
     private int[] ZoneSizes() => L2Encounters.ZoneSizes(ZoneMap());
 
-    /// <summary>Shows zone <paramref name="z"/> (from the Maps tab's "Monsters..." button).</summary>
-    public void ShowZone(int z)
+    // shows a zone (from the Maps tab's "Monsters..." button)
+    public void ShowZone(int zone)
     {
         RefreshLists();   // (zones may have been added on the Maps tab)
         ListTab = 0;
-        SelectedZone = -1; SelectedZone = z;
+        SelectedZone = -1; SelectedZone = zone;
     }
 
     private bool Locked()
@@ -250,7 +248,7 @@ public partial class L2EncountersPage : ObservableObject
         return false;
     }
 
-    // ---------------------------------------------------------------- zones
+    // zones
 
     partial void OnSelectedZoneChanged(int value)
     {
@@ -261,67 +259,67 @@ public partial class L2EncountersPage : ObservableObject
         if (first.Weight > 0) SelectedGroup = first.Group;
     }
 
-    private void ShowZoneDetails(int z)
+    private void ShowZoneDetails(int zone)
     {
-        var slots = L2Encounters.Zone(_rom!, z);
-        var zm = ZoneMap();
-        int cells = zm.Count(b => b == z);
-        ZoneTitle = $"World map zone {z:X2}";
+        var slots = L2Encounters.Zone(_rom!, zone);
+        var zoneMap = ZoneMap();
+        int cells = zoneMap.Count(b => b == zone);
+        ZoneTitle = $"World map zone {zone:X2}";
         var near = new SortedSet<string>();
-        foreach (var e in L2MapInfo.Read(_rom!, 0).Where(e => e.Kind == "Exit" && e.DestMap >= 2))
+        foreach (var exit in L2MapInfo.Read(_rom!, 0).Where(e => e.Kind == "Exit" && e.DestMap >= 2))
         {
-            int zx = e.X1 / 4, zy = e.Y1 / 4;
+            int zoneX = exit.X1 / 4, zoneY = exit.Y1 / 4;
             bool hit = false;
             for (int dy = -3; dy <= 3 && !hit; dy++)
                 for (int dx = -3; dx <= 3 && !hit; dx++)
                 {
-                    int x = zx + dx, y = zy + dy;
-                    if (x >= 0 && y >= 0 && x < 64 && y < 64 && zm[y * 64 + x] == z) hit = true;
+                    int x = zoneX + dx, y = zoneY + dy;
+                    if (x >= 0 && y >= 0 && x < 64 && y < 64 && zoneMap[y * 64 + x] == zone) hit = true;
                 }
-            if (hit) { string n = L2Maps.Name(_rom!, e.DestMap); if (n.Length > 0 && !n.Contains('~')) near.Add(n); }
+            if (hit) { string name = L2Maps.Name(_rom!, exit.DestMap); if (name.Length > 0 && !name.Contains('~')) near.Add(name); }
         }
-        ZoneText = z == 0 ? "Zone 00 has no battles: paint it where the party should walk in peace." :
+        ZoneText = zone == 0 ? "Zone 00 has no battles: paint it where the party should walk in peace." :
             (cells == 0 ? "No part of the world map is painted with this zone (paint it in Maps > World map > Battle zones). " : $"Painted on {cells} squares of the world map (the light area below)" + (near.Count > 0 ? $", near {string.Join(", ", near.Take(8))}. " : ". ")) +
             "Each battle here is one of the groups below, picked by its chance; how often battles come is the same everywhere (Settings).";
-        ZoneMapImage = ZonePicture(zm, z);
-        double sum = slots.Sum(s => s.Weight);
+        ZoneMapImage = ZonePicture(zoneMap, zone);
+        double totalWeight = slots.Sum(s => s.Weight);
         _allSlots = slots.Select((s, i) => new L2ZoneSlotVm
         {
             Index = i, Groups = _groupOptions, Group = s.Group, Weight = s.Weight,
-            ShareText = s.Weight == 0 ? "not used (chance 0)" : $"{s.Weight / sum * 100:0}% of the battles here",
+            ShareText = s.Weight == 0 ? "not used (chance 0)" : $"{s.Weight / totalWeight * 100:0}% of the battles here",
             Monsters = s.Weight == 0 ? new() : GroupPictures(s.Group),
             Changed = ZoneEdited,
         }).ToList();
         ZoneSlots = _allSlots.Where(s => s.Weight > 0).ToList();
     }
 
-    private BitmapSource? ZonePicture(byte[] zm, int z)
+    private BitmapSource? ZonePicture(byte[] zoneMap, int zone)
     {
         if (_worldSmall == null) return null;
         // the world map at 1/8 size, darkened outside the zone
-        var dv = new DrawingVisual();
-        using (var dc = dv.RenderOpen())
+        var visual = new DrawingVisual();
+        using (var dc = visual.RenderOpen())
         {
             dc.DrawImage(_worldSmall, new System.Windows.Rect(0, 0, 512, 512));
             var shade = new SolidColorBrush(Color.FromArgb(0x80, 0, 0, 0)); shade.Freeze();
-            uint c = L2MapsPage.ZoneColour(z);
-            var mark = new SolidColorBrush(Color.FromArgb(0x60, (byte)(c >> 16), (byte)(c >> 8), (byte)c)); mark.Freeze();
+            uint colour = L2MapsPage.ZoneColour(zone);
+            var mark = new SolidColorBrush(Color.FromArgb(0x60, (byte)(colour >> 16), (byte)(colour >> 8), (byte)colour)); mark.Freeze();
             var rim = new System.Windows.Media.Pen(System.Windows.Media.Brushes.White, 1); rim.Freeze();
             for (int y = 0; y < 64; y++)
                 for (int x = 0; x < 64; x++)
                 {
-                    bool inZone = zm[y * 64 + x] == z;
+                    bool inZone = zoneMap[y * 64 + x] == zone;
                     dc.DrawRectangle(inZone ? mark : shade, null, new System.Windows.Rect(x * 8, y * 8, 8, 8));
                     // a white edge round the zone
-                    if (inZone && (x == 0 || zm[y * 64 + x - 1] != z)) dc.DrawLine(rim, new System.Windows.Point(x * 8, y * 8), new System.Windows.Point(x * 8, y * 8 + 8));
-                    if (inZone && (x == 63 || zm[y * 64 + x + 1] != z)) dc.DrawLine(rim, new System.Windows.Point(x * 8 + 8, y * 8), new System.Windows.Point(x * 8 + 8, y * 8 + 8));
-                    if (inZone && (y == 0 || zm[(y - 1) * 64 + x] != z)) dc.DrawLine(rim, new System.Windows.Point(x * 8, y * 8), new System.Windows.Point(x * 8 + 8, y * 8));
-                    if (inZone && (y == 63 || zm[(y + 1) * 64 + x] != z)) dc.DrawLine(rim, new System.Windows.Point(x * 8, y * 8 + 8), new System.Windows.Point(x * 8 + 8, y * 8 + 8));
+                    if (inZone && (x == 0 || zoneMap[y * 64 + x - 1] != zone)) dc.DrawLine(rim, new System.Windows.Point(x * 8, y * 8), new System.Windows.Point(x * 8, y * 8 + 8));
+                    if (inZone && (x == 63 || zoneMap[y * 64 + x + 1] != zone)) dc.DrawLine(rim, new System.Windows.Point(x * 8 + 8, y * 8), new System.Windows.Point(x * 8 + 8, y * 8 + 8));
+                    if (inZone && (y == 0 || zoneMap[(y - 1) * 64 + x] != zone)) dc.DrawLine(rim, new System.Windows.Point(x * 8, y * 8), new System.Windows.Point(x * 8 + 8, y * 8));
+                    if (inZone && (y == 63 || zoneMap[(y + 1) * 64 + x] != zone)) dc.DrawLine(rim, new System.Windows.Point(x * 8, y * 8 + 8), new System.Windows.Point(x * 8 + 8, y * 8 + 8));
                 }
         }
-        var rtb = new RenderTargetBitmap(512, 512, 96, 96, PixelFormats.Pbgra32);
-        rtb.Render(dv); rtb.Freeze();
-        return rtb;
+        var bitmap = new RenderTargetBitmap(512, 512, 96, 96, PixelFormats.Pbgra32);
+        bitmap.Render(visual); bitmap.Freeze();
+        return bitmap;
     }
 
     private void ZoneEdited()
@@ -332,30 +330,30 @@ public partial class L2EncountersPage : ObservableObject
         L2Encounters.WriteZone(_rom, SelectedZone, slots);
         _main.NotifyRomModified($"Lufia II: battle zone {SelectedZone:X2}");
         _readVersion = _rom.Version;
-        int z = SelectedZone;
-        Status = $"Zone {z:X2} written.";
-        System.Windows.Application.Current?.Dispatcher.BeginInvoke(() => { RefreshLists(); ShowZoneDetails(z); });
+        int zone = SelectedZone;
+        Status = $"Zone {zone:X2} written.";
+        System.Windows.Application.Current?.Dispatcher.BeginInvoke(() => { RefreshLists(); ShowZoneDetails(zone); });
     }
 
-    /// <summary>Adds a world map battle zone (the game has 17; the zone table moves to the added space the first time).</summary>
+    // adds a world map battle zone (the game has 17, the zone table moves to the added space the first time)
     [RelayCommand]
     private void AddZone()
     {
         if (_rom == null || _main == null || Locked()) return;
         try
         {
-            int z = L2Encounters.AddZone(_rom);
-            _main.NotifyRomModified($"Lufia II: battle zone {z:X2} added");
+            int zone = L2Encounters.AddZone(_rom);
+            _main.NotifyRomModified($"Lufia II: battle zone {zone:X2} added");
             _readVersion = _rom.Version;
             RefreshLists();
-            ListTab = 0; SelectedZone = -1; SelectedZone = z;
-            Status = $"Zone {z:X2} added: give it groups here (Add group), then paint it on the world map (Maps > World map > Battle zones).";
+            ListTab = 0; SelectedZone = -1; SelectedZone = zone;
+            Status = $"Zone {zone:X2} added: give it groups here (Add group), then paint it on the world map (Maps > World map > Battle zones).";
         }
         catch (Exception ex) { Status = "No zone added: " + ex.Message; }
     }
 
     [RelayCommand]
-    private void EditSlotGroup(L2ZoneSlotVm? s) { if (s != null) SelectedGroup = s.Group; }
+    private void EditSlotGroup(L2ZoneSlotVm? slot) { if (slot != null) SelectedGroup = slot.Group; }
 
     [RelayCommand]
     private void AddZoneGroup()
@@ -368,9 +366,9 @@ public partial class L2EncountersPage : ObservableObject
     }
 
     [RelayCommand]
-    private void RemoveZoneGroup(L2ZoneSlotVm? s) { if (s != null) s.Weight = 0; }
+    private void RemoveZoneGroup(L2ZoneSlotVm? slot) { if (slot != null) slot.Weight = 0; }
 
-    // ---------------------------------------------------------------- dungeon maps
+    // dungeon maps
 
     partial void OnSelectedMapRowChanged(int value)
     {
@@ -381,36 +379,36 @@ public partial class L2EncountersPage : ObservableObject
 
     private void ShowMapDetails(int map)
     {
-        var (at, len) = L2Encounters.MapList(_rom!, map);
+        var (listOffset, length) = L2Encounters.MapList(_rom!, map);
         var shared = L2Encounters.SharingWith(_rom!, map);
         string name = L2Maps.Name(_rom!, map);
         MapTitle = $"{map:X2}  {(name.Length > 0 && !name.Contains('~') ? name : "Map " + map.ToString("X2"))}";
         MapText = "In towns and dungeons the monsters walk on the map; touching one starts a battle with its group. These are the map's monsters in the order the map places them." +
                   (shared.Count > 0 ? $" Maps {string.Join(", ", shared.Select(m => m.ToString("X2")))} use the same list: a change here changes them too." : "");
-        FieldMonsters = Enumerable.Range(0, len).Select(i =>
+        FieldMonsters = Enumerable.Range(0, length).Select(i =>
         {
-            int g = _rom!.ReadByte(at + i);
-            return new L2FieldMonsterVm { Index = i, Label = $"Monster {i + 1}", Groups = _groupOptions, Group = g, Monsters = GroupPictures(g), Changed = FieldEdited };
+            int group = _rom!.ReadByte(listOffset + i);
+            return new L2FieldMonsterVm { Index = i, Label = $"Monster {i + 1}", Groups = _groupOptions, Group = group, Monsters = GroupPictures(group), Changed = FieldEdited };
         }).ToList();
     }
 
-    private void FieldEdited(L2FieldMonsterVm f)
+    private void FieldEdited(L2FieldMonsterVm fieldMonster)
     {
         if (_rom == null || _main == null || SelectedMapRow < 0 || _loading) return;
         if (Locked()) return;
         int map = _mapIds[SelectedMapRow];
-        var (at, _) = L2Encounters.MapList(_rom, map);
-        _rom.WriteByte(at + f.Index, (byte)f.Group);
+        var (listOffset, _) = L2Encounters.MapList(_rom, map);
+        _rom.WriteByte(listOffset + fieldMonster.Index, (byte)fieldMonster.Group);
         _main.NotifyRomModified($"Lufia II: monsters of map {map:X2}");
         _readVersion = _rom.Version;
-        f.Monsters = GroupPictures(f.Group);
-        SelectedGroup = f.Group;
+        fieldMonster.Monsters = GroupPictures(fieldMonster.Group);
+        SelectedGroup = fieldMonster.Group;
     }
 
     [RelayCommand]
-    private void EditFieldGroup(L2FieldMonsterVm? f) { if (f != null) SelectedGroup = f.Group; }
+    private void EditFieldGroup(L2FieldMonsterVm? fieldMonster) { if (fieldMonster != null) SelectedGroup = fieldMonster.Group; }
 
-    // ---------------------------------------------------------------- the group
+    // the group
 
     partial void OnSelectedGroupChanged(int value)
     {
@@ -418,71 +416,71 @@ public partial class L2EncountersPage : ObservableObject
         ShowGroup(value);
     }
 
-    private void ShowGroup(int g)
+    private void ShowGroup(int group)
     {
-        var ms = L2Encounters.Group(_rom!, g);
-        GroupTitle = $"Monster group {g:X2}";
-        var (zones, maps) = L2Encounters.UsersOf(_rom!, g);
+        var monsters = L2Encounters.Group(_rom!, group);
+        GroupTitle = $"Monster group {group:X2}";
+        var (zones, maps) = L2Encounters.UsersOf(_rom!, group);
         var parts = new List<string>();
         if (zones.Count > 0) parts.Add("world map " + string.Join(", ", zones.Select(z => $"zone {z.Zone:X2} ({z.Share * 100:0}% of its battles)")));
-        if (maps.Count > 0) parts.Add("the monsters of " + string.Join(", ", maps.Take(10).Select(m => { string n = L2Maps.Name(_rom!, m); return $"{m:X2} {(n.Length > 0 && !n.Contains('~') ? n : "")}".Trim(); })) + (maps.Count > 10 ? $" and {maps.Count - 10} more maps" : ""));
+        if (maps.Count > 0) parts.Add("the monsters of " + string.Join(", ", maps.Take(10).Select(m => { string name = L2Maps.Name(_rom!, m); return $"{m:X2} {(name.Length > 0 && !name.Contains('~') ? name : "")}".Trim(); })) + (maps.Count > 10 ? $" and {maps.Count - 10} more maps" : ""));
         GroupUsers = parts.Count == 0 ? "No zone or map uses this group (scripted battles may)." : "Fought in " + string.Join("; ", parts) + ".";
-        ShowGroupRoom(ms);
-        GroupNote = L2Encounters.IsFixed(ms)
+        ShowGroupRoom(monsters);
+        GroupNote = L2Encounters.IsFixed(monsters)
             ? "A fixed battle: with place 1 empty the game takes the monster in place 2 and reads the other places as its own layout data, not monsters. Change only place 2 here."
             : "";
         var list = new ObservableCollection<L2GroupMonster>();
-        for (int i = 0; i < ms.Length; i++)
+        for (int i = 0; i < monsters.Length; i++)
         {
-            if (ms[i] == 0xFF || L2Encounters.IsFixed(ms) && i != 1) continue;
-            var m = ms[i] < _monsterList.Count ? _monsterList[ms[i]] : null;
+            if (monsters[i] == 0xFF || L2Encounters.IsFixed(monsters) && i != 1) continue;
+            var monster = monsters[i] < _monsterList.Count ? _monsterList[monsters[i]] : null;
             list.Add(new L2GroupMonster
             {
-                Slot = i, Choices = MonsterChoices, Monster = ms[i] < MonsterChoices.Count ? MonsterChoices[ms[i]] : null,
-                Detail = m == null ? "" : $"level {m.Level}, HP {m.Hp}, {m.Exp} EXP, {m.Gold} gold", Changed = GroupMonsterEdited,
+                Slot = i, Choices = MonsterChoices, Monster = monsters[i] < MonsterChoices.Count ? MonsterChoices[monsters[i]] : null,
+                Detail = monster == null ? "" : $"level {monster.Level}, HP {monster.Hp}, {monster.Exp} EXP, {monster.Gold} gold", Changed = GroupMonsterEdited,
             });
         }
         GroupMonsters = list;
     }
 
-    private void WriteGroup(int[] ms, string what)
+    private void WriteGroup(int[] monsters, string what)
     {
         if (_rom == null || _main == null || SelectedGroup < 0) return;
         if (Locked()) return;
-        L2Encounters.WriteGroup(_rom, SelectedGroup, ms);
+        L2Encounters.WriteGroup(_rom, SelectedGroup, monsters);
         _main.NotifyRomModified($"Lufia II: monster group {SelectedGroup:X2}");
         _readVersion = _rom.Version;
-        int g = SelectedGroup;
+        int group = SelectedGroup;
         Status = what;
         System.Windows.Application.Current?.Dispatcher.BeginInvoke(() =>
         {
-            RefreshLists(); ShowGroup(g);
+            RefreshLists(); ShowGroup(group);
             if (MiddleMode == 0 && SelectedZone >= 0) ShowZoneDetails(SelectedZone);
             else if (SelectedMapRow >= 0 && SelectedMapRow < _mapIds.Count) ShowMapDetails(_mapIds[SelectedMapRow]);
         });
     }
 
-    private void GroupMonsterEdited(L2GroupMonster gm)
+    private void GroupMonsterEdited(L2GroupMonster groupMonster)
     {
-        if (_rom == null || gm.Monster == null) return;
-        var ms = L2Encounters.Group(_rom, SelectedGroup);
-        if (ms[gm.Slot] == gm.Monster.Id) return;
-        if (L2Encounters.IsFixed(ms) && gm.Slot != 1) { Status = "This is a fixed battle: only the monster in place 2 can change."; ShowGroup(SelectedGroup); return; }
-        ms[gm.Slot] = gm.Monster.Id;
-        WriteGroup(ms, $"Group {SelectedGroup:X2}: {MonsterName(gm.Monster.Id)} in place {gm.Slot + 1}.");
+        if (_rom == null || groupMonster.Monster == null) return;
+        var monsters = L2Encounters.Group(_rom, SelectedGroup);
+        if (monsters[groupMonster.Slot] == groupMonster.Monster.Id) return;
+        if (L2Encounters.IsFixed(monsters) && groupMonster.Slot != 1) { Status = "This is a fixed battle: only the monster in place 2 can change."; ShowGroup(SelectedGroup); return; }
+        monsters[groupMonster.Slot] = groupMonster.Monster.Id;
+        WriteGroup(monsters, $"Group {SelectedGroup:X2}: {MonsterName(groupMonster.Monster.Id)} in place {groupMonster.Slot + 1}.");
     }
 
     [RelayCommand]
-    private void RemoveMonster(L2GroupMonster? gm)
+    private void RemoveMonster(L2GroupMonster? groupMonster)
     {
-        if (_rom == null || gm == null) return;
-        var ms = L2Encounters.Group(_rom, SelectedGroup);
-        if (L2Encounters.IsFixed(ms)) { Status = "This is a fixed battle: only the monster in place 2 can change."; return; }
-        if (ms.Count(m => m != 0xFF) <= 1) { Status = "A group needs at least one monster."; return; }
-        ms[gm.Slot] = 0xFF;
-        // place 1 empty with place 2 filled would make it a fixed battle: place 2's monster moves up
-        if (ms[0] == 0xFF && ms[1] != 0xFF) { ms[0] = ms[1]; ms[1] = 0xFF; }
-        WriteGroup(ms, $"Took {MonsterName(gm.Monster?.Id ?? 0)} out of group {SelectedGroup:X2}.");
+        if (_rom == null || groupMonster == null) return;
+        var monsters = L2Encounters.Group(_rom, SelectedGroup);
+        if (L2Encounters.IsFixed(monsters)) { Status = "This is a fixed battle: only the monster in place 2 can change."; return; }
+        if (monsters.Count(m => m != 0xFF) <= 1) { Status = "A group needs at least one monster."; return; }
+        monsters[groupMonster.Slot] = 0xFF;
+        // place 1 empty with place 2 filled would make it a fixed battle, so place 2's monster moves up
+        if (monsters[0] == 0xFF && monsters[1] != 0xFF) { monsters[0] = monsters[1]; monsters[1] = 0xFF; }
+        WriteGroup(monsters, $"Took {MonsterName(groupMonster.Monster?.Id ?? 0)} out of group {SelectedGroup:X2}.");
     }
 
     [RelayCommand]
@@ -490,11 +488,11 @@ public partial class L2EncountersPage : ObservableObject
     {
         if (_rom == null || SelectedGroup < 0) return;
         if (AddChoice == null) { Status = "Pick the monster to add in the list first."; return; }
-        var ms = L2Encounters.Group(_rom, SelectedGroup);
-        if (L2Encounters.IsFixed(ms)) { Status = "This is a fixed battle: only the monster in place 2 can change."; return; }
-        int free = Array.IndexOf(ms, 0xFF);
-        if (free < 0) { Status = "A group holds at most 8 monsters."; return; }
-        ms[free] = AddChoice.Id;
-        WriteGroup(ms, $"Added {MonsterName(AddChoice.Id)} to group {SelectedGroup:X2}.");
+        var monsters = L2Encounters.Group(_rom, SelectedGroup);
+        if (L2Encounters.IsFixed(monsters)) { Status = "This is a fixed battle: only the monster in place 2 can change."; return; }
+        int freePlace = Array.IndexOf(monsters, 0xFF);
+        if (freePlace < 0) { Status = "A group holds at most 8 monsters."; return; }
+        monsters[freePlace] = AddChoice.Id;
+        WriteGroup(monsters, $"Added {MonsterName(AddChoice.Id)} to group {SelectedGroup:X2}.");
     }
 }

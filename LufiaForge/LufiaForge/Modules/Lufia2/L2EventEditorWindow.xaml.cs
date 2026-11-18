@@ -3,8 +3,8 @@ using System.Windows;
 
 namespace LufiaForge.Modules.Lufia2;
 
-/// <summary>The pop-up Lufia II event editor (the Maps page's "Talk event..." / "Event...", double-clicking a character
-/// or a step-on area): the same panel as the Events page, in a window of its own.</summary>
+// the pop-up Lufia II event editor (the Maps page's "Talk event..." / "Event...", double-clicking a character
+// or a step-on area): same panel as the Events page, just in its own window
 public partial class L2EventEditorWindow : Window
 {
     private readonly L2ScriptEditor _editor;

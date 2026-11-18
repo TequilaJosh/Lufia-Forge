@@ -14,7 +14,7 @@ using Color = System.Windows.Media.Color;
 
 namespace LufiaForge.Modules.Lufia2;
 
-/// <summary>A picture in the Graphics list (grouped by kind).</summary>
+// a picture in the Graphics list (grouped by kind)
 public sealed class L2GfxItem
 {
     public string Group { get; init; } = "";
@@ -22,7 +22,7 @@ public sealed class L2GfxItem
     public override string ToString() => Label;
 }
 
-/// <summary>One colour of the palette shown (click it to paint with it and change it).</summary>
+// one colour of the palette shown (click it to paint with it and change it)
 public sealed partial class L2Swatch : ObservableObject
 {
     public int Index { get; init; }
@@ -31,9 +31,9 @@ public sealed partial class L2Swatch : ObservableObject
     [ObservableProperty] private bool _isSelected;
 }
 
-/// <summary>Graphics: battle backgrounds, capsule monsters, hero battle sprites, the title screen, fonts, menu graphics
-/// and map sprites (<see cref="L2Gfx"/>), shown, painted pixel by pixel, saved as PNG and brought back from a PNG; new
-/// map sprites and new map sprite palettes (<see cref="L2Sprites"/>).</summary>
+// Graphics page: battle backgrounds, capsule monsters, hero battle sprites, the title screen, fonts, menu graphics
+// and map sprites (L2Gfx). shown, painted pixel by pixel, saved as PNG and brought back from a PNG. also new
+// map sprites and new map sprite palettes (L2Sprites)
 public partial class L2GraphicsPage : L2Page, LufiaForge.ViewModels.IPendingEdits
 {
     private List<L2Gfx.Asset> _assets = new();
@@ -61,7 +61,7 @@ public partial class L2GraphicsPage : L2Page, LufiaForge.ViewModels.IPendingEdit
     private int _colour = -1;
     private bool _syncing;
 
-    // the painter: the picture's colour numbers as painted, and the strokes to take back (until written)
+    // the painter: the picture's colour numbers as painted, plus the strokes to take back (until it's written)
     private byte[]? _work;
     private byte[]? _strokeStart;
     private string? _refused;   // why a pixel of this stroke wasn't painted
@@ -87,8 +87,8 @@ public partial class L2GraphicsPage : L2Page, LufiaForge.ViewModels.IPendingEdit
     [ObservableProperty] private bool _isMonsterSprite;
     [ObservableProperty] private string _monsterInfo = "";
 
-    // a painting not yet written goes in by itself (leaving the page, saving the project, Apply to ROM), as the Maps
-    // page's edits do
+    // a painting that isn't written yet goes in by itself (leaving the page, saving the project, Apply to ROM), same
+    // as the Maps page's edits
     protected override void OnListRead() => Main?.Register(this);
 
     public bool HasPendingEdits => Rom != null && _asset != null && IsPainted;
@@ -103,7 +103,7 @@ public partial class L2GraphicsPage : L2Page, LufiaForge.ViewModels.IPendingEdit
         view.GroupDescriptions.Add(new PropertyGroupDescription(nameof(L2GfxItem.Group)));
         ItemsView = view;
         OnPropertyChanged(nameof(ItemsView));
-        if (!_refreshing) ForgetPainting();   // a new ROM (or Undo): the painting was of the old one
+        if (!_refreshing) ForgetPainting();   // new ROM (or Undo), the painting was of the old one
         return items.Select(i => i.Label);
     }
 
@@ -111,9 +111,9 @@ public partial class L2GraphicsPage : L2Page, LufiaForge.ViewModels.IPendingEdit
     {
         if (!_refreshing && IsPainted && _asset != null && !AskToWrite())
         {
-            // the painting couldn't be written: it stays, with the picture it belongs to (and the reason on screen)
-            int back = _assets.IndexOf(_asset);
-            System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(() => { _refreshing = true; try { SelectedIndex = back; } finally { _refreshing = false; } });
+            // the painting couldn't be written, so it stays along with its picture (and the reason on screen)
+            int previousIndex = _assets.IndexOf(_asset);
+            System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(() => { _refreshing = true; try { SelectedIndex = previousIndex; } finally { _refreshing = false; } });
             return;
         }
         _asset = _assets[index];
@@ -137,8 +137,8 @@ public partial class L2GraphicsPage : L2Page, LufiaForge.ViewModels.IPendingEdit
         Draw(keep: _refreshing);
         if (!_refreshing)
         {
-            int big = Math.Max(_pic?.Width ?? 64, _pic?.Height ?? 64);
-            Zoom = Math.Clamp(512 / big, 1, 12);
+            int longestSide = Math.Max(_pic?.Width ?? 64, _pic?.Height ?? 64);
+            Zoom = Math.Clamp(512 / longestSide, 1, 12);
             PaintColour = _pic != null && _pic.Colours.Length > 1 ? 1 : 0;
             ShowPaintColour();
         }
@@ -153,7 +153,7 @@ public partial class L2GraphicsPage : L2Page, LufiaForge.ViewModels.IPendingEdit
         ShowMonsterInfo();
     }
 
-    // nothing here is a record field: the picture is written by Import and the painter only
+    // nothing here is a record field, only Import and the painter write the picture
     protected override bool IsField(string property) => false;
     protected override string? Write() => null;
 
@@ -164,97 +164,97 @@ public partial class L2GraphicsPage : L2Page, LufiaForge.ViewModels.IPendingEdit
         Draw(keep: true);
     }
 
-    /// <summary>Decodes the picture again; <paramref name="keep"/> keeps what is being painted (when the size is the same).</summary>
+    // decodes the picture again. keep = hold on to what's being painted (when the size is the same)
     private void Draw(bool keep = false)
     {
         if (Rom == null || _asset == null) return;
         try { _pic = L2Gfx.Decode(Rom, _asset, PaletteChoice); }
         catch (Exception ex) { _pic = null; _work = null; PictureImage = null; Info = "Can't read this picture: " + ex.Message; return; }
-        var p = _pic;
-        if (!keep || _work == null || _work.Length != p.Pixels.Length) ResetPainting();
+        var picture = _pic;
+        if (!keep || _work == null || _work.Length != picture.Pixels.Length) ResetPainting();
         Render();
-        Swatches = p.Colours.Select((c, i) => new L2Swatch
+        Swatches = picture.Colours.Select((c, i) => new L2Swatch
         {
             Index = i,
             Brush = Frozen(c),
             IsSelected = i == _colour,
-            Tip = SwatchTip(p, i),
+            Tip = SwatchTip(picture, i),
         }).ToList();
         if (_asset.Kind == L2Gfx.Kind.Palette)
-            Info = $"{p.RowNames?.Length ?? 0} rows, {p.ColourOffsets?.Count(o => o >= 0) ?? 0} colours. {_asset.Note}";
+            Info = $"{picture.RowNames?.Length ?? 0} rows, {picture.ColourOffsets?.Count(o => o >= 0) ?? 0} colours. {_asset.Note}";
         else
         {
-            string colours = p.Rows > 1 ? $"{p.Colours.Length} colours ({p.Rows} rows of {p.RowSize}; each 8x8 square uses one row)" : $"{p.Colours.Length} colours";
-            Info = $"{p.Width} x {p.Height} pixels, {colours}{(p.RomColours ? "" : ", not stored with these graphics")}. {_asset.Note}";
+            string colours = picture.Rows > 1 ? $"{picture.Colours.Length} colours ({picture.Rows} rows of {picture.RowSize}; each 8x8 square uses one row)" : $"{picture.Colours.Length} colours";
+            Info = $"{picture.Width} x {picture.Height} pixels, {colours}{(picture.RomColours ? "" : ", not stored with these graphics")}. {_asset.Note}";
         }
         ShowColour();
         ShowPaintColour();
     }
 
-    /// <summary>The painted colour numbers as a picture.</summary>
+    // turns the painted colour numbers into a picture
     private void Render()
     {
         if (_pic == null || _work == null) { PictureImage = null; return; }
-        var p = _pic;
-        var px = new int[_work.Length];
-        for (int i = 0; i < px.Length; i++)
+        var picture = _pic;
+        var pixels = new int[_work.Length];
+        for (int i = 0; i < pixels.Length; i++)
         {
-            int v = _work[i];
-            px[i] = p.Transparent0 && v % p.RowSize == 0 || v >= p.Colours.Length ? 0 : (int)p.Colours[v];
+            int colourNumber = _work[i];
+            pixels[i] = picture.Transparent0 && colourNumber % picture.RowSize == 0 || colourNumber >= picture.Colours.Length ? 0 : (int)picture.Colours[colourNumber];
         }
-        var bmp = BitmapSource.Create(p.Width, p.Height, 96, 96, PixelFormats.Bgra32, null, px, p.Width * 4);
+        var bmp = BitmapSource.Create(picture.Width, picture.Height, 96, 96, PixelFormats.Bgra32, null, pixels, picture.Width * 4);
         bmp.Freeze();
         PictureImage = bmp;
     }
 
-    private string SwatchTip(L2Gfx.Picture p, int i)
+    private string SwatchTip(L2Gfx.Picture picture, int i)
     {
-        int off = OffsetOf(i);
-        if (p.RowNames != null)
-            return off < 0 ? "Not a colour of this set" : $"{p.RowNames[i / 16]}, colour {i % 16}: {Rom!.ReadUInt16Le(off) & 0x7FFF:X4} at {off:X6}";
-        return $"Colour {i} (row {i / p.RowSize}, {i % p.RowSize}): {L2Gfx.Bgr555(p.Colours[i]):X4}" + (i % p.RowSize == 0 && (p.Transparent0 || p.Rows > 1) ? ", see-through" : "") +
-               (off >= 0 ? $" at {off:X6}" : IsFileColour(i) ? $", palette {PaletteChoice} of the sprite" : "") + (CanPaint ? ". Click to paint with it." : "");
+        int offset = OffsetOf(i);
+        if (picture.RowNames != null)
+            return offset < 0 ? "Not a colour of this set" : $"{picture.RowNames[i / 16]}, colour {i % 16}: {Rom!.ReadUInt16Le(offset) & 0x7FFF:X4} at {offset:X6}";
+        return $"Colour {i} (row {i / picture.RowSize}, {i % picture.RowSize}): {L2Gfx.Bgr555(picture.Colours[i]):X4}" + (i % picture.RowSize == 0 && (picture.Transparent0 || picture.Rows > 1) ? ", see-through" : "") +
+               (offset >= 0 ? $" at {offset:X6}" : IsFileColour(i) ? $", palette {PaletteChoice} of the sprite" : "") + (CanPaint ? ". Click to paint with it." : "");
     }
 
-    private int OffsetOf(int i) => _pic?.ColourOffsets is { } o && i >= 0 && i < o.Length ? o[i] : -1;
+    private int OffsetOf(int i) => _pic?.ColourOffsets is { } offsets && i >= 0 && i < offsets.Length ? offsets[i] : -1;
 
-    /// <summary>Colour <paramref name="i"/> is one of a monster sprite's palette, kept in its packed data.</summary>
+    // true if colour i is in a monster sprite's palette (kept in its packed data)
     private bool IsFileColour(int i) => _pic is { FileColours: true } && _asset?.Kind == L2Gfx.Kind.MonsterSprite && i >= 0 && i < 16;
 
-    // ── the colour editor ───────────────────────────────────────────────────
+    // the colour editor
 
     [RelayCommand]
-    private void PickColour(L2Swatch? s)
+    private void PickColour(L2Swatch? swatch)
     {
-        if (s == null) return;
-        _colour = s.Index;
-        foreach (var x in Swatches) x.IsSelected = x.Index == _colour;
-        if (CanPaint) { PaintColour = s.Index; ShowPaintColour(); }
+        if (swatch == null) return;
+        _colour = swatch.Index;
+        foreach (var other in Swatches) other.IsSelected = other.Index == _colour;
+        if (CanPaint) { PaintColour = swatch.Index; ShowPaintColour(); }
         ShowColour();
     }
 
-    /// <summary>Picks colour <paramref name="index"/> of the picture shown (for tests and the swatches).</summary>
+    // picks colour index of the picture shown (for tests and the swatches)
     public void PickColourAt(int index) => PickColour(Swatches.FirstOrDefault(s => s.Index == index));
 
     private void ShowColour()
     {
-        int off = OffsetOf(_colour);
-        HasColour = (off >= 0 || IsFileColour(_colour)) && Rom != null;
+        int offset = OffsetOf(_colour);
+        HasColour = (offset >= 0 || IsFileColour(_colour)) && Rom != null;
         _syncing = true;
-        if (HasColour && off < 0)
+        if (HasColour && offset < 0)
         {
-            int v = L2MonsterSprites.Palette(L2MonsterSprites.Read(Rom!, _asset!.Id), PaletteChoice)[_colour];
-            Red = v & 31; Green = v >> 5 & 31; Blue = v >> 10 & 31;
-            Hex = v.ToString("X4");
+            int bgr = L2MonsterSprites.Palette(L2MonsterSprites.Read(Rom!, _asset!.Id), PaletteChoice)[_colour];
+            Red = bgr & 31; Green = bgr >> 5 & 31; Blue = bgr >> 10 & 31;
+            Hex = bgr.ToString("X4");
             ColourInfo = $"Colour {_colour} of palette {PaletteChoice}, kept with the sprite's tiles ({L2MonsterSprites.Where(Rom!, _asset.Id)}).";
         }
         else if (HasColour)
         {
-            int v = Rom!.ReadUInt16Le(off) & 0x7FFF;
-            Red = v & 31; Green = v >> 5 & 31; Blue = v >> 10 & 31;
-            Hex = v.ToString("X4");
-            int snes = L2Rom.FileToSnes(off);
-            ColourInfo = $"Colour {_colour % _pic!.RowSize} of row {_colour / _pic.RowSize}, at {off:X6} (${snes >> 16:X2}:{snes & 0xFFFF:X4}).";
+            int bgr = Rom!.ReadUInt16Le(offset) & 0x7FFF;
+            Red = bgr & 31; Green = bgr >> 5 & 31; Blue = bgr >> 10 & 31;
+            Hex = bgr.ToString("X4");
+            int snes = L2Rom.FileToSnes(offset);
+            ColourInfo = $"Colour {_colour % _pic!.RowSize} of row {_colour / _pic.RowSize}, at {offset:X6} (${snes >> 16:X2}:{snes & 0xFFFF:X4}).";
         }
         else
         {
@@ -283,19 +283,19 @@ public partial class L2GraphicsPage : L2Page, LufiaForge.ViewModels.IPendingEdit
     partial void OnHexChanged(string value)
     {
         if (_syncing) return;
-        var t = value.Trim().TrimStart('$', '#');
-        if (t.Length is < 1 or > 4 || !int.TryParse(t, System.Globalization.NumberStyles.HexNumber, null, out int v) || v > 0x7FFF) return;
-        _syncing = true; Red = v & 31; Green = v >> 5 & 31; Blue = v >> 10 & 31; _syncing = false;
+        var hexText = value.Trim().TrimStart('$', '#');
+        if (hexText.Length is < 1 or > 4 || !int.TryParse(hexText, System.Globalization.NumberStyles.HexNumber, null, out int bgr) || bgr > 0x7FFF) return;
+        _syncing = true; Red = bgr & 31; Green = bgr >> 5 & 31; Blue = bgr >> 10 & 31; _syncing = false;
         UpdatePreview();
     }
 
-    /// <summary>Writes the colour in the editor to the ROM (one Undo step) and redraws the picture.</summary>
+    // writes the colour in the editor to the ROM (one Undo step) and redraws the picture
     [RelayCommand]
     private void ApplyColour()
     {
         if (Rom == null || Main == null || _asset == null) return;
-        int off = OffsetOf(_colour);
-        if (off < 0 && IsFileColour(_colour))
+        int offset = OffsetOf(_colour);
+        if (offset < 0 && IsFileColour(_colour))
         {
             var before = Rom.ToArray();
             bool changed;
@@ -309,25 +309,25 @@ public partial class L2GraphicsPage : L2Page, LufiaForge.ViewModels.IPendingEdit
             MonsterSpritesEdited();
             return;
         }
-        if (off < 0) { Status = "Pick a colour first."; return; }
-        if (!L2Gfx.SetColour(Rom, off, EditedValue)) { Status = "Nothing changed: the colour is the same."; return; }
-        Main.NotifyRomModified($"Lufia II: colour {EditedValue:X4} at {off:X6} ({_asset.Name})");
+        if (offset < 0) { Status = "Pick a colour first."; return; }
+        if (!L2Gfx.SetColour(Rom, offset, EditedValue)) { Status = "Nothing changed: the colour is the same."; return; }
+        Main.NotifyRomModified($"Lufia II: colour {EditedValue:X4} at {offset:X6} ({_asset.Name})");
         MarkRead();
         Draw(keep: true);
-        Status = $"Colour written at {off:X6}. Every picture using it changes too. Edit, Undo takes it back.";
+        Status = $"Colour written at {offset:X6}. Every picture using it changes too. Edit, Undo takes it back.";
     }
 
-    /// <summary>The colour editor's Apply (for tests).</summary>
+    // the colour editor's Apply (for tests)
     public void ApplyColourNow() => ApplyColour();
 
-    private static Brush Frozen(uint c)
+    private static Brush Frozen(uint argb)
     {
-        var b = new SolidColorBrush(Color.FromRgb((byte)(c >> 16), (byte)(c >> 8), (byte)c));
-        b.Freeze();
-        return b;
+        var brush = new SolidColorBrush(Color.FromRgb((byte)(argb >> 16), (byte)(argb >> 8), (byte)argb));
+        brush.Freeze();
+        return brush;
     }
 
-    // ── the painter ─────────────────────────────────────────────────────────
+    // the painter
 
     private void ResetPainting()
     {
@@ -363,71 +363,71 @@ public partial class L2GraphicsPage : L2Page, LufiaForge.ViewModels.IPendingEdit
     private void ShowPaintColour()
     {
         if (_pic == null || PaintColour < 0 || PaintColour >= _pic.Colours.Length) { PaintBrush = Brushes.Transparent; return; }
-        bool clear = PaintColour % _pic.RowSize == 0 && (_pic.Transparent0 || _pic.Rows > 1);
-        PaintBrush = clear ? Brushes.Transparent : Frozen(_pic.Colours[PaintColour]);
+        bool seeThrough = PaintColour % _pic.RowSize == 0 && (_pic.Transparent0 || _pic.Rows > 1);
+        PaintBrush = seeThrough ? Brushes.Transparent : Frozen(_pic.Colours[PaintColour]);
     }
 
     [RelayCommand] private void ZoomIn() => Zoom = Math.Min(Zoom + (Zoom >= 8 ? 2 : 1), 24);
     [RelayCommand] private void ZoomOut() => Zoom = Math.Max(Zoom - (Zoom > 8 ? 2 : 1), 1);
 
-    /// <summary>The value colour <paramref name="c"/> is painted as at (x, y), or -1 with why: on a tilemap screen
-    /// each 8x8 square shows one row of colours, so a colour of another row can't go into a square that already has
-    /// colours of its own (a see-through colour takes the square's row).</summary>
-    private int Fit(byte[] px, int x, int y, int c, out string why)
+    // the value colour gets painted as at (x, y), or -1 and why. on a tilemap screen each 8x8 square shows one
+    // row of colours, so a colour from another row can't go in a square that already has colours of its own
+    // (a see-through colour takes the square's row)
+    private int Fit(byte[] pixels, int x, int y, int colour, out string why)
     {
         why = "";
-        var p = _pic!;
-        if (p.Rows <= 1 || _asset!.Kind is not (L2Gfx.Kind.BattleBackground or L2Gfx.Kind.Title)) return c;
-        int rs = p.RowSize, w = p.Width, cx = x / 8 * 8, cy = y / 8 * 8, row = -1;
+        var picture = _pic!;
+        if (picture.Rows <= 1 || _asset!.Kind is not (L2Gfx.Kind.BattleBackground or L2Gfx.Kind.Title)) return colour;
+        int rowSize = picture.RowSize, w = picture.Width, squareX = x / 8 * 8, squareY = y / 8 * 8, row = -1;
         for (int i = 0; i < 64 && row < 0; i++)
         {
-            int xx = cx + i % 8, yy = cy + i / 8;
-            if (xx == x && yy == y) continue;
-            int v = px[yy * w + xx];
-            if (v % rs != 0) row = v / rs;
+            int px = squareX + i % 8, py = squareY + i / 8;
+            if (px == x && py == y) continue;
+            int existing = pixels[py * w + px];
+            if (existing % rowSize != 0) row = existing / rowSize;
         }
-        if (row < 0 || c / rs == row) return c;
-        if (c % rs == 0) return row * rs;
-        why = $"The 8x8 square at ({cx}, {cy}) uses colour row {row}: a square shows only one row of {rs} colours. Pick a colour of row {row}, or paint its other pixels with a see-through colour first.";
+        if (row < 0 || colour / rowSize == row) return colour;
+        if (colour % rowSize == 0) return row * rowSize;
+        why = $"The 8x8 square at ({squareX}, {squareY}) uses colour row {row}: a square shows only one row of {rowSize} colours. Pick a colour of row {row}, or paint its other pixels with a see-through colour first.";
         return -1;
     }
 
     private void PaintPixel(int x, int y)
     {
         if (_pic == null || _work == null) return;
-        int v = Fit(_work, x, y, PaintColour, out var why);
-        if (v < 0) { PaintInfo = _refused = why; return; }
+        int value = Fit(_work, x, y, PaintColour, out var why);
+        if (value < 0) { PaintInfo = _refused = why; return; }
         int i = y * _pic.Width + x;
-        if (_work[i] == v) return;
-        _work[i] = (byte)v;
+        if (_work[i] == value) return;
+        _work[i] = (byte)value;
         Render();
     }
 
-    /// <summary>Fills the area of one colour around (x, y) (4 ways; a map sprite's frame at most), all or nothing.</summary>
+    // flood fills the area of one colour around (x, y), 4 ways and inside a map sprite's frame at most. all or nothing
     private void Fill(int x, int y)
     {
         if (_pic == null || _work == null) return;
-        int w = _pic.Width, h = _pic.Height, from = _work[y * w + x];
-        bool frame = _asset?.Kind == L2Gfx.Kind.MapSprite;
-        int x0 = frame ? x / CellWidth * CellWidth : 0, x1 = frame ? x0 + CellWidth : w;
-        var n = (byte[])_work.Clone();
-        var seen = new bool[n.Length];
+        int w = _pic.Width, h = _pic.Height, fromColour = _work[y * w + x];
+        bool inFrame = _asset?.Kind == L2Gfx.Kind.MapSprite;
+        int x0 = inFrame ? x / CellWidth * CellWidth : 0, x1 = inFrame ? x0 + CellWidth : w;
+        var filled = (byte[])_work.Clone();
+        var seen = new bool[filled.Length];
         var todo = new Stack<int>();
         todo.Push(y * w + x); seen[y * w + x] = true;
         while (todo.Count > 0)
         {
             int i = todo.Pop(), px = i % w, py = i / w;
-            int v = Fit(n, px, py, PaintColour, out var why);
-            if (v < 0) { PaintInfo = _refused = "Not filled: " + why; return; }
-            n[i] = (byte)v;
-            void Next(int nx, int ny) { if (nx < x0 || ny < 0 || nx >= x1 || ny >= h) return; int j = ny * w + nx; if (!seen[j] && _work[j] == from) { seen[j] = true; todo.Push(j); } }
+            int value = Fit(filled, px, py, PaintColour, out var why);
+            if (value < 0) { PaintInfo = _refused = "Not filled: " + why; return; }
+            filled[i] = (byte)value;
+            void Next(int nx, int ny) { if (nx < x0 || ny < 0 || nx >= x1 || ny >= h) return; int j = ny * w + nx; if (!seen[j] && _work[j] == fromColour) { seen[j] = true; todo.Push(j); } }
             Next(px + 1, py); Next(px - 1, py); Next(px, py + 1); Next(px, py - 1);
         }
-        _work = n;
+        _work = filled;
         Render();
     }
 
-    /// <summary>A mouse button went down on pixel (x, y) of the picture (the view's canvas).</summary>
+    // a mouse button went down on pixel (x, y) of the picture (the view's canvas)
     public void PaintPress(int x, int y, bool right)
     {
         if (!CanPaint || _pic == null || _work == null || !IsEditable) return;
@@ -486,8 +486,8 @@ public partial class L2GraphicsPage : L2Page, LufiaForge.ViewModels.IPendingEdit
         Render(); UpdatePainted();
     }
 
-    /// <summary>Ctrl+Z / Ctrl+Y in the picture: the painter's strokes while there are some; false lets the key go on
-    /// to the app's Undo.</summary>
+    // Ctrl+Z / Ctrl+Y in the picture undo the painter's strokes while there are some. false lets the key go on
+    // to the app's Undo
     public bool PaintKey(bool redo)
     {
         if (redo ? !CanPaintRedo() : !CanPaintUndo()) return false;
@@ -497,12 +497,12 @@ public partial class L2GraphicsPage : L2Page, LufiaForge.ViewModels.IPendingEdit
 
     private bool CanWritePainting() => IsPainted;
 
-    /// <summary>Writes the painting into the ROM the way Import PNG does (packed files are packed again and move to the
-    /// added space when they grow); one step for Edit, Undo.</summary>
+    // writes the painting into the ROM the same way Import PNG does (packed files get packed again and move to the
+    // added space when they grow). one step for Edit, Undo
     [RelayCommand(CanExecute = nameof(CanWritePainting))]
     private void WritePainting() => WritePaintingNow();
 
-    /// <summary>Writes the painting now (also for tests); null, or why it couldn't be (it is kept then).</summary>
+    // writes the painting now (tests use it too). returns null, or why it couldn't be written (the painting is kept then)
     public string? WritePaintingNow()
     {
         if (Rom == null || Main == null || _asset == null || _work == null || !IsPainted) return null;
@@ -535,23 +535,23 @@ public partial class L2GraphicsPage : L2Page, LufiaForge.ViewModels.IPendingEdit
         Status = "Painting thrown away: the picture is the game's again.";
     }
 
-    /// <summary>False when the painting was to be written and couldn't be (it is kept then: Status says why).</summary>
+    // false when the painting was supposed to be written and couldn't be (it's kept then, Status says why)
     private bool AskToWrite()
     {
-        var r = System.Windows.MessageBox.Show($"Write your painting of {_asset!.Name} into the ROM before showing another picture?\n\nNo throws the painting away.",
+        var answer = System.Windows.MessageBox.Show($"Write your painting of {_asset!.Name} into the ROM before showing another picture?\n\nNo throws the painting away.",
             "Painting not written", System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxImage.Question);
-        if (r == System.Windows.MessageBoxResult.Yes && WritePaintingNow() != null) return false;
+        if (answer == System.Windows.MessageBoxResult.Yes && WritePaintingNow() != null) return false;
         ForgetPainting();
         return true;
     }
 
-    // ── map sprites: their colours, new palettes, new sprites ───────────────
+    // map sprites: their colours, new palettes, new sprites
 
     private string SharingNote()
     {
         if (Rom == null || _asset?.Kind != L2Gfx.Kind.MapSprite) return "";
-        var t = L2Sprites.SharingTiles(Rom, _asset.Id);
-        return t.Count > 0 ? $" Sprite{(t.Count == 1 ? "" : "s")} {string.Join(", ", t.Select(L2Sprites.Name))} use{(t.Count == 1 ? "s" : "")} the same tiles and changed too." : "";
+        var sharing = L2Sprites.SharingTiles(Rom, _asset.Id);
+        return sharing.Count > 0 ? $" Sprite{(sharing.Count == 1 ? "" : "s")} {string.Join(", ", sharing.Select(L2Sprites.Name))} use{(sharing.Count == 1 ? "s" : "")} the same tiles and changed too." : "";
     }
 
     private void ShowSpriteInfo()
@@ -566,15 +566,15 @@ public partial class L2GraphicsPage : L2Page, LufiaForge.ViewModels.IPendingEdit
             $"New sprites: {added} of {L2Sprites.MaxNew} made, any 3 of them on one map.",
             $"New palettes: {L2Sprites.PaletteCount(Rom)}. On a map the game puts a new palette into one of the 8 sprite colour rows that no other character there is using (field monster rows first; row {L2Sprites.RowOf(Rom, id)}, this sprite's own, when all are taken).",
         };
-        var t = L2Sprites.SharingTiles(Rom, id);
-        if (t.Count > 0) parts.Add($"Uses the same tiles as {string.Join(", ", t.Select(L2Sprites.Name))}: painting one paints both.");
-        var e = L2Sprites.SharingEntry(Rom, id);
-        if (e.Count > 0) parts.Add($"Shares its entry with {string.Join(", ", e.Select(L2Sprites.Name))}: a colour row change changes both.");
+        var sameTiles = L2Sprites.SharingTiles(Rom, id);
+        if (sameTiles.Count > 0) parts.Add($"Uses the same tiles as {string.Join(", ", sameTiles.Select(L2Sprites.Name))}: painting one paints both.");
+        var sameEntry = L2Sprites.SharingEntry(Rom, id);
+        if (sameEntry.Count > 0) parts.Add($"Shares its entry with {string.Join(", ", sameEntry.Select(L2Sprites.Name))}: a colour row change changes both.");
         SpriteInfo = string.Join(" ", parts);
     }
 
-    /// <summary>The list read again (after a sprite or palette was added), showing the item <paramref name="select"/>
-    /// gives (an index into the new list).</summary>
+    // reads the list again (after a sprite or palette was added) and shows the item select gives (an index
+    // into the new list)
     private void Refresh(Func<int> select, bool keep)
     {
         _refreshing = keep;
@@ -582,7 +582,7 @@ public partial class L2GraphicsPage : L2Page, LufiaForge.ViewModels.IPendingEdit
         {
             var names = ReadNames().ToList();
             Names.Clear();
-            foreach (var n in names) Names.Add(n);
+            foreach (var name in names) Names.Add(name);
             if (!keep) ForgetPainting();
             SelectedIndex = -1;
             SelectedIndex = Math.Clamp(select(), 0, Names.Count - 1);
@@ -592,7 +592,7 @@ public partial class L2GraphicsPage : L2Page, LufiaForge.ViewModels.IPendingEdit
 
     private int IndexOfSprite(int id) => _assets.FindIndex(a => a.Kind == L2Gfx.Kind.MapSprite && a.Id == id);
 
-    /// <summary>The map sprite's colours from the Colours list: a sprite row, or a new palette.</summary>
+    // sets the map sprite's colours from the Colours list: a sprite row, or a new palette
     private void SetSpriteColours(int choice)
     {
         if (Rom == null || Main == null || _asset == null) return;
@@ -609,23 +609,23 @@ public partial class L2GraphicsPage : L2Page, LufiaForge.ViewModels.IPendingEdit
         Main.NotifyRomModified($"Lufia II: map sprite {L2Sprites.Name(id)} uses {what}");
         MarkRead();
         var shared = choice < 8 ? L2Sprites.SharingEntry(Rom, id) : new List<int>();
-        int at = SelectedIndex;
-        Refresh(() => at, keep: true);
+        int selected = SelectedIndex;
+        Refresh(() => selected, keep: true);
         Status = $"Sprite {L2Sprites.Name(id)} now uses {what}." + (shared.Count > 0 ? $" Sprite{(shared.Count == 1 ? "" : "s")} {string.Join(", ", shared.Select(L2Sprites.Name))} share{(shared.Count == 1 ? "s" : "")} its entry and changed too." : "") + " Edit, Undo takes it back.";
     }
 
     private bool CanAdd() => !IsPainted;
 
-    /// <summary>Adds a palette for map sprites (black, or the colours shown) and gives it to the sprite shown.</summary>
+    // adds a palette for map sprites (black, or the colours shown) and gives it to the sprite shown
     [RelayCommand(CanExecute = nameof(CanAdd))]
     private void AddPalette(string? how)
     {
         if (Rom == null || Main == null || _asset?.Kind != L2Gfx.Kind.MapSprite || _pic == null) return;
         bool copy = how == "copy";
-        var colours = Enumerable.Range(0, 16).Select(c => !copy ? 0 : OffsetOf(c) is var o && o >= 0 ? Rom.ReadUInt16Le(o) & 0x7FFF : L2Gfx.Bgr555(_pic.Colours[c])).ToArray();
+        var colours = Enumerable.Range(0, 16).Select(c => !copy ? 0 : OffsetOf(c) is var offset && offset >= 0 ? Rom.ReadUInt16Le(offset) & 0x7FFF : L2Gfx.Bgr555(_pic.Colours[c])).ToArray();
         var before = Rom.ToArray();
-        int p, id = _asset.Id;
-        try { p = L2Sprites.AddPalette(Rom, colours); L2Sprites.SetPalette(Rom, id, p); }
+        int palette, id = _asset.Id;
+        try { palette = L2Sprites.AddPalette(Rom, colours); L2Sprites.SetPalette(Rom, id, palette); }
         catch (Exception ex)
         {
             if (!Rom.SameAs(before)) Rom.ReplaceAll(before);
@@ -633,22 +633,22 @@ public partial class L2GraphicsPage : L2Page, LufiaForge.ViewModels.IPendingEdit
             return;
         }
         bool grew = Rom.Length > before.Length;
-        Main.NotifyRomModified($"Lufia II: new map sprite palette {p} ({(copy ? "a copy of the colours of" : "black, for")} sprite {L2Sprites.Name(id)})");
+        Main.NotifyRomModified($"Lufia II: new map sprite palette {palette} ({(copy ? "a copy of the colours of" : "black, for")} sprite {L2Sprites.Name(id)})");
         MarkRead();
         Refresh(() => IndexOfSprite(id), keep: false);
-        Status = $"New palette {p} made ({(copy ? "a copy of the colours shown" : "all black")}) and given to sprite {L2Sprites.Name(id)}. Click a colour above to change it." +
+        Status = $"New palette {palette} made ({(copy ? "a copy of the colours shown" : "all black")}) and given to sprite {L2Sprites.Name(id)}. Click a colour above to change it." +
                  (grew ? " The ROM grew to make room." : "") + " Edit, Undo takes it back.";
     }
 
-    /// <summary>Adds a map sprite ("New n") like the one shown: a copy of it, or empty with its size and frames.</summary>
+    // adds a map sprite ("New n") like the one shown: a copy of it, or empty with its size and frames
     [RelayCommand(CanExecute = nameof(CanAdd))]
     private void AddSprite(string? how)
     {
         if (Rom == null || Main == null || _asset?.Kind != L2Gfx.Kind.MapSprite) return;
         bool empty = how == "empty";
         var before = Rom.ToArray();
-        int id, from = _asset.Id;
-        try { id = L2Sprites.AddSprite(Rom, from, empty); }
+        int id, fromSprite = _asset.Id;
+        try { id = L2Sprites.AddSprite(Rom, fromSprite, empty); }
         catch (Exception ex)
         {
             if (!Rom.SameAs(before)) Rom.ReplaceAll(before);
@@ -656,29 +656,29 @@ public partial class L2GraphicsPage : L2Page, LufiaForge.ViewModels.IPendingEdit
             return;
         }
         bool grew = Rom.Length > before.Length;
-        Main.NotifyRomModified($"Lufia II: new map sprite {L2Sprites.Name(id)} ({(empty ? "empty, the size of" : "a copy of")} sprite {L2Sprites.Name(from)})");
+        Main.NotifyRomModified($"Lufia II: new map sprite {L2Sprites.Name(id)} ({(empty ? "empty, the size of" : "a copy of")} sprite {L2Sprites.Name(fromSprite)})");
         MarkRead();
         Refresh(() => IndexOfSprite(id), keep: false);
-        Status = $"Map sprite {L2Sprites.Name(id)} made ({(empty ? $"empty, with the size, frames and colours of {L2Sprites.Name(from)}" : $"a copy of {L2Sprites.Name(from)}")}); paint it below. " +
+        Status = $"Map sprite {L2Sprites.Name(id)} made ({(empty ? $"empty, with the size, frames and colours of {L2Sprites.Name(fromSprite)}" : $"a copy of {L2Sprites.Name(fromSprite)}")}); paint it below. " +
                  "Give it to a character in the Maps tab: on that map it becomes FB, FC or FD (3 new sprites a map)." +
                  (grew ? " The ROM grew to make room." : "") + " Edit, Undo takes it back.";
     }
 
-    /// <summary>Picks the list item of map sprite <paramref name="id"/> (for tests).</summary>
+    // selects map sprite id in the list (for tests)
     public void ShowSprite(int id) { int i = IndexOfSprite(id); if (i >= 0) SelectedIndex = i; }
 
-    // ── monster battle sprites: new palettes, new sprites, which monster shows one ──
+    // monster battle sprites: new palettes, new sprites, which monster shows one
 
-    /// <summary>The monsters, for "Give it to".</summary>
+    // the monsters for "Give it to"
     [ObservableProperty] private List<L2Option> _monsterOptions = new();
     [ObservableProperty] private int _giveTo = -1;
-    /// <summary>The shown sprite's movement flags in battle (<see cref="L2MonsterSprites.MoveFlags"/>).</summary>
+    // the shown sprite's movement flags in battle (L2MonsterSprites.MoveFlags)
     [ObservableProperty] private List<L2Flag> _moveFlags = new();
     [ObservableProperty] private string _moveNote = "";
     private bool _movesLoading;
 
-    /// <summary>A monster sprite was added, painted, recoloured, given a palette or a movement, or given to a monster
-    /// (the Monsters and Encounters pages show it again).</summary>
+    // fires when a monster sprite was added, painted, recoloured, given a palette or a movement, or given to a
+    // monster (so the Monsters and Encounters pages show it again)
     public event Action? MonsterSpritesChanged;
 
     private void MonsterSpritesEdited() => MonsterSpritesChanged?.Invoke();
@@ -710,40 +710,40 @@ public partial class L2GraphicsPage : L2Page, LufiaForge.ViewModels.IPendingEdit
         MonsterSpritesEdited();
     }
 
-    /// <summary>After monsters were added or renamed on the Monsters page: "Give it to" lists them.</summary>
+    // after monsters were added or renamed on the Monsters page, so "Give it to" lists them
     public void RefreshMonsterOptions()
     {
         if (Rom == null) return;
-        int keep = GiveTo;
+        int previousChoice = GiveTo;
         MonsterOptions = L2Battle.Monsters(Rom).Select(m => new L2Option(m.Index, $"{m.Index:X2} {m.Name}")).ToList();
-        GiveTo = keep;
+        GiveTo = previousChoice;
     }
 
-    /// <summary>Sets the shown sprite's movement flags (for tests).</summary>
-    public void SetMovesNow(int moves) { foreach (var f in MoveFlags) f.IsChecked = (moves & f.Bit) != 0; }
+    // sets the shown sprite's movement flags (for tests)
+    public void SetMovesNow(int moves) { foreach (var flag in MoveFlags) flag.IsChecked = (moves & flag.Bit) != 0; }
 
     private int IndexOfMonsterSprite(int id) => _assets.FindIndex(a => a.Kind == L2Gfx.Kind.MonsterSprite && a.Id == id);
 
-    /// <summary>Picks the list item of monster sprite <paramref name="id"/> (for tests).</summary>
+    // selects monster sprite id in the list (for tests)
     public void ShowMonsterSprite(int id) { int i = IndexOfMonsterSprite(id); if (i >= 0) SelectedIndex = i; }
 
     private void ShowMonsterInfo()
     {
         if (Rom == null || _asset?.Kind != L2Gfx.Kind.MonsterSprite) { MonsterInfo = ""; return; }
         int id = _asset.Id, added = L2MonsterSprites.Count(Rom) - L2MonsterSprites.GameCount;
-        var (tx, ty, _) = L2MonsterSprites.Size(Rom, id);
-        var (sx, sy) = L2MonsterSprites.Squares(tx, ty);
-        bool can = L2MonsterSprites.CanInstall(Rom, out var why);
+        var (tilesX, tilesY, _) = L2MonsterSprites.Size(Rom, id);
+        var (squaresX, squaresY) = L2MonsterSprites.Squares(tilesX, tilesY);
+        bool canInstall = L2MonsterSprites.CanInstall(Rom, out var why);
         MonsterInfo = $"A monster shows sprite {id:X2} ({id}) when its Battle sprite field on the Monsters page holds {id}, with the palette its Palette field names. " +
-                      $"This one is {sx * sy} of the {L2MonsterSprites.MaxSquares} squares of 16 x 16 that all the kinds of monster in one battle share. " +
+                      $"This one is {squaresX * squaresY} of the {L2MonsterSprites.MaxSquares} squares of 16 x 16 that all the kinds of monster in one battle share. " +
                       $"New sprites: {added} made, up to {L2MonsterSprites.MaxNew} more (numbers {L2MonsterSprites.GameCount + 1} to {L2MonsterSprites.MaxNumber}: a monster keeps its sprite in one byte)." +
-                      (can ? "" : " " + why);
+                      (canInstall ? "" : " " + why);
         var user = L2MonsterSprites.Users(Rom, id).FirstOrDefault();
         GiveTo = user?.Index ?? (GiveTo >= 0 ? GiveTo : 0);
         ShowMoves();
     }
 
-    /// <summary>Adds a palette to the monster sprite shown (black, or a copy of the colours shown) and shows it.</summary>
+    // adds a palette to the monster sprite shown (black, or a copy of the colours shown) and shows it
     [RelayCommand(CanExecute = nameof(CanAdd))]
     private void AddMonsterPalette(string? how)
     {
@@ -752,20 +752,20 @@ public partial class L2GraphicsPage : L2Page, LufiaForge.ViewModels.IPendingEdit
         int id = _asset.Id;
         var colours = copy ? L2MonsterSprites.Palette(L2MonsterSprites.Read(Rom, id), PaletteChoice) : new int[16];
         var before = Rom.ToArray();
-        int p;
-        try { p = L2MonsterSprites.AddPalette(Rom, id, colours); }
+        int palette;
+        try { palette = L2MonsterSprites.AddPalette(Rom, id, colours); }
         catch (Exception ex) { if (!Rom.SameAs(before)) Rom.ReplaceAll(before); Status = "Not added: " + ex.Message; return; }
         bool grew = Rom.Length > before.Length;
-        Main.NotifyRomModified($"Lufia II: palette {p} of monster sprite {id:X2} ({(copy ? "a copy" : "black")})");
+        Main.NotifyRomModified($"Lufia II: palette {palette} of monster sprite {id:X2} ({(copy ? "a copy" : "black")})");
         MarkRead();
         Refresh(() => IndexOfMonsterSprite(id), keep: false);
-        PaletteChoice = p;
-        Status = $"Palette {p} added to sprite {id:X2} ({(copy ? "a copy of the colours shown" : "all black")}). Click its colours above to change them; give it to a monster below or with the Palette field on the Monsters page." +
+        PaletteChoice = palette;
+        Status = $"Palette {palette} added to sprite {id:X2} ({(copy ? "a copy of the colours shown" : "all black")}). Click its colours above to change them; give it to a monster below or with the Palette field on the Monsters page." +
                  (grew ? " The ROM grew to make room." : "") + " Edit, Undo takes it back.";
         MonsterSpritesEdited();
     }
 
-    /// <summary>Adds a monster sprite: a copy of the one shown, or a picture file (the dialog).</summary>
+    // adds a monster sprite: a copy of the one shown, or from a picture file (the dialog)
     [RelayCommand(CanExecute = nameof(CanAdd))]
     private void AddMonsterSprite(string? how)
     {
@@ -777,42 +777,42 @@ public partial class L2GraphicsPage : L2Page, LufiaForge.ViewModels.IPendingEdit
             AddMonsterSpriteFrom(dlg.FileName);
             return;
         }
-        int from = _asset.Id;
-        AddMonster(() => L2MonsterSprites.AddCopy(Rom, from), $"a copy of sprite {from:X2}");
+        int fromSprite = _asset.Id;
+        AddMonster(() => L2MonsterSprites.AddCopy(Rom, fromSprite), $"a copy of sprite {fromSprite:X2}");
     }
 
-    /// <summary>Adds a monster sprite from a picture file (the dialog's part split off so it can be tested): a palette
-    /// picture of up to 16 colours keeps its colour numbers and colours (colour 0 see-through); any other picture gets
-    /// up to 15 colours of its own (see-through pixels become colour 0). Its movement in battle is the shown sprite's.</summary>
+    // adds a monster sprite from a picture file (split off from the dialog so tests can call it). a palette picture
+    // with up to 16 colours keeps its colour numbers and colours (colour 0 see-through), any other picture gets up to
+    // 15 colours of its own (see-through pixels become colour 0). it moves in battle like the shown sprite
     public void AddMonsterSpriteFrom(string path)
     {
         if (Rom == null || _asset?.Kind != L2Gfx.Kind.MonsterSprite) return;
-        byte[] px;
+        byte[] pixels;
         int[] colours;
         int w, h;
         string how;
-        var ip = IndexedPng.TryLoad(path);
-        if (ip is { } png && png.Palette.Length <= 16 && png.Indices.All(i => i < 16))
+        var loaded = IndexedPng.TryLoad(path);
+        if (loaded is { } png && png.Palette.Length <= 16 && png.Indices.All(i => i < 16))
         {
-            (w, h, px) = (png.Width, png.Height, png.Indices);
+            (w, h, pixels) = (png.Width, png.Height, png.Indices);
             colours = Enumerable.Range(0, 16).Select(c => c < png.Palette.Length ? (int)L2Gfx.Bgr555(png.Palette[c]) : 0).ToArray();
             how = "colour numbers and colours kept";
         }
         else
         {
-            BitmapSource src;
-            try { src = new BitmapImage(new Uri(path)); }
+            BitmapSource source;
+            try { source = new BitmapImage(new Uri(path)); }
             catch (Exception ex) { Status = "Can't read the picture: " + ex.Message; return; }
-            (w, h) = (src.PixelWidth, src.PixelHeight);
-            var bgra = new FormatConvertedBitmap(src, PixelFormats.Bgra32, null, 0);
+            (w, h) = (source.PixelWidth, source.PixelHeight);
+            var bgra = new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
             var argb = new uint[w * h];
             bgra.CopyPixels(argb, w * 4, 0);
-            (px, colours) = L2MonsterSprites.Reduce(argb);
+            (pixels, colours) = L2MonsterSprites.Reduce(argb);
             how = "colours brought down to 15 and see-through";
         }
         if (L2MonsterSprites.SizeProblem(w, h) is { } why) { Status = "Not added: " + why; return; }
         int moves = L2MonsterSprites.Size(Rom, _asset.Id).Moves;
-        AddMonster(() => L2MonsterSprites.AddPicture(Rom, w, h, px, colours, moves), $"{Path.GetFileName(path)}, {w} x {h}, {how}");
+        AddMonster(() => L2MonsterSprites.AddPicture(Rom, w, h, pixels, colours, moves), $"{Path.GetFileName(path)}, {w} x {h}, {how}");
     }
 
     private void AddMonster(Func<int> add, string what)
@@ -831,29 +831,29 @@ public partial class L2GraphicsPage : L2Page, LufiaForge.ViewModels.IPendingEdit
         MonsterSpritesEdited();
     }
 
-    /// <summary>Gives the sprite shown, with the palette shown, to the monster picked in "Give it to".</summary>
+    // gives the sprite shown, with the palette shown, to the monster picked in "Give it to"
     [RelayCommand(CanExecute = nameof(CanAdd))]
     private void GiveToMonster()
     {
         if (Rom == null || Main == null || _asset?.Kind != L2Gfx.Kind.MonsterSprite || GiveTo < 0) return;
-        var m = L2Battle.ReadMonster(Rom, GiveTo);
-        int id = _asset.Id, p = PaletteChoice;
-        if (m.Sprite == id && m.Palette == p) { Status = $"{m.Name} already shows sprite {id:X2} with palette {p}."; return; }
-        m.Sprite = (byte)id; m.Palette = (byte)p;
-        L2Battle.WriteMonster(Rom, m);
-        Main.NotifyRomModified($"Lufia II: monster {m.Index:X2} {m.Name} shows sprite {id:X2}, palette {p}");
+        var monster = L2Battle.ReadMonster(Rom, GiveTo);
+        int id = _asset.Id, palette = PaletteChoice;
+        if (monster.Sprite == id && monster.Palette == palette) { Status = $"{monster.Name} already shows sprite {id:X2} with palette {palette}."; return; }
+        monster.Sprite = (byte)id; monster.Palette = (byte)palette;
+        L2Battle.WriteMonster(Rom, monster);
+        Main.NotifyRomModified($"Lufia II: monster {monster.Index:X2} {monster.Name} shows sprite {id:X2}, palette {palette}");
         MarkRead();
-        int at = SelectedIndex;
-        Refresh(() => at, keep: true);
-        PaletteChoice = p;
-        Status = $"{m.Index:X2} {m.Name} now shows sprite {id:X2} with palette {p}. Edit, Undo takes it back.";
+        int selected = SelectedIndex;
+        Refresh(() => selected, keep: true);
+        PaletteChoice = palette;
+        Status = $"{monster.Index:X2} {monster.Name} now shows sprite {id:X2} with palette {palette}. Edit, Undo takes it back.";
         MonsterSpritesEdited();
     }
 
-    /// <summary>"Give it to" for tests.</summary>
+    // "Give it to" for tests
     public void GiveToMonsterNow(int monster) { GiveTo = monster; GiveToMonster(); }
 
-    // ── PNG ──────────────────────────────────────────────────────────────────
+    // PNG
 
     private string FileName() => string.Concat(("Lufia II " + _asset!.Group + " " + _asset.Name).Select(c => Path.GetInvalidFileNameChars().Contains(c) || c == ':' ? '_' : c)) + ".png";
 
@@ -866,7 +866,7 @@ public partial class L2GraphicsPage : L2Page, LufiaForge.ViewModels.IPendingEdit
         ExportTo(dlg.FileName);
     }
 
-    /// <summary>Saves the picture shown (as painted) as a palette PNG (the dialog's part split off so it can be tested).</summary>
+    // saves the picture shown (as painted) as a palette PNG (split off from the dialog so tests can call it)
     public void ExportTo(string path)
     {
         if (_pic == null) return;
@@ -884,48 +884,48 @@ public partial class L2GraphicsPage : L2Page, LufiaForge.ViewModels.IPendingEdit
         ImportFrom(dlg.FileName);
     }
 
-    /// <summary>Writes a picture file into the ROM (the dialog's part split off so it can be tested).</summary>
+    // writes a picture file into the ROM (split off from the dialog so tests can call it)
     public void ImportFrom(string path)
     {
         if (Rom == null || Main == null || _pic == null || _asset == null) return;
         int w = _pic.Width, h = _pic.Height;
-        var ip = IndexedPng.TryLoad(path);
-        byte[] idx;
+        var loaded = IndexedPng.TryLoad(path);
+        byte[] colourNumbers;
         uint[]? colours = null;
         string how;
-        if (ip is { } png)
+        if (loaded is { } png)
         {
             if (png.Width != w || png.Height != h) { Status = $"The picture must be {w} x {h} pixels (as saved by Export PNG)."; return; }
-            idx = png.Indices;
+            colourNumbers = png.Indices;
             if ((TakeColours || _asset.Kind == L2Gfx.Kind.Palette) && _pic.RomColours) colours = png.Palette;
             how = colours != null ? "colour numbers kept, colours taken from the picture" : "colour numbers kept";
         }
         else
         {
-            BitmapSource src;
-            try { src = new BitmapImage(new Uri(path)); }
+            BitmapSource source;
+            try { source = new BitmapImage(new Uri(path)); }
             catch (Exception ex) { Status = "Can't read the picture: " + ex.Message; return; }
-            if (src.PixelWidth != w || src.PixelHeight != h) { Status = $"The picture must be {w} x {h} pixels (as saved by Export PNG)."; return; }
-            var bgra = new FormatConvertedBitmap(src, PixelFormats.Bgra32, null, 0);
-            var px = new uint[w * h];
-            bgra.CopyPixels(px, w * 4, 0);
+            if (source.PixelWidth != w || source.PixelHeight != h) { Status = $"The picture must be {w} x {h} pixels (as saved by Export PNG)."; return; }
+            var bgra = new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
+            var pixels = new uint[w * h];
+            bgra.CopyPixels(pixels, w * 4, 0);
             if (_asset.Kind == L2Gfx.Kind.Palette)
             {
-                // a palette is its squares: the colour in the middle of each
-                idx = _pic.Pixels;
+                // a palette picture is just its squares, take the colour in the middle of each
+                colourNumbers = _pic.Pixels;
                 int cell = L2Gfx.PaletteCell;
-                colours = Enumerable.Range(0, _pic.Colours.Length).Select(i => px[(i / 16 * cell + cell / 2) * w + i % 16 * cell + cell / 2]).ToArray();
+                colours = Enumerable.Range(0, _pic.Colours.Length).Select(i => pixels[(i / 16 * cell + cell / 2) * w + i % 16 * cell + cell / 2]).ToArray();
                 how = "colours read from the middle of each square";
             }
             else
             {
-                idx = L2Gfx.MatchColours(px, _pic);
+                colourNumbers = L2Gfx.MatchColours(pixels, _pic);
                 how = "colours matched to the ones shown" + (_pic.Rows > 1 ? " (each 8x8 square to its best row)" : "");
             }
         }
         var before = Rom.ToArray();
         string what;
-        try { what = L2Gfx.Import(Rom, _asset, PaletteChoice, idx, colours); }
+        try { what = L2Gfx.Import(Rom, _asset, PaletteChoice, colourNumbers, colours); }
         catch (Exception ex)
         {
             if (!Rom.SameAs(before)) Rom.ReplaceAll(before);

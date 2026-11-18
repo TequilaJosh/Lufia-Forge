@@ -14,11 +14,9 @@ using Microsoft.Win32;
 
 namespace LufiaForge.Modules.Lufia2;
 
-/// <summary>
-/// Battle animations: every one played as the game plays it (the game's own animation code run inside Lufia Forge), its
-/// sprite graphics painted or imported from PNG, its colours, how long its steps last, copies of an animation to
-/// change on their own (new animation numbers), and giving one to a spell or an IP attack (<see cref="L2SpellAnims"/>).
-/// </summary>
+// battle animations. each one plays like in the game (we run the game's own animation code inside Lufia Forge).
+// you can paint its sprite graphics or import them from PNG, change its colours and how long its steps last,
+// make a copy to change on its own (gets a new animation number), and give it to a spell or an IP attack (L2SpellAnims)
 public partial class L2AnimationsPage : ObservableObject
 {
     private RomBuffer? _rom;
@@ -46,7 +44,7 @@ public partial class L2AnimationsPage : ObservableObject
     [ObservableProperty] private string _playInfo = "";
     [ObservableProperty] private bool _loop = true;
     private List<uint[]> _frames = new();
-    private int _at;
+    private int _frameIndex;
     private readonly DispatcherTimer _timer = new(DispatcherPriority.Render) { Interval = TimeSpan.FromSeconds(1 / 60.0) };
     private int _playToken;
 
@@ -89,53 +87,53 @@ public partial class L2AnimationsPage : ObservableObject
     public void SetRom(RomBuffer rom, MainViewModel main)
     {
         _rom = rom; _main = main;
-        var mons = ReadMonsters();
-        int gob = mons.FindIndex(m => m.Name.Trim() == "Goblin");
-        Monster = gob >= 0 ? gob + 1 : Math.Min(1, MonsterNames.Count - 1);
+        var monsters = ReadMonsters();
+        int goblin = monsters.FindIndex(m => m.Name.Trim() == "Goblin");
+        Monster = goblin >= 0 ? goblin + 1 : Math.Min(1, MonsterNames.Count - 1);
         RefreshList(-1);
     }
 
-    /// <summary>The monsters the preview can show (one per sprite and palette).</summary>
+    // the monsters the preview can show (one per sprite + palette)
     private List<L2Battle.Monster> ReadMonsters()
     {
-        var mons = L2Battle.Monsters(_rom!).Where(m => m.Sprite > 0).GroupBy(m => ((int)m.Sprite, (int)m.Palette)).Select(g => g.First()).ToList();
-        _monsters = new List<(int, int)> { (-1, 0) }.Concat(mons.Select(m => ((int)m.Sprite, (int)m.Palette))).ToList();
-        MonsterNames = new List<string> { "(none)" }.Concat(mons.Select(m => $"{m.Name.Trim()}")).ToList();
-        return mons;
+        var monsters = L2Battle.Monsters(_rom!).Where(m => m.Sprite > 0).GroupBy(m => ((int)m.Sprite, (int)m.Palette)).Select(g => g.First()).ToList();
+        _monsters = new List<(int, int)> { (-1, 0) }.Concat(monsters.Select(m => ((int)m.Sprite, (int)m.Palette))).ToList();
+        MonsterNames = new List<string> { "(none)" }.Concat(monsters.Select(m => $"{m.Name.Trim()}")).ToList();
+        return monsters;
     }
 
-    /// <summary>The ROM's version when the page read it (or wrote it itself).</summary>
+    // the ROM's version when we last read it (or wrote it ourselves)
     private int _readVersion = -1;
 
-    /// <summary>The page is shown: when the ROM changed since it read it (spells, IP attacks, items or monsters changed on
-    /// their pages, Undo), the lists and the animation shown are read again, keeping the picks.</summary>
-    /// <summary>The page is on screen: the preview plays only then (it emulates the game and draws at 60 Hz).</summary>
+    // Shown(): if the ROM changed since we read it (spells, IP attacks, items or monsters changed on their pages, or Undo)
+    // we read the lists and the animation again, keeping the picks.
+    // _visible = the page is on screen. the preview only plays then (it emulates the game and draws at 60 Hz)
     private bool _visible;
 
-    /// <summary>Another page was picked: the preview stops.</summary>
+    // another page got picked, so the preview stops
     public void Hidden() { _visible = false; _timer.Stop(); }
 
     public void Shown()
     {
-        bool was = _visible;
+        bool wasVisible = _visible;
         _visible = true;
-        if (_rom == null || _rom.Version == _readVersion) { if (!was && !_timer.IsEnabled) Play(); return; }
-        var (sprite, pal) = Monster >= 0 && Monster < _monsters.Count ? _monsters[Monster] : (-1, 0);
-        int spell = SpellChoice, ipc = IpChoice, item = ItemChoice;
+        if (_rom == null || _rom.Version == _readVersion) { if (!wasVisible && !_timer.IsEnabled) Play(); return; }
+        var (sprite, palette) = Monster >= 0 && Monster < _monsters.Count ? _monsters[Monster] : (-1, 0);
+        int spell = SpellChoice, ipAttack = IpChoice, item = ItemChoice;
         ReadMonsters();
-        int m = _monsters.IndexOf((sprite, pal));
-        Monster = m >= 0 ? m : Math.Min(1, MonsterNames.Count - 1);
+        int monsterIndex = _monsters.IndexOf((sprite, palette));
+        Monster = monsterIndex >= 0 ? monsterIndex : Math.Min(1, MonsterNames.Count - 1);
         RefreshList(-1);
-        SpellChoice = spell; IpChoice = ipc; ItemChoice = item;
+        SpellChoice = spell; IpChoice = ipAttack; ItemChoice = item;
     }
 
     private void RefreshList(int select)
     {
         if (_rom == null) return;
         _readVersion = _rom.Version;
-        int keep = select >= 0 ? select : SelectedIndex >= 0 && SelectedIndex < _ids.Count ? _ids[SelectedIndex] : 0x12;
+        int keepId = select >= 0 ? select : SelectedIndex >= 0 && SelectedIndex < _ids.Count ? _ids[SelectedIndex] : 0x12;
         _ids.Clear(); Names.Clear();
-        foreach (var (v, name) in L2Magic.Animations(_rom)) { _ids.Add(v); Names.Add($"{v:X2}  {name}"); }
+        foreach (var (animId, name) in L2Magic.Animations(_rom)) { _ids.Add(animId); Names.Add($"{animId:X2}  {name}"); }
         SpellNames = L2Battle.Spells(_rom).Select(s => $"{s.Index:X2}  {s.Name.Trim()}  (now {L2Magic.SpellAnimation(_rom, s.Index):X2})").ToList();
         IpNames = L2Battle.IpAttacks(_rom).Select(a => $"{a.Index + 1:X2}  {a.Name}  (now {a.Animation:X2})").ToList();
         // weapons first (they swing with theirs), then the other items
@@ -143,12 +141,12 @@ public partial class L2AnimationsPage : ObservableObject
         _itemIds = items.Select(it => it.Index).ToList();
         ItemNames = items.Select(it =>
         {
-            int a = ItemAnimation(it);
-            return $"{it.Index:X3}  {it.Name.Trim()}{(it.EquipType == 1 ? " (weapon)" : "")}  (now {(a < 0 ? "default" : a.ToString("X2"))})";
+            int anim = ItemAnimation(it);
+            return $"{it.Index:X3}  {it.Name.Trim()}{(it.EquipType == 1 ? " (weapon)" : "")}  (now {(anim < 0 ? "default" : anim.ToString("X2"))})";
         }).ToList();
-        int i = _ids.IndexOf(keep);
+        int listIndex = _ids.IndexOf(keepId);
         SelectedIndex = -1;
-        SelectedIndex = i >= 0 ? i : 0;
+        SelectedIndex = listIndex >= 0 ? listIndex : 0;
     }
 
     private int Id => SelectedIndex >= 0 && SelectedIndex < _ids.Count ? _ids[SelectedIndex] : -1;
@@ -162,49 +160,49 @@ public partial class L2AnimationsPage : ObservableObject
         _script = L2SpellAnims.Parse(_rom, Id);
         IsNew = L2SpellAnims.IsNew(_rom, Id);
         NewName = IsNew ? L2SpellAnims.Name(_rom, Id) : "";
-        var gfx = L2SpellAnims.Graphics(_script);
-        var pals = L2SpellAnims.Palettes(_script).Where(p => p.Step.Op != 0x2C).ToList();
+        var graphics = L2SpellAnims.Graphics(_script);
+        var palettes = L2SpellAnims.Palettes(_script).Where(p => p.Step.Op != 0x2C).ToList();
         Info = $"Animation {Id:X2}" + (IsNew ? $" (new, kept by Lufia Forge in bank ${_script.Bank:X2})" : "") + $": {_script.Steps.Count} steps at ${_script.Bank:X2}:{_script.Start:X4}. " +
                (_script.Problem != null ? _script.Problem + " " : "") +
                (IsNew ? "Its graphics, colours and steps are its own copies." : "The game's animations share graphics, colours and steps: change a copy (Make a copy) unless you want every animation using them changed.");
         Listing = L2SpellAnims.Listing(_script);
-        _graphicsIndexes = gfx.Where(g => g.What == "sprites").Select(g => g.Index).Concat(gfx.Where(g => g.What != "sprites").Select(g => g.Index)).Distinct().ToList();
-        GraphicsChoices = _graphicsIndexes.Select(ix =>
+        _graphicsIndexes = graphics.Where(g => g.What == "sprites").Select(g => g.Index).Concat(graphics.Where(g => g.What != "sprites").Select(g => g.Index)).Distinct().ToList();
+        GraphicsChoices = _graphicsIndexes.Select(gfxIndex =>
         {
-            var g = gfx.First(x => x.Index == ix);
-            string file = ix < L2SpellAnims.FirstNewGfx ? $"file {L2SpellAnims.GameFile(_rom, ix):X3}" : "Lufia Forge's";
-            return $"{(g.What == "sprites" ? "Sprites" : "Other graphics")} {ix:X2} ({file}, {g.What})";
+            var g = graphics.First(x => x.Index == gfxIndex);
+            string file = gfxIndex < L2SpellAnims.FirstNewGfx ? $"file {L2SpellAnims.GameFile(_rom, gfxIndex):X3}" : "Lufia Forge's";
+            return $"{(g.What == "sprites" ? "Sprites" : "Other graphics")} {gfxIndex:X2} ({file}, {g.What})";
         }).ToList();
-        _paletteIndexes = pals.OrderBy(p => p.Step.Op == 0xDD ? 1 : 0).Select(p => p.Index).Distinct().ToList();
-        PaletteChoices = _paletteIndexes.Select(w => $"Colours {w:X} ({pals.First(p => p.Index == w).What})").ToList();
+        _paletteIndexes = palettes.OrderBy(p => p.Step.Op == 0xDD ? 1 : 0).Select(p => p.Index).Distinct().ToList();
+        PaletteChoices = _paletteIndexes.Select(palIndex => $"Colours {palIndex:X} ({palettes.First(p => p.Index == palIndex).What})").ToList();
         GraphicsChoice = _graphicsIndexes.Count > 0 ? 0 : -1;
         PaletteChoice = _paletteIndexes.Count > 0 ? 0 : -1;
         LoadSheet();
         Timings.Clear();
-        foreach (var t in L2SpellAnims.Timings(_script)) Timings.Add(new L2TimingItem(t, $"Step length at {_script.Bank:X2}:{t.Address:X4}" + (t.Op == 0x02 ? "" : " (1-20)"), L2SpellAnims.TimingFrames(t)));
+        foreach (var step in L2SpellAnims.Timings(_script)) Timings.Add(new L2TimingItem(step, $"Step length at {_script.Bank:X2}:{step.Address:X4}" + (step.Op == 0x02 ? "" : " (1-20)"), L2SpellAnims.TimingFrames(step)));
         TimingInfo = Timings.Count == 0
             ? "Its steps keep the length they start with (one frame), so it has no lengths to change here."
             : "How many frames each wait lasts in the scripts of this animation (one line per place that sets it). Longer steps play it slower. Lengths marked 1-20 take 1, 2, 3, 4, 5, 6, 8, 10 or 20.";
-        if (_visible) Play();   // (not while another page is shown: opening a project and every Undo read this page too)
+        if (_visible) Play();   // not while another page is shown (opening a project and every Undo reload this page too)
     }
 
-    // ── preview ───────────────────────────────────────────────────────────────
+    // preview
 
     [RelayCommand]
     private void Play()
     {
         if (_rom == null || Id < 0) return;
         _timer.Stop();
-        int token = ++_playToken, id = Id, bg = Background, hero = Math.Max(0, Hero);
-        var (sprite, pal) = Monster >= 0 && Monster < _monsters.Count ? _monsters[Monster] : (-1, 0);
-        var copy = new RomBuffer(_rom.ToArray(), "preview");
+        int token = ++_playToken, id = Id, background = Background, hero = Math.Max(0, Hero);
+        var (sprite, palette) = Monster >= 0 && Monster < _monsters.Count ? _monsters[Monster] : (-1, 0);
+        var romCopy = new RomBuffer(_rom.ToArray(), "preview");
         PlayInfo = "Playing the game's code...";
-        Task.Run(() => L2AnimPreview.Play(copy, id, new L2AnimPreview.Options(bg, sprite, pal, Hero: hero))).ContinueWith(t =>
+        Task.Run(() => L2AnimPreview.Play(romCopy, id, new L2AnimPreview.Options(background, sprite, palette, Hero: hero))).ContinueWith(task =>
         {
             if (token != _playToken) return;
-            if (t.Exception != null) { PlayInfo = "Couldn't play it: " + t.Exception.InnerException?.Message; return; }
-            var (frames, problem) = t.Result;
-            _frames = frames; _at = 0;
+            if (task.Exception != null) { PlayInfo = "Couldn't play it: " + task.Exception.InnerException?.Message; return; }
+            var (frames, problem) = task.Result;
+            _frames = frames; _frameIndex = 0;
             PlayInfo = $"{frames.Count} frames ({frames.Count / 60.0:0.0} s)" + (problem != null ? ". " + problem : "") + ". No sound; the heroes and the battle's windows aren't drawn.";
             if (frames.Count > 0) { Frame = new WriteableBitmap(SnesRenderer.Width, SnesRenderer.Height, 96, 96, PixelFormats.Bgra32, null); _timer.Start(); }
         }, TaskScheduler.FromCurrentSynchronizationContext());
@@ -215,20 +213,20 @@ public partial class L2AnimationsPage : ObservableObject
     private void Tick()
     {
         if (Frame == null || _frames.Count == 0) { _timer.Stop(); return; }
-        if (_at >= _frames.Count)
+        if (_frameIndex >= _frames.Count)
         {
             if (!Loop) { _timer.Stop(); return; }
-            _at = 0;
+            _frameIndex = 0;
         }
-        Frame.WritePixels(new System.Windows.Int32Rect(0, 0, SnesRenderer.Width, SnesRenderer.Height), _frames[_at], SnesRenderer.Width * 4, 0);
-        _at++;
+        Frame.WritePixels(new System.Windows.Int32Rect(0, 0, SnesRenderer.Width, SnesRenderer.Height), _frames[_frameIndex], SnesRenderer.Width * 4, 0);
+        _frameIndex++;
     }
 
     partial void OnBackgroundChanged(int value) { if (_rom != null) Play(); }
     partial void OnMonsterChanged(int value) { if (_rom != null && Id >= 0) Play(); }
     partial void OnHeroChanged(int value) { if (_rom != null && Id >= 0) Play(); }
 
-    // ── graphics and colours ───────────────────────────────────────────────────
+    // graphics and colours
 
     partial void OnGraphicsChoiceChanged(int value) => LoadSheet();
     partial void OnPaletteChoiceChanged(int value) => LoadSheet();
@@ -256,22 +254,22 @@ public partial class L2AnimationsPage : ObservableObject
     private void Swatch()
     {
         Swatches.Clear();
-        var c = Colours();
-        for (int i = 0; i < 16; i++) Swatches.Add(new L2AnimSwatch(i, new SolidColorBrush(ToColor(c[i])), i == Colour));
-        ColourText = $"{c[Math.Clamp(Colour, 0, 15)]:X4}";
+        var colours = Colours();
+        for (int i = 0; i < 16; i++) Swatches.Add(new L2AnimSwatch(i, new SolidColorBrush(ToColor(colours[i])), i == Colour));
+        ColourText = $"{colours[Math.Clamp(Colour, 0, 15)]:X4}";
     }
 
-    private static Color ToColor(int v) => Color.FromRgb((byte)((v & 31) * 255 / 31), (byte)((v >> 5 & 31) * 255 / 31), (byte)((v >> 10 & 31) * 255 / 31));
+    private static Color ToColor(int bgr555) => Color.FromRgb((byte)((bgr555 & 31) * 255 / 31), (byte)((bgr555 >> 5 & 31) * 255 / 31), (byte)((bgr555 >> 10 & 31) * 255 / 31));
 
     private void DrawSheet()
     {
         if (_sheetPx == null) return;
-        var c = Colours();
+        var colours = Colours();
         var px = new uint[_sheetPx.Length];
         for (int i = 0; i < px.Length; i++)
         {
-            int ci = _sheetPx[i];
-            px[i] = ci == 0 ? 0xFF202020u : 0xFF000000u | (uint)(ToColor(c[ci]).R << 16 | ToColor(c[ci]).G << 8 | ToColor(c[ci]).B);
+            int colourIndex = _sheetPx[i];
+            px[i] = colourIndex == 0 ? 0xFF202020u : 0xFF000000u | (uint)(ToColor(colours[colourIndex]).R << 16 | ToColor(colours[colourIndex]).G << 8 | ToColor(colours[colourIndex]).B);
         }
         var bmp = BitmapSource.Create(_sheetW, _sheetH, 96, 96, PixelFormats.Bgra32, null, px, _sheetW * 4);
         bmp.Freeze();
@@ -315,12 +313,12 @@ public partial class L2AnimationsPage : ObservableObject
     private void SetColour()
     {
         if (_rom == null || _main == null || PalIndex < 0) return;
-        string t = ColourText.Trim().TrimStart('#');
-        int v;
-        if (t.Length == 6 && int.TryParse(t, System.Globalization.NumberStyles.HexNumber, null, out int rgb))
-            v = L2Gfx.Bgr555(0xFF000000u | (uint)rgb);
-        else if (!int.TryParse(t, System.Globalization.NumberStyles.HexNumber, null, out v)) { Status = "A colour is 4 hex digits (BGR555, as the game keeps it) or 6 (#RRGGBB)."; return; }
-        L2SpellAnims.SetColour(_rom, PalIndex, Colour, v);
+        string text = ColourText.Trim().TrimStart('#');
+        int colour;
+        if (text.Length == 6 && int.TryParse(text, System.Globalization.NumberStyles.HexNumber, null, out int rgb))
+            colour = L2Gfx.Bgr555(0xFF000000u | (uint)rgb);
+        else if (!int.TryParse(text, System.Globalization.NumberStyles.HexNumber, null, out colour)) { Status = "A colour is 4 hex digits (BGR555, as the game keeps it) or 6 (#RRGGBB)."; return; }
+        L2SpellAnims.SetColour(_rom, PalIndex, Colour, colour);
         _main.NotifyRomModified($"Lufia II: animation colours {PalIndex:X}, colour {Colour}");
         _readVersion = _rom.Version;
         var users = L2SpellAnims.PaletteUsers(_rom, PalIndex, Id);
@@ -339,8 +337,8 @@ public partial class L2AnimationsPage : ObservableObject
 
     public void ExportSheetTo(string path)
     {
-        var c = Colours();
-        IndexedPng.Save(path, _sheetW, _sheetH, _sheetPx!, c.Select(v => 0xFF000000u | (uint)(ToColor(v).R << 16 | ToColor(v).G << 8 | ToColor(v).B)).ToArray(), firstTransparent: true);
+        var colours = Colours();
+        IndexedPng.Save(path, _sheetW, _sheetH, _sheetPx!, colours.Select(v =>0xFF000000u | (uint)(ToColor(v).R << 16 | ToColor(v).G << 8 | ToColor(v).B)).ToArray(), firstTransparent: true);
         Status = $"Saved {path}: {_sheetW} x {_sheetH}, 16 colours, colour 0 see-through.";
     }
 
@@ -352,35 +350,35 @@ public partial class L2AnimationsPage : ObservableObject
         if (dlg.ShowDialog() == true) ImportSheetFrom(dlg.FileName);
     }
 
-    /// <summary>A picture as the graphics: a palette PNG keeps its colour numbers; any other picture is matched to the
-    /// colours shown (see-through pixels become colour 0). It must be the sheet's size (128 wide).</summary>
+    // loads a picture as the graphics. a palette PNG keeps its colour numbers, any other picture gets matched to the
+    // colours shown (see-through pixels become colour 0). has to be the sheet's size (128 wide)
     public void ImportSheetFrom(string path)
     {
         if (_rom == null || _main == null || _sheetPx == null || _tiles == null) return;
         try
         {
-            byte[] idx;
-            int w, h;
-            if (IndexedPng.TryLoad(path) is { } ix && ix.Palette.Length <= 16) { (w, h, idx) = (ix.Width, ix.Height, ix.Indices); }
+            byte[] indices;
+            int width, height;
+            if (IndexedPng.TryLoad(path) is { } png && png.Palette.Length <= 16) { (width, height, indices) = (png.Width, png.Height, png.Indices); }
             else
             {
                 var src = new FormatConvertedBitmap(new BitmapImage(new Uri(path)), PixelFormats.Bgra32, null, 0);
-                w = src.PixelWidth; h = src.PixelHeight;
-                var argb = new uint[w * h];
-                src.CopyPixels(argb, w * 4, 0);
-                var c = Colours().Select(ToColor).ToArray();
-                idx = new byte[w * h];
+                width = src.PixelWidth; height = src.PixelHeight;
+                var argb = new uint[width * height];
+                src.CopyPixels(argb, width * 4, 0);
+                var colours = Colours().Select(ToColor).ToArray();
+                indices = new byte[width * height];
                 for (int i = 0; i < argb.Length; i++)
                 {
-                    uint p = argb[i];
-                    if (p >> 24 < 128) continue;
-                    int r = (int)(p >> 16 & 255), g = (int)(p >> 8 & 255), b = (int)(p & 255), best = 1, bd = int.MaxValue;
-                    for (int k = 1; k < 16; k++) { int d = (c[k].R - r) * (c[k].R - r) + (c[k].G - g) * (c[k].G - g) + (c[k].B - b) * (c[k].B - b); if (d < bd) { bd = d; best = k; } }
-                    idx[i] = (byte)best;
+                    uint pixel = argb[i];
+                    if (pixel >> 24 < 128) continue;
+                    int r = (int)(pixel >> 16 & 255), g = (int)(pixel >> 8 & 255), b = (int)(pixel & 255), best = 1, bestDistance = int.MaxValue;
+                    for (int k = 1; k < 16; k++) { int distance = (colours[k].R - r) * (colours[k].R - r) + (colours[k].G - g) * (colours[k].G - g) + (colours[k].B - b) * (colours[k].B - b); if (distance < bestDistance) { bestDistance = distance; best = k; } }
+                    indices[i] = (byte)best;
                 }
             }
-            if (w != _sheetW || h != _sheetH) { Status = $"The picture is {w} x {h}; these graphics are {_sheetW} x {_sheetH} (export them to get the layout)."; return; }
-            _sheetPx = idx.Select(v => (byte)(v & 15)).ToArray();
+            if (width != _sheetW || height != _sheetH) { Status = $"The picture is {width} x {height}; these graphics are {_sheetW} x {_sheetH} (export them to get the layout)."; return; }
+            _sheetPx = indices.Select(v => (byte)(v & 15)).ToArray();
             L2SpellAnims.WriteGraphics(_rom, GfxIndex, L2SpellAnims.SheetTiles(_sheetW, _sheetH, _sheetPx, _tiles.Length));
             _main.NotifyRomModified($"Lufia II: animation {Id:X2} graphics imported");
             _readVersion = _rom.Version;
@@ -390,13 +388,13 @@ public partial class L2AnimationsPage : ObservableObject
         catch (Exception e) { Status = "Not imported: " + e.Message; }
     }
 
-    // ── timing ────────────────────────────────────────────────────────────────
+    // timing
 
     [RelayCommand]
     private void WriteTiming()
     {
         if (_rom == null || _main == null || _script == null) return;
-        foreach (var t in Timings) L2SpellAnims.SetTiming(_rom, t.Step, t.Frames);
+        foreach (var timing in Timings) L2SpellAnims.SetTiming(_rom, timing.Step, timing.Frames);
         _main.NotifyRomModified($"Lufia II: animation {Id:X2} step lengths");
         var shared = L2SpellAnims.SharedWith(_rom, _script, Timings.Select(t => t.Step.File));
         Status = "Step lengths written." + (shared.Count > 0 ? $" Animations {string.Join(", ", shared.Select(u => u.ToString("X2")))} run these steps too." : "");
@@ -406,7 +404,7 @@ public partial class L2AnimationsPage : ObservableObject
     [RelayCommand] private void Slower() { foreach (var t in Timings) t.Frames = Math.Min(255, t.Frames * 2); }
     [RelayCommand] private void Faster() { foreach (var t in Timings) t.Frames = Math.Max(1, t.Frames / 2); }
 
-    // ── new animations ──────────────────────────────────────────────────────────
+    // new animations
 
     [RelayCommand]
     private void MakeCopy()
@@ -415,10 +413,10 @@ public partial class L2AnimationsPage : ObservableObject
         if (!L2SpellAnims.CanInstall(_rom, out var why)) { Status = why; return; }
         try
         {
-            int n = L2SpellAnims.Copy(_rom, Id, string.IsNullOrWhiteSpace(NewName) || IsNew ? $"Copy of {Id:X2}" : NewName);
-            _main.NotifyRomModified($"Lufia II: new animation {n:X2} (a copy of {Id:X2})");
-            RefreshList(n);
-            Status = $"Animation {n:X2} made: a copy of the one before with its own graphics, colours and steps. Give it to a spell, an IP attack or a weapon below.";
+            int newId = L2SpellAnims.Copy(_rom, Id, string.IsNullOrWhiteSpace(NewName) || IsNew ? $"Copy of {Id:X2}" : NewName);
+            _main.NotifyRomModified($"Lufia II: new animation {newId:X2} (a copy of {Id:X2})");
+            RefreshList(newId);
+            Status = $"Animation {newId:X2} made: a copy of the one before with its own graphics, colours and steps. Give it to a spell, an IP attack or a weapon below.";
         }
         catch (Exception e) { Status = "Not made: " + e.Message; }
     }
@@ -454,23 +452,23 @@ public partial class L2AnimationsPage : ObservableObject
         if (_rom == null || _main == null || IpChoice < 0 || Id < 0) return;
         var ips = L2Battle.IpAttacks(_rom);
         if (IpChoice >= ips.Count) return;
-        var a = ips[IpChoice];
-        a.Animation = (byte)Id;
-        L2Battle.WriteIp(_rom, a);
-        _main.NotifyRomModified($"Lufia II: IP attack {a.Name} shows animation {Id:X2}");
-        Status = $"{a.Name} shows animation {Id:X2} now.";
+        var attack = ips[IpChoice];
+        attack.Animation = (byte)Id;
+        L2Battle.WriteIp(_rom, attack);
+        _main.NotifyRomModified($"Lufia II: IP attack {attack.Name} shows animation {Id:X2}");
+        Status = $"{attack.Name} shows animation {Id:X2} now.";
         int keep = IpChoice; RefreshList(Id); IpChoice = keep;
     }
 
-    /// <summary>The animation an item gives (its word 0x2000 = animation + 1, from its record or added by Lufia Forge), -1 = the default.</summary>
-    private int ItemAnimation(L2Battle.Item it)
+    // the animation an item gives: its word 0x2000 = animation + 1 (in its record or added by Lufia Forge), -1 = default
+    private int ItemAnimation(L2Battle.Item item)
     {
-        int w = it.Values.TryGetValue(0x2000, out var v) ? v : L2AiScripts.ItemAddedWords(_rom!, it.Index).GetValueOrDefault(0x2000);
-        return w > 0 ? w - 1 : -1;
+        int word = item.Values.TryGetValue(0x2000, out var value) ? value : L2AiScripts.ItemAddedWords(_rom!, item.Index).GetValueOrDefault(0x2000);
+        return word > 0 ? word - 1 : -1;
     }
 
-    /// <summary>Gives the item this animation: the record's word 0x2000 when it has one, else a word Lufia Forge adds.
-    /// A weapon swings with it ($81:A8B7), an item used in battle shows it ($81:AA3D).</summary>
+    // gives the item this animation: the record's word 0x2000 if it has one, otherwise a word Lufia Forge adds.
+    // a weapon swings with it ($81:A8B7), an item used in battle shows it ($81:AA3D)
     [RelayCommand]
     private void GiveToItem()
     {

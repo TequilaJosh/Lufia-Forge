@@ -18,8 +18,8 @@ public partial class L2CutscenesView : UserControl
     {
         if (Page?.CurrentRom == null || Page.CurrentMain == null) return;
         if (!Page.Editor.ConfirmLeave()) return;
-        var w = new L2NewCutsceneWindow(Page, Page.Selected?.Map ?? Page.Editor.Map) { Owner = Window.GetWindow(this) };
-        w.ShowDialog();
+        var window = new L2NewCutsceneWindow(Page, Page.Selected?.Map ?? Page.Editor.Map) { Owner = Window.GetWindow(this) };
+        window.ShowDialog();
     }
 
     private void DeleteCutscene_Click(object sender, RoutedEventArgs e)

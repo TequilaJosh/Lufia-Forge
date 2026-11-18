@@ -11,19 +11,14 @@ using TextBox = System.Windows.Controls.TextBox;
 
 namespace LufiaForge.Modules.Lufia2;
 
-/// <summary>
-/// BOUNCE AND FOCUS on the Monsters and Items pages (the status patch, <see cref="L2StatusPatch"/>):
-/// <list type="bullet">
-/// <item>Bounce is the game's status bit 6: it sends physical hits back at the attacker, as Mirror does magic. The game
-/// never gives it; Lufia Forge lets a monster start every battle with it, a worn item give it to its wearer at the start
-/// of every battle, an item used in battle give or cure it (battle script 27 / 26 with status 6), and it bounces plain
-/// weapon attacks too (the game's check only saw scripted ones).</item>
-/// <item>Focus (Mewlies' idea for the unused Tag ring and Tag candy): a hero with it hits harder each turn in a row it
-/// attacks the same foe with its weapon. A worn item gives it, or an item used in battle gives it for the battle
-/// (command 61).</item>
-/// </list>
-/// Each change is written at once.
-/// </summary>
+// the BOUNCE AND FOCUS card on the Monsters and Items pages (part of the status patch, L2StatusPatch)
+// - Bounce is the game's status bit 6. it sends physical hits back at the attacker, like Mirror does with magic. the game
+//   never gives it out. with Lufia Forge a monster can start every battle with it, a worn item can give it to its wearer
+//   at the start of every battle, an item used in battle can give or cure it (battle script 27 / 26 with status 6), and
+//   it bounces plain weapon attacks too (the game's check only saw scripted ones)
+// - Focus (Mewlies' idea for the unused Tag ring and Tag candy): a hero with it hits harder each turn in a row it attacks
+//   the same foe with its weapon. a worn item gives it, or an item used in battle gives it for that battle (command 61)
+// every change gets written right away
 public sealed class L2BounceFocusCard : Border
 {
     private L2Page? _page;
@@ -33,10 +28,10 @@ public sealed class L2BounceFocusCard : Border
     public L2BounceFocusCard()
     {
         Child = _body;
-        Loaded += (_, _) => { if (Style == null && TryFindResource("GdCard") is Style st) Style = st; };
+        Loaded += (_, _) => { if (Style == null && TryFindResource("GdCard") is Style cardStyle) Style = cardStyle; };
     }
 
-    /// <summary>Shows the card for <paramref name="page"/>'s records: monsters, or items.</summary>
+    // shows the card for page's records (monsters or items)
     public void Attach(L2Page page, bool monsters)
     {
         if (_page != null) _page.PropertyChanged -= PageChanged;
@@ -58,9 +53,9 @@ public sealed class L2BounceFocusCard : Border
 
     private void Check(string label, bool on, string hint, Action<bool> write, bool enabled = true)
     {
-        var cb = new CheckBox { Content = label, IsChecked = on, IsEnabled = enabled, Style = TryFindResource("GdCheck") as Style, Margin = new Thickness(0, 4, 0, 0) };
-        cb.Click += (_, _) => Do(() => write(cb.IsChecked == true), $"{label}: {(cb.IsChecked == true ? "on" : "off")}");
-        _body.Children.Add(cb);
+        var checkBox = new CheckBox { Content = label, IsChecked = on, IsEnabled = enabled, Style = TryFindResource("GdCheck") as Style, Margin = new Thickness(0, 4, 0, 0) };
+        checkBox.Click += (_, _) => Do(() => write(checkBox.IsChecked == true), $"{label}: {(checkBox.IsChecked == true ? "on" : "off")}");
+        _body.Children.Add(checkBox);
         _body.Children.Add(Hint(hint));
     }
 
@@ -71,13 +66,13 @@ public sealed class L2BounceFocusCard : Border
         var rom = _page?.PageRom;
         int index = _page?.PageIndex ?? -1;
         if (rom == null || index < 0 || !rom.IsLufia2) return;
-        bool v4 = L2StatusPatch.IsApplied(rom);
+        bool patchApplied = L2StatusPatch.IsApplied(rom);
         _body.Children.Add(new TextBlock
         {
             Style = TryFindResource("GdHint") as Style, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 6),
             Text = "Bounce sends physical attacks (plain attacks too) back at the attacker, as Mirror does magic: \"<name> bounces it " +
                    "back!\". It lasts until cured or the battle ends. Focus: a hero hits harder each turn in a row it " +
-                   "attacks the same foe with its weapon (\"Maxim's focus: 25% more\")." + (v4 ? "" : " Both are new battle code, added to the game with the first one set here."),
+                   "attacks the same foe with its weapon (\"Maxim's focus: 25% more\")." + (patchApplied ? "" : " Both are new battle code, added to the game with the first one set here."),
         });
         if (_monsters)
         {
@@ -105,42 +100,42 @@ public sealed class L2BounceFocusCard : Border
             battle ? "The heroes it is used on have focus until the battle ends." : "Tick \"Usable in battle\" above first.",
             on => L2StatusSteps.SetStep(rom, Kind.ItemBattle, index, on, 0x61), battle);
 
-        // the focus percents (one set for the game)
-        var pct = L2StatusPatch.FocusPercents(rom);
+        // the focus percents (one set for the whole game)
+        var percents = L2StatusPatch.FocusPercents(rom);
         _body.Children.Add(new TextBlock { Text = "Focus bonus, attack in a row on one foe (every focus item):", Style = TryFindResource("GdFieldLabel") as Style, Margin = new Thickness(0, 6, 0, 2) });
         var row = new StackPanel { Orientation = Orientation.Horizontal };
-        string[] heads = { "2nd", "3rd", "4th", "5th", "6th+" };
+        string[] headers = { "2nd", "3rd", "4th", "5th", "6th+" };
         var boxes = new List<TextBox>();
         for (int i = 0; i < 5; i++)
         {
-            row.Children.Add(new TextBlock { Text = heads[i], Style = TryFindResource("GdFieldLabel") as Style, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(i == 0 ? 0 : 8, 0, 4, 0) });
-            var tb = new TextBox { Text = pct[i].ToString(CultureInfo.InvariantCulture), Width = 40, Style = TryFindResource("GdNumber") as Style, ToolTip = "Percent more damage (0-255)." };
-            boxes.Add(tb);
-            row.Children.Add(tb);
+            row.Children.Add(new TextBlock { Text = headers[i], Style = TryFindResource("GdFieldLabel") as Style, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(i == 0 ? 0 : 8, 0, 4, 0) });
+            var box = new TextBox { Text = percents[i].ToString(CultureInfo.InvariantCulture), Width = 40, Style = TryFindResource("GdNumber") as Style, ToolTip = "Percent more damage (0-255)." };
+            boxes.Add(box);
+            row.Children.Add(box);
             row.Children.Add(new TextBlock { Text = "%", Style = TryFindResource("GdFieldLabel") as Style, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(2, 0, 0, 0) });
         }
-        foreach (var tb in boxes)
-            tb.LostFocus += (_, _) =>
+        foreach (var box in boxes)
+            box.LostFocus += (_, _) =>
             {
-                var vals = boxes.Select(b => int.TryParse(b.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int v) && v is >= 0 and <= 255 ? v : -1).ToArray();
+                var values = boxes.Select(b => int.TryParse(b.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int v) && v is >= 0 and <= 255 ? v : -1).ToArray();
                 var now = L2StatusPatch.FocusPercents(rom);
-                if (vals.Any(v => v < 0)) { Dispatcher.BeginInvoke(Build); return; }
-                // the same as shown: nothing to write (and the status patch isn't put in for a box merely visited)
-                if (vals.Select(v => (byte)v).SequenceEqual(now)) return;
-                Do(() => L2StatusPatch.SetFocusPercents(rom, vals), "focus bonus " + string.Join(" / ", vals.Select(v => "+" + v + "%")));
+                if (values.Any(v => v < 0)) { Dispatcher.BeginInvoke(Build); return; }
+                // same as what's shown = nothing to write (and we don't put the status patch in just because a box got visited)
+                if (values.Select(v => (byte)v).SequenceEqual(now)) return;
+                Do(() => L2StatusPatch.SetFocusPercents(rom, values), "focus bonus " + string.Join(" / ", values.Select(v => "+" + v + "%")));
             };
         _body.Children.Add(row);
 
         if (!L2StatusPatch.TagItemsDone(rom) && L2StatusPatch.TagItems(rom) is var (rings, candies) && rings.Count + candies.Count > 0)
         {
-            var b = new Button
+            var tagButton = new Button
             {
                 Content = "Make the Tag ring and Tag candy focus items", Style = TryFindResource("LufiaButton") as Style,
                 Margin = new Thickness(0, 10, 0, 0), HorizontalAlignment = System.Windows.HorizontalAlignment.Left,
                 ToolTip = "The game never uses them. Mewlies' idea: the Tag ring gives its wearer focus, the Tag candy gives a hero focus for the rest of the battle.",
             };
-            b.Click += (_, _) => Do(() => { L2StatusPatch.MakeTagItems(rom); }, "Tag ring and Tag candy made focus items");
-            _body.Children.Add(b);
+            tagButton.Click += (_, _) => Do(() => { L2StatusPatch.MakeTagItems(rom); }, "Tag ring and Tag candy made focus items");
+            _body.Children.Add(tagButton);
         }
     }
 

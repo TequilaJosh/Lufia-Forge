@@ -8,30 +8,28 @@ using LufiaForge.ViewModels;
 
 namespace LufiaForge.Modules.Lufia2;
 
-/// <summary>A cutscene (an event of some map) in the Cutscenes page's list.</summary>
+// a cutscene (an event of some map) in the Cutscenes page's list
 public sealed class L2CutsceneItem
 {
     public int Map { get; init; }
     public L2EventBlocks.Entry Entry { get; init; } = null!;
-    /// <summary>The map and what starts it.</summary>
+    // the map and what starts it
     public string Label { get; init; } = "";
     public string Title { get; init; } = "";
-    /// <summary>What it does: moves, lines, flags.</summary>
+    // what it does: moves, lines, flags
     public string Hint { get; init; } = "";
-    /// <summary>Its first line.</summary>
+    // its first line
     public string Details { get; init; } = "";
     public int Moves { get; init; }
     public ImageSource? Picture { get; init; }
     public override string ToString() => Label;
 }
 
-/// <summary>
-/// The Lufia II Cutscenes page, laid out like Lufia 1's: every event of every map that moves characters, the camera or
-/// the screen (and the rest, further down) in one list with a search, a map filter and "only bigger scenes"; the
-/// picked one opens in the event editor with the stage always on, so the map is the stage, the steps are the timeline
-/// and a click on the stage adds a walk, an appearance or a turn. New cutscene makes one on any map; Delete takes one
-/// off its map.
-/// </summary>
+// the Lufia II Cutscenes page, laid out like the Lufia 1 one. every event of every map that moves characters, the
+// camera or the screen (and the rest further down) goes in one list, with a search, a map filter and "only bigger
+// scenes". the picked one opens in the event editor with the stage always on: the map is the stage, the steps are the
+// timeline, and clicking the stage adds a walk, an appearance or a turn. New cutscene makes one on any map, Delete
+// takes one off its map
 public partial class L2CutscenesPage : ObservableObject
 {
     private RomBuffer? _rom;
@@ -70,27 +68,27 @@ public partial class L2CutscenesPage : ObservableObject
         Read();
     }
 
-    /// <summary>The name shown for a map: the project's own, else the game's.</summary>
-    public static string MapName(RomBuffer rom, int m) => L2ScriptEditor.MapNameOf(rom, m);
+    // the name shown for a map: the project's own, otherwise the game's
+    public static string MapName(RomBuffer rom, int map) => L2ScriptEditor.MapNameOf(rom, map);
 
     private BitmapSource? Sprite(int sprite)
     {
         if (_rom == null || sprite < 0) return null;
-        if (_sprites.TryGetValue(sprite, out var p)) return p;
-        BitmapSource? bmp = null;
+        if (_sprites.TryGetValue(sprite, out var cached)) return cached;
+        BitmapSource? bitmap = null;
         try
         {
-            if (L2Graphics.MapSprite(_rom, sprite) is var (w, h, px))
+            if (L2Graphics.MapSprite(_rom, sprite) is var (width, height, pixels))
             {
-                bmp = BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgra32, null, px.Select(c => (int)c).ToArray(), w * 4);
-                bmp.Freeze();
+                bitmap = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgra32, null, pixels.Select(c => (int)c).ToArray(), width * 4);
+                bitmap.Freeze();
             }
         }
         catch (Exception) { }
-        return _sprites[sprite] = bmp;
+        return _sprites[sprite] = bitmap;
     }
 
-    /// <summary>Reads every map's events: what starts each, its moves and lines.</summary>
+    // reads every map's events: what starts each one, its moves and lines
     private void Read()
     {
         var rom = _rom!;
@@ -115,36 +113,36 @@ public partial class L2CutscenesPage : ObservableObject
             List<L2EventBlocks.Entry> entries;
             try { entries = L2EventBlocks.ReadLists(rom, block).Where(e => e.IsScript && e.Head != L2EventBlocks.GameList).OrderBy(e => e.Head == L2EventBlocks.SceneList ? 0 : e.Head).ThenBy(e => e.Id).ToList(); }
             catch (Exception) { continue; }
-            foreach (var e in entries)
+            foreach (var entry in entries)
             {
-                string title = e.Head switch
+                string title = entry.Head switch
                 {
-                    L2EventBlocks.SceneList => L2Cutscene.Starter(rom, map, e.Id) is { } st
-                        ? $"Scene {e.Id:X2}: when the party enters" + (st.Flag >= 0 ? $" (story flag {st.Flag:X2} {(st.MustBeOn ? "on" : "off")})" : "")
-                        : $"Scene {e.Id:X2}: on arrival from another cutscene",
-                    L2EventBlocks.TalkList => "Talking to " + speakers.Label(e.Id, sprite: false) + (e.Id >= 0x50 && starts.TryGetValue(e.Id, out var c) ? $" at ({c[1]},{c[2]})" : ""),
-                    L2EventBlocks.TriggerList => triggers.TryGetValue(e.Id, out var t) ? $"Stepping onto ({t[1]},{t[2]})-({t[3] - 1},{t[4] - 1})" : $"Stepping onto area {e.Id} (not on the map)",
-                    _ => $"Event {e.Id:X2}",
+                    L2EventBlocks.SceneList => L2Cutscene.Starter(rom, map, entry.Id) is { } starter
+                        ? $"Scene {entry.Id:X2}: when the party enters" + (starter.Flag >= 0 ? $" (story flag {starter.Flag:X2} {(starter.MustBeOn ? "on" : "off")})" : "")
+                        : $"Scene {entry.Id:X2}: on arrival from another cutscene",
+                    L2EventBlocks.TalkList => "Talking to " + speakers.Label(entry.Id, sprite: false) + (entry.Id >= 0x50 && starts.TryGetValue(entry.Id, out var character) ? $" at ({character[1]},{character[2]})" : ""),
+                    L2EventBlocks.TriggerList => triggers.TryGetValue(entry.Id, out var trigger) ? $"Stepping onto ({trigger[1]},{trigger[2]})-({trigger[3] - 1},{trigger[4] - 1})" : $"Stepping onto area {entry.Id} (not on the map)",
+                    _ => $"Event {entry.Id:X2}",
                 };
-                int moves = 0, says = 0;
-                string first = "", flags = "";
+                int moves = 0, textBoxes = 0;
+                string firstLine = "", flags = "";
                 try
                 {
-                    var s = L2EventScript.Read(rom, block + e.Offset, block);
-                    moves = s.Steps.Count(x => !x.IsText && x.Op is 0x2F or 0x30 or 0xA3 or 0x7A or 0x2D or 0x2E or 0x98 or 0x99 or 0x3A or 0xC4 or 0x41 or 0x58 or 0x59);
-                    says = s.Steps.Count(x => x.IsText);
-                    first = s.Steps.FirstOrDefault(x => x.IsText)?.Text.Replace("\n", " ") ?? "";
-                    var set = s.Steps.Where(x => !x.IsText && L2ExtraFlags.Of(x.Bytes).Use == L2ExtraFlags.Use.On).Select(x => L2ExtraFlags.FlagOf(x.Bytes)).Distinct().ToList();
-                    if (set.Count > 0) flags = " · sets story flag " + string.Join(", ", set.Select(L2ExtraFlags.Number));
-                    if (s.Steps.Any(x => !x.IsText && x.Op == 0x16)) flags += " · goes to another map";
+                    var script = L2EventScript.Read(rom, block + entry.Offset, block);
+                    moves = script.Steps.Count(x => !x.IsText && x.Op is 0x2F or 0x30 or 0xA3 or 0x7A or 0x2D or 0x2E or 0x98 or 0x99 or 0x3A or 0xC4 or 0x41 or 0x58 or 0x59);
+                    textBoxes = script.Steps.Count(x => x.IsText);
+                    firstLine = script.Steps.FirstOrDefault(x => x.IsText)?.Text.Replace("\n", " ") ?? "";
+                    var flagsSet = script.Steps.Where(x => !x.IsText && L2ExtraFlags.Of(x.Bytes).Use == L2ExtraFlags.Use.On).Select(x => L2ExtraFlags.FlagOf(x.Bytes)).Distinct().ToList();
+                    if (flagsSet.Count > 0) flags = " · sets story flag " + string.Join(", ", flagsSet.Select(L2ExtraFlags.Number));
+                    if (script.Steps.Any(x => !x.IsText && x.Op == 0x16)) flags += " · goes to another map";
                 }
                 catch (Exception) { }
-                int sprite = e.Head == L2EventBlocks.TalkList ? (e.Id < 7 ? e.Id : sprites.GetValueOrDefault(e.Id, -1)) : 0;
+                int sprite = entry.Head == L2EventBlocks.TalkList ? (entry.Id < 7 ? entry.Id : sprites.GetValueOrDefault(entry.Id, -1)) : 0;
                 _all.Add(new L2CutsceneItem
                 {
-                    Map = map, Entry = e, Title = title, Label = $"{map:X2} {mapName} · {title}", Moves = moves,
-                    Hint = $"{moves} stage command{(moves == 1 ? "" : "s")}, {says} text box{(says == 1 ? "" : "es")}{flags}",
-                    Details = first.Length > 0 ? "\"" + (first.Length > 60 ? first[..60] + "..." : first) + "\"" : "",
+                    Map = map, Entry = entry, Title = title, Label = $"{map:X2} {mapName} · {title}", Moves = moves,
+                    Hint = $"{moves} stage command{(moves == 1 ? "" : "s")}, {textBoxes} text box{(textBoxes == 1 ? "" : "es")}{flags}",
+                    Details = firstLine.Length > 0 ? "\"" + (firstLine.Length > 60 ? firstLine[..60] + "..." : firstLine) + "\"" : "",
                     Picture = Sprite(sprite),
                 });
             }
@@ -154,7 +152,7 @@ public partial class L2CutscenesPage : ObservableObject
         _filling = true;
         MapFilters.Clear(); _filterMaps.Clear();
         MapFilters.Add("All maps"); _filterMaps.Add(-1);
-        foreach (int m in _all.Select(c => c.Map).Distinct()) { MapFilters.Add($"{m:X2}  {MapName(rom, m)}"); _filterMaps.Add(m); }
+        foreach (int mapWithCutscenes in _all.Select(c => c.Map).Distinct()) { MapFilters.Add($"{mapWithCutscenes:X2}  {MapName(rom, mapWithCutscenes)}"); _filterMaps.Add(mapWithCutscenes); }
         MapFilterIndex = Math.Max(0, _filterMaps.IndexOf(filterMap));
         _filling = false;
         Filter();
@@ -163,19 +161,19 @@ public partial class L2CutscenesPage : ObservableObject
     private void Filter()
     {
         if (_filling) return;
-        var keep = Selected;
+        var kept = Selected;
         _filling = true;
         Cutscenes.Clear();
-        string q = Search.Trim();
+        string query = Search.Trim();
         int map = MapFilterIndex >= 0 && MapFilterIndex < _filterMaps.Count ? _filterMaps[MapFilterIndex] : -1;
-        foreach (var c in _all)
+        foreach (var cutscene in _all)
         {
-            if (map >= 0 && c.Map != map) continue;
-            if (OnlyBig && c.Moves < 6) continue;
-            if (q.Length > 0 && !c.Label.Contains(q, StringComparison.OrdinalIgnoreCase) && !c.Hint.Contains(q, StringComparison.OrdinalIgnoreCase) && !c.Details.Contains(q, StringComparison.OrdinalIgnoreCase)) continue;
-            Cutscenes.Add(c);
+            if (map >= 0 && cutscene.Map != map) continue;
+            if (OnlyBig && cutscene.Moves < 6) continue;
+            if (query.Length > 0 && !cutscene.Label.Contains(query, StringComparison.OrdinalIgnoreCase) && !cutscene.Hint.Contains(query, StringComparison.OrdinalIgnoreCase) && !cutscene.Details.Contains(query, StringComparison.OrdinalIgnoreCase)) continue;
+            Cutscenes.Add(cutscene);
         }
-        Selected = keep != null ? Cutscenes.FirstOrDefault(c => c.Map == keep.Map && c.Entry.Head == keep.Entry.Head && c.Entry.Id == keep.Entry.Id) : null;
+        Selected = kept != null ? Cutscenes.FirstOrDefault(c => c.Map == kept.Map && c.Entry.Head == kept.Entry.Head && c.Entry.Id == kept.Entry.Id) : null;
         _filling = false;
         Status = $"{Cutscenes.Count} of {_all.Count} cutscenes shown.";
     }
@@ -191,7 +189,7 @@ public partial class L2CutscenesPage : ObservableObject
         if (Editor.Event?.Entry is { } open && Editor.Map == value.Map && open.Head == value.Entry.Head && open.Id == value.Entry.Id) return;
         if (!Editor.ConfirmLeave())
         {
-            // kept: the list shows the cutscene the editor still has (else Delete would take out the other one)
+            // kept: the list shows the cutscene the editor still has (otherwise Delete would take out the other one)
             var shown = Cutscenes.FirstOrDefault(c => Editor.Event?.Entry is { } e && c.Map == Editor.Map && c.Entry.Head == e.Head && c.Entry.Id == e.Id);
             System.Windows.Application.Current?.Dispatcher.BeginInvoke(() => { _filling = true; Selected = shown; _filling = false; HasSelection = shown != null; });
             return;
@@ -199,17 +197,17 @@ public partial class L2CutscenesPage : ObservableObject
         if (!Editor.Load(_rom, _main, value.Map, value.Entry.Head, value.Entry.Id)) Status = "That cutscene isn't on the map any more.";
     }
 
-    /// <summary>Shows one cutscene (from another page).</summary>
+    // shows one cutscene (from another page)
     public void ShowCutscene(int map, int head, int id)
     {
-        var c = _all.FirstOrDefault(x => x.Map == map && x.Entry.Head == head && x.Entry.Id == id);
-        if (c == null) { Reload(); c = _all.FirstOrDefault(x => x.Map == map && x.Entry.Head == head && x.Entry.Id == id); }
-        if (c == null) return;
-        if (!Cutscenes.Contains(c)) { _filling = true; Search = ""; MapFilterIndex = 0; OnlyBig = false; _filling = false; Filter(); }
-        Selected = c;
+        var cutscene = _all.FirstOrDefault(x => x.Map == map && x.Entry.Head == head && x.Entry.Id == id);
+        if (cutscene == null) { Reload(); cutscene = _all.FirstOrDefault(x => x.Map == map && x.Entry.Head == head && x.Entry.Id == id); }
+        if (cutscene == null) return;
+        if (!Cutscenes.Contains(cutscene)) { _filling = true; Search = ""; MapFilterIndex = 0; OnlyBig = false; _filling = false; Filter(); }
+        Selected = cutscene;
     }
 
-    /// <summary>Reads every map again (events were written, here or on another page); the cutscene open stays open.</summary>
+    // reads every map again (events were written, here or on another page). the open cutscene stays open
     public void Reload()
     {
         if (_rom == null) return;
@@ -218,11 +216,11 @@ public partial class L2CutscenesPage : ObservableObject
         Read();   // (the filter keeps the picked cutscene, by its map and entry, without opening it again)
     }
 
-    /// <summary>The ROM's version when the list was read.</summary>
+    // the ROM's version when the list was read
     private int _readVersion = -1;
 
-    /// <summary>The page is shown: when the ROM changed since the list was read (another page, Undo), the cutscene open
-    /// (unless it has unwritten steps) and the list are read again.</summary>
+    // the page is shown: if the ROM changed since the list was read (another page, Undo), the open cutscene
+    // (unless it has unwritten steps) and the list get read again
     public void Shown()
     {
         if (_rom == null || _rom.Version == _readVersion) return;
@@ -231,7 +229,7 @@ public partial class L2CutscenesPage : ObservableObject
         Read();
     }
 
-    /// <summary>A cutscene was made (the New cutscene window): the list shows it, the editor opens it.</summary>
+    // a cutscene was made (the New cutscene window): the list shows it and the editor opens it
     public void CutsceneCreated(int map, int head, int id, string what)
     {
         _main?.NotifyRomModified("Lufia II: " + what);
@@ -241,27 +239,27 @@ public partial class L2CutscenesPage : ObservableObject
         Status = what + " Add its steps (the first line is a placeholder): ＋ on a card, or click the stage.";
     }
 
-    /// <summary>What deleting the picked cutscene changes, or null when it can't be deleted.</summary>
+    // what deleting the picked cutscene changes, or null when it can't be deleted
     public string? DeleteDescription()
     {
-        if (_rom == null || Selected is not { } c) return null;
-        if (c.Entry.Head == L2EventBlocks.SceneList && L2Cutscene.Starter(_rom, c.Map, c.Entry.Id) != null)
+        if (_rom == null || Selected is not { } cutscene) return null;
+        if (cutscene.Entry.Head == L2EventBlocks.SceneList && L2Cutscene.Starter(_rom, cutscene.Map, cutscene.Entry.Id) != null)
             return null;
-        return c.Entry.Head switch
+        return cutscene.Entry.Head switch
         {
-            L2EventBlocks.TalkList => $"Talking to {c.Title[11..]} on {MapName(_rom, c.Map)} will do nothing; the steps stay in the ROM, unused.",
-            L2EventBlocks.TriggerList => $"{c.Title} on {MapName(_rom, c.Map)} will do nothing (the area stays on the Maps page); the steps stay in the ROM, unused.",
-            _ => $"Scene {c.Entry.Id:X2} of {MapName(_rom, c.Map)} goes; a \"Go to another map\" step that sends the party to it would then start nothing. The steps stay in the ROM, unused.",
+            L2EventBlocks.TalkList => $"Talking to {cutscene.Title[11..]} on {MapName(_rom, cutscene.Map)} will do nothing; the steps stay in the ROM, unused.",
+            L2EventBlocks.TriggerList => $"{cutscene.Title} on {MapName(_rom, cutscene.Map)} will do nothing (the area stays on the Maps page); the steps stay in the ROM, unused.",
+            _ => $"Scene {cutscene.Entry.Id:X2} of {MapName(_rom, cutscene.Map)} goes; a \"Go to another map\" step that sends the party to it would then start nothing. The steps stay in the ROM, unused.",
         };
     }
 
-    /// <summary>Takes the picked cutscene off its map (after <see cref="DeleteDescription"/> was shown).</summary>
+    // takes the picked cutscene off its map (after DeleteDescription was shown)
     public void Delete()
     {
-        if (_rom == null || _main == null || Selected is not { } c) return;
+        if (_rom == null || _main == null || Selected is not { } cutscene) return;
         Editor.Unload();
-        L2EventBlocks.Remove(_rom, c.Map, c.Entry);
-        _main.NotifyRomModified($"Lufia II: removed \"{c.Title}\" from {MapName(_rom, c.Map)}");
+        L2EventBlocks.Remove(_rom, cutscene.Map, cutscene.Entry);
+        _main.NotifyRomModified($"Lufia II: removed \"{cutscene.Title}\" from {MapName(_rom, cutscene.Map)}");
         L2FlagUses.Invalidate();
         _filling = true; Selected = null; _filling = false;
         Read();

@@ -20,11 +20,9 @@ using Image = System.Windows.Controls.Image;
 
 namespace LufiaForge.Modules.Lufia2;
 
-/// <summary>
-/// The Lufia II event editor, laid out like Lufia 1's: the steps as cards edited in place on the left, the stage (the
-/// map with its characters) on the right, the timeline underneath. Shown on the Events page, the Cutscenes page (stage
-/// always on) and in the pop-up window the Maps page opens. Bound to an <see cref="L2ScriptEditor"/>.
-/// </summary>
+// the Lufia II event editor, laid out like the Lufia 1 one: step cards edited in place on the left, the stage (the
+// map with its characters) on the right, the timeline under it. used on the Events page, the Cutscenes page (stage
+// always on) and in the pop-up window the Maps page opens. bound to an L2ScriptEditor
 public partial class L2EventEditorPanel : UserControl
 {
     private L2ScriptEditor? _editor;
@@ -44,17 +42,17 @@ public partial class L2EventEditorPanel : UserControl
         StageSplitter.MouseDoubleClick += (_, _) => { Common.LayoutMemory.Set(StageSplitKey, null); if (StageRoot.Visibility == Visibility.Visible) ShowStage(true); };
         TimelineSplitter.DragCompleted += (_, e) => { if (Common.LayoutMemory.Moved(e)) Common.LayoutMemory.Set("l2events.timeline", Common.LayoutMemory.Format(new GridLength(TimelineRow.ActualHeight))); };
         TimelineSplitter.MouseDoubleClick += (_, _) => { Common.LayoutMemory.Set("l2events.timeline", null); TimelineRow.Height = new GridLength(220); };
-        // while it's on screen its edits are written by themselves (saving the project, Apply to ROM in the top bar)
+        // while it's on screen its edits get written along with everything else (saving the project, Apply to ROM in the top bar)
         Loaded += (_, _) =>
         {
             if (_editor != null) Main?.Register(_editor);
-            CastExpander.IsExpanded = Common.LayoutMemory.Get("l2events.cast") == "1";   // (open or shut on another page meanwhile)
+            CastExpander.IsExpanded = Common.LayoutMemory.Get("l2events.cast") == "1";   // (might have been opened or shut on another page meanwhile)
         };
-        // a sound renamed in Settings: the cards show the new name (also when it was renamed while this was off screen)
+        // a sound renamed in Settings: the cards show the new name (also if it got renamed while this was off screen)
         Loaded += (_, _) =>
         {
             Core.Audio.SoundNames.Changed -= SoundNamesChanged; Core.Audio.SoundNames.Changed += SoundNamesChanged;
-            if (_soundNames != Core.Audio.SoundNames.Version) SoundNamesChanged();
+            if (_soundNamesVersion != Core.Audio.SoundNames.Version) SoundNamesChanged();
         };
         Unloaded += (_, _) =>
         {
@@ -83,7 +81,7 @@ public partial class L2EventEditorPanel : UserControl
         "Pick a step to see the places it uses on the stage: blue is the spot or area, orange is the piece of the map a tile change copies from. " +
         "Show bytes gives the raw commands; pick a step and change its bytes under the list (it must keep its size).";
 
-    /// <summary>Cutscene layout (the Cutscenes page): the stage is always shown and gets most of the room.</summary>
+    // cutscene layout (the Cutscenes page): the stage is always shown and gets most of the room
     public bool CutsceneMode
     {
         get => _cutsceneMode;
@@ -103,7 +101,7 @@ public partial class L2EventEditorPanel : UserControl
 
     private string StageSplitKey => _cutsceneMode ? "l2cutscenes.stage" : "l2events.stage";
 
-    /// <summary>Shows the editor's script (the panel follows every event it loads from now on).</summary>
+    // shows the editor's script (from now on the panel follows every event the editor loads)
     public void Bind(L2ScriptEditor editor)
     {
         if (ReferenceEquals(_editor, editor)) { Refresh(); return; }
@@ -125,14 +123,14 @@ public partial class L2EventEditorPanel : UserControl
         Refresh();
     }
 
-    /// <summary>After the editor loaded another script: the stage comes on for one with moves, the bytes view follows.</summary>
+    // after the editor loads another script: the stage comes on if the script has moves, the bytes view follows
     public void Refresh()
     {
         if (_editor == null) return;
-        bool moves = _editor.Script?.Steps.Any(s => !s.IsText && s.Op is 0x2D or 0x2E or 0x2F or 0x30 or 0x7A or 0x98 or 0x99 or 0xA3 or 0x3A or 0xC4 or 0x41) == true;
-        // a puzzle script: its steps mark their places on the stage
+        bool hasMoves = _editor.Script?.Steps.Any(s => !s.IsText && s.Op is 0x2D or 0x2E or 0x2F or 0x30 or 0x7A or 0x98 or 0x99 or 0xA3 or 0x3A or 0xC4 or 0x41) == true;
+        // a puzzle script's steps mark their places on the stage
         if (!_cutsceneMode) HelpText.Text = _editor.IsPuzzle ? PuzzleHelp : DefaultHelp;
-        if (_cutsceneMode || StageToggle.IsChecked == true || ((moves || _editor.IsPuzzle) && !_stageChosen)) ShowStage(true);
+        if (_cutsceneMode || StageToggle.IsChecked == true || ((hasMoves || _editor.IsPuzzle) && !_stageChosen)) ShowStage(true);
         if (_cutsceneMode && !_timelineChosen) ShowTimeline(true);
         else if (TimelineCard.Visibility == Visibility.Visible) Timeline.Refresh();
         if (_editor.SelectedLine >= 0) _editor.HighlightLine(_editor.SelectedLine);
@@ -149,12 +147,12 @@ public partial class L2EventEditorPanel : UserControl
         else if (e.PropertyName is nameof(L2ScriptEditor.Title) or nameof(L2ScriptEditor.IsPuzzle)) Refresh();
     }
 
-    // ── the steps ──
+    // the steps
 
     private void Line_MouseDown(object sender, MouseButtonEventArgs e)
     {
         if (_editor == null || sender is not FrameworkElement { DataContext: L2LineVm line }) return;
-        // Shift+click: the steps from the picked one to this one, for Copy
+        // shift+click marks the steps from the picked one to this one, for Copy
         if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) && _editor.SelectedLine >= 0) { _editor.MarkRange(_editor.SelectedLine, line.Index); return; }
         _editor.ClearMark();
         if (_editor.SelectedLine != line.Index) _editor.SelectedLine = line.Index;
@@ -165,7 +163,7 @@ public partial class L2EventEditorPanel : UserControl
         Dispatcher.BeginInvoke(() =>
         {
             LinesList.UpdateLayout();
-            if (LinesList.ItemContainerGenerator.ContainerFromIndex(index) is FrameworkElement fe) fe.BringIntoView();
+            if (LinesList.ItemContainerGenerator.ContainerFromIndex(index) is FrameworkElement card) card.BringIntoView();
         }, System.Windows.Threading.DispatcherPriority.Loaded);
     }
 
@@ -190,15 +188,15 @@ public partial class L2EventEditorPanel : UserControl
     private void Grip_MouseMove(object sender, MouseEventArgs e)
     {
         if (_gripLine == null || e.LeftButton != MouseButtonState.Pressed) { _gripLine = null; return; }
-        var p = e.GetPosition(this);
-        if (Math.Abs(p.Y - _gripStart.Y) < 4 && Math.Abs(p.X - _gripStart.X) < 4) return;
+        var position = e.GetPosition(this);
+        if (Math.Abs(position.Y - _gripStart.Y) < 4 && Math.Abs(position.X - _gripStart.X) < 4) return;
         var line = _gripLine; _gripLine = null;
         DragDrop.DoDragDrop((DependencyObject)sender, new DataObject(typeof(L2LineVm), line), DragDropEffects.Move);
-        foreach (var l in _editor?.Lines ?? Enumerable.Empty<L2LineVm>()) { l.DropAbove = false; l.DropBelow = false; }
+        foreach (var step in _editor?.Lines ?? Enumerable.Empty<L2LineVm>()) { step.DropAbove = false; step.DropBelow = false; }
     }
 
     private static bool DropsAbove(object sender, DragEventArgs e) =>
-        sender is FrameworkElement fe && e.GetPosition(fe).Y < fe.ActualHeight / 2;
+        sender is FrameworkElement card && e.GetPosition(card).Y < card.ActualHeight / 2;
 
     private void Line_DragOver(object sender, DragEventArgs e)
     {
@@ -224,53 +222,53 @@ public partial class L2EventEditorPanel : UserControl
         e.Handled = true;
     }
 
-    /// <summary>The "insert a step" menu: text first, then the commands by category (rarely used ones in their own sub-menu).</summary>
-    private void ShowInsertMenu(FrameworkElement anchor, int at)
+    // the "insert a step" menu: text first, then the commands by category (the rarely used ones get their own sub-menu)
+    private void ShowInsertMenu(FrameworkElement anchor, int insertAt)
     {
         if (_editor == null || !_editor.CanEdit) return;
         var menu = new ContextMenu { PlacementTarget = anchor, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
         void AddText(string name, byte[] opener)
         {
             var item = new MenuItem { Header = name };
-            item.Click += (_, _) => _editor.AddText(opener, "...", 0x01, at);
+            item.Click += (_, _) => _editor.AddText(opener, "...", 0x01, insertAt);
             menu.Items.Add(item);
         }
-        bool talk = _editor.Event?.Entry?.Head == L2EventBlocks.TalkList;
-        if (talk) AddText("Dialogue: the person talked to says", new byte[] { 0x08 });
+        bool isTalkEvent = _editor.Event?.Entry?.Head == L2EventBlocks.TalkList;
+        if (isTalkEvent) AddText("Dialogue: the person talked to says", new byte[] { 0x08 });
         AddText("Dialogue: Maxim says", new byte[] { 0x61 });
         AddText("Dialogue: a character of the map says", new byte[] { 0x13, (byte)(_editor.Characters.Keys.FirstOrDefault(k => k >= 0x50, 0x50)) });
         AddText("Dialogue: narration", new byte[] { 0x9E, 0x05 });
-        var q = new MenuItem { Header = "Dialogue: a question (yes / no)" };
-        q.Click += (_, _) => _editor.AddText(new byte[] { 0x10, 0x02, 0, 0, 0, 0 }, "Is that so?\nYes\nNo", 0x0B, at);
-        menu.Items.Add(q);
+        var question = new MenuItem { Header = "Dialogue: a question (yes / no)" };
+        question.Click += (_, _) => _editor.AddText(new byte[] { 0x10, 0x02, 0, 0, 0, 0 }, "Is that so?\nYes\nNo", 0x0B, insertAt);
+        menu.Items.Add(question);
         menu.Items.Add(new Separator());
         var ready = new MenuItem { Header = "Ready-made" };
-        var sp = new MenuItem { Header = "✨ Sparkles on a spot (they turn, then go)", ToolTip = "The game's warp sparkles (Shrine of Daos 1F): 10 sparkles appear 120 pixels out, turn, close in and go, and the event waits for them. Pick the spot on the stage." };
-        sp.Click += (_, _) =>
+        var sparkles = new MenuItem { Header = "✨ Sparkles on a spot (they turn, then go)", ToolTip = "The game's warp sparkles (Shrine of Daos 1F): 10 sparkles appear 120 pixels out, turn, close in and go, and the event waits for them. Pick the spot on the stage." };
+        sparkles.Click += (_, _) =>
         {
-            int n = _editor.Lines.Count;
-            _editor.AddRing(new byte[] { 0x8D, 0x00, 0x01, 0x0A, 0x78, 0x40, 0x00 }, at);
-            // the ring's point: picked on the stage
-            if (_editor.Lines.Count > n && at >= 0 && at < _editor.Lines.Count && _editor.Lines[at].Fields.FirstOrDefault(f => f.IsPlace) is { } pf)
+            int linesBefore = _editor.Lines.Count;
+            _editor.AddRing(new byte[] { 0x8D, 0x00, 0x01, 0x0A, 0x78, 0x40, 0x00 }, insertAt);
+            // the ring's point gets picked on the stage
+            if (_editor.Lines.Count > linesBefore && insertAt >= 0 && insertAt < _editor.Lines.Count && _editor.Lines[insertAt].Fields.FirstOrDefault(f => f.IsPlace) is { } placeField)
             {
                 if (StageRoot.Visibility != Visibility.Visible) ShowStage(true);
-                pf.PickPlace();
+                placeField.PickPlace();
             }
         };
-        ready.Items.Add(sp);
+        ready.Items.Add(sparkles);
         menu.Items.Add(ready);
         menu.Items.Add(new Separator());
         var offered = L2EventCommands.Definitions.Where(d => d.Template != null && !L2EventScript.TextOpeners.Contains(d.Template[0])).ToList();
-        foreach (string cat in L2EventCommands.Categories)
+        foreach (string category in L2EventCommands.Categories)
         {
-            var defs = cat == L2EventCommands.Special ? offered.Where(d => d.Rare || d.Category == cat).ToList() : offered.Where(d => d.Category == cat && !d.Rare).ToList();
-            if (defs.Count == 0) continue;
-            var sub = new MenuItem { Header = cat };
-            foreach (var d in defs.OrderBy(d => cat == L2EventCommands.Special ? d.Name : ""))
+            var commands = category == L2EventCommands.Special ? offered.Where(d => d.Rare || d.Category == category).ToList() : offered.Where(d => d.Category == category && !d.Rare).ToList();
+            if (commands.Count == 0) continue;
+            var sub = new MenuItem { Header = category };
+            foreach (var d in commands.OrderBy(d => category == L2EventCommands.Special ? d.Name : ""))
             {
                 var item = new MenuItem { Header = d.Name, ToolTip = (d.Help.Length > 0 ? d.Help : null) + (d.Waits.Length > 0 ? " The event waits here " + d.Waits + "." : "") };
                 var def = d;
-                item.Click += (_, _) => _editor.AddCommand(def, at);
+                item.Click += (_, _) => _editor.AddCommand(def, insertAt);
                 sub.Items.Add(item);
             }
             menu.Items.Add(sub);
@@ -280,15 +278,15 @@ public partial class L2EventEditorPanel : UserControl
 
     private void Insert_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is Button { DataContext: L2LineVm line } b) ShowInsertMenu(b, line.Index + 1);
+        if (sender is Button { DataContext: L2LineVm line } button) ShowInsertMenu(button, line.Index + 1);
     }
 
     private void InsertAtStart_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is Button b) ShowInsertMenu(b, 0);
+        if (sender is Button button) ShowInsertMenu(button, 0);
     }
 
-    /// <summary>The "Add a step" button of a host page: below the picked step.</summary>
+    // the "Add a step" button of a host page: inserts below the picked step
     public void ShowInsertMenuAt(FrameworkElement anchor) { if (_editor != null) ShowInsertMenu(anchor, _editor.InsertIndex); }
 
     private void Delete_Click(object sender, RoutedEventArgs e)
@@ -306,56 +304,56 @@ public partial class L2EventEditorPanel : UserControl
 
     private void Follow_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is FrameworkElement { DataContext: L2FieldVm f }) f.Follow();
+        if (sender is FrameworkElement { DataContext: L2FieldVm field }) field.Follow();
     }
 
     private void FlagUses_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is FrameworkElement { DataContext: L2FieldVm f }) f.ShowFlagUses();
+        if (sender is FrameworkElement { DataContext: L2FieldVm field }) field.ShowFlagUses();
     }
 
-    private int _soundNames = Core.Audio.SoundNames.Version;
-    private void SoundNamesChanged() { _soundNames = Core.Audio.SoundNames.Version; Dispatcher.BeginInvoke(() => _editor?.RefreshSoundNames()); }
+    private int _soundNamesVersion = Core.Audio.SoundNames.Version;
+    private void SoundNamesChanged() { _soundNamesVersion = Core.Audio.SoundNames.Version; Dispatcher.BeginInvoke(() => _editor?.RefreshSoundNames()); }
 
     private void Listen_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not Button { DataContext: L2FieldVm f } b || _editor == null || f.Raw < 0) return;
-        string note = Common.SoundPreview.Toggle(b, _editor.Rom, lufia2: true, song: f.IsSong, f.Raw);
+        if (sender is not Button { DataContext: L2FieldVm field } button || _editor == null || field.Raw < 0) return;
+        string note = Common.SoundPreview.Toggle(button, _editor.Rom, lufia2: true, song: field.IsSong, field.Raw);
         if (note.Length > 0) _editor.Status = note;
     }
 
     private void PickArrival_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not FrameworkElement { DataContext: L2FieldVm f } || _editor?.Rom is not { } rom) return;
-        int map = Math.Max(2, f.StepMap);
-        int point = f.Raw;
-        var at = L2MapInfo.Records(rom, map, L2MapInfo.Points, 3).Select(r => r.Bytes).FirstOrDefault(b => b[0] == point);
-        var w = new L2PickPlaceWindow(rom, map, at?[1] ?? 0, at?[2] ?? 0, m => L2Maps.Name(rom, m)) { Owner = Window.GetWindow(this), Title = "Where the party arrives - Lufia Forge" };
-        if (w.ShowDialog() != true) return;
-        if (w.Map < 2) { _editor.StageInfo = "\"Go to another map\" arrives at a point of a town or dungeon, not the world map."; return; }
-        _editor.PickArrival(f, w.Map, w.X, w.Y);
+        if (sender is not FrameworkElement { DataContext: L2FieldVm field } || _editor?.Rom is not { } rom) return;
+        int map = Math.Max(2, field.StepMap);
+        int point = field.Raw;
+        var pointRecord = L2MapInfo.Records(rom, map, L2MapInfo.Points, 3).Select(r => r.Bytes).FirstOrDefault(b => b[0] == point);
+        var window = new L2PickPlaceWindow(rom, map, pointRecord?[1] ?? 0, pointRecord?[2] ?? 0, m => L2Maps.Name(rom, m)) { Owner = Window.GetWindow(this), Title = "Where the party arrives - Lufia Forge" };
+        if (window.ShowDialog() != true) return;
+        if (window.Map < 2) { _editor.StageInfo = "\"Go to another map\" arrives at a point of a town or dungeon, not the world map."; return; }
+        _editor.PickArrival(field, window.Map, window.X, window.Y);
     }
 
     private void HeroFix_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not FrameworkElement { DataContext: L2LineVm l } || !l.HasHeroFix || _editor == null) return;
-        if (l.HeroFix == -2) _editor.RingLikeGame(l.Index);
-        else if (l.HeroFix == 0) _editor.LeaderVanishToStandIn();
-        else _editor.HeroToCharacter(l.HeroFix);
+        if (sender is not FrameworkElement { DataContext: L2LineVm line } || !line.HasHeroFix || _editor == null) return;
+        if (line.HeroFix == -2) _editor.RingLikeGame(line.Index);
+        else if (line.HeroFix == 0) _editor.LeaderVanishToStandIn();
+        else _editor.HeroToCharacter(line.HeroFix);
     }
 
     private void PickPlace_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not FrameworkElement { DataContext: L2FieldVm f } || _editor == null) return;
+        if (sender is not FrameworkElement { DataContext: L2FieldVm field } || _editor == null) return;
         if (StageRoot.Visibility != Visibility.Visible) ShowStage(true);
-        f.PickPlace();
+        field.PickPlace();
     }
 
     private void EditChange_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not FrameworkElement { DataContext: L2FieldVm f } || _editor == null) return;
+        if (sender is not FrameworkElement { DataContext: L2FieldVm field } || _editor == null) return;
         if (StageRoot.Visibility != Visibility.Visible) ShowStage(true);
-        f.EditChange();
+        field.EditChange();
     }
 
     private void ChangePreset_Click(object sender, RoutedEventArgs e)
@@ -363,33 +361,33 @@ public partial class L2EventEditorPanel : UserControl
         if (_editor?.Rom == null) return;
         var presets = L2Presets.Load().OrderBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
         if (presets.Count == 0) { _editor.ChangeInfo = "You have no presets yet: keep one on the Maps page (drag an area, then Pieces and presets...)."; return; }
-        var w = L2Ui.Window("Use a preset", 460, 520);
-        w.Owner = Window.GetWindow(this);
+        var window = L2Ui.Window("Use a preset", 460, 520);
+        window.Owner = Window.GetWindow(this);
         var root = new DockPanel { Margin = new Thickness(12) };
         var top = L2Ui.Label("Pick the preset the place changes into. It is kept on a part of the map you click next (somewhere the player never sees).", true);
         DockPanel.SetDock(top, Dock.Top); root.Children.Add(top);
         var list = new ListBox { Margin = new Thickness(0, 8, 0, 8) };
-        if (L2Ui.S("GdRecordList") is { } ls) list.Style = ls;
-        foreach (var p in presets) list.Items.Add(new ListBoxItem { Content = $"{p.Name}  ({p.W} x {p.H})", Tag = p });
+        if (L2Ui.S("GdRecordList") is { } listStyle) list.Style = listStyle;
+        foreach (var preset in presets) list.Items.Add(new ListBoxItem { Content = $"{preset.Name}  ({preset.W} x {preset.H})", Tag = preset });
         list.SelectedIndex = 0;
         L2Presets.Preset? picked = null;
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = System.Windows.HorizontalAlignment.Right };
-        buttons.Children.Add(L2Ui.Button("Use it", true, (_, _) => { picked = (list.SelectedItem as ListBoxItem)?.Tag as L2Presets.Preset; w.DialogResult = true; }));
-        var cancel = L2Ui.Button("Cancel", false, (_, _) => w.DialogResult = false); cancel.Margin = new Thickness(8, 0, 0, 0);
+        buttons.Children.Add(L2Ui.Button("Use it", true, (_, _) => { picked = (list.SelectedItem as ListBoxItem)?.Tag as L2Presets.Preset; window.DialogResult = true; }));
+        var cancel = L2Ui.Button("Cancel", false, (_, _) => window.DialogResult = false); cancel.Margin = new Thickness(8, 0, 0, 0);
         buttons.Children.Add(cancel);
         DockPanel.SetDock(buttons, Dock.Bottom); root.Children.Add(buttons);
         root.Children.Add(list);
-        list.MouseDoubleClick += (_, _) => { picked = (list.SelectedItem as ListBoxItem)?.Tag as L2Presets.Preset; w.DialogResult = true; };
-        w.Content = root;
-        if (w.ShowDialog() != true || picked == null) return;
+        list.MouseDoubleClick += (_, _) => { picked = (list.SelectedItem as ListBoxItem)?.Tag as L2Presets.Preset; window.DialogResult = true; };
+        window.Content = root;
+        if (window.ShowDialog() != true || picked == null) return;
         if (_editor.ChangeWithPreset(picked) is { } why) _editor.ChangeInfo = why;
     }
 
     private void EditPath_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not FrameworkElement { DataContext: L2FieldVm f }) return;
+        if (sender is not FrameworkElement { DataContext: L2FieldVm field }) return;
         if (StageRoot.Visibility != Visibility.Visible) ShowStage(true);
-        f.EditPath();
+        field.EditPath();
     }
 
     private void OpenScene_Click(object sender, RoutedEventArgs e)
@@ -397,7 +395,7 @@ public partial class L2EventEditorPanel : UserControl
         if (sender is FrameworkElement { DataContext: L2LineVm line }) _editor?.OpenScene(line);
     }
 
-    /// <summary>Opens another event in place of this one (◀ Back comes back).</summary>
+    // opens another event in place of this one (Back comes back)
     private void OpenOther(int map, int head, int id)
     {
         // (the start-up script is list -1)
@@ -419,7 +417,7 @@ public partial class L2EventEditorPanel : UserControl
         Refresh();
     }
 
-    // ── views ──
+    // views
 
     private void ViewMode_Click(object sender, RoutedEventArgs e)
     {
@@ -458,17 +456,17 @@ public partial class L2EventEditorPanel : UserControl
         else LinesColumn.Width = new GridLength(1, GridUnitType.Star);
         if (show)
         {
-            if (Window.GetWindow(this) is L2EventEditorWindow w && w.Width < 1400 && w.WindowState == WindowState.Normal) w.Width = 1400;
+            if (Window.GetWindow(this) is L2EventEditorWindow window && window.Width < 1400 && window.WindowState == WindowState.Normal) window.Width = 1400;
             _editor?.ShowStage();
         }
     }
 
-    // ── the stage ──
+    // the stage
 
     private (int X, int Y) TileAt(MouseEventArgs e)
     {
-        var p = e.GetPosition(Stage);
-        return ((int)Math.Max(0, p.X / 16), (int)Math.Max(0, p.Y / 16));
+        var position = e.GetPosition(Stage);
+        return ((int)Math.Max(0, position.X / 16), (int)Math.Max(0, position.Y / 16));
     }
 
     private void Stage_MouseMove(object sender, MouseEventArgs e)
@@ -496,12 +494,12 @@ public partial class L2EventEditorPanel : UserControl
         _lastTile = (x, y);
         if (_pickStart) { _pickStart = false; _editor.SetPartyStart(x, y); return; }
         if (_placeSprite >= 0) { int sprite = _placeSprite; _placeSprite = -1; _editor.AddCharacterHere(sprite, x, y); return; }
-        if (_placeStory is var (sid, sspr)) { _placeStory = null; _editor.SendStoryHere(sid, sspr, x, y); return; }
+        if (_placeStory is var (storyId, storySprite)) { _placeStory = null; _editor.SendStoryHere(storyId, storySprite, x, y); return; }
         if (_editor.IsChangingMap) { _editor.ChangeDown(x, y); Stage.CaptureMouse(); return; }
         if (_editor.IsPickingPlace) { _editor.PlaceDown(x, y); Stage.CaptureMouse(); return; }
         if (_editor.IsDrawingPath) { _editor.PathClick(x, y); return; }
-        var p = e.GetPosition(Stage);
-        if (_editor.StageClick(p.X, p.Y)) return;
+        var position = e.GetPosition(Stage);
+        if (_editor.StageClick(position.X, position.Y)) return;
         ShowActionMenu(x, y);
     }
 
@@ -518,7 +516,7 @@ public partial class L2EventEditorPanel : UserControl
         ShowActionMenu(x, y);
     }
 
-    /// <summary>What can happen at a tile: the picked character (or any) walks / appears / turns; the camera moves; the party starts.</summary>
+    // what can happen at a tile: the picked character (or any) walks / appears / turns there, the camera moves there, the party starts there
     private void ShowActionMenu(int x, int y)
     {
         if (_editor == null) return;
@@ -526,15 +524,15 @@ public partial class L2EventEditorPanel : UserControl
         if (actions.Count == 0) return;
         var menu = new ContextMenu { PlacementTarget = Stage };
         menu.Items.Add(new MenuItem { Header = $"Tile ({x}, {y}), added after step {_editor.InsertIndex}", IsEnabled = false });
-        var subs = new Dictionary<string, MenuItem>();
-        foreach (var a in actions)
+        var subMenus = new Dictionary<string, MenuItem>();
+        foreach (var action in actions)
         {
-            var mi = new MenuItem { Header = a.Header };
-            var act = a.Act;
-            mi.Click += (_, _) => act();
-            if (a.Group.Length == 0) { if (subs.Count > 0 && !menu.Items.OfType<Separator>().Any()) menu.Items.Add(new Separator()); menu.Items.Add(mi); continue; }
-            if (!subs.TryGetValue(a.Group, out var sub)) { sub = new MenuItem { Header = a.Group }; subs[a.Group] = sub; menu.Items.Add(sub); }
-            sub.Items.Add(mi);
+            var item = new MenuItem { Header = action.Header };
+            var act = action.Act;
+            item.Click += (_, _) => act();
+            if (action.Group.Length == 0) { if (subMenus.Count > 0 && !menu.Items.OfType<Separator>().Any()) menu.Items.Add(new Separator()); menu.Items.Add(item); continue; }
+            if (!subMenus.TryGetValue(action.Group, out var sub)) { sub = new MenuItem { Header = action.Group }; subMenus[action.Group] = sub; menu.Items.Add(sub); }
+            sub.Items.Add(item);
         }
         if (_editor.CanEdit)
         {
@@ -545,7 +543,7 @@ public partial class L2EventEditorPanel : UserControl
             sparkle.Click += (_, _) => _editor.AddSparkles(x, y);
             menu.Items.Add(sparkle);
             var add = new MenuItem { Header = "＋ A new character appears here…", ToolTip = "Pick its sprite: it is made with the map (hidden) and appears on this tile at this step" };
-            add.Click += (_, _) => { int s = PickSprite(_editor, Window.GetWindow(this), "New character", "＋ Add the character"); if (s >= 0) _editor.AddCharacterHere(s, x, y); };
+            add.Click += (_, _) => { int sprite = PickSprite(_editor, Window.GetWindow(this), "New character", "＋ Add the character"); if (sprite >= 0) _editor.AddCharacterHere(sprite, x, y); };
             menu.Items.Add(add);
         }
         menu.IsOpen = true;
@@ -569,18 +567,18 @@ public partial class L2EventEditorPanel : UserControl
         if (_editor != null) _editor.StageInfo = "Click the tile where the party stands when the event begins.";
     }
 
-    /// <summary>Keeps the camera's view (a point of the map) in sight.</summary>
+    // keeps the camera's view (a point of the map) in sight
     private void ScrollTo(double x, double y)
     {
         if (_editor == null || StageRoot.Visibility != Visibility.Visible) return;
-        double z = _editor.Zoom;
-        double vx = x * z - StageScroll.ViewportWidth / 2, vy = y * z - StageScroll.ViewportHeight / 2;
+        double zoom = _editor.Zoom;
+        double centeredX = x * zoom - StageScroll.ViewportWidth / 2, centeredY = y * zoom - StageScroll.ViewportHeight / 2;
         double left = StageScroll.HorizontalOffset, top = StageScroll.VerticalOffset;
-        if (x * z < left + StageScroll.ViewportWidth * 0.2 || x * z > left + StageScroll.ViewportWidth * 0.8) StageScroll.ScrollToHorizontalOffset(Math.Max(0, vx));
-        if (y * z < top + StageScroll.ViewportHeight * 0.2 || y * z > top + StageScroll.ViewportHeight * 0.8) StageScroll.ScrollToVerticalOffset(Math.Max(0, vy));
+        if (x * zoom < left + StageScroll.ViewportWidth * 0.2 || x * zoom > left + StageScroll.ViewportWidth * 0.8) StageScroll.ScrollToHorizontalOffset(Math.Max(0, centeredX));
+        if (y * zoom < top + StageScroll.ViewportHeight * 0.2 || y * zoom > top + StageScroll.ViewportHeight * 0.8) StageScroll.ScrollToVerticalOffset(Math.Max(0, centeredY));
     }
 
-    /// <summary>A sprite to place with the next click on the stage (-1: none).</summary>
+    // a sprite to place with the next click on the stage (-1 = none)
     private int _placeSprite = -1;
 
     private void AddCast_Click(object sender, RoutedEventArgs e)
@@ -596,8 +594,8 @@ public partial class L2EventEditorPanel : UserControl
     private void CastWhen_Click(object sender, RoutedEventArgs e)
     {
         if (_editor?.Rom == null || sender is not FrameworkElement { DataContext: L2CastRowVm row }) return;
-        var w = L2Ui.Window($"{row.Name.Trim()}: when it is on the map", 520, 300);
-        w.Owner = Window.GetWindow(this);
+        var window = L2Ui.Window($"{row.Name.Trim()}: when it is on the map", 520, 300);
+        window.Owner = Window.GetWindow(this);
         var root = new StackPanel { Margin = new Thickness(14) };
         root.Children.Add(L2Ui.Label("The start-up script makes the map's characters as the map loads. Pick when it makes this one " +
                                      "(two characters can share a place: one while a flag is off, the other once it is on).", true));
@@ -605,35 +603,35 @@ public partial class L2EventEditorPanel : UserControl
         var whileOn = new System.Windows.Controls.RadioButton { Content = "Only while this story flag is on", Margin = new Thickness(0, 4, 0, 4), Foreground = L2Ui.B("TextPrimaryBrush") };
         var whileOff = new System.Windows.Controls.RadioButton { Content = "Only while this story flag is off", Margin = new Thickness(0, 4, 0, 4), Foreground = L2Ui.B("TextPrimaryBrush") };
         var flags = new System.Windows.Controls.ComboBox { ItemsSource = _editor.FlagChoices, DisplayMemberPath = "Label", Margin = new Thickness(20, 4, 0, 4), MinWidth = 380 };
-        if (L2Ui.S("GdCombo") is { } cs) flags.Style = cs;
+        if (L2Ui.S("GdCombo") is { } comboStyle) flags.Style = comboStyle;
         flags.SelectedIndex = 0;
         root.Children.Add(always); root.Children.Add(whileOn); root.Children.Add(whileOff); root.Children.Add(flags);
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = System.Windows.HorizontalAlignment.Right, Margin = new Thickness(0, 12, 0, 0) };
         bool ok = false;
-        buttons.Children.Add(L2Ui.Button("Set", true, (_, _) => { ok = true; w.DialogResult = true; }));
-        var cancel = L2Ui.Button("Cancel", false, (_, _) => w.DialogResult = false); cancel.Margin = new Thickness(8, 0, 0, 0);
+        buttons.Children.Add(L2Ui.Button("Set", true, (_, _) => { ok = true; window.DialogResult = true; }));
+        var cancel = L2Ui.Button("Cancel", false, (_, _) => window.DialogResult = false); cancel.Margin = new Thickness(8, 0, 0, 0);
         buttons.Children.Add(cancel);
         root.Children.Add(buttons);
-        w.Content = root;
-        w.ShowDialog();
+        window.Content = root;
+        window.ShowDialog();
         if (!ok) return;
         int flag = always.IsChecked == true ? -1 : (flags.SelectedItem as L2Option)?.Value ?? 0;
         _editor.SetWhen(row.Id, flag, whileOn.IsChecked == true);
     }
 
-    /// <summary>A story character to put on the next tile clicked on the stage: (id, sprite); id -1 = a new one.</summary>
+    // a story character to put on the next tile clicked on the stage: (id, sprite), id -1 = a new one
     private (int Id, int Sprite)? _placeStory;
 
     private void AddStory_Click(object sender, RoutedEventArgs e)
     {
         if (_editor?.Rom is not { } rom) return;
-        var w = L2Ui.Window("Story character here", 520, 260);
-        w.Owner = Window.GetWindow(this);
+        var window = L2Ui.Window("Story character here", 520, 260);
+        window.Owner = Window.GetWindow(this);
         var root = new StackPanel { Margin = new Thickness(14) };
         root.Children.Add(L2Ui.Label("Pick the story character. Next, click the tile on the stage: from the picked step on it stands there " +
                                      "(from the next time this map loads; the game remembers where each story character is).", true));
         var box = new System.Windows.Controls.ComboBox { DisplayMemberPath = "Label", Margin = new Thickness(0, 10, 0, 4), MinWidth = 440 };
-        if (L2Ui.S("GdCombo") is { } cs) box.Style = cs;
+        if (L2Ui.S("GdCombo") is { } comboStyle) box.Style = comboStyle;
         var items = new List<L2Option> { new(-1, "＋ A new story character (pick its sprite next)") };
         for (int id = L2Persistent.First; id <= L2Persistent.LastUsable; id++)
             if (L2Persistent.Exists(rom, id)) items.Add(new L2Option(id, $"{id:X2}  {L2EventCommands.Cap(_editor.StoryLabel(id))}"));
@@ -642,12 +640,12 @@ public partial class L2EventEditorPanel : UserControl
         root.Children.Add(box);
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = System.Windows.HorizontalAlignment.Right, Margin = new Thickness(0, 12, 0, 0) };
         bool ok = false;
-        buttons.Children.Add(L2Ui.Button("Next", true, (_, _) => { ok = true; w.DialogResult = true; }));
-        var cancel = L2Ui.Button("Cancel", false, (_, _) => w.DialogResult = false); cancel.Margin = new Thickness(8, 0, 0, 0);
+        buttons.Children.Add(L2Ui.Button("Next", true, (_, _) => { ok = true; window.DialogResult = true; }));
+        var cancel = L2Ui.Button("Cancel", false, (_, _) => window.DialogResult = false); cancel.Margin = new Thickness(8, 0, 0, 0);
         buttons.Children.Add(cancel);
         root.Children.Add(buttons);
-        w.Content = root;
-        w.ShowDialog();
+        window.Content = root;
+        window.ShowDialog();
         if (!ok || box.SelectedItem is not L2Option pick) return;
         int sprite = -1;
         if (pick.Value < 0)
@@ -687,12 +685,12 @@ public partial class L2EventEditorPanel : UserControl
 
     private void PickStoryPlace_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not FrameworkElement { DataContext: L2FieldVm f } || _editor?.Rom is not { } rom || f.Step.Bytes.Length < 4) return;
-        int map = f.Step.Bytes[2] < L2Maps.Count(rom) && !L2Persistent.IsAway(f.Step.Bytes[2], f.Step.Bytes[3]) ? f.Step.Bytes[2] : Math.Max(2, _editor.Map);
-        var at = L2MapInfo.Records(rom, map, L2MapInfo.Characters, 8).Select(r => r.Bytes).FirstOrDefault(b => b[0] == f.Step.Bytes[3]);
-        var w = new L2PickPlaceWindow(rom, map, at?[1] ?? 0, at?[2] ?? 0, m => L2Maps.Name(rom, m)) { Owner = Window.GetWindow(this), Title = "Where the story character stands - Lufia Forge" };
-        if (w.ShowDialog() != true) return;
-        _editor.PickStoryPlace(f, w.Map, w.X, w.Y);
+        if (sender is not FrameworkElement { DataContext: L2FieldVm field } || _editor?.Rom is not { } rom || field.Step.Bytes.Length < 4) return;
+        int map = field.Step.Bytes[2] < L2Maps.Count(rom) && !L2Persistent.IsAway(field.Step.Bytes[2], field.Step.Bytes[3]) ? field.Step.Bytes[2] : Math.Max(2, _editor.Map);
+        var characterRecord = L2MapInfo.Records(rom, map, L2MapInfo.Characters, 8).Select(r => r.Bytes).FirstOrDefault(b => b[0] == field.Step.Bytes[3]);
+        var window = new L2PickPlaceWindow(rom, map, characterRecord?[1] ?? 0, characterRecord?[2] ?? 0, m => L2Maps.Name(rom, m)) { Owner = Window.GetWindow(this), Title = "Where the story character stands - Lufia Forge" };
+        if (window.ShowDialog() != true) return;
+        _editor.PickStoryPlace(field, window.Map, window.X, window.Y);
     }
 
     private void CastSprite_Click(object sender, RoutedEventArgs e)
@@ -703,11 +701,11 @@ public partial class L2EventEditorPanel : UserControl
         if (sprite >= 0) _editor.ChangeSpriteInEvent(row.Id, sprite);
     }
 
-    /// <summary>Pasting steps from another map: a window to match each character, point, path and area they name.</summary>
+    // pasting steps from another map: a window to match up each character, point, path and area they name
     private bool AskPasteMatch(string intro, List<L2PasteRef> refs)
     {
-        var w = L2Ui.Window("Paste steps", 640, Math.Min(760, 220 + refs.Count * 44));
-        w.Owner = Window.GetWindow(this);
+        var window = L2Ui.Window("Paste steps", 640, Math.Min(760, 220 + refs.Count * 44));
+        window.Owner = Window.GetWindow(this);
         var root = new DockPanel { Margin = new Thickness(12) };
         var top = L2Ui.Label(intro + " (Points and characters are this map's; paths and areas can be copied over.)", true);
         DockPanel.SetDock(top, Dock.Top); root.Children.Add(top);
@@ -716,68 +714,68 @@ public partial class L2EventEditorPanel : UserControl
         var combos = new List<(L2PasteRef Ref, System.Windows.Controls.ComboBox Box)>();
         buttons.Children.Add(L2Ui.Button("Paste", true, (_, _) =>
         {
-            foreach (var (r, box) in combos) if (box.SelectedItem is L2Option o) r.To = o.Value;
-            ok = true; w.DialogResult = true;
+            foreach (var (pasteRef, box) in combos) if (box.SelectedItem is L2Option option) pasteRef.To = option.Value;
+            ok = true; window.DialogResult = true;
         }));
-        var cancel = L2Ui.Button("Cancel", false, (_, _) => w.DialogResult = false); cancel.Margin = new Thickness(8, 0, 0, 0);
+        var cancel = L2Ui.Button("Cancel", false, (_, _) => window.DialogResult = false); cancel.Margin = new Thickness(8, 0, 0, 0);
         buttons.Children.Add(cancel);
         DockPanel.SetDock(buttons, Dock.Bottom); root.Children.Add(buttons);
         var list = new StackPanel { Margin = new Thickness(0, 8, 0, 0) };
-        foreach (var r in refs)
+        foreach (var pasteRef in refs)
         {
             var row = new DockPanel { Margin = new Thickness(0, 3, 0, 3) };
-            var label = L2Ui.Label(r.Label); label.Width = 260; label.VerticalAlignment = VerticalAlignment.Center;
+            var label = L2Ui.Label(pasteRef.Label); label.Width = 260; label.VerticalAlignment = VerticalAlignment.Center;
             row.Children.Add(label);
-            var box = new System.Windows.Controls.ComboBox { ItemsSource = r.Choices, DisplayMemberPath = "Label", MinWidth = 300 };
-            if (L2Ui.S("GdCombo") is { } cs) box.Style = cs;
-            box.SelectedItem = r.Choices.FirstOrDefault(o => o.Value == r.To) ?? r.Choices.FirstOrDefault();
+            var box = new System.Windows.Controls.ComboBox { ItemsSource = pasteRef.Choices, DisplayMemberPath = "Label", MinWidth = 300 };
+            if (L2Ui.S("GdCombo") is { } comboStyle) box.Style = comboStyle;
+            box.SelectedItem = pasteRef.Choices.FirstOrDefault(o => o.Value == pasteRef.To) ?? pasteRef.Choices.FirstOrDefault();
             row.Children.Add(box);
-            combos.Add((r, box));
+            combos.Add((pasteRef, box));
             list.Children.Add(row);
         }
         root.Children.Add(new ScrollViewer { Content = list, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
-        w.Content = root;
-        w.ShowDialog();
+        window.Content = root;
+        window.ShowDialog();
         return ok;
     }
 
-    /// <summary>A small window to pick a map sprite (with its picture); -1 when cancelled.</summary>
+    // a small window to pick a map sprite (with its picture), -1 when cancelled
     public static int PickSprite(L2ScriptEditor editor, Window? owner, string title = "New character", string button = "＋ Add the character", string? hint = null,
         bool gameOnly = false)
     {
         var rom = editor.Rom!;
-        var w = L2Ui.Window(title, 420, 560);
-        w.Owner = owner;
+        var window = L2Ui.Window(title, 420, 560);
+        window.Owner = owner;
         var root = new DockPanel { Margin = new Thickness(12) };
         root.Children.Add(L2Ui.Label(hint ?? "Pick the sprite of the new character. It is made with the map, hidden until a step makes it appear.", true));
         DockPanel.SetDock(root.Children[0], Dock.Top);
         var list = new ListBox { Margin = new Thickness(0, 8, 0, 8) };
-        if (L2Ui.S("GdRecordList") is { } ls) list.Style = ls;
+        if (L2Ui.S("GdRecordList") is { } listStyle) list.Style = listStyle;
         int count = gameOnly ? L2Sprites.GameCount : L2Sprites.Count(rom);
         for (int s = 0; s < count; s++)
         {
             var row = new StackPanel { Orientation = Orientation.Horizontal, Tag = s };
-            var img = new Image { Source = editor.SpritePicture(s), Width = 24, Height = 32, Stretch = Stretch.Uniform, Margin = new Thickness(0, 0, 8, 0) };
-            RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.NearestNeighbor);
-            row.Children.Add(img);
+            var picture = new Image { Source = editor.SpritePicture(s), Width = 24, Height = 32, Stretch = Stretch.Uniform, Margin = new Thickness(0, 0, 8, 0) };
+            RenderOptions.SetBitmapScalingMode(picture, BitmapScalingMode.NearestNeighbor);
+            row.Children.Add(picture);
             row.Children.Add(new TextBlock { Text = $"{s:X2}  {(s < 7 ? L2Rom.Heroes[s] : L2Sprites.Name(s))}", VerticalAlignment = VerticalAlignment.Center, Foreground = L2Ui.B("TextPrimaryBrush") });
             list.Items.Add(row);
         }
         list.SelectedIndex = Math.Min(0x0C, count - 1);
         int picked = -1;
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = System.Windows.HorizontalAlignment.Right };
-        buttons.Children.Add(L2Ui.Button(button, true, (_, _) => { picked = list.SelectedItem is StackPanel { Tag: int t } ? t : -1; w.DialogResult = true; }));
-        var cancel = L2Ui.Button("Cancel", false, (_, _) => w.DialogResult = false); cancel.Margin = new Thickness(8, 0, 0, 0);
+        buttons.Children.Add(L2Ui.Button(button, true, (_, _) => { picked = list.SelectedItem is StackPanel { Tag: int sprite } ? sprite : -1; window.DialogResult = true; }));
+        var cancel = L2Ui.Button("Cancel", false, (_, _) => window.DialogResult = false); cancel.Margin = new Thickness(8, 0, 0, 0);
         buttons.Children.Add(cancel);
         DockPanel.SetDock(buttons, Dock.Bottom);
         root.Children.Add(buttons);
         root.Children.Add(list);
-        list.MouseDoubleClick += (_, _) => { picked = list.SelectedItem is StackPanel { Tag: int t } ? t : -1; w.DialogResult = true; };
-        w.Content = root;
-        return w.ShowDialog() == true ? picked : -1;
+        list.MouseDoubleClick += (_, _) => { picked = list.SelectedItem is StackPanel { Tag: int sprite } ? sprite : -1; window.DialogResult = true; };
+        window.Content = root;
+        return window.ShowDialog() == true ? picked : -1;
     }
 
-    // ── keys, closing ──
+    // keys, closing
 
     protected override void OnPreviewKeyDown(KeyEventArgs e)
     {

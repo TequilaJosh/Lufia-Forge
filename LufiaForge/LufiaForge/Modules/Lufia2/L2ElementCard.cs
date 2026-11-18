@@ -9,11 +9,9 @@ using HorizontalAlignment = System.Windows.HorizontalAlignment;
 
 namespace LufiaForge.Modules.Lufia2;
 
-/// <summary>
-/// The element percents of the record a page shows (<see cref="L2Elements"/>): a monster's, a hero's own, or an item's
-/// (what wearing it adds). A box per element; a change is written at once (the battle code and the table go in with
-/// the first one).
-/// </summary>
+// the element percents of the record a page shows (L2Elements): a monster's, a hero's own, or an item's (what
+// wearing it adds). one box per element, changes get written right away (the battle code and the table go in with
+// the first one)
 public sealed class L2ElementCard : Border
 {
     private L2Page? _page;
@@ -25,10 +23,10 @@ public sealed class L2ElementCard : Border
     public L2ElementCard()
     {
         Child = _body;
-        Loaded += (_, _) => { if (Style == null && TryFindResource("GdCard") is Style st) Style = st; };
+        Loaded += (_, _) => { if (Style == null && TryFindResource("GdCard") is Style cardStyle) Style = cardStyle; };
     }
 
-    /// <summary><paramref name="shows"/>: whether a record has the card (an item: only equipment).</summary>
+    // shows = whether a record gets the card (for items only equipment does)
     public void Attach(L2Page page, Who who, Func<int, bool>? shows = null)
     {
         if (_page != null) _page.PropertyChanged -= PageChanged;
@@ -69,56 +67,56 @@ public sealed class L2ElementCard : Border
             Style = TryFindResource("GdHint") as Style, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 6),
             Text = Hint() + (L2Elements.IsIn(rom) ? "" : " The element table isn't in this ROM yet: these are what the game's scripts do now. The first change puts the table in and moves them into it."),
         });
-        var row = L2Elements.Row(rom, _who, index);
+        var percents = L2Elements.Row(rom, _who, index);
         var grid = new Grid();
-        for (int c = 0; c < 4; c++) grid.ColumnDefinitions.Add(new ColumnDefinition { Width = c % 2 == 0 ? new GridLength(130) : new GridLength(90) });
+        for (int col = 0; col < 4; col++) grid.ColumnDefinitions.Add(new ColumnDefinition { Width = col % 2 == 0 ? new GridLength(130) : new GridLength(90) });
         int rows = (L2Elements.Order.Length + 1) / 2;
         for (int r = 0; r < rows; r++) grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         _loading = true;
         for (int n = 0; n < L2Elements.Order.Length; n++)
         {
-            int k = L2Elements.Order[n];
-            int r = n % rows, c = n / rows * 2;
-            var name = new TextBlock { Text = L2Elements.Name(k), Style = TryFindResource("GdFieldLabel") as Style, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
-            Grid.SetRow(name, r); Grid.SetColumn(name, c);
+            int element = L2Elements.Order[n];
+            int gridRow = n % rows, gridCol = n / rows * 2;
+            var name = new TextBlock { Text = L2Elements.Name(element), Style = TryFindResource("GdFieldLabel") as Style, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
+            Grid.SetRow(name, gridRow); Grid.SetColumn(name, gridCol);
             grid.Children.Add(name);
-            var tb = new TextBox
+            var box = new TextBox
             {
-                Text = row[k] == 0 ? "" : (row[k] > 0 ? "+" : "") + row[k].ToString(CultureInfo.InvariantCulture),
+                Text = percents[element] == 0 ? "" : (percents[element] > 0 ? "+" : "") + percents[element].ToString(CultureInfo.InvariantCulture),
                 Style = TryFindResource("GdNumber") as Style, Width = 60, Margin = new Thickness(2, 1, 2, 1), HorizontalAlignment = HorizontalAlignment.Left,
-                ToolTip = $"{L2Elements.Name(k)}: percent ({L2Elements.Min} to +{L2Elements.Max}; empty = 0)",
+                ToolTip = $"{L2Elements.Name(element)}: percent ({L2Elements.Min} to +{L2Elements.Max}; empty = 0)",
             };
-            int kk = k;
-            tb.LostFocus += (_, _) =>
+            int thisElement = element;
+            box.LostFocus += (_, _) =>
             {
-                string t = tb.Text.Trim().TrimEnd('%').Replace("+", "");
-                if (t.Length == 0) t = "0";
-                if (!int.TryParse(t, NumberStyles.Integer, CultureInfo.InvariantCulture, out int v) || v < L2Elements.Min || v > L2Elements.Max)
+                string text = box.Text.Trim().TrimEnd('%').Replace("+", "");
+                if (text.Length == 0) text = "0";
+                if (!int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int percent) || percent < L2Elements.Min || percent > L2Elements.Max)
                 {
                     Dispatcher.BeginInvoke(Build);
                     return;
                 }
-                // the value it has now (nothing typed: clicking into the box and out again installed the status patch)
-                int now = _page?.PageRom is { } pr && L2Elements.IsIn(pr) && _page.PageIndex >= 0 ? L2Elements.Get(pr, _who, _page.PageIndex, kk) : row[kk];
-                if (v == now) return;
-                Write(kk, v);
+                // the value it has right now (without this, clicking into the box and out again with nothing typed installed the status patch)
+                int now = _page?.PageRom is { } pageRom && L2Elements.IsIn(pageRom) && _page.PageIndex >= 0 ? L2Elements.Get(pageRom, _who, _page.PageIndex, thisElement) : percents[thisElement];
+                if (percent == now) return;
+                Write(thisElement, percent);
             };
-            Grid.SetRow(tb, r); Grid.SetColumn(tb, c + 1);
-            grid.Children.Add(tb);
+            Grid.SetRow(box, gridRow); Grid.SetColumn(box, gridCol + 1);
+            grid.Children.Add(box);
         }
         _loading = false;
         _body.Children.Add(grid);
     }
 
-    private void Write(int k, int percent)
+    private void Write(int element, int percent)
     {
         var rom = _page?.PageRom;
         int index = _page?.PageIndex ?? -1;
         if (_loading || rom == null || index < 0) return;
         try
         {
-            if (L2Elements.Set(rom, _who, index, k, percent))
-                _page!.ReportChange($"{L2Elements.Name(k)} {(percent > 0 ? "+" : "")}{percent}%");
+            if (L2Elements.Set(rom, _who, index, element, percent))
+                _page!.ReportChange($"{L2Elements.Name(element)} {(percent > 0 ? "+" : "")}{percent}%");
         }
         catch (Exception e) { MessageBox.Show(e.Message, "Elements", MessageBoxButton.OK, MessageBoxImage.Warning); }
         Dispatcher.BeginInvoke(Build);

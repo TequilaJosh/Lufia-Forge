@@ -10,22 +10,22 @@ public partial class L2ItemsView : UserControl
     public L2ItemsView()
     {
         InitializeComponent();
-        DataContextChanged += (_, _) => { if (DataContext is L2ItemsPage p) Attach(p); };
+        DataContextChanged += (_, _) => { if (DataContext is L2ItemsPage page) Attach(page); };
     }
 
-    /// <summary>The new statuses card: what this record gives, cures or resists.</summary>
-    private void Attach(L2ItemsPage p)
+    // hooks up the cards. the new statuses card shows what this record gives, cures or resists
+    private void Attach(L2ItemsPage page)
     {
-        Elements.Attach(p, LufiaForge.Core.Lufia2.L2Elements.Who.Item, i => p.PageRom is { } r && L2Battle.ReadItem(r, i).EquipType != 0);
-        Types.Attach(p, Kind.Weapon, i =>
+        Elements.Attach(page, LufiaForge.Core.Lufia2.L2Elements.Who.Item, i => page.PageRom is { } rom && L2Battle.ReadItem(rom, i).EquipType != 0);
+        Types.Attach(page, Kind.Weapon, i =>
         {
-            var rom = p.PageRom;
+            var rom = page.PageRom;
             if (rom == null) return null;
-            var it = L2Battle.ReadItem(rom, i);
-            return (it.EquipType & 1) != 0 ? Kind.Weapon : (it.Words & 0x0002) != 0 ? Kind.ItemBattle : null;
+            var item = L2Battle.ReadItem(rom, i);
+            return (item.EquipType & 1) != 0 ? Kind.Weapon : (item.Words & 0x0002) != 0 ? Kind.ItemBattle : null;
         });
-        BounceFocus.Attach(p, monsters: false);
-        NewStatuses.Attach(p,
+        BounceFocus.Attach(page, monsters: false);
+        NewStatuses.Attach(page,
             new("Weapon hit causes", "As a weapon: the chance its hit gives the status (its weapon script).", Kind.Weapon, What.Cause),
             new("Worn: resists", "As armor: the wearer's chance of getting it drops by this percent (100 = immune).", Kind.Armor, What.Resist),
             new("Used: causes", "Used in battle: the chance it gives the status to its targets.", Kind.ItemBattle, What.Cause),
