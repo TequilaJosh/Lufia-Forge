@@ -307,6 +307,13 @@ public partial class MainViewModel
                 }
             }
             catch (Exception ex) { _openNote += " The hold-L patch couldn't be fixed: " + ex.Message; }
+        if (!rom.IsLufia2 && Core.FoulWaterFix.Needed(rom))
+        {
+            Core.FoulWaterFix.Set(rom, true);
+            NotifyRomModified("Fast walking: Foul Water's steps count down again (Colmines92's fix)");
+            OnPropertyChanged(nameof(RomBuffer));
+            _openNote += " With fast walking, Foul Water's effect never ended; Colmines92's fix was added (Edit, Undo takes it back).";
+        }
         try
         {
             if (Core.Lufia2.L2Rom.NeedsLowBankFix(rom))

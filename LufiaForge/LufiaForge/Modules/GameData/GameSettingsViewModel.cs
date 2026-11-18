@@ -38,6 +38,11 @@ public partial class GameSettingsViewModel : GameDataEditorBase
     [ObservableProperty] private bool _limitsPatch;
     [ObservableProperty] private bool _canLimitsPatch;
     [ObservableProperty] private string _limitsText = "";
+    /// <summary>Hold R to turn without walking (<see cref="LufiaForge.Core.TurnInPlacePatch"/>).</summary>
+    [ObservableProperty] private bool _turnPatch;
+    [ObservableProperty] private bool _canTurnPatch;
+    [ObservableProperty] private string _turnText = "";
+    [ObservableProperty] private string _fastWalkText = "";
     [ObservableProperty] private bool _retargetFix;
     [ObservableProperty] private bool _canRetargetFix;
     /// <summary>Dutch letters in the fonts (<see cref="LufiaForge.Core.DutchLetters"/>).</summary>
@@ -81,7 +86,23 @@ public partial class GameSettingsViewModel : GameDataEditorBase
         _syncingPreset = false;
     }
     partial void OnSafeStepsChanged(int value) => UpdateEncounterText();
-    partial void OnMenuButtonChanged(int value) => UpdateMenuText();
+    partial void OnMenuButtonChanged(int value) { UpdateMenuText(); UpdateTurnText(); }
+    partial void OnTurnPatchChanged(bool value) => UpdateTurnText();
+    partial void OnFastWalkChanged(bool value) => UpdateFastWalkText();
+
+    private void UpdateTurnText() => TurnText = !CanTurnPatch
+        ? "The field step code ($01:8BFF) was changed by another patch, so this can't be added here."
+        : TurnPatch && MenuButton == 6 ? "R also opens the menu (Menu button above): both will happen."
+        : "Hold R and press a direction to face that way without taking a step (no random battle), as in Lufia II. Thanks to Colmines92.";
+
+    private void UpdateFastWalkText()
+    {
+        var rom = Ctx?.Rom;
+        bool canFix = rom != null && (LufiaForge.Core.FoulWaterFix.IsOriginal(rom) || LufiaForge.Core.FoulWaterFix.IsApplied(rom));
+        FastWalkText = !FastWalk ? "Towns already walk fast; this makes the world map and dungeons as fast."
+            : canFix ? "Foul Water's steps still count down (Colmines92's fix goes in with it: the game counted them only at normal speed)."
+            : "Warning: this ROM's Foul Water code isn't the game's, so its effect may never end (a battle every step until the game is reset).";
+    }
     partial void OnHoldLPatchChanged(bool value) => UpdateMenuText();
     partial void OnLimitsPatchChanged(bool value) => UpdateLimitsText();
     partial void OnMaxLevelActualChanged(int value) => UpdateLimitsText();
@@ -134,6 +155,10 @@ public partial class GameSettingsViewModel : GameDataEditorBase
         LimitsPatch       = LufiaForge.Core.LimitsPatch.IsApplied(rom);
         CanLimitsPatch    = LimitsPatch || LufiaForge.Core.LimitsPatch.IsOriginal(rom);
         UpdateLimitsText();
+        TurnPatch         = LufiaForge.Core.TurnInPlacePatch.IsApplied(rom);
+        CanTurnPatch      = TurnPatch || LufiaForge.Core.TurnInPlacePatch.IsOriginal(rom);
+        UpdateTurnText();
+        UpdateFastWalkText();
         RetargetFix       = LufiaForge.Core.Battle.RetargetPatch.IsApplied(rom);
         CanRetargetFix    = RetargetFix || LufiaForge.Core.Battle.RetargetPatch.IsOriginal(rom);
         InternalTitle     = rom.ReadAscii(GameDataOffsets.InternalTitle, GameDataOffsets.InternalTitleLen).TrimEnd();
@@ -154,7 +179,8 @@ public partial class GameSettingsViewModel : GameDataEditorBase
         bool fixWanted = RetargetFix, fixed_ = LufiaForge.Core.Battle.RetargetPatch.IsApplied(rom);
         bool lettersWanted = DutchLetters, letters = LufiaForge.Core.DutchLetters.IsApplied(rom);
         bool limitsWanted = LimitsPatch && CanLimitsPatch, limits = LufiaForge.Core.LimitsPatch.IsApplied(rom);
-        if ((patchWanted && !patched || fixWanted && !fixed_ || lettersWanted && !letters || limitsWanted && !limits) && rom.Length < Core.Maps.MapWriter.ExpandedSize && !AutoWriting &&
+        bool turnWanted = TurnPatch && CanTurnPatch, turn = LufiaForge.Core.TurnInPlacePatch.IsApplied(rom);
+        if ((patchWanted && !patched || fixWanted && !fixed_ || lettersWanted && !letters || limitsWanted && !limits || turnWanted && !turn) && rom.Length < Core.Maps.MapWriter.ExpandedSize && !AutoWriting &&
             System.Windows.MessageBox.Show("The patches you ticked add small routines to the expanded part of the ROM. Expand the ROM to 2 MB?",
                 "Expand ROM?", System.Windows.MessageBoxButton.YesNo) != System.Windows.MessageBoxResult.Yes)
         { Refuse("Not applied: the ROM was not expanded."); return; }
@@ -169,10 +195,13 @@ public partial class GameSettingsViewModel : GameDataEditorBase
             if (!lettersWanted && letters) LufiaForge.Core.DutchLetters.Remove(rom);
             if (limitsWanted && !limits) LufiaForge.Core.LimitsPatch.Apply(rom);
             if (!limitsWanted && limits) LufiaForge.Core.LimitsPatch.Remove(rom);
+            if (turnWanted && !turn) LufiaForge.Core.TurnInPlacePatch.Apply(rom);
+            if (!turnWanted && turn) LufiaForge.Core.TurnInPlacePatch.Remove(rom);
             if (LufiaForge.Core.MenuButtonPatch.Current(rom) >= 0) LufiaForge.Core.MenuButtonPatch.Set(rom, MenuButton);
             rom.WriteByte(GameDataOffsets.WalkSpeed, (byte)(FastWalk ? 0x20 : 0x10));
             rom.WriteBytes(GameDataOffsets.WalkSpeedPatch,
                 FastWalk ? GameDataOffsets.WalkPatchFast : GameDataOffsets.WalkPatchNormal);
+            LufiaForge.Core.FoulWaterFix.Set(rom, FastWalk);
             if (LufiaForge.Core.RestoredWalk.IsAvailable(rom) && RestoredWalk != LufiaForge.Core.RestoredWalk.IsOn(rom))
                 LufiaForge.Core.RestoredWalk.Set(rom, RestoredWalk);
             rom.WriteByte(GameDataOffsets.ShipSpeed,    (byte)(FastShip    ? 0x40 : 0x20));

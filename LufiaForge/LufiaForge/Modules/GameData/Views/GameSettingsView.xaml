@@ -20,8 +20,7 @@
                     <StackPanel>
                         <TextBlock Text="MOVEMENT" Style="{StaticResource GdSection}"/>
                         <CheckBox Content="Fast walking" Style="{StaticResource GdCheck}" IsChecked="{Binding FastWalk}"/>
-                        <TextBlock Style="{StaticResource GdHint}" Margin="20,0,0,6"
-                                   Text="Warning: breaks the Foul Water item - its effect becomes permanent (a battle every step) until the game is reset."/>
+                        <TextBlock Style="{StaticResource GdHint}" Margin="20,0,0,6" TextWrapping="Wrap" Text="{Binding FastWalkText}"/>
                         <StackPanel Visibility="{Binding HasRestoredWalk, Converter={StaticResource BoolToVisibilityConverter}}">
                             <CheckBox Content="Lufia Restored's faster walking" Style="{StaticResource GdCheck}" IsChecked="{Binding RestoredWalk}"/>
                             <TextBlock Style="{StaticResource GdHint}" Margin="20,0,0,6" TextWrapping="Wrap"
@@ -37,6 +36,10 @@
                                       ToolTip="The button that opens the menu on the field (the game uses B). Colmines92's menu button remap."/>
                         </StackPanel>
                         <TextBlock Text="{Binding MenuButtonText}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                        <CheckBox Content="Hold R to turn without walking" Style="{StaticResource GdCheck}" IsChecked="{Binding TurnPatch}"
+                                  IsEnabled="{Binding CanTurnPatch}" Margin="0,8,0,0"
+                                  ToolTip="Colmines92's patch: hold R and press a direction to face that way without taking a step"/>
+                        <TextBlock Text="{Binding TurnText}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="20,0,0,0"/>
                     </StackPanel>
                 </Border>
 

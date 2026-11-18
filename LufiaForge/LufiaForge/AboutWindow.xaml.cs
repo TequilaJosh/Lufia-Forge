@@ -12,7 +12,7 @@ public partial class AboutWindow : Window
     {
         new("Ok Impala!", "Testing from the first betas, and a long list of ideas that became features: graphics import/export, map copy and paste, the music editor, title screen and credits editors, fewer random battles, party members retargeting, 4 MB ROMs, and the rename command for flashbacks with the old heroes."),
         new("Artemis", "A huge help: finding bugs (the 8 MB battle window, the party in test runs, story cutscenes that ended at once, Sinistrals between two tiles), Lufia II lore, and ideas that became features: text length warnings, adding characters from the event screens, copying steps and tile changes, the ring commands and the Sinistral attacks."),
-        new("Colmines92", "The 3-digit level patches for both games, which became the higher limits (levels to 255, HP and MP to 9999), the menu button remap, and more ideas."),
+        new("Colmines92", "The 3-digit level patches for both games, which became the higher limits (levels to 255, HP and MP to 9999), the menu button remap, hold R to turn without walking and the Foul Water fix for fast walking in Lufia 1, and more ideas."),
         new("Jester", "The idea of giving Lufia 1 the Lufia II font."),
         new("Pedro José", "Feedback and encouragement in the Discord."),
         new("Mewlies", "Feedback and Lufia lore in the Discord."),

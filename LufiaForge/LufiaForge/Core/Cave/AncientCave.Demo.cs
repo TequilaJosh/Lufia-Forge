@@ -51,5 +51,6 @@ public static partial class AncientCave
     {
         rom.WriteByte(GameDataOffsets.WalkSpeed, (byte)(on ? 0x20 : 0x10));
         rom.WriteBytes(GameDataOffsets.WalkSpeedPatch, on ? GameDataOffsets.WalkPatchFast : GameDataOffsets.WalkPatchNormal);
+        FoulWaterFix.Set(rom, on);
     }
 }
