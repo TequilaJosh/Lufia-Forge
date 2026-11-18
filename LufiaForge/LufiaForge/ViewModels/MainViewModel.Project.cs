@@ -9,11 +9,9 @@ using System.Windows.Threading;
 
 namespace LufiaForge.ViewModels;
 
-/// <summary>
-/// Projects: picking a ROM starts a named project (<see cref="LufiaProject"/>); edits go to the ROM in memory and are
-/// kept by saving the project (Ctrl+S, every 5 minutes on its own, and when closing after a question). ROM files are
-/// only written when one is needed: Export ROM, and the copy BizHawk plays.
-/// </summary>
+// projects: picking a rom starts a named project (LufiaProject). edits go to the rom in memory and get kept by saving
+// the project (ctrl+s, every 5 minutes by itself, and when closing after asking). rom files only get written when one
+// is needed: export rom, and the copy bizhawk plays
 public partial class MainViewModel
 {
     public static readonly TimeSpan AutosaveEvery = TimeSpan.FromMinutes(5);
@@ -23,7 +21,7 @@ public partial class MainViewModel
     [NotifyPropertyChangedFor(nameof(ProjectText))]
     private LufiaProject? _project;
 
-    /// <summary>The ROM as the project was last saved (to tell whether anything changed since).</summary>
+    // the rom as the project was last saved (to tell if anything changed since)
     private byte[]? _savedRom;
 
     public ObservableCollection<RecentProjects.Entry> RecentList { get; } = new();
@@ -31,19 +29,19 @@ public partial class MainViewModel
 
     public string ProjectText => Project == null ? "" : $"{Project.Name}";
 
-    /// <summary>Flag names and notes (Lufia II) are kept in the open project.</summary>
+    // flag names and notes (lufia 2) are kept in the open project
     partial void OnProjectChanged(LufiaProject? value) => Core.Lufia2.L2FlagNotes.Project = value?.FlagNotes;
 
     private readonly List<IPendingEdits> _editors = new();
 
-    /// <summary>A tab or panel whose edits are written by themselves (see <see cref="IPendingEdits"/>).</summary>
+    // a tab or panel whose edits get written without asking (see IPendingEdits)
     public void Register(IPendingEdits editor) { if (!_editors.Contains(editor)) _editors.Add(editor); ApplyAllCommand.NotifyCanExecuteChanged(); }
     public void Unregister(IPendingEdits editor) => _editors.Remove(editor);
 
-    /// <summary>Whether a tab has edits that aren't in the ROM yet.</summary>
-    public bool HasPendingEdits => _editors.ToList().Any(e => { try { return e.HasPendingEdits; } catch { return false; } });
+    // whether a tab has edits that aren't in the rom yet
+    public bool HasPendingEdits => _editors.ToList().Any(editor => { try { return editor.HasPendingEdits; } catch { return false; } });
 
-    /// <summary>Apply to ROM (top bar): every tab's edits are written to the ROM now.</summary>
+    // apply to rom (top bar): writes every tab's edits to the rom now
     [RelayCommand(CanExecute = nameof(IsRomLoaded))]
     private void ApplyAll()
     {
@@ -56,19 +54,17 @@ public partial class MainViewModel
             StatusMessage = had ? "Every tab's edits are in the project now (Save Project keeps them)." : "Nothing to apply: every edit is already in the project.";
     }
 
-    private static bool IsModal(Window w) =>
-        (bool)(typeof(Window).GetField("_showingAsDialog", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)?.GetValue(w) ?? false);
+    private static bool IsModal(Window window) =>
+        (bool)(typeof(Window).GetField("_showingAsDialog", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)?.GetValue(window) ?? false);
 
-    /// <summary>
-    /// A dialog is open on the UI thread: a window shown with ShowDialog, a message box or a file picker. The timers
-    /// still tick inside its loop, so nothing may write the ROM or save the project behind it (an editor halfway
-    /// through Apply may be asking a question in it). Message boxes and file pickers aren't WPF windows: they are the
-    /// thread's visible windows of the dialog class (#32770).
-    /// </summary>
+    // a dialog is open on the ui thread: a window shown with ShowDialog, a message box or a file picker. the timers
+    // still tick inside its loop, so nothing can write the rom or save the project behind it (an editor halfway through
+    // Apply might be asking a question in it). message boxes and file pickers aren't wpf windows, they're the thread's
+    // visible windows of the dialog class (#32770)
     public static bool IsDialogOpen()
     {
         if (System.Windows.Interop.ComponentDispatcher.IsThreadModal) return true;
-        if (Application.Current?.Windows.OfType<Window>().Any(w => w.IsVisible && IsModal(w)) == true) return true;
+        if (Application.Current?.Windows.OfType<Window>().Any(window => window.IsVisible && IsModal(window)) == true) return true;
         bool found = false;
         var name = new System.Text.StringBuilder(16);
         EnumThreadWindows(GetCurrentThreadId(), (hwnd, _) =>
@@ -87,23 +83,23 @@ public partial class MainViewModel
     private static extern int GetClassName(IntPtr hwnd, System.Text.StringBuilder name, int max);
     [System.Runtime.InteropServices.DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
 
-    /// <summary>Writes every tab's pending edits; returns the problems.</summary>
+    // writes every tab's pending edits, returns the problems
     private List<string> WriteAllPending()
     {
-        // a box being typed in hands its text over first (it would be put back to the old value otherwise), also one
-        // in a popped-out section's window, which keeps its focus there while the main window is used
-        if (System.Windows.Input.Keyboard.FocusedElement is System.Windows.Controls.TextBox tb)
-            System.Windows.Data.BindingOperations.GetBindingExpression(tb, System.Windows.Controls.TextBox.TextProperty)?.UpdateSource();
-        foreach (var w in System.Windows.Application.Current?.Windows.OfType<System.Windows.Window>() ?? [])
-            if (System.Windows.Input.FocusManager.GetFocusedElement(w) is System.Windows.Controls.TextBox wb && !ReferenceEquals(wb, System.Windows.Input.Keyboard.FocusedElement))
-                System.Windows.Data.BindingOperations.GetBindingExpression(wb, System.Windows.Controls.TextBox.TextProperty)?.UpdateSource();
+        // a box someone's typing in hands its text over first (it would go back to the old value otherwise), also one in
+        // a popped-out section's window, which keeps its focus there while the main window is used
+        if (System.Windows.Input.Keyboard.FocusedElement is System.Windows.Controls.TextBox focusedBox)
+            System.Windows.Data.BindingOperations.GetBindingExpression(focusedBox, System.Windows.Controls.TextBox.TextProperty)?.UpdateSource();
+        foreach (var window in System.Windows.Application.Current?.Windows.OfType<System.Windows.Window>() ?? [])
+            if (System.Windows.Input.FocusManager.GetFocusedElement(window) is System.Windows.Controls.TextBox windowBox && !ReferenceEquals(windowBox, System.Windows.Input.Keyboard.FocusedElement))
+                System.Windows.Data.BindingOperations.GetBindingExpression(windowBox, System.Windows.Controls.TextBox.TextProperty)?.UpdateSource();
         var errors = new List<string>();
-        foreach (var e in _editors.ToList())
+        foreach (var editor in _editors.ToList())
         {
             try
             {
-                if (!e.HasPendingEdits) continue;
-                if (e.WritePendingEdits() is { } error) errors.Add(error);
+                if (!editor.HasPendingEdits) continue;
+                if (editor.WritePendingEdits() is { } error) errors.Add(error);
             }
             catch (Exception ex) { errors.Add(ex.Message); }
         }
@@ -112,14 +108,14 @@ public partial class MainViewModel
 
     private DispatcherTimer? _autosave;
 
-    /// <summary>When the user last typed, clicked or scrolled (the autosave waits for a pause).</summary>
+    // when the user last typed, clicked or scrolled (the autosave waits for a pause)
     private static DateTime _lastInput = DateTime.MinValue;
 
     private void StartProjectSupport()
     {
         RefreshRecent();
-        foreach (var ev in new RoutedEvent[] { UIElement.PreviewKeyDownEvent, UIElement.PreviewMouseDownEvent, UIElement.PreviewMouseWheelEvent, UIElement.PreviewMouseUpEvent })
-            EventManager.RegisterClassHandler(typeof(Window), ev, new RoutedEventHandler((_, _) => _lastInput = DateTime.Now), true);
+        foreach (var routedEvent in new RoutedEvent[] { UIElement.PreviewKeyDownEvent, UIElement.PreviewMouseDownEvent, UIElement.PreviewMouseWheelEvent, UIElement.PreviewMouseUpEvent })
+            EventManager.RegisterClassHandler(typeof(Window), routedEvent, new RoutedEventHandler((_, _) => _lastInput = DateTime.Now), true);
         _autosave = new DispatcherTimer { Interval = AutosaveEvery };
         _autosave.Tick += (_, _) => Autosave();
         _autosave.Start();
@@ -140,11 +136,11 @@ public partial class MainViewModel
     public void RefreshRecent()
     {
         RecentList.Clear();
-        foreach (var e in RecentProjects.Load()) RecentList.Add(e);
+        foreach (var entry in RecentProjects.Load()) RecentList.Add(entry);
         OnPropertyChanged(nameof(HasRecent));
     }
 
-    /// <summary>Unsaved: the ROM differs from the last save, or a tab has edits that aren't in the ROM yet.</summary>
+    // unsaved = the rom differs from the last save, or a tab has edits that aren't in the rom yet
     public bool HasUnsavedProjectChanges()
     {
         if (Project == null || RomBuffer == null) return false;
@@ -152,9 +148,9 @@ public partial class MainViewModel
         return _savedRom == null || !RomBuffer.SameAs(_savedRom);
     }
 
-    // ── new / open ──
+    // new / open
 
-    /// <summary>Picks a ROM and starts a project from it.</summary>
+    // picks a rom and starts a project from it
     [RelayCommand]
     private void NewProject()
     {
@@ -247,13 +243,13 @@ public partial class MainViewModel
 
     private void Use(LufiaProject project, byte[] rom)
     {
-        // a project made before Lufia Forge knew the ROM (the Dutch Lufia II was taken for Lufia 1)
+        // a project made before we knew the rom (the dutch lufia 2 got taken for lufia 1)
         if (GameDetect.Detect(rom) == GameKind.Unknown) throw new InvalidDataException(GameDetect.WhyNot(rom));
         _pendingChanges.Clear();
         Project = project;
         Core.Maps.MapNames.ProjectNames = project.MapNames;
         _savedRom = (byte[])rom.Clone();
-        // what the project started from: another hack's data is known from it (RomIdentity, TableGuard)
+        // what the project started from, so we know another hack's data from it (RomIdentity, TableGuard)
         var buffer = new RomBuffer(rom, PlayRomPath(project)) { Original = project.BaseRom };
         TableGuard.Protect(buffer);
         RomBuffer = buffer;
@@ -263,16 +259,10 @@ public partial class MainViewModel
         OnPropertyChanged(nameof(WindowTitle));
     }
 
-    /// <summary>Mistakes in the game Lufia Forge puts right as a ROM is opened (each one Edit, Undo step): Lufia II's
-    /// shrine maps CF and F1, drawn wrong in the US game (<see cref="Core.Lufia2.L2ShrineFix"/>), and on an 8 MB Lufia II
-    /// ROM made before 2026-11-01 the battle window frame read from the upper 4 MB (<see cref="Core.Lufia2.L2Rom.FixLowBankReads"/>),
-    /// and puzzle blocks Lufia Forge wrote before then past 2.5 MB, where their commands can't reach RAM
-    /// (<see cref="Core.Lufia2.L2PuzzleBlock.MoveIntoReach"/>), and a version 2 battle script block, whose runner hook
-    /// skipped the fan hacks' monster scripts with offsets that wrap round their bank (<see cref="Core.Lufia2.L2AiScripts.UpdateHooks"/>).</summary>
     private string _openNote = "";
 
-    /// <summary>Snes9x 1.51 mode was turned on (Edit, Settings): what the open project has in the top 2 MB of its 8 MB ROM
-    /// moves now, as one Undo step, and the status bar says what.</summary>
+    // snes9x 1.51 mode got turned on (edit, settings): what the open project has in the top 2 MB of its 8 MB rom moves
+    // now, as one undo step, and the status bar says what
     public void MoveOutOfTop2MB()
     {
         if (RomBuffer is not { IsLufia2: true } rom || !Core.Lufia2.L2HighBanks.Needed(rom)) return;
@@ -292,10 +282,16 @@ public partial class MainViewModel
 
     private static int SafeCount(Func<int> count) { try { return count(); } catch (Exception) { return 0; } }
 
+    // mistakes in the game we put right as a rom opens (each one an edit, undo step): lufia 2's shrine maps CF and F1,
+    // drawn wrong in the us game (Core.Lufia2.L2ShrineFix), and on an 8 MB lufia 2 rom made before 2026-11-01 the
+    // battle window frame read from the upper 4 MB (Core.Lufia2.L2Rom.FixLowBankReads), and puzzle blocks we wrote
+    // before then past 2.5 MB, where their commands can't reach ram (Core.Lufia2.L2PuzzleBlock.MoveIntoReach), and a
+    // version 2 battle script block, whose runner hook skipped the fan hacks' monster scripts with offsets that wrap
+    // around their bank (Core.Lufia2.L2AiScripts.UpdateHooks)
     private void FixKnownBugs(RomBuffer rom)
     {
         _openNote = "";
-        // (each fix on its own: one that fails says so in the note, and the project still opens with the others)
+        // each fix on its own, so one that fails says so in the note and the project still opens with the others
         if (!rom.IsLufia2)
             try
             {
@@ -377,19 +373,18 @@ public partial class MainViewModel
         {
             Core.Lufia2.L2ShrineFix.Apply(rom);
             NotifyRomModified("Lufia II: shrine maps CF and F1 fixed as in the European release (block set 17 and tile set 11; maps E7-EB keep their look)");
-            OnPropertyChanged(nameof(RomBuffer));   // the pages read the fixed ROM
+            OnPropertyChanged(nameof(RomBuffer));   // the pages read the fixed rom
             _openNote += " Shrine maps CF and F1, garbled in the US game, were fixed as in the European release (Edit, Undo takes it back).";
         }
         catch (Exception ex) { _openNote += " Lufia II's shrine maps CF and F1 couldn't be fixed: " + ex.Message; }
     }
 
-    /// <summary>The Dutch Lufia II picked for a new project: Lufia Forge edits the US game's layout, so the Dutch text
-    /// goes into a Lufia II (USA) ROM or a hack built on one, picked next (<see cref="Core.Lufia2.L2Dutch"/>). Returns
-    /// false when the file isn't the Dutch ROM.</summary>
+    // the dutch lufia 2 picked for a new project. we edit the us game's layout, so the dutch text goes into a lufia 2
+    // (usa) rom or a hack built on one, picked next (Core.Lufia2.L2Dutch). returns false if the file isn't the dutch rom
     private bool TryDutch(string path)
     {
         byte[] dutch;
-        try { dutch = Core.Lufia2.L2Dutch.ReadFile(path); }   // (a .zip too)
+        try { dutch = Core.Lufia2.L2Dutch.ReadFile(path); }   // a .zip too
         catch { return false; }
         if (MessageBox.Show("This is the Dutch Lufia II, a translation built on the European release, which keeps its data in other places " +
                 "than the US game.\n\nLufia Forge edits Lufia II (USA) and the hacks built on it, so it puts the Dutch translation into one of " +
@@ -428,20 +423,19 @@ public partial class MainViewModel
         return true;
     }
 
-    /// <summary>The ROM file next to the project (what Export ROM names its copies after, and where the bookmarks and
-    /// flag names are kept): "&lt;project&gt;.sfc". BizHawk plays it too, unless another file is there
-    /// (<see cref="PlayCopies"/>).</summary>
-    private static string PlayRomPath(LufiaProject p) => Path.ChangeExtension(p.Path, ".sfc");
+    // the rom file next to the project (what export rom names its copies after, and where the bookmarks and flag names
+    // are kept): "<project>.sfc". bizhawk plays it too, unless some other file is there (PlayCopies)
+    private static string PlayRomPath(LufiaProject project) => Path.ChangeExtension(project.Path, ".sfc");
 
-    /// <summary>Bookmarks and story flag names kept next to the ROM go with the project (with <paramref name="replace"/>,
-    /// also over the notes already at the new place: Save Project As over another project).</summary>
+    // bookmarks and story flag names kept next to the rom go along with the project (with replace, also over the notes
+    // already at the new place, for save project as over another project)
     private static void CarryOverNotes(string romPath, string projectRom, bool replace = false)
     {
-        foreach (var ext in new[] { ".lfbookmarks.json", ".lfflags.json" })
+        foreach (var extension in new[] { ".lfbookmarks.json", ".lfflags.json" })
         {
             try
             {
-                string from = Path.ChangeExtension(romPath, null) + ext, to = Path.ChangeExtension(projectRom, null) + ext;
+                string from = Path.ChangeExtension(romPath, null) + extension, to = Path.ChangeExtension(projectRom, null) + extension;
                 if (string.Equals(Path.GetFullPath(from), Path.GetFullPath(to), StringComparison.OrdinalIgnoreCase)) continue;
                 if (File.Exists(from) && (replace || !File.Exists(to))) File.Copy(from, to, overwrite: true);
             }
@@ -449,11 +443,11 @@ public partial class MainViewModel
         }
     }
 
-    /// <summary>The BizHawk window <see cref="PlayInBizHawk"/> opened last (closed before a new one opens).</summary>
+    // the bizhawk window PlayInBizHawk opened last (closed before a new one opens)
     private static System.Diagnostics.Process? _played;
 
-    /// <summary>Writes the project's ROM as it is now and opens it in BizHawk, in a window of its own (the one opened
-    /// here before is closed first). Returns what happened, for a page's status line.</summary>
+    // writes the project's rom as it is now and opens it in bizhawk, in a window of its own (the one we opened before
+    // gets closed first). returns what happened, for a page's status line
     public string PlayInBizHawk()
     {
         string? rom = WritePlayRom();
@@ -475,13 +469,13 @@ public partial class MainViewModel
             { WorkingDirectory = Path.GetDirectoryName(exe)!, UseShellExecute = false });
         }
         catch (Exception ex) { return "BizHawk couldn't be opened: " + ex.Message; }
-        string? warn = Modules.MemoryMonitor.BizHawkHost.CoreWarning(exe, rom);
-        return "BizHawk is opening the ROM: start a new game." + (warn != null ? " " + warn : "");
+        string? coreWarning = Modules.MemoryMonitor.BizHawkHost.CoreWarning(exe, rom);
+        return "BizHawk is opening the ROM: start a new game." + (coreWarning != null ? " " + coreWarning : "");
     }
 
-    /// <summary>Writes the project's ROM as it is now next to the project (for BizHawk) and returns its path. A file
-    /// there that Lufia Forge didn't write (the ROM the project started from, say) is never overwritten: the copy goes
-    /// to "&lt;project&gt;.play.sfc" then (<see cref="PlayCopies"/>).</summary>
+    // writes the project's rom as it is now next to the project (for bizhawk) and returns its path. a file there that
+    // we didn't write (the rom the project started from, say) never gets overwritten, the copy goes to
+    // "<project>.play.sfc" then (PlayCopies)
     public string? WritePlayRom()
     {
         if (RomBuffer == null || Project == null) return null;
@@ -500,7 +494,7 @@ public partial class MainViewModel
         }
     }
 
-    // ── save ──
+    // save
 
     [RelayCommand(CanExecute = nameof(IsRomLoaded))]
     private void SaveProject() => SaveProjectNow(quiet: false);
@@ -509,22 +503,22 @@ public partial class MainViewModel
     private void SaveProjectAs()
     {
         if (Project == null || RomBuffer == null) return;
-        var d = new SaveFileDialog
+        var dialog = new SaveFileDialog
         {
             Title = "Save project as",
             Filter = $"Lufia Forge projects (*{LufiaProject.Extension})|*{LufiaProject.Extension}",
             FileName = Path.GetFileName(Project.Path),
             InitialDirectory = Path.GetDirectoryName(Project.Path),
         };
-        if (d.ShowDialog() != true) return;
+        if (dialog.ShowDialog() != true) return;
         Flush(quiet: false);
-        try { SaveProjectTo(d.FileName); }
+        try { SaveProjectTo(dialog.FileName); }
         catch (Exception ex) { MessageBox.Show($"The project couldn't be saved: {ex.Message}", "Save project", MessageBoxButton.OK, MessageBoxImage.Error); }
     }
 
-    /// <summary>File, New Project From This One: saves this project, then saves it again as a new project in a folder of
-    /// its own (named in <see cref="Modules.Common.NewProjectWindow"/>) and goes on in that one. The project left behind
-    /// is a version to go back to.</summary>
+    // file, new project from this one: saves this project, then saves it again as a new project in a folder of its own
+    // (named in Modules.Common.NewProjectWindow) and carries on in that one. the project left behind is a version to go
+    // back to
     [RelayCommand(CanExecute = nameof(IsRomLoaded))]
     private void NewProjectFromThis()
     {
@@ -539,7 +533,7 @@ public partial class MainViewModel
             SaveProjectTo(ask.ProjectPath);
             if (Project.Name != ask.ProjectName && LufiaProject.FileNameFor(ask.ProjectName) == Project.Name)
             {
-                Project.Name = ask.ProjectName;   // a name with characters a file name can't hold
+                Project.Name = ask.ProjectName;   // a name with characters a file name can't have
                 SaveProjectNow(quiet: true);
                 RecentProjects.Add(Project.Path, Project.Name);
                 RefreshRecent();
@@ -554,32 +548,30 @@ public partial class MainViewModel
         }
     }
 
-    /// <summary>File, Merge Another Project Into This One: picks a project (or a ROM), compares it with this one
-    /// (<see cref="Core.Merge.ProjectMerge"/>), shows what it changed in <see cref="Modules.Common.MergeWindow"/> and puts
-    /// in what the user ticked, as one Edit, Undo step. The other project's file is only read.</summary>
+    // file, merge another project into this one: picks a project (or a rom), compares it with this one
+    // (Core.Merge.ProjectMerge), shows what it changed in Modules.Common.MergeWindow and puts in what the user ticked,
+    // as one edit, undo step. the other project's file only gets read
     [RelayCommand(CanExecute = nameof(IsRomLoaded))]
     private async Task MergeProject()
     {
         if (Project == null || RomBuffer == null) return;
-        var d = new OpenFileDialog
+        var dialog = new OpenFileDialog
         {
             Title = "Pick the project to merge into this one",
             Filter = $"Lufia Forge projects (*{LufiaProject.Extension})|*{LufiaProject.Extension}|SNES ROM files (*.sfc;*.smc)|*.sfc;*.smc|All files (*.*)|*.*",
             InitialDirectory = Path.GetDirectoryName(Project.Path),
         };
-        if (d.ShowDialog() != true) return;
-        await MergeFrom(d.FileName);
+        if (dialog.ShowDialog() != true) return;
+        await MergeFrom(dialog.FileName);
     }
 
-    /// <summary>
-    /// The version both projects were made from, when the change logs show it: a project copied from another starts with
-    /// all of its change log, so when this project's log as last saved is how the other's begins, the other was made
-    /// from this project as last saved (its saved ROM), and when the other's log is how this one's begins, this project
-    /// was made from the other as it is. Counting from it, what both had before they split isn't a conflict (counted
-    /// from the starting ROM a new map both have, say, is "made by both" and every difference on it a conflict, so the
-    /// other project's work on it stayed out: the Jeros' Story projects' map F3). Null when the logs don't show it (the
-    /// window still offers picking the version by hand).
-    /// </summary>
+    // the version both projects were made from, if the change logs show it. a project copied from another starts with
+    // all of its change log, so if this project's log as last saved is how the other's begins, the other was made from
+    // this project as last saved (its saved rom), and if the other's log is how this one's begins, this project was made
+    // from the other as it is. counting from there, what both had before they split isn't a conflict (counted from the
+    // starting rom, a new map both have is "made by both" and every difference on it a conflict, so the other project's
+    // work on it stayed out: the jeros' story projects' map F3). null when the logs don't show it (the window still lets
+    // you pick the version by hand)
     private (byte[]? Rom, string? Name) SharedVersion(LufiaProject project, string theirName, byte[] theirs, List<string> theirLog)
     {
         var ourLog = project.Changes;
@@ -592,7 +584,7 @@ public partial class MainViewModel
         return (null, null);
     }
 
-    /// <summary>The merge with the other project (or ROM) at <paramref name="path"/> picked.</summary>
+    // the merge, with the other project (or rom) at path picked
     public async Task MergeFrom(string path)
     {
         if (Project == null || RomBuffer == null) return;
@@ -601,7 +593,7 @@ public partial class MainViewModel
             MessageBox.Show("That is this project. Pick the other project to take changes from.", "Merge", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
-        // a merge reloads every tab afterwards: edits that couldn't be written would be lost, so it stops for them
+        // a merge reloads every tab after, so edits that couldn't be written would be lost. stop for them
         if (!Flush(quiet: false) && HasPendingEdits)
         {
             StatusMessage = "Merge: nothing changed. Write or drop the edits that couldn't be written first.";
@@ -616,9 +608,9 @@ public partial class MainViewModel
         {
             if (path.EndsWith(LufiaProject.Extension, StringComparison.OrdinalIgnoreCase))
             {
-                var (p, rom) = LufiaProject.Open(path);
-                theirName = p.Name; theirs = rom; theirsBase = p.BaseRom; theirLog = p.Changes.ToList(); theirNames = new(p.MapNames);
-                theirFlagNotes = new(p.FlagNotes);
+                var (theirProject, rom) = LufiaProject.Open(path);
+                theirName = theirProject.Name; theirs = rom; theirsBase = theirProject.BaseRom; theirLog = theirProject.Changes.ToList(); theirNames = new(theirProject.MapNames);
+                theirFlagNotes = new(theirProject.FlagNotes);
             }
             else
             {
@@ -648,7 +640,7 @@ public partial class MainViewModel
             return;
         }
         finally { System.Windows.Input.Mouse.OverrideCursor = null; }
-        // flag names and notes (Lufia II) this project doesn't have: taken with the map names
+        // flag names and notes (lufia 2) this project doesn't have, taken along with the map names
         var newFlagNotes = theirFlagNotes.Where(kv => !project.FlagNotes.ContainsKey(kv.Key)).ToList();
         if (plan.Items.Count == 0 && plan.TheirNewMapNames.Count == 0 && newFlagNotes.Count == 0)
         {
@@ -657,9 +649,9 @@ public partial class MainViewModel
             StatusMessage = "Merge: nothing to take.";
             return;
         }
-        var win = new Modules.Common.MergeWindow(plan, (anc, ancName) => Task.Run(() => Core.Merge.ProjectMerge.Plan(Input(anc, ancName)))) { Owner = Application.Current?.MainWindow };
-        if (win.ShowDialog() != true) { StatusMessage = "Merge cancelled: nothing changed."; return; }
-        plan = win.Plan;
+        var mergeWindow = new Modules.Common.MergeWindow(plan, (pickedAncestor, pickedName) => Task.Run(() => Core.Merge.ProjectMerge.Plan(Input(pickedAncestor, pickedName)))) { Owner = Application.Current?.MainWindow };
+        if (mergeWindow.ShowDialog() != true) { StatusMessage = "Merge cancelled: nothing changed."; return; }
+        plan = mergeWindow.Plan;
         if (RomBuffer == null || Project != project || !RomBuffer.SameAs(ours))
         {
             MessageBox.Show("The project changed while the merge window was open, so nothing was merged. Merge again.", "Merge", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -676,8 +668,8 @@ public partial class MainViewModel
             return;
         }
         finally { System.Windows.Input.Mouse.OverrideCursor = null; }
-        // the app stayed usable while the merge was built: an edit written meanwhile (or another project opened) would be
-        // overwritten by the result, so it goes in only onto the ROM it was made from
+        // the app stayed usable while the merge was built. an edit written in the meantime (or another project opened)
+        // would get overwritten by the result, so it only goes in on top of the rom it was made from
         if (RomBuffer == null || Project != project || !RomBuffer.SameAs(ours))
         {
             MessageBox.Show("The project changed while the merge was being made, so nothing was merged. Merge again.", "Merge", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -694,13 +686,13 @@ public partial class MainViewModel
                 _pendingChanges.Add($"(from \"{theirName}\") " + System.Text.RegularExpressions.Regex.Replace(line, @"^\d{4}-\d\d-\d\d \d\d:\d\d\s+", ""));
         int names = 0;
         if (plan.TakeMapNames)
-            foreach (var (m, name) in plan.TheirNewMapNames)
-                if (!Project.MapNames.ContainsKey(m)) { Project.MapNames[m] = name; names++; }
+            foreach (var (map, name) in plan.TheirNewMapNames)
+                if (!Project.MapNames.ContainsKey(map)) { Project.MapNames[map] = name; names++; }
         if (names > 0) { Project.MapNamesChanged = true; Core.Maps.MapNames.ProjectNames = Project.MapNames; }
         int flagNames = 0;
         if (plan.TakeMapNames)
-            foreach (var (k, note) in newFlagNotes)
-                if (Project.FlagNotes.TryAdd(k, note)) flagNames++;
+            foreach (var (flag, note) in newFlagNotes)
+                if (Project.FlagNotes.TryAdd(flag, note)) flagNames++;
         if (flagNames > 0) Project.FlagNotesChanged = true;
         ReloadModules();
         OnPropertyChanged(nameof(WindowTitle));
@@ -711,14 +703,14 @@ public partial class MainViewModel
             "\n\nEdit > Undo takes the whole merge back (map names stay). Save Project keeps it. Play the merged scenes in BizHawk to make sure they run as both projects had them.");
     }
 
-    /// <summary>Save Project As, once the file is picked: when the save fails the project keeps its old file and name
-    /// (later saves go there, not to the file that couldn't be written). The bookmarks and flag names go along.</summary>
+    // save project as, once the file is picked. if the save fails the project keeps its old file and name (later saves
+    // go there, not to the file that couldn't be written). the bookmarks and flag names go along
     public void SaveProjectTo(string path)
     {
         if (Project == null || RomBuffer == null) return;
         var rom = RomBuffer.ToArray();
         string oldName = Project.Name, oldRom = RomBuffer.FilePath;
-        // the change log's new lines go into the file too (as Save Project does): they tell a later merge what changed
+        // the change log's new lines go in the file too (like save project does), they tell a later merge what changed
         Project.Changes.AddRange(_pendingChanges.Select(c => $"{DateTime.Now:yyyy-MM-dd HH:mm}  {c}"));
         _pendingChanges.Clear();
         Project.Name = Path.GetFileNameWithoutExtension(path);
@@ -732,24 +724,24 @@ public partial class MainViewModel
         OnPropertyChanged(nameof(Project));
         OnPropertyChanged(nameof(WindowTitle));
         OnPropertyChanged(nameof(ProjectText));
-        // the bookmarks and flag names are kept next to the project's ROM file: the pages open them at the new place
+        // the bookmarks and flag names are kept next to the project's rom file, so the pages open them at the new place
         if (!string.Equals(oldRom, RomBuffer.FilePath, StringComparison.OrdinalIgnoreCase)) ReloadModules();
         StatusMessage = $"Project saved as \"{Project.Name}\".";
         StatusDetail = Project.Path;
     }
 
-    /// <summary>Writes the tabs' pending edits to the ROM; with quiet, problems only go to the status bar.</summary>
+    // writes the tabs' pending edits to the rom. with quiet, problems only go to the status bar
     private bool Flush(bool quiet)
     {
         var errors = WriteAllPending();
         if (errors.Count == 0) return true;
-        string msg = "Some edits couldn't be saved into the project yet: " + string.Join("; ", errors);
-        if (quiet) StatusDetail = msg;
-        else MessageBox.Show(msg + "\n\nThe rest is saved; those edits stay in their tab.", "Save project", MessageBoxButton.OK, MessageBoxImage.Warning);
+        string message = "Some edits couldn't be saved into the project yet: " + string.Join("; ", errors);
+        if (quiet) StatusDetail = message;
+        else MessageBox.Show(message + "\n\nThe rest is saved; those edits stay in their tab.", "Save project", MessageBoxButton.OK, MessageBoxImage.Warning);
         return false;
     }
 
-    /// <summary>Saves the project; false when it couldn't be.</summary>
+    // saves the project, false if it couldn't
     public bool SaveProjectNow(bool quiet)
     {
         if (Project == null || RomBuffer == null) return true;
@@ -777,7 +769,7 @@ public partial class MainViewModel
     private void Autosave()
     {
         if (Project == null || _autosave == null) return;
-        // not in the middle of something (typing, a drag, a dialog): try again a little later
+        // not in the middle of something (typing, a drag, a dialog), otherwise try again a little later
         bool busy = (DateTime.Now - _lastInput).TotalSeconds < 4 || System.Windows.Input.Mouse.Captured != null || IsDialogOpen();
         if (busy) { _autosave.Interval = TimeSpan.FromSeconds(20); return; }
         _autosave.Interval = AutosaveEvery;
@@ -786,9 +778,8 @@ public partial class MainViewModel
         SaveProjectNow(quiet: true);
     }
 
-    /// <summary>Before an update restarts Lufia Forge (the restart skips the question on closing): waits until no dialog
-    /// is open, then writes the tabs' edits and saves the project. False when something couldn't be kept (the restart
-    /// must not happen then).</summary>
+    // before an update restarts lufia forge (the restart skips the question on closing): waits until no dialog is open,
+    // then writes the tabs' edits and saves the project. false if something couldn't be kept (no restart then)
     public async Task<bool> SaveBeforeRestartAsync()
     {
         while (IsDialogOpen()) await Task.Delay(500);
@@ -798,12 +789,9 @@ public partial class MainViewModel
         return !HasPendingEdits;   // edits a tab couldn't write would be lost
     }
 
-    /// <summary>
-    /// Lufia Forge has to close after an error on another thread (the app's own error handler can't keep it open):
-    /// when the project has changes that aren't saved, a copy of it as it is now goes next to it, "&lt;name&gt; (recovered
-    /// &lt;date&gt;).lfproj", leaving the project file itself alone. Edits still in a tab aren't in it. Returns the
-    /// copy's path, or null.
-    /// </summary>
+    // lufia forge has to close after an error on another thread (the app's own error handler can't keep it open).
+    // if the project has unsaved changes, a copy of it as it is now goes next to it, "<name> (recovered <date>).lfproj",
+    // and the project file itself is left alone. edits still in a tab aren't in it. returns the copy's path, or null
     public string? SaveRecoveryCopy()
     {
         try
@@ -819,19 +807,19 @@ public partial class MainViewModel
         catch { return null; }
     }
 
-    /// <summary>Before leaving the project (closing the app, opening another): asks to save it when something isn't
-    /// saved. False = stay.</summary>
+    // before leaving the project (closing the app, opening another): asks to save it if something isn't saved.
+    // false = stay
     public bool ConfirmLeaveProject()
     {
         if (Project == null) return true;
-        Flush(quiet: true);   // edits still in the tabs go into the ROM first
+        Flush(quiet: true);   // edits still in the tabs go into the rom first
         if (!HasUnsavedProjectChanges()) return true;
         var answer = MessageBox.Show($"Save the changes to the project \"{Project.Name}\"?", "Lufia Forge",
             MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
         if (answer == MessageBoxResult.Cancel) return false;
         if (answer == MessageBoxResult.No) return true;
         if (!SaveProjectNow(quiet: false)) return false;
-        // edits a tab couldn't write (shown in the save's message) would be lost by leaving: ask, staying is the default
+        // edits a tab couldn't write (shown in the save's message) would be lost by leaving, so ask. staying is the default
         if (HasPendingEdits && MessageBox.Show("Some edits in the tabs couldn't be written into the project (the message before this one says which). " +
                 "Leave anyway and lose them?", "Lufia Forge", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes)
             return false;

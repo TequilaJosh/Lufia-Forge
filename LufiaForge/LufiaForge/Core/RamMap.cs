@@ -1,36 +1,30 @@
 namespace LufiaForge.Core;
 
-/// <summary>
-/// Which RAM the game leaves free, and which of it Lufia Forge's patches use, so new patches can find room and two
-/// patches never share a byte by accident (<see cref="Clashes"/>).
-/// <para>
-/// The free areas were measured in BizHawk (2026-10-22): all 128 KB of work RAM was compared every 8 frames with what
-/// it held after power-on, over 14 runs of a random-button player (the prologue and its fights, a save in Alekia, the
-/// world map, Alekia, its castle, Treck's tower, Herat, Arubus, Frederia, the finale, Kirof, Medan Castle, the Grenoble
-/// cave, Platina; field, menus, 14 battles). These bytes were never written. The game doesn't clear bank 7F at power-on,
-/// so a patch must set up what it keeps there. Shops, inns, the ship, saving, the credits and the biggest fights weren't
-/// covered, so an area marked <see cref="Free.Sure"/> false wants a try in the game first.
-/// </para>
-/// <para>
-/// More room: <see cref="SaveRamPatch"/> asks for 32 KB of cartridge RAM, which adds $70:2000-$70:7FFF (24 KB, kept with
-/// the power off). The game's own 8 KB also has $70:1830-$70:1BFF free (after its three save slots and signature).
-/// </para>
-/// </summary>
+// which ram the game leaves free and which of it our patches use, so new patches can find room and two patches never
+// share a byte by accident (Clashes).
+// i measured the free areas in bizhawk (2026-10-22): all 128 KB of work ram compared every 8 frames with what it had
+// after power-on, over 14 runs of a random-button player (the prologue and its fights, a save in alekia, the world map,
+// alekia, its castle, treck's tower, herat, arubus, frederia, the finale, kirof, medan castle, the grenoble cave,
+// platina, so field, menus and 14 battles). these bytes never got written. the game doesn't clear bank 7F at power-on,
+// so a patch has to set up whatever it keeps there. shops, inns, the ship, saving, the credits and the biggest fights
+// weren't covered, so an area with Free.Sure false wants a try in the game first.
+// more room: SaveRamPatch asks for 32 KB of cartridge ram, which adds $70:2000-$70:7FFF (24 KB, kept with the power
+// off). the game's own 8 KB also has $70:1830-$70:1BFF free (after its three save slots and signature)
 public static class RamMap
 {
-    /// <summary>A stretch of RAM, SNES addresses (bank:offset); <see cref="End"/> is the first byte after it.</summary>
+    // a stretch of ram in snes addresses (bank:offset), End is the first byte after it
     public readonly record struct Area(int Start, int End)
     {
         public int Length => End - Start;
-        public bool Overlaps(Area o) => Start < o.End && o.Start < End;
+        public bool Overlaps(Area other) => Start < other.End && other.Start < End;
         public override string ToString() => $"${Start >> 16:X2}:{Start & 0xFFFF:X4}-${Start >> 16:X2}:{(End - 1) & 0xFFFF:X4}";
     }
 
-    /// <summary>RAM the game never wrote in the survey. <paramref name="Sure"/>: also clear of the places the survey
-    /// couldn't reach (an area next to the fight records or a buffer that bigger scenes might fill is not).</summary>
+    // ram the game never wrote in the survey. Sure = also clear of the places the survey couldn't reach (an area next
+    // to the fight records, or a buffer that bigger scenes might fill, isn't)
     public readonly record struct Free(Area Area, bool Sure, string Note);
 
-    /// <summary>RAM a Lufia Forge patch uses.</summary>
+    // ram one of our patches uses
     public readonly record struct Use(Area Area, string Patch, string Note);
 
     private static Area A(int start, int endInclusive) => new(start, endInclusive + 1);
@@ -66,7 +60,7 @@ public static class RamMap
         new(A(0x701C00, 0x701F3F), "Ancient Cave", "party backup and direct page while in the cave (cartridge RAM)"),
     };
 
-    /// <summary>Pairs of uses that share bytes (should be none).</summary>
+    // pairs of uses that share bytes (should be none)
     public static List<(Use A, Use B)> Clashes()
     {
         var list = new List<(Use, Use)>();
@@ -76,17 +70,17 @@ public static class RamMap
         return list;
     }
 
-    /// <summary>The free parts of the free areas: what no patch uses yet.</summary>
+    // the free parts of the free areas, what no patch uses yet
     public static List<(Area Area, bool Sure, string Note)> Unused()
     {
         var list = new List<(Area, bool, string)>();
-        foreach (var f in FreeAreas)
+        foreach (var free in FreeAreas)
         {
-            var parts = new List<Area> { f.Area };
-            foreach (var u in Uses)
-                parts = parts.SelectMany(p => !p.Overlaps(u.Area) ? new[] { p }
-                    : new[] { new Area(p.Start, u.Area.Start), new Area(u.Area.End, p.End) }.Where(x => x.Length > 0)).ToList();
-            list.AddRange(parts.Select(p => (p, f.Sure, f.Note)));
+            var parts = new List<Area> { free.Area };
+            foreach (var use in Uses)
+                parts = parts.SelectMany(part => !part.Overlaps(use.Area) ? new[] { part }
+                    : new[] { new Area(part.Start, use.Area.Start), new Area(use.Area.End, part.End) }.Where(x => x.Length > 0)).ToList();
+            list.AddRange(parts.Select(part => (part, free.Sure, free.Note)));
         }
         return list;
     }

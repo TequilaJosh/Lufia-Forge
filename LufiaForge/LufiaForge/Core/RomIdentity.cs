@@ -2,75 +2,73 @@ using System.IO;
 
 namespace LufiaForge.Core;
 
-/// <summary>
-/// What a ROM is: the clean US game, a hack Lufia Forge knows (Lufia Restored; Frue, Spekkio, Kureji Lufia and The
-/// Wrath of Foomy), or another hack, and which parts of the game that hack changed. It compares the ROM with a
-/// fingerprint of the clean US ROM shipped with Lufia Forge (Fingerprints/lufiaN.bin: a 16-bit hash, the low half of
-/// a CRC32, of every 64 bytes; no game data). The same fingerprint tells which bytes of the areas Lufia Forge treats as
-/// free were put there by another hack (<see cref="ForeignRanges"/>), so they are never reused.
-/// </summary>
+// what a rom is: the clean us game, a hack we know (lufia restored, frue, spekkio, kureji lufia and the wrath of foomy),
+// or some other hack, and which parts of the game that hack changed. it compares the rom with a fingerprint of the
+// clean us rom that ships with lufia forge (Fingerprints/lufiaN.bin: a 16-bit hash, the low half of a crc32, of every
+// 64 bytes, no game data). the same fingerprint tells which bytes of the areas we treat as free were put there by
+// another hack (ForeignRanges), so they never get reused
 public static class RomIdentity
 {
     public const int Chunk = 64;
 
     private static readonly Dictionary<GameKind, ushort[]?> Prints = new();
 
-    /// <summary>The clean ROM's fingerprint for a game, or null.</summary>
+    // the clean rom's fingerprint for a game, or null
     public static ushort[]? Print(GameKind game)
     {
         lock (Prints)
         {
-            if (Prints.TryGetValue(game, out var p)) return p;
+            if (Prints.TryGetValue(game, out var print)) return print;
             string name = game == GameKind.Lufia2 ? "Fingerprints.lufia2.bin" : game == GameKind.Lufia1 ? "Fingerprints.lufia1.bin" : "";
-            using var s = name.Length == 0 ? null : typeof(RomIdentity).Assembly.GetManifestResourceStream(name);
-            if (s == null) return Prints[game] = null;
-            using var ms = new MemoryStream(); s.CopyTo(ms);
-            var b = ms.ToArray();
-            var u = new ushort[b.Length / 2];
-            Buffer.BlockCopy(b, 0, u, 0, u.Length * 2);
-            return Prints[game] = u;
+            using var stream = name.Length == 0 ? null : typeof(RomIdentity).Assembly.GetManifestResourceStream(name);
+            if (stream == null) return Prints[game] = null;
+            using var buffer = new MemoryStream(); stream.CopyTo(buffer);
+            var bytes = buffer.ToArray();
+            var hashes = new ushort[bytes.Length / 2];
+            Buffer.BlockCopy(bytes, 0, hashes, 0, hashes.Length * 2);
+            return Prints[game] = hashes;
         }
     }
 
     private static ushort Hash(byte[] data, int chunk)
     {
-        int at = chunk * Chunk, len = Math.Min(Chunk, data.Length - at);
-        return len <= 0 ? (ushort)0 : (ushort)(CommunityPatches.Crc32(data.AsSpan(at, len).ToArray()) & 0xFFFF);
+        int offset = chunk * Chunk, length = Math.Min(Chunk, data.Length - offset);
+        return length <= 0 ? (ushort)0 : (ushort)(CommunityPatches.Crc32(data.AsSpan(offset, length).ToArray()) & 0xFFFF);
     }
 
-    /// <summary>Whether the 64-byte chunk holding <paramref name="at"/> differs from the clean game (or lies past it).</summary>
+    // whether the 64-byte chunk with offset at in it differs from the clean game (or is past its end)
     public static bool Changed(byte[] data, GameKind game, int at)
     {
-        var p = Print(game);
-        int c = at / Chunk;
-        return p == null || c >= p.Length || Hash(data, c) != p[c];
+        var print = Print(game);
+        int chunk = at / Chunk;
+        return print == null || chunk >= print.Length || Hash(data, chunk) != print[chunk];
     }
 
-    /// <summary>The parts of [start, end) where <paramref name="data"/> differs from the clean game, in whole chunks.</summary>
+    // the parts of [start, end) where data differs from the clean game, in whole chunks
     public static List<(int Start, int End)> ChangedRanges(byte[] data, GameKind game, int start, int end)
     {
         var list = new List<(int, int)>();
         if (Print(game) == null) { list.Add((start, end)); return list; }
-        for (int c = start / Chunk; c * Chunk < end; c++)
+        for (int chunk = start / Chunk; chunk * Chunk < end; chunk++)
         {
-            if (!Changed(data, game, c * Chunk)) continue;
-            int s = Math.Max(start, c * Chunk), e = Math.Min(end, c * Chunk + Chunk);
-            if (list.Count > 0 && list[^1].Item2 == s) list[^1] = (list[^1].Item1, e); else list.Add((s, e));
+            if (!Changed(data, game, chunk * Chunk)) continue;
+            int rangeStart = Math.Max(start, chunk * Chunk), rangeEnd = Math.Min(end, chunk * Chunk + Chunk);
+            if (list.Count > 0 && list[^1].Item2 == rangeStart) list[^1] = (list[^1].Item1, rangeEnd); else list.Add((rangeStart, rangeEnd));
         }
         return list;
     }
 
-    /// <summary>The bytes of a free area another hack put there: the chunks of the ROM the project started from (or the
-    /// ROM as it was opened) that differ from the clean game. Lufia Forge's own blocks in the area are known by their
-    /// records and counted apart by the callers.</summary>
+    // the bytes in a free area that another hack put there: the chunks of the rom the project started from (or the rom
+    // as it was opened) that differ from the clean game. our own blocks in the area are known from their records and
+    // the callers count them separately
     public static List<(int Start, int End)> ForeignRanges(RomBuffer rom, int start, int end) =>
-        rom.Original is { } o && o.Length >= end ? ChangedRanges(o, rom.Game, start, end) : new();
+        rom.Original is { } original && original.Length >= end ? ChangedRanges(original, rom.Game, start, end) : new();
 
-    // ── what the ROM is ──────────────────────────────────────────────────────────
+    // what the rom is
 
     public sealed record Report(string What, List<string> ChangedParts, double ChangedShare);
 
-    /// <summary>The parts of each game, for saying what a hack changed (file offsets, end exclusive).</summary>
+    // the parts of each game, for saying what a hack changed (file offsets, end exclusive)
     private static readonly (int Start, int End, string Name)[] Lufia2Parts =
     {
         (0x000000, 0x038000, "game code"), (0x038000, 0x078000, "events, map names and menu text"), (0x078000, 0x084000, "dungeon puzzles"),
@@ -82,7 +80,7 @@ public static class RomIdentity
         (0x27F000, 0x280000, "map sprite and map lists"),
     };
 
-    /// <summary>The parts of a game's ROM, for naming where a change is (file offsets, end exclusive).</summary>
+    // the parts of a game's rom, for naming where a change is (file offsets, end exclusive)
     public static IReadOnlyList<(int Start, int End, string Name)> Parts(GameKind game) => game == GameKind.Lufia2 ? Lufia2Parts : Lufia1Parts;
 
     private static readonly (int Start, int End, string Name)[] Lufia1Parts =
@@ -91,7 +89,7 @@ public static class RomIdentity
         (0x050000, 0x060000, "font, text, items and descriptions"), (0x060000, 0x100000, "maps, graphics and music (resources)"),
     };
 
-    /// <summary>What a ROM is, from its bytes (best given the ROM a project started from).</summary>
+    // what a rom is, from its bytes (best to pass the rom a project started from)
     public static Report Identify(byte[] data, GameKind game, RomBuffer? asBuffer = null)
     {
         var rom = asBuffer ?? new RomBuffer(data, "");
@@ -102,31 +100,31 @@ public static class RomIdentity
         if (game == GameKind.Lufia2 && CommunityPatches.Lufia2HackIn(rom) is { } id)
             known = id switch { "frue" => "Frue Lufia v8.2", "spekkio" => "Spekkio Lufia v8.2", "kureji" => "Kureji Lufia v8.2", "foomy" => "The Wrath of Foomy v8.2", _ => id };
         if (game == GameKind.Lufia1 && CommunityPatches.RestoredApplied(rom)) known = "Lufia Restored v3.2";
-        var p = Print(game);
-        if (p == null) return new(known ?? "a changed ROM", new(), 0);
+        var print = Print(game);
+        if (print == null) return new(known ?? "a changed ROM", new(), 0);
         var parts = game == GameKind.Lufia2 ? Lufia2Parts : Lufia1Parts;
-        int changed = 0, total = Math.Min(p.Length, data.Length / Chunk);
+        int changed = 0, total = Math.Min(print.Length, data.Length / Chunk);
         var byPart = new Dictionary<string, int>();
-        for (int c = 0; c < total; c++)
+        for (int chunk = 0; chunk < total; chunk++)
         {
-            if (Hash(data, c) == p[c]) continue;
+            if (Hash(data, chunk) == print[chunk]) continue;
             changed++;
-            // (a chunk on the edge of two parts counts for both)
-            int at = c * Chunk;
-            var hit = parts.Where(x => at < x.End && at + Chunk > x.Start).Select(x => x.Name).DefaultIfEmpty("other");
+            // a chunk on the edge of two parts counts for both
+            int offset = chunk * Chunk;
+            var hit = parts.Where(x => offset < x.End && offset + Chunk > x.Start).Select(x => x.Name).DefaultIfEmpty("other");
             foreach (var part in hit) byPart[part] = byPart.GetValueOrDefault(part) + 1;
         }
-        var list = byPart.OrderByDescending(k => k.Value).Select(k => k.Key).ToList();
+        var list = byPart.OrderByDescending(pair => pair.Value).Select(pair => pair.Key).ToList();
         if (data.Length > cleanSize) list.Add($"{(data.Length - cleanSize) / 1024} KB added after the game");
         double share = total == 0 ? 0 : changed / (double)total;
         string what = known ?? (changed == 0 ? "the US game (only grown)" : share < 0.002 ? "the US game with small changes (another hack or earlier edits)" : "a hack Lufia Forge doesn't know by name");
         return new(what, list, share);
     }
 
-    // ── which game, when the title was changed ───────────────────────────────────
+    // which game it is when the title got changed
 
-    /// <summary>Bytes of each game's own code that hacks leave alone (the event and setup interpreters, the battle
-    /// script interpreter's entry), for telling the game apart when a hack renamed it.</summary>
+    // bytes of each game's own code that hacks leave alone (the event and setup interpreters, the battle script
+    // interpreter's entry), to tell the games apart when a hack renamed it
     private static readonly (GameKind Game, int At, string Hex)[] Signatures =
     {
         (GameKind.Lufia1, 0x98AF, "20 40 c7 c9 20 b0 0a 0a 85 00 64 01"),
@@ -135,16 +133,16 @@ public static class RomIdentity
         (GameKind.Lufia2, 0x2B452, "8b 08 c2 30 48 da 5a e2 20 9c 60 0a"),
     };
 
-    /// <summary>The game whose code the ROM holds (both of its signatures), or Unknown.</summary>
+    // the game whose code the rom has (both of its signatures), or Unknown
     public static GameKind ByCode(byte[] rom)
     {
         foreach (var game in new[] { GameKind.Lufia2, GameKind.Lufia1 })
         {
-            var sigs = Signatures.Where(s => s.Game == game).ToList();
-            if (sigs.All(s =>
+            var signatures = Signatures.Where(s => s.Game == game).ToList();
+            if (signatures.All(s =>
             {
-                var b = s.Hex.Split(' ').Select(x => Convert.ToByte(x, 16)).ToArray();
-                return s.At + b.Length <= rom.Length && rom.AsSpan(s.At, b.Length).SequenceEqual(b);
+                var bytes = s.Hex.Split(' ').Select(x => Convert.ToByte(x, 16)).ToArray();
+                return s.At + bytes.Length <= rom.Length && rom.AsSpan(s.At, bytes.Length).SequenceEqual(bytes);
             })) return game;
         }
         return GameKind.Unknown;

@@ -2,19 +2,17 @@ using LufiaForge.Core.Lufia2;
 
 namespace LufiaForge.Core;
 
-/// <summary>
-/// Whether the tables Lufia Forge reads at fixed places are still where the game's code looks for them. Each table is
-/// tied to the places in the game's code that point at it (an LDA long with its address, or an immediate with it),
-/// found by scanning the clean US ROMs (refscan) and read in the code. When another hack moved a table it changed those
-/// bytes: the pages that edit the table then stay read-only, so nothing is written over the hack's data (the old spot
-/// may hold something else now). Tables Lufia Forge moves itself, or follows from the code (the monster table the fan
-/// hacks moved to $D0:A000), count as in place.
-/// </summary>
+// whether the tables we read at fixed places are still where the game's code looks for them. each table is tied to
+// the places in the game's code that point at it (an LDA long with its address, or an immediate with it), found by
+// scanning the clean us roms (refscan) and read in the code. when another hack moved a table it changed those bytes,
+// so the pages that edit that table stay read-only and nothing gets written over the hack's data (the old spot might
+// hold something else now). tables we move ourselves, or follow from the code (the monster table the fan hacks moved
+// to $D0:A000), count as in place
 public static class TableGuard
 {
     public sealed record Table(GameKind Game, string Name, string[] Pages, (int At, byte[] Bytes)[] Sites, Func<RomBuffer, bool>? MovedByLufiaForge = null)
     {
-        /// <summary>The game's own table (file offset, length): no writes there once another hack moved it.</summary>
+        // the game's own table (file offset, length). no writes there once another hack moved it
         public (int At, int Length) Old { get; init; }
     }
 
@@ -22,9 +20,9 @@ public static class TableGuard
 
     public sealed record Result(Table Table, State State, string Note);
 
-    private static (int, byte[]) S(int at, string hex) => (at, hex.Split(' ').Select(b => Convert.ToByte(b, 16)).ToArray());
+    private static (int, byte[]) S(int offset, string hex) => (offset, hex.Split(' ').Select(b => Convert.ToByte(b, 16)).ToArray());
 
-    /// <summary>Lufia II (US): the tables and the code that reads them.</summary>
+    // lufia 2 (us): the tables and the code that reads them
     public static readonly Table[] Lufia2 =
     {
         new(GameKind.Lufia2, "items", new[] { "Items" }, new[] { S(0xF29C, "bf 69 cf 96"), S(0xF2A1, "69 69 cf") }) { Old = (0xB4F69, 0x1D3 * 2) },
@@ -54,7 +52,7 @@ public static class TableGuard
         new(GameKind.Lufia2, "monster attack names", new[] { "Monsters" }, new[] { S(0x2954D, "bc d7 f2") }) { Old = (0x2F2D7, 0x8A * 2) },
     };
 
-    /// <summary>Lufia 1 (US): tables Lufia Forge doesn't move itself, and the code that reads them.</summary>
+    // lufia 1 (us): tables we don't move ourselves, and the code that reads them
     public static readonly Table[] Lufia1 =
     {
         new(GameKind.Lufia1, "map data select table", new[] { "Map Editor" }, new[] { S(0xBD96, "bf 9b e1 01") }) { Old = (0xE19B, 0x100) },
@@ -66,28 +64,28 @@ public static class TableGuard
 
     public static IEnumerable<Table> For(RomBuffer rom) => rom.IsLufia2 ? Lufia2 : rom.Game == GameKind.Lufia1 ? Lufia1 : Array.Empty<Table>();
 
-    public static Result Check(RomBuffer rom, Table t)
+    public static Result Check(RomBuffer rom, Table table)
     {
-        bool same = t.Sites.All(s => s.At + s.Bytes.Length <= rom.Length && rom.ReadBytes(s.At, s.Bytes.Length).AsSpan().SequenceEqual(s.Bytes));
-        if (same) return new(t, State.InPlace, "");
-        if (t.MovedByLufiaForge?.Invoke(rom) == true) return new(t, State.Followed, "moved by Lufia Forge");
-        return new(t, State.MovedByAnotherHack, $"Another hack changed where the game reads the {t.Name}, so Lufia Forge doesn't write to them (it would write over that hack's data).");
+        bool same = table.Sites.All(site => site.At + site.Bytes.Length <= rom.Length && rom.ReadBytes(site.At, site.Bytes.Length).AsSpan().SequenceEqual(site.Bytes));
+        if (same) return new(table, State.InPlace, "");
+        if (table.MovedByLufiaForge?.Invoke(rom) == true) return new(table, State.Followed, "moved by Lufia Forge");
+        return new(table, State.MovedByAnotherHack, $"Another hack changed where the game reads the {table.Name}, so Lufia Forge doesn't write to them (it would write over that hack's data).");
     }
 
     public static List<Result> CheckAll(RomBuffer rom) => For(rom).Select(t => Check(rom, t)).ToList();
 
-    /// <summary>Makes the game's own spot of every table another hack moved read-only in this ROM (the editors that use it
-    /// are locked too; this also stops any other path writing there).</summary>
+    // makes the game's own spot of every table another hack moved read-only in this rom (the editors that use it are
+    // locked too, this also stops any other path from writing there)
     public static void Protect(RomBuffer rom)
     {
         rom.Protected.Clear();
-        foreach (var r in CheckAll(rom))
-            if (r.State == State.MovedByAnotherHack && r.Table.Old.Length > 0)
-                rom.Protected.Add((r.Table.Old.At, r.Table.Old.At + r.Table.Old.Length,
-                    $"Not written: another hack changed where the game keeps its {r.Table.Name}, and the old place may hold that hack's data now."));
+        foreach (var result in CheckAll(rom))
+            if (result.State == State.MovedByAnotherHack && result.Table.Old.Length > 0)
+                rom.Protected.Add((result.Table.Old.At, result.Table.Old.At + result.Table.Old.Length,
+                    $"Not written: another hack changed where the game keeps its {result.Table.Name}, and the old place may hold that hack's data now."));
     }
 
-    /// <summary>Why a page must stay read-only in this ROM, or null when it can be edited.</summary>
+    // why a page has to stay read-only in this rom, or null if it can be edited
     public static string? LockReason(RomBuffer rom, string page)
     {
         var moved = CheckAll(rom).Where(r => r.State == State.MovedByAnotherHack && r.Table.Pages.Contains(page)).Select(r => r.Table.Name).ToList();

@@ -1,5 +1,5 @@
-// The CPU model the decompiled Lufia II code is written against: registers, flags, memory.
-// It is here so the code compiles (which checks the decompiler's structure); it does not run the game.
+// the cpu model the decompiled lufia 2 code is written against: registers, flags, memory.
+// it's only here so the code compiles (which checks the decompiler's structure), it doesn't run the game
 namespace Lufia2.Decomp;
 
 using System;
@@ -8,7 +8,7 @@ public sealed class Memory
 {
     private readonly int _width;
     public Memory(int width) { _width = width; }
-    /// <summary>The byte, word or 24-bit value at a 24-bit address.</summary>
+    // the byte, word or 24-bit value at a 24-bit address
     public int this[int address]
     {
         get => 0;
@@ -18,7 +18,7 @@ public sealed class Memory
 
 public static partial class Game
 {
-    // registers: A is the full 16-bit accumulator, AL its low byte (8-bit A mode)
+    // registers: A is the whole 16-bit accumulator, AL its low byte (8-bit A mode)
     private static int _a, _x, _y;
     public static int A { get => _a; set => _a = value & 0xFFFF; }
     public static int AL { get => _a & 0xFF; set => _a = (_a & 0xFF00) | (value & 0xFF); }
@@ -29,15 +29,15 @@ public static partial class Game
 
     public static readonly Memory m8 = new(1), m16 = new(2), m24 = new(3);
 
-    /// <summary>A 16-bit pointer stored at <paramref name="at"/>, in the data bank.</summary>
+    // a 16-bit pointer stored at address at, in the data bank
     public static int Ptr16(int at) => DB << 16 | m16[at];
-    /// <summary>A 24-bit pointer stored at <paramref name="at"/>.</summary>
+    // a 24-bit pointer stored at address at
     public static int Ptr24(int at) => m24[at];
-    /// <summary>An address in the data bank (DB unknown when the code was read).</summary>
+    // an address in the data bank (DB wasn't known when the code was read)
     public static int Db(int address) => DB << 16 | address;
-    /// <summary>A direct-page address (D unknown when the code was read).</summary>
+    // a direct page address (D wasn't known when the code was read)
     public static int Dp(int address) => (D + address) & 0xFFFF;
-    /// <summary>A routine the decompiler couldn't follow (code in RAM).</summary>
+    // a routine the decompiler couldn't follow (code in ram)
     public static Action Far(int address) => () => { };
 
     public static int Swap(int a) => (a >> 8 | a << 8) & 0xFFFF;
@@ -54,9 +54,9 @@ public static partial class Game
     public static void Push16(int v) { }
     public static int Pop8() => 0;
     public static int Pop16() => 0;
-    /// <summary>PHP: saves the flags (the code mostly uses it to keep the A and X/Y sizes).</summary>
+    // PHP: saves the flags (the code mostly uses it to keep the A and X/Y sizes)
     public static void PushFlags() { }
-    /// <summary>PLP: restores the flags saved by <see cref="PushFlags"/>.</summary>
+    // PLP: restores the flags saved by PushFlags
     public static void PullFlags() { }
 
     public static void DisableInterrupts() { }
@@ -67,9 +67,9 @@ public static partial class Game
     public static void Brk(int n) { }
     public static void Cop(int n) { }
     public static void Wdm(int n) { }
-    /// <summary>MVN: copies A + 1 bytes from fromBank:X up to toBank:Y.</summary>
+    // MVN: copies A + 1 bytes from fromBank:X up to toBank:Y
     public static void MoveBlockUp(int fromBank, int toBank) { }
-    /// <summary>MVP: copies A + 1 bytes down, ending at fromBank:X and toBank:Y.</summary>
+    // MVP: copies A + 1 bytes down, ending at fromBank:X and toBank:Y
     public static void MoveBlockDown(int fromBank, int toBank) { }
     public static void JumpIndirect(int address) { }
     public static void JumpIndirectLong(int address) { }

@@ -1,14 +1,12 @@
 namespace LufiaForge.Core;
 
-/// <summary>
-/// Lufia 1: Foul Water with fast walking (Colmines92's fix, shared on the Lufia Forge Discord). Foul Water brings a
-/// battle every step for a number of steps ($16BA, counted down at <c>$01:8CA5</c>). Away from the world map the game
-/// counts a step only while the walking speed ($0789) is the slow one, 10 (dungeons; towns walk at 20), so with fast
-/// walking (every map at 20) the count never went down and the effect lasted until the game was reset. The fix counts
-/// on maps that have random battles instead ($078B, set by the map's setup script and read by the encounter code at
-/// <c>$01:883B</c>): <c>LDA $078B / BEQ</c> past the count / <c>NOP NOP</c> in place of <c>LDA $0789 / CMP #$10 / BNE</c>.
-/// It goes in with Fast walking and out with it. Lufia Restored has its own fix there (it reads $078A).
-/// </summary>
+// lufia 1: foul water with fast walking (colmines92's fix, shared on the lufia forge discord).
+// foul water gives a battle every step for a number of steps ($16BA, counted down at $01:8CA5). off the world map the
+// game only counts a step while the walking speed ($0789) is the slow one, 10 (dungeons, towns walk at 20), so with fast
+// walking (every map at 20) the count never went down and the effect lasted until you reset.
+// the fix counts on maps that have random battles instead ($078B, set by the map's setup script and read by the
+// encounter code at $01:883B): LDA $078B / BEQ past the count / NOP NOP in place of LDA $0789 / CMP #$10 / BNE.
+// it goes in and out with fast walking. lufia restored has its own fix there (it reads $078A)
 public static class FoulWaterFix
 {
     public const int Site = 0x8C99;   // $01:8C99
@@ -21,8 +19,8 @@ public static class FoulWaterFix
     public static bool IsApplied(RomBuffer rom) => Holds(rom, Fixed);
     public static bool IsOriginal(RomBuffer rom) => Holds(rom, Original);
 
-    /// <summary>Puts the fix in (<paramref name="on"/>) or the game's bytes back; only where the place holds one of the
-    /// two (another hack's code there is left alone). True when something was written.</summary>
+    // puts the fix in (on) or the game's bytes back, but only if the place has one of the two
+    // (another hack's code there is left alone). true when something got written
     public static bool Set(RomBuffer rom, bool on)
     {
         if (on && IsOriginal(rom)) { rom.WriteBytes(Site, Fixed); return true; }
@@ -30,7 +28,7 @@ public static class FoulWaterFix
         return false;
     }
 
-    /// <summary>The ROM walks fast (the Fast walking setting) but still has the game's count: the fix belongs in.</summary>
+    // the rom walks fast (the fast walking setting) but still has the game's count, so the fix belongs in
     public static bool Needed(RomBuffer rom) =>
         rom.Length > 0x9A4D && !rom.IsLufia2 && rom.ReadByte(0x9829) == 0x20 &&
         rom.ReadBytes(0x9A49, 4).AsSpan().SequenceEqual(new byte[] { 0xEA, 0xEA, 0xA9, 0x20 }) && IsOriginal(rom);

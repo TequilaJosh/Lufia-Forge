@@ -1,15 +1,13 @@
 namespace LufiaForge.ViewModels;
 
-/// <summary>
-/// A tab (or panel) holding edits that aren't in the ROM yet. The app writes them without asking: when the project is
-/// saved (also on its own every 5 minutes), before closing, before a ROM is exported or played in BizHawk, and when
-/// Apply to ROM in the top bar is clicked. Register it with <see cref="MainViewModel.Register"/>.
-/// </summary>
+// a tab (or panel) with edits that aren't in the rom yet. the app writes them without asking: when the project gets
+// saved (also by itself every 5 minutes), before closing, before a rom is exported or played in bizhawk, and when
+// apply to rom in the top bar is clicked. register it with MainViewModel.Register
 public interface IPendingEdits
 {
-    /// <summary>Whether there are edits that aren't in the ROM yet.</summary>
+    // whether there are edits that aren't in the rom yet
     bool HasPendingEdits { get; }
 
-    /// <summary>Writes them to the ROM without dialogs. Null, or why they couldn't be written (they stay then).</summary>
+    // writes them to the rom without dialogs. returns null, or why they couldn't be written (they stay then)
     string? WritePendingEdits();
 }

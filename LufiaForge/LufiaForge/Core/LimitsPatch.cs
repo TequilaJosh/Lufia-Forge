@@ -2,38 +2,34 @@ using LufiaForge.Core.Maps;
 
 namespace LufiaForge.Core;
 
-/// <summary>
-/// Lufia 1: higher limits. Levels up to 255 show with 3 digits (the idea and the level bytes are Colmines92's patch,
-/// shared on the Lufia Forge Discord), HP and MP up to 9999 show with 4 digits, and the game handles levels past 113.
-/// <list type="bullet">
-/// <item>Menu text code 01 prints a number: format byte b ttt dddd, dddd = how many of its 8 characters to skip (36 = 2
-/// digits, 35 = 3, 45 = 3 of a u16, 44 = 4). Field party box (<c>$00:B8FB</c>): level 3 digits, HP/MP 4 digits without the
-/// space before "/", and the box starts at column 20 (<c>$00:B93B</c>). Save screen (<c>$00:AB9C</c>) the same, its sprites
-/// 8 px right (<c>$01:AB3B</c>). Field magic list: casts "(1234)". The 13 battle messages with amounts: 4 digits.</item>
-/// <item>Battle party windows (<c>$08:925A</c>): the windows are one column wider toward the screen's edge (inner width 12,
-/// <c>$08:A29D</c> / <c>$08:A2D9</c>; frames <c>$08:A369</c>, text <c>$08:A291</c>), so "name *123" and "♥1234♦1234" fit
-/// beside the heroes' sprites.</item>
-/// <item>Damage numbers (<c>$08:A4AE</c>, <c>$08:DD42</c>): 4 digits as two 16x16 sprites of two digits each, in the tiles
-/// and sprites the popups already use (they showed the last 3 digits: 1234 popped up as 234).</item>
-/// <item>Equipment bonus sums capped at 9999 (<c>$08:F7E0</c>, was 999); max HP / MP worked out at <c>$08:E884</c> never above
-/// 9999 (JSL hooks); growth bands 7+ (past about level 113) use band 6 (<c>$08:E6A1</c>: it read the next table); the
-/// next-level EXP stops at FFFFFF (<c>$08:E722</c>: it wrapped near level 200, so a hero levelled up every battle).</item>
-/// </list>
-/// Checked in the game (BizHawk): the field menus, the battle windows and a damage number of 1234; levels 150 to 255 in
-/// one battle with the cap at 255. The level cap itself is the Max level setting.
-/// </summary>
+// lufia 1: higher limits. levels up to 255 show with 3 digits (the idea and the level bytes are colmines92's patch,
+// shared on the lufia forge discord), hp and mp up to 9999 show with 4 digits, and the game handles levels past 113.
+// - menu text code 01 prints a number: format byte b ttt dddd, dddd = how many of its 8 characters to skip (36 = 2
+//   digits, 35 = 3, 45 = 3 of a u16, 44 = 4). field party box ($00:B8FB): level 3 digits, hp/mp 4 digits without the
+//   space before "/", and the box starts at column 20 ($00:B93B). save screen ($00:AB9C) the same, its sprites 8 px
+//   right ($01:AB3B). field magic list: casts "(1234)". the 13 battle messages with amounts: 4 digits
+// - battle party windows ($08:925A): the windows are one column wider toward the screen's edge (inner width 12,
+//   $08:A29D / $08:A2D9, frames $08:A369, text $08:A291), so "name *123" and "(heart)1234(diamond)1234" fit next to
+//   the heroes' sprites
+// - damage numbers ($08:A4AE, $08:DD42): 4 digits as two 16x16 sprites of two digits each, in the tiles and sprites the
+//   popups already use (they showed the last 3 digits, 1234 popped up as 234)
+// - equipment bonus sums capped at 9999 ($08:F7E0, was 999). max hp / mp worked out at $08:E884 never go above 9999
+//   (JSL hooks). growth bands 7+ (past about level 113) use band 6 ($08:E6A1, it read the next table). the next-level
+//   exp stops at FFFFFF ($08:E722, it wrapped near level 200 so a hero levelled up every battle)
+// checked in the game (bizhawk): the field menus, the battle windows and a damage number of 1234, levels 150 to 255 in
+// one battle with the cap at 255. the level cap itself is the max level setting
 public static class LimitsPatch
 {
     public const int SpaceId = 41;
 
-    private static int FileOffset(int snes) => (snes >> 16 & 0x7F) * 0x8000 + (snes & 0x7FFF);
-    private static int SnesAddress(int file) => (file / 0x8000 | 0x80) << 16 | (file % 0x8000 | 0x8000);
+    private static int FileOffset(int snesAddress) => (snesAddress >> 16 & 0x7F) * 0x8000 + (snesAddress & 0x7FFF);
+    private static int SnesAddress(int fileOffset) => (fileOffset / 0x8000 | 0x80) << 16 | (fileOffset % 0x8000 | 0x8000);
 
     private static HookPatch? _patch;
     private static HookPatch Patch => _patch ??= new(Sites, Code);
 
     public static bool IsApplied(RomBuffer rom) => Patch.AppliedAt(rom, FileOffset) >= 0;
-    /// <summary>Every place the patch changes still holds the game's bytes.</summary>
+    // every place the patch changes still has the game's bytes
     public static bool IsOriginal(RomBuffer rom) => Patch.IsOriginal(rom);
 
     public static void Apply(RomBuffer rom)
@@ -41,21 +37,21 @@ public static class LimitsPatch
         if (IsApplied(rom)) return;
         if (!IsOriginal(rom)) throw new InvalidOperationException("Some of the code and menu bytes the higher limits change aren't the game's (another patch, such as a 3-digit level patch, changed them), so it can't be added safely.");
         if (rom.Length < MapWriter.ExpandedSize) rom.Expand(MapWriter.ExpandedSize);
-        var space = ExpansionSpace.Load(rom);
-        int at = space.AllocateInOneBank(Patch.Code.Bytes.Length, ExpansionSpace.Kind.Patch, SpaceId);
-        Patch.Write(rom, at, SnesAddress(at));
-        space.Save();
+        var freeSpace = ExpansionSpace.Load(rom);
+        int routineOffset = freeSpace.AllocateInOneBank(Patch.Code.Bytes.Length, ExpansionSpace.Kind.Patch, SpaceId);
+        Patch.Write(rom, routineOffset, SnesAddress(routineOffset));
+        freeSpace.Save();
         rom.FixChecksum();
     }
 
     public static void Remove(RomBuffer rom)
     {
-        int at = Patch.AppliedAt(rom, FileOffset);
-        if (at < 0) return;
+        int routineOffset = Patch.AppliedAt(rom, FileOffset);
+        if (routineOffset < 0) return;
         Patch.Restore(rom);
-        var space = ExpansionSpace.Load(rom);
-        space.Free(at);
-        space.Save();
+        var freeSpace = ExpansionSpace.Load(rom);
+        freeSpace.Free(routineOffset);
+        freeSpace.Save();
         rom.FixChecksum();
     }
 

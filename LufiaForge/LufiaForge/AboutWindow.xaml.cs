@@ -2,12 +2,12 @@ using System.Windows;
 
 namespace LufiaForge;
 
-/// <summary>Version, thanks to the people who helped, and the work Lufia Forge builds on.</summary>
+// the version, thanks to the people who helped, and the older work lufia forge builds on
 public partial class AboutWindow : Window
 {
     public sealed record Credit(string Name, string For);
 
-    /// <summary>People who helped make Lufia Forge what it is (testing, ideas, bug reports).</summary>
+    // people who helped make lufia forge what it is (testing, ideas, bug reports)
     public static readonly Credit[] Thanks =
     {
         new("Ok Impala!", "Testing from the first betas, and a long list of ideas that became features: graphics import/export, map copy and paste, the music editor, title screen and credits editors, fewer random battles, party members retargeting, 4 MB ROMs, and the rename command for flashbacks with the old heroes."),
@@ -19,7 +19,7 @@ public partial class AboutWindow : Window
         new("Everyone in the Discord", "Every bug report, screenshot and \"what if...\" that made it in."),
     };
 
-    /// <summary>Earlier work Lufia Forge builds on or works with.</summary>
+    // earlier work we build on or work with
     public static readonly Credit[] BuiltOn =
     {
         new("FlamePurge", "Lufia & the Fortress of Doom Restored: Lufia Forge reads and edits ROMs with Restored (and its Always Retry option) as their base."),
@@ -33,7 +33,7 @@ public partial class AboutWindow : Window
         InitializeComponent();
         string version;
         try { version = Core.UpdateService.CurrentVersion; }
-        catch (Exception) { version = typeof(AboutWindow).Assembly.GetName().Version?.ToString(3) ?? "?"; }   // not installed (a dev build)
+        catch (Exception) { version = typeof(AboutWindow).Assembly.GetName().Version?.ToString(3) ?? "?"; }   // not installed, a dev build
         VersionText.Text = $"Version {version}";
         ThanksList.ItemsSource = Thanks;
         CreditsList.ItemsSource = BuiltOn;

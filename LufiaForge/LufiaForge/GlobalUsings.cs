@@ -1,5 +1,5 @@
-// Resolve WPF vs WinForms type ambiguities when UseWindowsForms is enabled.
-// These aliases ensure existing WPF code compiles without qualification changes.
+// UseWindowsForms is on, so some type names exist in both wpf and winforms.
+// these aliases pick the wpf ones so the code doesn't need full names everywhere
 global using Application    = System.Windows.Application;
 global using UserControl    = System.Windows.Controls.UserControl;
 global using MessageBox     = System.Windows.MessageBox;

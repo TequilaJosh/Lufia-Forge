@@ -3,46 +3,45 @@ using System.Text.Json;
 
 namespace LufiaForge.Core;
 
-/// <summary>
-/// The ROM files Lufia Forge writes next to a project for BizHawk (play copies), and the check that writing one never
-/// overwrites a file that isn't one: the ROM the project started from, say, when the project was saved next to it under
-/// the same name. Every play copy written is remembered (path, size and CRC32, in %APPDATA%\LufiaForge\play_copies.json).
-/// A file at the project's play path that isn't remembered, or changed since, is someone else's and is left alone: the
-/// copy goes to "&lt;project&gt;.play.sfc" then. A play copy written before Lufia Forge remembered them still counts as
-/// one when it can't be anything else: no copier header, written after the project was made, and not the project's
-/// starting ROM (BizHawk keys its in-game saves to the ROM's name, so those projects keep playing the same file).
-/// </summary>
+// the rom files we write next to a project for bizhawk (play copies), and the check that writing one never
+// overwrites a file that isn't one (like the rom the project started from, when the project got saved next to it
+// under the same name). every play copy we write is remembered (path, size and crc32, in
+// %APPDATA%\LufiaForge\play_copies.json). a file at the project's play path that isn't remembered, or changed since,
+// is someone else's and we leave it alone, the copy goes to "<project>.play.sfc" then.
+// a play copy written before we remembered them still counts as one if it can't be anything else: no copier header,
+// written after the project was made, and not the project's starting rom (bizhawk keys its in-game saves to the rom's
+// name, so those projects keep playing the same file)
 public static class PlayCopies
 {
     private sealed record Entry(string Path, long Length, uint Crc);
 
     private const int Max = 200;
 
-    /// <summary>Where the list is kept (tests point it somewhere else).</summary>
+    // where the list is kept (tests point it somewhere else)
     public static string StoreFile { get; set; } =
         System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "LufiaForge", "play_copies.json");
 
-    /// <summary>The file a project's play copy goes to: <paramref name="preferred"/> (&lt;project&gt;.sfc) when nothing
-    /// is there or it is the project's play copy, else the first "&lt;project&gt;.play.sfc" (".play-2.sfc", ...) that is.</summary>
+    // the file a project's play copy goes to: preferred (<project>.sfc) when nothing is there or it's the project's play
+    // copy, otherwise the first "<project>.play.sfc" (".play-2.sfc", ...) that is
     public static string Target(string preferred, byte[] baseRom, DateTime projectCreated)
     {
         if (IsPlayCopy(preferred, baseRom, projectCreated)) return preferred;
-        string dir = System.IO.Path.GetDirectoryName(preferred) ?? "";
-        string name = System.IO.Path.GetFileNameWithoutExtension(preferred), ext = System.IO.Path.GetExtension(preferred);
-        for (int n = 1; ; n++)
+        string folder = System.IO.Path.GetDirectoryName(preferred) ?? "";
+        string name = System.IO.Path.GetFileNameWithoutExtension(preferred), extension = System.IO.Path.GetExtension(preferred);
+        for (int copyNumber = 1; ; copyNumber++)
         {
-            string path = System.IO.Path.Combine(dir, $"{name}.play{(n > 1 ? "-" + n : "")}{ext}");
+            string path = System.IO.Path.Combine(folder, $"{name}.play{(copyNumber > 1 ? "-" + copyNumber : "")}{extension}");
             if (!File.Exists(path) || IsRemembered(path)) return path;
         }
     }
 
-    /// <summary>Whether Lufia Forge may write the play copy to <paramref name="path"/> (see the class notes).</summary>
+    // whether we can write the play copy to path (see the notes at the top)
     public static bool IsPlayCopy(string path, byte[] baseRom, DateTime projectCreated)
     {
         try
         {
             if (!File.Exists(path)) return true;
-            if (Find(path) != null) return IsRemembered(path);   // remembered, but changed since: not ours any more
+            if (Find(path) != null) return IsRemembered(path);   // remembered but changed since, not ours anymore
             var info = new FileInfo(path);
             if (info.Length % 1024 == 512 || info.LastWriteTime < projectCreated) return false;
             return !File.ReadAllBytes(path).AsSpan().SequenceEqual(baseRom);
@@ -50,28 +49,28 @@ public static class PlayCopies
         catch { return false; }
     }
 
-    /// <summary>The file is a play copy Lufia Forge wrote and nothing changed it since.</summary>
+    // the file is a play copy we wrote and nothing changed it since
     public static bool IsRemembered(string path)
     {
         try
         {
-            var e = Find(path);
-            if (e == null || !File.Exists(path)) return false;
+            var entry = Find(path);
+            if (entry == null || !File.Exists(path)) return false;
             var data = File.ReadAllBytes(path);
-            return data.LongLength == e.Length && CommunityPatches.Crc32(data) == e.Crc;
+            return data.LongLength == entry.Length && CommunityPatches.Crc32(data) == entry.Crc;
         }
         catch { return false; }
     }
 
-    /// <summary>Remembers the file just written as a play copy.</summary>
+    // remembers the file we just wrote as a play copy
     public static void Remember(string path)
     {
         try
         {
             var data = File.ReadAllBytes(path);
-            string full = System.IO.Path.GetFullPath(path);
-            var list = Load().Where(e => !string.Equals(e.Path, full, StringComparison.OrdinalIgnoreCase)).ToList();
-            list.Insert(0, new Entry(full, data.LongLength, CommunityPatches.Crc32(data)));
+            string fullPath = System.IO.Path.GetFullPath(path);
+            var list = Load().Where(e => !string.Equals(e.Path, fullPath, StringComparison.OrdinalIgnoreCase)).ToList();
+            list.Insert(0, new Entry(fullPath, data.LongLength, CommunityPatches.Crc32(data)));
             Directory.CreateDirectory(System.IO.Path.GetDirectoryName(StoreFile)!);
             File.WriteAllText(StoreFile, JsonSerializer.Serialize(list.Take(Max).ToList(), new JsonSerializerOptions { WriteIndented = true }));
         }
@@ -80,8 +79,8 @@ public static class PlayCopies
 
     private static Entry? Find(string path)
     {
-        string full = System.IO.Path.GetFullPath(path);
-        return Load().FirstOrDefault(e => string.Equals(e.Path, full, StringComparison.OrdinalIgnoreCase));
+        string fullPath = System.IO.Path.GetFullPath(path);
+        return Load().FirstOrDefault(e => string.Equals(e.Path, fullPath, StringComparison.OrdinalIgnoreCase));
     }
 
     private static List<Entry> Load()

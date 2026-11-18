@@ -15,8 +15,7 @@ public partial class App : Application
 
     private bool _showingError;
 
-    /// <summary>An error nothing caught on the UI thread: said, and Lufia Forge carries on (the project stays open, so
-    /// it can be saved).</summary>
+    // an error nothing caught on the ui thread. we show it and carry on, the project stays open so it can still be saved
     private void OnUiError(object sender, System.Windows.Threading.DispatcherUnhandledExceptionEventArgs e)
     {
         e.Handled = true;
@@ -26,22 +25,22 @@ public partial class App : Application
         {
             MessageBox.Show($"Something went wrong: {e.Exception.Message}\n\nLufia Forge keeps running. If the page you were on " +
                             "acts oddly now, save the project and open it again.\n\n" + e.Exception.GetType().Name +
-                            (e.Exception.StackTrace is { } st ? "\n" + string.Join("\n", st.Split('\n').Take(6)) : ""),
+                            (e.Exception.StackTrace is { } stackTrace ? "\n" + string.Join("\n", stackTrace.Split('\n').Take(6)) : ""),
                             "Lufia Forge", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         catch { }
         finally { _showingError = false; }
     }
 
-    /// <summary>An error on another thread: .NET closes the app after this, so a copy of the unsaved project is kept
-    /// (<see cref="ViewModels.MainViewModel.SaveRecoveryCopy"/>) and where it went is said.</summary>
+    // an error on another thread. .net closes the app after this, so we keep a copy of the unsaved project
+    // (MainViewModel.SaveRecoveryCopy) and say where it went
     private static void OnFatalError(object sender, UnhandledExceptionEventArgs e)
     {
-        string? copy = ViewModels.MainViewModel.Instance?.SaveRecoveryCopy();
+        string? recoveryCopy = ViewModels.MainViewModel.Instance?.SaveRecoveryCopy();
         try
         {
             MessageBox.Show($"Lufia Forge has to close after an error: {(e.ExceptionObject as Exception)?.Message ?? e.ExceptionObject?.ToString()}" +
-                            (copy != null ? $"\n\nThe project's unsaved changes were kept in a copy next to it:\n{copy}\n\nOpen it with Open Project." : ""),
+                            (recoveryCopy != null ? $"\n\nThe project's unsaved changes were kept in a copy next to it:\n{recoveryCopy}\n\nOpen it with Open Project." : ""),
                             "Lufia Forge", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         catch { }

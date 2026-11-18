@@ -3,13 +3,12 @@ using LufiaForge.Core.Lufia2;
 
 namespace LufiaForge.Core.Merge;
 
-/// <summary>
-/// The Lufia II things a merge handles by what they hold, wherever they sit (see <see cref="ProjectMerge"/>): each event
-/// of each map and its start-up script, each list of a map's info block, each packed file. Compared three ways (the
-/// base, this project, the other one) one by one, so two projects that changed different events of one map both keep
-/// theirs. After the bytes are merged, each is made as chosen: one whose bytes the merge changed is written again in
-/// free room (events in the event space, info blocks and files in the added space) and pointed at.
-/// </summary>
+// the lufia 2 things a merge handles by what's in them, wherever they sit (see ProjectMerge): each event of each map
+// and its start-up script, each list of a map's info block, each packed file. compared three ways (the base, this
+// project, the other one) one at a time, so two projects that changed different events of one map both keep theirs.
+// after the bytes are merged each one is made the way it was chosen: if the merge changed its bytes it gets written
+// again in free room (events in the event space, info blocks and files in the added space) and pointed at.
+// a = this project, ab = its base, b = the other project, bb = the other one's base
 internal sealed class L2MergeUnits
 {
     private readonly Content _a, _ab, _b, _bb;
@@ -21,7 +20,7 @@ internal sealed class L2MergeUnits
     private readonly Dictionary<(int Map, int List), MergeItem> _info = new();
     private readonly Dictionary<int, MergeItem> _files = new();
 
-    /// <summary>Where scripts are laid out to be compared (past every ROM, so nothing is taken for the old bytes there).</summary>
+    // where scripts get laid out to be compared (past the end of every rom, so nothing gets mistaken for the old bytes there)
     private const int Probe = 0x7F8000;
     private const int InitKey = -1;
 
@@ -31,16 +30,16 @@ internal sealed class L2MergeUnits
         MakeItems();
     }
 
-    // ── what a ROM holds ───────────────────────────────────────────────────────
+    // what a rom holds
 
-    /// <summary>An event (or the key table, or a start-up script) as compared: its bytes laid out at <see cref="Probe"/>.</summary>
+    // an event (or the key table, or a start-up script) the way we compare it: its bytes laid out at Probe
     private sealed class Ev
     {
         public byte[] Canon = Array.Empty<byte>();
         public L2EventScript? Script;
         public byte[]? Key;
         public string? Problem;
-        public int Start, End;   // the bytes it takes in its ROM
+        public int Start, End;   // the bytes it takes up in its rom
         public string Snippet = "";
     }
 
@@ -69,17 +68,17 @@ internal sealed class L2MergeUnits
             try { FileIds = L2Rom.FileIds(rom).ToList(); } catch (Exception) { FileIds = Enumerable.Range(0, L2Rom.FileCount).ToList(); }
         }
 
-        public MapEvents? Events(int m) => m >= Maps ? null : _ev.TryGetValue(m, out var e) ? e : _ev[m] = ReadEvents(Rom, m);
-        public (int Start, byte[]?[]? Lists) Info(int m) => m >= Maps ? (-1, null) : _info.TryGetValue(m, out var i) ? i : _info[m] = ReadInfo(Rom, m);
-        public (byte[]? Data, int At, int Packed) File(int id) => !FileIds.Contains(id) ? (null, -1, 0) : _files.TryGetValue(id, out var f) ? f : _files[id] = ReadFile(Rom, id);
+        public MapEvents? Events(int map) => map >= Maps ? null : _ev.TryGetValue(map, out var events) ? events : _ev[map] = ReadEvents(Rom, map);
+        public (int Start, byte[]?[]? Lists) Info(int map) => map >= Maps ? (-1, null) : _info.TryGetValue(map, out var info) ? info : _info[map] = ReadInfo(Rom, map);
+        public (byte[]? Data, int At, int Packed) File(int id) => !FileIds.Contains(id) ? (null, -1, 0) : _files.TryGetValue(id, out var file) ? file : _files[id] = ReadFile(Rom, id);
     }
 
-    private static MapEvents ReadEvents(RomBuffer rom, int m)
+    private static MapEvents ReadEvents(RomBuffer rom, int map)
     {
         var ev = new MapEvents();
         try
         {
-            int block = L2Events.Block(rom, m);
+            int block = L2Events.Block(rom, map);
             if (block >= 0)
             {
                 ev.Block = block;
@@ -88,22 +87,22 @@ internal sealed class L2MergeUnits
                 foreach (var e in L2EventBlocks.ReadLists(rom, block))
                 {
                     var key = (e.Head, e.Id);
-                    if (ev.Entries.ContainsKey(key)) continue;   // (the game takes the first one)
-                    int k = e.IsScript ? e.Offset : 0x10000 + e.Offset;
-                    if (!byOffset.TryGetValue(k, out var x)) byOffset[k] = x = e.IsScript ? ReadScript(rom, block + e.Offset, block) : ReadKey(rom, block, e.Offset);
-                    ev.Entries[key] = x; ev.Order.Add(key);
-                    end = Math.Max(end, x.End);
+                    if (ev.Entries.ContainsKey(key)) continue;   // the game takes the first one
+                    int offsetKey = e.IsScript ? e.Offset : 0x10000 + e.Offset;
+                    if (!byOffset.TryGetValue(offsetKey, out var parsed)) byOffset[offsetKey] = parsed = e.IsScript ? ReadScript(rom, block + e.Offset, block) : ReadKey(rom, block, e.Offset);
+                    ev.Entries[key] = parsed; ev.Order.Add(key);
+                    end = Math.Max(end, parsed.End);
                 }
                 foreach (int head in L2EventBlocks.Heads)
                 {
-                    int at = rom.ReadUInt16Le(block + head), i = 0;
-                    while (i < 128 && rom.ReadByte(block + at + i * 3) != 0xFF) i++;
-                    end = Math.Max(end, block + at + i * 3 + 1);
+                    int listOffset = rom.ReadUInt16Le(block + head), i = 0;
+                    while (i < 128 && rom.ReadByte(block + listOffset + i * 3) != 0xFF) i++;
+                    end = Math.Max(end, block + listOffset + i * 3 + 1);
                 }
-                if (L2EventBlocks.Chunk(rom, block) is { } c) { ev.BlockStart = block - 8; ev.BlockEnd = Math.Max(end, block + c.Room); }
+                if (L2EventBlocks.Chunk(rom, block) is { } chunk) { ev.BlockStart = block - 8; ev.BlockEnd = Math.Max(end, block + chunk.Room); }
                 else { ev.BlockStart = block; ev.BlockEnd = end; }
             }
-            int init = L2EventBlocks.InitScript(rom, m);
+            int init = L2EventBlocks.InitScript(rom, map);
             if (init > 0 && init < rom.Length)
             {
                 ev.Init = ReadScript(rom, init, L2EventBlocks.InitBase(init));
@@ -116,57 +115,57 @@ internal sealed class L2MergeUnits
         return ev;
     }
 
-    private static Ev ReadScript(RomBuffer rom, int at, int jumpBase)
+    private static Ev ReadScript(RomBuffer rom, int scriptOffset, int jumpBase)
     {
-        var s = L2EventScript.Read(rom, at, jumpBase);
-        var x = new Ev { Script = s, Start = at, End = s.Steps.Count == 0 ? at + 1 : s.Steps.Max(t => t.At + t.OriginalLength) };
-        x.Snippet = s.Steps.FirstOrDefault(t => t.IsText)?.Text.Replace("\n", " ").Replace("\r", "") ?? "";
-        if (x.Snippet.Length > 50) x.Snippet = x.Snippet[..50] + "...";
-        if (s.Problem != null) { x.Problem = s.Problem; x.Canon = System.Text.Encoding.UTF8.GetBytes($"?{at:X6} {s.Problem}"); return x; }
-        var (bytes, error) = s.Detached().WithJumpBase(Probe).Build(rom, Probe);
-        if (error != null) { x.Problem = error; x.Canon = System.Text.Encoding.UTF8.GetBytes($"?{at:X6} {error}"); return x; }
-        x.Canon = bytes!;
-        return x;
+        var script = L2EventScript.Read(rom, scriptOffset, jumpBase);
+        var ev = new Ev { Script = script, Start = scriptOffset, End = script.Steps.Count == 0 ? scriptOffset + 1 : script.Steps.Max(t => t.At + t.OriginalLength) };
+        ev.Snippet = script.Steps.FirstOrDefault(t => t.IsText)?.Text.Replace("\n", " ").Replace("\r", "") ?? "";
+        if (ev.Snippet.Length > 50) ev.Snippet = ev.Snippet[..50] + "...";
+        if (script.Problem != null) { ev.Problem = script.Problem; ev.Canon = System.Text.Encoding.UTF8.GetBytes($"?{scriptOffset:X6} {script.Problem}"); return ev; }
+        var (bytes, error) = script.Detached().WithJumpBase(Probe).Build(rom, Probe);
+        if (error != null) { ev.Problem = error; ev.Canon = System.Text.Encoding.UTF8.GetBytes($"?{scriptOffset:X6} {error}"); return ev; }
+        ev.Canon = bytes!;
+        return ev;
     }
 
     private static Ev ReadKey(RomBuffer rom, int block, int offset)
     {
-        int p = offset;
-        while (rom.ReadByte(block + p) != 0 && p < offset + 0x300) p += 3;
-        var bytes = rom.ReadBytes(block + offset, p + 1 - offset);
-        return new Ev { Key = bytes, Canon = bytes, Start = block + offset, End = block + p + 1 };
+        int end = offset;
+        while (rom.ReadByte(block + end) != 0 && end < offset + 0x300) end += 3;
+        var bytes = rom.ReadBytes(block + offset, end + 1 - offset);
+        return new Ev { Key = bytes, Canon = bytes, Start = block + offset, End = block + end + 1 };
     }
 
-    /// <summary>A map's info block: its 21 lists (the records up to FF where the record size is known, else the bytes up
-    /// to the next list).</summary>
-    private static (int Start, byte[]?[]? Lists) ReadInfo(RomBuffer rom, int m)
+    // a map's info block: its 21 lists (the records up to FF where we know the record size, otherwise the bytes up to
+    // the next list)
+    private static (int Start, byte[]?[]? Lists) ReadInfo(RomBuffer rom, int map)
     {
         try
         {
-            int b = L2MapInfo.Block(rom, m);
-            if (b < 0 || b + 0x2C > rom.Length) return (-1, null);
-            int size = rom.ReadUInt16Le(b);
-            if (size < 0x2C || size > 0x1000 || b + size > rom.Length) return (-1, null);
-            var offs = Enumerable.Range(0, 21).Select(i => (int)rom.ReadUInt16Le(b + 2 + i * 2)).ToArray();
+            int blockOffset = L2MapInfo.Block(rom, map);
+            if (blockOffset < 0 || blockOffset + 0x2C > rom.Length) return (-1, null);
+            int size = rom.ReadUInt16Le(blockOffset);
+            if (size < 0x2C || size > 0x1000 || blockOffset + size > rom.Length) return (-1, null);
+            var listOffsets = Enumerable.Range(0, 21).Select(i => (int)rom.ReadUInt16Le(blockOffset + 2 + i * 2)).ToArray();
             var lists = new byte[]?[21];
             for (int i = 0; i < 21; i++)
             {
-                int off = offs[i];
-                if (off <= 0 || off >= size + 1) { lists[i] = Array.Empty<byte>(); continue; }
-                int rs = L2MapInfo.RecordSize(2 + i * 2);
-                if (rs > 0)
+                int listOffset = listOffsets[i];
+                if (listOffset <= 0 || listOffset >= size + 1) { lists[i] = Array.Empty<byte>(); continue; }
+                int recordSize = L2MapInfo.RecordSize(2 + i * 2);
+                if (recordSize > 0)
                 {
-                    int p = b + off;
-                    for (int guard = 0; guard < 128 && p + rs <= b + size + 1 && rom.ReadByte(p) != 0xFF; guard++) p += rs;
-                    lists[i] = rom.ReadBytes(b + off, Math.Min(p + 1, b + size + 1) - (b + off));
+                    int pos = blockOffset + listOffset;
+                    for (int guard = 0; guard < 128 && pos + recordSize <= blockOffset + size + 1 && rom.ReadByte(pos) != 0xFF; guard++) pos += recordSize;
+                    lists[i] = rom.ReadBytes(blockOffset + listOffset, Math.Min(pos + 1, blockOffset + size + 1) - (blockOffset + listOffset));
                 }
                 else
                 {
-                    int next = offs.Where(o => o > off && o <= size).DefaultIfEmpty(size).Min();
-                    lists[i] = rom.ReadBytes(b + off, next - off);
+                    int next = listOffsets.Where(other => other > listOffset && other <= size).DefaultIfEmpty(size).Min();
+                    lists[i] = rom.ReadBytes(blockOffset + listOffset, next - listOffset);
                 }
             }
-            return (b, lists);
+            return (blockOffset, lists);
         }
         catch (Exception) { return (-1, null); }
     }
@@ -175,10 +174,10 @@ internal sealed class L2MergeUnits
     {
         try
         {
-            int at = L2Rom.FileOffset(rom, id);
-            if (at < 0 || at >= rom.Length) return (null, -1, 0);
-            var data = LufiaCompression.Decompress(rom, at, out int packed);
-            return (data, at, packed);
+            int fileOffset = L2Rom.FileOffset(rom, id);
+            if (fileOffset < 0 || fileOffset >= rom.Length) return (null, -1, 0);
+            var data = LufiaCompression.Decompress(rom, fileOffset, out int packed);
+            return (data, fileOffset, packed);
         }
         catch (Exception) { return (null, -1, 0); }
     }
@@ -186,54 +185,54 @@ internal sealed class L2MergeUnits
     private static bool Eq(byte[]? x, byte[]? y) => x == null ? y == null : y != null && x.AsSpan().SequenceEqual(y);
     private static bool Eq(Ev? x, Ev? y) => Eq(x?.Canon, y?.Canon);
 
-    // ── which bytes belong to what ─────────────────────────────────────────────
+    // which bytes belong to what
 
-    /// <summary>Marks the bytes of a ROM's events, info blocks and packed files (<paramref name="data"/>) and the pointers
-    /// to them (<paramref name="ptr"/>; each pointer also in <paramref name="slots"/>).</summary>
+    // marks the bytes of a rom's events, info blocks and packed files (data) and the pointers to them
+    // (ptr, and each pointer goes in slots too)
     public void Own(RomBuffer rom, bool[] data, bool[] ptr, List<(int, int)>? slots)
     {
-        var c = ReferenceEquals(rom, _a.Rom) ? _a : ReferenceEquals(rom, _b.Rom) ? _b : new Content(rom);
-        int n = data.Length;
-        void D(int s, int e) { for (int i = Math.Max(0, s); i < Math.Min(n, e); i++) data[i] = true; }
-        void P(int s, int len) { for (int i = Math.Max(0, s); i < Math.Min(n, s + len); i++) ptr[i] = true; slots?.Add((s, len)); }
-        for (int m = 0; m < c.Maps; m++)
+        var content = ReferenceEquals(rom, _a.Rom) ? _a : ReferenceEquals(rom, _b.Rom) ? _b : new Content(rom);
+        int size = data.Length;
+        void MarkData(int s, int e) { for (int i = Math.Max(0, s); i < Math.Min(size, e); i++) data[i] = true; }
+        void MarkPointer(int s, int len) { for (int i = Math.Max(0, s); i < Math.Min(size, s + len); i++) ptr[i] = true; slots?.Add((s, len)); }
+        for (int m = 0; m < content.Maps; m++)
         {
             try
             {
-                int h = L2Events.HeaderAt(rom, m);
-                P(h, 3); P(h + 3, 3);
-                var ev = c.Events(m)!;
-                if (ev.Block >= 0) D(ev.BlockStart, ev.BlockEnd);
-                foreach (var x in ev.Entries.Values) D(x.Start, x.End);
-                if (ev.Init != null) D(ev.InitStart, ev.InitEnd);
-                P(L2MapInfo.PointerAt(rom, m), 3);
-                var (b, lists) = c.Info(m);
-                if (lists != null) D(b, b + rom.ReadUInt16Le(b) + 1);
+                int headerAt = L2Events.HeaderAt(rom, m);
+                MarkPointer(headerAt, 3); MarkPointer(headerAt + 3, 3);
+                var ev = content.Events(m)!;
+                if (ev.Block >= 0) MarkData(ev.BlockStart, ev.BlockEnd);
+                foreach (var entry in ev.Entries.Values) MarkData(entry.Start, entry.End);
+                if (ev.Init != null) MarkData(ev.InitStart, ev.InitEnd);
+                MarkPointer(L2MapInfo.PointerAt(rom, m), 3);
+                var (infoStart, lists) = content.Info(m);
+                if (lists != null) MarkData(infoStart, infoStart + rom.ReadUInt16Le(infoStart) + 1);
             }
             catch (Exception) { }
         }
-        foreach (int id in c.FileIds)
+        foreach (int id in content.FileIds)
         {
             try
             {
-                P(L2Rom.FileTableAt(rom) + id * 3, 3);
-                var (d, at, packed) = c.File(id);
-                if (d != null) D(at, at + packed);
+                MarkPointer(L2Rom.FileTableAt(rom) + id * 3, 3);
+                var (fileData, fileOffset, packed) = content.File(id);
+                if (fileData != null) MarkData(fileOffset, fileOffset + packed);
             }
             catch (Exception) { }
         }
     }
 
-    // ── what the other project changed ─────────────────────────────────────────
+    // what the other project changed
 
-    private static string MapGroup(Content c, int m)
+    private static string MapGroup(Content content, int map)
     {
         string name;
-        try { name = L2Maps.Name(c.Rom, m); } catch (Exception) { name = ""; }
-        return $"Map {m:X2}" + (string.IsNullOrWhiteSpace(name) ? "" : " " + name);
+        try { name = L2Maps.Name(content.Rom, map); } catch (Exception) { name = ""; }
+        return $"Map {map:X2}" + (string.IsNullOrWhiteSpace(name) ? "" : " " + name);
     }
 
-    private static string EventName(Content c, int m, int head, int id) => head switch
+    private static string EventName(Content content, int map, int head, int id) => head switch
     {
         InitKey => "Start-up script (makes the map's characters)",
         2 => id switch
@@ -243,16 +242,16 @@ internal sealed class L2MergeUnits
         },
         4 => $"Scene {id:X2}",
         6 => id >= 0x50 ? $"Talking to character {id - 0x4F}" : $"Talking to {new L2EventCommands.Words().Who(id)}",
-        8 => $"Stepping on area {id}" + Area(c, m, id),
+        8 => $"Stepping on area {id}" + Area(content, map, id),
         _ => $"Event {id:X2} of list +{head:X}",
     };
 
-    private static string Area(Content c, int m, int id)
+    private static string Area(Content content, int map, int id)
     {
         try
         {
-            var t = L2MapInfo.Records(c.Rom, m, L2MapInfo.Triggers, 5).FirstOrDefault(r => r.Bytes[0] == id).Bytes;
-            return t == null ? "" : $" ({t[1]},{t[2]})-({t[3] - 1},{t[4] - 1})";
+            var trigger = L2MapInfo.Records(content.Rom, map, L2MapInfo.Triggers, 5).FirstOrDefault(r => r.Bytes[0] == id).Bytes;
+            return trigger == null ? "" : $" ({trigger[1]},{trigger[2]})-({trigger[3] - 1},{trigger[4] - 1})";
         }
         catch (Exception) { return ""; }
     }
@@ -272,12 +271,12 @@ internal sealed class L2MergeUnits
             var a = _a.Events(m)!; var b = _b.Events(m)!;
             var ab = _ab.Events(m); var bb = _bb.Events(m);
             var keys = a.Order.Concat(b.Order).Concat(ab?.Order ?? new()).Distinct().ToList();
-            int k = 0;
+            int eventNumber = 0;
             foreach (var key in keys)
             {
                 var ea = a.Entries.GetValueOrDefault(key); var eb = b.Entries.GetValueOrDefault(key);
                 var eab = ab?.Entries.GetValueOrDefault(key); var ebb = bb?.Entries.GetValueOrDefault(key);
-                AddEvent(m, key.Head, key.Id, group, order + 10 + k++, ea, eab, eb, ebb);
+                AddEvent(m, key.Head, key.Id, group, order + 10 + eventNumber++, ea, eab, eb, ebb);
             }
             AddEvent(m, InitKey, InitKey, group, order + 1, a.Init, ab?.Init, b.Init, bb?.Init);
 
@@ -287,14 +286,14 @@ internal sealed class L2MergeUnits
                 for (int i = 0; i < 21; i++)
                 {
                     byte[]? xa = la[i], xb = lb[i], xab = lab?[i], xbb = lbb?[i];
-                    bool tc = !Eq(xb, xbb), oc = !Eq(xa, xab);
-                    if (!tc) continue;
+                    bool theyChanged = !Eq(xb, xbb), weChanged = !Eq(xa, xab);
+                    if (!theyChanged) continue;
                     if (Eq(xa, xb)) { SameCount++; continue; }
                     int list = 2 + i * 2;
                     var item = new MergeItem
                     {
-                        Group = group, What = $"Map info: {L2MapInfo.ListName(list)}", Conflict = oc, Take = !oc, Order = order + 500 + i,
-                        Why = oc ? "Both projects changed this list of the map's info, differently." : "Only the other project changed this list of the map's info.",
+                        Group = group, What = $"Map info: {L2MapInfo.ListName(list)}", Conflict = weChanged, Take = !weChanged, Order = order + 500 + i,
+                        Why = weChanged ? "Both projects changed this list of the map's info, differently." : "Only the other project changed this list of the map's info.",
                         Details = () => InfoDetails(list, xab, xa, xb),
                     };
                     _info[(m, list)] = item; Items.Add(item);
@@ -305,15 +304,15 @@ internal sealed class L2MergeUnits
         {
             var (da, _, _) = _a.File(id); var (db, _, _) = _b.File(id);
             var dab = _ab.File(id).Data; var dbb = _bb.File(id).Data;
-            bool tc = !Eq(db, dbb), oc = !Eq(da, dab);
-            if (!tc) continue;
+            bool theyChanged = !Eq(db, dbb), weChanged = !Eq(da, dab);
+            if (!theyChanged) continue;
             if (Eq(da, db)) { SameCount++; continue; }
             var (group, what, order) = FileLabel(id);
             var item = new MergeItem
             {
-                Group = group, What = what, Conflict = oc, Take = !oc && db != null, Order = order,
+                Group = group, What = what, Conflict = weChanged, Take = !weChanged && db != null, Order = order,
                 Why = db == null ? "The other project's copy of this file can't be unpacked: it isn't taken." :
-                      oc ? "Both projects changed this file, differently." : "Only the other project changed this file.",
+                      weChanged ? "Both projects changed this file, differently." : "Only the other project changed this file.",
                 Details = () => FileDetails(dab, da, db),
             };
             _files[id] = item; Items.Add(item);
@@ -333,81 +332,81 @@ internal sealed class L2MergeUnits
         return ("Graphics and other packed files", what, 700000 + id);
     }
 
-    private void AddEvent(int m, int head, int id, string group, int order, Ev? a, Ev? ab, Ev? b, Ev? bb)
+    private void AddEvent(int map, int head, int id, string group, int order, Ev? a, Ev? ab, Ev? b, Ev? bb)
     {
-        bool tc = !Eq(b, bb), oc = !Eq(a, ab);
-        if (!tc) return;
+        bool theyChanged = !Eq(b, bb), weChanged = !Eq(a, ab);
+        if (!theyChanged) return;
         if (Eq(a, b)) { SameCount++; return; }
         bool broken = b?.Problem != null;
         string why = broken ? $"The other project's version can't be read ({b!.Problem}), so it isn't taken."
-            : b == null ? (oc ? "The other project took this event out; this project changed it." : "The other project took this event out.")
+            : b == null ? (weChanged ? "The other project took this event out; this project changed it." : "The other project took this event out.")
             : bb == null && a == null ? "New in the other project."
             : bb == null ? "Both projects added an event here (the same list and number), with different steps."
             : a == null ? "This project took the event out; the other project changed it."
-            : oc ? "Both projects changed this event, differently." : "Only the other project changed this event.";
+            : weChanged ? "Both projects changed this event, differently." : "Only the other project changed this event.";
         string snippet = (b ?? a)?.Snippet ?? "";
         var item = new MergeItem
         {
             Group = group,
-            What = EventName(b != null ? _b : _a, m, head, id) + (snippet.Length > 0 ? $": \"{snippet}\"" : ""),
-            Conflict = oc && !broken, Take = !oc && !broken, Order = order, Why = why,
+            What = EventName(b != null ? _b : _a, map, head, id) + (snippet.Length > 0 ? $": \"{snippet}\"" : ""),
+            Conflict = weChanged && !broken, Take = !weChanged && !broken, Order = order, Why = why,
             Details = () => EventDetails(ab, a, b, a != null ? _a.Rom : _ab.Rom, b != null ? _b.Rom : _bb.Rom),
         };
-        _events[(m, head, id)] = item; Items.Add(item);
+        _events[(map, head, id)] = item; Items.Add(item);
     }
 
-    // ── differentials ──────────────────────────────────────────────────────────
+    // diffs
 
-    private static List<string> Listing(Ev? e, RomBuffer rom)
+    private static List<string> Listing(Ev? ev, RomBuffer rom)
     {
-        if (e == null) return new() { "(no such event)" };
-        if (e.Problem != null) return new() { "(can't be read: " + e.Problem + ")" };
-        if (e.Key != null) return Enumerable.Range(0, e.Key.Length / 3).Select(i => Convert.ToHexString(e.Key, i * 3, 3)).Append("00").ToList();
-        var w = new L2EventCommands.Words();
-        var steps = e.Script!.Steps;
+        if (ev == null) return new() { "(no such event)" };
+        if (ev.Problem != null) return new() { "(can't be read: " + ev.Problem + ")" };
+        if (ev.Key != null) return Enumerable.Range(0, ev.Key.Length / 3).Select(i => Convert.ToHexString(ev.Key, i * 3, 3)).Append("00").ToList();
+        var words = new L2EventCommands.Words();
+        var steps = ev.Script!.Steps;
         var lines = new List<string>();
-        foreach (var s in steps)
+        foreach (var step in steps)
         {
-            string d;
-            try { d = L2EventCommands.Find(s.Op)?.Describe(s.Bytes, w) ?? $"command {s.Op:X2}"; } catch (Exception) { d = $"command {s.Op:X2}"; }
-            if (s.IsText) d = d.TrimEnd(':', ' ') + ": \"" + s.Text.Replace("\r", "").Replace("\n", " | ") + "\"";
-            var jumps = s.Jumps.Select(j => j.Step != null ? steps.IndexOf(j.Step) + 1 : -1).ToList();
-            if (jumps.Count > 0) d += " -> " + string.Join(", ", jumps.Select(j => j > 0 ? $"step {j}" : "?"));
-            lines.Add(d);
+            string line;
+            try { line = L2EventCommands.Find(step.Op)?.Describe(step.Bytes, words) ?? $"command {step.Op:X2}"; } catch (Exception) { line = $"command {step.Op:X2}"; }
+            if (step.IsText) line = line.TrimEnd(':', ' ') + ": \"" + step.Text.Replace("\r", "").Replace("\n", " | ") + "\"";
+            var jumps = step.Jumps.Select(j => j.Step != null ? steps.IndexOf(j.Step) + 1 : -1).ToList();
+            if (jumps.Count > 0) line += " -> " + string.Join(", ", jumps.Select(j => j > 0 ? $"step {j}" : "?"));
+            lines.Add(line);
         }
         return lines;
     }
 
-    private static List<DiffLine> EventDetails(Ev? ab, Ev? a, Ev? b, RomBuffer ra, RomBuffer rb)
+    private static List<DiffLine> EventDetails(Ev? ab, Ev? a, Ev? b, RomBuffer romA, RomBuffer romB)
     {
-        var la = Listing(a, ra);
-        var lb = Listing(b, rb);
+        var listingA = Listing(a, romA);
+        var listingB = Listing(b, romB);
         var lines = new List<DiffLine>
         {
             new(DiffKind.Note, Eq(a, ab) ? "This project has the event as it started." : "This project changed the event too."),
             new(DiffKind.Head, "- this project's steps   + the other project's steps"),
         };
-        lines.AddRange(MergeDiff.Lines(Number(la), Number(lb)));
+        lines.AddRange(MergeDiff.Lines(Number(listingA), Number(listingB)));
         return lines;
     }
 
-    private static List<string> Number(List<string> l) => l.Select((s, i) => $"{i + 1,3}. {s}").ToList();
+    private static List<string> Number(List<string> lines) => lines.Select((s, i) => $"{i + 1,3}. {s}").ToList();
 
-    private static List<DiffLine> InfoDetails(int list, byte[]? ab, byte[]? a, byte[]? b)
+    private static List<DiffLine> InfoDetails(int listId, byte[]? ab, byte[]? a, byte[]? b)
     {
-        int rs = L2MapInfo.RecordSize(list);
-        List<string> Records(byte[]? x)
+        int recordSize = L2MapInfo.RecordSize(listId);
+        List<string> Records(byte[]? list)
         {
-            if (x == null) return new() { "(none)" };
-            if (rs <= 0) return Enumerable.Range(0, (x.Length + 15) / 16).Select(i => Convert.ToHexString(x, i * 16, Math.Min(16, x.Length - i * 16))).ToList();
-            var l = new List<string>();
-            for (int p = 0; p + rs <= x.Length && x[p] != 0xFF; p += rs) l.Add(string.Join(" ", x.Skip(p).Take(rs).Select(v => v.ToString("X2"))));
-            return l;
+            if (list == null) return new() { "(none)" };
+            if (recordSize <= 0) return Enumerable.Range(0, (list.Length + 15) / 16).Select(i => Convert.ToHexString(list, i * 16, Math.Min(16, list.Length - i * 16))).ToList();
+            var records = new List<string>();
+            for (int pos = 0; pos + recordSize <= list.Length && list[pos] != 0xFF; pos += recordSize) records.Add(string.Join(" ", list.Skip(pos).Take(recordSize).Select(v => v.ToString("X2"))));
+            return records;
         }
         var lines = new List<DiffLine>
         {
             new(DiffKind.Note, (Eq(a, ab) ? "This project has the list as it started." : "This project changed the list too.") +
-                (rs > 0 ? $" One record a line ({rs} bytes: the first is its number)." : "")),
+                (recordSize > 0 ? $" One record a line ({recordSize} bytes: the first is its number)." : "")),
             new(DiffKind.Head, "- this project's   + the other project's"),
         };
         lines.AddRange(MergeDiff.Lines(Records(a), Records(b)));
@@ -418,11 +417,11 @@ internal sealed class L2MergeUnits
     {
         var lines = new List<DiffLine>();
         if (a == null || b == null) { lines.Add(new(DiffKind.Note, a == null ? "This project's copy can't be unpacked." : "The other project's copy can't be unpacked.")); return lines; }
-        int diff = 0, first = -1;
+        int differing = 0, firstDiff = -1;
         for (int i = 0; i < Math.Max(a.Length, b.Length); i++)
-            if (i >= a.Length || i >= b.Length || a[i] != b[i]) { diff++; if (first < 0) first = i; }
+            if (i >= a.Length || i >= b.Length || a[i] != b[i]) { differing++; if (firstDiff < 0) firstDiff = i; }
         lines.Add(new(DiffKind.Note, (Eq(a, ab) ? "This project has the file as it started. " : "This project changed the file too. ") +
-            $"Unpacked: this project's {a.Length} bytes, the other project's {b.Length}; {diff} byte{(diff == 1 ? "" : "s")} differ."));
+            $"Unpacked: this project's {a.Length} bytes, the other project's {b.Length}; {differing} byte{(differing == 1 ? "" : "s")} differ."));
         lines.Add(new(DiffKind.Head, "Rows that differ (offset in the unpacked file): - this project's   + the other project's"));
         int shown = 0;
         for (int row = 0; row < Math.Max(a.Length, b.Length) && shown < 48; row += 16)
@@ -439,30 +438,30 @@ internal sealed class L2MergeUnits
         return lines;
     }
 
-    // ── making them as chosen ──────────────────────────────────────────────────
+    // making them the way they were chosen
 
-    private (List<((int Head, int Id) Key, Ev Ev)> Events, Ev? Init) DesiredEvents(int m)
+    private (List<((int Head, int Id) Key, Ev Ev)> Events, Ev? Init) DesiredEvents(int map)
     {
-        var a = _a.Events(m); var b = _b.Events(m);
+        var a = _a.Events(map); var b = _b.Events(map);
         if (a == null) return (b!.Order.Select(k => (k, b.Entries[k])).ToList(), b.Init);
         var list = new List<((int, int), Ev)>();
         foreach (var key in a.Order.Concat(b?.Order ?? new()).Distinct())
         {
-            var src = _events.TryGetValue((m, key.Head, key.Id), out var item) && item.Take ? b : a;
-            if (src?.Entries.GetValueOrDefault(key) is { } e) list.Add((key, e));
+            var source = _events.TryGetValue((map, key.Head, key.Id), out var item) && item.Take ? b : a;
+            if (source?.Entries.GetValueOrDefault(key) is { } ev) list.Add((key, ev));
         }
-        var init = _events.TryGetValue((m, InitKey, InitKey), out var ii) && ii.Take ? b?.Init : a.Init;
+        var init = _events.TryGetValue((map, InitKey, InitKey), out var initItem) && initItem.Take ? b?.Init : a.Init;
         return (list, init);
     }
 
-    private byte[]?[]? DesiredInfo(int m)
+    private byte[]?[]? DesiredInfo(int map)
     {
-        var (_, la) = _a.Info(m); var (_, lb) = _b.Info(m);
+        var (_, la) = _a.Info(map); var (_, lb) = _b.Info(map);
         if (la == null) return lb;
-        var outp = (byte[]?[])la.Clone();
+        var lists = (byte[]?[])la.Clone();
         for (int i = 0; i < 21; i++)
-            if (_info.TryGetValue((m, 2 + i * 2), out var item) && item.Take && lb != null) outp[i] = lb[i];
-        return outp;
+            if (_info.TryGetValue((map, 2 + i * 2), out var item) && item.Take && lb != null) lists[i] = lb[i];
+        return lists;
     }
 
     private byte[]? DesiredFile(int id)
@@ -475,51 +474,51 @@ internal sealed class L2MergeUnits
     private static bool SameEvents(MapEvents now, List<((int Head, int Id) Key, Ev Ev)> want, Ev? init)
     {
         if (now.Problem != null || now.Entries.Count != want.Count) return false;
-        foreach (var (key, e) in want)
-            if (!now.Entries.TryGetValue(key, out var x) || !Eq(x, e)) return false;
+        foreach (var (key, ev) in want)
+            if (!now.Entries.TryGetValue(key, out var current) || !Eq(current, ev)) return false;
         return init == null || Eq(now.Init, init);
     }
 
-    /// <summary>After the bytes are merged: every map's events, info lists and packed files made as chosen (written again
-    /// in free room where the merged bytes don't hold them).</summary>
-    public void Converge(RomBuffer r, List<string> report)
+    // after the bytes are merged: makes every map's events, info lists and packed files the way they were chosen
+    // (written again in free room where the merged bytes don't have them)
+    public void Converge(RomBuffer rom, List<string> report)
     {
-        var now = new Content(r);
+        var now = new Content(rom);
         int blocks = 0, inits = 0, infos = 0, files = 0;
         var problems = new List<string>();
-        for (int m = 0; m < now.Maps; m++)
+        for (int map = 0; map < now.Maps; map++)
         {
-            if (m >= _a.Maps && m >= _b.Maps) break;
+            if (map >= _a.Maps && map >= _b.Maps) break;
             try
             {
-                var (want, init) = DesiredEvents(m);
-                var cur = now.Events(m)!;
-                if (!SameEvents(cur, want, null))
+                var (want, init) = DesiredEvents(map);
+                var current = now.Events(map)!;
+                if (!SameEvents(current, want, null))
                 {
                     var broken = want.FirstOrDefault(w => w.Ev.Problem != null);
-                    if (broken.Ev != null) problems.Add($"Map {m:X2}: event {broken.Key.Id:X2} of list +{broken.Key.Head:X} can't be read, so the map's events couldn't be laid out again.");
+                    if (broken.Ev != null) problems.Add($"Map {map:X2}: event {broken.Key.Id:X2} of list +{broken.Key.Head:X} can't be read, so the map's events couldn't be laid out again.");
                     else
                     {
                         var events = want.Select(w => (new L2EventBlocks.Entry(w.Key.Head, w.Key.Id, 0), w.Ev.Script, w.Ev.Key)).ToList();
-                        int ph = L2EventBlocks.WriteBlock(r, events);
-                        L2EventBlocks.PointMap(r, m, ph);
+                        int blockOffset = L2EventBlocks.WriteBlock(rom, events);
+                        L2EventBlocks.PointMap(rom, map, blockOffset);
                         blocks++;
                     }
                 }
-                if (init != null && !Eq(cur.Init, init))
+                if (init != null && !Eq(current.Init, init))
                 {
-                    if (init.Problem != null) problems.Add($"Map {m:X2}: the start-up script can't be read, so it couldn't be written again.");
-                    else { L2EventBlocks.WriteInitNew(r, m, init.Script!.Detached()); inits++; }
+                    if (init.Problem != null) problems.Add($"Map {map:X2}: the start-up script can't be read, so it couldn't be written again.");
+                    else { L2EventBlocks.WriteInitNew(rom, map, init.Script!.Detached()); inits++; }
                 }
-                var wantInfo = DesiredInfo(m);
-                var (_, curInfo) = now.Info(m);
+                var wantInfo = DesiredInfo(map);
+                var (_, curInfo) = now.Info(map);
                 if (wantInfo != null && (curInfo == null || Enumerable.Range(0, 21).Any(i => !Eq(curInfo[i], wantInfo[i]))))
                 {
-                    WriteInfo(r, m, wantInfo);
+                    WriteInfo(rom, map, wantInfo);
                     infos++;
                 }
             }
-            catch (Exception ex) { problems.Add($"Map {m:X2}: {ex.Message}"); }
+            catch (Exception ex) { problems.Add($"Map {map:X2}: {ex.Message}"); }
         }
         foreach (int id in now.FileIds)
         {
@@ -528,7 +527,7 @@ internal sealed class L2MergeUnits
                 var want = DesiredFile(id);
                 if (want == null) continue;
                 if (Eq(now.File(id).Data, want)) continue;
-                L2Rom.WriteNewFile(r, id, want);
+                L2Rom.WriteNewFile(rom, id, want);
                 files++;
             }
             catch (Exception ex) { problems.Add($"Packed file {id:X3}: {ex.Message}"); }
@@ -542,43 +541,43 @@ internal sealed class L2MergeUnits
         if (problems.Count > 0) throw new InvalidOperationException(string.Join("\n", problems));
     }
 
-    private static void WriteInfo(RomBuffer r, int m, byte[]?[] lists)
+    private static void WriteInfo(RomBuffer rom, int map, byte[]?[] lists)
     {
         var data = new List<byte>(new byte[0x2C]);
         for (int i = 0; i < 21; i++)
         {
-            var l = lists[i] ?? Array.Empty<byte>();
-            if (l.Length == 0) continue;
-            int at = data.Count;
-            data[2 + i * 2] = (byte)at; data[3 + i * 2] = (byte)(at >> 8);
-            data.AddRange(l);
+            var list = lists[i] ?? Array.Empty<byte>();
+            if (list.Length == 0) continue;
+            int listOffset = data.Count;
+            data[2 + i * 2] = (byte)listOffset; data[3 + i * 2] = (byte)(listOffset >> 8);
+            data.AddRange(list);
         }
         if (data.Count > 0x0FFF) throw new InvalidOperationException("the merged info block would be bigger than 4 KB.");
         data[0] = (byte)data.Count; data[1] = (byte)(data.Count >> 8);
-        int to = L2Rom.Allocate(r, data.Count + 1, upper: true);
-        r.WriteBytes(to, data.Append((byte)0).ToArray());
-        int snes = L2Rom.FileToSnes(to);
-        r.WriteBytes(L2MapInfo.PointerAt(r, m), new[] { (byte)snes, (byte)(snes >> 8), (byte)(snes >> 16) });
+        int blockOffset = L2Rom.Allocate(rom, data.Count + 1, upper: true);
+        rom.WriteBytes(blockOffset, data.Append((byte)0).ToArray());
+        int snes = L2Rom.FileToSnes(blockOffset);
+        rom.WriteBytes(L2MapInfo.PointerAt(rom, map), new[] { (byte)snes, (byte)(snes >> 8), (byte)(snes >> 16) });
     }
 
-    /// <summary>Reads the merged ROM again: every map's events, info and every packed file as chosen, every event readable.</summary>
-    public void Verify(RomBuffer r, List<string> report)
+    // reads the merged rom back: every map's events and info and every packed file as chosen, every event readable
+    public void Verify(RomBuffer rom, List<string> report)
     {
-        var now = new Content(r);
+        var now = new Content(rom);
         var bad = new List<string>();
         int maps = 0, events = 0;
-        for (int m = 0; m < Math.Min(now.Maps, Math.Max(_a.Maps, _b.Maps)); m++)
+        for (int map = 0; map < Math.Min(now.Maps, Math.Max(_a.Maps, _b.Maps)); map++)
         {
-            var (want, init) = DesiredEvents(m);
-            var cur = now.Events(m)!;
+            var (want, init) = DesiredEvents(map);
+            var current = now.Events(map)!;
             maps++;
             events += want.Count;
-            if (!SameEvents(cur, want, init)) bad.Add($"map {m:X2}'s events");
-            foreach (var (key, e) in cur.Entries)
-                if (e.Problem != null && want.FirstOrDefault(w => w.Key == key).Ev?.Problem == null) bad.Add($"map {m:X2} event {key.Id:X2} of list +{key.Head:X} can't be read ({e.Problem})");
-            var wi = DesiredInfo(m);
-            var (_, ci) = now.Info(m);
-            if (wi != null && (ci == null || Enumerable.Range(0, 21).Any(i => !Eq(ci[i], wi[i])))) bad.Add($"map {m:X2}'s info");
+            if (!SameEvents(current, want, init)) bad.Add($"map {map:X2}'s events");
+            foreach (var (key, ev) in current.Entries)
+                if (ev.Problem != null && want.FirstOrDefault(w => w.Key == key).Ev?.Problem == null) bad.Add($"map {map:X2} event {key.Id:X2} of list +{key.Head:X} can't be read ({ev.Problem})");
+            var wantInfo = DesiredInfo(map);
+            var (_, currentInfo) = now.Info(map);
+            if (wantInfo != null && (currentInfo == null || Enumerable.Range(0, 21).Any(i => !Eq(currentInfo[i], wantInfo[i])))) bad.Add($"map {map:X2}'s info");
         }
         int files = 0;
         foreach (int id in now.FileIds)
@@ -593,40 +592,40 @@ internal sealed class L2MergeUnits
     }
 }
 
-/// <summary>Line differentials for the merge window.</summary>
+// line diffs for the merge window
 public static class MergeDiff
 {
-    /// <summary>The lines of <paramref name="ours"/> and <paramref name="theirs"/> in order: kept by both, only ours
-    /// (-), only theirs (+). Long runs of kept lines are cut short.</summary>
+    // the lines of ours and theirs in order: kept by both, only ours (-), only theirs (+).
+    // long runs of kept lines get cut short
     public static List<DiffLine> Lines(IReadOnlyList<string> ours, IReadOnlyList<string> theirs)
     {
-        static string Bare(string s) => s.Length > 5 && s[3] == '.' ? s[5..] : s;   // (step numbers don't count)
-        int n = ours.Count, m = theirs.Count;
-        var lcs = new int[n + 1, m + 1];
-        for (int i = n - 1; i >= 0; i--)
-            for (int j = m - 1; j >= 0; j--)
+        static string Bare(string s) => s.Length > 5 && s[3] == '.' ? s[5..] : s;   // step numbers don't count
+        int ourCount = ours.Count, theirCount = theirs.Count;
+        var lcs = new int[ourCount + 1, theirCount + 1];
+        for (int i = ourCount - 1; i >= 0; i--)
+            for (int j = theirCount - 1; j >= 0; j--)
                 lcs[i, j] = Bare(ours[i]) == Bare(theirs[j]) ? lcs[i + 1, j + 1] + 1 : Math.Max(lcs[i + 1, j], lcs[i, j + 1]);
         var raw = new List<DiffLine>();
-        int x = 0, y = 0;
-        while (x < n || y < m)
+        int ourIndex = 0, theirIndex = 0;
+        while (ourIndex < ourCount || theirIndex < theirCount)
         {
-            if (x < n && y < m && Bare(ours[x]) == Bare(theirs[y])) { raw.Add(new(DiffKind.Same, "  " + theirs[y])); x++; y++; }
-            else if (y < m && (x >= n || lcs[x, y + 1] >= lcs[x + 1, y])) { raw.Add(new(DiffKind.Theirs, "+ " + theirs[y])); y++; }
-            else { raw.Add(new(DiffKind.Ours, "- " + ours[x])); x++; }
+            if (ourIndex < ourCount && theirIndex < theirCount && Bare(ours[ourIndex]) == Bare(theirs[theirIndex])) { raw.Add(new(DiffKind.Same, "  " + theirs[theirIndex])); ourIndex++; theirIndex++; }
+            else if (theirIndex < theirCount && (ourIndex >= ourCount || lcs[ourIndex, theirIndex + 1] >= lcs[ourIndex + 1, theirIndex])) { raw.Add(new(DiffKind.Theirs, "+ " + theirs[theirIndex])); theirIndex++; }
+            else { raw.Add(new(DiffKind.Ours, "- " + ours[ourIndex])); ourIndex++; }
         }
-        // keep 3 lines of context round each change
+        // keep 3 lines of context around each change
         var keep = new bool[raw.Count];
         for (int i = 0; i < raw.Count; i++)
             if (raw[i].Kind != DiffKind.Same)
                 for (int k = Math.Max(0, i - 3); k <= Math.Min(raw.Count - 1, i + 3); k++) keep[k] = true;
-        var outp = new List<DiffLine>();
+        var shown = new List<DiffLine>();
         bool cut = false;
         for (int i = 0; i < raw.Count; i++)
         {
-            if (keep[i]) { outp.Add(raw[i]); cut = false; }
-            else if (!cut) { outp.Add(new(DiffKind.Note, "  ...")); cut = true; }
+            if (keep[i]) { shown.Add(raw[i]); cut = false; }
+            else if (!cut) { shown.Add(new(DiffKind.Note, "  ...")); cut = true; }
         }
-        if (outp.All(l => l.Kind is DiffKind.Same or DiffKind.Note)) outp.Add(new(DiffKind.Note, "(the steps read the same: they differ in bytes the listing doesn't show)"));
-        return outp;
+        if (shown.All(l => l.Kind is DiffKind.Same or DiffKind.Note)) shown.Add(new(DiffKind.Note, "(the steps read the same: they differ in bytes the listing doesn't show)"));
+        return shown;
     }
 }

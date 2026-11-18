@@ -23,16 +23,14 @@ Title="{Binding WindowTitle}"
 
     <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/> <!-- Menu bar -->
-            <RowDefinition Height="Auto"/> <!-- Toolbar -->
-            <RowDefinition Height="Auto"/> <!-- Gold divider -->
-            <RowDefinition Height="*"/>    <!-- Tab content -->
-            <RowDefinition Height="Auto"/> <!-- Status bar -->
+            <RowDefinition Height="Auto"/> <!-- menu bar -->
+            <RowDefinition Height="Auto"/> <!-- toolbar -->
+            <RowDefinition Height="Auto"/> <!-- gold divider -->
+            <RowDefinition Height="*"/>    <!-- tab content -->
+            <RowDefinition Height="Auto"/> <!-- status bar -->
         </Grid.RowDefinitions>
 
-        <!-- ============================================================
-             MENU BAR
-             ============================================================ -->
+        <!-- menu bar -->
         <Menu Grid.Row="0"
               Background="{StaticResource DeepPurpleBrush}"
               Foreground="{StaticResource TextPrimaryBrush}">
@@ -117,15 +115,13 @@ Title="{Binding WindowTitle}"
             </MenuItem>
         </Menu>
 
-        <!-- ============================================================
-             TOOLBAR
-             ============================================================ -->
+        <!-- toolbar -->
         <Border Grid.Row="1"
                 Background="{StaticResource ToolbarBackgroundBrush}"
                 Padding="8,6">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
 
-                <!-- App title/logo area -->
+                <!-- app title / logo -->
                 <StackPanel Orientation="Horizontal" Margin="0,0,24,0">
                     <TextBlock Text="⚔"
                                FontSize="20"
@@ -169,7 +165,7 @@ Title="{Binding WindowTitle}"
                 <Button Content="↷  Redo" Style="{StaticResource LufiaButton}" Command="{Binding RedoCommand}" Margin="0,0,8,0"
                         ToolTip="{Binding RedoText}" ToolTipService.ShowOnDisabled="True"/>
 
-                <!-- ROM info chip -->
+                <!-- rom info chip -->
                 <Border Background="{StaticResource MidPurpleBrush}"
                         BorderBrush="{StaticResource BorderPurpleBrush}"
                         BorderThickness="1"
@@ -191,18 +187,16 @@ Title="{Binding WindowTitle}"
             </StackPanel>
         </Border>
 
-        <!-- Gold accent line -->
+        <!-- gold accent line -->
         <Rectangle Grid.Row="2" Height="2" Fill="{StaticResource GoldAccentBrush}"/>
 
-        <!-- ============================================================
-             MAIN CONTENT - TABS
-             ============================================================ -->
+        <!-- main content, the tabs -->
         <TabControl Grid.Row="3"
                     Style="{StaticResource LufiaTabControl}"
                     SelectedIndex="{Binding SelectedTabIndex}"
                     Background="Transparent">
 
-            <!-- Lufia II: its editors (shown instead of the Lufia 1 tabs when a Lufia II ROM is loaded) -->
+            <!-- lufia 2 editors (shown instead of the lufia 1 tabs when a lufia 2 rom is loaded) -->
             <TabItem x:Name="Lufia2Tab" Header="🗡  Lufia II" Style="{StaticResource LufiaTabItem}" Visibility="Collapsed">
                 <l2:Lufia2View x:Name="Lufia2View">
                     <l2:Lufia2View.DataContext>
@@ -284,7 +278,7 @@ Title="{Binding WindowTitle}"
                                    FontSize="18"
                                    Margin="0,0,0,16"/>
 
-                        <!-- ROM detail rows are populated in code-behind -->
+                        <!-- the rom detail rows get filled in from the code-behind -->
                         <ItemsControl x:Name="RomInfoItems">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
@@ -311,9 +305,7 @@ Title="{Binding WindowTitle}"
         </TabControl>
 
 
-        <!-- ============================================================
-             WELCOME (no ROM open yet)
-             ============================================================ -->
+        <!-- welcome (no rom open yet) -->
         <Grid Grid.Row="3" Background="{StaticResource MidPurpleBrush}"
               Visibility="{Binding ShowWelcome, Converter={StaticResource BoolToVisibilityConverter}}">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -380,9 +372,7 @@ Title="{Binding WindowTitle}"
             </ScrollViewer>
         </Grid>
 
-        <!-- ============================================================
-             STATUS BAR
-             ============================================================ -->
+        <!-- status bar -->
         <Border Grid.Row="4"
                 Background="{StaticResource DeepPurpleBrush}"
                 BorderBrush="{StaticResource BorderPurpleBrush}"

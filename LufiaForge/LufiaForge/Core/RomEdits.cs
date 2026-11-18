@@ -3,44 +3,42 @@ using LufiaForge.Core.Maps;
 
 namespace LufiaForge.Core;
 
-/// <summary>
-/// What has been done to a ROM, read from the ROM itself (so it is the same in every session): its size, the
-/// blocks Lufia Forge keeps in its space table above 1 MB, the built-in patches, title animation and data other
-/// hacks are known to add. Everything an editor shows is read the same way - through the game's own pointers and
-/// that table - so a ROM edited over many sessions opens with every change in place.
-/// </summary>
+// what's been done to a rom, read from the rom itself (so it's the same in every session): its size, the blocks we keep
+// in the space table above 1 MB, the built-in patches, title animation and data other hacks are known to add.
+// everything an editor shows is read the same way, through the game's own pointers and that table, so a rom edited
+// over lots of sessions opens with every change in place
 public static class RomEdits
 {
     public static List<(string Label, string Value)> Describe(RomBuffer rom)
     {
         var list = new List<(string, string)>();
-        var who = RomIdentity.Identify(rom.Original ?? rom.ToArray(), rom.Game);
-        list.Add(("Started from:", who.What + (who.ChangedParts.Count > 0 ? $" (it changed: {string.Join(", ", who.ChangedParts)})" : "")));
+        var identity = RomIdentity.Identify(rom.Original ?? rom.ToArray(), rom.Game);
+        list.Add(("Started from:", identity.What + (identity.ChangedParts.Count > 0 ? $" (it changed: {string.Join(", ", identity.ChangedParts)})" : "")));
         var moved = TableGuard.CheckAll(rom).Where(r => r.State == TableGuard.State.MovedByAnotherHack).Select(r => r.Table.Name).ToList();
         if (moved.Count > 0) list.Add(("Kept as they are:", $"another hack moved the {string.Join(", ", moved)}; Lufia Forge doesn't write there"));
-        int kb = rom.Length / 1024;
+        int sizeKb = rom.Length / 1024;
         string size = rom.Length switch
         {
             MapWriter.ExpansionStart => "1 MB (the original size)",
             MapWriter.ExpandedSize => "2 MB (expanded)",
             MapWriter.MaxSize => "4 MB (expanded: the most a Lufia cartridge can address)",
-            _ => $"{kb / 1024.0:0.#} MB (expanded by another hack)",
+            _ => $"{sizeKb / 1024.0:0.#} MB (expanded by another hack)",
         };
         list.Add(("ROM size:", size));
 
         if (rom.Length >= MapWriter.ExpandedSize)
         {
-            var space = ExpansionSpace.Load(rom);
-            var e = space.Entries;
-            int Count(ExpansionSpace.Kind k) => e.Count(x => x.Kind == k);
+            var freeSpace = ExpansionSpace.Load(rom);
+            var entries = freeSpace.Entries;
+            int Count(ExpansionSpace.Kind kind) => entries.Count(x => x.Kind == kind);
             long room = rom.Length - ExpansionSpace.FirstUsable - ExpansionSpace.TableSize;
             list.Add(("Lufia Forge edits:",
                 $"{Count(ExpansionSpace.Kind.MapData)} maps, {Count(ExpansionSpace.Kind.ScriptBlock)} event script blocks, " +
                 $"{Count(ExpansionSpace.Kind.Resource)} graphics/music/data resources and {Count(ExpansionSpace.Kind.Patch)} patch routines stored in the added space"));
-            long kept = Union(e.Where(x => x.Kind == ExpansionSpace.Kind.Unknown));
+            long kept = Union(entries.Where(x => x.Kind == ExpansionSpace.Kind.Unknown));
             if (kept > 0)
                 list.Add(("Kept safe:", $"{kept / 1024:N0} KB of other data in the added space (other hacks or older copies) is never overwritten"));
-            list.Add(("Added space free:", $"{Math.Max(0, room - Union(e)) / 1024:N0} KB of {room / 1024:N0} KB"));
+            list.Add(("Added space free:", $"{Math.Max(0, room - Union(entries)) / 1024:N0} KB of {room / 1024:N0} KB"));
         }
 
         var patches = new List<string>();
@@ -61,8 +59,8 @@ public static class RomEdits
 
         try
         {
-            var t = TitleScreen.Load(rom);
-            if (t.Cycles.Any(c => c.On)) list.Add(("Title screen:", "animated (colour cycling of " + string.Join(" and ", Enumerable.Range(0, 2).Where(k => t.Cycles[k].On).Select(k => $"row {k + 2}")) + ")"));
+            var title = TitleScreen.Load(rom);
+            if (title.Cycles.Any(c => c.On)) list.Add(("Title screen:", "animated (colour cycling of " + string.Join(" and ", Enumerable.Range(0, 2).Where(k => title.Cycles[k].On).Select(k => $"row {k + 2}")) + ")"));
         }
         catch { }
 
@@ -72,25 +70,25 @@ public static class RomEdits
         return list;
     }
 
-    /// <summary>Bytes covered by the blocks (overlaps counted once).</summary>
+    // bytes the blocks cover (overlaps counted once)
     private static long Union(IEnumerable<ExpansionSpace.Entry> blocks)
     {
         long total = 0; int end = int.MinValue;
-        foreach (var b in blocks.OrderBy(x => x.Start))
+        foreach (var block in blocks.OrderBy(x => x.Start))
         {
-            int s = Math.Max(b.Start, end);
-            if (b.End > s) total += b.End - s;
-            end = Math.Max(end, b.End);
+            int start = Math.Max(block.Start, end);
+            if (block.End > start) total += block.End - start;
+            end = Math.Max(end, block.End);
         }
         return total;
     }
 
-    /// <summary>One line for the status bar when a ROM is opened.</summary>
+    // one line for the status bar when a rom gets opened
     public static string Summary(RomBuffer rom)
     {
-        var d = Describe(rom);
-        if (rom.Length == MapWriter.ExpansionStart && d.Any(x => x.Item1 == "Built-in patches:" && x.Item2 == "none") && d.Count <= 2)
+        var lines = Describe(rom);
+        if (rom.Length == MapWriter.ExpansionStart && lines.Any(x => x.Item1 == "Built-in patches:" && x.Item2 == "none") && lines.Count <= 2)
             return "";
-        return string.Join("  |  ", d.Where(x => x.Item1 is "ROM size:" or "Lufia Forge edits:" or "Other hacks found:").Select(x => $"{x.Item1} {x.Item2}"));
+        return string.Join("  |  ", lines.Where(x => x.Item1 is "ROM size:" or "Lufia Forge edits:" or "Other hacks found:").Select(x => $"{x.Item1} {x.Item2}"));
     }
 }
