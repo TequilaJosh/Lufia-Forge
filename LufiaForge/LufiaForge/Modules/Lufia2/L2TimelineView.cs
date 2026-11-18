@@ -12,11 +12,9 @@ using Cursors = System.Windows.Input.Cursors;
 
 namespace LufiaForge.Modules.Lufia2;
 
-/// <summary>
-/// The steps of a Lufia II event placed in time, as Lufia 1's cutscene timeline: a track per character, plus the
-/// camera, dialogue, screen, sound, story flags and timing; a block per step, as long as the step takes in the game
-/// (dialogue timed at a reading speed). Click a block to pick its step; the red playhead follows playback.
-/// </summary>
+// the steps of a Lufia II event laid out in time, like Lufia 1's cutscene timeline. a track per character, plus
+// camera, dialogue, screen, sound, story flags and timing. a block per step, as long as the step takes in the game
+// (dialogue timed at a reading speed). click a block to pick its step, the red playhead follows playback
 public sealed class L2TimelineView : Grid
 {
     private readonly ScrollViewer _scroll = new() { HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Background = new SolidColorBrush(Color.FromRgb(0x14, 0x0C, 0x22)) };
@@ -32,7 +30,7 @@ public sealed class L2TimelineView : Grid
     private int _playFrame, _selectedLine = -1;
 
     private const double LabelW = 8, TrackH = 26, RulerH = 22, NamesW = 120;
-    private double Ppf => _zoom.Value;
+    private double PixelsPerFrame => _zoom.Value;
 
     private static readonly Dictionary<string, Brush> KindBrush = new()
     {
@@ -93,21 +91,21 @@ public sealed class L2TimelineView : Grid
     public void SelectLine(int line)
     {
         _selectedLine = line;
-        var it = _items.FirstOrDefault(i => i.Line == line);
-        if (it != null) { _playFrame = it.Start; ScrollToFrame(it.Start); }
+        var item = _items.FirstOrDefault(i => i.Line == line);
+        if (item != null) { _playFrame = item.Start; ScrollToFrame(item.Start); }
         Draw();
     }
 
     private void OnProgress(int line, int framesIntoLine)
     {
-        var it = _items.FirstOrDefault(i => i.Line == line);
-        if (it == null) return;
-        _playFrame = it.Start + framesIntoLine;
+        var item = _items.FirstOrDefault(i => i.Line == line);
+        if (item == null) return;
+        _playFrame = item.Start + framesIntoLine;
         PlacePlayhead();
         ScrollToFrame(_playFrame);
     }
 
-    private double X(int frame) => LabelW + frame * Ppf;
+    private double X(int frame) => LabelW + frame * PixelsPerFrame;
 
     private void ScrollToFrame(int frame)
     {
@@ -124,44 +122,44 @@ public sealed class L2TimelineView : Grid
         int total = _items.Max(i => i.Start + Math.Max(1, i.Duration));
         double width = X(total) + 80, height = RulerH + _tracks.Count * TrackH + 10;
         _canvas.Width = width; _canvas.Height = height; _names.Height = height + 20;
-        int step = Ppf * 60 >= 40 ? 60 : 300;
-        for (int f = 0; f <= total; f += 30)
+        int step = PixelsPerFrame * 60 >= 40 ? 60 : 300;
+        for (int frame = 0; frame <= total; frame += 30)
         {
-            bool major = f % step == 0;
-            _canvas.Children.Add(new Line { X1 = X(f), X2 = X(f), Y1 = major ? 4 : 12, Y2 = height, Stroke = new SolidColorBrush(Color.FromArgb((byte)(major ? 70 : 28), 255, 255, 255)), IsHitTestVisible = false });
+            bool major = frame % step == 0;
+            _canvas.Children.Add(new Line { X1 = X(frame), X2 = X(frame), Y1 = major ? 4 : 12, Y2 = height, Stroke = new SolidColorBrush(Color.FromArgb((byte)(major ? 70 : 28), 255, 255, 255)), IsHitTestVisible = false });
             if (major)
             {
-                var t = new TextBlock { Text = $"{f / 60}s", Foreground = Brushes.Gray, FontSize = 10, IsHitTestVisible = false };
-                Canvas.SetLeft(t, X(f) + 2); Canvas.SetTop(t, 2);
-                _canvas.Children.Add(t);
+                var secondsLabel = new TextBlock { Text = $"{frame / 60}s", Foreground = Brushes.Gray, FontSize = 10, IsHitTestVisible = false };
+                Canvas.SetLeft(secondsLabel, X(frame) + 2); Canvas.SetTop(secondsLabel, 2);
+                _canvas.Children.Add(secondsLabel);
             }
         }
-        for (int k = 0; k < _tracks.Count; k++)
+        for (int trackIndex = 0; trackIndex < _tracks.Count; trackIndex++)
         {
-            double y = RulerH + k * TrackH;
-            var bg = new Rectangle { Width = width, Height = TrackH - 2, Fill = new SolidColorBrush(Color.FromArgb((byte)(k % 2 == 0 ? 26 : 12), 255, 255, 255)), IsHitTestVisible = false };
-            Canvas.SetLeft(bg, 0); Canvas.SetTop(bg, y);
-            _canvas.Children.Add(bg);
-            var label = new TextBlock { Text = _tracks[k], Foreground = Brushes.Gold, FontSize = 11, FontWeight = FontWeights.SemiBold, Width = NamesW - 8, TextTrimming = TextTrimming.CharacterEllipsis, ToolTip = _tracks[k] };
+            double y = RulerH + trackIndex * TrackH;
+            var stripe = new Rectangle { Width = width, Height = TrackH - 2, Fill = new SolidColorBrush(Color.FromArgb((byte)(trackIndex % 2 == 0 ? 26 : 12), 255, 255, 255)), IsHitTestVisible = false };
+            Canvas.SetLeft(stripe, 0); Canvas.SetTop(stripe, y);
+            _canvas.Children.Add(stripe);
+            var label = new TextBlock { Text = _tracks[trackIndex], Foreground = Brushes.Gold, FontSize = 11, FontWeight = FontWeights.SemiBold, Width = NamesW - 8, TextTrimming = TextTrimming.CharacterEllipsis, ToolTip = _tracks[trackIndex] };
             Canvas.SetLeft(label, 4); Canvas.SetTop(label, y + 5);
             _names.Children.Add(label);
         }
-        foreach (var it in _items)
+        foreach (var item in _items)
         {
-            int k = _tracks.IndexOf(it.Track);
-            if (k < 0) continue;
-            double w = Math.Max(6, it.Duration * Ppf);
+            int trackIndex = _tracks.IndexOf(item.Track);
+            if (trackIndex < 0) continue;
+            double blockWidth = Math.Max(6, item.Duration * PixelsPerFrame);
             var block = new Border
             {
-                Width = w, Height = TrackH - 6, CornerRadius = new CornerRadius(3), Tag = it, Cursor = Cursors.Hand,
-                Background = KindBrush.GetValueOrDefault(it.Kind, KindBrush["other"]),
-                BorderBrush = it.Line == _selectedLine ? Brushes.Gold : new SolidColorBrush(Color.FromArgb(120, 255, 255, 255)),
-                BorderThickness = new Thickness(it.Line == _selectedLine ? 2 : 1),
-                Opacity = it.Reached ? 1 : 0.45,
-                ToolTip = $"Step {it.Line + 1}: {it.Label}\nStarts {Sec(it.Start)}, lasts {Sec(it.Duration)}" + (it.Reached ? "" : "\n(playback doesn't reach it with these story flags)") + "\nClick to pick the step",
-                Child = new TextBlock { Text = it.Label, Foreground = Brushes.White, FontSize = 10, TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(4, 1, 2, 0), IsHitTestVisible = false },
+                Width = blockWidth, Height = TrackH - 6, CornerRadius = new CornerRadius(3), Tag = item, Cursor = Cursors.Hand,
+                Background = KindBrush.GetValueOrDefault(item.Kind, KindBrush["other"]),
+                BorderBrush = item.Line == _selectedLine ? Brushes.Gold : new SolidColorBrush(Color.FromArgb(120, 255, 255, 255)),
+                BorderThickness = new Thickness(item.Line == _selectedLine ? 2 : 1),
+                Opacity = item.Reached ? 1 : 0.45,
+                ToolTip = $"Step {item.Line + 1}: {item.Label}\nStarts {Sec(item.Start)}, lasts {Sec(item.Duration)}" + (item.Reached ? "" : "\n(playback doesn't reach it with these story flags)") + "\nClick to pick the step",
+                Child = new TextBlock { Text = item.Label, Foreground = Brushes.White, FontSize = 10, TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(4, 1, 2, 0), IsHitTestVisible = false },
             };
-            Canvas.SetLeft(block, X(it.Start)); Canvas.SetTop(block, RulerH + k * TrackH + 2);
+            Canvas.SetLeft(block, X(item.Start)); Canvas.SetTop(block, RulerH + trackIndex * TrackH + 2);
             block.MouseLeftButtonDown += Block_Down;
             _canvas.Children.Add(block);
         }
@@ -180,16 +178,16 @@ public sealed class L2TimelineView : Grid
 
     private void Block_Down(object sender, MouseButtonEventArgs e)
     {
-        if (sender is Border { Tag: L2TimelineItem it } && _editor != null) { _editor.SelectedLine = it.Line; e.Handled = true; }
+        if (sender is Border { Tag: L2TimelineItem item } && _editor != null) { _editor.SelectedLine = item.Line; e.Handled = true; }
     }
 
     private void Canvas_Down(object sender, MouseButtonEventArgs e)
     {
-        var p = e.GetPosition(_canvas);
-        int frame = Math.Max(0, (int)((p.X - LabelW) / Ppf));
+        var mousePos = e.GetPosition(_canvas);
+        int frame = Math.Max(0, (int)((mousePos.X - LabelW) / PixelsPerFrame));
         _playFrame = frame;
         PlacePlayhead();
-        var it = _items.Where(i => i.Start <= frame).OrderByDescending(i => i.Start).FirstOrDefault();
-        if (it != null && _editor != null) _editor.SelectedLine = it.Line;
+        var item = _items.Where(i => i.Start <= frame).OrderByDescending(i => i.Start).FirstOrDefault();
+        if (item != null && _editor != null) _editor.SelectedLine = item.Line;
     }
 }

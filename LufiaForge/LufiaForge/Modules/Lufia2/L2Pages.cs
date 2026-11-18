@@ -10,7 +10,7 @@ using LufiaForge.ViewModels;
 
 namespace LufiaForge.Modules.Lufia2;
 
-/// <summary>A flag (one bit of a byte) as a check box.</summary>
+// a flag (one bit of a byte) as a check box
 public partial class L2Flag : ObservableObject
 {
     public string Label { get; init; } = "";
@@ -20,12 +20,12 @@ public partial class L2Flag : ObservableObject
     partial void OnIsCheckedChanged(bool value) => Changed?.Invoke();
 }
 
-/// <summary>An optional word of an item (a stat bonus, the IP attack, ...): only the words the item has.</summary>
+// an optional word of an item (a stat bonus, the IP attack, ...), only the words the item has
 public partial class L2Word : ObservableObject
 {
     public string Label { get; init; } = "";
     public int Bit { get; init; }
-    /// <summary>The record has this word (else Lufia Forge can add it, see <see cref="L2AiScripts.SetItemAddedWord"/>).</summary>
+    // the record has this word (else Lufia Forge can add it, see L2AiScripts.SetItemAddedWord)
     public bool InRecord { get; init; }
     [ObservableProperty] private int _value;
     [ObservableProperty] private bool _has;
@@ -33,7 +33,7 @@ public partial class L2Word : ObservableObject
     public Func<int, string>? Describe { get; init; }
     public Action? Changed { get; set; }
     public bool CanSwitch => !InRecord;
-    /// <summary>Picked from a list (the IP attack by its name) instead of typed as a number.</summary>
+    // picked from a list (the IP attack by its name) instead of typed as a number
     public List<L2Option>? Options { get; init; }
     public bool IsChoice => Options != null;
     public bool IsNumber => Options == null;
@@ -43,34 +43,34 @@ public partial class L2Word : ObservableObject
 
 public sealed record L2Option(int Value, string Label);
 
-/// <summary>Base of the Lufia II pages: a list of records; the picked one's fields are shown, and an edit is written to
-/// the ROM at once (Edit > Undo takes it back).</summary>
+// base of the Lufia II pages: a list of records, the picked one's fields are shown, and an edit gets written to
+// the ROM right away (Edit > Undo takes it back)
 public abstract partial class L2Page : ObservableObject
 {
     protected RomBuffer? Rom;
     protected MainViewModel? Main;
     protected bool Loading;
 
-    /// <summary>A number typed for a byte / word field, kept in its range (300 went in as 44, 70000 as 4464, -1 as 65535,
-    /// while the box still showed what was typed).</summary>
-    protected static byte B(int v) => (byte)Math.Clamp(v, 0, 0xFF);
-    protected static ushort W(int v) => (ushort)Math.Clamp(v, 0, 0xFFFF);
+    // a number typed for a byte / word field, kept in its range (300 used to go in as 44, 70000 as 4464, -1 as 65535,
+    // while the box still showed what was typed)
+    protected static byte B(int value) => (byte)Math.Clamp(value, 0, 0xFF);
+    protected static ushort W(int value) => (ushort)Math.Clamp(value, 0, 0xFFFF);
 
-    /// <summary>Shows values again without writing (after a value was kept in its range).</summary>
+    // shows values again without writing (after a value was kept in its range)
     protected void ShowBack(Action set)
     {
-        bool was = Loading;
+        bool wasLoading = Loading;
         Loading = true;
-        try { set(); } finally { Loading = was; }
+        try { set(); } finally { Loading = wasLoading; }
     }
-    /// <summary>The ROM's <see cref="RomBuffer.Version"/> when the page last read it (or wrote it itself).</summary>
+    // the ROM's RomBuffer.Version when the page last read it (or wrote it itself)
     private int _readVersion = -1;
 
-    /// <summary>The page has what the ROM holds now (after reading it, or after a write of its own).</summary>
+    // the page has what the ROM holds now (after reading it, or after a write of its own)
     protected void MarkRead() { if (Rom != null) _readVersion = Rom.Version; }
 
-    /// <summary>For a card in the view that writes the ROM itself (the new statuses): the ROM, the record shown, and
-    /// a change to report (Edit, Undo).</summary>
+    // for a card in the view that writes the ROM itself (the new statuses): the ROM, the record shown, and
+    // a change to report (Edit, Undo)
     public RomBuffer? PageRom => Rom;
     public int PageIndex => SelectedIndex;
     public void ReportChange(string what)
@@ -78,23 +78,23 @@ public abstract partial class L2Page : ObservableObject
         if (Main == null) return;
         Main.NotifyRomModified("Lufia II: " + what);
         // the rest of the page shows the record again (its scripts' listings)
-        int i = SelectedIndex;
+        int shownIndex = SelectedIndex;
         Loading = true;
-        try { Load(i); } finally { Loading = false; }
+        try { Load(shownIndex); } finally { Loading = false; }
         MarkRead();
-        // the other cards show the record again too (a change in one can put in code another reads: the status patch)
+        // the other cards show the record again too (a change in one can put in code another reads, like the status patch)
         Reloads++;
         OnPropertyChanged(nameof(Reloads));
     }
 
-    /// <summary>Counts <see cref="ReportChange"/>s: the cards in the view build again when it changes.</summary>
+    // counts ReportChange calls, the cards in the view build again when it changes
     public int Reloads { get; private set; }
 
-    /// <summary>The ROM changed since the page read it (another page, Undo, a patch).</summary>
+    // the ROM changed since the page read it (another page, Undo, a patch)
     protected bool ChangedSinceRead => Rom != null && Rom.Version != _readVersion;
 
-    /// <summary>The page is shown: when the ROM changed since it read it, the list and the record shown are read again,
-    /// keeping the pick. A page with edits not yet in the ROM keeps them.</summary>
+    // the page is shown. if the ROM changed since it read it, the list and the record shown get read again,
+    // keeping the pick. a page with edits not in the ROM yet keeps them
     public virtual void Shown()
     {
         if (!ChangedSinceRead) return;
@@ -106,21 +106,21 @@ public abstract partial class L2Page : ObservableObject
     public ObservableCollection<string> Names { get; } = new();
     [ObservableProperty] private int _selectedIndex = -1;
     [ObservableProperty] private bool _isEditable;
-    /// <summary>Why the page is read-only in this ROM (another hack moved a table it edits), or "".</summary>
+    // why the page is read-only in this ROM (another hack moved a table it edits), or ""
     [ObservableProperty] private string _lockNote = "";
 
-    /// <summary>The page's name for <see cref="TableGuard"/>.</summary>
+    // the page's name for TableGuard
     protected virtual string PageName => GetType().Name switch
     {
         "L2ItemsPage" => "Items", "L2SpellsPage" => "Spells", "L2IpPage" => "IP attacks", "L2MonstersPage" => "Monsters",
         "L2CharactersPage" => "Characters", "L2CapsulesPage" => "Capsule monsters", "L2ChestsPage" => "Treasure", "L2ExitsPage" => "Exits",
         "L2EventsPage" => "Events", "L2GraphicsPage" => "Graphics", "L2MusicPage" => "Music", _ => "",
     };
-    /// <summary>The picked record's description (items, spells, IP attacks), new lines as line breaks.</summary>
+    // the picked record's description (items, spells, IP attacks), new lines as line breaks
     [ObservableProperty] private string _description = "";
     [ObservableProperty] private string _descriptionNote = "";
 
-    /// <summary>The description entry of record <paramref name="index"/> (<see cref="L2Descriptions"/>), or -1.</summary>
+    // the description entry of record index (L2Descriptions), or -1
     protected virtual int DescriptionEntry(int index) => -1;
     public bool HasDescription => DescriptionEntry(0) >= 0;
 
@@ -129,7 +129,7 @@ public abstract partial class L2Page : ObservableObject
         Rom = rom; Main = main;
         OnListRead();
         Names.Clear();
-        foreach (var n in ReadNames()) Names.Add(n);
+        foreach (var name in ReadNames()) Names.Add(name);
         LockNote = TableGuard.LockReason(rom, PageName) ?? "";
         IsEditable = Names.Count > 0 && LockNote.Length == 0;
         SelectedIndex = -1;
@@ -137,7 +137,7 @@ public abstract partial class L2Page : ObservableObject
         MarkRead();
     }
 
-    /// <summary>Reads the list again (after a record was added) and picks <paramref name="select"/>.</summary>
+    // reads the list again (after a record was added) and picks select
     protected void RefreshList(int select)
     {
         if (Rom == null) return;
@@ -146,7 +146,7 @@ public abstract partial class L2Page : ObservableObject
         {
             OnListRead();
             Names.Clear();
-            foreach (var n in ReadNames()) Names.Add(n);
+            foreach (var name in ReadNames()) Names.Add(name);
         }
         finally { Loading = false; }
         SelectedIndex = -1;
@@ -160,8 +160,8 @@ public abstract partial class L2Page : ObservableObject
         try
         {
             Load(value);
-            int e = DescriptionEntry(value);
-            if (e >= 0) { Description = L2Descriptions.Read(Rom, e).Replace("\n", Environment.NewLine); DescriptionNote = SpaceNote(); }
+            int entry = DescriptionEntry(value);
+            if (entry >= 0) { Description = L2Descriptions.Read(Rom, entry).Replace("\n", Environment.NewLine); DescriptionNote = SpaceNote(); }
         }
         finally { Loading = false; }
         MarkRead();
@@ -176,9 +176,9 @@ public abstract partial class L2Page : ObservableObject
     private void WriteDescription()
     {
         if (Loading || Rom == null || Main == null || SelectedIndex < 0) return;
-        int e = DescriptionEntry(SelectedIndex);
-        if (e < 0) return;
-        string? error = L2Descriptions.Write(Rom, e, Description.Replace("\r\n", "\n"));
+        int entry = DescriptionEntry(SelectedIndex);
+        if (entry < 0) return;
+        string? error = L2Descriptions.Write(Rom, entry, Description.Replace("\r\n", "\n"));
         if (error != null) { DescriptionNote = "Not written: " + error; return; }
         Main.NotifyRomModified($"Lufia II: description of {Names[SelectedIndex].Trim()}");
         MarkRead();
@@ -186,23 +186,23 @@ public abstract partial class L2Page : ObservableObject
     }
 
     protected abstract IEnumerable<string> ReadNames();
-    /// <summary>Before the list is read for a ROM (or again after a record was added): lists the fields pick from.</summary>
+    // before the list is read for a ROM (or again after a record was added): the lists the fields pick from
     protected virtual void OnListRead() { }
     protected abstract void Load(int index);
-    /// <summary>Writes the shown record; returns what changed (for Undo), or null.</summary>
+    // writes the shown record, returns what changed (for Undo) or null
     protected abstract string? Write();
 
-    /// <summary>Call from a field's change: writes the record and refreshes its line in the list.</summary>
+    // call from a field's change: writes the record and refreshes its line in the list
     protected void Edited()
     {
         if (Loading || Rom == null || Main == null || SelectedIndex < 0) return;
         string? what = Write();
         if (what == null) return;
-        int i = SelectedIndex;
+        int index = SelectedIndex;
         Main.NotifyRomModified("Lufia II: " + what);
         MarkRead();
-        var fresh = ReadNames().ElementAtOrDefault(i);
-        if (fresh != null && fresh != Names[i]) { Loading = true; Names[i] = fresh; SelectedIndex = i; Loading = false; }
+        var fresh = ReadNames().ElementAtOrDefault(index);
+        if (fresh != null && fresh != Names[index]) { Loading = true; Names[index] = fresh; SelectedIndex = index; Loading = false; }
     }
 
     protected override void OnPropertyChanged(PropertyChangedEventArgs e)
@@ -215,47 +215,47 @@ public abstract partial class L2Page : ObservableObject
 
     protected virtual bool IsField(string property) => true;
 
-    protected static BitmapSource? Picture((int Width, int Height, uint[] Pixels)? pic)
+    protected static BitmapSource? Picture((int Width, int Height, uint[] Pixels)? sprite)
     {
-        if (pic is not var (w, h, px)) return null;
-        var bmp = BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgra32, null, px.Select(c => (int)c).ToArray(), w * 4);
-        bmp.Freeze();
-        return bmp;
+        if (sprite is not var (w, h, pixels)) return null;
+        var bitmap = BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgra32, null, pixels.Select(c => (int)c).ToArray(), w * 4);
+        bitmap.Freeze();
+        return bitmap;
     }
 
-    /// <summary>Opens the battle script editor for (kind, index); after a change the page shows the record again.</summary>
+    // opens the battle script editor for (kind, index), after a change the page shows the record again
     protected void EditScript(L2AiScripts.Kind kind, int index, string who)
     {
         if (Rom == null || Main == null) return;
-        var w = new L2ScriptWindow(Rom, kind, index, who) { Owner = System.Windows.Application.Current?.MainWindow };
-        if (w.ShowDialog() != true) return;
-        Main.NotifyRomModified("Lufia II: " + w.Change);
-        int i = SelectedIndex;
+        var window = new L2ScriptWindow(Rom, kind, index, who) { Owner = System.Windows.Application.Current?.MainWindow };
+        if (window.ShowDialog() != true) return;
+        Main.NotifyRomModified("Lufia II: " + window.Change);
+        int shownIndex = SelectedIndex;
         Loading = true;
-        try { Load(i); } finally { Loading = false; }
+        try { Load(shownIndex); } finally { Loading = false; }
         MarkRead();
-        // the other cards show the record again too (a change in one can put in code another reads: the status patch)
+        // the other cards show the record again too (a change in one can put in code another reads, like the status patch)
         Reloads++;
         OnPropertyChanged(nameof(Reloads));
     }
 
-    /// <summary>A record's two battle scripts as text (what runs now: Lufia Forge's edited one or the game's).</summary>
+    // a record's two battle scripts as text (what runs now, Lufia Forge's edited one or the game's)
     protected static string ScriptsText(RomBuffer rom, L2AiScripts.Kind turn, L2AiScripts.Kind hit, int index)
     {
         var names = L2AiScripts.NameLists.From(rom);
-        string Part(L2AiScripts.Kind k, string title, string none)
+        string Part(L2AiScripts.Kind kind, string title, string none)
         {
             try
             {
-                var (steps, edited) = L2AiScripts.Load(rom, k, index);
+                var (steps, edited) = L2AiScripts.Load(rom, kind, index);
                 return title + (edited ? "  (edited in Lufia Forge)" : "") + "\n" + (steps.Count == 0 ? none : L2AiScripts.Listing(steps, names));
             }
-            catch (Exception e) { return title + "\n" + e.Message; }
+            catch (Exception ex) { return title + "\n" + ex.Message; }
         }
         return Part(turn, "ITS TURN", "No script: it just attacks.") + "\n\n" + Part(hit, "WHEN HIT", "No script.");
     }
 
-    /// <summary>A spell's or IP attack's effect as steps (what runs now: Lufia Forge's edited one or the game's).</summary>
+    // a spell's or IP attack's effect as steps (what runs now, Lufia Forge's edited one or the game's)
     protected static string EffectListing(RomBuffer rom, L2AiScripts.Kind kind, int index)
     {
         try
@@ -263,7 +263,7 @@ public abstract partial class L2Page : ObservableObject
             var (steps, edited) = L2AiScripts.Load(rom, kind, index);
             return (edited ? "(edited in Lufia Forge)\n" : "") + (steps.Count == 0 ? "No effect script." : L2AiScripts.Listing(steps, L2AiScripts.NameLists.From(rom)));
         }
-        catch (Exception e) { return e.Message; }
+        catch (Exception ex) { return ex.Message; }
     }
 
     protected static List<L2Flag> Flags(string[] labels, int value, Action changed) =>
@@ -272,11 +272,11 @@ public abstract partial class L2Page : ObservableObject
     protected static int FlagValue(IEnumerable<L2Flag> flags) => flags.Where(f => f.IsChecked).Sum(f => f.Bit);
 }
 
-// ------------------------------------------------------------------------------------------- monsters
+// monsters
 
 public partial class L2MonstersPage : L2Page
 {
-    private L2Battle.Monster? _m;
+    private L2Battle.Monster? _monster;
     public List<L2Option> ItemOptions { get; private set; } = new();
 
     [ObservableProperty] private string _name = "";
@@ -286,45 +286,44 @@ public partial class L2MonstersPage : L2Page
     [ObservableProperty] private string _scriptText = "";
     [ObservableProperty] private string _aiText = "";
     [ObservableProperty] private BitmapSource? _pictureImage;
-    /// <summary>The battle sprites (1 up, the game's and Lufia Forge's new ones) and the palettes of the one picked.</summary>
+    // the battle sprites (1 up, the game's and Lufia Forge's new ones) and the palettes of the one picked
     [ObservableProperty] private List<L2Option> _spriteOptions = new();
     [ObservableProperty] private List<L2Option> _paletteOptions = new();
     [ObservableProperty] private string _spriteNote = "";
-    /// <summary>How the sprite moves in battle, and whether its battles still fit the battle sprite buffer.</summary>
+    // how the sprite moves in battle, and whether its battles still fit the battle sprite buffer
     [ObservableProperty] private string _movesNote = "";
     [ObservableProperty] private string _roomNote = "";
     [ObservableProperty] private bool _roomWarn;
-    /// <summary>How many monsters the ROM has (the US game's 224, or a hack's table up to 256).</summary>
+    // how many monsters the ROM has (the US game's 224, or a hack's table up to 256)
     [ObservableProperty] private string _countNote = "";
-    /// <summary>What to know about the picked record in a hack (a placeholder slot, a record shared by several ids, a
-    /// name field that also holds script bytes), or "".</summary>
+    // what to know about the picked record in a hack (a placeholder slot, a record shared by several ids, a
+    // name field that also holds script bytes), or ""
     [ObservableProperty] private string _recordNote = "";
     [ObservableProperty] private int _nameMax = L2Battle.MonsterNameLength;
     [ObservableProperty] private string _newMonsterNote = "";
     [ObservableProperty] private bool _canAddMonster;
 
-    /// <summary>After a monster was added, or one's name, sprite or palette changed (the Encounters page lists and draws
-    /// it then).</summary>
+    // after a monster was added, or one's name, sprite or palette changed (so the Encounters page lists and draws it)
     public event Action? MonstersChanged;
 
-    /// <summary>A new monster: a copy of the one shown (<see cref="L2NewMonsters.Add"/>), named "New xx".</summary>
+    // a new monster: a copy of the one shown (L2NewMonsters.Add), named "New xx"
     [RelayCommand]
     private void AddMonster()
     {
-        if (Rom == null || Main == null || _m == null) return;
-        int from = _m.Index;
-        string fromName = _m.Name;
-        // a hack whose monster bank is full: the monsters move to a bank of their own first (the same step)
+        if (Rom == null || Main == null || _monster == null) return;
+        int from = _monster.Index;
+        string fromName = _monster.Name;
+        // a hack whose monster bank is full, the monsters move to a bank of their own first (in the same step)
         L2NewMonsters.RoomResult? room = null;
         if (L2NewMonsters.NeedsRoom(Rom))
         {
-            // the room is worked out on a copy of the whole ROM and put in over it, and every page reads again after:
-            // the other pages' edits not yet in the ROM go in first
+            // the room is worked out on a copy of the whole ROM and put in over it, and every page reads again after,
+            // so the other pages' edits not in the ROM yet go in first
             Main.WritePendingEdits();
-            var mouse = System.Windows.Input.Mouse.OverrideCursor;
+            var oldCursor = System.Windows.Input.Mouse.OverrideCursor;
             System.Windows.Input.Mouse.OverrideCursor = System.Windows.Input.Cursors.Wait;
             try { room = L2NewMonsters.PrepareRoom(Rom); }
-            finally { System.Windows.Input.Mouse.OverrideCursor = mouse; }
+            finally { System.Windows.Input.Mouse.OverrideCursor = oldCursor; }
             if (room.Bytes == null)
             {
                 System.Windows.MessageBox.Show(room.Preview(), "New monster", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
@@ -335,13 +334,12 @@ public partial class L2MonstersPage : L2Page
         AddNew(room);
     }
 
-    /// <summary>Adds a copy of the monster shown, after putting a prepared (checked) <paramref name="room"/> in when there
-    /// is one, as one Undo step.</summary>
+    // adds a copy of the monster shown as one Undo step, after putting a prepared (checked) room in if there is one
     public void AddNew(L2NewMonsters.RoomResult? room)
     {
-        if (Rom == null || Main == null || _m == null) return;
-        int from = _m.Index;
-        string fromName = _m.Name;
+        if (Rom == null || Main == null || _monster == null) return;
+        int from = _monster.Index;
+        string fromName = _monster.Name;
         var before = room != null ? Rom.ToArray() : null;
         try
         {
@@ -350,121 +348,121 @@ public partial class L2MonstersPage : L2Page
             Main.NotifyRomModified(room != null
                 ? $"Lufia II: monsters moved to bank ${room.ToBank:X2} and new monster {id:X2} (a copy of {fromName})"
                 : $"Lufia II: new monster {id:X2} (a copy of {fromName})");
-            if (room != null) Main.ReloadModules();   // the tidy may have moved spells too: every page reads again
+            if (room != null) Main.ReloadModules();   // the tidy may have moved spells too, so every page reads again
             RefreshList(id);
             MonstersChanged?.Invoke();
             if (room != null) Main.StatusMessage = $"Monsters moved to bank ${room.ToBank:X2} (bank ${room.FromBank:X2} was full), new monster {id:X2} added (Edit, Undo takes both back).";
         }
-        catch (Exception e)
+        catch (Exception ex)
         {
             if (before != null) Rom.ReplaceAll(before);   // nothing half done
-            System.Windows.MessageBox.Show(e.Message, "New monster", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+            System.Windows.MessageBox.Show(ex.Message, "New monster", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
         }
     }
 
-    /// <summary>Shows what making room in a hack does (see <see cref="L2NewMonsters.PrepareRoom"/>) and asks.</summary>
+    // shows what making room in a hack does (see L2NewMonsters.PrepareRoom) and asks
     internal static bool ConfirmRoom(L2NewMonsters.RoomResult room, string question) =>
         System.Windows.MessageBox.Show($"This ROM's monster bank (${room.FromBank:X2}, set up by the hack it started from) " +
             $"{(room.RoomBefore < 0x40 ? "is full" : $"has {room.RoomBefore} bytes left")}, so the monsters move to a bank of their own.\n\n" +
             room.Preview() + "\n\n" + question, "Lufia II: room for new monsters",
             System.Windows.MessageBoxButton.OKCancel, System.Windows.MessageBoxImage.Question) == System.Windows.MessageBoxResult.OK;
 
-    private static string Line(L2Battle.Monster m) =>
-        $"{m.Index:X2}  " + (m.Unused ? "(unused slot)" : m.Name + (m.SameAs >= 0 ? $"  (= {m.SameAs:X2})" : ""));
+    private static string Line(L2Battle.Monster monster) =>
+        $"{monster.Index:X2}  " + (monster.Unused ? "(unused slot)" : monster.Name + (monster.SameAs >= 0 ? $"  (= {monster.SameAs:X2})" : ""));
 
     protected override IEnumerable<string> ReadNames()
     {
         ItemOptions = L2Battle.Items(Rom!).Select(i => new L2Option(i.Index, $"{i.Index:X3} {i.Name}")).ToList();
         OnPropertyChanged(nameof(ItemOptions));
-        var ms = L2Battle.Monsters(Rom!);
-        var sprites = Enumerable.Range(1, L2MonsterSprites.Count(Rom!)).Select(n =>
+        var monsters = L2Battle.Monsters(Rom!);
+        var sprites = Enumerable.Range(1, L2MonsterSprites.Count(Rom!)).Select(spriteId =>
         {
-            var (tx, ty, _) = L2MonsterSprites.Size(Rom!, n);
-            var who = ms.Where(m => m.Sprite == n).Select(m => m.Name).Distinct().ToList();
-            string names = who.Count == 0 ? (L2MonsterSprites.IsNew(n) ? "new" : "no monster") : string.Join(", ", who.Take(2)) + (who.Count > 2 ? ", ..." : "");
-            return new L2Option(n, $"{n:X2} ({tx * 8} x {ty * 8}) {names}");
+            var (tilesW, tilesH, _) = L2MonsterSprites.Size(Rom!, spriteId);
+            var users = monsters.Where(m => m.Sprite == spriteId).Select(m => m.Name).Distinct().ToList();
+            string names = users.Count == 0 ? (L2MonsterSprites.IsNew(spriteId) ? "new" : "no monster") : string.Join(", ", users.Take(2)) + (users.Count > 2 ? ", ..." : "");
+            return new L2Option(spriteId, $"{spriteId:X2} ({tilesW * 8} x {tilesH * 8}) {names}");
         }).ToList();
         // (the same list stays, so the sprite list keeps its pick when a field of the monster is written)
         if (!sprites.SequenceEqual(SpriteOptions))
         {
             SpriteOptions = sprites;
             // the list shows the pick again (a new list leaves the box empty until the value is raised again)
-            bool was = Loading; Loading = true;
-            try { OnPropertyChanged(nameof(Sprite)); } finally { Loading = was; }
+            bool wasLoading = Loading; Loading = true;
+            try { OnPropertyChanged(nameof(Sprite)); } finally { Loading = wasLoading; }
         }
-        int real = ms.Count(m => !m.Unused);
-        CountNote =(ms.Count == L2Battle.MonsterCount && real == ms.Count ? "Lufia II's 224 monsters." :
-                        $"This ROM's monster table has {ms.Count} entries (the US game 224): {real} monsters" +
-                        (real < ms.Count ? $", {ms.Count - real} unused slots the hack points at a placeholder." : ".")) +
+        int inUse = monsters.Count(m => !m.Unused);
+        CountNote =(monsters.Count == L2Battle.MonsterCount && inUse == monsters.Count ? "Lufia II's 224 monsters." :
+                        $"This ROM's monster table has {monsters.Count} entries (the US game 224): {inUse} monsters" +
+                        (inUse < monsters.Count ? $", {monsters.Count - inUse} unused slots the hack points at a placeholder." : ".")) +
                     " A change is written to the ROM at once (Edit, Undo takes it back).";
-        return ms.Select(Line);
+        return monsters.Select(Line);
     }
 
     protected override void OnListRead()
     {
         bool can = L2NewMonsters.CanAdd(Rom!, out var why), needsRoom = !can && L2NewMonsters.NeedsRoom(Rom!);
-        string room = L2NewMonsters.IsHackMoved(Rom!)
+        string roomText = L2NewMonsters.IsHackMoved(Rom!)
             ? $"{L2NewMonsters.Room(Rom!)} bytes free in bank ${L2NewMonsters.Bank(Rom!):X2} (a copy takes its record, about 45 bytes, and its battle scripts)."
             : $"Room for about {Math.Max(0, L2NewMonsters.Room(Rom!) / 64)} more.";
         NewMonsterNote = can
-            ? $"a copy of the monster shown (record, sprite, drop and battle scripts) as monster {L2NewMonsters.NextId(Rom!):X2}; then change what you like and put it in a monster group or story battle (Encounters page). {room}"
+            ? $"a copy of the monster shown (record, sprite, drop and battle scripts) as monster {L2NewMonsters.NextId(Rom!):X2}; then change what you like and put it in a monster group or story battle (Encounters page). {roomText}"
             : needsRoom
                 ? $"a copy of the monster shown as monster {L2NewMonsters.NextId(Rom!):X2}. This ROM's monster bank (${L2NewMonsters.Bank(Rom!):X2}, set up by the hack) is full, so the first one moves the monsters to a bank of their own (several KB free; the hack's data is tidied first). You see what moves before anything changes."
                 : why;
         CanAddMonster = can || needsRoom;
     }
 
-    /// <summary>The palettes of sprite <paramref name="sprite"/> (and the note under the picture).</summary>
+    // the palettes of sprite (and the note under the picture)
     private void ShowSprite(int sprite)
     {
-        int pals = 0;
-        try { if (sprite >= 1 && sprite <= L2MonsterSprites.Count(Rom!)) pals = L2MonsterSprites.PaletteCount(Rom!, sprite); } catch { }
-        PaletteOptions = Enumerable.Range(0, Math.Max(1, pals)).Select(p => new L2Option(p, $"Palette {p}")).ToList();
-        SpriteNote = pals == 0 ? "No such sprite." :
-            $"Sprite {sprite:X2}: {L2MonsterSprites.Where(Rom!, sprite)}, {pals} palette{(pals == 1 ? "" : "s")}. Paint it, give it new palettes or make new sprites in Graphics (Monster battle sprites).";
-        MovesNote = pals == 0 ? "" : $"In battle it {L2MonsterSprites.MovesText(L2MonsterSprites.Size(Rom!, sprite).Moves)} (set for the sprite in Graphics, Monster battle sprites).";
+        int paletteCount = 0;
+        try { if (sprite >= 1 && sprite <= L2MonsterSprites.Count(Rom!)) paletteCount = L2MonsterSprites.PaletteCount(Rom!, sprite); } catch { }
+        PaletteOptions = Enumerable.Range(0, Math.Max(1, paletteCount)).Select(p => new L2Option(p, $"Palette {p}")).ToList();
+        SpriteNote = paletteCount == 0 ? "No such sprite." :
+            $"Sprite {sprite:X2}: {L2MonsterSprites.Where(Rom!, sprite)}, {paletteCount} palette{(paletteCount == 1 ? "" : "s")}. Paint it, give it new palettes or make new sprites in Graphics (Monster battle sprites).";
+        MovesNote = paletteCount == 0 ? "" : $"In battle it {L2MonsterSprites.MovesText(L2MonsterSprites.Size(Rom!, sprite).Moves)} (set for the sprite in Graphics, Monster battle sprites).";
         ShowRoom(sprite);
     }
 
-    /// <summary>Which of the monster's groups and story battles would need more than the 64 squares of the battle
-    /// sprite buffer with sprite <paramref name="sprite"/> (<see cref="L2BattleRoom"/>).</summary>
+    // which of the monster's groups and story battles would need more than the 64 squares of the battle
+    // sprite buffer with this sprite (L2BattleRoom)
     private void ShowRoom(int sprite)
     {
         RoomNote = ""; RoomWarn = false;
-        if (_m == null || Rom == null || sprite < 1 || sprite > L2MonsterSprites.Count(Rom)) return;
+        if (_monster == null || Rom == null || sprite < 1 || sprite > L2MonsterSprites.Count(Rom)) return;
         try
         {
-            var over = L2BattleRoom.Overflows(Rom, _m.Index, sprite);
-            var ms = L2Battle.Monsters(Rom);
-            int most = L2BattleRoom.MostWith(Rom, _m.Index, sprite);
-            var (tx, ty, _) = L2MonsterSprites.Size(Rom, sprite);
-            var (sx, sy) = L2MonsterSprites.Squares(tx, ty);
-            string own = $"The sprite takes {sx * sy} of the {L2BattleRoom.Squares} squares of 16 x 16 that the kinds of monster in one battle share.";
-            if (over.Count > 0)
+            var tooBig = L2BattleRoom.Overflows(Rom, _monster.Index, sprite);
+            var monsters = L2Battle.Monsters(Rom);
+            int most = L2BattleRoom.MostWith(Rom, _monster.Index, sprite);
+            var (tilesW, tilesH, _) = L2MonsterSprites.Size(Rom, sprite);
+            var (squaresW, squaresH) = L2MonsterSprites.Squares(tilesW, tilesH);
+            string spriteText = $"The sprite takes {squaresW * squaresH} of the {L2BattleRoom.Squares} squares of 16 x 16 that the kinds of monster in one battle share.";
+            if (tooBig.Count > 0)
             {
                 RoomWarn = true;
-                RoomNote = own + " Too big for " + string.Join("; ", over.Take(6).Select(o => o.What + " (" + L2BattleRoom.Describe(o.Need, ms) + ")")) +
-                           (over.Count > 6 ? $" and {over.Count - 6} more" : "") + ". Pick a smaller sprite, or change those battles on the Encounters page.";
+                RoomNote = spriteText + " Too big for " + string.Join("; ", tooBig.Take(6).Select(o => o.What + " (" + L2BattleRoom.Describe(o.Need, monsters) + ")")) +
+                           (tooBig.Count > 6 ? $" and {tooBig.Count - 6} more" : "") + ". Pick a smaller sprite, or change those battles on the Encounters page.";
             }
-            else RoomNote = own + (most == 0 ? " No monster group or story battle has this monster yet." : $" Its battles need at most {most} squares: they fit.");
+            else RoomNote = spriteText + (most == 0 ? " No monster group or story battle has this monster yet." : $" Its battles need at most {most} squares: they fit.");
         }
-        catch (Exception e) { RoomNote = e.Message; }
+        catch (Exception ex) { RoomNote = ex.Message; }
     }
 
-    /// <summary>After a monster sprite was added, painted or given to a monster in Graphics: the sprite list and the
-    /// monster shown are read again.</summary>
+    // after a monster sprite was added, painted or given to a monster in Graphics, the sprite list and the
+    // monster shown get read again
     public void RefreshSprites()
     {
         if (Rom == null) return;
-        int i = SelectedIndex;
+        int shownIndex = SelectedIndex;
         Loading = true;
         try
         {
             var names = ReadNames().ToList();
-            if (i >= 0 && i < Names.Count)
+            if (shownIndex >= 0 && shownIndex < Names.Count)
             {
-                Load(i);
-                if (i < names.Count && names[i] != Names[i]) Names[i] = names[i];
+                Load(shownIndex);
+                if (shownIndex < names.Count && names[shownIndex] != Names[shownIndex]) Names[shownIndex] = names[shownIndex];
             }
         }
         finally { Loading = false; }
@@ -473,14 +471,14 @@ public partial class L2MonstersPage : L2Page
     partial void OnSpriteChanged(int value)
     {
         if (Rom == null) return;
-        bool was = Loading;
+        bool wasLoading = Loading;
         Loading = true;
         try
         {
             ShowSprite(value);
             if (Palette >= PaletteOptions.Count) Palette = 0;
         }
-        finally { Loading = was; }
+        finally { Loading = wasLoading; }
         if (Loading) return;
         PictureImage = Picture(L2Graphics.MonsterSprite(Rom, Sprite, Palette));
     }
@@ -488,18 +486,18 @@ public partial class L2MonstersPage : L2Page
     protected override void Load(int index)
     {
         if (SpriteOptions.Count != L2MonsterSprites.Count(Rom!)) ReadNames().ToList();   // sprites added in Graphics
-        _m = L2Battle.ReadMonster(Rom!, index);
-        NameMax = Math.Max(1, L2Battle.NameRoom(Rom!, _m));
+        _monster = L2Battle.ReadMonster(Rom!, index);
+        NameMax = Math.Max(1, L2Battle.NameRoom(Rom!, _monster));
         var notes = new List<string>();
-        if (_m.Unused) notes.Add("An unused slot: the hack points this id at a placeholder record that other ids share, so an edit here changes them all.");
-        var sharing = L2Battle.Monsters(Rom!).Where(m => m.Index != index && m.Offset == _m.Offset).Select(m => m.Index.ToString("X2")).ToList();
-        if (!_m.Unused && sharing.Count > 0) notes.Add($"Ids {string.Join(", ", sharing)} use the same record: an edit changes them too.");
-        if (!_m.Unused && NameMax < L2Battle.MonsterNameLength)
+        if (_monster.Unused) notes.Add("An unused slot: the hack points this id at a placeholder record that other ids share, so an edit here changes them all.");
+        var sharing = L2Battle.Monsters(Rom!).Where(m => m.Index != index && m.Offset == _monster.Offset).Select(m => m.Index.ToString("X2")).ToList();
+        if (!_monster.Unused && sharing.Count > 0) notes.Add($"Ids {string.Join(", ", sharing)} use the same record: an edit changes them too.");
+        if (!_monster.Unused && NameMax < L2Battle.MonsterNameLength)
             notes.Add($"The name can have up to {NameMax} letter{(NameMax == 1 ? "" : "s")}: the rest of its field holds battle script bytes.");
         RecordNote = string.Join(" ", notes);
-        Name = _m.Name; Level = _m.Level; Hp = _m.Hp; Mp = _m.Mp; Atp = _m.Atp; Dfp = _m.Dfp; Agl = _m.Agl; Int = _m.Int; Gut = _m.Gut; Mgr = _m.Mgr;
-        Exp = _m.Exp; Gold = _m.Gold; Sprite = _m.Sprite; ShowSprite(_m.Sprite); Palette = _m.Palette;
-        HasDrop = _m.DropAt > 0; DropItem = Math.Max(0, _m.DropItem); DropChance = _m.DropChance;
+        Name = _monster.Name; Level = _monster.Level; Hp = _monster.Hp; Mp = _monster.Mp; Atp = _monster.Atp; Dfp = _monster.Dfp; Agl = _monster.Agl; Int = _monster.Int; Gut = _monster.Gut; Mgr = _monster.Mgr;
+        Exp = _monster.Exp; Gold = _monster.Gold; Sprite = _monster.Sprite; ShowSprite(_monster.Sprite); Palette = _monster.Palette;
+        HasDrop = _monster.DropAt > 0; DropItem = Math.Max(0, _monster.DropItem); DropChance = _monster.DropChance;
         ScriptText = HasDrop ? "" : "It drops nothing (a drop can't be added yet: the record would grow).";
         AiText = ScriptsText(Rom!, L2AiScripts.Kind.MonsterAttack, L2AiScripts.Kind.MonsterDefense, index);
         PictureImage = Picture(L2Graphics.MonsterSprite(Rom!, Sprite, Palette));
@@ -510,37 +508,37 @@ public partial class L2MonstersPage : L2Page
         // (the new-monster note is set when the list is read again, after an Undo too, while the old record is still shown)
         or nameof(NewMonsterNote) or nameof(CanAddMonster));
 
-    [RelayCommand] private void EditTurnScript() { if (_m != null) EditScript(L2AiScripts.Kind.MonsterAttack, _m.Index, _m.Name); }
-    [RelayCommand] private void EditHitScript() { if (_m != null) EditScript(L2AiScripts.Kind.MonsterDefense, _m.Index, _m.Name); }
+    [RelayCommand] private void EditTurnScript() { if (_monster != null) EditScript(L2AiScripts.Kind.MonsterAttack, _monster.Index, _monster.Name); }
+    [RelayCommand] private void EditHitScript() { if (_monster != null) EditScript(L2AiScripts.Kind.MonsterDefense, _monster.Index, _monster.Name); }
 
     protected override string? Write()
     {
-        if (_m == null) return null;
-        string oldName = _m.Name;   // (before the name typed goes in: a rename is a change the other pages show)
-        _m.Name = Name; _m.Level = B(Level); _m.Hp = W(Hp); _m.Mp = W(Mp); _m.Atp = W(Atp); _m.Dfp = W(Dfp);
-        _m.Agl = B(Agl); _m.Int = B(Int); _m.Gut = B(Gut); _m.Mgr = B(Mgr); _m.Exp = W(Exp); _m.Gold = W(Gold);
-        ShowBack(() => { Level = _m.Level; Hp = _m.Hp; Mp = _m.Mp; Atp = _m.Atp; Dfp = _m.Dfp; Agl = _m.Agl; Int = _m.Int; Gut = _m.Gut; Mgr = _m.Mgr; Exp = _m.Exp; Gold = _m.Gold; });
-        byte oldSprite = _m.Sprite, oldPalette = _m.Palette;
-        _m.Sprite = (byte)Math.Clamp(Sprite, 1, L2MonsterSprites.Count(Rom!)); _m.Palette = (byte)Math.Clamp(Palette, 0, 255);
-        if (HasDrop) { _m.DropItem = DropItem; _m.DropChance = DropChance; }
-        L2Battle.WriteMonster(Rom!, _m);
-        // the Encounters page shows the monster's picture and its battles' sprite room: read again (after this write)
-        if (oldSprite != _m.Sprite || oldPalette != _m.Palette || oldName != _m.Name)
+        if (_monster == null) return null;
+        string oldName = _monster.Name;   // (before the name typed goes in: a rename is a change the other pages show)
+        _monster.Name = Name; _monster.Level = B(Level); _monster.Hp = W(Hp); _monster.Mp = W(Mp); _monster.Atp = W(Atp); _monster.Dfp = W(Dfp);
+        _monster.Agl = B(Agl); _monster.Int = B(Int); _monster.Gut = B(Gut); _monster.Mgr = B(Mgr); _monster.Exp = W(Exp); _monster.Gold = W(Gold);
+        ShowBack(() => { Level = _monster.Level; Hp = _monster.Hp; Mp = _monster.Mp; Atp = _monster.Atp; Dfp = _monster.Dfp; Agl = _monster.Agl; Int = _monster.Int; Gut = _monster.Gut; Mgr = _monster.Mgr; Exp = _monster.Exp; Gold = _monster.Gold; });
+        byte oldSprite = _monster.Sprite, oldPalette = _monster.Palette;
+        _monster.Sprite = (byte)Math.Clamp(Sprite, 1, L2MonsterSprites.Count(Rom!)); _monster.Palette = (byte)Math.Clamp(Palette, 0, 255);
+        if (HasDrop) { _monster.DropItem = DropItem; _monster.DropChance = DropChance; }
+        L2Battle.WriteMonster(Rom!, _monster);
+        // the Encounters page shows the monster's picture and its battles' sprite room, so it reads again (after this write)
+        if (oldSprite != _monster.Sprite || oldPalette != _monster.Palette || oldName != _monster.Name)
             System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(() => MonstersChanged?.Invoke());
-        PictureImage = Picture(L2Graphics.MonsterSprite(Rom!, _m.Sprite, _m.Palette));
-        return _m.Name;
+        PictureImage = Picture(L2Graphics.MonsterSprite(Rom!, _monster.Sprite, _monster.Palette));
+        return _monster.Name;
     }
 }
 
-// ------------------------------------------------------------------------------------------- items
+// items
 
 public partial class L2ItemsPage : L2Page
 {
-    private L2Battle.Item? _it;
+    private L2Battle.Item? _item;
     public List<L2Option> EquipTypeOptions { get; } =
         new[] { new L2Option(0, "(not equipment)") }.Concat(L2Battle.EquipTypes.Select((t, i) => new L2Option(1 << i, t))).ToList();
     public List<L2Option> IpOptions { get; private set; } = new();
-    /// <summary>An item's battle animation word: the animation + 1 ($81:AA3D takes 1 off; 0 plays animation 00 too).</summary>
+    // an item's battle animation word is the animation + 1 ($81:AA3D takes 1 off, 0 plays animation 00 too)
     public List<L2Option> AnimationOptions { get; private set; } = new();
 
     [ObservableProperty] private string _name = "";
@@ -550,11 +548,11 @@ public partial class L2ItemsPage : L2Page
     [ObservableProperty] private List<L2Word> _words = new();
     [ObservableProperty] private string _wordsText = "";
     [ObservableProperty] private string _effectText = "";
-    /// <summary>The item's chance to break when used (empty = the default: equipment never, other items always).</summary>
+    // the item's chance to break when used (empty = the default, equipment never, other items always)
     [ObservableProperty] private string _breakText = "";
     [ObservableProperty] private string _breakNote = "";
     private string[] _ipNames = Array.Empty<string>();
-    /// <summary>The added words as the item had them when shown (bit -> has it, value).</summary>
+    // the added words as the item had them when shown (bit -> has it, value)
     private Dictionary<int, (bool Has, int Value)> _addedAtLoad = new();
 
     protected override void OnListRead()
@@ -572,41 +570,41 @@ public partial class L2ItemsPage : L2Page
         return L2Battle.Items(Rom!).Select(i => $"{i.Index:X3}  {i.Name}");
     }
 
-    private static List<L2Option> WithValue(List<L2Option> l, int v) => l.Any(o => o.Value == v) ? l : l.Append(new L2Option(v, $"Animation {v - 1:X2}")).ToList();
+    private static List<L2Option> WithValue(List<L2Option> options, int value) => options.Any(o => o.Value == value) ? options : options.Append(new L2Option(value, $"Animation {value - 1:X2}")).ToList();
 
     [RelayCommand] private void EditMenuScript() => EditItem(L2AiScripts.Kind.ItemMenu);
     [RelayCommand] private void EditBattleScript() => EditItem(L2AiScripts.Kind.ItemBattle);
     [RelayCommand] private void EditWeaponScript() => EditItem(L2AiScripts.Kind.Weapon);
     [RelayCommand] private void EditArmorScript() => EditItem(L2AiScripts.Kind.Armor);
-    private void EditItem(L2AiScripts.Kind k) { if (_it != null) EditScript(k, _it.Index, _it.Name.Trim()); }
+    private void EditItem(L2AiScripts.Kind kind) { if (_item != null) EditScript(kind, _item.Index, _item.Name.Trim()); }
 
     protected override void Load(int index)
     {
-        _it = L2Battle.ReadItem(Rom!, index);
-        Name = _it.Name; Price = _it.Price; EquipType = _it.EquipType; Icon = _it.Icon;
-        UseFlags = Flags(L2Battle.ItemUse, _it.Use, Edited);
-        EquipBy = Flags(L2Rom.Heroes, _it.EquipBy, Edited);
-        // every bonus word: the record's own, or one Lufia Forge adds (the item loader hook puts it in)
+        _item = L2Battle.ReadItem(Rom!, index);
+        Name = _item.Name; Price = _item.Price; EquipType = _item.EquipType; Icon = _item.Icon;
+        UseFlags = Flags(L2Battle.ItemUse, _item.Use, Edited);
+        EquipBy = Flags(L2Rom.Heroes, _item.EquipBy, Edited);
+        // every bonus word, the record's own or one Lufia Forge adds (the item loader hook puts it in)
         var added = L2AiScripts.ItemAddedWords(Rom!, index);
-        string Ip(int v) => v >= 1 && v <= _ipNames.Length ? "" : v == 0 ? "" : "not an IP attack";
+        string Ip(int attack) => attack >= 1 && attack <= _ipNames.Length ? "" : attack == 0 ? "" : "not an IP attack";
         Words = L2Battle.ItemWords.Where(w => !w.Name.EndsWith("script") && w.Bit != 0x4000)
-            .Select(w =>
+            .Select(itemWord =>
             {
-                bool own = _it.Values.ContainsKey(w.Bit);
-                int v = own ? _it.Values[w.Bit] : added.GetValueOrDefault(w.Bit);
-                var word = new L2Word { Label = w.Name, Bit = w.Bit, InRecord = own, Describe = w.Bit == 0x8000 ? Ip : null, Changed = Edited,
-                                        Options = w.Bit == 0x8000 ? IpOptions : w.Bit == 0x2000 ? WithValue(AnimationOptions, v) : null };
-                word.Value = v; word.Has = own || added.ContainsKey(w.Bit); word.Note = w.Bit == 0x8000 ? Ip(v) : "";
+                bool own = _item.Values.ContainsKey(itemWord.Bit);
+                int value = own ? _item.Values[itemWord.Bit] : added.GetValueOrDefault(itemWord.Bit);
+                var word = new L2Word { Label = itemWord.Name, Bit = itemWord.Bit, InRecord = own, Describe = itemWord.Bit == 0x8000 ? Ip : null, Changed = Edited,
+                                        Options = itemWord.Bit == 0x8000 ? IpOptions : itemWord.Bit == 0x2000 ? WithValue(AnimationOptions, value) : null };
+                word.Value = value; word.Has = own || added.ContainsKey(itemWord.Bit); word.Note = itemWord.Bit == 0x8000 ? Ip(value) : "";
                 return word;
             }).ToList();
         _addedAtLoad = Words.Where(w => !w.InRecord).ToDictionary(w => w.Bit, w => (w.Has, w.Value));
         WordsText = "Tick a bonus to give it to the item (ATP for weapons, DFP for armor...). The IP attack is the one its wearer can use (new ones are made on the IP attacks page).";
         var names = L2AiScripts.NameLists.From(Rom!);
         var parts = new List<string>();
-        foreach (var k in new[] { L2AiScripts.Kind.ItemMenu, L2AiScripts.Kind.ItemBattle, L2AiScripts.Kind.Weapon, L2AiScripts.Kind.Armor })
+        foreach (var kind in new[] { L2AiScripts.Kind.ItemMenu, L2AiScripts.Kind.ItemBattle, L2AiScripts.Kind.Weapon, L2AiScripts.Kind.Armor })
         {
-            var (steps, edited) = L2AiScripts.Load(Rom!, k, index);
-            if (steps.Count > 0) parts.Add(L2AiScripts.KindName(k).ToUpperInvariant() + (edited ? "  (edited in Lufia Forge)" : "") + "\n" + L2AiScripts.Listing(steps, names));
+            var (steps, edited) = L2AiScripts.Load(Rom!, kind, index);
+            if (steps.Count > 0) parts.Add(L2AiScripts.KindName(kind).ToUpperInvariant() + (edited ? "  (edited in Lufia Forge)" : "") + "\n" + L2AiScripts.Listing(steps, names));
         }
         EffectText = parts.Count > 0 ? string.Join("\n\n", parts) : "No effect yet: the buttons below give it one.";
         int own = L2ItemBreak.Own(Rom!, index);
@@ -616,8 +614,8 @@ public partial class L2ItemsPage : L2Page
 
     private string BreakDescription(int index)
     {
-        int c = L2ItemBreak.Chance(Rom!, index);
-        string now = c >= 100 ? "used up every time" : c <= 0 ? "never used up" : $"a {c}% chance to break each time (in battle: \"... broke!\")";
+        int chance = L2ItemBreak.Chance(Rom!, index);
+        string now = chance >= 100 ? "used up every time" : chance <= 0 ? "never used up" : $"a {chance}% chance to break each time (in battle: \"... broke!\")";
         if (!L2ItemBreak.IsIn(Rom!))
             return $"Now: {now} (the game uses up every item a hero uses, equipment too). Empty = the default: equipment never breaks, other items always. Typing a number puts the code for it in.";
         return $"Now: {now}." + (L2ItemBreak.Own(Rom!, index) == L2ItemBreak.Default ? " Empty = the default: equipment never breaks, other items always." : " Empty goes back to the default.");
@@ -628,59 +626,59 @@ public partial class L2ItemsPage : L2Page
 
     protected override string? Write()
     {
-        if (_it == null) return null;
-        _it.Name = Name; _it.Price = W(Price); _it.EquipType = B(EquipType); _it.Icon = B(Icon);
-        ShowBack(() => { Price = _it.Price; Icon = _it.Icon; });
-        _it.Use = (byte)FlagValue(UseFlags); _it.EquipBy = (byte)FlagValue(EquipBy);
-        foreach (var w in Words)
+        if (_item == null) return null;
+        _item.Name = Name; _item.Price = W(Price); _item.EquipType = B(EquipType); _item.Icon = B(Icon);
+        ShowBack(() => { Price = _item.Price; Icon = _item.Icon; });
+        _item.Use = (byte)FlagValue(UseFlags); _item.EquipBy = (byte)FlagValue(EquipBy);
+        foreach (var word in Words)
         {
-            if (w.InRecord) { _it.Values[w.Bit] = W(w.Value); if (w.Value != _it.Values[w.Bit]) { var ww = w; ShowBack(() => ww.Value = _it.Values[ww.Bit]); } }
+            if (word.InRecord) { _item.Values[word.Bit] = W(word.Value); if (word.Value != _item.Values[word.Bit]) { var wordCopy = word; ShowBack(() => wordCopy.Value = _item.Values[wordCopy.Bit]); } }
             // an added word only when it was changed here (the Animations page gives items an animation word too)
-            else if (_addedAtLoad.GetValueOrDefault(w.Bit) != (w.Has, w.Value))
+            else if (_addedAtLoad.GetValueOrDefault(word.Bit) != (word.Has, word.Value))
             {
-                L2AiScripts.SetItemAddedWord(Rom!, _it.Index, w.Bit, w.Has ? w.Value : null);
-                _addedAtLoad[w.Bit] = (w.Has, w.Value);
+                L2AiScripts.SetItemAddedWord(Rom!, _item.Index, word.Bit, word.Has ? word.Value : null);
+                _addedAtLoad[word.Bit] = (word.Has, word.Value);
             }
         }
-        L2Battle.WriteItem(Rom!, _it);
+        L2Battle.WriteItem(Rom!, _item);
         WriteBreak();
-        return _it.Name;
+        return _item.Name;
     }
 
-    /// <summary>The break chance; equipment that can be used gets the code too (else the game uses it up).</summary>
+    // the break chance. equipment that can be used gets the code too (else the game uses it up)
     private void WriteBreak()
     {
-        string t = BreakText.Trim().TrimEnd('%').Trim();
+        string typed = BreakText.Trim().TrimEnd('%').Trim();
         int want = L2ItemBreak.Default;
-        if (t.Length > 0 && (!int.TryParse(t, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out want) || want is < 0 or > 100))
-            want = L2ItemBreak.Own(Rom!, _it!.Index);
-        bool usableGear = _it!.EquipType != 0 && (_it.Use & 0xC0) != 0;
-        if (L2ItemBreak.CantInstall(Rom!) == null && (want != L2ItemBreak.Own(Rom!, _it.Index) || usableGear && !L2ItemBreak.IsIn(Rom!)))
-            L2ItemBreak.Set(Rom!, _it.Index, want);
-        int own = L2ItemBreak.Own(Rom!, _it.Index);
+        if (typed.Length > 0 && (!int.TryParse(typed, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out want) || want is < 0 or > 100))
+            want = L2ItemBreak.Own(Rom!, _item!.Index);
+        bool usableGear = _item!.EquipType != 0 && (_item.Use & 0xC0) != 0;
+        if (L2ItemBreak.CantInstall(Rom!) == null && (want != L2ItemBreak.Own(Rom!, _item.Index) || usableGear && !L2ItemBreak.IsIn(Rom!)))
+            L2ItemBreak.Set(Rom!, _item.Index, want);
+        int own = L2ItemBreak.Own(Rom!, _item.Index);
         string shown = own == L2ItemBreak.Default ? "" : own.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        if (BreakText != shown) { bool was = Loading; Loading = true; BreakText = shown; Loading = was; }
-        BreakNote = BreakDescription(_it.Index);
+        if (BreakText != shown) { bool wasLoading = Loading; Loading = true; BreakText = shown; Loading = wasLoading; }
+        BreakNote = BreakDescription(_item.Index);
     }
 }
 
-// ------------------------------------------------------------------------------------------- spells
+// spells
 
-/// <summary>Options for a target / pointer combo box: the known ones in words, and the record's own value when the game
-/// uses one that has no name.</summary>
+// options for a target / pointer combo box: the known ones in words, plus the record's own value if the game
+// uses one that has no name
 internal static class L2Choices
 {
     public static List<L2Option> With(IEnumerable<(int Value, string Name)> known, int current)
     {
-        var l = known.Select(k => new L2Option(k.Value, k.Name)).ToList();
-        if (l.All(o => o.Value != current)) l.Add(new L2Option(current, $"Other ({current:X2})"));
-        return l;
+        var options = known.Select(k => new L2Option(k.Value, k.Name)).ToList();
+        if (options.All(o => o.Value != current)) options.Add(new L2Option(current, $"Other ({current:X2})"));
+        return options;
     }
 }
 
 public partial class L2SpellsPage : L2Page
 {
-    private L2Battle.Spell? _s;
+    private L2Battle.Spell? _spell;
     private int _animAtLoad = -1;
     [ObservableProperty] private string _name = "";
     [ObservableProperty] private int _mp, _price, _target, _animation;
@@ -703,35 +701,35 @@ public partial class L2SpellsPage : L2Page
 
     protected override void Load(int index)
     {
-        _s = L2Battle.ReadSpell(Rom!, index);
-        Name = _s.Name; Mp = _s.Mp; Price = _s.Price; InMenu = (_s.Flags & 0x40) != 0; InBattle = (_s.Flags & 0x80) != 0;
-        TargetOptions = L2Choices.With(L2Magic.Targets, _s.Target);
-        Target = _s.Target;
+        _spell = L2Battle.ReadSpell(Rom!, index);
+        Name = _spell.Name; Mp = _spell.Mp; Price = _spell.Price; InMenu = (_spell.Flags & 0x40) != 0; InBattle = (_spell.Flags & 0x80) != 0;
+        TargetOptions = L2Choices.With(L2Magic.Targets, _spell.Target);
+        Target = _spell.Target;
         int anim = L2Magic.SpellAnimation(Rom!, index);
         if (anim >= 0 && AnimationOptions.All(o => o.Value != anim)) AnimationOptions = AnimationOptions.Append(new L2Option(anim, $"Animation {anim:X2}")).ToList();
         Animation = _animAtLoad = anim;
-        LearnBy = Flags(L2Rom.Heroes, _s.LearnBy, Edited);
+        LearnBy = Flags(L2Rom.Heroes, _spell.LearnBy, Edited);
         EffectText = EffectListing(Rom!, L2AiScripts.Kind.Spell, index);
         bool scriptAnim = L2AiScripts.Load(Rom!, L2AiScripts.Kind.Spell, index).Steps.Any(st => st.Op == 0x5A);
         AnimationNote = (scriptAnim ? "Its effect starts an animation of its own (a \"Battle animation\" step), which plays instead of this one. " : "")
             + "A monster casting it shows the same animation, aimed at the heroes.";
     }
 
-    [RelayCommand] private void EditEffect() { if (_s != null) EditScript(L2AiScripts.Kind.Spell, _s.Index, _s.Name.Trim()); }
+    [RelayCommand] private void EditEffect() { if (_spell != null) EditScript(L2AiScripts.Kind.Spell, _spell.Index, _spell.Name.Trim()); }
 
-    /// <summary>A new spell: a copy of the picked one (record, effect as it runs now, animation, description), named
-    /// "New nn". Heroes get it from a shop (Shops page), a start list (Characters page) or an event.</summary>
+    // a new spell: a copy of the picked one (record, effect as it runs now, animation, description), named
+    // "New nn". heroes get it from a shop (Shops page), a start list (Characters page) or an event
     [RelayCommand]
     private void AddSpell()
     {
-        if (Rom == null || Main == null || _s == null) return;
+        if (Rom == null || Main == null || _spell == null) return;
         try
         {
-            int id = L2Magic.AddSpell(Rom, _s.Index);
-            Main.NotifyRomModified($"Lufia II: new spell {id:X2} (a copy of {_s.Name.Trim()})");
+            int id = L2Magic.AddSpell(Rom, _spell.Index);
+            Main.NotifyRomModified($"Lufia II: new spell {id:X2} (a copy of {_spell.Name.Trim()})");
             RefreshList(id);
         }
-        catch (Exception e) { System.Windows.MessageBox.Show(e.Message, "New spell", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning); }
+        catch (Exception ex) { System.Windows.MessageBox.Show(ex.Message, "New spell", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning); }
     }
 
     protected override bool IsField(string p) => p is nameof(Name) or nameof(Mp) or nameof(Price) or nameof(InMenu) or nameof(InBattle) or nameof(Target) or nameof(Animation);
@@ -739,31 +737,31 @@ public partial class L2SpellsPage : L2Page
 
     protected override string? Write()
     {
-        if (_s == null) return null;
+        if (_spell == null) return null;
         // the record as the ROM has it now (moving the spells, from any page, gives it a new place)
-        _s = L2Battle.ReadSpell(Rom!, _s.Index);
-        _s.Name = Name; _s.Mp = W(Mp); _s.Price = W(Price); _s.Target = B(Target);
-        ShowBack(() => { Mp = _s.Mp; Price = _s.Price; });
-        _s.Flags = (byte)(_s.Flags & 0x3F | (InMenu ? 0x40 : 0) | (InBattle ? 0x80 : 0));
-        _s.LearnBy = (byte)FlagValue(LearnBy);
-        L2Battle.WriteSpell(Rom!, _s);
+        _spell = L2Battle.ReadSpell(Rom!, _spell.Index);
+        _spell.Name = Name; _spell.Mp = W(Mp); _spell.Price = W(Price); _spell.Target = B(Target);
+        ShowBack(() => { Mp = _spell.Mp; Price = _spell.Price; });
+        _spell.Flags = (byte)(_spell.Flags & 0x3F | (InMenu ? 0x40 : 0) | (InBattle ? 0x80 : 0));
+        _spell.LearnBy = (byte)FlagValue(LearnBy);
+        L2Battle.WriteSpell(Rom!, _spell);
         // the animation only when it was changed here (the Animations page gives spells animations too)
-        if (Animation >= 0 && Animation != _animAtLoad && Animation != L2Magic.SpellAnimation(Rom!, _s.Index))
+        if (Animation >= 0 && Animation != _animAtLoad && Animation != L2Magic.SpellAnimation(Rom!, _spell.Index))
         {
             _animAtLoad = Animation;
-            try { L2Magic.SetSpellAnimation(Rom!, _s.Index, Animation); }
-            catch (Exception e) { System.Windows.MessageBox.Show(e.Message, "Animation", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning); }
-            _s = L2Battle.ReadSpell(Rom!, _s.Index);   // the first change moves the spells (L2Magic.Install)
+            try { L2Magic.SetSpellAnimation(Rom!, _spell.Index, Animation); }
+            catch (Exception ex) { System.Windows.MessageBox.Show(ex.Message, "Animation", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning); }
+            _spell = L2Battle.ReadSpell(Rom!, _spell.Index);   // the first change moves the spells (L2Magic.Install)
         }
-        return _s.Name;
+        return _spell.Name;
     }
 }
 
-// ------------------------------------------------------------------------------------------- IP attacks
+// IP attacks
 
 public partial class L2IpPage : L2Page
 {
-    private L2Battle.IpAttack? _a;
+    private L2Battle.IpAttack? _attack;
     private int _animAtLoad = -1;
     [ObservableProperty] private string _name = "";
     [ObservableProperty] private int _cost, _animation, _target, _cursor;
@@ -788,54 +786,54 @@ public partial class L2IpPage : L2Page
 
     protected override void Load(int index)
     {
-        _a = L2Battle.ReadIp(Rom!, index);
-        Name = _a.Name; Cost = _a.Cost;
-        if (AnimationOptions.All(o => o.Value != _a.Animation)) AnimationOptions = AnimationOptions.Append(new L2Option(_a.Animation, $"Animation {_a.Animation:X2}")).ToList();
-        Animation = _animAtLoad = _a.Animation;
-        TargetOptions = L2Choices.With(L2Magic.Targets, _a.Targeting); Target = _a.Targeting;
-        CursorOptions = L2Choices.With(L2Magic.Cursors, _a.Cursor); Cursor = _a.Cursor;
+        _attack = L2Battle.ReadIp(Rom!, index);
+        Name = _attack.Name; Cost = _attack.Cost;
+        if (AnimationOptions.All(o => o.Value != _attack.Animation)) AnimationOptions = AnimationOptions.Append(new L2Option(_attack.Animation, $"Animation {_attack.Animation:X2}")).ToList();
+        Animation = _animAtLoad = _attack.Animation;
+        TargetOptions = L2Choices.With(L2Magic.Targets, _attack.Targeting); Target = _attack.Targeting;
+        CursorOptions = L2Choices.With(L2Magic.Cursors, _attack.Cursor); Cursor = _attack.Cursor;
         EffectText = EffectListing(Rom!, L2AiScripts.Kind.IpAttack, index);
-        var sharing = L2AiScripts.IpAttacksWithEffect(Rom!, _a.Effect).Where(i => i != index).ToList();
+        var sharing = L2AiScripts.IpAttacksWithEffect(Rom!, _attack.Effect).Where(i => i != index).ToList();
         IsShared = sharing.Count > 0;
         EffectNote = sharing.Count > 0
             ? $"This effect is shared with {string.Join(", ", sharing.Take(6).Select(i => L2Battle.ReadIp(Rom!, i).Name))}{(sharing.Count > 6 ? $" and {sharing.Count - 6} more" : "")}: a change applies to them too. \"Use its own copy\" lets this one change alone."
             : "Its effect is its own.";
-        var items = L2Battle.Items(Rom!).Where(it => (it.Values.TryGetValue(0x8000, out var v) ? v : L2AiScripts.ItemAddedWords(Rom!, it.Index).GetValueOrDefault(0x8000)) == index + 1)
+        var items = L2Battle.Items(Rom!).Where(it => (it.Values.TryGetValue(0x8000, out var attackWord) ? attackWord : L2AiScripts.ItemAddedWords(Rom!, it.Index).GetValueOrDefault(0x8000)) == index + 1)
             .Select(it => it.Name.Trim()).ToList();
         ItemsText = items.Count == 0 ? "No item gives it yet: pick an item on the Items page and choose this attack under \"IP attack\"."
             : "Given by: " + string.Join(", ", items.Take(10)) + (items.Count > 10 ? $" and {items.Count - 10} more" : "") + ".";
     }
 
-    [RelayCommand] private void EditEffect() { if (_a != null) EditScript(L2AiScripts.Kind.IpAttack, _a.Index, _a.Name); }
+    [RelayCommand] private void EditEffect() { if (_attack != null) EditScript(L2AiScripts.Kind.IpAttack, _attack.Index, _attack.Name); }
 
     [RelayCommand]
     private void OwnEffect()
     {
-        if (Rom == null || Main == null || _a == null) return;
+        if (Rom == null || Main == null || _attack == null) return;
         try
         {
-            L2Magic.GiveIpOwnEffect(Rom, _a.Index);
-            Main.NotifyRomModified($"Lufia II: {_a.Name} has its own effect");
-            int i = SelectedIndex;
+            L2Magic.GiveIpOwnEffect(Rom, _attack.Index);
+            Main.NotifyRomModified($"Lufia II: {_attack.Name} has its own effect");
+            int shownIndex = SelectedIndex;
             Loading = true;
-            try { Load(i); } finally { Loading = false; }
+            try { Load(shownIndex); } finally { Loading = false; }
         }
-        catch (Exception e) { System.Windows.MessageBox.Show(e.Message, "Own effect", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning); }
+        catch (Exception ex) { System.Windows.MessageBox.Show(ex.Message, "Own effect", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning); }
     }
 
-    /// <summary>A new IP attack: a copy of the picked one (its numbers, description and effect as it runs now, as an effect
-    /// of its own), named "New attack".</summary>
+    // a new IP attack: a copy of the picked one (its numbers, description and effect as it runs now, as an effect
+    // of its own), named "New attack"
     [RelayCommand]
     private void AddIp()
     {
-        if (Rom == null || Main == null || _a == null) return;
+        if (Rom == null || Main == null || _attack == null) return;
         try
         {
-            int id = L2Magic.AddIp(Rom, _a.Index);
-            Main.NotifyRomModified($"Lufia II: new IP attack {id:X2} (a copy of {_a.Name})");
+            int id = L2Magic.AddIp(Rom, _attack.Index);
+            Main.NotifyRomModified($"Lufia II: new IP attack {id:X2} (a copy of {_attack.Name})");
             RefreshList(id);
         }
-        catch (Exception e) { System.Windows.MessageBox.Show(e.Message, "New IP attack", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning); }
+        catch (Exception ex) { System.Windows.MessageBox.Show(ex.Message, "New IP attack", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning); }
     }
 
     protected override bool IsField(string p) => p is nameof(Name) or nameof(Cost) or nameof(Animation) or nameof(Target) or nameof(Cursor);
@@ -843,24 +841,24 @@ public partial class L2IpPage : L2Page
 
     protected override string? Write()
     {
-        if (_a == null) return null;
+        if (_attack == null) return null;
         // the record as the ROM has it now (moving the IP attacks, from any page, gives it a new place)
-        _a = L2Battle.ReadIp(Rom!, _a.Index);
-        if (Name.Trim() != _a.Name)
+        _attack = L2Battle.ReadIp(Rom!, _attack.Index);
+        if (Name.Trim() != _attack.Name)
         {
-            try { L2Magic.SetIpName(Rom!, _a.Index, Name); }
-            catch (Exception e) { System.Windows.MessageBox.Show(e.Message, "Name", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning); }
-            _a = L2Battle.ReadIp(Rom!, _a.Index);
+            try { L2Magic.SetIpName(Rom!, _attack.Index, Name); }
+            catch (Exception ex) { System.Windows.MessageBox.Show(ex.Message, "Name", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning); }
+            _attack = L2Battle.ReadIp(Rom!, _attack.Index);
         }
         // the animation only when it was changed here (the Animations page gives IP attacks animations too)
-        if (Animation != _animAtLoad) { _a.Animation = (byte)Animation; _animAtLoad = Animation; }
-        _a.Cost = (byte)Math.Clamp(Cost, 0, 255); _a.Targeting = (byte)Target; _a.Cursor = (byte)Cursor;
-        L2Battle.WriteIp(Rom!, _a);
-        return _a.Name + " (IP)";
+        if (Animation != _animAtLoad) { _attack.Animation = (byte)Animation; _animAtLoad = Animation; }
+        _attack.Cost = (byte)Math.Clamp(Cost, 0, 255); _attack.Targeting = (byte)Target; _attack.Cursor = (byte)Cursor;
+        L2Battle.WriteIp(Rom!, _attack);
+        return _attack.Name + " (IP)";
     }
 }
 
-// ------------------------------------------------------------------------------------------- text
+// text
 
 public partial class L2TextPage : ObservableObject
 {
@@ -883,25 +881,25 @@ public partial class L2TextPage : ObservableObject
         _rom = rom; _main = main;
         MapNames.Clear(); _maps.Clear();
         int total = 0;
-        for (int m = 0; m < L2Maps.Count(rom); m++)
+        for (int mapNumber = 0; mapNumber < L2Maps.Count(rom); mapNumber++)
         {
-            int c = L2Events.Lines(rom, m).Count;
-            if (c == 0) continue;
-            string n = L2Maps.Name(rom, m);
-            _maps.Add(m);
-            MapNames.Add($"{m:X2}  {(n.Length > 0 && !n.Contains('~') ? n : "Map " + m.ToString("X2"))}  ({c})");
-            total += c;
+            int lineCount = L2Events.Lines(rom, mapNumber).Count;
+            if (lineCount == 0) continue;
+            string name = L2Maps.Name(rom, mapNumber);
+            _maps.Add(mapNumber);
+            MapNames.Add($"{mapNumber:X2}  {(name.Length > 0 && !name.Contains('~') ? name : "Map " + mapNumber.ToString("X2"))}  ({lineCount})");
+            total += lineCount;
         }
         Status = $"{total} lines on {_maps.Count} maps.";
         SelectedMap = -1;
         SelectedMap = _maps.Count > 0 ? 0 : -1;
     }
 
-    /// <summary>The ROM's version when the lines were read (their places move when another page writes a map's events).</summary>
+    // the ROM's version when the lines were read (their places move when another page writes a map's events)
     private int _readVersion = -1;
 
-    /// <summary>The page is shown: when the ROM changed since the lines were read, the maps and lines are read again,
-    /// keeping the map and line picked (and the text being typed, when it was changed but not applied).</summary>
+    // the page is shown. if the ROM changed since the lines were read, the maps and lines get read again,
+    // keeping the map and line picked (and the text being typed, if it was changed but not applied)
     public void Shown()
     {
         if (_rom == null || _main == null || _rom.Version == _readVersion) return;
@@ -911,9 +909,9 @@ public partial class L2TextPage : ObservableObject
         bool unapplied = line != null && typed.Replace("\r", "") != line.Text;
         string status = Status;
         SetRom(_rom, _main);
-        int mi = _maps.IndexOf(map);
-        if (mi < 0) return;
-        if (mi != SelectedMap) SelectedMap = mi;
+        int mapIndex = _maps.IndexOf(map);
+        if (mapIndex < 0) return;
+        if (mapIndex != SelectedMap) SelectedMap = mapIndex;
         if (line == null) return;
         int again = _lines.FindIndex(x => x.Text == line.Text && x.Speaker == line.Speaker);
         if (again < 0) return;
@@ -928,7 +926,7 @@ public partial class L2TextPage : ObservableObject
         if (_rom == null || value < 0) { _lines = new(); return; }
         _lines = L2Events.Lines(_rom, _maps[value]);
         _readVersion = _rom.Version;
-        foreach (var l in _lines) LineNames.Add($"{l.Speaker}: {l.Text.Replace("\n", " ")}");
+        foreach (var line in _lines) LineNames.Add($"{line.Speaker}: {line.Text.Replace("\n", " ")}");
         SelectedLine = -1;
         SelectedLine = _lines.Count > 0 ? 0 : -1;
     }
@@ -936,9 +934,9 @@ public partial class L2TextPage : ObservableObject
     partial void OnSelectedLineChanged(int value)
     {
         if (value < 0 || value >= _lines.Count) { Text = ""; Speaker = ""; Room = ""; return; }
-        var l = _lines[value];
-        Speaker = $"{l.Speaker}, at {l.Offset:X6}";
-        Text = l.Text;
+        var line = _lines[value];
+        Speaker = $"{line.Speaker}, at {line.Offset:X6}";
+        Text = line.Text;
         OnTextChanged(Text);
     }
 
@@ -949,17 +947,17 @@ public partial class L2TextPage : ObservableObject
     partial void OnTextChanged(string value)
     {
         if (_rom == null || SelectedLine < 0 || SelectedLine >= _lines.Count) { WidthWarning = ""; return; }
-        int n, room = _lines[SelectedLine].Length;
-        // (while typing, a tag can be half written or unknown: the counter says so instead of the byte count)
-        try { n = L2Text.Encode(_rom, value).Length; }
+        int size, room = _lines[SelectedLine].Length;
+        // (while typing a tag can be half written or unknown, so the counter says so instead of the byte count)
+        try { size = L2Text.Encode(_rom, value).Length; }
         catch (Exception ex) when (ex is InvalidOperationException or FormatException)
         {
             Room = ex.Message;
             WidthWarning = "";
             return;
         }
-        Room = n <= room ? $"{n} of {room} bytes: written in place."
-            : $"{n} bytes, {n - room} more than its place holds: Apply writes the map's events again in added space, so the line can be as long as you like.";
+        Room = size <= room ? $"{size} of {room} bytes: written in place."
+            : $"{size} bytes, {size - room} more than its place holds: Apply writes the map's events again in added space, so the line can be as long as you like.";
         WidthWarning = L2Events.WidthWarning(value.Replace("[WAIT]", "").Replace("[END]", "").Replace("[CHOICE]", ""));
     }
 
@@ -967,10 +965,10 @@ public partial class L2TextPage : ObservableObject
     private void Apply()
     {
         if (_rom == null || _main == null || SelectedLine < 0) return;
-        var l = _lines[SelectedLine];
+        var line = _lines[SelectedLine];
         if (!Text.EndsWith("[WAIT]") && !Text.EndsWith("[END]") && !Text.EndsWith("[CHOICE]")) { Status = "The text has to end with [WAIT], [END] or [CHOICE] like the original."; return; }
         // the line must still be where it was read (another page may have moved the map's events meanwhile)
-        if (!L2Events.Lines(_rom, l.Map).Any(x => x.Offset == l.Offset && x.Length == l.Length && x.Text == l.Text))
+        if (!L2Events.Lines(_rom, line.Map).Any(x => x.Offset == line.Offset && x.Length == line.Length && x.Text == line.Text))
         {
             _readVersion = -1;
             Shown();   // (the text typed stays when its line is found again)
@@ -978,15 +976,15 @@ public partial class L2TextPage : ObservableObject
             return;
         }
         string done;
-        try { done = L2Events.WriteText(_rom, l, Text); }
+        try { done = L2Events.WriteText(_rom, line, Text); }
         catch (Exception ex) { Status = "Not written: " + ex.Message; return; }
         L2FlagUses.Invalidate();
-        _main.NotifyRomModified($"Lufia II: text on map {l.Map:X2}");
-        // a line written elsewhere sorts to a new place in the list: pick it again by its text
+        _main.NotifyRomModified($"Lufia II: text on map {line.Map:X2}");
+        // a line written elsewhere sorts to a new place in the list, so pick it again by its text
         int keep = SelectedLine;
         string written = Text.Replace("\r", "");
         OnSelectedMapChanged(SelectedMap);
-        int again = _lines.FindIndex(x => x.Text == written && x.Speaker == l.Speaker);
+        int again = _lines.FindIndex(x => x.Text == written && x.Speaker == line.Speaker);
         if (again < 0) again = _lines.FindIndex(x => x.Text == written);
         SelectedLine = again >= 0 ? again : keep;
         Status = (done.StartsWith("Written") ? done : "Written. " + done) + " (Edit > Undo takes it back.)";
@@ -994,9 +992,9 @@ public partial class L2TextPage : ObservableObject
 }
 
 
-// ------------------------------------------------------------------------------------------- encounters
+// encounters
 
-/// <summary>A choice in a list of choices (a monster in a group slot, a group in a map's list).</summary>
+// a choice in a list of choices (a monster in a group slot, a group in a map's list)
 public partial class L2Slot : ObservableObject
 {
     public string Label { get; init; } = "";
@@ -1007,7 +1005,7 @@ public partial class L2Slot : ObservableObject
 }
 
 // (the Encounters page is in L2EncountersPage.cs)
-/// <summary>A story battle's slot: the monster and its place on the screen.</summary>
+// a story battle's slot: the monster and its place on the screen
 public partial class L2StorySlot : ObservableObject
 {
     public string Label { get; init; } = "";
@@ -1023,9 +1021,9 @@ public partial class L2StorySlot : ObservableObject
 
 
 
-// ------------------------------------------------------------------------------------------- shops
+// shops
 
-/// <summary>One list of a shop (items, weapons, ...), its slots as choices.</summary>
+// one list of a shop (items, weapons, ...), its slots as choices
 public sealed class L2ShopSection
 {
     public string Title { get; init; } = "";
@@ -1047,7 +1045,7 @@ public partial class L2ShopsPage : ObservableObject
     [ObservableProperty] private string _info = "";
     [ObservableProperty] private string _newShopNote = "";
     [ObservableProperty] private bool _canAdd;
-    /// <summary>The lists the shop has (its menu): items, weapons, armor, spells, and whether it buys.</summary>
+    // the lists the shop has (its menu): items, weapons, armor, spells, and whether it buys
     [ObservableProperty] private bool _hasItems, _hasWeapons, _hasArmor, _hasSpells, _buys;
     [ObservableProperty] private bool _canChangeLists;
 
@@ -1058,18 +1056,18 @@ public partial class L2ShopsPage : ObservableObject
         ReadList(0);
     }
 
-    /// <summary>The items and spells a slot can hold, with their names and prices as they are now.</summary>
+    // the items and spells a slot can hold, with their names and prices as they are now
     private void ReadChoices()
     {
         _items = L2Battle.Items(_rom!).Select(i => new L2Option(i.Index, $"{i.Index:X3} {i.Name}  ({i.Price} G)")).ToList();
         _spells = L2Battle.Spells(_rom!).Select(s => new L2Option(s.Index, $"{s.Index:X2} {s.Name}  ({s.Price} G)")).ToList();
     }
 
-    /// <summary>The ROM's version when the shops were read.</summary>
+    // the ROM's version when the shops were read
     private int _readVersion = -1;
 
-    /// <summary>The page is shown: when the ROM changed since (new spells, renamed items, Undo), the shops and the
-    /// choices are read again, keeping the shop picked.</summary>
+    // the page is shown. if the ROM changed since (new spells, renamed items, Undo), the shops and the
+    // choices get read again, keeping the shop picked
     public void Shown()
     {
         if (_rom == null || _rom.Version == _readVersion) return;
@@ -1083,12 +1081,12 @@ public partial class L2ShopsPage : ObservableObject
         _readVersion = rom.Version;
         _shops = L2Shops.All(rom);
         Names.Clear();
-        foreach (var s in _shops)
+        foreach (var shop in _shops)
         {
-            var maps = L2Shops.UsedOn(rom, s.Id);
+            var maps = L2Shops.UsedOn(rom, shop.Id);
             string where = maps.Count > 0 ? "  " + L2Maps.Name(rom, maps[0]) : "";
-            string what = string.Join(", ", (s.IsComposite ? new[] { "second-hand" } : Array.Empty<string>()).Concat(s.Sections.Select(x => x.Name)));
-            Names.Add($"{s.Id:X2}  {what}{where}" + (s.Id > L2Shops.LastOriginal || L2Shops.IsAdded(rom, s) ? "  (added)" : ""));
+            string what = string.Join(", ", (shop.IsComposite ? new[] { "second-hand" } : Array.Empty<string>()).Concat(shop.Sections.Select(x => x.Name)));
+            Names.Add($"{shop.Id:X2}  {what}{where}" + (shop.Id > L2Shops.LastOriginal || L2Shops.IsAdded(rom, shop) ? "  (added)" : ""));
         }
         CanAdd = L2Shops.CanInstall(rom, out var why) && L2Shops.NextId(rom) > 0;
         NewShopNote = CanAdd
@@ -1106,9 +1104,9 @@ public partial class L2ShopsPage : ObservableObject
         Sections = shop.Sections.Select(sec => new L2ShopSection
         {
             Title = sec.Name.ToUpperInvariant(), Bit = sec.Bit,
-            Slots = sec.Entries.Select((e, i) => new L2Slot
+            Slots = sec.Entries.Select((entry, i) => new L2Slot
             {
-                Label = $"{i + 1}.", Options = sec.IsSpells ? _spells : _items, Value = e,
+                Label = $"{i + 1}.", Options = sec.IsSpells ? _spells : _items, Value = entry,
                 Changed = () => SlotEdited(shop, sec),
             }).ToList(),
         }).ToList();
@@ -1126,18 +1124,17 @@ public partial class L2ShopsPage : ObservableObject
     private void SlotEdited(L2Shops.Shop shop, L2Shops.Section sec)
     {
         if (_rom == null || _main == null) return;
-        var ui = Sections.ElementAtOrDefault(shop.Sections.IndexOf(sec));
-        if (ui == null) return;
+        var shownSection = Sections.ElementAtOrDefault(shop.Sections.IndexOf(sec));
+        if (shownSection == null) return;
         if (TableGuard.LockReason(_rom, "Shops") is { } locked) { System.Windows.MessageBox.Show(locked, "Shops"); return; }
-        if (ui.Slots.Any(s => !sec.IsSpells && s.Value == 0)) { System.Windows.MessageBox.Show("Item 000 ends a list, so a slot can't hold it: take the slot away with - instead.", "Shops"); return; }
-        for (int i = 0; i < sec.Entries.Count; i++) sec.Entries[i] = ui.Slots[i].Value;
+        if (shownSection.Slots.Any(s => !sec.IsSpells && s.Value == 0)) { System.Windows.MessageBox.Show("Item 000 ends a list, so a slot can't hold it: take the slot away with - instead.", "Shops"); return; }
+        for (int i = 0; i < sec.Entries.Count; i++) sec.Entries[i] = shownSection.Slots[i].Value;
         L2Shops.WriteSection(_rom, sec);
         _main.NotifyRomModified($"Lufia II: shop {shop.Id:X2}");
         _readVersion = _rom.Version;
     }
 
-    /// <summary>Writes the shown shop anew with <paramref name="change"/> applied to its lists (any length; see
-    /// <see cref="L2Shops.Rewrite"/>).</summary>
+    // writes the shown shop anew with change applied to its lists (any length, see L2Shops.Rewrite)
     private void Rewrite(Func<Dictionary<int, List<int>>, int, int> change, string what)
     {
         if (_rom == null || _main == null || SelectedIndex < 0 || SelectedIndex >= _shops.Count) return;
@@ -1149,24 +1146,24 @@ public partial class L2ShopsPage : ObservableObject
             L2Shops.Rewrite(_rom, shop.Id, shop.Look, mask, lists.ToDictionary(k => k.Key, k => (IReadOnlyList<int>)k.Value));
             _main.NotifyRomModified($"Lufia II: shop {shop.Id:X2} ({what})");
         }
-        catch (Exception e) { System.Windows.MessageBox.Show(e.Message, "Shops", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning); }
+        catch (Exception ex) { System.Windows.MessageBox.Show(ex.Message, "Shops", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning); }
         ReadList(SelectedIndex);
     }
 
     private static int FirstOf(int bit) => bit == 5 ? 0 : 1;
 
     [RelayCommand]
-    private void AddSlot(int bit) => Rewrite((l, m) =>
+    private void AddSlot(int bit) => Rewrite((lists, mask) =>
     {
-        if (l[bit].Count >= L2Shops.MaxEntries) throw new InvalidOperationException($"A list can have up to {L2Shops.MaxEntries} entries here.");
-        l[bit].Add(l[bit].Count > 0 ? l[bit][^1] : FirstOf(bit)); return m;
+        if (lists[bit].Count >= L2Shops.MaxEntries) throw new InvalidOperationException($"A list can have up to {L2Shops.MaxEntries} entries here.");
+        lists[bit].Add(lists[bit].Count > 0 ? lists[bit][^1] : FirstOf(bit)); return mask;
     }, "a slot added");
 
     [RelayCommand]
-    private void RemoveSlot(int bit) => Rewrite((l, m) =>
+    private void RemoveSlot(int bit) => Rewrite((lists, mask) =>
     {
-        if (l[bit].Count <= 1) throw new InvalidOperationException("A list keeps at least one entry: untick the list instead.");
-        l[bit].RemoveAt(l[bit].Count - 1); return m;
+        if (lists[bit].Count <= 1) throw new InvalidOperationException("A list keeps at least one entry: untick the list instead.");
+        lists[bit].RemoveAt(lists[bit].Count - 1); return mask;
     }, "a slot taken away");
 
     partial void OnHasItemsChanged(bool value) => ListToggled(2, value);
@@ -1178,18 +1175,18 @@ public partial class L2ShopsPage : ObservableObject
     private void ListToggled(int bit, bool on)
     {
         if (_loading || _rom == null) return;
-        Rewrite((l, m) =>
+        Rewrite((lists, mask) =>
         {
             if (bit < 7)
             {
-                if (on && !l.ContainsKey(bit)) l[bit] = new List<int> { FirstOf(bit) };
-                if (!on) l.Remove(bit);
+                if (on && !lists.ContainsKey(bit)) lists[bit] = new List<int> { FirstOf(bit) };
+                if (!on) lists.Remove(bit);
             }
-            return on ? m | 1 << bit : m & ~(1 << bit);
+            return on ? mask | 1 << bit : mask & ~(1 << bit);
         }, on ? "a list added" : "a list taken away");
     }
 
-    /// <summary>A new shop: a copy of the one shown with an id of its own (<see cref="L2Shops.Add"/>).</summary>
+    // a new shop: a copy of the one shown with an id of its own (L2Shops.Add)
     [RelayCommand]
     private void AddShop()
     {
@@ -1201,6 +1198,6 @@ public partial class L2ShopsPage : ObservableObject
             _shops = L2Shops.All(_rom);
             ReadList(_shops.FindIndex(s => s.Id == id));
         }
-        catch (Exception e) { System.Windows.MessageBox.Show(e.Message, "New shop", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning); }
+        catch (Exception ex) { System.Windows.MessageBox.Show(ex.Message, "New shop", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning); }
     }
 }

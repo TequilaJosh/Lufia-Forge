@@ -8,7 +8,7 @@ using Kind = LufiaForge.Core.Lufia2.L2FlagIndex.Kind;
 
 namespace LufiaForge.Modules.Lufia2;
 
-/// <summary>A story character in the Story characters tab's list.</summary>
+// a story character in the Story characters tab's list
 public sealed partial class L2StoryRow : ObservableObject
 {
     public int Id { get; init; }
@@ -16,20 +16,17 @@ public sealed partial class L2StoryRow : ObservableObject
     [ObservableProperty] private string _label = "";
     [ObservableProperty] private string _detail = "";
     [ObservableProperty] private BitmapSource? _picture;
-    /// <summary>Not in the game and nothing uses it: free to take.</summary>
+    // not in the game and nothing uses it, so it's free to take
     public bool Free { get; init; }
     public double Dim => Free ? 0.6 : 1.0;
 }
 
-/// <summary>A place a story character is used, in the Story characters tab.</summary>
+// a place a story character is used, in the Story characters tab
 public sealed record L2StoryUseRow(string Text, L2Persistent.Use? Use);
 
-/// <summary>
-/// The Story characters tab of the Events page: Lufia II's story characters (10-4E, <see cref="L2Persistent"/>), the
-/// ones the game remembers the place of, such as Tia. Each one's name and note (kept in the project), its sprite,
-/// where a new game puts it, and every event that sends it, talks to it or uses it; "New story character" takes a
-/// free one.
-/// </summary>
+// the Story characters tab of the Events page. Lufia II's story characters (10-4E, L2Persistent) are the ones the
+// game remembers the place of, like Tia. shows each one's name and note (kept in the project), its sprite, where a
+// new game puts it, and every event that sends it, talks to it or uses it. "New story character" takes a free one
 public sealed partial class L2StoryCharsPanel : ObservableObject
 {
     private readonly L2EventsPage _page;
@@ -73,14 +70,14 @@ public sealed partial class L2StoryCharsPanel : ObservableObject
     partial void OnShowChanged(int value) => Fill();
     partial void OnFilterChanged(string value) => Fill();
 
-    /// <summary>Reads the list again (the ROM changed, or the page is shown).</summary>
+    // reads the list again (the ROM changed, or the page is shown)
     public void Refresh()
     {
         OnPropertyChanged(nameof(KeptText));
         Fill();
     }
 
-    /// <summary>Shows one story character (from the event editor).</summary>
+    // shows one story character (from the event editor)
     public void ShowChar(int id)
     {
         _filling = true;
@@ -90,15 +87,15 @@ public sealed partial class L2StoryCharsPanel : ObservableObject
         Selected = Rows.FirstOrDefault(r => r.Id == id);
     }
 
-    private static string MapName(RomBuffer rom, int m) => $"{m:X2} {L2ScriptEditor.MapNameOf(rom, m)}";
+    private static string MapName(RomBuffer rom, int map) => $"{map:X2} {L2ScriptEditor.MapNameOf(rom, map)}";
 
-    /// <summary>"Elcid (map 04), start 8 (12, 5)", or "away".</summary>
+    // "Elcid (map 04), start 8 (12, 5)", or "away"
     private static string PlaceOf(RomBuffer rom, int map, int spot)
     {
         if (L2Persistent.IsAway(map, spot)) return "away (on no map the party sees)";
         if (map >= L2Maps.Count(rom)) return $"map {map:X2} (there is no such map), start {spot}";
-        var at = L2MapInfo.Records(rom, map, L2MapInfo.Characters, 8).Select(r => r.Bytes).FirstOrDefault(b => b[0] == spot);
-        return $"{MapName(rom, map)}, start {spot}" + (at != null ? $" ({at[1]}, {at[2]})" : " (the map has no such start: it stands in the top-left corner)");
+        var charStart = L2MapInfo.Records(rom, map, L2MapInfo.Characters, 8).Select(r => r.Bytes).FirstOrDefault(b => b[0] == spot);
+        return $"{MapName(rom, map)}, start {spot}" + (charStart != null ? $" ({charStart[1]}, {charStart[2]})" : " (the map has no such start: it stands in the top-left corner)");
     }
 
     private string LabelOf(int id) => L2Speakers.StoryName(id) ?? "";
@@ -111,29 +108,29 @@ public sealed partial class L2StoryCharsPanel : ObservableObject
         var rom = Rom;
         if (rom == null) { CountText = ""; ShowSelected(null); return; }
         var uses = L2Persistent.Uses(rom).ToLookup(u => u.Id);
-        string q = Filter.Trim();
+        string search = Filter.Trim();
         int inGame = 0, free = 0;
         for (int id = L2Persistent.First; id <= L2Persistent.LastUsable; id++)
         {
-            bool has = L2Persistent.Exists(rom, id);
+            bool exists = L2Persistent.Exists(rom, id);
             string? name = L2FlagNotes.Name(Kind.Character, id);
-            bool isFree = !has && !uses[id].Any() && name == null;
-            if (has) inGame++;
+            bool isFree = !exists && !uses[id].Any() && name == null;
+            if (exists) inGame++;
             if (isFree) free++;
-            if (Show == 0 && !has || Show == 2 && !isFree || Show == 3 && name == null) continue;
-            var rec = has ? L2Persistent.Record(rom, id) : null;
+            if (Show == 0 && !exists || Show == 2 && !isFree || Show == 3 && name == null) continue;
+            var charRecord = exists ? L2Persistent.Record(rom, id) : null;
             int sends = uses[id].Count(u => u.How == "sends");
-            string detail = rec == null ? (isFree ? "free" : "not in the game: never shows up") :
-                $"new game: {PlaceOf(rom, rec[2], rec[3])}" + (sends > 0 ? $"; {sends} send{(sends == 1 ? "" : "s")}" : "");
+            string detail = charRecord == null ? (isFree ? "free" : "not in the game: never shows up") :
+                $"new game: {PlaceOf(rom, charRecord[2], charRecord[3])}" + (sends > 0 ? $"; {sends} send{(sends == 1 ? "" : "s")}" : "");
             var row = new L2StoryRow
             {
                 Id = id, Free = isFree,
-                Label = LabelOf(id) is { Length: > 0 } l ? l : rec != null ? $"sprite {L2Sprites.Name(rec[1])}" : "",
+                Label = LabelOf(id) is { Length: > 0 } label ? label : charRecord != null ? $"sprite {L2Sprites.Name(charRecord[1])}" : "",
                 Detail = detail,
-                Picture = rec != null ? Editor.SpritePicture(rec[1]) : null,
+                Picture = charRecord != null ? Editor.SpritePicture(charRecord[1]) : null,
             };
-            if (q.Length > 0 && !row.NumberText.Equals(q, StringComparison.OrdinalIgnoreCase) && !row.Label.Contains(q, StringComparison.OrdinalIgnoreCase) &&
-                !row.Detail.Contains(q, StringComparison.OrdinalIgnoreCase) && !(L2FlagNotes.Note(Kind.Character, id)?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false)) continue;
+            if (search.Length > 0 && !row.NumberText.Equals(search, StringComparison.OrdinalIgnoreCase) && !row.Label.Contains(search, StringComparison.OrdinalIgnoreCase) &&
+                !row.Detail.Contains(search, StringComparison.OrdinalIgnoreCase) && !(L2FlagNotes.Note(Kind.Character, id)?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false)) continue;
             Rows.Add(row);
         }
         CountText = $"{inGame} in the game, {free} free (10-{L2Persistent.LastUsable:X2}; 4F is the game's own)";
@@ -143,37 +140,37 @@ public sealed partial class L2StoryCharsPanel : ObservableObject
 
     partial void OnSelectedChanged(L2StoryRow? value) => ShowSelected(value);
 
-    private void ShowSelected(L2StoryRow? r)
+    private void ShowSelected(L2StoryRow? row)
     {
         Uses.Clear();
         _filling = true;
-        NameText = r != null ? L2FlagNotes.Name(Kind.Character, r.Id) ?? "" : "";
-        NoteText = r != null ? L2FlagNotes.Note(Kind.Character, r.Id) ?? "" : "";
+        NameText = row != null ? L2FlagNotes.Name(Kind.Character, row.Id) ?? "" : "";
+        NoteText = row != null ? L2FlagNotes.Note(Kind.Character, row.Id) ?? "" : "";
         _filling = false;
         var rom = Rom;
-        if (r == null || rom == null) { Title = ""; About = ""; PlaceText = ""; Picture = null; InGame = false; CanRemove = false; return; }
-        bool has = L2Persistent.Exists(rom, r.Id);
-        var rec = has ? L2Persistent.Record(rom, r.Id) : null;
-        var uses = L2Persistent.Uses(rom).Where(u => u.Id == r.Id).ToList();
-        Title = $"Story character {r.Id:X2}" + (LabelOf(r.Id) is { Length: > 0 } l ? $": {l}" : "");
-        Picture = rec != null ? Editor.SpritePicture(rec[1]) : null;
-        InGame = has;
-        CanRemove = has && uses.Count == 0;
-        PlaceText = rec != null ? $"Sprite {L2Sprites.Name(rec[1])}. A new game puts it on {PlaceOf(rom, rec[2], rec[3])}." :
+        if (row == null || rom == null) { Title = ""; About = ""; PlaceText = ""; Picture = null; InGame = false; CanRemove = false; return; }
+        bool exists = L2Persistent.Exists(rom, row.Id);
+        var charRecord = exists ? L2Persistent.Record(rom, row.Id) : null;
+        var uses = L2Persistent.Uses(rom).Where(u => u.Id == row.Id).ToList();
+        Title = $"Story character {row.Id:X2}" + (LabelOf(row.Id) is { Length: > 0 } label ? $": {label}" : "");
+        Picture = charRecord != null ? Editor.SpritePicture(charRecord[1]) : null;
+        InGame = exists;
+        CanRemove = exists && uses.Count == 0;
+        PlaceText = charRecord != null ? $"Sprite {L2Sprites.Name(charRecord[1])}. A new game puts it on {PlaceOf(rom, charRecord[2], charRecord[3])}." :
             "Not in the game: it never shows up, even when an event sends it. \"Pick its new-game place…\" puts it in the game, with a sprite and a place.";
         var about = new List<string>();
-        if (L2Speakers.StoryName(r.Id) is { } gn && L2FlagNotes.Name(Kind.Character, r.Id) == null) about.Add($"In the game: {gn}.");
-        about.Add($"RAM: map $7E:{0x085E + r.Id - 0x10:X4}, start $7E:{0x089E + r.Id - 0x10:X4}, sprite $7E:{0x08DE + r.Id - 0x10:X4} (kept in the save).");
-        if (has && uses.Count == 0) about.Add("No event uses it yet: it stays on its new-game place for the whole game.");
+        if (L2Speakers.StoryName(row.Id) is { } gameName && L2FlagNotes.Name(Kind.Character, row.Id) == null) about.Add($"In the game: {gameName}.");
+        about.Add($"RAM: map $7E:{0x085E + row.Id - 0x10:X4}, start $7E:{0x089E + row.Id - 0x10:X4}, sprite $7E:{0x08DE + row.Id - 0x10:X4} (kept in the save).");
+        if (exists && uses.Count == 0) about.Add("No event uses it yet: it stays on its new-game place for the whole game.");
         About = string.Join("\n", about);
-        foreach (var u in uses.Where(u => u.How != "uses").OrderBy(u => u.How == "sends" ? 0 : 1).ThenBy(u => u.Map).ThenBy(u => u.At))
-            Uses.Add(new L2StoryUseRow($"{MapName(rom, u.Map)} · {u.Where} · " + (u.How == "sends" ? "sends to " + PlaceOf(rom, u.ToMap, u.ToSpot) : "talk event"), u));
-        // other steps (walks, turns, lines it says): one row per event, opened at its first step
-        foreach (var g in uses.Where(u => u.How == "uses").GroupBy(u => (u.Map, u.Head, u.ListId)).OrderBy(g => g.Key.Map))
+        foreach (var use in uses.Where(u => u.How != "uses").OrderBy(u => u.How == "sends" ? 0 : 1).ThenBy(u => u.Map).ThenBy(u => u.At))
+            Uses.Add(new L2StoryUseRow($"{MapName(rom, use.Map)} · {use.Where} · " + (use.How == "sends" ? "sends to " + PlaceOf(rom, use.ToMap, use.ToSpot) : "talk event"), use));
+        // other steps (walks, turns, lines it says) get one row per event, opened at its first step
+        foreach (var eventUses in uses.Where(u => u.How == "uses").GroupBy(u => (u.Map, u.Head, u.ListId)).OrderBy(g => g.Key.Map))
         {
-            var first = g.OrderBy(u => u.At).First();
-            int n = g.Count();
-            Uses.Add(new L2StoryUseRow($"{MapName(rom, first.Map)} · {first.Where} · {n} step{(n == 1 ? "" : "s")} move or show it", first));
+            var first = eventUses.OrderBy(u => u.At).First();
+            int stepCount = eventUses.Count();
+            Uses.Add(new L2StoryUseRow($"{MapName(rom, first.Map)} · {first.Where} · {stepCount} step{(stepCount == 1 ? "" : "s")} move or show it", first));
         }
         if (Uses.Count == 0) Uses.Add(new L2StoryUseRow("(no event uses it)", null));
     }
@@ -183,14 +180,14 @@ public sealed partial class L2StoryCharsPanel : ObservableObject
 
     private void SaveNote()
     {
-        if (_filling || Selected is not { } r) return;
+        if (_filling || Selected is not { } row) return;
         _filling = true;
         try
         {
-            L2FlagNotes.Set(Kind.Character, r.Id, NameText, NoteText);
+            L2FlagNotes.Set(Kind.Character, row.Id, NameText, NoteText);
             var rom = Rom;
-            r.Label = LabelOf(r.Id) is { Length: > 0 } l ? l : rom != null && L2Persistent.Exists(rom, r.Id) ? $"sprite {L2Sprites.Name(L2Persistent.Record(rom, r.Id)[1])}" : "";
-            Title = $"Story character {r.Id:X2}" + (LabelOf(r.Id) is { Length: > 0 } t ? $": {t}" : "");
+            row.Label = LabelOf(row.Id) is { Length: > 0 } label ? label : rom != null && L2Persistent.Exists(rom, row.Id) ? $"sprite {L2Sprites.Name(L2Persistent.Record(rom, row.Id)[1])}" : "";
+            Title = $"Story character {row.Id:X2}" + (LabelOf(row.Id) is { Length: > 0 } name ? $": {name}" : "");
         }
         finally { _filling = false; }
         OnPropertyChanged(nameof(KeptText));
@@ -200,7 +197,7 @@ public sealed partial class L2StoryCharsPanel : ObservableObject
     {
         var rom = Rom;
         if (rom == null || _page.MainVm is not { } main) return false;
-        if (!_page.AskBeforeLeaving()) return false;   // the editor reads the map again after: its unsaved steps go first
+        if (!_page.AskBeforeLeaving()) return false;   // the editor reads the map again after, so its unsaved steps go first
         try
         {
             L2Rom.AllOrNothing(rom, () => { edit(rom); return 0; });
@@ -211,7 +208,7 @@ public sealed partial class L2StoryCharsPanel : ObservableObject
         catch (Exception ex) { Status = "Not changed: " + ex.Message; return false; }
     }
 
-    /// <summary>Takes a free story character, with a sprite picked in a window; it starts away until it gets a place.</summary>
+    // takes a free story character, with a sprite picked in a window. it starts away until it gets a place
     [RelayCommand]
     private void NewChar()
     {
@@ -232,89 +229,89 @@ public sealed partial class L2StoryCharsPanel : ObservableObject
                  "(the event editor's Characters section: \"＋ Story character here…\").";
     }
 
-    /// <summary>A sprite for the picked one (the same on every map).</summary>
+    // picks a sprite for the selected one (the same on every map)
     [RelayCommand]
     private void ChangeSprite()
     {
         var rom = Rom;
-        if (rom == null || Selected is not { } r || !L2Persistent.Exists(rom, r.Id)) return;
+        if (rom == null || Selected is not { } row || !L2Persistent.Exists(rom, row.Id)) return;
         if (Editor.Rom == null) { Status = "Pick a map on the Events tab first."; return; }
-        int sprite = L2EventEditorPanel.PickSprite(Editor, System.Windows.Application.Current?.MainWindow, $"Story character {r.Id:X2}: sprite", "Use this sprite",
+        int sprite = L2EventEditorPanel.PickSprite(Editor, System.Windows.Application.Current?.MainWindow, $"Story character {row.Id:X2}: sprite", "Use this sprite",
             "Pick its sprite: it has it on every map, from a new game on (an event can still change it for one scene).", gameOnly: true);
         if (sprite < 0) return;
-        var rec = L2Persistent.Record(rom, r.Id);
-        if (Write($"story character {r.Id:X2} sprite", x => L2Persistent.Set(x, r.Id, sprite, rec[2], rec[3]))) { Fill(); Status = "Sprite changed (from a new game on)."; }
+        var charRecord = L2Persistent.Record(rom, row.Id);
+        if (Write($"story character {row.Id:X2} sprite", editRom => L2Persistent.Set(editRom, row.Id, sprite, charRecord[2], charRecord[3]))) { Fill(); Status = "Sprite changed (from a new game on)."; }
     }
 
-    /// <summary>Where a new game puts the picked one: a tile picked on a map (a character start there is used or made).</summary>
+    // where a new game puts the picked one: a tile picked on a map (a character start there gets used or made)
     public void SetPlace(int map, int x, int y)
     {
         var rom = Rom;
-        if (rom == null || Selected is not { } r) return;
-        bool has = L2Persistent.Exists(rom, r.Id);
-        int sprite = has ? L2Persistent.Record(rom, r.Id)[1] : -1;
+        if (rom == null || Selected is not { } row) return;
+        bool has = L2Persistent.Exists(rom, row.Id);
+        int sprite = has ? L2Persistent.Record(rom, row.Id)[1] : -1;
         if (sprite < 0)
         {
             if (Editor.Rom == null) { Status = "Pick a map on the Events tab first."; return; }
-            sprite = L2EventEditorPanel.PickSprite(Editor, System.Windows.Application.Current?.MainWindow, $"Story character {r.Id:X2}: sprite", "Use this sprite",
+            sprite = L2EventEditorPanel.PickSprite(Editor, System.Windows.Application.Current?.MainWindow, $"Story character {row.Id:X2}: sprite", "Use this sprite",
                 "Pick its sprite (one of the game's).", gameOnly: true);
             if (sprite < 0) return;
         }
         int spot = -1;
-        if (!Write($"story character {r.Id:X2} new-game place", x2 => { spot = L2Persistent.StartAt(x2, map, x, y); L2Persistent.Set(x2, r.Id, sprite, map, spot); })) return;
+        if (!Write($"story character {row.Id:X2} new-game place", editRom => { spot = L2Persistent.StartAt(editRom, map, x, y); L2Persistent.Set(editRom, row.Id, sprite, map, spot); })) return;
         Fill();
         Status = $"A new game puts it on {MapName(rom, map)} at ({x}, {y}) (start {spot}).";
     }
 
-    /// <summary>The place the picked one has from a new game, for the map window: (map, x, y).</summary>
+    // the place the picked one has from a new game, for the map window: (map, x, y)
     public (int Map, int X, int Y) PlaceForWindow()
     {
         var rom = Rom;
         int map = Math.Max(2, _page.CurrentMap);
-        if (rom == null || Selected is not { } r || !L2Persistent.Exists(rom, r.Id)) return (map, 0, 0);
-        var rec = L2Persistent.Record(rom, r.Id);
-        if (L2Persistent.IsAway(rec[2], rec[3]) || rec[2] >= L2Maps.Count(rom)) return (map, 0, 0);
-        var at = L2MapInfo.Records(rom, rec[2], L2MapInfo.Characters, 8).Select(b => b.Bytes).FirstOrDefault(b => b[0] == rec[3]);
-        return (rec[2], at?[1] ?? 0, at?[2] ?? 0);
+        if (rom == null || Selected is not { } row || !L2Persistent.Exists(rom, row.Id)) return (map, 0, 0);
+        var charRecord = L2Persistent.Record(rom, row.Id);
+        if (L2Persistent.IsAway(charRecord[2], charRecord[3]) || charRecord[2] >= L2Maps.Count(rom)) return (map, 0, 0);
+        var charStart = L2MapInfo.Records(rom, charRecord[2], L2MapInfo.Characters, 8).Select(b => b.Bytes).FirstOrDefault(b => b[0] == charRecord[3]);
+        return (charRecord[2], charStart?[1] ?? 0, charStart?[2] ?? 0);
     }
 
-    /// <summary>A new game puts the picked one away: it shows up once an event sends it somewhere.</summary>
+    // a new game puts the picked one away, it shows up once an event sends it somewhere
     [RelayCommand]
     private void StartAway()
     {
         var rom = Rom;
-        if (rom == null || Selected is not { } r || !L2Persistent.Exists(rom, r.Id)) return;
-        int sprite = L2Persistent.Record(rom, r.Id)[1];
-        if (Write($"story character {r.Id:X2} away from a new game", x => L2Persistent.Set(x, r.Id, sprite, L2Persistent.AwayMap, L2Persistent.AwaySpot)))
+        if (rom == null || Selected is not { } row || !L2Persistent.Exists(rom, row.Id)) return;
+        int sprite = L2Persistent.Record(rom, row.Id)[1];
+        if (Write($"story character {row.Id:X2} away from a new game", editRom => L2Persistent.Set(editRom, row.Id, sprite, L2Persistent.AwayMap, L2Persistent.AwaySpot)))
         {
             Fill();
             Status = "A new game puts it away: it shows up once an event sends it to a map.";
         }
     }
 
-    /// <summary>Takes the picked one out of the game (only when no event uses it).</summary>
+    // takes the picked one out of the game (only if no event uses it)
     [RelayCommand]
     private void RemoveChar()
     {
         var rom = Rom;
-        if (rom == null || Selected is not { } r || !L2Persistent.Exists(rom, r.Id)) return;
-        if (L2Persistent.Uses(rom).Any(u => u.Id == r.Id)) { Status = "Events use it: take those steps out first (the list shows them)."; return; }
-        if (System.Windows.MessageBox.Show($"Take story character {r.Id:X2} out of the game? It no longer shows up anywhere, and its number is free again.",
+        if (rom == null || Selected is not { } row || !L2Persistent.Exists(rom, row.Id)) return;
+        if (L2Persistent.Uses(rom).Any(u => u.Id == row.Id)) { Status = "Events use it: take those steps out first (the list shows them)."; return; }
+        if (System.Windows.MessageBox.Show($"Take story character {row.Id:X2} out of the game? It no longer shows up anywhere, and its number is free again.",
                 "Story characters", System.Windows.MessageBoxButton.OKCancel) != System.Windows.MessageBoxResult.OK) return;
-        if (Write($"story character {r.Id:X2} taken out", x => L2Persistent.Remove(x, r.Id)))
+        if (Write($"story character {row.Id:X2} taken out", editRom => L2Persistent.Remove(editRom, row.Id)))
         {
-            L2FlagNotes.Set(Kind.Character, r.Id, null, null);
+            L2FlagNotes.Set(Kind.Character, row.Id, null, null);
             Fill();
-            Status = $"{r.Id:X2} is out of the game.";
+            Status = $"{row.Id:X2} is out of the game.";
         }
     }
 
-    /// <summary>Opens the event that uses it, at the step.</summary>
+    // opens the event that uses it, at that step
     [RelayCommand]
     private void OpenUse(L2StoryUseRow? row)
     {
         row ??= SelectedUse;
-        if (row?.Use is not { } u || Rom == null) return;
-        _page.ShowEventAt(u.Map, u.Head, u.ListId, u.At);
+        if (row?.Use is not { } use || Rom == null) return;
+        _page.ShowEventAt(use.Map, use.Head, use.ListId, use.At);
     }
 }

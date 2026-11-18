@@ -3,7 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:LufiaForge.Modules.Lufia2">
     <DockPanel Background="{StaticResource MidPurpleBrush}">
-        <!-- another hack moved tables some pages edit: say so (those pages are read-only) -->
+        <!-- another hack moved tables some pages edit, so say so (those pages are read-only) -->
         <Border DockPanel.Dock="Top" Margin="8,8,8,0" Padding="10,6" CornerRadius="4" Background="#40C9A227" BorderBrush="{StaticResource GoldLightBrush}" BorderThickness="1">
             <Border.Style>
                 <Style TargetType="Border">

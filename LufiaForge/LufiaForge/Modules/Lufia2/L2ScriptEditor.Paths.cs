@@ -5,12 +5,10 @@ using LufiaForge.Core.Lufia2;
 
 namespace LufiaForge.Modules.Lufia2;
 
-/// <summary>
-/// Drawing a path on the stage: a character is picked, each click adds a place it heads for (sideways first, then up
-/// or down, as the game walks a path), Done writes the path to the map (<see cref="L2Paths"/>, the map info's +12
-/// list and a walk program in the info block) and adds "A character walks a path" (33 path who), or points the step
-/// being edited at it.
-/// </summary>
+// drawing a path on the stage. a character is picked, each click adds a place it heads for (sideways first, then up
+// or down, like the game walks a path), and Done writes the path to the map (L2Paths, the map info's +12 list and a
+// walk program in the info block) and adds "A character walks a path" (33 path who), or points the step being
+// edited at it
 public partial class L2ScriptEditor
 {
     private int _pathWho = -1, _pathId = -1, _pathInsertAt = -1;
@@ -26,7 +24,7 @@ public partial class L2ScriptEditor
     [ObservableProperty] private bool _pathEventGoesOn;
     [ObservableProperty] private string _pathWait = "0";
 
-    /// <summary>The route being drawn: a mark for each tile it goes over, the places numbered.</summary>
+    // the route being drawn: a mark for each tile it goes over, the places numbered
     public ObservableCollection<L2StageMark> PathMarks { get; } = new();
 
     public IReadOnlyList<L2Option> PathSpeeds => Speeds;
@@ -44,18 +42,18 @@ public partial class L2ScriptEditor
     private void ReadPaths() =>
         _paths = L2Paths.Read(_rom!, _map).Select(p => (p.Id, $"path {p.Id} (to {p.X},{p.Y})")).ToList();
 
-    /// <summary>From the stage's menu: <paramref name="who"/> walks a new path whose first place is (x, y).</summary>
+    // from the stage's menu: who walks a new path whose first place is (x, y)
     public void StartPath(int who, int x, int y)
     {
-        var st = StateForInsert();
-        if (st == null || !st.Actors.TryGetValue(who, out var a) || !a.Placed) { StageInfo = $"{L2EventCommands.Cap(Name(who))} isn't on the map yet: make it appear first."; return; }
-        BeginPath(who, (a.X, a.Y), -1, null, new L2Paths.Plan());
+        var state = StateForInsert();
+        if (state == null || !state.Actors.TryGetValue(who, out var actor) || !actor.Placed) { StageInfo = $"{L2EventCommands.Cap(Name(who))} isn't on the map yet: make it appear first."; return; }
+        BeginPath(who, (actor.X, actor.Y), -1, null, new L2Paths.Plan());
         _pathInsertAt = InsertIndex;
-        if (x != a.X || y != a.Y) _pathCorners.Add((x, y));
+        if (x != actor.X || y != actor.Y) _pathCorners.Add((x, y));
         DrawPath();
     }
 
-    /// <summary>From a "walks a path" card: its path drawn on the stage, to change.</summary>
+    // from a "walks a path" card: draws its path on the stage so it can be changed
     public void EditPath(L2FieldVm field)
     {
         if (_rom == null || _script == null || !CanEdit || IsPlaying) return;
@@ -64,17 +62,17 @@ public partial class L2ScriptEditor
         int index = _script.Steps.IndexOf(step);
         int who = step.Bytes[2], id = step.Bytes[1];
         var before = Before(index) ?? _start;
-        if (before == null || !before.Actors.TryGetValue(who, out var a) || !a.Placed)
+        if (before == null || !before.Actors.TryGetValue(who, out var actor) || !actor.Placed)
         {
             StageInfo = $"{L2EventCommands.Cap(Name(who))} isn't on the map before step {index + 1}, so there's nowhere to walk from: make it appear first.";
             return;
         }
         var path = L2Paths.Read(_rom, _map).FirstOrDefault(p => p.Id == id);
-        var plan = path != null ? L2Paths.ToPlan(path, a.X, a.Y) : null;
-        // a path other steps of the map walk too gets a new number, so they keep theirs
+        var plan = path != null ? L2Paths.ToPlan(path, actor.X, actor.Y) : null;
+        // a path that other steps of the map walk too gets a new number, so they keep theirs
         bool shared = path != null && L2Script.MapScripts(_rom, _map).SelectMany(s => s.Ops)
             .Any(o => !o.IsText && o.At != step.At && o.At + 2 < _rom.Length && _rom.ReadByte(o.At) == 0x33 && _rom.ReadByte(o.At + 1) == id);
-        BeginPath(who, (a.X, a.Y), path != null && plan != null && !shared ? id : -1, step, plan ?? new L2Paths.Plan());
+        BeginPath(who, (actor.X, actor.Y), path != null && plan != null && !shared ? id : -1, step, plan ?? new L2Paths.Plan());
         DrawPath();
         if (path == null) PathInfo = $"The map has no path {id}: click the places to walk to. " + PathInfo;
         else if (plan == null) PathInfo = $"Path {id} does more than walk to places (it checks the leader, walks at random or jumps), so it can't be drawn here: drawing makes a new path for this step. " + PathInfo;
@@ -98,7 +96,7 @@ public partial class L2ScriptEditor
 
     private static L2Option AddSpeed(int speed) => new(speed, $"speed {speed}");
 
-    /// <summary>A click on the stage while drawing: a place to head for (the last one again: taken back).</summary>
+    // a click on the stage while drawing: a place to head for (clicking the last one again takes it back)
     public void PathClick(int x, int y)
     {
         if (!IsDrawingPath) return;
@@ -158,7 +156,7 @@ public partial class L2ScriptEditor
             if (_pathStep.Bytes[1] != id)
             {
                 Remember();
-                var b = (byte[])_pathStep.Bytes.Clone(); b[1] = (byte)id; _pathStep.Bytes = b;
+                var bytes = (byte[])_pathStep.Bytes.Clone(); bytes[1] = (byte)id; _pathStep.Bytes = bytes;
             }
             Changed(true);
             StageInfo = $"Path {id} saved to the map; step {_script.Steps.IndexOf(_pathStep) + 1} walks it.";
@@ -176,7 +174,7 @@ public partial class L2ScriptEditor
     partial void OnPathSpeedChanged(L2Option? value) => DrawPath();
     partial void OnPathFaceChanged(L2Option? value) => DrawPath();
 
-    /// <summary>The route on the stage: each tile it walks over, the places numbered, a red mark where a wall stops it.</summary>
+    // the route on the stage: each tile it walks over, the places numbered, a red mark where a wall stops it
     private void DrawPath()
     {
         PathMarks.Clear();
@@ -185,13 +183,13 @@ public partial class L2ScriptEditor
         L2StageMap? map = null;
         try { map = L2StageMap.Read(_rom!, _map); } catch (Exception) { }
         string? blocked = null;
-        var (px, py) = _pathFrom;
-        foreach (var (x, y, d) in route)
+        var (prevX, prevY) = _pathFrom;
+        foreach (var (x, y, dir) in route)
         {
-            string? hit = map?.Wall(px, py, d);
+            string? hit = map?.Wall(prevX, prevY, dir);
             if (hit != null && blocked == null) blocked = $"a wall or {hit} stops it at ({x}, {y}): in the game it would wait there for good";
             PathMarks.Add(new L2StageMark { Left = x * 16 + 4, Top = y * 16 + 4, Width = 8, Height = 8, IsSource = hit != null });
-            (px, py) = (x, y);
+            (prevX, prevY) = (x, y);
         }
         PathMarks.Add(new L2StageMark { Left = _pathFrom.X * 16, Top = _pathFrom.Y * 16, Width = 16, Height = 16, Label = "start", IsCorner = true });
         for (int k = 0; k < _pathCorners.Count; k++)

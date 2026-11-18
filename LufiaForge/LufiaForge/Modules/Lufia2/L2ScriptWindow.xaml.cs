@@ -14,11 +14,9 @@ using TextBox = System.Windows.Controls.TextBox;
 
 namespace LufiaForge.Modules.Lufia2;
 
-/// <summary>
-/// Edits a Lufia II monster's or capsule monster's battle script (its turn, or when it is hit) step by step: the
-/// command of each step from a list, its values in fields (spells, monsters, items, stats by name; "go to" picks a
-/// step). Save writes it to Lufia Forge's script table (<see cref="L2AiScripts"/>); the game's own bytes stay.
-/// </summary>
+// edits a Lufia II monster's or capsule monster's battle script (its turn, or when it's hit) step by step. each
+// step's command comes from a list and its values go in fields (spells, monsters, items, stats by name, "go to" picks a
+// step). Save writes it to Lufia Forge's script table (L2AiScripts), the game's own bytes stay where they are
 public partial class L2ScriptWindow : Window
 {
     private readonly RomBuffer _rom;
@@ -29,7 +27,7 @@ public partial class L2ScriptWindow : Window
     private readonly bool _edited;
     private bool _loading;
 
-    /// <summary>What was done (for Undo and the status bar), when the window closes with a change.</summary>
+    // what was done (for Undo and the status bar), if the window closes with a change
     public string Change { get; private set; } = "";
 
     private sealed record OpChoice(L2AiScripts.OpDef Def)
@@ -45,11 +43,11 @@ public partial class L2ScriptWindow : Window
         string unreadable = "";
         _edited = L2AiScripts.Override(rom, kind, index) != null;
         try { _steps = L2AiScripts.Load(rom, kind, index).Steps; }
-        catch (Exception e)
+        catch (Exception ex)
         {
             // (some hacks point a few monsters' scripts at other data)
             _steps = new List<Step>();
-            unreadable = $" Its current script can't be read ({e.Message}); saving gives it this new one.";
+            unreadable = $" Its current script can't be read ({ex.Message}); saving gives it this new one.";
         }
         bool attack = kind is Kind.MonsterAttack or Kind.CapsuleAi;
         Title = $"{who}: {L2AiScripts.KindName(kind)}";
@@ -57,7 +55,7 @@ public partial class L2ScriptWindow : Window
         string start = "";
         if (_steps.Count == 0)
         {
-            // no script: start from what the game does then
+            // no script, so start from what the game does then
             if (kind == Kind.Weapon)
             {
                 _steps = new List<Step> { L2AiScripts.New(0x37), L2AiScripts.New(0x00) };
@@ -80,7 +78,7 @@ public partial class L2ScriptWindow : Window
         InfoText.Text = (_edited ? "This script was edited in Lufia Forge (the game's own one is kept and comes back with 'Back to the game's script')."
                                  : "The game's own script. Saving keeps the game's bytes as they are and puts the edited script in the ROM's added space.") + start + unreadable;
         RevertButton.IsEnabled = _edited;
-        foreach (var d in L2AiScripts.Ops.OrderBy(o => GroupOrder(o.Group))) OpBox.Items.Add(new OpChoice(d));   // (the list's own order: the common ones first)
+        foreach (var def in L2AiScripts.Ops.OrderBy(o => GroupOrder(o.Group))) OpBox.Items.Add(new OpChoice(def));   // (the list's own order, common ones first)
         RefreshList(0);
         // Ctrl+Z / Ctrl+Y take back changes to the steps (text boxes keep their own while typing)
         PreviewKeyDown += (_, e) =>
@@ -93,16 +91,16 @@ public partial class L2ScriptWindow : Window
         if (!L2AiScripts.IsInstalled(rom) && !L2AiScripts.CanInstall(rom, out var why)) StatusText.Text = why;
     }
 
-    private static int GroupOrder(string g) => g switch
+    private static int GroupOrder(string group) => group switch
     {
         "Actions" => 0, "Choices and jumps" => 1, "Show and sound" => 2, "Effects of a special attack" => 3, "Numbers" => 4, _ => 5,
     };
 
     private static Step Make(byte op, params int[] values)
     {
-        var s = L2AiScripts.New(op);
-        for (int i = 0; i < values.Length; i++) L2AiScripts.SetArg(s, i, values[i]);
-        return s;
+        var step = L2AiScripts.New(op);
+        for (int i = 0; i < values.Length; i++) L2AiScripts.SetArg(step, i, values[i]);
+        return step;
     }
 
     private Step? Current => StepList.SelectedIndex >= 0 && StepList.SelectedIndex < _steps.Count ? _steps[StepList.SelectedIndex] : null;
@@ -121,13 +119,13 @@ public partial class L2ScriptWindow : Window
         Record();
     }
 
-    // ── undo / redo inside the window (every change to the steps, until Save) ──────────────────────────────
+    // undo / redo inside the window (every change to the steps, until Save)
 
     private readonly List<(List<Step> Steps, int Selected)> _undo = new(), _redo = new();
     private (List<Step> Steps, int Selected)? _last;
     private bool _restoring;
 
-    /// <summary>A copy of the steps whose "go to"s point at the copies.</summary>
+    // a copy of the steps, with their "go to"s pointing at the copies
     private static List<Step> CloneSteps(List<Step> steps)
     {
         var copy = steps.Select(s => s.Clone()).ToList();
@@ -135,13 +133,13 @@ public partial class L2ScriptWindow : Window
             for (int t = 0; t < steps[i].Targets.Length; t++)
             {
                 var target = steps[i].Targets[t];
-                int k = target == null ? -1 : steps.IndexOf(target);
-                copy[i].Targets[t] = k >= 0 ? copy[k] : null;
+                int targetPos = target == null ? -1 : steps.IndexOf(target);
+                copy[i].Targets[t] = targetPos >= 0 ? copy[targetPos] : null;
             }
         return copy;
     }
 
-    /// <summary>After a change: the state before it becomes an undo step.</summary>
+    // after a change, the state before it becomes an undo step
     private void Record()
     {
         if (_restoring) return;
@@ -174,18 +172,18 @@ public partial class L2ScriptWindow : Window
     private void UndoStep()
     {
         if (_undo.Count == 0 || _last is not { } now) return;
-        var s = _undo[^1]; _undo.RemoveAt(_undo.Count - 1);
+        var state = _undo[^1]; _undo.RemoveAt(_undo.Count - 1);
         _redo.Add(now);
-        Restore(s);
+        Restore(state);
         StatusText.Text = "Undone (Ctrl+Y puts it back).";
     }
 
     private void RedoStep()
     {
         if (_redo.Count == 0 || _last is not { } now) return;
-        var s = _redo[^1]; _redo.RemoveAt(_redo.Count - 1);
+        var state = _redo[^1]; _redo.RemoveAt(_redo.Count - 1);
         _undo.Add(now);
-        Restore(s);
+        Restore(state);
         StatusText.Text = "Redone.";
     }
 
@@ -199,7 +197,7 @@ public partial class L2ScriptWindow : Window
     private void Undo_Click(object sender, RoutedEventArgs e) => UndoStep();
     private void Redo_Click(object sender, RoutedEventArgs e) => RedoStep();
 
-    /// <summary>After a value changed: the lines (other steps' "go to" texts too) and the bytes.</summary>
+    // after a value changed, redo the lines (other steps' "go to" texts too) and the bytes
     private void Changed()
     {
         _loading = true;
@@ -215,10 +213,10 @@ public partial class L2ScriptWindow : Window
     {
         try
         {
-            var b = L2AiScripts.Build(_steps, 1);
-            BytesText.Text = $"{b.Length} bytes: {BitConverter.ToString(b).Replace('-', ' ')}";
+            var bytes = L2AiScripts.Build(_steps, 1);
+            BytesText.Text = $"{bytes.Length} bytes: {BitConverter.ToString(bytes).Replace('-', ' ')}";
         }
-        catch (Exception e) { BytesText.Text = e.Message; }
+        catch (Exception ex) { BytesText.Text = ex.Message; }
         UpdatePreview();
     }
 
@@ -230,16 +228,16 @@ public partial class L2ScriptWindow : Window
         try
         {
             ArgPanel.Children.Clear();
-            var s = Current;
-            StepHeader.Text = s == null ? "STEP" : $"STEP {StepList.SelectedIndex + 1}";
-            OpBox.IsEnabled = s != null;
-            if (s == null) { OpBox.SelectedIndex = -1; OpHelp.Text = ""; ShowBytes(); return; }
-            OpBox.SelectedItem = OpBox.Items.Cast<OpChoice>().FirstOrDefault(c => c.Def.Op == s.Op);
-            var d = s.Def!;
-            OpHelp.Text = d.Help;
+            var step = Current;
+            StepHeader.Text = step == null ? "STEP" : $"STEP {StepList.SelectedIndex + 1}";
+            OpBox.IsEnabled = step != null;
+            if (step == null) { OpBox.SelectedIndex = -1; OpHelp.Text = ""; ShowBytes(); return; }
+            OpBox.SelectedItem = OpBox.Items.Cast<OpChoice>().FirstOrDefault(c => c.Def.Op == step.Op);
+            var def = step.Def!;
+            OpHelp.Text = def.Help;
             int jump = 0;
-            for (int i = 0; i < d.Args.Length; i++)
-                ArgPanel.Children.Add(Field(s, d.Args[i], i, d.Args[i] == Arg.Jump ? jump++ : -1));
+            for (int i = 0; i < def.Args.Length; i++)
+                ArgPanel.Children.Add(Field(step, def.Args[i], i, def.Args[i] == Arg.Jump ? jump++ : -1));
             ShowBytes();
         }
         finally { _loading = false; }
@@ -247,28 +245,28 @@ public partial class L2ScriptWindow : Window
 
     private void OpBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (_loading || Current is not { } s || OpBox.SelectedItem is not OpChoice c || c.Def.Op == s.Op) return;
-        // the step keeps its place (and the steps that go to it); its values start at zero
-        var fresh = L2AiScripts.New(c.Def.Op);
-        s.Op = fresh.Op; s.Args = fresh.Args; s.Targets = fresh.Targets; s.OutsideTargets = fresh.OutsideTargets;
-        if (c.Def.Op == 0x32) L2AiScripts.SetArg(s, 0, 1);   // the usual target: one random foe
-        // a new "go to" goes to the next step (none after the last one: Save asks for one; a step going to
+        if (_loading || Current is not { } step || OpBox.SelectedItem is not OpChoice choice || choice.Def.Op == step.Op) return;
+        // the step keeps its place (and the steps that go to it), its values start at zero
+        var fresh = L2AiScripts.New(choice.Def.Op);
+        step.Op = fresh.Op; step.Args = fresh.Args; step.Targets = fresh.Targets; step.OutsideTargets = fresh.OutsideTargets;
+        if (choice.Def.Op == 0x32) L2AiScripts.SetArg(step, 0, 1);   // the usual target: one random foe
+        // a new "go to" goes to the next step (none after the last one, Save asks for one. a step going to
         // itself would loop forever in the battle)
-        for (int j = 0; j < s.Targets.Length; j++) s.Targets[j] = _steps.ElementAtOrDefault(StepList.SelectedIndex + 1);
+        for (int j = 0; j < step.Targets.Length; j++) step.Targets[j] = _steps.ElementAtOrDefault(StepList.SelectedIndex + 1);
         Changed();
         ShowStep();
     }
 
-    // ── fields ──────────────────────────────────────────────────────────────
+    // fields
 
-    private static string Label(Arg a, int i, L2AiScripts.OpDef d) => L2AiScripts.ArgInfo(d.Op, i)?.Label ?? a switch
+    private static string Label(Arg arg, int argIndex, L2AiScripts.OpDef def) => L2AiScripts.ArgInfo(def.Op, argIndex)?.Label ?? arg switch
     {
         Arg.Message => "message",
         Arg.NewStatus => "status",
         Arg.Jump => "go to",
         Arg.Chance => "chance (of 256)",
         Arg.Percent => "percent",
-        Arg.Register => d.Args.Count(x => x == Arg.Register) > 1 ? $"number {i + 1}" : "number",
+        Arg.Register => def.Args.Count(x => x == Arg.Register) > 1 ? $"number {argIndex + 1}" : "number",
         Arg.Value => "value",
         Arg.Spell => "spell",
         Arg.Monster => "monster",
@@ -284,59 +282,59 @@ public partial class L2ScriptWindow : Window
         Arg.Change => "change (%)",
         Arg.Animation => "animation",
         Arg.Sound => "sound",
-        _ => d.Args.Length > 1 ? $"value {i + 1}" : "value",
+        _ => def.Args.Length > 1 ? $"value {argIndex + 1}" : "value",
     };
 
-    private FrameworkElement Field(Step s, Arg a, int i, int jump)
+    private FrameworkElement Field(Step step, Arg arg, int argIndex, int jump)
     {
-        var d = s.Def!;
+        var def = step.Def!;
         var row = new DockPanel { Margin = new Thickness(0, 4, 0, 4) };
-        row.Children.Add(new TextBlock { Text = Label(a, i, d), Width = 120, VerticalAlignment = System.Windows.VerticalAlignment.Center, Style = (Style)FindResource("GdFieldLabel") });
-        FrameworkElement editor = a switch
+        row.Children.Add(new TextBlock { Text = Label(arg, argIndex, def), Width = 120, VerticalAlignment = System.Windows.VerticalAlignment.Center, Style = (Style)FindResource("GdFieldLabel") });
+        FrameworkElement editor = arg switch
         {
-            Arg.Jump => StepPicker(s, jump),
-            Arg.Spell => List(s, i, _names.Spells),
-            Arg.Monster => List(s, i, _names.Monsters),
-            Arg.CapsuleAttack => List(s, i, _names.CapsuleAttacks),
-            Arg.Item => List(s, i, _names.Items, 0x1FF),
-            Arg.Stat => List(s, i, L2AiScripts.Stats),
-            Arg.Status => List(s, i, L2AiScripts.Statuses),
-            Arg.NewStatus => List(s, i, s.Op == 0x5D ? L2StatusPatch.Names : L2StatusPatch.Names.Append(L2StatusPatch.EveryName).ToArray()),   // 10: all 16 (cure, resist, ward)
-            Arg.Target => List(s, i, L2AiScripts.Targets, plain: true),
-            Arg.AttackName => NameField(s, i),
-            Arg.Message => List(s, i, Enumerable.Range(0, 0x30).Select(L2AiScripts.MessageText).ToArray()),
-            Arg.Change => Signed(s, i),
-            Arg.Restore => List(s, i, L2AiScripts.Restores),
-            Arg.Animation when _names.Animations.Length == 0x100 => List(s, i, _names.Animations),
-            Arg.Element => Elements(s, i),
-            Arg.Value => ValueField(s, i),
-            Arg.Register => RegisterField(s, i),
-            Arg.Library => LibraryField(s, i),
-            _ => Number(s, i, hex: a is Arg.Animation or Arg.Sound),
+            Arg.Jump => StepPicker(step, jump),
+            Arg.Spell => List(step, argIndex, _names.Spells),
+            Arg.Monster => List(step, argIndex, _names.Monsters),
+            Arg.CapsuleAttack => List(step, argIndex, _names.CapsuleAttacks),
+            Arg.Item => List(step, argIndex, _names.Items, 0x1FF),
+            Arg.Stat => List(step, argIndex, L2AiScripts.Stats),
+            Arg.Status => List(step, argIndex, L2AiScripts.Statuses),
+            Arg.NewStatus => List(step, argIndex, step.Op == 0x5D ? L2StatusPatch.Names : L2StatusPatch.Names.Append(L2StatusPatch.EveryName).ToArray()),   // 10: all 16 (cure, resist, ward)
+            Arg.Target => List(step, argIndex, L2AiScripts.Targets, plain: true),
+            Arg.AttackName => NameField(step, argIndex),
+            Arg.Message => List(step, argIndex, Enumerable.Range(0, 0x30).Select(L2AiScripts.MessageText).ToArray()),
+            Arg.Change => Signed(step, argIndex),
+            Arg.Restore => List(step, argIndex, L2AiScripts.Restores),
+            Arg.Animation when _names.Animations.Length == 0x100 => List(step, argIndex, _names.Animations),
+            Arg.Element => Elements(step, argIndex),
+            Arg.Value => ValueField(step, argIndex),
+            Arg.Register => RegisterField(step, argIndex),
+            Arg.Library => LibraryField(step, argIndex),
+            _ => Number(step, argIndex, hex: arg is Arg.Animation or Arg.Sound),
         };
         row.Children.Add(editor);
         // what the number means, under its field
-        if (L2AiScripts.ArgInfo(d.Op, i) is not { Help.Length: > 0 } info) return row;
+        if (L2AiScripts.ArgInfo(def.Op, argIndex) is not { Help.Length: > 0 } info) return row;
         var both = new StackPanel();
         both.Children.Add(row);
         both.Children.Add(new TextBlock { Text = info.Help, Style = (Style)FindResource("GdHint"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(120, 0, 0, 6) });
         return both;
     }
 
-    /// <summary>A shared script: picked from the list (each with what it does), and a button that copies its steps in
-    /// here so they can be changed for this monster alone.</summary>
-    private FrameworkElement LibraryField(Step s, int i)
+    // a shared script: picked from the list (each with what it does), plus a button that copies its steps in here
+    // so they can be changed for this monster alone
+    private FrameworkElement LibraryField(Step step, int argIndex)
     {
         var panel = new StackPanel();
         var box = Combo();
-        for (int n = 0; n < L2AiScripts.LibraryCount; n++) box.Items.Add($"{n:X2}  {_names.Library[n]}");
-        int v = L2AiScripts.ArgValue(s, i);
-        if (v >= L2AiScripts.LibraryCount) box.Items.Add($"{v:X2}  (not in the game's list)");
-        box.SelectedIndex = Math.Min(v, box.Items.Count - 1);
+        for (int libraryId = 0; libraryId < L2AiScripts.LibraryCount; libraryId++) box.Items.Add($"{libraryId:X2}  {_names.Library[libraryId]}");
+        int current = L2AiScripts.ArgValue(step, argIndex);
+        if (current >= L2AiScripts.LibraryCount) box.Items.Add($"{current:X2}  (not in the game's list)");
+        box.SelectedIndex = Math.Min(current, box.Items.Count - 1);
         box.SelectionChanged += (_, _) =>
         {
             if (_loading || box.SelectedIndex < 0 || box.SelectedIndex >= L2AiScripts.LibraryCount) return;
-            L2AiScripts.SetArg(s, i, box.SelectedIndex);
+            L2AiScripts.SetArg(step, argIndex, box.SelectedIndex);
             Changed();
         };
         panel.Children.Add(box);
@@ -349,12 +347,12 @@ public partial class L2ScriptWindow : Window
         };
         copy.Click += (_, _) =>
         {
-            int at = StepList.SelectedIndex;
+            int insertAt = StepList.SelectedIndex;
             try
             {
-                int n = L2AiScripts.InlineLibrary(_rom, _steps, at);
-                RefreshList(at);
-                StatusText.Text = $"Shared script {v:X2} copied in as steps {at + 1}-{at + n}: change them as you like, then Save.";
+                int stepCount = L2AiScripts.InlineLibrary(_rom, _steps, insertAt);
+                RefreshList(insertAt);
+                StatusText.Text = $"Shared script {current:X2} copied in as steps {insertAt + 1}-{insertAt + stepCount}: change them as you like, then Save.";
             }
             catch (Exception ex) { StatusText.Text = ex.Message; }
         };
@@ -362,10 +360,9 @@ public partial class L2ScriptWindow : Window
         return panel;
     }
 
-    /// <summary>The attack name shown: picked from the game's names (and the ones added), or typed: a name no other
-    /// one has becomes a new name (<see cref="L2AttackNames"/>, written at Save), an added name only this window made is
-    /// changed in place.</summary>
-    private FrameworkElement NameField(Step s, int i)
+    // the attack name shown. picked from the game's names (and the added ones), or typed: a name nothing else has
+    // becomes a new name (L2AttackNames, written at Save), and an added name only this window made gets changed in place
+    private FrameworkElement NameField(Step step, int argIndex)
     {
         var panel = new StackPanel();
         string[] Names() => _names.AttackNames;   // (the typed ones at the end)
@@ -373,158 +370,158 @@ public partial class L2ScriptWindow : Window
         void Fill()
         {
             box.Items.Clear();
-            foreach (var (n, k) in Names().Select((n, k) => (n, k))) box.Items.Add($"{k:X2}  {n}");
-            int v = L2AiScripts.ArgValue(s, i);
-            if (v >= box.Items.Count) box.Items.Add($"{v:X2}  (not in the list)");
-            box.SelectedIndex = Math.Min(v, box.Items.Count - 1);
+            foreach (var (name, number) in Names().Select((n, k) => (n, k))) box.Items.Add($"{number:X2}  {name}");
+            int current = L2AiScripts.ArgValue(step, argIndex);
+            if (current >= box.Items.Count) box.Items.Add($"{current:X2}  (not in the list)");
+            box.SelectedIndex = Math.Min(current, box.Items.Count - 1);
         }
         Fill();
         box.SelectionChanged += (_, _) =>
         {
             if (_loading || box.SelectedIndex < 0 || box.SelectedIndex >= Names().Length) return;
-            L2AiScripts.SetArg(s, i, box.SelectedIndex);
+            L2AiScripts.SetArg(step, argIndex, box.SelectedIndex);
             Changed();
         };
         panel.Children.Add(box);
         var row = new DockPanel { Margin = new Thickness(0, 6, 0, 0) };
-        var use = new Button { Content = "Use this name", Style = (Style)FindResource("LufiaButton"), Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(6, 0, 0, 0) };
-        DockPanel.SetDock(use, Dock.Right);
-        var text = new TextBox { Style = (Style)FindResource("GdText"), MaxLength = L2Attacks.NameMax, ToolTip = $"Your own name for it (up to {L2Attacks.NameMax} letters)" };
-        int now = L2AiScripts.ArgValue(s, i);
-        text.Text = now > 0 && now < Names().Length ? Names()[now] : "";
-        row.Children.Add(use); row.Children.Add(text);
+        var useButton = new Button { Content = "Use this name", Style = (Style)FindResource("LufiaButton"), Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(6, 0, 0, 0) };
+        DockPanel.SetDock(useButton, Dock.Right);
+        var nameBox = new TextBox { Style = (Style)FindResource("GdText"), MaxLength = L2Attacks.NameMax, ToolTip = $"Your own name for it (up to {L2Attacks.NameMax} letters)" };
+        int now = L2AiScripts.ArgValue(step, argIndex);
+        nameBox.Text = now > 0 && now < Names().Length ? Names()[now] : "";
+        row.Children.Add(useButton); row.Children.Add(nameBox);
         panel.Children.Add(new TextBlock { Text = "or type your own:", Style = (Style)FindResource("GdHint"), Margin = new Thickness(0, 6, 0, 0) });
         panel.Children.Add(row);
         void Use()
         {
-            string t = text.Text.Trim();
-            if (L2AttackNames.Check(_rom, t) is { } bad) { StatusText.Text = "Name not used: " + bad; return; }
+            string typed = nameBox.Text.Trim();
+            if (L2AttackNames.Check(_rom, typed) is { } bad) { StatusText.Text = "Name not used: " + bad; return; }
             var all = Names();
-            int found = Array.FindIndex(all, n => n == t);
-            int cur = L2AiScripts.ArgValue(s, i);
-            if (found > 0) { L2AiScripts.SetArg(s, i, found); StatusText.Text = $"\"{t}\" is name {found:X2}: used."; }
-            else if (cur >= _romNames && cur - _romNames < _typed.Count && _steps.Count(x => x.Op == 0x1E && x.Args[0] == cur) == 1)
+            int found = Array.FindIndex(all, n => n == typed);
+            int current = L2AiScripts.ArgValue(step, argIndex);
+            if (found > 0) { L2AiScripts.SetArg(step, argIndex, found); StatusText.Text = $"\"{typed}\" is name {found:X2}: used."; }
+            else if (current >= _romNames && current - _romNames < _typed.Count && _steps.Count(x => x.Op == 0x1E && x.Args[0] == current) == 1)
             {
-                _typed[cur - _romNames].Text = t;   // a name this window made, used by this step only: changed
-                _names.AttackNames[cur] = t;
-                StatusText.Text = $"Name {cur:X2} is \"{t}\" now (written when you Save).";
+                _typed[current - _romNames].Text = typed;   // a name this window made, used by this step only, so just change it
+                _names.AttackNames[current] = typed;
+                StatusText.Text = $"Name {current:X2} is \"{typed}\" now (written when you Save).";
             }
             else
             {
                 if (L2AttackNames.CantAdd(_rom) is { } no || _names.AttackNames.Length > L2AttackNames.Last) { StatusText.Text = "Name not added: " + (L2AttackNames.CantAdd(_rom) ?? "no room left."); return; }
-                int n = _names.AttackNames.Length;
-                _typed.Add(new TypedName { Text = t, Animation = L2Attacks.NameAnimation(_rom, cur) });
-                _names.AttackNames = _names.AttackNames.Append(t).ToArray();
-                L2AiScripts.SetArg(s, i, n);
-                StatusText.Text = $"\"{t}\" is a new name ({n:X2}): it's added when you Save, and other monsters can use it too.";
+                int newIndex = _names.AttackNames.Length;
+                _typed.Add(new TypedName { Text = typed, Animation = L2Attacks.NameAnimation(_rom, current) });
+                _names.AttackNames = _names.AttackNames.Append(typed).ToArray();
+                L2AiScripts.SetArg(step, argIndex, newIndex);
+                StatusText.Text = $"\"{typed}\" is a new name ({newIndex:X2}): it's added when you Save, and other monsters can use it too.";
             }
             _loading = true; Fill(); _loading = false;
             Changed();
         }
-        use.Click += (_, _) => Use();
-        text.KeyDown += (_, e) => { if (e.Key == System.Windows.Input.Key.Enter) { Use(); e.Handled = true; } };
+        useButton.Click += (_, _) => Use();
+        nameBox.KeyDown += (_, e) => { if (e.Key == System.Windows.Input.Key.Enter) { Use(); e.Handled = true; } };
         return panel;
     }
 
-    /// <summary>Names typed in this window that aren't in the ROM yet (numbers after the ROM's last name, in order).</summary>
+    // names typed in this window that aren't in the ROM yet (numbers after the ROM's last name, in order)
     private sealed class TypedName { public string Text = ""; public int Animation = 0xE0; }
     private readonly List<TypedName> _typed = new();
     private int _romNames => _names.AttackNames.Length - _typed.Count;
 
     private ComboBox Combo() => new() { Style = (Style)FindResource("GdCombo"), HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch, Width = double.NaN, MaxDropDownHeight = 480 };
 
-    private FrameworkElement StepPicker(Step s, int jump)
+    private FrameworkElement StepPicker(Step step, int jump)
     {
         var box = Combo();
         for (int k = 0; k < _steps.Count; k++) box.Items.Add(Line(k).TrimStart());
-        var t = s.Targets[jump];
-        box.SelectedIndex = t == null ? -1 : _steps.IndexOf(t);
+        var target = step.Targets[jump];
+        box.SelectedIndex = target == null ? -1 : _steps.IndexOf(target);
         box.SelectionChanged += (_, _) =>
         {
             if (_loading || box.SelectedIndex < 0) return;
-            s.Targets[jump] = _steps[box.SelectedIndex];
-            s.OutsideTargets[jump] = -1;
+            step.Targets[jump] = _steps[box.SelectedIndex];
+            step.OutsideTargets[jump] = -1;
             Changed();
         };
         return box;
     }
 
-    private FrameworkElement List(Step s, int i, string[] names, int mask = 0xFFFF, bool plain = false)
+    private FrameworkElement List(Step step, int argIndex, string[] names, int mask = 0xFFFF, bool plain = false)
     {
         var box = Combo();
-        foreach (var (n, k) in names.Select((n, k) => (n, k))) box.Items.Add(plain ? n : $"{k:X2}  {n}");
-        int v = L2AiScripts.ArgValue(s, i);
-        if ((v & mask) >= names.Length) box.Items.Add($"{v & mask:X2}  (not in the list)");
-        box.SelectedIndex = Math.Min(v & mask, box.Items.Count - 1);
+        foreach (var (name, number) in names.Select((n, k) => (n, k))) box.Items.Add(plain ? name : $"{number:X2}  {name}");
+        int value = L2AiScripts.ArgValue(step, argIndex);
+        if ((value & mask) >= names.Length) box.Items.Add($"{value & mask:X2}  (not in the list)");
+        box.SelectedIndex = Math.Min(value & mask, box.Items.Count - 1);
         box.SelectionChanged += (_, _) =>
         {
             if (_loading || box.SelectedIndex < 0 || box.SelectedIndex >= names.Length) return;
-            L2AiScripts.SetArg(s, i, (L2AiScripts.ArgValue(s, i) & ~mask) | box.SelectedIndex);
+            L2AiScripts.SetArg(step, argIndex, (L2AiScripts.ArgValue(step, argIndex) & ~mask) | box.SelectedIndex);
             Changed();
         };
         return box;
     }
 
-    private FrameworkElement Elements(Step s, int i)
+    private FrameworkElement Elements(Step step, int argIndex)
     {
         var wrap = new WrapPanel();
-        int v = L2AiScripts.ArgValue(s, i);
+        int bits = L2AiScripts.ArgValue(step, argIndex);
         var hint = new TextBlock { Style = (Style)FindResource("GdHint"), Width = 300, Margin = new Thickness(0, 2, 0, 0) };
-        void Hint() => hint.Text = $"= {L2AiScripts.ElementText(L2AiScripts.ArgValue(s, i))} ({L2AiScripts.ArgValue(s, i):X4})";
+        void Hint() => hint.Text = $"= {L2AiScripts.ElementText(L2AiScripts.ArgValue(step, argIndex))} ({L2AiScripts.ArgValue(step, argIndex):X4})";
         foreach (var (bit, name) in L2AiScripts.Elements)
         {
-            var cb = new CheckBox { Content = name, IsChecked = (v & bit) != 0, Width = 100, Margin = new Thickness(0, 1, 0, 1), Foreground = (System.Windows.Media.Brush)FindResource("TextPrimaryBrush") };
-            cb.Click += (_, _) =>
+            var checkBox = new CheckBox { Content = name, IsChecked = (bits & bit) != 0, Width = 100, Margin = new Thickness(0, 1, 0, 1), Foreground = (System.Windows.Media.Brush)FindResource("TextPrimaryBrush") };
+            checkBox.Click += (_, _) =>
             {
-                int now = L2AiScripts.ArgValue(s, i);
-                L2AiScripts.SetArg(s, i, cb.IsChecked == true ? now | bit : now & ~bit);
+                int now = L2AiScripts.ArgValue(step, argIndex);
+                L2AiScripts.SetArg(step, argIndex, checkBox.IsChecked == true ? now | bit : now & ~bit);
                 Hint(); Changed();
             };
-            wrap.Children.Add(cb);
+            wrap.Children.Add(checkBox);
         }
         Hint();
         wrap.Children.Add(hint);
         return wrap;
     }
 
-    /// <summary>The registers offered by name (the known ones, then every other one as "shared value XX").</summary>
+    // the registers offered by name (the known ones, then every other one as "shared value XX")
     private static readonly int[] RegisterChoices = L2AiScripts.KnownRegisters
         .Concat(Enumerable.Range(0, 0x100).Except(L2AiScripts.KnownRegisters)).ToArray();
 
     private ComboBox RegisterBox(int value)
     {
         var box = Combo();
-        foreach (int r in RegisterChoices) box.Items.Add($"{L2AiScripts.RegisterName(r)}  ({r:X2})");
+        foreach (int register in RegisterChoices) box.Items.Add($"{L2AiScripts.RegisterName(register)}  ({register:X2})");
         box.SelectedIndex = Array.IndexOf(RegisterChoices, value & 0xFF);
         return box;
     }
 
-    /// <summary>A register: picked by what it holds.</summary>
-    private FrameworkElement RegisterField(Step s, int i)
+    // a register, picked by what it holds
+    private FrameworkElement RegisterField(Step step, int argIndex)
     {
-        var box = RegisterBox(L2AiScripts.ArgValue(s, i));
+        var box = RegisterBox(L2AiScripts.ArgValue(step, argIndex));
         box.SelectionChanged += (_, _) =>
         {
             if (_loading || box.SelectedIndex < 0) return;
-            L2AiScripts.SetArg(s, i, RegisterChoices[box.SelectedIndex]);
+            L2AiScripts.SetArg(step, argIndex, RegisterChoices[box.SelectedIndex]);
             Changed();
         };
         return box;
     }
 
-    /// <summary>A value: a number, or what a register holds.</summary>
-    private FrameworkElement ValueField(Step s, int i)
+    // a value: a number, or what a register holds
+    private FrameworkElement ValueField(Step step, int argIndex)
     {
         var panel = new StackPanel();
         var mode = new ComboBox { Style = (Style)FindResource("GdCombo"), Width = 160, HorizontalAlignment = System.Windows.HorizontalAlignment.Left };
         mode.Items.Add("a number"); mode.Items.Add("what a number holds");
         var box = new TextBox { Style = (Style)FindResource("GdNumber"), Width = 90, Margin = new Thickness(0, 4, 0, 0), HorizontalAlignment = System.Windows.HorizontalAlignment.Left };
-        int v = L2AiScripts.ArgValue(s, i);
-        bool reg = (v >> 8) == 0x80;
-        var regBox = RegisterBox(reg ? v : 0x2A);
+        int value = L2AiScripts.ArgValue(step, argIndex);
+        bool isRegister = (value >> 8) == 0x80;
+        var regBox = RegisterBox(isRegister ? value : 0x2A);
         regBox.Margin = new Thickness(0, 4, 0, 0);
-        mode.SelectedIndex = reg ? 1 : 0;
-        box.Text = reg ? "0" : ((short)v).ToString(CultureInfo.InvariantCulture);
+        mode.SelectedIndex = isRegister ? 1 : 0;
+        box.Text = isRegister ? "0" : ((short)value).ToString(CultureInfo.InvariantCulture);
         void Show() { box.Visibility = mode.SelectedIndex == 0 ? Visibility.Visible : Visibility.Collapsed; regBox.Visibility = mode.SelectedIndex == 1 ? Visibility.Visible : Visibility.Collapsed; }
         void Write()
         {
@@ -533,10 +530,10 @@ public partial class L2ScriptWindow : Window
             if (mode.SelectedIndex == 1)
             {
                 if (regBox.SelectedIndex < 0) return;
-                L2AiScripts.SetArg(s, i, 0x8000 | RegisterChoices[regBox.SelectedIndex]);
+                L2AiScripts.SetArg(step, argIndex, 0x8000 | RegisterChoices[regBox.SelectedIndex]);
             }
-            else if (int.TryParse(box.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int nv) && nv is >= -32768 and <= 0x7FFF && (nv & 0xFF00) != 0x8000)
-                L2AiScripts.SetArg(s, i, nv & 0xFFFF);
+            else if (int.TryParse(box.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int number) && number is >= -32768 and <= 0x7FFF && (number & 0xFF00) != 0x8000)
+                L2AiScripts.SetArg(step, argIndex, number & 0xFFFF);
             else { StatusText.Text = "A number is -32768 to 32767."; return; }
             StatusText.Text = "";
             Changed();
@@ -549,24 +546,24 @@ public partial class L2ScriptWindow : Window
         return panel;
     }
 
-    private FrameworkElement Number(Step s, int i, bool hex)
+    private FrameworkElement Number(Step step, int argIndex, bool hex)
     {
-        var d = s.Def!;
-        int max = L2AiScripts.Size(d.Args[i]) == 2 ? 0xFFFF : 0xFF;
+        var def = step.Def!;
+        int max = L2AiScripts.Size(def.Args[argIndex]) == 2 ? 0xFFFF : 0xFF;
         var panel = new StackPanel { Orientation = Orientation.Horizontal };
         var box = new TextBox { Style = (Style)FindResource("GdNumber"), Width = 70 };
-        int v = L2AiScripts.ArgValue(s, i);
-        box.Text = hex ? v.ToString(max > 0xFF ? "X4" : "X2") : v.ToString(CultureInfo.InvariantCulture);
+        int value = L2AiScripts.ArgValue(step, argIndex);
+        box.Text = hex ? value.ToString(max > 0xFF ? "X4" : "X2") : value.ToString(CultureInfo.InvariantCulture);
         var hint = new TextBlock { Style = (Style)FindResource("GdHint"), VerticalAlignment = System.Windows.VerticalAlignment.Center, Margin = new Thickness(6, 0, 0, 0) };
-        void Hint() => hint.Text = (hex ? "hex" : $"0-{max}") + (d.Args[i] is Arg.Chance or Arg.Percent ? "  " + L2AiScripts.ArgText(d.Args[i], L2AiScripts.ArgValue(s, i), _names) : "");
+        void Hint() => hint.Text = (hex ? "hex" : $"0-{max}") + (def.Args[argIndex] is Arg.Chance or Arg.Percent ? "  " + L2AiScripts.ArgText(def.Args[argIndex], L2AiScripts.ArgValue(step, argIndex), _names) : "");
         box.TextChanged += (_, _) =>
         {
             if (_loading) return;
-            bool okay = hex ? int.TryParse(box.Text, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int nv)
-                            : int.TryParse(box.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out nv);
-            if (!okay || nv < 0 || nv > max) { StatusText.Text = hex ? $"A value is 0-{max:X} (hex)." : $"A value is 0-{max}."; return; }
+            bool okay = hex ? int.TryParse(box.Text, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int number)
+                            : int.TryParse(box.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out number);
+            if (!okay || number < 0 || number > max) { StatusText.Text = hex ? $"A value is 0-{max:X} (hex)." : $"A value is 0-{max}."; return; }
             StatusText.Text = "";
-            L2AiScripts.SetArg(s, i, nv);
+            L2AiScripts.SetArg(step, argIndex, number);
             Hint(); Changed();
         };
         Hint();
@@ -574,17 +571,17 @@ public partial class L2ScriptWindow : Window
         return panel;
     }
 
-    /// <summary>A signed percentage (-128 to 127), for raising or lowering a stat.</summary>
-    private FrameworkElement Signed(Step s, int i)
+    // a signed percentage (-128 to 127), for raising or lowering a stat
+    private FrameworkElement Signed(Step step, int argIndex)
     {
         var panel = new StackPanel { Orientation = Orientation.Horizontal };
-        var box = new TextBox { Style = (Style)FindResource("GdNumber"), Width = 70, Text = ((sbyte)L2AiScripts.ArgValue(s, i)).ToString(CultureInfo.InvariantCulture) };
+        var box = new TextBox { Style = (Style)FindResource("GdNumber"), Width = 70, Text = ((sbyte)L2AiScripts.ArgValue(step, argIndex)).ToString(CultureInfo.InvariantCulture) };
         box.TextChanged += (_, _) =>
         {
             if (_loading) return;
-            if (!int.TryParse(box.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int v) || v is < -128 or > 127) { StatusText.Text = "A change is -128 to 127 (minus lowers the stat)."; return; }
+            if (!int.TryParse(box.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int change) || change is < -128 or > 127) { StatusText.Text = "A change is -128 to 127 (minus lowers the stat)."; return; }
             StatusText.Text = "";
-            L2AiScripts.SetArg(s, i, v & 0xFF);
+            L2AiScripts.SetArg(step, argIndex, change & 0xFF);
             Changed();
         };
         panel.Children.Add(box);
@@ -592,12 +589,12 @@ public partial class L2ScriptWindow : Window
         return panel;
     }
 
-    // ── ready-made actions ──────────────────────────────────────────────────
+    // ready-made actions
 
     private static Step Op(byte op, params int[] values) => Make(op, values);
 
-    /// <summary>The usual shapes of a monster's turn, as the game's own scripts write them. Each is a list of steps; a
-    /// "go to" is given as the index of the step it goes to in the same list.</summary>
+    // the usual shapes of a monster's turn, the way the game's own scripts write them. each one is a list of steps,
+    // a "go to" is given as the index of the step it goes to in the same list
     private static readonly (string Name, string Help, Func<List<Step>> Build)[] Ready =
     {
         ("Attack a random hero", "Pick a random hero, attack.", () => new() { Op(0x32, 1), Op(0x28), Op(0x00) }),
@@ -641,11 +638,11 @@ public partial class L2ScriptWindow : Window
             var item = new MenuItem { Header = name, ToolTip = help.Length > 0 ? help : null };
             item.Click += (_, _) =>
             {
-                var add = build();
-                int at = Math.Clamp(StepList.SelectedIndex + 1, 0, _steps.Count);
-                _steps.InsertRange(at, add);
-                RefreshList(at);
-                StatusText.Text = $"Added: {name} (steps {at + 1}-{at + add.Count}). Pick a step to change what it uses.";
+                var newSteps = build();
+                int insertAt = Math.Clamp(StepList.SelectedIndex + 1, 0, _steps.Count);
+                _steps.InsertRange(insertAt, newSteps);
+                RefreshList(insertAt);
+                StatusText.Text = $"Added: {name} (steps {insertAt + 1}-{insertAt + newSteps.Count}). Pick a step to change what it uses.";
             };
             menu.Items.Add(item);
         }
@@ -658,11 +655,11 @@ public partial class L2ScriptWindow : Window
             var item = new MenuItem { Header = $"{wave} ({who})", ToolTip = $"{who}'s wave as the game does it: every hero, " + string.Join(", ", steps.Select(s => L2AiScripts.Describe(s, steps, _names)).Where(t => !t.StartsWith("End"))).ToLowerInvariant() };
             item.Click += (_, _) =>
             {
-                var add = SinistralWave(who)!;
-                int at = Math.Clamp(StepList.SelectedIndex + 1, 0, _steps.Count);
-                _steps.InsertRange(at, add);
-                RefreshList(at);
-                StatusText.Text = $"Added: {wave} (steps {at + 1}-{at + add.Count}), {who}'s own steps. Change the damage, the statuses or the name if you like; " +
+                var newSteps = SinistralWave(who)!;
+                int insertAt = Math.Clamp(StepList.SelectedIndex + 1, 0, _steps.Count);
+                _steps.InsertRange(insertAt, newSteps);
+                RefreshList(insertAt);
+                StatusText.Text = $"Added: {wave} (steps {insertAt + 1}-{insertAt + newSteps.Count}), {who}'s own steps. Change the damage, the statuses or the name if you like; " +
                                   "in front of it a chance (\"With a 50% chance, go to\") makes it one of several actions.";
             };
             waves.Items.Add(item);
@@ -671,26 +668,26 @@ public partial class L2ScriptWindow : Window
         menu.IsOpen = true;
     }
 
-    /// <summary>A Sinistral's wave from its battle script in the ROM: the steps from its start to its first End, without
-    /// the chance and counter steps that time it in the Sinistral's own script (05, 07, 0C, 0E). Null when the monster or
-    /// its wave isn't found (a ROM where they were changed).</summary>
+    // a Sinistral's wave from its battle script in the ROM: the steps from its start to its first End, minus the
+    // chance and counter steps that time it in the Sinistral's own script (05, 07, 0C, 0E). null if the monster or
+    // its wave isn't found (a ROM where they were changed)
     private List<Step>? SinistralWave(string who)
     {
-        int m = Array.FindIndex(_names.Monsters, n => n.Trim() == who);
-        if (m < 0) return null;
+        int monster = Array.FindIndex(_names.Monsters, n => n.Trim() == who);
+        if (monster < 0) return null;
         List<Step> steps;
-        try { steps = L2AiScripts.LoadOriginal(_rom, L2AiScripts.Kind.MonsterAttack, m); } catch (Exception) { return null; }
+        try { steps = L2AiScripts.LoadOriginal(_rom, L2AiScripts.Kind.MonsterAttack, monster); } catch (Exception) { return null; }
         int end = steps.FindIndex(s => s.Op == 0x00);
         if (end < 0 || !steps.Take(end).Any(s => s.Op == 0x1E)) return null;
         return steps.Take(end + 1).Where(s => s.Op is not (0x05 or 0x07 or 0x0C or 0x0E)).Select(s => s.Clone()).ToList();
     }
 
-    // ── steps ───────────────────────────────────────────────────────────────
+    // steps
 
-    private void Insert(int at, Step s)
+    private void Insert(int at, Step step)
     {
-        _steps.Insert(Math.Clamp(at, 0, _steps.Count), s);
-        RefreshList(_steps.IndexOf(s));
+        _steps.Insert(Math.Clamp(at, 0, _steps.Count), step);
+        RefreshList(_steps.IndexOf(step));
     }
 
     private void Add_Click(object sender, RoutedEventArgs e) => Insert(StepList.SelectedIndex + 1, L2AiScripts.New(0x00));
@@ -698,7 +695,7 @@ public partial class L2ScriptWindow : Window
 
     private void Copy_Click(object sender, RoutedEventArgs e)
     {
-        if (Current is { } s) Insert(StepList.SelectedIndex + 1, s.Clone());
+        if (Current is { } current) Insert(StepList.SelectedIndex + 1, current.Clone());
     }
 
     private void Move(int by)
@@ -720,13 +717,13 @@ public partial class L2ScriptWindow : Window
         _steps.RemoveAt(i);
         // steps that went to it go to the step that took its place
         var next = _steps.ElementAtOrDefault(i) ?? _steps.LastOrDefault();
-        foreach (var s in _steps)
-            for (int j = 0; j < s.Targets.Length; j++)
-                if (ReferenceEquals(s.Targets[j], gone)) s.Targets[j] = next;
+        foreach (var step in _steps)
+            for (int j = 0; j < step.Targets.Length; j++)
+                if (ReferenceEquals(step.Targets[j], gone)) step.Targets[j] = next;
         RefreshList(Math.Min(i, _steps.Count - 1));
     }
 
-    // ── save ────────────────────────────────────────────────────────────────
+    // save
 
     private void Save_Click(object sender, RoutedEventArgs e)
     {
@@ -739,13 +736,13 @@ public partial class L2ScriptWindow : Window
             if (self >= 0) throw new InvalidOperationException($"Step {self + 1} goes to itself: the battle would never end.");
             if (!_steps.Any(s => s.Def?.EndsPath == true)) throw new InvalidOperationException("The script never ends: add an End (or Quit) step.");
             // names typed here go in first (they get the numbers the steps already use), together with the script or
-            // not at all: a failed save left the names in the ROM (outside Undo), and saving again added them twice
-            int at = L2Rom.AllOrNothing(_rom, () =>
+            // not at all. a failed save used to leave the names in the ROM (outside Undo) and saving again added them twice
+            int savedAt = L2Rom.AllOrNothing(_rom, () =>
             {
-                foreach (var t in _typed) L2AttackNames.Add(_rom, t.Text, t.Animation);
+                foreach (var typedName in _typed) L2AttackNames.Add(_rom, typedName.Text, typedName.Animation);
                 return L2AiScripts.Save(_rom, _kind, _index, _steps);
             });
-            Change = $"{Title}: {(_edited ? "edited" : "new script")} ({L2AiScripts.Build(_steps, 1).Length} bytes at 0x{at:X6})";
+            Change = $"{Title}: {(_edited ? "edited" : "new script")} ({L2AiScripts.Build(_steps, 1).Length} bytes at 0x{savedAt:X6})";
             DialogResult = true;
         }
         catch (Exception ex) { StatusText.Text = "Not saved: " + ex.Message; }

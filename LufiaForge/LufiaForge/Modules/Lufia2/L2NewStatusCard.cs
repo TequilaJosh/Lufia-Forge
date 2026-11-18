@@ -11,14 +11,12 @@ using HorizontalAlignment = System.Windows.HorizontalAlignment;
 
 namespace LufiaForge.Modules.Lufia2;
 
-/// <summary>
-/// The new statuses (<see cref="L2StatusPatch"/>) of the record a page shows: a row per status, a column per thing that
-/// can give it (a weapon's hit causes it, armor resists it, a spell causes, cures or wards it, a monster resists it or has
-/// it from the start). Each change writes the script step (or the monster's starting statuses) at once.
-/// </summary>
+// the new statuses (L2StatusPatch) of the record a page shows. a row per status, a column per thing that can give it
+// (a weapon's hit causes it, armor resists it, a spell causes, cures or wards it, a monster resists it or has it from
+// the start). each change writes the script step (or the monster's starting statuses) right away
 public sealed class L2NewStatusCard : Border
 {
-    /// <summary>A column: its heading, what it writes (a script kind and a command, or the monster's starting statuses).</summary>
+    // a column: its heading and what it writes (a script kind and a command, or the monster's starting statuses)
     public sealed record Column(string Header, string Tip, Kind Kind, What What, bool Start = false);
 
     private L2Page? _page;
@@ -29,10 +27,10 @@ public sealed class L2NewStatusCard : Border
     public L2NewStatusCard()
     {
         Child = _body;
-        Loaded += (_, _) => { if (Style == null && TryFindResource("GdCard") is Style st) Style = st; };
+        Loaded += (_, _) => { if (Style == null && TryFindResource("GdCard") is Style cardStyle) Style = cardStyle; };
     }
 
-    /// <summary>Shows the card for <paramref name="page"/>'s records with these columns (call once, from the view).</summary>
+    // shows the card for page's records with these columns (call once, from the view)
     public void Attach(L2Page page, params Column[] columns)
     {
         if (_page != null) _page.PropertyChanged -= PageChanged;
@@ -67,56 +65,56 @@ public sealed class L2NewStatusCard : Border
         for (int r = 0; r <= 17; r++) grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         for (int c = 0; c < _columns.Length; c++)
         {
-            var h = new TextBlock { Text = _columns[c].Header, ToolTip = _columns[c].Tip, Style = TryFindResource("GdFieldLabel") as Style, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(2, 0, 2, 4) };
-            Grid.SetColumn(h, c + 1);
-            grid.Children.Add(h);
+            var heading = new TextBlock { Text = _columns[c].Header, ToolTip = _columns[c].Tip, Style = TryFindResource("GdFieldLabel") as Style, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(2, 0, 2, 4) };
+            Grid.SetColumn(heading, c + 1);
+            grid.Children.Add(heading);
         }
         int start = _columns.Any(c => c.Start) ? L2StatusPatch.MonsterStart(rom, index) : 0;
-        // a row per status, and first (when a column has it) "every new status" (status 10: 5E, 5F, 60)
+        // a row per status, and first (if a column has it) "every new status" (status 10: 5E, 5F, 60)
         var values = _columns.Select(c => c.Start ? null : L2StatusSteps.GetAll(rom, c.Kind, index, c.What)
             .Append(HasEvery(c) ? L2StatusSteps.Get(rom, c.Kind, index, c.What, L2StatusPatch.Every) : 0).ToArray()).ToArray();
         bool every = _columns.Any(HasEvery);
         _loading = true;
-        foreach (int s in (every ? new[] { L2StatusPatch.Every } : Array.Empty<int>()).Concat(Enumerable.Range(0, 16)))
+        foreach (int status in (every ? new[] { L2StatusPatch.Every } : Array.Empty<int>()).Concat(Enumerable.Range(0, 16)))
         {
-            int row = s == L2StatusPatch.Every ? 1 : every ? s + 2 : s + 1;
+            int row = status == L2StatusPatch.Every ? 1 : every ? status + 2 : status + 1;
             var name = new TextBlock
             {
-                Text = s == L2StatusPatch.Every ? "Every status" : L2StatusPatch.Names[s],
-                ToolTip = s == L2StatusPatch.Every ? "All 16 at once (a single step: 'every new status')." : L2StatusPatch.Help[s],
+                Text = status == L2StatusPatch.Every ? "Every status" : L2StatusPatch.Names[status],
+                ToolTip = status == L2StatusPatch.Every ? "All 16 at once (a single step: 'every new status')." : L2StatusPatch.Help[status],
                 Style = TryFindResource("GdFieldLabel") as Style, VerticalAlignment = VerticalAlignment.Center,
             };
             Grid.SetRow(name, row);
             grid.Children.Add(name);
             for (int c = 0; c < _columns.Length; c++)
             {
-                var col = _columns[c];
-                int st = s;
-                if (s == L2StatusPatch.Every && !HasEvery(col)) continue;
+                var column = _columns[c];
+                int capturedStatus = status;
+                if (status == L2StatusPatch.Every && !HasEvery(column)) continue;
                 FrameworkElement cell;
-                if (col.Start || col.What == What.Ward)
+                if (column.Start || column.What == What.Ward)
                 {
-                    bool on = col.Start ? (start & 1 << s) != 0 : values[c]![s] > 0;
-                    var cb = new CheckBox { IsChecked = on, Style = TryFindResource("GdCheck") as Style, Margin = new Thickness(4, 1, 4, 1), VerticalAlignment = VerticalAlignment.Center };
-                    cb.Click += (_, _) => Write(col, st, cb.IsChecked == true ? 100 : 0);
-                    cell = cb;
+                    bool on = column.Start ? (start & 1 << status) != 0 : values[c]![status] > 0;
+                    var checkBox = new CheckBox { IsChecked = on, Style = TryFindResource("GdCheck") as Style, Margin = new Thickness(4, 1, 4, 1), VerticalAlignment = VerticalAlignment.Center };
+                    checkBox.Click += (_, _) => Write(column, capturedStatus, checkBox.IsChecked == true ? 100 : 0);
+                    cell = checkBox;
                 }
                 else
                 {
-                    var tb = new TextBox { Text = values[c]![s] == 0 ? "" : values[c]![s].ToString(CultureInfo.InvariantCulture), Style = TryFindResource("GdNumber") as Style, Width = 48, Margin = new Thickness(2, 1, 2, 1), HorizontalAlignment = HorizontalAlignment.Left, ToolTip = col.Tip };
-                    int shown = values[c]![s];
-                    tb.LostFocus += (_, _) =>
+                    var numberBox = new TextBox { Text = values[c]![status] == 0 ? "" : values[c]![status].ToString(CultureInfo.InvariantCulture), Style = TryFindResource("GdNumber") as Style, Width = 48, Margin = new Thickness(2, 1, 2, 1), HorizontalAlignment = HorizontalAlignment.Left, ToolTip = column.Tip };
+                    int shown = values[c]![status];
+                    numberBox.LostFocus += (_, _) =>
                     {
-                        string t = tb.Text.Trim();
-                        if (t.Length == 0) t = "0";
-                        // a wrong number shows the value the ROM has again (blanking it showed "none" while the ROM kept
-                        // the old value, and the next visit of the box then wrote 0, taking the step out)
-                        if (!int.TryParse(t, NumberStyles.Integer, CultureInfo.InvariantCulture, out int v) || v is < 0 or > 100)
-                        { tb.Text = shown == 0 ? "" : shown.ToString(CultureInfo.InvariantCulture); return; }
-                        if (v == shown) return;   // nothing typed
-                        Write(col, st, v);
+                        string typed = numberBox.Text.Trim();
+                        if (typed.Length == 0) typed = "0";
+                        // a bad number puts back the value the ROM has (blanking it used to show "none" while the ROM kept
+                        // the old value, then the next visit to the box wrote 0 and took the step out)
+                        if (!int.TryParse(typed, NumberStyles.Integer, CultureInfo.InvariantCulture, out int percent) || percent is < 0 or > 100)
+                        { numberBox.Text = shown == 0 ? "" : shown.ToString(CultureInfo.InvariantCulture); return; }
+                        if (percent == shown) return;   // nothing typed
+                        Write(column, capturedStatus, percent);
                     };
-                    cell = tb;
+                    cell = numberBox;
                 }
                 Grid.SetRow(cell, row);
                 Grid.SetColumn(cell, c + 1);
@@ -127,10 +125,10 @@ public sealed class L2NewStatusCard : Border
         _body.Children.Add(grid);
     }
 
-    /// <summary>Whether a column takes "every new status" (cure, resist, ward; not causes or starting statuses).</summary>
-    private static bool HasEvery(Column c) => !c.Start && c.What != What.Cause;
+    // true if a column takes "every new status" (cure, resist, ward, not causes or starting statuses)
+    private static bool HasEvery(Column column) => !column.Start && column.What != What.Cause;
 
-    private void Write(Column col, int status, int value)
+    private void Write(Column column, int status, int value)
     {
         var rom = _page?.PageRom;
         int index = _page?.PageIndex ?? -1;
@@ -138,17 +136,17 @@ public sealed class L2NewStatusCard : Border
         try
         {
             bool changed;
-            if (col.Start)
+            if (column.Start)
             {
                 int bits = L2StatusPatch.MonsterStart(rom, index);
                 int now = value > 0 ? bits | 1 << status : bits & ~(1 << status);
                 changed = now != bits || !L2StatusPatch.IsApplied(rom);
                 if (changed) L2StatusPatch.SetMonsterStart(rom, index, now);
             }
-            else changed = L2StatusSteps.Set(rom, col.Kind, index, col.What, status, value);
-            if (changed) _page!.ReportChange($"{L2StatusPatch.NameOf(status)}: {col.Header.ToLowerInvariant()} {(value == 0 ? "none" : col.Start || col.What == What.Ward ? "on" : value + "%")}");
+            else changed = L2StatusSteps.Set(rom, column.Kind, index, column.What, status, value);
+            if (changed) _page!.ReportChange($"{L2StatusPatch.NameOf(status)}: {column.Header.ToLowerInvariant()} {(value == 0 ? "none" : column.Start || column.What == What.Ward ? "on" : value + "%")}");
         }
-        catch (Exception e) { MessageBox.Show(e.Message, "New statuses", MessageBoxButton.OK, MessageBoxImage.Warning); }
+        catch (Exception ex) { MessageBox.Show(ex.Message, "New statuses", MessageBoxButton.OK, MessageBoxImage.Warning); }
         Dispatcher.BeginInvoke(Build);
     }
 }

@@ -6,7 +6,7 @@ using LufiaForge.ViewModels;
 
 namespace LufiaForge.Modules.Lufia2;
 
-/// <summary>Game-wide settings: random battles, walking speed, a run button, selling price, level cap, the ROM's size.</summary>
+// game-wide settings: random battles, walking speed, a run button, selling price, level cap, the ROM's size
 public partial class L2SettingsPage : ObservableObject
 {
     private RomBuffer? _rom;
@@ -23,7 +23,7 @@ public partial class L2SettingsPage : ObservableObject
     [ObservableProperty] private int _encounter, _worldSpeed, _fieldSpeed, _sell, _levelCap, _nameWhen, _nameWhere;
     [ObservableProperty] private string _encounterText = "", _status = "", _sizeText = "";
     [ObservableProperty] private bool _canEncounter, _canWorld, _canField, _canSell, _canLevel, _canNameBox;
-    /// <summary>Levels to 255 and HP / MP to 9999 (<see cref="L2Limits"/>).</summary>
+    // levels to 255 and HP / MP to 9999 (L2Limits)
     [ObservableProperty] private bool _limits, _canLimits;
     [ObservableProperty] private string _limitsText = "", _levelCapLabel = "Highest level (2 to 99)";
 
@@ -35,7 +35,7 @@ public partial class L2SettingsPage : ObservableObject
         CheckRoom();
     }
 
-    /// <summary>The page is shown: the settings as the ROM has them now (a patch or Undo may have changed them).</summary>
+    // the page is shown, so read the settings as the ROM has them now (a patch or Undo may have changed them)
     public void Shown()
     {
         if (_rom == null || _rom.Version == _readVersion) return;
@@ -47,12 +47,12 @@ public partial class L2SettingsPage : ObservableObject
 
     private int _readVersion = -1;
 
-    // ---------------------------------------------------------------- tidy the hack's data
+    // tidy the hack's data
 
     [ObservableProperty] private string _tidyText = "";
     private L2Tidy.Result? _tidy;
 
-    /// <summary>Works out (on a copy) what tidying would do, for the card.</summary>
+    // works out (on a copy) what tidying would do, for the card
     private void CheckTidy()
     {
         if (_rom == null) return;
@@ -74,41 +74,41 @@ public partial class L2SettingsPage : ObservableObject
     private void Tidy()
     {
         if (_rom == null || _main == null) return;
-        // worked out on a copy of the whole ROM and put in over it, then every page reads again: the pages' edits not
-        // yet in the ROM go in first
+        // worked out on a copy of the whole ROM and put in over it, then every page reads again. so the pages' edits
+        // not in the ROM yet go in first
         _main.WritePendingEdits();
-        var mouse = System.Windows.Input.Mouse.OverrideCursor;
+        var oldCursor = System.Windows.Input.Mouse.OverrideCursor;
         System.Windows.Input.Mouse.OverrideCursor = System.Windows.Input.Cursors.Wait;
-        L2Tidy.Result r;
-        try { r = L2Tidy.Prepare(_rom); }
-        finally { System.Windows.Input.Mouse.OverrideCursor = mouse; }
-        if (r.Tidied == null)
+        L2Tidy.Result result;
+        try { result = L2Tidy.Prepare(_rom); }
+        finally { System.Windows.Input.Mouse.OverrideCursor = oldCursor; }
+        if (result.Tidied == null)
         {
-            System.Windows.MessageBox.Show(r.Preview(), "Lufia II: tidy the hack's data", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
+            System.Windows.MessageBox.Show(result.Preview(), "Lufia II: tidy the hack's data", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
             CheckTidy();
             return;
         }
-        var ok = System.Windows.MessageBox.Show(r.Preview() + "\n\nTidy it now? Edit, Undo takes it back.", "Lufia II: tidy the hack's data",
+        var answer = System.Windows.MessageBox.Show(result.Preview() + "\n\nTidy it now? Edit, Undo takes it back.", "Lufia II: tidy the hack's data",
             System.Windows.MessageBoxButton.OKCancel, System.Windows.MessageBoxImage.Question);
-        if (ok != System.Windows.MessageBoxResult.OK) return;
-        ApplyTidy(r);
+        if (answer != System.Windows.MessageBoxResult.OK) return;
+        ApplyTidy(result);
     }
 
-    /// <summary>Puts a prepared (and checked) tidy in the ROM as one Undo step.</summary>
-    public void ApplyTidy(L2Tidy.Result r)
+    // puts a prepared (and checked) tidy in the ROM as one Undo step
+    public void ApplyTidy(L2Tidy.Result result)
     {
-        if (_rom == null || _main == null || r.Tidied == null) return;
-        L2Tidy.Apply(_rom, r);
+        if (_rom == null || _main == null || result.Tidied == null) return;
+        L2Tidy.Apply(_rom, result);
         _main.NotifyRomModified("Lufia II: hack's data tidied");
         _main.ReloadModules();   // every page reads the moved scripts and spells again (this one too)
-        Status = "Tidied: " + string.Join(" ", r.Gains.Take(1).DefaultIfEmpty("the scripts sit on their own now."));
+        Status = "Tidied: " + string.Join(" ", result.Gains.Take(1).DefaultIfEmpty("the scripts sit on their own now."));
     }
 
-    // ---------------------------------------------------------------- room for new monsters (a hack's full bank $D0)
+    // room for new monsters (a hack's full bank $D0)
 
     [ObservableProperty] private string _roomText = "";
 
-    /// <summary>What moving a hack's monsters to a bank of their own would give, for the card (cheap: nothing is built).</summary>
+    // what moving a hack's monsters to a bank of their own would give, for the card (cheap, nothing gets built)
     private void CheckRoom()
     {
         if (_rom == null) return;
@@ -125,32 +125,32 @@ public partial class L2SettingsPage : ObservableObject
     private void MakeRoom()
     {
         if (_rom == null || _main == null) return;
-        // worked out on a copy of the whole ROM and put in over it, then every page reads again: the pages' edits not
-        // yet in the ROM go in first
+        // worked out on a copy of the whole ROM and put in over it, then every page reads again. so the pages' edits
+        // not in the ROM yet go in first
         _main.WritePendingEdits();
-        var mouse = System.Windows.Input.Mouse.OverrideCursor;
+        var oldCursor = System.Windows.Input.Mouse.OverrideCursor;
         System.Windows.Input.Mouse.OverrideCursor = System.Windows.Input.Cursors.Wait;
-        L2NewMonsters.RoomResult r;
-        try { r = L2NewMonsters.PrepareRoom(_rom); }
-        finally { System.Windows.Input.Mouse.OverrideCursor = mouse; }
-        if (r.Bytes == null)
+        L2NewMonsters.RoomResult room;
+        try { room = L2NewMonsters.PrepareRoom(_rom); }
+        finally { System.Windows.Input.Mouse.OverrideCursor = oldCursor; }
+        if (room.Bytes == null)
         {
-            System.Windows.MessageBox.Show(r.Preview(), "Lufia II: room for new monsters", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
+            System.Windows.MessageBox.Show(room.Preview(), "Lufia II: room for new monsters", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
             CheckRoom();
             return;
         }
-        if (!L2MonstersPage.ConfirmRoom(r, "Make room now? Edit, Undo takes it back.")) return;
-        ApplyRoom(r);
+        if (!L2MonstersPage.ConfirmRoom(room, "Make room now? Edit, Undo takes it back.")) return;
+        ApplyRoom(room);
     }
 
-    /// <summary>Puts a prepared (and checked) move of the monsters in the ROM as one Undo step.</summary>
-    public void ApplyRoom(L2NewMonsters.RoomResult r)
+    // puts a prepared (and checked) move of the monsters in the ROM as one Undo step
+    public void ApplyRoom(L2NewMonsters.RoomResult room)
     {
-        if (_rom == null || _main == null || r.Bytes == null) return;
-        L2NewMonsters.ApplyRoom(_rom, r);
-        _main.NotifyRomModified($"Lufia II: monsters moved to bank ${r.ToBank:X2} (room for new monsters)" + (r.Tidied ? ", hack's data tidied" : ""));
+        if (_rom == null || _main == null || room.Bytes == null) return;
+        L2NewMonsters.ApplyRoom(_rom, room);
+        _main.NotifyRomModified($"Lufia II: monsters moved to bank ${room.ToBank:X2} (room for new monsters)" + (room.Tidied ? ", hack's data tidied" : ""));
         _main.ReloadModules();
-        Status = $"The monsters have a bank of their own now (${r.ToBank:X2}): {r.RoomAfter} bytes for new monsters (Monsters page, \"Add a new monster\").";
+        Status = $"The monsters have a bank of their own now (${room.ToBank:X2}): {room.RoomAfter} bytes for new monsters (Monsters page, \"Add a new monster\").";
     }
 
     private void Reload()
@@ -180,13 +180,13 @@ public partial class L2SettingsPage : ObservableObject
 
     private void UpdateText()
     {
-        double m = L2Settings.MeanSteps((byte)Encounter);
-        EncounterText = double.IsInfinity(m) ? "No random battles on the world map." : $"About 1 battle every {m:0.#} steps on the world map (none for the first 6 steps).";
+        double meanSteps = L2Settings.MeanSteps((byte)Encounter);
+        EncounterText = double.IsInfinity(meanSteps) ? "No random battles on the world map." : $"About 1 battle every {meanSteps:0.#} steps on the world map (none for the first 6 steps).";
     }
 
     private static string SizeOf(RomBuffer rom)
     {
-        string mb(double b) => (b / 1048576).ToString("0.##") + " MB";
+        string mb(double bytes) => (bytes / 1048576).ToString("0.##") + " MB";
         if (L2Rom.IsExLoRom(rom))
             return $"8 MB. Free: {mb(L2Rom.FreeSpace(rom))} in the first 4 MB, and {L2EventSpace.UpperBanksLeft(rom)} empty banks of 32 KB " +
                    $"in the upper 4 MB for events and data (made so far: event space {mb(L2EventSpace.Free(rom))} free, data {mb(L2Rom.UpperFree(rom))} free). " +
@@ -202,11 +202,11 @@ public partial class L2SettingsPage : ObservableObject
     private void MakeEight()
     {
         if (_rom == null || _main == null) return;
-        var r = System.Windows.MessageBox.Show(
+        var answer = System.Windows.MessageBox.Show(
             "Make the ROM 8 MB?\n\nIt keeps the game as it is and adds 4 MB for events, map sprites and map data. " +
             "Snes9x, bsnes and BizHawk's BSNESv115+ core run it; BizHawk's older BSNES core (Config > Preferred Cores > SNES) can't, and some flash carts may not either. Edit, Undo takes it back.",
             "Lufia II: ROM size", System.Windows.MessageBoxButton.OKCancel, System.Windows.MessageBoxImage.Question);
-        if (r != System.Windows.MessageBoxResult.OK) return;
+        if (answer != System.Windows.MessageBoxResult.OK) return;
         try { L2Rom.ExpandTo8(_rom); }
         catch (Exception ex) { Status = "Not changed: " + ex.Message; return; }
         _main.NotifyRomModified("Lufia II: ROM made 8 MB");

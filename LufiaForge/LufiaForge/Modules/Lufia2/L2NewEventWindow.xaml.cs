@@ -16,11 +16,9 @@ using Rectangle = System.Windows.Shapes.Rectangle;
 
 namespace LufiaForge.Modules.Lufia2;
 
-/// <summary>
-/// Makes a new Lufia II event on the picked map: talking to one of its characters (or to a new one, added to the map
-/// where the user clicks), stepping onto an area dragged on the map, or more steps at the end of another event. The
-/// event starts with one line of text and, when it plays once, a free story flag (checked first, then turned on).
-/// </summary>
+// makes a new Lufia II event on the picked map. it starts by talking to one of its characters (or to a new one, added
+// to the map where you click), by stepping onto an area dragged on the map, or it's more steps at the end of another
+// event. the event starts with one line of text and, if it plays once, a free story flag (checked first, then turned on)
 public partial class L2NewEventWindow : Window
 {
     private readonly L2EventsPage _page;
@@ -46,13 +44,13 @@ public partial class L2NewEventWindow : Window
 
         int block = L2Events.Block(_rom, _map);
         _talked = block >= 0 ? L2EventBlocks.ReadLists(_rom, block).Where(e => e.Head == L2EventBlocks.TalkList).Select(e => e.Id).ToHashSet() : new();
-        foreach (var (id, c) in page.Characters.Where(c => c.Key >= 0x50 || c.Key is >= L2Persistent.First and <= L2Persistent.LastUsable).OrderBy(c => c.Key))
-            TalkCombo.Items.Add(new L2Option(id, L2EventCommands.Cap(c.Name) + (_talked.Contains(id) ? " (has an event already)" : "")));
+        foreach (var (id, character) in page.Characters.Where(c => c.Key >= 0x50 || c.Key is >= L2Persistent.First and <= L2Persistent.LastUsable).OrderBy(c => c.Key))
+            TalkCombo.Items.Add(new L2Option(id, L2EventCommands.Cap(character.Name) + (_talked.Contains(id) ? " (has an event already)" : "")));
         TalkCombo.SelectedIndex = TalkCombo.Items.Cast<L2Option>().ToList().FindIndex(o => !_talked.Contains(o.Value));
-        foreach (var e in page.Events.Where(e => e.Entry != null)) AfterCombo.Items.Add(e);
+        foreach (var eventItem in page.Events.Where(e => e.Entry != null)) AfterCombo.Items.Add(eventItem);
         if (AfterCombo.Items.Count > 0) AfterCombo.SelectedIndex = 0;
-        foreach (var (v, n) in L2EventCommands.MoveModes.Where(m => m.Item1 is 0x05 or 0x06 or 0x07 or 0x08 or 0x00))
-            ModeCombo.Items.Add(new L2Option(v, v == 0 ? "Wanders around (2 tiles each way)" : n));
+        foreach (var (mode, name) in L2EventCommands.MoveModes.Where(m => m.Item1 is 0x05 or 0x06 or 0x07 or 0x08 or 0x00))
+            ModeCombo.Items.Add(new L2Option(mode, mode == 0 ? "Wanders around (2 tiles each way)" : name));
         ModeCombo.SelectedIndex = 1;
         if (block < 0) { TalkRadio.IsEnabled = NewCharRadio.IsEnabled = AreaRadio.IsEnabled = AfterRadio.IsEnabled = false; ChoiceText.Text = "This map has no event block."; }
         DrawMap();
@@ -64,10 +62,10 @@ public partial class L2NewEventWindow : Window
     {
         try
         {
-            var (w, h, px) = L2Maps.Render(_rom, _map);
-            var bmp = BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgra32, null, px.Select(c => (int)c).ToArray(), w * 4);
-            bmp.Freeze();
-            MapImage.Source = bmp;
+            var (w, h, pixels) = L2Maps.Render(_rom, _map);
+            var bitmap = BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgra32, null, pixels.Select(c => (int)c).ToArray(), w * 4);
+            bitmap.Freeze();
+            MapImage.Source = bitmap;
             Surface.Width = w; Surface.Height = h;
         }
         catch (Exception ex) { MapHint.Text = "The map can't be drawn: " + ex.Message; }
@@ -79,25 +77,25 @@ public partial class L2NewEventWindow : Window
         Marks.Children.Clear();
         void Box(int x1, int y1, int x2, int y2, Brush stroke, Brush fill, string? label = null)
         {
-            var r = new Rectangle { Width = (x2 - x1 + 1) * 16, Height = (y2 - y1 + 1) * 16, Stroke = stroke, StrokeThickness = 2, Fill = fill };
-            Canvas.SetLeft(r, x1 * 16); Canvas.SetTop(r, y1 * 16);
-            Marks.Children.Add(r);
+            var rect = new Rectangle { Width = (x2 - x1 + 1) * 16, Height = (y2 - y1 + 1) * 16, Stroke = stroke, StrokeThickness = 2, Fill = fill };
+            Canvas.SetLeft(rect, x1 * 16); Canvas.SetTop(rect, y1 * 16);
+            Marks.Children.Add(rect);
             if (label == null) return;
-            var t = new TextBlock { Text = label, Foreground = Brushes.White, FontSize = 10, Background = new SolidColorBrush(Color.FromArgb(160, 0, 0, 0)) };
-            Canvas.SetLeft(t, x1 * 16 + 1); Canvas.SetTop(t, y1 * 16 - 13);
-            Marks.Children.Add(t);
+            var labelBlock = new TextBlock { Text = label, Foreground = Brushes.White, FontSize = 10, Background = new SolidColorBrush(Color.FromArgb(160, 0, 0, 0)) };
+            Canvas.SetLeft(labelBlock, x1 * 16 + 1); Canvas.SetTop(labelBlock, y1 * 16 - 13);
+            Marks.Children.Add(labelBlock);
         }
-        foreach (var (_, b) in L2MapInfo.Records(_rom, _map, L2MapInfo.Triggers, 5))
-            Box(b[1], b[2], b[3] - 1, b[4] - 1, Brushes.HotPink, new SolidColorBrush(Color.FromArgb(50, 255, 105, 180)), $"area {b[0]}");
-        foreach (var (_, b) in L2MapInfo.Records(_rom, _map, L2MapInfo.Characters, 8))
-            Box(b[1], b[2], b[1], b[2], Brushes.Gold, Brushes.Transparent, $"{b[0]}");
+        foreach (var (_, areaRecord) in L2MapInfo.Records(_rom, _map, L2MapInfo.Triggers, 5))
+            Box(areaRecord[1], areaRecord[2], areaRecord[3] - 1, areaRecord[4] - 1, Brushes.HotPink, new SolidColorBrush(Color.FromArgb(50, 255, 105, 180)), $"area {areaRecord[0]}");
+        foreach (var (_, charRecord) in L2MapInfo.Records(_rom, _map, L2MapInfo.Characters, 8))
+            Box(charRecord[1], charRecord[2], charRecord[1], charRecord[2], Brushes.Gold, Brushes.Transparent, $"{charRecord[0]}");
         if (_area is var (x1, y1, x2, y2) && AreaRadio.IsChecked == true)
             Box(x1, y1, x2, y2, Brushes.Gold, new SolidColorBrush(Color.FromArgb(90, 255, 215, 0)));
         if (_spot is var (sx, sy) && NewCharRadio.IsChecked == true)
             Box(sx, sy, sx, sy, Brushes.Gold, new SolidColorBrush(Color.FromArgb(120, 255, 215, 0)), "new");
-        if (TalkRadio.IsChecked == true && TalkCombo.SelectedItem is L2Option o)
-            foreach (var (_, b) in L2MapInfo.Records(_rom, _map, L2MapInfo.Characters, 8).Where(r => 0x4F + r.Bytes[0] == o.Value))
-                Box(b[1] - 1, b[2] - 1, b[1] + 1, b[2] + 1, Brushes.Gold, Brushes.Transparent);
+        if (TalkRadio.IsChecked == true && TalkCombo.SelectedItem is L2Option picked)
+            foreach (var (_, charRecord) in L2MapInfo.Records(_rom, _map, L2MapInfo.Characters, 8).Where(r => 0x4F + r.Bytes[0] == picked.Value))
+                Box(charRecord[1] - 1, charRecord[2] - 1, charRecord[1] + 1, charRecord[2] + 1, Brushes.Gold, Brushes.Transparent);
     }
 
     private void Start_Changed(object sender, RoutedEventArgs e)
@@ -120,23 +118,23 @@ public partial class L2NewEventWindow : Window
     private void Sprite_Changed(object sender, TextChangedEventArgs e)
     {
         if (!IsInitialized || SpriteImage == null) return;
-        SpriteImage.Source = int.TryParse(SpriteBox.Text.Trim(), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int s) && s < L2Graphics.MapSpriteCount
-            ? Picture(L2Graphics.MapSprite(_rom, s)) : null;
+        SpriteImage.Source = int.TryParse(SpriteBox.Text.Trim(), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int spriteId) && spriteId < L2Graphics.MapSpriteCount
+            ? Picture(L2Graphics.MapSprite(_rom, spriteId)) : null;
     }
 
-    private static BitmapSource? Picture((int Width, int Height, uint[] Pixels)? pic)
+    private static BitmapSource? Picture((int Width, int Height, uint[] Pixels)? sprite)
     {
-        if (pic is not var (w, h, px)) return null;
-        var bmp = BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgra32, null, px.Select(c => (int)c).ToArray(), w * 4);
-        bmp.Freeze();
-        return bmp;
+        if (sprite is not var (w, h, pixels)) return null;
+        var bitmap = BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgra32, null, pixels.Select(c => (int)c).ToArray(), w * 4);
+        bitmap.Freeze();
+        return bitmap;
     }
 
     private void Describe()
     {
         if (TalkRadio.IsChecked == true)
-            ChoiceText.Text = TalkCombo.SelectedItem is L2Option o
-                ? _talked.Contains(o.Value) ? "That character has an event already: pick it in the list to change it, or pick another." : $"Talking to {_page.Who(o.Value)} starts it."
+            ChoiceText.Text = TalkCombo.SelectedItem is L2Option picked
+                ? _talked.Contains(picked.Value) ? "That character has an event already: pick it in the list to change it, or pick another." : $"Talking to {_page.Who(picked.Value)} starts it."
                 : "The map has no characters; add a new one.";
         else if (NewCharRadio.IsChecked == true)
             ChoiceText.Text = _spot is var (x, y) ? $"A new character stands on ({x}, {y}); talking to it starts the event." : "Click the tile where the new character stands.";
@@ -147,8 +145,8 @@ public partial class L2NewEventWindow : Window
 
     private (int X, int Y) Tile(MouseEventArgs e)
     {
-        var p = e.GetPosition(Surface);
-        return ((int)Math.Max(0, p.X) / 16, (int)Math.Max(0, p.Y) / 16);
+        var mousePos = e.GetPosition(Surface);
+        return ((int)Math.Max(0, mousePos.X) / 16, (int)Math.Max(0, mousePos.Y) / 16);
     }
 
     private void Surface_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -165,9 +163,9 @@ public partial class L2NewEventWindow : Window
     private void Surface_MouseMove(object sender, MouseEventArgs e)
     {
         if (_dragFrom is not { } from || e.LeftButton != MouseButtonState.Pressed) return;
-        int fx = (int)from.X / 16, fy = (int)from.Y / 16;
+        int fromX = (int)from.X / 16, fromY = (int)from.Y / 16;
         var (x, y) = Tile(e);
-        _area = (Math.Min(fx, x), Math.Min(fy, y), Math.Max(fx, x), Math.Max(fy, y));
+        _area = (Math.Min(fromX, x), Math.Min(fromY, y), Math.Max(fromX, x), Math.Max(fromY, y));
         DrawMarks(); Describe();
     }
 
@@ -186,8 +184,8 @@ public partial class L2NewEventWindow : Window
         if (L2EventText.Check(text, _rom) is { } problem) { ChoiceText.Text = problem; return; }
         int flag = OnceCheck.IsChecked == true && AfterRadio.IsChecked != true ? _flag : -1;
         int block = L2Events.Block(_rom, _map);
-        // the new character goes in before its event: when the event can't be added (no room), the ROM goes back as it
-        // was (else the character stayed, outside Undo and the change log)
+        // the new character goes in before its event, so if the event can't be added (no room) the ROM goes back to how
+        // it was (else the character would stay, outside Undo and the change log)
         var before = _rom.ToArray();
         try
         {
@@ -205,9 +203,9 @@ public partial class L2NewEventWindow : Window
                 }
                 else
                 {
-                    if (TalkCombo.SelectedItem is not L2Option o) { ChoiceText.Text = "Pick a character."; return; }
-                    if (_talked.Contains(o.Value)) { ChoiceText.Text = "That character has an event already."; return; }
-                    actor = o.Value;
+                    if (TalkCombo.SelectedItem is not L2Option picked) { ChoiceText.Text = "Pick a character."; return; }
+                    if (_talked.Contains(picked.Value)) { ChoiceText.Text = "That character has an event already."; return; }
+                    actor = picked.Value;
                     what = $"new event on {_page.CurrentMapName}: talking to {_page.Who(actor)}";
                 }
                 var script = L2EventBlocks.NewScript(block, new byte[] { 0x08 }, text, flag);

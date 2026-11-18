@@ -11,9 +11,9 @@ using Point = System.Windows.Point;
 
 namespace LufiaForge.Modules.Lufia2;
 
-/// <summary>A picture drawn pixel by pixel at a whole-number zoom, with an optional grid (every pixel when big
-/// enough, every 8x8 square, and every <see cref="CellWidth"/> x <see cref="CellHeight"/> cell, e.g. a sprite frame).
-/// Mouse presses and drags come out as pixel positions (a fast drag gives every pixel on the way).</summary>
+// a picture drawn pixel by pixel at a whole-number zoom, with an optional grid (every pixel when it's big enough,
+// every 8x8 square, and every CellWidth x CellHeight cell, like a sprite frame).
+// mouse presses and drags come out as pixel positions (a fast drag gives every pixel on the way)
 public sealed class L2PixelCanvas : FrameworkElement
 {
     public static readonly DependencyProperty SourceProperty = DependencyProperty.Register(nameof(Source), typeof(BitmapSource), typeof(L2PixelCanvas),
@@ -33,12 +33,12 @@ public sealed class L2PixelCanvas : FrameworkElement
     public int CellWidth { get => (int)GetValue(CellWidthProperty); set => SetValue(CellWidthProperty, value); }
     public int CellHeight { get => (int)GetValue(CellHeightProperty); set => SetValue(CellHeightProperty, value); }
 
-    /// <summary>A button went down on pixel (x, y); right = the right button.</summary>
+    // a button went down on pixel (x, y), right = the right button
     public event Action<int, int, bool>? PixelPressed;
-    /// <summary>The mouse moved onto pixel (x, y) with the button held.</summary>
+    // the mouse moved onto pixel (x, y) with the button held
     public event Action<int, int>? PixelDragged;
     public event Action? PixelReleased;
-    /// <summary>The mouse is over pixel (x, y), or (-1, -1) when it left.</summary>
+    // the mouse is over pixel (x, y), or (-1, -1) once it left
     public event Action<int, int>? PixelHover;
 
     private static readonly Pen PixelPen = Frozen(Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF), 1);
@@ -57,53 +57,53 @@ public sealed class L2PixelCanvas : FrameworkElement
         SnapsToDevicePixels = true;
     }
 
-    private static Pen Frozen(Color c, double w) { var p = new Pen(new SolidColorBrush(c), w); p.Freeze(); return p; }
+    private static Pen Frozen(Color color, double width) { var pen = new Pen(new SolidColorBrush(color), width); pen.Freeze(); return pen; }
 
     private static Brush MakeChecker()
     {
-        var g = new DrawingGroup();
-        g.Children.Add(new GeometryDrawing(new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x2A)), null, new RectangleGeometry(new Rect(0, 0, 16, 16))));
-        g.Children.Add(new GeometryDrawing(new SolidColorBrush(Color.FromRgb(0x38, 0x38, 0x38)), null, new RectangleGeometry(new Rect(0, 0, 8, 8))));
-        g.Children.Add(new GeometryDrawing(new SolidColorBrush(Color.FromRgb(0x38, 0x38, 0x38)), null, new RectangleGeometry(new Rect(8, 8, 8, 8))));
-        var b = new DrawingBrush(g) { TileMode = TileMode.Tile, Viewport = new Rect(0, 0, 16, 16), ViewportUnits = BrushMappingMode.Absolute };
-        b.Freeze();
-        return b;
+        var drawing = new DrawingGroup();
+        drawing.Children.Add(new GeometryDrawing(new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x2A)), null, new RectangleGeometry(new Rect(0, 0, 16, 16))));
+        drawing.Children.Add(new GeometryDrawing(new SolidColorBrush(Color.FromRgb(0x38, 0x38, 0x38)), null, new RectangleGeometry(new Rect(0, 0, 8, 8))));
+        drawing.Children.Add(new GeometryDrawing(new SolidColorBrush(Color.FromRgb(0x38, 0x38, 0x38)), null, new RectangleGeometry(new Rect(8, 8, 8, 8))));
+        var brush = new DrawingBrush(drawing) { TileMode = TileMode.Tile, Viewport = new Rect(0, 0, 16, 16), ViewportUnits = BrushMappingMode.Absolute };
+        brush.Freeze();
+        return brush;
     }
 
-    private int Z => Math.Max(1, Zoom);
+    private int ZoomLevel => Math.Max(1, Zoom);
 
     protected override Size MeasureOverride(Size availableSize) =>
-        Source is { } s ? new Size(s.PixelWidth * Z + 1, s.PixelHeight * Z + 1) : new Size(0, 0);
+        Source is { } source ? new Size(source.PixelWidth * ZoomLevel + 1, source.PixelHeight * ZoomLevel + 1) : new Size(0, 0);
 
     protected override void OnRender(DrawingContext dc)
     {
-        if (Source is not { } s) return;
-        int w = s.PixelWidth, h = s.PixelHeight, z = Z;
-        var area = new Rect(0, 0, w * z, h * z);
+        if (Source is not { } source) return;
+        int w = source.PixelWidth, h = source.PixelHeight, zoom = ZoomLevel;
+        var area = new Rect(0, 0, w * zoom, h * zoom);
         dc.DrawRectangle(Checker, null, area);
-        dc.DrawImage(s, area);
+        dc.DrawImage(source, area);
         if (!ShowGrid) return;
         // lines on the half pixel so a 1-pixel pen is sharp
         void Lines(int step, Pen pen)
         {
-            for (int x = step; x < w; x += step) dc.DrawLine(pen, new Point(x * z + 0.5, 0), new Point(x * z + 0.5, h * z));
-            for (int y = step; y < h; y += step) dc.DrawLine(pen, new Point(0, y * z + 0.5), new Point(w * z, y * z + 0.5));
+            for (int x = step; x < w; x += step) dc.DrawLine(pen, new Point(x * zoom + 0.5, 0), new Point(x * zoom + 0.5, h * zoom));
+            for (int y = step; y < h; y += step) dc.DrawLine(pen, new Point(0, y * zoom + 0.5), new Point(w * zoom, y * zoom + 0.5));
         }
-        if (z >= 6) Lines(1, PixelPen);
-        if (z >= 2) Lines(8, TilePen);
-        int cw = Math.Max(1, CellWidth), ch = Math.Max(1, CellHeight);
-        for (int x = cw; x < w; x += cw) dc.DrawLine(CellPen, new Point(x * z + 0.5, 0), new Point(x * z + 0.5, h * z));
-        for (int y = ch; y < h; y += ch) dc.DrawLine(CellPen, new Point(0, y * z + 0.5), new Point(w * z, y * z + 0.5));
-        dc.DrawRectangle(null, TilePen, new Rect(0.5, 0.5, w * z, h * z));
+        if (zoom >= 6) Lines(1, PixelPen);
+        if (zoom >= 2) Lines(8, TilePen);
+        int cellW = Math.Max(1, CellWidth), cellH = Math.Max(1, CellHeight);
+        for (int x = cellW; x < w; x += cellW) dc.DrawLine(CellPen, new Point(x * zoom + 0.5, 0), new Point(x * zoom + 0.5, h * zoom));
+        for (int y = cellH; y < h; y += cellH) dc.DrawLine(CellPen, new Point(0, y * zoom + 0.5), new Point(w * zoom, y * zoom + 0.5));
+        dc.DrawRectangle(null, TilePen, new Rect(0.5, 0.5, w * zoom, h * zoom));
     }
 
     private (int X, int Y) PixelAt(MouseEventArgs e)
     {
-        var p = e.GetPosition(this);
-        return ((int)Math.Floor(p.X / Z), (int)Math.Floor(p.Y / Z));
+        var mousePos = e.GetPosition(this);
+        return ((int)Math.Floor(mousePos.X / ZoomLevel), (int)Math.Floor(mousePos.Y / ZoomLevel));
     }
 
-    private bool Inside(int x, int y) => Source is { } s && x >= 0 && y >= 0 && x < s.PixelWidth && y < s.PixelHeight;
+    private bool Inside(int x, int y) => Source is { } source && x >= 0 && y >= 0 && x < source.PixelWidth && y < source.PixelHeight;
 
     protected override void OnMouseDown(MouseButtonEventArgs e)
     {
@@ -153,7 +153,7 @@ public sealed class L2PixelCanvas : FrameworkElement
         if (_lastX >= 0) { _lastX = _lastY = -1; PixelReleased?.Invoke(); }
     }
 
-    /// <summary>Ctrl + the mouse wheel: +1 to zoom in, -1 to zoom out.</summary>
+    // Ctrl + mouse wheel: +1 to zoom in, -1 to zoom out
     public event Action<int>? ZoomWheel;
 
     protected override void OnMouseWheel(MouseWheelEventArgs e)

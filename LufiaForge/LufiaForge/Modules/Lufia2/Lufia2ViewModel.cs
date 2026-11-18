@@ -4,11 +4,11 @@ using LufiaForge.ViewModels;
 
 namespace LufiaForge.Modules.Lufia2;
 
-/// <summary>The Lufia II tab: shown instead of the Lufia 1 editors when a Lufia II ROM is loaded.</summary>
+// the Lufia II tab, shown instead of the Lufia 1 editors when a Lufia II ROM is loaded
 public partial class Lufia2ViewModel : ObservableObject
 {
     [ObservableProperty] private string _overview = "Load a Lufia II ROM.";
-    /// <summary>Shown above the pages when another hack moved tables some pages edit (those stay read-only).</summary>
+    // shown above the pages when another hack moved tables some pages edit (those stay read-only)
     [ObservableProperty] private string _lockBanner = "";
 
     public L2MonstersPage Monsters { get; } = new();
@@ -33,28 +33,28 @@ public partial class Lufia2ViewModel : ObservableObject
     public L2MusicPage Music { get; } = new();
     public L2GraphicsPage Graphics { get; } = new();
 
-    /// <summary>Asks the view to show a page (by its header).</summary>
+    // asks the view to show a page (by its header)
     public event Action<string>? ShowPage;
-    /// <summary>Asks the view to pop up the event editor on an event of a map (the Maps page's characters and areas).</summary>
+    // asks the view to pop up the event editor on one of a map's events (the Maps page's characters and areas)
     public event Action<int, int, int>? OpenEditor;
 
     public Lufia2ViewModel()
     {
-        // the Maps tab's "Talk event..." / "Event..." and double-clicking a character or an area: the event editor pops up
+        // the Maps tab's "Talk event..." / "Event..." and double-clicking a character or an area pop up the event editor
         Maps.OpenEventRequested += (map, head, id) => OpenEditor?.Invoke(map, head, id);
-        // the Maps tab's battle zone list: "Monsters..." shows the zone on the Encounters page
+        // the Maps tab's battle zone list, "Monsters..." shows the zone on the Encounters page
         Maps.OpenZoneRequested += zone => { Encounters.ShowZone(zone); ShowPage?.Invoke("Encounters"); };
-        // a monster added on the Monsters page: the Encounters page offers it
+        // a monster added on the Monsters page shows up on the Encounters page too
         Monsters.MonstersChanged += () => { Encounters.RefreshMonsters(); Graphics.RefreshMonsterOptions(); };
-        // a monster sprite added, painted, given a palette or a movement, or given to a monster on the Graphics page:
-        // the Monsters page lists it and shows the monster again, the Encounters page draws the new pictures
+        // a monster sprite added, painted, given a palette or a movement, or given to a monster on the Graphics page.
+        // the Monsters page lists it and shows the monster again, and the Encounters page draws the new pictures
         Graphics.MonsterSpritesChanged += () => { Monsters.RefreshSprites(); Encounters.RefreshMonsters(); };
-        // the Treasure tab and the Maps tab edit the same treasure: the map's edits are written before Treasure reads it
+        // the Treasure tab and the Maps tab edit the same treasure, so the map's edits get written before Treasure reads it
         Chests.BeforeRead = () => Maps.WritePendingEdits();
     }
 
-    /// <summary>A page was switched to (or the tab shown again): the edits not yet in the ROM go in first (from every
-    /// page), then the page reads the ROM again when it changed since it last read it.</summary>
+    // a page was switched to (or the tab shown again). the edits not in the ROM yet go in first (from every page),
+    // then the page reads the ROM again if it changed since it last read it
     public void PageShown(string header)
     {
         _main?.WritePendingEdits();

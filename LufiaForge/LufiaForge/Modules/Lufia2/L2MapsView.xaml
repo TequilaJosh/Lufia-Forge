@@ -13,7 +13,7 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- ============ Top bar: tools | area actions | undo / redo ............ edited, revert, apply ============ -->
+        <!-- top bar: tools | area actions | undo / redo ... edited, revert, apply -->
         <Border Grid.Row="0" Background="{StaticResource SurfacePurpleBrush}" BorderBrush="{StaticResource BorderPurpleBrush}" BorderThickness="0,0,0,1" Padding="10,7">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top" Margin="8,0,0,0">
@@ -85,7 +85,7 @@
             </DockPanel>
         </Border>
 
-        <!-- ============ Body: maps | map | inspector + blocks ============ -->
+        <!-- body: maps | map | inspector + blocks -->
         <Grid Grid.Row="1" common:LayoutMemory.Key="l2maps.main2">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="230" MinWidth="120"/>
@@ -95,7 +95,7 @@
                 <ColumnDefinition Width="340" MinWidth="220"/>
             </Grid.ColumnDefinitions>
 
-            <!-- Maps -->
+            <!-- maps -->
             <common:PopOutHost Grid.Column="0" Title="Lufia II map list" Key="l2maps.list" ButtonMargin="0,10,10,0">
             <DockPanel Margin="8,8,4,8">
                 <TextBox DockPanel.Dock="Top" Style="{StaticResource LufiaSearchBox}" Tag="Search maps (name or number)" Margin="0,0,0,6"
@@ -121,7 +121,7 @@
 
             <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" ResizeBehavior="PreviousAndNext"/>
 
-            <!-- Map canvas with its view bar -->
+            <!-- map canvas and its view bar -->
             <common:PopOutHost Grid.Column="2" Title="Lufia II map" Key="l2maps.map" ButtonMargin="0,10,20,0">
             <DockPanel Margin="0,8,0,8">
                 <Border DockPanel.Dock="Bottom" Background="{StaticResource SurfacePurpleBrush}" BorderBrush="{StaticResource BorderPurpleBrush}"
@@ -296,7 +296,7 @@
 
             <GridSplitter Grid.Column="3" Width="6" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" ResizeBehavior="PreviousAndNext"/>
 
-            <!-- Inspector, blocks, map settings -->
+            <!-- inspector, blocks, map settings -->
             <common:PopOutHost Grid.Column="4" Title="Lufia II map inspector" Key="l2maps.tiles" ButtonMargin="0,10,12,0">
             <Grid Margin="4,8,8,8" IsEnabled="{Binding IsEditableMap}">
                 <Grid.RowDefinitions>
@@ -305,7 +305,7 @@
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <!-- Battle zones (world map, while painting zones) -->
+                <!-- battle zones (world map, while painting zones) -->
                 <Border Grid.Row="0" Grid.RowSpan="2" Style="{StaticResource LufiaCard}" Margin="0,0,0,8" Panel.ZIndex="1"
                         Visibility="{Binding ZonePanelVisible, Converter={StaticResource BoolToVisibilityConverter}}">
                     <DockPanel>
@@ -354,7 +354,7 @@
                     </DockPanel>
                 </Border>
 
-                <!-- Selection -->
+                <!-- selection -->
                 <Border Grid.Row="0" Style="{StaticResource LufiaCard}" Margin="0,0,0,8">
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <StackPanel>
@@ -491,7 +491,7 @@
                     </ScrollViewer>
                 </Border>
 
-                <!-- Blocks -->
+                <!-- blocks -->
                 <Border Grid.Row="1" Style="{StaticResource LufiaCard}" Margin="0,0,0,8">
                     <DockPanel>
                         <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4">
@@ -586,7 +586,7 @@
                     </DockPanel>
                 </Border>
 
-                <!-- Map settings -->
+                <!-- map settings -->
                 <Border Grid.Row="2" Style="{StaticResource LufiaCard}" Padding="10,6">
                     <Expander Header="⚙  Map settings, size, characters, new map, test start" Foreground="{StaticResource GoldLightBrush}">
                         <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="380">
@@ -642,7 +642,7 @@
             </common:PopOutHost>
         </Grid>
 
-        <!-- Status bar -->
+        <!-- status bar -->
         <Border Grid.Row="2" Background="{StaticResource DeepPurpleBrush}" BorderBrush="{StaticResource BorderPurpleBrush}" BorderThickness="0,1,0,0" Padding="10,5">
             <StackPanel>
                 <TextBlock Text="{Binding Status}" Style="{StaticResource LufiaLabel}" Foreground="{StaticResource GoldLightBrush}" TextTrimming="CharacterEllipsis"/>

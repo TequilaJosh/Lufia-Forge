@@ -2,17 +2,15 @@ using LufiaForge.Core.Lufia2;
 
 namespace LufiaForge.Modules.Lufia2;
 
-/// <summary>
-/// Story characters (10-4E, <see cref="L2Persistent"/>) in the event editor: the "Send a story character" step's lists
-/// (every story character the game has, the character starts of the map it goes to), sending one away or onto a tile
-/// of this map, and turning a map character into a story character.
-/// </summary>
+// story characters (10-4E, L2Persistent) in the event editor: the "Send a story character" step's lists (every story
+// character the game has, the character starts of the map it goes to), sending one away or onto a tile of this map,
+// and turning a map character into a story character
 public partial class L2ScriptEditor
 {
-    /// <summary>Asks the page to show a story character on the Story characters tab.</summary>
+    // asks the page to show a story character on the Story characters tab
     public event Action<int>? StoryCharRequested;
 
-    /// <summary>Shows a story character on the Story characters tab (false: no page shows that tab here).</summary>
+    // shows a story character on the Story characters tab (false = no page shows that tab here)
     public bool RequestStoryChar(int id)
     {
         if (StoryCharRequested == null) return false;
@@ -20,32 +18,32 @@ public partial class L2ScriptEditor
         return true;
     }
 
-    /// <summary>Every story character the game has, for the "Send a story character" step (one it doesn't have is
-    /// listed when the step names it).</summary>
-    private List<L2Option> StoryChoices(int v)
+    // every story character the game has, for the "Send a story character" step (one it doesn't have is
+    // listed if the step names it)
+    private List<L2Option> StoryChoices(int current)
     {
         var list = new List<L2Option>();
         var rom = _rom!;
         for (int id = L2Persistent.First; id <= L2Persistent.LastUsable; id++)
         {
-            bool has = L2Persistent.Exists(rom, id);
-            if (has || id == v)
-                list.Add(new L2Option(id, $"{id:X2} {L2EventCommands.Cap(StoryLabel(id))}" + (has ? "" : "  (not in the game: never shows up)")));
+            bool exists = L2Persistent.Exists(rom, id);
+            if (exists || id == current)
+                list.Add(new L2Option(id, $"{id:X2} {L2EventCommands.Cap(StoryLabel(id))}" + (exists ? "" : "  (not in the game: never shows up)")));
         }
         return list;
     }
 
-    /// <summary>A story character's name for lists: the user's name, the game's, else its sprite.</summary>
+    // a story character's name for lists: the user's name, the game's, else its sprite
     public string StoryLabel(int id)
     {
-        if (L2Speakers.StoryName(id) is { } n) return n;
+        if (L2Speakers.StoryName(id) is { } name) return name;
         if (_rom != null && L2Persistent.Exists(_rom, id)) return $"story character {id:X2} (sprite {L2Sprites.Name(L2Persistent.Record(_rom, id)[1])})";
         return $"story character {id:X2}";
     }
 
-    /// <summary>The character starts of <paramref name="map"/>, for the "start" of a "Send a story character" step: where
-    /// each is, and whose place it is.</summary>
-    private List<L2Option> StoryStartChoices(int map, int v)
+    // the character starts of map, for the "start" of a "Send a story character" step: where
+    // each one is, and whose place it is
+    private List<L2Option> StoryStartChoices(int map, int current)
     {
         var list = new List<L2Option>();
         var rom = _rom!;
@@ -53,29 +51,29 @@ public partial class L2ScriptEditor
         HashSet<int> made;
         try { made = L2MapInfo.Stages(rom, map).Select(c => c.Id).ToHashSet(); } catch (Exception) { made = new(); }
         var story = L2Persistent.All(rom).Where(p => p.Map == map).ToList();
-        foreach (var (_, b) in L2MapInfo.Records(rom, map, L2MapInfo.Characters, 8))
+        foreach (var (_, charRecord) in L2MapInfo.Records(rom, map, L2MapInfo.Characters, 8))
         {
             var who = new List<string>();
-            if (L2Persistent.IsAway(map, b[0])) who.Add("away: outside the room, never seen");
-            if (made.Contains(0x4F + b[0])) who.Add($"also map character {b[0]}'s place");
-            var here = story.Where(p => p.Spot == b[0]).Select(p => p.Id).Distinct().ToList();
+            if (L2Persistent.IsAway(map, charRecord[0])) who.Add("away: outside the room, never seen");
+            if (made.Contains(0x4F + charRecord[0])) who.Add($"also map character {charRecord[0]}'s place");
+            var here = story.Where(p => p.Spot == charRecord[0]).Select(p => p.Id).Distinct().ToList();
             if (here.Count > 0) who.Add("story " + string.Join(", ", here.Select(i => i.ToString("X2"))));
-            list.Add(new L2Option(b[0], $"start {b[0]} ({b[1]}, {b[2]})" + (who.Count > 0 ? "  " + string.Join("; ", who) : "")));
+            list.Add(new L2Option(charRecord[0], $"start {charRecord[0]} ({charRecord[1]}, {charRecord[2]})" + (who.Count > 0 ? "  " + string.Join("; ", who) : "")));
         }
         return list;
     }
 
-    /// <summary>"Send a story character" steps get their own lists.</summary>
-    private IEnumerable<L2Option>? StoryFieldChoices(L2Step s, L2ParamDef p, int v)
+    // "Send a story character" steps get their own lists
+    private IEnumerable<L2Option>? StoryFieldChoices(L2Step step, L2ParamDef paramDef, int current)
     {
-        if (s.IsText || s.Op != 0x35 || s.Bytes.Length < 4 || _rom == null) return null;
-        if (p.Kind == L2Kind.Who) return StoryChoices(v);
-        if (p.Kind == L2Kind.Number && p.Label == "start") return StoryStartChoices(s.Bytes[2], v);
+        if (step.IsText || step.Op != 0x35 || step.Bytes.Length < 4 || _rom == null) return null;
+        if (paramDef.Kind == L2Kind.Who) return StoryChoices(current);
+        if (paramDef.Kind == L2Kind.Number && paramDef.Label == "start") return StoryStartChoices(step.Bytes[2], current);
         return null;
     }
 
-    /// <summary>Story character <paramref name="id"/> goes away (where the game sends the ones it is done with) at the
-    /// picked step: gone from this map at once and seen nowhere after.</summary>
+    // story character id goes away (where the game sends the ones it's done with) at the picked step,
+    // gone from this map right away and seen nowhere after
     public void SendAway(int id)
     {
         if (_script == null || !CanEdit || id is < L2Persistent.First or > L2Persistent.LastUsable) return;
@@ -84,13 +82,12 @@ public partial class L2ScriptEditor
                     "(the game does this with Tia when she joins). A later \"Send a story character\" step brings it back.";
     }
 
-    /// <summary>A story character (<paramref name="id"/>; -1: a new one with <paramref name="sprite"/>) stands on
-    /// (<paramref name="x"/>, <paramref name="y"/>) of this map from the picked step on: a character start there (one
-    /// made when none is free) and a "Send a story character" step.</summary>
+    // a story character (id, or -1 for a new one with sprite) stands on (x, y) of this map from the picked step on.
+    // that's a character start there (one gets made if none is free) and a "Send a story character" step
     public void SendStoryHere(int id, int sprite, int x, int y)
     {
         if (_rom == null || _main == null || _script == null || !CanEdit || _map < 0) return;
-        // reading the map again below reads the open event again: unsaved steps are saved first
+        // reading the map again below reads the open event again, so unsaved steps get saved first
         if (HasPendingEdits && !SaveNow(quiet: true)) return;
         var rom = _rom;
         int spot;
@@ -99,8 +96,8 @@ public partial class L2ScriptEditor
         {
             (id, spot) = L2Rom.AllOrNothing(rom, () =>
             {
-                int i = id < 0 ? L2Persistent.New(rom, sprite) : id;
-                return (i, L2Persistent.StartAt(rom, _map, x, y));
+                int storyId = id < 0 ? L2Persistent.New(rom, sprite) : id;
+                return (storyId, L2Persistent.StartAt(rom, _map, x, y));
             });
         }
         catch (Exception ex) { StageInfo = "Not added: " + ex.Message; return; }
@@ -108,10 +105,10 @@ public partial class L2ScriptEditor
         int keep = SelectedLine;
         ReadMap();
         var items = ItemsOf(rom, _map);
-        if (_event != null) _event = _event.IsInit ? items[0] : items.FirstOrDefault(x2 => x2.Entry?.Head == _event.Entry?.Head && x2.Entry?.Id == _event.Entry?.Id) ?? _event;
+        if (_event != null) _event = _event.IsInit ? items[0] : items.FirstOrDefault(item => item.Entry?.Head == _event.Entry?.Head && item.Entry?.Id == _event.Entry?.Id) ?? _event;
         ReadScript(keep);
         MarkRead();
-        // (the page reads its lists again on Saved, which loads the event again when it has unsaved steps: before the step)
+        // (the page reads its lists again on Saved, which loads the event again if it has unsaved steps, so this goes before the step)
         Saved?.Invoke("story character");
         Insert(-1, new L2Step { Bytes = new byte[] { 0x35, (byte)id, (byte)_map, (byte)spot } });
         StageInfo = $"{(made ? "New story character" : "Story character")} {id:X2} ({StoryLabel(id)}) stands on ({x}, {y}) from step {SelectedLine + 1} on, " +
@@ -119,25 +116,25 @@ public partial class L2ScriptEditor
                     "use a map character for the scene: \"Add a character…\"). Name it on the Story characters tab.";
     }
 
-    /// <summary>The place a "Send a story character" step sends to, picked on that map (the window of the "Go to
-    /// another map" steps): a character start there (made when none is free on that tile).</summary>
-    public void PickStoryPlace(L2FieldVm f, int map, int x, int y)
+    // the place a "Send a story character" step sends to, picked on that map (the window of the "Go to
+    // another map" steps): a character start there (made if none is free on that tile)
+    public void PickStoryPlace(L2FieldVm field, int map, int x, int y)
     {
-        if (_rom == null || _main == null || f.Step.IsText || f.Step.Op != 0x35) return;
+        if (_rom == null || _main == null || field.Step.IsText || field.Step.Op != 0x35) return;
         try
         {
             var before = L2MapInfo.Records(_rom, map, L2MapInfo.Characters, 8).Count();
             int spot = L2Persistent.StartAt(_rom, map, x, y);
             bool made = L2MapInfo.Records(_rom, map, L2MapInfo.Characters, 8).Count() > before;
             if (made) _main.NotifyRomModified($"Lufia II: map {map:X2} character start {spot}");
-            _placeField = f;
+            _placeField = field;
             _choices.Clear();
             Finish(b => { b[2] = (byte)map; b[3] = (byte)spot; }, $"map {map:X2} start {spot} ({x}, {y})" + (made ? ", a new start" : ""));
         }
         catch (Exception ex) { StageInfo = "Not written: " + ex.Message; }
     }
 
-    /// <summary>Map character <paramref name="charId"/> becomes a story character (<see cref="L2Persistent.MakeStory"/>).</summary>
+    // map character charId becomes a story character (L2Persistent.MakeStory)
     public void MakeStoryCharacter(int charId)
     {
         if (_rom == null || _main == null || _map < 0 || !CanEdit) return;
@@ -151,9 +148,9 @@ public partial class L2ScriptEditor
         var items = ItemsOf(_rom, _map);
         if (_event != null)
         {
-            var e = _event.Entry;
-            int want = e?.Head == L2EventBlocks.TalkList && e.Id == charId ? id : e?.Id ?? -1;
-            _event = _event.IsInit ? items[0] : items.FirstOrDefault(x2 => x2.Entry?.Head == e?.Head && x2.Entry?.Id == want) ?? _event;
+            var entry = _event.Entry;
+            int want = entry?.Head == L2EventBlocks.TalkList && entry.Id == charId ? id : entry?.Id ?? -1;
+            _event = _event.IsInit ? items[0] : items.FirstOrDefault(item => item.Entry?.Head == entry?.Head && item.Entry?.Id == want) ?? _event;
         }
         ReadScript(keep);
         MarkRead();

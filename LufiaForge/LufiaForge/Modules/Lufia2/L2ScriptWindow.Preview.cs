@@ -11,8 +11,8 @@ using Step = LufiaForge.Core.Lufia2.L2AiScripts.Step;
 
 namespace LufiaForge.Modules.Lufia2;
 
-/// <summary>A small preview of the animation the script plays (the picked step's, else the script's first, else the
-/// spell's or IP attack's own), played by the game's own code (<see cref="L2AnimPreview"/>) and looped.</summary>
+// a small looping preview of the animation the script plays (the picked step's, else the script's first, else the
+// spell's or IP attack's own), played by the game's own code (L2AnimPreview)
 public partial class L2ScriptWindow
 {
     private int _previewId = -2, _previewToken, _previewAt;
@@ -21,24 +21,24 @@ public partial class L2ScriptWindow
     private DispatcherTimer? _previewTimer;
     private const int LoopPause = 40;
 
-    /// <summary>The animation a step plays (its animation field), or -1.</summary>
-    private static int AnimationOf(Step s)
+    // the animation a step plays (its animation field), or -1
+    private static int AnimationOf(Step step)
     {
-        var d = s.Def;
-        if (d == null) return -1;
-        for (int i = 0; i < d.Args.Length; i++)
-            if (d.Args[i] == Arg.Animation)
+        var def = step.Def;
+        if (def == null) return -1;
+        for (int i = 0; i < def.Args.Length; i++)
+            if (def.Args[i] == Arg.Animation)
             {
-                int at = L2AiScripts.ArgAt(d, i);
-                if (at < s.Args.Length && s.Args[at] is var v && v is not (0xFF or 0xE0)) return v;
+                int argIndex = L2AiScripts.ArgAt(def, i);
+                if (argIndex < step.Args.Length && step.Args[argIndex] is var value && value is not (0xFF or 0xE0)) return value;
             }
         return -1;
     }
 
     private int AnimationShown()
     {
-        if (Current is { } s && AnimationOf(s) is var a && a >= 0) return a;
-        foreach (var st in _steps) if (AnimationOf(st) is var b && b >= 0) return b;
+        if (Current is { } current && AnimationOf(current) is var animation && animation >= 0) return animation;
+        foreach (var step in _steps) if (AnimationOf(step) is var stepAnimation && stepAnimation >= 0) return stepAnimation;
         try
         {
             if (_kind == Kind.Spell) return L2Magic.SpellAnimation(_rom, _index);
@@ -48,13 +48,13 @@ public partial class L2ScriptWindow
         return -1;
     }
 
-    /// <summary>Plays the animation of the picked step (or the script's) when it is another one than the one shown.</summary>
+    // plays the animation of the picked step (or the script's) if it's a different one than the one shown
     private void UpdatePreview()
     {
         int id = AnimationShown();
         if (id == _previewId || _previewClosed) return;
-        // closing stops it for good: a preview still being made then never starts its timer (which kept the closed
-        // window and its frames alive, drawing at 60 Hz)
+        // closing stops it for good, so a preview still being made never starts its timer (that used to keep the
+        // closed window and its frames alive, drawing at 60 Hz)
         if (!_previewHooked)
         {
             _previewHooked = true;
@@ -68,14 +68,14 @@ public partial class L2ScriptWindow
         PreviewText.Text = $"Animation {id:X2}: {name}. Playing the game's code...";
         int token = ++_previewToken;
         var copy = new RomBuffer(_rom.ToArray(), "preview");
-        var (sprite, pal) = (-1, 0);
+        var (sprite, palette) = (-1, 0);
         if (_kind is Kind.MonsterAttack or Kind.MonsterDefense)
-            try { var m = L2Battle.ReadMonster(_rom, _index); (sprite, pal) = (m.Sprite, m.Palette); } catch (Exception) { }
-        Task.Run(() => L2AnimPreview.Play(copy, id, new L2AnimPreview.Options(0, sprite, pal, MaxFrames: 600))).ContinueWith(t => Dispatcher.BeginInvoke(() =>
+            try { var monster = L2Battle.ReadMonster(_rom, _index); (sprite, palette) = (monster.Sprite, monster.Palette); } catch (Exception) { }
+        Task.Run(() => L2AnimPreview.Play(copy, id, new L2AnimPreview.Options(0, sprite, palette, MaxFrames: 600))).ContinueWith(task => Dispatcher.BeginInvoke(() =>
         {
             if (token != _previewToken || _previewClosed) return;
-            if (t.Exception != null) { PreviewText.Text = $"Animation {id:X2}: {name}. It can't be played here: {t.Exception.InnerException?.Message}"; return; }
-            var (frames, problem) = t.Result;
+            if (task.Exception != null) { PreviewText.Text = $"Animation {id:X2}: {name}. It can't be played here: {task.Exception.InnerException?.Message}"; return; }
+            var (frames, problem) = task.Result;
             _previewFrames = frames; _previewAt = 0;
             PreviewText.Text = $"Animation {id:X2}: {name}, {frames.Count / 60.0:0.0} s" + (problem != null ? $" ({problem})" : "") +
                                ". The heroes and the battle's windows aren't drawn; the Animations page edits it.";
@@ -98,8 +98,8 @@ public partial class L2ScriptWindow
         if (_previewBitmap == null || _previewFrames.Count == 0) { _previewTimer?.Stop(); return; }
         // the last frame stays a moment, then it plays again
         if (_previewAt >= _previewFrames.Count + LoopPause) _previewAt = 0;
-        int f = Math.Min(_previewAt, _previewFrames.Count - 1);
-        _previewBitmap.WritePixels(new Int32Rect(0, 0, SnesRenderer.Width, SnesRenderer.Height), _previewFrames[f], SnesRenderer.Width * 4, 0);
+        int frame = Math.Min(_previewAt, _previewFrames.Count - 1);
+        _previewBitmap.WritePixels(new Int32Rect(0, 0, SnesRenderer.Width, SnesRenderer.Height), _previewFrames[frame], SnesRenderer.Width * 4, 0);
         _previewAt++;
     }
 }

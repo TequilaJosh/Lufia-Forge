@@ -7,10 +7,8 @@ using CheckBox = System.Windows.Controls.CheckBox;
 
 namespace LufiaForge.Modules.Lufia2;
 
-/// <summary>
-/// Monster types (<see cref="L2MonsterTypes"/>): on Monsters, what the monster is (steps in its "when hit" script); on
-/// Items and Spells, what the weapon or spell is strong against (its attack's element). A tick writes at once.
-/// </summary>
+// monster types (L2MonsterTypes). on Monsters it's what the monster is (steps in its "when hit" script), on Items and
+// Spells it's what the weapon or spell is strong against (its attack's element). a tick writes right away
 public sealed class L2TypeCard : Border
 {
     private L2Page? _page;
@@ -22,11 +20,11 @@ public sealed class L2TypeCard : Border
     public L2TypeCard()
     {
         Child = _body;
-        Loaded += (_, _) => { if (Style == null && TryFindResource("GdCard") is Style st) Style = st; };
+        Loaded += (_, _) => { if (Style == null && TryFindResource("GdCard") is Style cardStyle) Style = cardStyle; };
     }
 
-    /// <summary><paramref name="kind"/>: MonsterDefense for what a monster is; Weapon or Spell for what it is strong against.
-    /// <paramref name="kindOf"/> picks the script per record (an item: its weapon or its battle use; null hides the card).</summary>
+    // kind: MonsterDefense for what a monster is, Weapon or Spell for what it's strong against.
+    // kindOf picks the script per record (for an item its weapon or its battle use, null hides the card)
     public void Attach(L2Page page, Kind kind, Func<int, Kind?>? kindOf = null)
     {
         if (_page != null) _page.PropertyChanged -= PageChanged;
@@ -51,10 +49,10 @@ public sealed class L2TypeCard : Border
         int index = _page?.PageIndex ?? -1;
         if (_kindOf != null && rom != null && index >= 0)
         {
-            var k = _kindOf(index);
-            Visibility = k == null ? Visibility.Collapsed : Visibility.Visible;
-            if (k == null) return;
-            _kind = k.Value;
+            var kind = _kindOf(index);
+            Visibility = kind == null ? Visibility.Collapsed : Visibility.Visible;
+            if (kind == null) return;
+            _kind = kind.Value;
         }
         _body.Children.Add(new TextBlock { Text = IsMonster ? "TYPE" : "STRONG AGAINST", Style = TryFindResource("GdSection") as Style });
         if (rom == null || index < 0 || !rom.IsLufia2) return;
@@ -66,23 +64,23 @@ public sealed class L2TypeCard : Border
                 : (_kind == Kind.Weapon ? "As a weapon: " : _kind == Kind.ItemBattle ? "Used in battle: " : "") + "adds the type's element to the attack (a step after the one that sets its element), on top of any it has: a fire sword strong against dragons is both. Undead: light. The first tick also makes the game's dragon, insect, flying and hard shell checks count an attack with other elements (they wanted the element alone).",
         });
         int bits = IsMonster ? L2MonsterTypes.Of(rom, index) : L2MonsterTypes.StrongAgainst(rom, _kind, index);
-        var wrap = new WrapPanel();
+        var typesPanel = new WrapPanel();
         _loading = true;
-        for (int t = 0; t < L2MonsterTypes.Types.Length; t++)
+        for (int i = 0; i < L2MonsterTypes.Types.Length; i++)
         {
-            var def = L2MonsterTypes.Types[t];
-            if (!IsMonster && def.Element == 0) continue;
-            int type = t;
-            var cb = new CheckBox
+            var typeInfo = L2MonsterTypes.Types[i];
+            if (!IsMonster && typeInfo.Element == 0) continue;
+            int type = i;
+            var checkBox = new CheckBox
             {
-                Content = def.Name, IsChecked = (bits & 1 << t) != 0, Style = TryFindResource("GdCheck") as Style,
-                Margin = new Thickness(0, 2, 14, 2), MinWidth = 96, ToolTip = def.Help,
+                Content = typeInfo.Name, IsChecked = (bits & 1 << i) != 0, Style = TryFindResource("GdCheck") as Style,
+                Margin = new Thickness(0, 2, 14, 2), MinWidth = 96, ToolTip = typeInfo.Help,
             };
-            cb.Click += (_, _) => Write(type, cb.IsChecked == true);
-            wrap.Children.Add(cb);
+            checkBox.Click += (_, _) => Write(type, checkBox.IsChecked == true);
+            typesPanel.Children.Add(checkBox);
         }
         _loading = false;
-        _body.Children.Add(wrap);
+        _body.Children.Add(typesPanel);
     }
 
     private void Write(int type, bool on)
@@ -96,7 +94,7 @@ public sealed class L2TypeCard : Border
             string name = L2MonsterTypes.Types[type].Name;
             if (changed) _page!.ReportChange(IsMonster ? $"type {name} {(on ? "on" : "off")}" : $"strong against {name} {(on ? "on" : "off")}");
         }
-        catch (Exception e) { MessageBox.Show(e.Message, "Type", MessageBoxButton.OK, MessageBoxImage.Warning); }
+        catch (Exception ex) { MessageBox.Show(ex.Message, "Type", MessageBoxButton.OK, MessageBoxImage.Warning); }
         Dispatcher.BeginInvoke(Build);
     }
 }
