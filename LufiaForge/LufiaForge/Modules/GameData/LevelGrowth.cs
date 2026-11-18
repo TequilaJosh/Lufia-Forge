@@ -2,21 +2,19 @@ using LufiaForge.Core;
 
 namespace LufiaForge.Modules.GameData;
 
-/// <summary>
-/// How the four main characters level up, reproduced from the game's level-up code ($08:E601):
-///
-/// EXP: each character record holds the EXP of the first level-up (+17) and an increment (+20, both 24-bit).
-/// After every level-up the increment grows by itself shifted right by k, where k is how many of the
-/// character's 5 thresholds (table $08:ED11, compared with growth counter + 1) have been passed; past the last
-/// one it stops growing. The next level-up comes at next + increment.
-///
-/// Stats: a growth counter (record +1, +1 per level-up) picks a band of 16 level-ups (counter / 16) and how far
-/// into it the character is (counter % 16 + 1). The stat is the value at the start of the band plus
-/// (band value x that / 16), plus a random -2..+2 when it isn't 0; it never goes down. The band values
-/// (table $08:EC69: 6 stats x 7 bands x 4 characters) are what a stat gains over each band of 16 level-ups.
-///
-/// Checked against real save data: EXP thresholds and stats match the game exactly at the levels tested.
-/// </summary>
+// how the four main characters level up, copied from the game's level-up code ($08:E601)
+//
+// EXP: each character record holds the EXP of the first level-up (+17) and an increment (+20, both 24-bit).
+// after every level-up the increment grows by itself shifted right by k, where k = how many of the
+// character's 5 thresholds (table $08:ED11, compared with growth counter + 1) have been passed. past the last
+// one it stops growing. the next level-up comes at next + increment
+//
+// stats: a growth counter (record +1, +1 per level-up) picks a band of 16 level-ups (counter / 16) and how far
+// into it the character is (counter % 16 + 1). the stat = the value at the start of the band plus
+// (band value x that / 16), plus a random -2..+2 when it isn't 0, and it never goes down. the band values
+// (table $08:EC69: 6 stats x 7 bands x 4 characters) are what a stat gains over each band of 16 level-ups
+//
+// checked against real save data: EXP thresholds and stats match the game exactly at the levels I tested
 public static class LevelGrowth
 {
     public const int GrowthTable = 0x46C69;      // $08:EC69
@@ -24,14 +22,14 @@ public static class LevelGrowth
     public const int Characters = 4;             // Hero, Lufia, Aguro, Jerin (the others never level up)
     public const int Bands = 7;
     public static readonly string[] StatNames = { "HP", "MP", "STR", "INT", "AGL", "MGR" };
-    /// <summary>Where each growth stat sits in the character record (u16 at +2: HP MP AGL INT STR MGR).</summary>
+    // where each growth stat sits in the character record (u16 at +2: HP MP AGL INT STR MGR)
     public static readonly int[] RecordStatOffset = { 2, 4, 10, 8, 6, 12 };
 
-    public static int GrowthOffset(int stat, int band, int ch) => GrowthTable + stat * 28 + band * 4 + ch;
+    public static int GrowthOffset(int stat, int band, int character) => GrowthTable + stat * 28 + band * 4 + character;
 
     public sealed record Level(int Number, long ExpToReach, int[] Stats);
 
-    /// <summary>Everything that decides one character's levels.</summary>
+    // everything that decides one character's levels
     public sealed class Setup
     {
         public int StartLevel, Counter;
@@ -41,72 +39,72 @@ public static class LevelGrowth
         public int[,] Growth = new int[6, Bands];     // stat, band
     }
 
-    public static Setup Read(RomBuffer rom, int ch)
+    public static Setup Read(RomBuffer rom, int character)
     {
-        int rec = GameDataOffsets.CharacterTable + ch * GameDataOffsets.CharacterStride;
-        var p = new Setup
+        int record = GameDataOffsets.CharacterTable + character * GameDataOffsets.CharacterStride;
+        var setup = new Setup
         {
-            StartLevel = rom.ReadByte(rec), Counter = rom.ReadByte(rec + 1),
-            StartExp = rom.ReadUInt24Le(rec + 14), FirstLevelExp = rom.ReadUInt24Le(rec + 17), Increment = rom.ReadUInt24Le(rec + 20),
+            StartLevel = rom.ReadByte(record), Counter = rom.ReadByte(record + 1),
+            StartExp = rom.ReadUInt24Le(record + 14), FirstLevelExp = rom.ReadUInt24Le(record + 17), Increment = rom.ReadUInt24Le(record + 20),
         };
-        for (int i = 0; i < 5; i++) p.Thresholds[i] = rom.ReadByte(ExpThresholds + ch * 5 + i);
-        for (int s = 0; s < 6; s++)
+        for (int i = 0; i < 5; i++) setup.Thresholds[i] = rom.ReadByte(ExpThresholds + character * 5 + i);
+        for (int stat = 0; stat < 6; stat++)
         {
-            p.StartStats[s] = rom.ReadUInt16Le(rec + RecordStatOffset[s]);
-            for (int b = 0; b < Bands; b++) p.Growth[s, b] = rom.ReadByte(GrowthOffset(s, b, ch));
+            setup.StartStats[stat] = rom.ReadUInt16Le(record + RecordStatOffset[stat]);
+            for (int band = 0; band < Bands; band++) setup.Growth[stat, band] = rom.ReadByte(GrowthOffset(stat, band, character));
         }
-        return p;
+        return setup;
     }
 
-    /// <summary>Writes the growth parts (not the starting stats, which the Characters tab edits).</summary>
-    public static void Write(RomBuffer rom, int ch, Setup p)
+    // writes the growth parts (not the starting stats, the Characters tab edits those)
+    public static void Write(RomBuffer rom, int character, Setup setup)
     {
-        int rec = GameDataOffsets.CharacterTable + ch * GameDataOffsets.CharacterStride;
-        rom.WriteByte(rec + 1, (byte)Math.Clamp(p.Counter, 0, 255));
-        WriteU24(rom, rec + 17, p.FirstLevelExp);
-        WriteU24(rom, rec + 20, p.Increment);
-        for (int i = 0; i < 5; i++) rom.WriteByte(ExpThresholds + ch * 5 + i, (byte)Math.Clamp(p.Thresholds[i], 0, 255));
-        for (int s = 0; s < 6; s++)
-            for (int b = 0; b < Bands; b++) rom.WriteByte(GrowthOffset(s, b, ch), (byte)Math.Clamp(p.Growth[s, b], 0, 255));
+        int record = GameDataOffsets.CharacterTable + character * GameDataOffsets.CharacterStride;
+        rom.WriteByte(record + 1, (byte)Math.Clamp(setup.Counter, 0, 255));
+        WriteU24(rom, record + 17, setup.FirstLevelExp);
+        WriteU24(rom, record + 20, setup.Increment);
+        for (int i = 0; i < 5; i++) rom.WriteByte(ExpThresholds + character * 5 + i, (byte)Math.Clamp(setup.Thresholds[i], 0, 255));
+        for (int stat = 0; stat < 6; stat++)
+            for (int band = 0; band < Bands; band++) rom.WriteByte(GrowthOffset(stat, band, character), (byte)Math.Clamp(setup.Growth[stat, band], 0, 255));
     }
 
-    private static void WriteU24(RomBuffer rom, int at, long v)
+    private static void WriteU24(RomBuffer rom, int offset, long value)
     {
-        v = Math.Clamp(v, 0, 0xFFFFFF);
-        rom.WriteBytes(at, new[] { (byte)v, (byte)(v >> 8), (byte)(v >> 16) });
+        value = Math.Clamp(value, 0, 0xFFFFFF);
+        rom.WriteBytes(offset, new[] { (byte)value, (byte)(value >> 8), (byte)(value >> 16) });
     }
 
-    /// <summary>Levels from the character's starting level up to 99, without the random -2..+2.</summary>
-    public static List<Level> Simulate(Setup p)
+    // levels from the character's starting level up to 99, without the random -2..+2
+    public static List<Level> Simulate(Setup setup)
     {
-        int lv = p.StartLevel, counter = p.Counter;
-        long next = p.FirstLevelExp, inc = p.Increment;
-        var live = (int[])p.StartStats.Clone(); var band = (int[])p.StartStats.Clone();
-        var levels = new List<Level> { new(lv, p.StartExp, (int[])live.Clone()) };
-        while (lv < 99)
+        int level = setup.StartLevel, counter = setup.Counter;
+        long next = setup.FirstLevelExp, increment = setup.Increment;
+        var stats = (int[])setup.StartStats.Clone(); var bandStart = (int[])setup.StartStats.Clone();
+        var levels = new List<Level> { new(level, setup.StartExp, (int[])stats.Clone()) };
+        while (level < 99)
         {
             // stats ($08:E692 / $08:E73D)
-            int row = (counter >> 4) & 0x0F, m = (counter & 0x0F) + 1;
-            for (int s = 0; s < 6; s++)
+            int band = (counter >> 4) & 0x0F, progress = (counter & 0x0F) + 1;
+            for (int stat = 0; stat < 6; stat++)
             {
-                int t = row < Bands ? p.Growth[s, row] : 0;
-                int value = band[s] + ((t * m + 8) >> 4);
-                if (value > live[s]) live[s] = value;
-                if (m == 16) band[s] = value;
+                int gain = band < Bands ? setup.Growth[stat, band] : 0;
+                int value = bandStart[stat] + ((gain * progress + 8) >> 4);
+                if (value > stats[stat]) stats[stat] = value;
+                if (progress == 16) bandStart[stat] = value;
             }
-            levels.Add(new Level(lv + 1, next, (int[])live.Clone()));
-            lv++;
+            levels.Add(new Level(level + 1, next, (int[])stats.Clone()));
+            level++;
             counter = (counter + 1) & 0xFF;
             // EXP ($08:E6B9)
-            int y = 0; long add = inc;
+            int passed = 0; long growth = increment;
             while (true)
             {
-                if (counter + 1 < p.Thresholds[y]) break;
-                if (y == 4) { add = 0; break; }
-                add >>= 1; y++;
+                if (counter + 1 < setup.Thresholds[passed]) break;
+                if (passed == 4) { growth = 0; break; }
+                growth >>= 1; passed++;
             }
-            inc += add;
-            next += inc;
+            increment += growth;
+            next += increment;
         }
         return levels;
     }

@@ -11,11 +11,9 @@ public partial class AilmentFlag : ObservableObject
     [ObservableProperty] private bool _isSet;
 }
 
-/// <summary>
-/// Spell names, MP cost, usage, targeting and the parameters of the spell's main effect.
-/// Spell records are variable-length and have no pointer table, so the effect type itself is
-/// shown read-only: changing it would change the record's size.
-/// </summary>
+// spell names, MP cost, usage, targeting and the numbers of the spell's main effect.
+// spell records have different lengths and no pointer table, so the effect type itself is
+// read-only here: changing it would change the record's size
 public partial class SpellEditorViewModel : GameDataEditorBase
 {
     [ObservableProperty] private int    _selectedIndex = -1;
@@ -45,7 +43,7 @@ public partial class SpellEditorViewModel : GameDataEditorBase
     [ObservableProperty] private string _rawHex = "";
     [ObservableProperty] private string _offsetText = "";
     [ObservableProperty] private string _newSpellText = "";
-    /// <summary>An added spell (38 and up): what it does can be changed with "Works like".</summary>
+    // an added spell (38 and up). what it does can be changed with "Works like"
     [ObservableProperty] private bool _isNewSpell;
     [ObservableProperty] private int _worksLike = 1;
 
@@ -81,57 +79,57 @@ public partial class SpellEditorViewModel : GameDataEditorBase
     {
         if (Ctx == null || SelectedIndex < 0 || SelectedIndex >= Core.Battle.SpellTablePatch.SpellCount(Ctx.Rom)) return;
         var rom = Ctx.Rom;
-        int o   = _recordOffset = Core.Battle.SpellTablePatch.SpellOffset(rom, SelectedIndex);
-        int end = o + Core.Battle.SpellTablePatch.SpellLength(rom, SelectedIndex);
+        int record = _recordOffset = Core.Battle.SpellTablePatch.SpellOffset(rom, SelectedIndex);
+        int end = record + Core.Battle.SpellTablePatch.SpellLength(rom, SelectedIndex);
 
-        Name = Ctx.ReadName(o, GameDataOffsets.SpellNameLen);
+        Name = Ctx.ReadName(record, GameDataOffsets.SpellNameLen);
 
-        int usage = rom.ReadByte(o + 8);
+        int usage = rom.ReadByte(record + 8);
         UsageOptions = GameDataLabels.WithValue(GameDataLabels.SpellUsages, usage);
         Usage = usage;
 
-        int target = rom.ReadByte(o + 10);
+        int target = rom.ReadByte(record + 10);
         TargetOptions = GameDataLabels.WithValue(GameDataLabels.Targets, target);
         Target = target;
 
-        Mp      = rom.ReadByte(o + 11);
-        _effect = rom.ReadByte(o + 20);
+        Mp      = rom.ReadByte(record + 11);
+        _effect = rom.ReadByte(record + 20);
         EffectText = _effect < GameDataLabels.SpellEffects.Length
             ? GameDataLabels.SpellEffects[_effect] : $"{_effect:X2} ?";
 
-        int sub = rom.ReadByte(o + 21);
+        int subType = rom.ReadByte(record + 21);
         IsCure = IsAilment = IsStat = IsElement = IsTeleport = false;
         switch (_effect)
         {
             case 0x01 or 0x05:
                 IsCure = true;
-                SubTypeOptions = GameDataLabels.WithValue(GameDataLabels.CureKinds, sub);
-                Power       = rom.ReadByte(o + 22);
-                RandomPower = rom.ReadByte(o + 23);
+                SubTypeOptions = GameDataLabels.WithValue(GameDataLabels.CureKinds, subType);
+                Power       = rom.ReadByte(record + 22);
+                RandomPower = rom.ReadByte(record + 23);
                 break;
             case 0x06 or 0x0E:
                 IsAilment = true;
-                foreach (var a in Ailments) a.IsSet = (sub & a.Bit) != 0;
-                SuccessRate = rom.ReadByte(o + 22);
+                foreach (var ailment in Ailments) ailment.IsSet = (subType & ailment.Bit) != 0;
+                SuccessRate = rom.ReadByte(record + 22);
                 break;
             case 0x07 or 0x0D:
                 IsStat = true;
-                SubTypeOptions = GameDataLabels.WithValue(GameDataLabels.StatKinds, sub);
-                Power       = rom.ReadByte(o + 22);
-                RandomPower = rom.ReadByte(o + 23);
+                SubTypeOptions = GameDataLabels.WithValue(GameDataLabels.StatKinds, subType);
+                Power       = rom.ReadByte(record + 22);
+                RandomPower = rom.ReadByte(record + 23);
                 break;
             case 0x0B:
                 IsElement = true;
-                SubTypeOptions = GameDataLabels.WithValue(GameDataLabels.Elements, sub);
-                Power       = rom.ReadUInt16Le(o + 22);
-                RandomPower = rom.ReadByte(o + 24);   // (one byte: the effect's 00 end follows at +25)
+                SubTypeOptions = GameDataLabels.WithValue(GameDataLabels.Elements, subType);
+                Power       = rom.ReadUInt16Le(record + 22);
+                RandomPower = rom.ReadByte(record + 24);   // one byte, the effect's 00 end follows at +25
                 break;
             case 0x10:
                 IsTeleport = true;
-                TeleportText = sub < GameDataLabels.TeleportKinds.Length ? GameDataLabels.TeleportKinds[sub] : $"{sub:X2} ?";
+                TeleportText = subType < GameDataLabels.TeleportKinds.Length ? GameDataLabels.TeleportKinds[subType] : $"{subType:X2} ?";
                 break;
         }
-        SubType = sub;
+        SubType = subType;
         HasNoParameters = !(IsCure || IsAilment || IsStat || IsElement || IsTeleport);
 
         IsEditable = SelectedIndex > 0;   // spell 00 is the "Nothing" placeholder
@@ -140,9 +138,9 @@ public partial class SpellEditorViewModel : GameDataEditorBase
         NewSpellText = Core.Battle.SpellTablePatch.IsApplied(rom)
             ? $"{added} new spells, room for {Core.Battle.SpellTablePatch.NewSlots - added} more. A new spell is a copy of the selected one (effect, animation, numbers): rename it and change its numbers."
             : "The game has 56 spells. \"New spell\" adds the \"Up to 128 spells\" patch (Patch Manager) first.";
-        RawHex     = ItemEditorViewModel.ToHex(rom.ReadBytes(o + 8, end - o - 8));
-        OffsetText = $"Record at 0x{o:X6}, {end - o} bytes";
-        LoadAnimation(rom, o);
+        RawHex     = ItemEditorViewModel.ToHex(rom.ReadBytes(record + 8, end - record - 8));
+        OffsetText = $"Record at 0x{record:X6}, {end - record} bytes";
+        LoadAnimation(rom, record);
     }
 
     [RelayCommand]
@@ -176,9 +174,9 @@ public partial class SpellEditorViewModel : GameDataEditorBase
     {
         if (Ctx == null) return;
         var rom = Ctx.Rom;
-        int n = Core.Battle.SpellTablePatch.NewCount(rom);
-        if (n == 0) { Status = "There are no new spells to remove."; return; }
-        int id = Core.Battle.SpellTablePatch.FirstNew + n - 1;
+        int newCount = Core.Battle.SpellTablePatch.NewCount(rom);
+        if (newCount == 0) { Status = "There are no new spells to remove."; return; }
+        int id = Core.Battle.SpellTablePatch.FirstNew + newCount - 1;
         if (System.Windows.MessageBox.Show($"Remove spell {id:X2}? Characters stop learning it and monsters that cast it attack instead.",
                 "Remove spell", System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxImage.Question) != System.Windows.MessageBoxResult.Yes) return;
         Commit($"Spell {id:X2} removed", () => { Core.Battle.SpellTablePatch.RemoveLastSpell(rom); rom.FixChecksum(); }, namesChanged: true);
@@ -190,36 +188,36 @@ public partial class SpellEditorViewModel : GameDataEditorBase
     {
         if (Ctx == null || !IsEditable) return;
         var rom = Ctx.Rom;
-        int o   = _recordOffset;
+        int record = _recordOffset;
         if (Core.DutchLetters.Unwritable(Ctx.Rom, Name) is string badName) { Refuse("Name: " + badName + "."); return; }
-        bool renamed = Name != Ctx.ReadName(o, GameDataOffsets.SpellNameLen);
+        bool renamed = Name != Ctx.ReadName(record, GameDataOffsets.SpellNameLen);
 
         bool written = Commit($"Spell {SelectedIndex:X2}", () =>
         {
-            if (renamed) Ctx.WriteName(o, GameDataOffsets.SpellNameLen, Name);
-            rom.WriteByte(o + 8,  (byte)Usage);
-            rom.WriteByte(o + 10, (byte)Target);
-            rom.WriteByte(o + 11, (byte)Clamp(Mp, 0, 255));
-            rom.WriteByte(o + 9, (byte)Clamp(Animation, 0, Core.Battle.SpellAnimations.Count(rom) - 1));
-            rom.WriteByte(o + 19, (byte)Clamp(Sound, 0, 255));
+            if (renamed) Ctx.WriteName(record, GameDataOffsets.SpellNameLen, Name);
+            rom.WriteByte(record + 8,  (byte)Usage);
+            rom.WriteByte(record + 10, (byte)Target);
+            rom.WriteByte(record + 11, (byte)Clamp(Mp, 0, 255));
+            rom.WriteByte(record + 9, (byte)Clamp(Animation, 0, Core.Battle.SpellAnimations.Count(rom) - 1));
+            rom.WriteByte(record + 19, (byte)Clamp(Sound, 0, 255));
 
             if (IsCure || IsStat)
             {
-                rom.WriteByte(o + 21, (byte)SubType);
-                rom.WriteByte(o + 22, (byte)Clamp(Power, 0, 255));
-                rom.WriteByte(o + 23, (byte)Clamp(RandomPower, 0, 255));
+                rom.WriteByte(record + 21, (byte)SubType);
+                rom.WriteByte(record + 22, (byte)Clamp(Power, 0, 255));
+                rom.WriteByte(record + 23, (byte)Clamp(RandomPower, 0, 255));
             }
             else if (IsAilment)
             {
                 int bits = Ailments.Where(a => a.IsSet).Sum(a => a.Bit);
-                rom.WriteByte(o + 21, (byte)bits);
-                rom.WriteByte(o + 22, (byte)Clamp(SuccessRate, 0, 255));
+                rom.WriteByte(record + 21, (byte)bits);
+                rom.WriteByte(record + 22, (byte)Clamp(SuccessRate, 0, 255));
             }
             else if (IsElement)
             {
-                rom.WriteByte(o + 21, (byte)SubType);
-                rom.WriteUInt16Le(o + 22, (ushort)Clamp(Power, 0, 0xFFFF));
-                rom.WriteByte(o + 24, (byte)Clamp(RandomPower, 0, 255));
+                rom.WriteByte(record + 21, (byte)SubType);
+                rom.WriteUInt16Le(record + 22, (ushort)Clamp(Power, 0, 0xFFFF));
+                rom.WriteByte(record + 24, (byte)Clamp(RandomPower, 0, 255));
             }
         }, namesChanged: renamed);
 

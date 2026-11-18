@@ -6,18 +6,18 @@ using LufiaForge.Core.Maps;
 
 namespace LufiaForge.Modules.GameData;
 
-/// <summary>New items: a free item number (one the game never uses) becomes a copy of the selected item, stored in the
-/// item bank (see <see cref="ItemTable"/>).</summary>
+// new items: a free item number (one the game never uses) becomes a copy of the selected item, stored in the
+// item bank (see ItemTable)
 public partial class ItemEditorViewModel
 {
     [ObservableProperty] private string _newItemNote = "";
 
-    /// <summary>Items the game hands out somewhere: shops, chests and hidden items, monster drops, events.</summary>
+    // items the game hands out somewhere: shops, chests and hidden items, monster drops, events
     public static HashSet<int> ReferencedItems(RomBuffer rom)
     {
         var set = new HashSet<int>();
-        foreach (int s in ShopTable.Ids(rom)) set.UnionWith(ShopTable.Read(rom, s).Items);
-        for (int m = 0, n = MonsterTable.Count(rom); m < n; m++) set.Add(rom.ReadByte(MonsterTable.RecordOffset(rom, m) + 32));
+        foreach (int shop in ShopTable.Ids(rom)) set.UnionWith(ShopTable.Read(rom, shop).Items);
+        for (int monster = 0, count = MonsterTable.Count(rom); monster < count; monster++) set.Add(rom.ReadByte(MonsterTable.RecordOffset(rom, monster) + 32));
         foreach (var map in MapCatalog.Scan(rom))
         {
             try { foreach (var spot in MapSetupScript.ReadSpots(rom, map.MapId)) if (spot.Kind is SpotKind.Chest or SpotKind.Hidden) set.Add(spot.Low); } catch { }
@@ -25,9 +25,9 @@ public partial class ItemEditorViewModel
             {
                 try
                 {
-                    var s = EventScript.Load(rom, map.MapId, ev);
-                    if (s == null) continue;
-                    foreach (var o in s.Ops) if (!o.IsText && o.Bytes.Length >= 2 && o.Bytes[0] == 0x3E) set.Add(o.Bytes[1]);
+                    var script = EventScript.Load(rom, map.MapId, ev);
+                    if (script == null) continue;
+                    foreach (var op in script.Ops) if (!op.IsText && op.Bytes.Length >= 2 && op.Bytes[0] == 0x3E) set.Add(op.Bytes[1]);
                 }
                 catch { }
             }
@@ -35,7 +35,7 @@ public partial class ItemEditorViewModel
         return set;
     }
 
-    /// <summary>(Cheap: the scan of shops, chests and events for free item numbers runs only when New item is clicked.)</summary>
+    // this one is cheap. the scan of shops, chests and events for free item numbers only runs when New item is clicked
     private void RefreshNewItemNote()
     {
         if (Ctx == null) return;

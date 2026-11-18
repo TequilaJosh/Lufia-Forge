@@ -9,8 +9,8 @@ using System.Windows.Media.Imaging;
 
 namespace LufiaForge.Modules.GameData;
 
-/// <summary>The spell's battle animation (+9) and sound (+19): picked from a list, its sheet shown, exported, and
-/// new animations made from imported sheets (see <see cref="SpellAnimations"/>).</summary>
+// the spell's battle animation (+9) and sound (+19): picked from a list, its sheet shown and exported, and
+// new animations made from imported sheets (see SpellAnimations)
 public partial class SpellEditorViewModel
 {
     public ObservableCollection<string> AnimationChoices { get; } = new();
@@ -30,27 +30,27 @@ public partial class SpellEditorViewModel
     private void FillAnimations(RomBuffer rom)
     {
         var users = new Dictionary<int, List<string>>();
-        for (int sp = 1, n = SpellTablePatch.SpellCount(rom); sp < n; sp++)
+        for (int spell = 1, count = SpellTablePatch.SpellCount(rom); spell < count; spell++)
         {
-            int a = rom.ReadByte(SpellTablePatch.SpellOffset(rom, sp) + 9);
-            if (!users.TryGetValue(a, out var l)) users[a] = l = new();
-            l.Add(Ctx!.ReadName(SpellTablePatch.SpellOffset(rom, sp), GameDataOffsets.SpellNameLen).Replace('@', ' ').Trim());
+            int animation = rom.ReadByte(SpellTablePatch.SpellOffset(rom, spell) + 9);
+            if (!users.TryGetValue(animation, out var names)) users[animation] = names = new();
+            names.Add(Ctx!.ReadName(SpellTablePatch.SpellOffset(rom, spell), GameDataOffsets.SpellNameLen).Replace('@', ' ').Trim());
         }
         AnimationChoices.Clear();
-        for (int a = 0, n = SpellAnimations.Count(rom); a < n; a++)
+        for (int animation = 0, count = SpellAnimations.Count(rom); animation < count; animation++)
         {
-            string who = a == 0 ? "none" : users.TryGetValue(a, out var l) ? string.Join(", ", l.Take(3)) + (l.Count > 3 ? "..." : "")
-                       : a >= SpellAnimations.OriginalCount ? "new" : a <= 3 ? "weapon hit" : "items / other";
-            AnimationChoices.Add($"{a:X2}  {who}");
+            string who = animation == 0 ? "none" : users.TryGetValue(animation, out var names) ? string.Join(", ", names.Take(3)) + (names.Count > 3 ? "..." : "")
+                       : animation >= SpellAnimations.OriginalCount ? "new" : animation <= 3 ? "weapon hit" : "items / other";
+            AnimationChoices.Add($"{animation:X2}  {who}");
         }
     }
 
-    private void LoadAnimation(RomBuffer rom, int o)
+    private void LoadAnimation(RomBuffer rom, int record)
     {
         _animLoading = true;
         FillAnimations(rom);
-        Animation = rom.ReadByte(o + 9);
-        Sound = rom.ReadByte(o + 19);
+        Animation = rom.ReadByte(record + 9);
+        Sound = rom.ReadByte(record + 19);
         _animLoading = false;
         DrawAnimation();
     }
@@ -63,9 +63,9 @@ public partial class SpellEditorViewModel
         if (Ctx == null || Animation <= 0 || Animation >= SpellAnimations.Count(Ctx.Rom)) { AnimationInfo = Animation == 0 ? "No animation." : ""; if (_pendingSheets.Count == 0) StartPreview(); return; }
         try
         {
-            var (idx, pal) = SpellAnimations.Sheet(Ctx.Rom, Animation);
-            var px = idx.Select(i => pal[i]).ToArray();
-            var bmp = BitmapSource.Create(SpellAnimations.SheetWidth, SpellAnimations.SheetHeight, 96, 96, PixelFormats.Bgra32, null, px, SpellAnimations.SheetWidth * 4);
+            var (indices, palette) = SpellAnimations.Sheet(Ctx.Rom, Animation);
+            var pixels = indices.Select(i => palette[i]).ToArray();
+            var bmp = BitmapSource.Create(SpellAnimations.SheetWidth, SpellAnimations.SheetHeight, 96, 96, PixelFormats.Bgra32, null, pixels, SpellAnimations.SheetWidth * 4);
             bmp.Freeze();
             AnimationSheet = bmp;
             var info = SpellAnimations.Describe(Ctx.Rom, Animation);
@@ -87,15 +87,15 @@ public partial class SpellEditorViewModel
 
     public void ExportAnimationTo(string path)
     {
-        var (idx, pal) = SpellAnimations.Sheet(Ctx!.Rom, Animation);
-        IndexedPng.Save(path, SpellAnimations.SheetWidth, SpellAnimations.SheetHeight, idx, pal, firstTransparent: true);
+        var (indices, palette) = SpellAnimations.Sheet(Ctx!.Rom, Animation);
+        IndexedPng.Save(path, SpellAnimations.SheetWidth, SpellAnimations.SheetHeight, indices, palette, firstTransparent: true);
         Status = $"Saved {path}: 128 x 64, 8 x 4 cells of 16 x 16, 16 colours (colour 0 = see-through).";
     }
 
-    // ── a new animation: up to three parts (start, middle repeated, end), each from a picture; shown and played,
-    //    then made ──
+    // a new animation: up to three parts (start, middle repeated, end), each from a picture. shown and played,
+    // then made
 
-    /// <summary>One part of a new animation: its picture and how it's cut into frames.</summary>
+    // one part of a new animation: its picture and how it's cut into frames
     private sealed class Part
     {
         public string? Path;
@@ -134,8 +134,8 @@ public partial class SpellEditorViewModel
         if (dlg.ShowDialog() == true) LoadPending(dlg.FileName);
     }
 
-    /// <summary>Reads a picture for the selected part: finds its frames, shows the sheet made from all parts with a grid
-    /// and plays the whole animation; nothing is written until <see cref="MakeAnimation"/>.</summary>
+    // reads a picture for the selected part: finds its frames, shows the sheet made from all parts with a grid
+    // and plays the whole animation. nothing gets written until MakeAnimation
     public void LoadPending(string path)
     {
         var part = _parts[SelectedPart];
@@ -144,7 +144,7 @@ public partial class SpellEditorViewModel
         Combine();
     }
 
-    /// <summary>For tests: a picture for a given part (0 start, 1 middle, 2 end).</summary>
+    // for tests: a picture for a given part (0 start, 1 middle, 2 end)
     public void LoadPart(int part, string path) { SelectedPart = part; LoadPending(path); }
 
     private void CutPart(Part part)
@@ -156,12 +156,12 @@ public partial class SpellEditorViewModel
         {
             var (argb, w, h) = LoadPicture(part.Path);
             int count = part.ManualCount ? part.Count : 0;
-            var r = part.ManualGrid ? SpellAnimationSheet.Prepare(argb, w, h, part.GridW, part.GridH, count)
+            var prepared = part.ManualGrid ? SpellAnimationSheet.Prepare(argb, w, h, part.GridW, part.GridH, count)
                                     : SpellAnimationSheet.Prepare(argb, w, h, 0, 0, count);
-            part.Frames = r.FrameImages;
-            if (!part.ManualGrid) { part.GridW = r.FrameImages.Max(f => f.W); part.GridH = r.FrameImages.Max(f => f.H); }
-            part.Count = r.Frames;
-            part.Info = $"{name}: " + string.Join(" ", r.Notes);
+            part.Frames = prepared.FrameImages;
+            if (!part.ManualGrid) { part.GridW = prepared.FrameImages.Max(f => f.W); part.GridH = prepared.FrameImages.Max(f => f.H); }
+            part.Count = prepared.Frames;
+            part.Info = $"{name}: " + string.Join(" ", prepared.Notes);
         }
         catch (Exception ex)
         {
@@ -178,24 +178,24 @@ public partial class SpellEditorViewModel
         _settingFrames = false;
     }
 
-    /// <summary>The parts' frames: on one sheet when they fit (start once, middle repeated, end once), else each part on
-    /// a sheet of its own (the animation switches sheets between them); one frame size for all.</summary>
+    // the parts' frames: on one sheet when they fit (start once, middle repeated, end once), else each part on
+    // a sheet of its own (the animation switches sheets between them). one frame size for all
     private void Combine()
     {
         _pendingSheets = new(); PendingSheet = null; HasPending = false;
         var used = Enumerable.Range(0, 3).Where(i => _parts[i].Frames.Count > 0).ToList();
         PartsSummary = string.Join("   ", Enumerable.Range(0, 3).Select(i =>
             $"{PartNames[i]}: " + (_parts[i].Path == null ? "none" : _parts[i].Error ? "can't be used" : $"{_parts[i].Frames.Count} frames" + (i == 1 && MiddleRepeats > 1 ? $" x {MiddleRepeats}" : ""))));
-        var sel = _parts[SelectedPart];
-        string partText = sel.Path == null ? $"No picture for the {PartNames[SelectedPart].ToLower()} yet." : sel.Info;
+        var selected = _parts[SelectedPart];
+        string partText = selected.Path == null ? $"No picture for the {PartNames[SelectedPart].ToLower()} yet." : selected.Info;
         if (used.Count == 0)
         {
             PendingInfo = partText;
-            PendingIsError = sel.Error;
+            PendingIsError = selected.Error;
             StartPreview();
             return;
         }
-        int Reps(int i) => i == 1 ? Math.Clamp(MiddleRepeats, 1, 50) : 1;
+        int Repeats(int part) => part == 1 ? Math.Clamp(MiddleRepeats, 1, 50) : 1;
         int minW = used.Max(i => _parts[i].Frames.Max(f => f.W)), minH = used.Max(i => _parts[i].Frames.Max(f => f.H));
         string how;
         try
@@ -203,11 +203,11 @@ public partial class SpellEditorViewModel
             // all on one sheet
             var frames = new List<SpellAnimationSheet.Frame>();
             var order = new List<int>();
-            foreach (int i in used)
+            foreach (int part in used)
             {
                 int first = frames.Count;
-                frames.AddRange(_parts[i].Frames);
-                for (int k = 0; k < Reps(i); k++) order.AddRange(Enumerable.Range(first, _parts[i].Frames.Count));
+                frames.AddRange(_parts[part].Frames);
+                for (int k = 0; k < Repeats(part); k++) order.AddRange(Enumerable.Range(first, _parts[part].Frames.Count));
             }
             _pendingSheets.Add((SpellAnimationSheet.Pack(frames, null, minW, minH), order));
             how = "all on one sheet";
@@ -217,19 +217,19 @@ public partial class SpellEditorViewModel
             // a sheet per part
             try
             {
-                foreach (int i in used)
+                foreach (int part in used)
                 {
-                    var r = SpellAnimationSheet.Pack(_parts[i].Frames, null, minW, minH);
+                    var packed = SpellAnimationSheet.Pack(_parts[part].Frames, null, minW, minH);
                     var order = new List<int>();
-                    for (int k = 0; k < Reps(i); k++) order.AddRange(Enumerable.Range(0, _parts[i].Frames.Count));
-                    _pendingSheets.Add((r, order));
+                    for (int k = 0; k < Repeats(part); k++) order.AddRange(Enumerable.Range(0, _parts[part].Frames.Count));
+                    _pendingSheets.Add((packed, order));
                 }
                 how = $"too many for one sheet, so each part has its own ({used.Count} sheets; the animation switches between them)";
             }
             catch (Exception ex)
             {
                 _pendingSheets = new();
-                PendingInfo = (sel.Error ? partText + " " : "") + "The parts can't be used: " + ex.Message;
+                PendingInfo = (selected.Error ? partText + " " : "") + "The parts can't be used: " + ex.Message;
                 PendingIsError = true;
                 StartPreview();
                 return;
@@ -238,36 +238,36 @@ public partial class SpellEditorViewModel
         catch (Exception ex)
         {
             _pendingSheets = new();
-            PendingInfo = (sel.Error ? partText + " " : "") + "It can't be used: " + ex.Message;
+            PendingInfo = (selected.Error ? partText + " " : "") + "It can't be used: " + ex.Message;
             PendingIsError = true;
             StartPreview();
             return;
         }
-        var first0 = _pendingSheets[0].Sheet;
+        var firstSheet = _pendingSheets[0].Sheet;
         int pictures = _pendingSheets.Sum(p => p.Order.Count);
         PendingSheet = Stack(_pendingSheets.Select(p => SheetWithGrid(p.Sheet.Indices, p.Sheet.Palette, p.Sheet.FrameWidth, p.Sheet.FrameHeight, p.Sheet.Frames)).ToList());
-        PendingInfo = partText + $" Frames of {first0.FrameWidth} x {first0.FrameHeight}, {how}; {pictures} pictures played." +
+        PendingInfo = partText + $" Frames of {firstSheet.FrameWidth} x {firstSheet.FrameHeight}, {how}; {pictures} pictures played." +
                       " Click Make the animation to give it to this spell.";
-        PendingIsError = sel.Error;
+        PendingIsError = selected.Error;
         HasPending = true;
         StartPreview();
     }
 
-    /// <summary>Sheets one under the other, a gap between.</summary>
+    // sheets one under the other, with a gap between
     private static BitmapSource Stack(List<BitmapSource> sheets)
     {
         if (sheets.Count == 1) return sheets[0];
         int w = sheets.Max(b => b.PixelWidth), h = sheets.Sum(b => b.PixelHeight) + 8 * (sheets.Count - 1);
-        var px = new uint[w * h];
+        var pixels = new uint[w * h];
         int y0 = 0;
-        foreach (var b in sheets)
+        foreach (var sheet in sheets)
         {
-            var part = new uint[b.PixelWidth * b.PixelHeight];
-            b.CopyPixels(part, b.PixelWidth * 4, 0);
-            for (int y = 0; y < b.PixelHeight; y++) Array.Copy(part, y * b.PixelWidth, px, (y0 + y) * w, b.PixelWidth);
-            y0 += b.PixelHeight + 8;
+            var sheetPixels = new uint[sheet.PixelWidth * sheet.PixelHeight];
+            sheet.CopyPixels(sheetPixels, sheet.PixelWidth * 4, 0);
+            for (int y = 0; y < sheet.PixelHeight; y++) Array.Copy(sheetPixels, y * sheet.PixelWidth, pixels, (y0 + y) * w, sheet.PixelWidth);
+            y0 += sheet.PixelHeight + 8;
         }
-        var bmp = BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgra32, null, px, w * 4);
+        var bmp = BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgra32, null, pixels, w * 4);
         bmp.Freeze();
         return bmp;
     }
@@ -280,7 +280,7 @@ public partial class SpellEditorViewModel
 
     partial void OnMiddleRepeatsChanged(int value) => Combine();
 
-    // a new frame size: that grid for the part, all its frames; a frame count: only that many
+    // a new frame size = that grid for the part, all its frames. a frame count = only that many
     partial void OnFrameWidthChanged(int value) => FieldsChanged(grid: true);
     partial void OnFrameHeightChanged(int value) => FieldsChanged(grid: true);
     partial void OnFrameCountChanged(int value) => FieldsChanged(grid: false);
@@ -297,7 +297,7 @@ public partial class SpellEditorViewModel
 
     partial void OnStepFramesChanged(int value) => StartPreview();
 
-    /// <summary>Takes the selected part's picture out.</summary>
+    // takes the selected part's picture out
     [RelayCommand]
     private void ClearPending()
     {
@@ -306,42 +306,42 @@ public partial class SpellEditorViewModel
         Combine();
     }
 
-    /// <summary>The picture as 0xAARRGGBB pixels (an indexed PNG's colour 0 is see-through).</summary>
+    // the picture as 0xAARRGGBB pixels (an indexed PNG's colour 0 is see-through)
     private static (uint[] Argb, int W, int H) LoadPicture(string path)
     {
         if (IndexedPng.TryLoad(path) is { } png)
             return (png.Indices.Select(i => i == 0 ? 0u : png.Palette[i] | 0xFF000000u).ToArray(), png.Width, png.Height);
-        var src = new FormatConvertedBitmap(new BitmapImage(new Uri(path)), PixelFormats.Bgra32, null, 0);
-        var px = new uint[src.PixelWidth * src.PixelHeight];
-        src.CopyPixels(px, src.PixelWidth * 4, 0);
-        return (px, src.PixelWidth, src.PixelHeight);
+        var source = new FormatConvertedBitmap(new BitmapImage(new Uri(path)), PixelFormats.Bgra32, null, 0);
+        var pixels = new uint[source.PixelWidth * source.PixelHeight];
+        source.CopyPixels(pixels, source.PixelWidth * 4, 0);
+        return (pixels, source.PixelWidth, source.PixelHeight);
     }
 
-    /// <summary>The sheet at 2x with its frames outlined (the ones used in gold, the rest dim).</summary>
-    private static BitmapSource SheetWithGrid(byte[] idx, uint[] pal, int fw, int fh, int frames)
+    // the sheet at 2x with its frames outlined (the used ones in gold, the rest dim)
+    private static BitmapSource SheetWithGrid(byte[] indices, uint[] palette, int frameWidth, int frameHeight, int frames)
     {
         const int S = 2, W = SpellAnimations.SheetWidth * S, H = SpellAnimations.SheetHeight * S;
-        var px = new uint[W * H];
+        var pixels = new uint[W * H];
         for (int y = 0; y < H; y++) for (int x = 0; x < W; x++)
         {
-            byte i = idx[y / S * SpellAnimations.SheetWidth + x / S];
-            px[y * W + x] = i == 0 ? 0xFF1C1430u : pal[i];
+            byte i = indices[y / S * SpellAnimations.SheetWidth + x / S];
+            pixels[y * W + x] = i == 0 ? 0xFF1C1430u : palette[i];
         }
-        int perRow = 8 / (fw / 16), rows = 4 / (fh / 16);
-        for (int f = 0; f < perRow * rows; f++)
+        int perRow = 8 / (frameWidth / 16), rows = 4 / (frameHeight / 16);
+        for (int frame = 0; frame < perRow * rows; frame++)
         {
-            uint c = f < frames ? 0xFFF0C040u : 0xFF4A3E60u;
-            int x0 = f % perRow * fw * S, y0 = f / perRow * fh * S, x1 = x0 + fw * S - 1, y1 = y0 + fh * S - 1;
-            for (int x = x0; x <= x1; x++) { px[y0 * W + x] = c; px[y1 * W + x] = c; }
-            for (int y = y0; y <= y1; y++) { px[y * W + x0] = c; px[y * W + x1] = c; }
+            uint color = frame < frames ? 0xFFF0C040u : 0xFF4A3E60u;
+            int x0 = frame % perRow * frameWidth * S, y0 = frame / perRow * frameHeight * S, x1 = x0 + frameWidth * S - 1, y1 = y0 + frameHeight * S - 1;
+            for (int x = x0; x <= x1; x++) { pixels[y0 * W + x] = color; pixels[y1 * W + x] = color; }
+            for (int y = y0; y <= y1; y++) { pixels[y * W + x0] = color; pixels[y * W + x1] = color; }
         }
-        var bmp = BitmapSource.Create(W, H, 96, 96, PixelFormats.Bgra32, null, px, W * 4);
+        var bmp = BitmapSource.Create(W, H, 96, 96, PixelFormats.Bgra32, null, pixels, W * 4);
         bmp.Freeze();
         return bmp;
     }
 
-    /// <summary>Plays the animation waiting to be made (all its parts in order), else this spell's animation when
-    /// Lufia Forge made it (the game's own move and combine their pictures in battle: shown as their sheet only).</summary>
+    // plays the animation waiting to be made (all its parts in order), else this spell's animation if
+    // Lufia Forge made it. the game's own ones move and combine their pictures in battle, so they only show as their sheet
     private void StartPreview()
     {
         _previewTimer?.Stop();
@@ -349,27 +349,27 @@ public partial class SpellEditorViewModel
         PreviewFrame = null;
         if (Ctx == null) return;
         // pictures to play: (sheet colour numbers, palette, x, y)
-        var pics = new List<(byte[] Idx, uint[] Pal, int X, int Y)>();
-        int fw, fh, step;
+        var pictures = new List<(byte[] Idx, uint[] Pal, int X, int Y)>();
+        int frameWidth, frameHeight, step;
         if (_pendingSheets.Count > 0)
         {
-            var f0 = _pendingSheets[0].Sheet;
-            fw = f0.FrameWidth; fh = f0.FrameHeight; step = StepFrames;
-            int perRow = 8 / (fw / 16);
+            var firstSheet = _pendingSheets[0].Sheet;
+            frameWidth = firstSheet.FrameWidth; frameHeight = firstSheet.FrameHeight; step = StepFrames;
+            int perRow = 8 / (frameWidth / 16);
             foreach (var (sheet, order) in _pendingSheets)
-                foreach (int f in order) pics.Add((sheet.Indices, sheet.Palette, f % perRow * fw, f / perRow * fh));
+                foreach (int frame in order) pictures.Add((sheet.Indices, sheet.Palette, frame % perRow * frameWidth, frame / perRow * frameHeight));
             PreviewInfo = "The new animation (not made yet).";
         }
         else if (Animation > 0 && SpellAnimations.MadeFrames(Ctx.Rom, Animation) is { } made)
         {
-            fw = made.Width; fh = made.Height; step = made.Step;
+            frameWidth = made.Width; frameHeight = made.Height; step = made.Step;
             var sheets = new Dictionary<int, (byte[], uint[])>();
-            foreach (var (res, x, y) in made.Frames)
+            foreach (var (resource, x, y) in made.Frames)
             {
-                if (!sheets.TryGetValue(res, out var sh)) sheets[res] = sh = SpellAnimations.SheetOfResource(Ctx.Rom, res);
-                pics.Add((sh.Item1, sh.Item2, x, y));
+                if (!sheets.TryGetValue(resource, out var found)) sheets[resource] = found = SpellAnimations.SheetOfResource(Ctx.Rom, resource);
+                pictures.Add((found.Item1, found.Item2, x, y));
             }
-            PreviewInfo = $"Animation {Animation:X2}: {pics.Count} pictures of {fw} x {fh}" + (sheets.Count > 1 ? $" from {sheets.Count} sheets." : ".");
+            PreviewInfo = $"Animation {Animation:X2}: {pictures.Count} pictures of {frameWidth} x {frameHeight}" + (sheets.Count > 1 ? $" from {sheets.Count} sheets." : ".");
         }
         else
         {
@@ -377,21 +377,21 @@ public partial class SpellEditorViewModel
             return;
         }
         const int S = 3;
-        var made2 = new Dictionary<(byte[], int, int), BitmapSource>();
-        foreach (var (idx, pal, cx, cy) in pics)
+        var bitmaps = new Dictionary<(byte[], int, int), BitmapSource>();
+        foreach (var (indices, palette, cx, cy) in pictures)
         {
-            if (!made2.TryGetValue((idx, cx, cy), out var bmp))
+            if (!bitmaps.TryGetValue((indices, cx, cy), out var bmp))
             {
-                var px = new uint[fw * S * fh * S];
-                for (int y = 0; y < fh * S; y++) for (int x = 0; x < fw * S; x++)
+                var pixels = new uint[frameWidth * S * frameHeight * S];
+                for (int y = 0; y < frameHeight * S; y++) for (int x = 0; x < frameWidth * S; x++)
                 {
                     int sx = cx + x / S, sy = cy + y / S;
-                    byte i = sx < SpellAnimations.SheetWidth && sy < SpellAnimations.SheetHeight ? idx[sy * SpellAnimations.SheetWidth + sx] : (byte)0;
-                    px[y * fw * S + x] = i == 0 ? 0u : pal[i];
+                    byte i = sx < SpellAnimations.SheetWidth && sy < SpellAnimations.SheetHeight ? indices[sy * SpellAnimations.SheetWidth + sx] : (byte)0;
+                    pixels[y * frameWidth * S + x] = i == 0 ? 0u : palette[i];
                 }
-                bmp = BitmapSource.Create(fw * S, fh * S, 96, 96, PixelFormats.Bgra32, null, px, fw * S * 4);
+                bmp = BitmapSource.Create(frameWidth * S, frameHeight * S, 96, 96, PixelFormats.Bgra32, null, pixels, frameWidth * S * 4);
                 bmp.Freeze();
-                made2[(idx, cx, cy)] = bmp;
+                bitmaps[(indices, cx, cy)] = bmp;
             }
             _previewFrames.Add(bmp);
         }
@@ -411,7 +411,7 @@ public partial class SpellEditorViewModel
         _previewTimer.Start();
     }
 
-    /// <summary>Makes the new animation from the parts' pictures and gives it to the selected spell.</summary>
+    // makes the new animation from the parts' pictures and gives it to the selected spell
     [RelayCommand]
     private void MakeAnimation()
     {
@@ -419,8 +419,8 @@ public partial class SpellEditorViewModel
         uint? flash = null;
         if (!string.IsNullOrWhiteSpace(FlashColour))
         {
-            var t = FlashColour.Trim().TrimStart('#');
-            if (t.Length != 6 || !uint.TryParse(t, System.Globalization.NumberStyles.HexNumber, null, out uint rgb))
+            var digits = FlashColour.Trim().TrimStart('#');
+            if (digits.Length != 6 || !uint.TryParse(digits, System.Globalization.NumberStyles.HexNumber, null, out uint rgb))
             {
                 PendingInfo = "Flash colour: a web colour like #FFE080, or empty for none.";
                 PendingIsError = true;
@@ -428,17 +428,17 @@ public partial class SpellEditorViewModel
             }
             flash = 0xFF000000u | rgb;
         }
-        int sp = SelectedIndex, made = -1;
+        int spell = SelectedIndex, made = -1;
         var sheets = _pendingSheets.ToList();
-        var p = sheets[0].Sheet;
+        var firstSheet = sheets[0].Sheet;
         int pictures = sheets.Sum(x => x.Order.Count);
         var parts = sheets.Select(x => (x.Sheet.Indices, x.Sheet.Palette, (IReadOnlyList<int>)x.Order)).ToList();
         try
         {
-            Commit($"Spell {sp:X2} animation", () =>
+            Commit($"Spell {spell:X2} animation", () =>
             {
-                made = SpellAnimations.ImportParts(Ctx.Rom, parts, p.FrameWidth, p.FrameHeight, StepFrames, FromBottom, flash);
-                Ctx.Rom.WriteByte(SpellTablePatch.SpellOffset(Ctx.Rom, sp) + 9, (byte)made);
+                made = SpellAnimations.ImportParts(Ctx.Rom, parts, firstSheet.FrameWidth, firstSheet.FrameHeight, StepFrames, FromBottom, flash);
+                Ctx.Rom.WriteByte(SpellTablePatch.SpellOffset(Ctx.Rom, spell) + 9, (byte)made);
             });
         }
         catch (Exception ex) { PendingInfo = "Can't make it: " + ex.Message; PendingIsError = true; return; }
@@ -447,12 +447,12 @@ public partial class SpellEditorViewModel
         _pendingSheets = new(); PendingSheet = null; HasPending = false;
         LoadSelected();
         PartsSummary = "";
-        PendingInfo = $"Animation {made:X2} made ({pictures} pictures of {p.FrameWidth} x {p.FrameHeight}" + (sheets.Count > 1 ? $", {sheets.Count} sheets" : "") + ") and given to this spell. It plays above. Unsaved.";
+        PendingInfo = $"Animation {made:X2} made ({pictures} pictures of {firstSheet.FrameWidth} x {firstSheet.FrameHeight}" + (sheets.Count > 1 ? $", {sheets.Count} sheets" : "") + ") and given to this spell. It plays above. Unsaved.";
         PendingIsError = false;
         Status = PendingInfo;
     }
 
-    /// <summary>For tests: choose a picture (the middle) and make the animation in one go.</summary>
+    // for tests: pick a picture (the middle) and make the animation in one go
     public void ImportAnimationFrom(string path)
     {
         LoadPart(1, path);

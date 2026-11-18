@@ -7,7 +7,7 @@ using System.Windows.Threading;
 
 namespace LufiaForge.Modules.GameData;
 
-/// <summary>A note in the editor: start and length in ticks (48 per quarter note), MIDI-style pitch, velocity 1-127.</summary>
+// a note in the editor: start and length in ticks (48 per quarter note), MIDI style pitch, velocity 1-127
 public sealed class NoteItem
 {
     public int Tick, Length, Pitch, Velocity;
@@ -15,14 +15,14 @@ public sealed class NoteItem
     public int End => Tick + Length;
 }
 
-/// <summary>One of the 8 game channels: its notes, its other events (instrument, volume, pan, effects) and its loop.</summary>
+// one of the game's 8 channels: its notes, its other events (instrument, volume, pan, effects) and its loop
 public sealed class EditChannel
 {
     public List<NoteItem> Notes = new();
     public List<SongCodec.Event> Others = new();
-    /// <summary>Where the channel jumps back to, and where it does; null = no repeat.</summary>
+    // where the channel jumps back to, and where it jumps. null = no repeat
     public int? LoopStart, LoopEnd;
-    /// <summary>Where the song stops (instead of repeating).</summary>
+    // where the song stops (instead of repeating)
     public int? EndTick;
     public bool Drum;
     public bool Used => Notes.Count > 0 || Others.Count > 0;
@@ -33,32 +33,32 @@ public sealed class EditChannel
     };
 }
 
-/// <summary>A channel button above the piano roll.</summary>
+// a channel button above the piano roll
 public partial class ChannelTab : ObservableObject
 {
     [ObservableProperty] private string _label = "";
 }
 
-/// <summary>A row of the channel-events list.</summary>
+// a row of the channel events list
 public sealed record OtherRow(SongCodec.Event Event, string When, string What);
 
-/// <summary>What the note editor needs from the page it sits on: the game's song format, playing, writing.</summary>
+// what the note editor needs from the page it sits on: the game's song format, playing, writing
 public interface ISongEditorHost
 {
     string Status { get; set; }
-    /// <summary>The song data (2-byte length, then the sound RAM image) as events.</summary>
+    // the song data (2 byte length, then the sound RAM image) as events
     SongCodec.Song DecodeSong(byte[] songData);
-    /// <summary>Song data for the selected song from the edited events.</summary>
+    // song data for the selected song from the edited events
     byte[] BuildSongData(SongCodec.Song song, out List<string> warnings);
-    /// <summary>The most bytes a song may have.</summary>
+    // the most bytes a song can have
     int MaxSongSize { get; }
-    /// <summary>Added to a note number for its name: Lufia II plays note n as MIDI note n + 12.</summary>
+    // added to a note number for its name. Lufia II plays note n as MIDI note n + 12
     int NoteNameOffset { get; }
-    /// <summary>The instrument a channel that had nothing starts with.</summary>
+    // the instrument a channel that had nothing starts with
     int DefaultInstrument();
-    /// <summary>A note for the status when an instrument is added, or null.</summary>
+    // a note for the status when an instrument is added, or null
     string? InstrumentNote(int instrument);
-    /// <summary>A command's description in the channel-events list, or null for the shared wording.</summary>
+    // a command's description in the channel events list, or null for the shared wording
     string? DescribeRaw(byte[] raw);
     void PlayEdited(int fromTick);
     void PreviewNote(int channel, int pitch, int tick);
@@ -67,11 +67,9 @@ public interface ISongEditorHost
     void ReloadNotes();
 }
 
-/// <summary>
-/// The Music tab's note editor: the song decoded into notes per channel (<see cref="SongCodec"/>), edited on a piano
-/// roll (<see cref="Views.PianoRoll"/>), encoded again when written to the ROM. Lufia 1's and Lufia II's Music pages
-/// both use it (<see cref="ISongEditorHost"/>).
-/// </summary>
+// the Music tab's note editor: the song decoded into notes per channel (SongCodec), edited on a piano
+// roll (Views.PianoRoll), encoded again when it's written to the ROM. Lufia 1's and Lufia II's Music pages
+// both use it (ISongEditorHost)
 public partial class NoteEditorViewModel : ObservableObject
 {
     public const int TicksPerBeat = SongCodec.TicksPerQuarter, TicksPerBar = TicksPerBeat * 4;
@@ -88,7 +86,7 @@ public partial class NoteEditorViewModel : ObservableObject
     public EditChannel Current => Channels[Math.Clamp(CurrentChannel, 0, 7)];
     public HashSet<NoteItem> Selected { get; } = new();
 
-    /// <summary>Raised whenever what the piano roll shows changes.</summary>
+    // fires whenever what the piano roll shows changes
     public event Action? Changed;
 
     [ObservableProperty] private bool _loaded;
@@ -99,13 +97,13 @@ public partial class NoteEditorViewModel : ObservableObject
     [ObservableProperty] private bool _dirty;
     [ObservableProperty] private int _cursorTick;
     [ObservableProperty] private string _cursorText = "1.1.00";
-    /// <summary>Where playback is (ticks), -1 when not playing.</summary>
+    // where playback is (ticks), -1 when not playing
     [ObservableProperty] private double _playheadTick = -1;
     [ObservableProperty] private bool _followPlayhead = true;
     [ObservableProperty] private bool _loopAllChannels = true;
     [ObservableProperty] private bool _previewNotes = true;
 
-    // snap and new-note settings
+    // snap and new note settings
     public static readonly (string Label, int Ticks)[] SnapChoices =
     {
         ("1 bar", 192), ("1/2", 96), ("1/4", 48), ("1/8", 24), ("1/16", 12), ("1/32", 6),
@@ -117,13 +115,13 @@ public partial class NoteEditorViewModel : ObservableObject
     public IEnumerable<string> LengthLabels => SnapChoices.Take(9).Select(c => c.Label);
     [ObservableProperty] private int _lengthIndex = 3;
     public int NewLength { get => SnapChoices[Math.Clamp(LengthIndex, 0, 8)].Ticks; }
-    /// <summary>Length of the last note drawn or resized (new notes get it when it isn't one of the choices).</summary>
+    // length of the last note drawn or resized (new notes get it when it isn't one of the choices)
     public int LastLength = 24;
     [ObservableProperty] private int _newVelocity = 100;
 
     public ObservableCollection<ChannelTab> ChannelLabels { get; } = new();
 
-    // ── loading ─────────────────────────────────────────────────────────────
+    // loading
 
     public void Load(byte[] songData)
     {
@@ -141,127 +139,125 @@ public partial class NoteEditorViewModel : ObservableObject
         UpdateSize();
     }
 
-    private static EditChannel FromEvents(List<SongCodec.Event> ev, bool drum)
+    private static EditChannel FromEvents(List<SongCodec.Event> events, bool drum)
     {
-        var ch = new EditChannel { Drum = drum };
-        var end = ev.LastOrDefault(e => e.Kind == SongCodec.Kind.LoopEnd);
+        var channel = new EditChannel { Drum = drum };
+        var end = events.LastOrDefault(e => e.Kind == SongCodec.Kind.LoopEnd);
         if (end != null)
         {
-            ch.LoopEnd = end.Tick;
-            var start = ev.Take(ev.IndexOf(end)).LastOrDefault(e => e.Kind == SongCodec.Kind.LoopStart && e.A == end.A);
-            ch.LoopStart = start?.Tick ?? 0;
+            channel.LoopEnd = end.Tick;
+            var start = events.Take(events.IndexOf(end)).LastOrDefault(e => e.Kind == SongCodec.Kind.LoopStart && e.A == end.A);
+            channel.LoopStart = start?.Tick ?? 0;
         }
-        var stop = ev.FirstOrDefault(e => e.Kind == SongCodec.Kind.End);
-        if (stop != null && end == null) ch.EndTick = stop.Tick;
-        foreach (var e in ev)
+        var stop = events.FirstOrDefault(e => e.Kind == SongCodec.Kind.End);
+        if (stop != null && end == null) channel.EndTick = stop.Tick;
+        foreach (var e in events)
         {
             switch (e.Kind)
             {
                 case SongCodec.Kind.Note:
-                    if (e.B > 0) ch.Notes.Add(new NoteItem { Tick = e.Tick, Pitch = e.A, Length = e.B, Velocity = e.C });
-                    break;   // (a rest is just silence: left out)
+                    if (e.B > 0) channel.Notes.Add(new NoteItem { Tick = e.Tick, Pitch = e.A, Length = e.B, Velocity = e.C });
+                    break;   // a rest is just silence, so it's left out
                 case SongCodec.Kind.Volume or SongCodec.Kind.Pan or SongCodec.Kind.Program or SongCodec.Kind.Raw:
-                    ch.Others.Add(e); break;
+                    channel.Others.Add(e); break;
             }
         }
-        return ch;
+        return channel;
     }
 
-    /// <summary>The song as the codec wants it (notes past a channel's loop end or song end are left out).</summary>
+    // the song the way the codec wants it (notes past a channel's loop end or song end are left out)
     public SongCodec.Song ToSong()
     {
         var song = new SongCodec.Song { Tempo = Tempo };
         for (int c = 0; c < 8; c++)
         {
-            var ch = Channels[c];
-            song.Drum[c] = ch.Drum;
-            if (!ch.Used) continue;
-            int limit = ch.EndTick ?? ch.LoopEnd ?? int.MaxValue;
+            var channel = Channels[c];
+            song.Drum[c] = channel.Drum;
+            if (!channel.Used) continue;
+            int limit = channel.EndTick ?? channel.LoopEnd ?? int.MaxValue;
             var list = new List<(SongCodec.Event E, int Rank)>();
-            if (ch.LoopEnd != null) list.Add((new SongCodec.Event(ch.LoopStart ?? 0, SongCodec.Kind.LoopStart), 0));
-            foreach (var o in ch.Others) if (o.Tick <= limit) list.Add((o, 1));
-            foreach (var n in ch.Notes.Where(n => n.Tick < limit))
-                list.Add((new SongCodec.Event(n.Tick, SongCodec.Kind.Note, n.Pitch, Math.Clamp(n.Length, 1, 255), Math.Clamp(n.Velocity, 0, 127)), 2));
-            if (ch.LoopEnd != null) list.Add((new SongCodec.Event(ch.LoopEnd.Value, SongCodec.Kind.LoopEnd), 3));
-            else if (ch.EndTick != null) list.Add((new SongCodec.Event(ch.EndTick.Value, SongCodec.Kind.End), 3));
+            if (channel.LoopEnd != null) list.Add((new SongCodec.Event(channel.LoopStart ?? 0, SongCodec.Kind.LoopStart), 0));
+            foreach (var other in channel.Others) if (other.Tick <= limit) list.Add((other, 1));
+            foreach (var note in channel.Notes.Where(n => n.Tick < limit))
+                list.Add((new SongCodec.Event(note.Tick, SongCodec.Kind.Note, note.Pitch, Math.Clamp(note.Length, 1, 255), Math.Clamp(note.Velocity, 0, 127)), 2));
+            if (channel.LoopEnd != null) list.Add((new SongCodec.Event(channel.LoopEnd.Value, SongCodec.Kind.LoopEnd), 3));
+            else if (channel.EndTick != null) list.Add((new SongCodec.Event(channel.EndTick.Value, SongCodec.Kind.End), 3));
             song.Channels[c].AddRange(list.OrderBy(x => x.E.Tick).ThenBy(x => x.Rank).Select(x => x.E));
         }
         return song;
     }
 
-    /// <summary>Notes <see cref="ToSong"/> leaves out: they start at or after their channel's loop end or song end.</summary>
+    // the notes ToSong leaves out: they start at or after their channel's loop end or song end
     public int NotesPastEnd() => Channels.Where(c => c.Used).Sum(c => c.Notes.Count(n => n.Tick >= (c.EndTick ?? c.LoopEnd ?? int.MaxValue)));
 
-    /// <summary>
-    /// The song from <paramref name="from"/> on (for playing from the cursor): what each channel had set by then
-    /// (instrument, volume, pan, effects) moves to the start.
-    /// </summary>
-    public SongCodec.Song ToSongFrom(int from)
+    // the song from fromTick on (for playing from the cursor). whatever each channel had set by then
+    // (instrument, volume, pan, effects) moves to the start
+    public SongCodec.Song ToSongFrom(int fromTick)
     {
         var song = ToSong();
-        if (from <= 0) return song;
+        if (fromTick <= 0) return song;
         for (int c = 0; c < 8; c++)
         {
-            var src = song.Channels[c];
-            if (src.Count == 0) continue;
-            var before = src.Where(e => e.Tick < from).ToList();
-            var keep = new List<SongCodec.Event>();
-            foreach (var k in new[] { SongCodec.Kind.Program, SongCodec.Kind.Volume, SongCodec.Kind.Pan })
-                if (before.LastOrDefault(e => e.Kind == k) is { } last) keep.Add(last with { Tick = 0 });
-            keep.AddRange(before.Where(e => e.Kind == SongCodec.Kind.Raw).Select(e => e with { Tick = 0 }));
-            var loopEnd = src.FirstOrDefault(e => e.Kind == SongCodec.Kind.LoopEnd);
-            foreach (var e in src.Where(e => e.Tick >= from && e.Kind != SongCodec.Kind.LoopStart))
-                keep.Add(e with { Tick = e.Tick - from });
-            if (loopEnd != null && loopEnd.Tick > from)
+            var events = song.Channels[c];
+            if (events.Count == 0) continue;
+            var before = events.Where(e => e.Tick < fromTick).ToList();
+            var kept = new List<SongCodec.Event>();
+            foreach (var kind in new[] { SongCodec.Kind.Program, SongCodec.Kind.Volume, SongCodec.Kind.Pan })
+                if (before.LastOrDefault(e => e.Kind == kind) is { } last) kept.Add(last with { Tick = 0 });
+            kept.AddRange(before.Where(e => e.Kind == SongCodec.Kind.Raw).Select(e => e with { Tick = 0 }));
+            var loopEnd = events.FirstOrDefault(e => e.Kind == SongCodec.Kind.LoopEnd);
+            foreach (var e in events.Where(e => e.Tick >= fromTick && e.Kind != SongCodec.Kind.LoopStart))
+                kept.Add(e with { Tick = e.Tick - fromTick });
+            if (loopEnd != null && loopEnd.Tick > fromTick)
             {
-                var ls = src.First(e => e.Kind == SongCodec.Kind.LoopStart);
-                keep.Insert(0, ls with { Tick = Math.Max(0, ls.Tick - from) });
+                var loopStart = events.First(e => e.Kind == SongCodec.Kind.LoopStart);
+                kept.Insert(0, loopStart with { Tick = Math.Max(0, loopStart.Tick - fromTick) });
             }
-            else if (!keep.Any(e => e.Kind is SongCodec.Kind.LoopEnd or SongCodec.Kind.End))
-                keep.Add(new SongCodec.Event(Math.Max(1, keep.Count == 0 ? 1 : keep.Max(e => e.Tick + (e.Kind == SongCodec.Kind.Note ? e.B : 0))), SongCodec.Kind.End));
-            keep.RemoveAll(e => e.Kind == SongCodec.Kind.LoopEnd && e.Tick <= 0);
-            src.Clear(); src.AddRange(keep);
+            else if (!kept.Any(e => e.Kind is SongCodec.Kind.LoopEnd or SongCodec.Kind.End))
+                kept.Add(new SongCodec.Event(Math.Max(1, kept.Count == 0 ? 1 : kept.Max(e => e.Tick + (e.Kind == SongCodec.Kind.Note ? e.B : 0))), SongCodec.Kind.End));
+            kept.RemoveAll(e => e.Kind == SongCodec.Kind.LoopEnd && e.Tick <= 0);
+            events.Clear(); events.AddRange(kept);
         }
         return song;
     }
 
-    /// <summary>The loop the playhead follows: the first channel that repeats.</summary>
+    // the loop the playhead follows: the first channel that repeats
     public (int Start, int End)? SongLoop()
     {
-        var ch = Channels.FirstOrDefault(c => c.Used && c.LoopEnd != null);
-        return ch == null ? null : (ch.LoopStart ?? 0, ch.LoopEnd!.Value);
+        var channel = Channels.FirstOrDefault(c => c.Used && c.LoopEnd != null);
+        return channel == null ? null : (channel.LoopStart ?? 0, channel.LoopEnd!.Value);
     }
 
-    /// <summary>The song's length in ticks (the furthest loop end, song end or note end).</summary>
+    // the song's length in ticks (the furthest loop end, song end or note end)
     public int LengthTicks => Math.Max(TicksPerBar * 4, Channels.Where(c => c.Used).Select(c =>
         Math.Max(c.LoopEnd ?? c.EndTick ?? 0, c.Notes.Count == 0 ? 0 : c.Notes.Max(n => n.End))).DefaultIfEmpty(0).Max());
 
-    // ── change tracking ─────────────────────────────────────────────────────
+    // change tracking
 
     private readonly Stack<(EditChannel[] Ch, int Tempo)> _undo = new(), _redo = new();
 
-    /// <summary>The undo / redo history and the cursor, kept while the song is written and read back.</summary>
+    // the undo / redo history and the cursor, kept while the song is written and read back
     public object SaveHistory() => (_undo.Reverse().ToList(), _redo.Reverse().ToList(), CursorTick);
 
     public void RestoreHistory(object saved)
     {
         if (saved is not (List<(EditChannel[], int)> undo, List<(EditChannel[], int)> redo, int cursor)) return;
-        _undo.Clear(); foreach (var u in undo) _undo.Push(u);
-        _redo.Clear(); foreach (var r in redo) _redo.Push(r);
+        _undo.Clear(); foreach (var step in undo) _undo.Push(step);
+        _redo.Clear(); foreach (var step in redo) _redo.Push(step);
         CursorTick = cursor;
         UndoCommand.NotifyCanExecuteChanged(); RedoCommand.NotifyCanExecuteChanged();
     }
     private readonly DispatcherTimer _sizeTimer;
 
-    /// <summary>Call before a change (the change can then be undone).</summary>
+    // call before a change so it can be undone
     public void Checkpoint()
     {
         _undo.Push((Channels.Select(c => c.Clone()).ToArray(), Tempo));
-        if (_undo.Count > 200) { var keep = _undo.Take(150).Reverse().ToList(); _undo.Clear(); foreach (var k in keep) _undo.Push(k); }
+        if (_undo.Count > 200) { var kept = _undo.Take(150).Reverse().ToList(); _undo.Clear(); foreach (var step in kept) _undo.Push(step); }
         _redo.Clear();
     }
 
-    /// <summary>Call after a change.</summary>
+    // call after a change
     public void Touch()
     {
         Dirty = true;
@@ -295,8 +291,8 @@ public partial class NoteEditorViewModel : ObservableObject
     {
         if (_undo.Count == 0) return;
         _redo.Push((Channels.Select(c => c.Clone()).ToArray(), Tempo));
-        var (ch, t) = _undo.Pop(); Channels = ch;
-        _settingTempo = true; Tempo = t; _settingTempo = false;
+        var (channels, tempo) = _undo.Pop(); Channels = channels;
+        _settingTempo = true; Tempo = tempo; _settingTempo = false;
         Selected.Clear(); Touch();
     }
 
@@ -305,8 +301,8 @@ public partial class NoteEditorViewModel : ObservableObject
     {
         if (_redo.Count == 0) return;
         _undo.Push((Channels.Select(c => c.Clone()).ToArray(), Tempo));
-        var (ch, t) = _redo.Pop(); Channels = ch;
-        _settingTempo = true; Tempo = t; _settingTempo = false;
+        var (channels, tempo) = _redo.Pop(); Channels = channels;
+        _settingTempo = true; Tempo = tempo; _settingTempo = false;
         Selected.Clear(); Touch();
     }
 
@@ -318,40 +314,40 @@ public partial class NoteEditorViewModel : ObservableObject
     }
     partial void OnCursorTickChanged(int value) => CursorText = TimeText(value);
 
-    /// <summary>Tempo typed in the box (the game's tempo number: 125 µs per tick).</summary>
+    // tempo typed in the box (the game's tempo number, 125 us per tick)
     partial void OnTempoChanged(int oldValue, int newValue)
     {
         if (!Loaded || _settingTempo) return;
-        int v = Math.Clamp(newValue, 1, 255);
+        int clamped = Math.Clamp(newValue, 1, 255);
         _settingTempo = true;
         _undo.Push((Channels.Select(c => c.Clone()).ToArray(), oldValue)); _redo.Clear();
-        Tempo = v;
+        Tempo = clamped;
         _settingTempo = false;
         Touch();
     }
     private bool _settingTempo;
 
-    // ── notes ───────────────────────────────────────────────────────────────
+    // notes
 
     public NoteItem AddNote(int tick, int pitch, int length)
     {
-        var ch = Current;
-        if (!ch.Used) StartChannel(ch);
-        var n = new NoteItem { Tick = Math.Max(0, tick), Pitch = Math.Clamp(pitch, 0, 127), Length = Math.Clamp(length, 1, 255), Velocity = Math.Clamp(NewVelocity, 1, 127) };
-        ch.Notes.Add(n);
-        return n;
+        var channel = Current;
+        if (!channel.Used) StartChannel(channel);
+        var note = new NoteItem { Tick = Math.Max(0, tick), Pitch = Math.Clamp(pitch, 0, 127), Length = Math.Clamp(length, 1, 255), Velocity = Math.Clamp(NewVelocity, 1, 127) };
+        channel.Notes.Add(note);
+        return note;
     }
 
-    /// <summary>A channel that had nothing gets an instrument, volume and pan, and the other channels' loop.</summary>
-    private void StartChannel(EditChannel ch)
+    // a channel that had nothing gets an instrument, volume and pan, and the other channels' loop
+    private void StartChannel(EditChannel channel)
     {
-        int ins = _owner.DefaultInstrument();
-        ch.Others.Add(new SongCodec.Event(0, SongCodec.Kind.Program, ins));
-        ch.Others.Add(new SongCodec.Event(0, SongCodec.Kind.Volume, 100));
-        ch.Others.Add(new SongCodec.Event(0, SongCodec.Kind.Pan, 64));
-        var other = Channels.FirstOrDefault(c => c != ch && c.Used);
-        if (other != null) { ch.LoopStart = other.LoopStart; ch.LoopEnd = other.LoopEnd; ch.EndTick = other.EndTick; }
-        else { ch.LoopStart = 0; ch.LoopEnd = TicksPerBar * 4; }
+        int instrument = _owner.DefaultInstrument();
+        channel.Others.Add(new SongCodec.Event(0, SongCodec.Kind.Program, instrument));
+        channel.Others.Add(new SongCodec.Event(0, SongCodec.Kind.Volume, 100));
+        channel.Others.Add(new SongCodec.Event(0, SongCodec.Kind.Pan, 64));
+        var other = Channels.FirstOrDefault(c => c != channel && c.Used);
+        if (other != null) { channel.LoopStart = other.LoopStart; channel.LoopEnd = other.LoopEnd; channel.EndTick = other.EndTick; }
+        else { channel.LoopStart = 0; channel.LoopEnd = TicksPerBar * 4; }
     }
 
     [RelayCommand]
@@ -365,7 +361,7 @@ public partial class NoteEditorViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void SelectAll() { Selected.Clear(); foreach (var n in Current.Notes) Selected.Add(n); Refresh(); }
+    private void SelectAll() { Selected.Clear(); foreach (var note in Current.Notes) Selected.Add(note); Refresh(); }
 
     private static List<NoteItem> _clipboard = new();
 
@@ -374,7 +370,7 @@ public partial class NoteEditorViewModel : ObservableObject
     {
         if (Selected.Count == 0) return;
         int first = Selected.Min(n => n.Tick);
-        _clipboard = Selected.Select(n => { var c = n.Clone(); c.Tick -= first; return c; }).ToList();
+        _clipboard = Selected.Select(n => { var copy = n.Clone(); copy.Tick -= first; return copy; }).ToList();
         _owner.Status = $"Copied {_clipboard.Count} notes. Click the ruler to put the cursor where they go, then Paste.";
     }
 
@@ -388,10 +384,10 @@ public partial class NoteEditorViewModel : ObservableObject
         Checkpoint();
         if (!Current.Used) StartChannel(Current);
         Selected.Clear();
-        foreach (var c in _clipboard)
+        foreach (var copied in _clipboard)
         {
-            var n = c.Clone(); n.Tick += CursorTick;
-            Current.Notes.Add(n); Selected.Add(n);
+            var note = copied.Clone(); note.Tick += CursorTick;
+            Current.Notes.Add(note); Selected.Add(note);
         }
         CursorTick = Selected.Max(n => n.End);
         Touch();
@@ -401,7 +397,7 @@ public partial class NoteEditorViewModel : ObservableObject
     {
         if (Selected.Count == 0) return;
         Checkpoint();
-        foreach (var n in Selected) n.Pitch = Math.Clamp(n.Pitch + semitones, 0, 127);
+        foreach (var note in Selected) note.Pitch = Math.Clamp(note.Pitch + semitones, 0, 127);
         Touch();
     }
 
@@ -411,7 +407,7 @@ public partial class NoteEditorViewModel : ObservableObject
         Checkpoint();
         int least = Selected.Min(n => n.Tick);
         if (least + ticks < 0) ticks = -least;
-        foreach (var n in Selected) n.Tick += ticks;
+        foreach (var note in Selected) note.Tick += ticks;
         Touch();
     }
 
@@ -420,22 +416,22 @@ public partial class NoteEditorViewModel : ObservableObject
     [RelayCommand] private void OctaveUp() => Transpose(12);
     [RelayCommand] private void OctaveDown() => Transpose(-12);
 
-    /// <summary>Moves the selected notes' starts and lengths to the snap grid.</summary>
+    // moves the selected notes' starts and lengths onto the snap grid
     [RelayCommand]
     private void Quantize()
     {
         if (Selected.Count == 0 || Snap <= 1) return;
         Checkpoint();
-        int longest = 255 / Snap * Snap;   // (a note is at most 255 ticks: the longest length on the grid)
-        foreach (var n in Selected)
+        int longest = 255 / Snap * Snap;   // a note is at most 255 ticks, so the longest length on the grid
+        foreach (var note in Selected)
         {
-            n.Tick = (int)Math.Round(n.Tick / (double)Snap) * Snap;
-            n.Length = Math.Clamp((int)Math.Round(n.Length / (double)Snap) * Snap, Snap, longest);
+            note.Tick = (int)Math.Round(note.Tick / (double)Snap) * Snap;
+            note.Length = Math.Clamp((int)Math.Round(note.Length / (double)Snap) * Snap, Snap, longest);
         }
         Touch();
     }
 
-    // selected-note fields (typing applies to every selected note)
+    // selected note fields (typing applies to every selected note)
     [ObservableProperty] private string _selPitch = "";
     [ObservableProperty] private string _selStart = "";
     [ObservableProperty] private string _selLength = "";
@@ -453,7 +449,7 @@ public partial class NoteEditorViewModel : ObservableObject
         }
         else
         {
-            string Same(Func<NoteItem, string> f) { var v = Selected.Select(f).Distinct().ToList(); return v.Count == 1 ? v[0] : ""; }
+            string Same(Func<NoteItem, string> field) { var values = Selected.Select(field).Distinct().ToList(); return values.Count == 1 ? values[0] : ""; }
             SelPitch = Same(n => Name(n.Pitch));
             SelStart = Same(n => TimeText(n.Tick));
             SelLength = Same(n => n.Length.ToString(CultureInfo.InvariantCulture));
@@ -465,29 +461,29 @@ public partial class NoteEditorViewModel : ObservableObject
 
     partial void OnSelPitchChanged(string value)
     {
-        if (_fillingFields || Selected.Count == 0 || Parse(value) is not int p) return;
-        Checkpoint(); foreach (var n in Selected) n.Pitch = p; Touch();
+        if (_fillingFields || Selected.Count == 0 || Parse(value) is not int pitch) return;
+        Checkpoint(); foreach (var note in Selected) note.Pitch = pitch; Touch();
     }
     partial void OnSelStartChanged(string value)
     {
-        if (_fillingFields || Selected.Count == 0 || ParseTime(value) is not int t) return;
+        if (_fillingFields || Selected.Count == 0 || ParseTime(value) is not int start) return;
         Checkpoint();
         int first = Selected.Min(n => n.Tick);
-        foreach (var n in Selected) n.Tick = Math.Max(0, n.Tick - first + t);
+        foreach (var note in Selected) note.Tick = Math.Max(0, note.Tick - first + start);
         Touch();
     }
     partial void OnSelLengthChanged(string value)
     {
-        if (_fillingFields || Selected.Count == 0 || !int.TryParse(value, out int l) || l is < 1 or > 255) return;
-        Checkpoint(); foreach (var n in Selected) n.Length = l; Touch();
+        if (_fillingFields || Selected.Count == 0 || !int.TryParse(value, out int length) || length is < 1 or > 255) return;
+        Checkpoint(); foreach (var note in Selected) note.Length = length; Touch();
     }
     partial void OnSelVelocityChanged(string value)
     {
-        if (_fillingFields || Selected.Count == 0 || !int.TryParse(value, out int v) || v is < 0 or > 127) return;
-        Checkpoint(); foreach (var n in Selected) n.Velocity = v; Touch();
+        if (_fillingFields || Selected.Count == 0 || !int.TryParse(value, out int velocity) || velocity is < 0 or > 127) return;
+        Checkpoint(); foreach (var note in Selected) note.Velocity = velocity; Touch();
     }
 
-    // ── channel events (instrument, volume, pan, effects) ───────────────────
+    // channel events (instrument, volume, pan, effects)
 
     public ObservableCollection<OtherRow> Others { get; } = new();
     [ObservableProperty] private OtherRow? _selectedOther;
@@ -502,7 +498,7 @@ public partial class NoteEditorViewModel : ObservableObject
         var keep = SelectedOther?.Event;
         Others.Clear();
         foreach (var e in Current.Others.OrderBy(e => e.Tick))
-            Others.Add(new OtherRow(e, TimeText(e.Tick), e.Kind == SongCodec.Kind.Raw && _owner.DescribeRaw(e.Raw!) is { } d ? d : Describe(e)));
+            Others.Add(new OtherRow(e, TimeText(e.Tick), e.Kind == SongCodec.Kind.Raw && _owner.DescribeRaw(e.Raw!) is { } description ? description : Describe(e)));
         SelectedOther = Others.FirstOrDefault(r => ReferenceEquals(r.Event, keep));
     }
 
@@ -533,16 +529,16 @@ public partial class NoteEditorViewModel : ObservableObject
         _ => "Command " + Convert.ToHexString(e.Raw ?? Array.Empty<byte>()),
     };
 
-    /// <summary>The value typed for the kind chosen; null when it doesn't parse.</summary>
+    // the value typed for the kind picked. null when it doesn't parse
     private SongCodec.Event? OtherFromFields(int tick)
     {
         if (SelectedOther?.Event.Kind == SongCodec.Kind.Raw && OtherKind == 0 && OtherValue.Length >= 4 && OtherValue.All(Uri.IsHexDigit))
             return new SongCodec.Event(tick, SongCodec.Kind.Raw, Raw: Convert.FromHexString(OtherValue));
         return OtherKind switch
         {
-            0 when int.TryParse(OtherValue, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int i) && i is >= 0 and < 0x40 => new SongCodec.Event(tick, SongCodec.Kind.Program, i),
-            1 when int.TryParse(OtherValue, out int v) && v is >= 0 and <= 127 => new SongCodec.Event(tick, SongCodec.Kind.Volume, v),
-            2 when int.TryParse(OtherValue, out int p) && p is >= 0 and <= 127 => new SongCodec.Event(tick, SongCodec.Kind.Pan, p),
+            0 when int.TryParse(OtherValue, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int instrument) && instrument is >= 0 and < 0x40 => new SongCodec.Event(tick, SongCodec.Kind.Program, instrument),
+            1 when int.TryParse(OtherValue, out int volume) && volume is >= 0 and <= 127 => new SongCodec.Event(tick, SongCodec.Kind.Volume, volume),
+            2 when int.TryParse(OtherValue, out int pan) && pan is >= 0 and <= 127 => new SongCodec.Event(tick, SongCodec.Kind.Pan, pan),
             _ => null,
         };
     }
@@ -550,14 +546,14 @@ public partial class NoteEditorViewModel : ObservableObject
     [RelayCommand]
     private void AddOther()
     {
-        var e = OtherFromFields(CursorTick);
-        if (e == null) { _owner.Status = "Value: instrument = hex 00-3F, volume and pan = 0-127 (pan 64 = centre)."; return; }
+        var added = OtherFromFields(CursorTick);
+        if (added == null) { _owner.Status = "Value: instrument = hex 00-3F, volume and pan = 0-127 (pan 64 = centre)."; return; }
         Checkpoint();
         if (!Current.Used) StartChannel(Current);
-        Current.Others.Add(e);
+        Current.Others.Add(added);
         Touch();
-        SelectedOther = Others.FirstOrDefault(r => ReferenceEquals(r.Event, e));
-        if (e.Kind == SongCodec.Kind.Program && _owner.InstrumentNote(e.A) is { } note) _owner.Status = note;
+        SelectedOther = Others.FirstOrDefault(r => ReferenceEquals(r.Event, added));
+        if (added.Kind == SongCodec.Kind.Program && _owner.InstrumentNote(added.A) is { } note) _owner.Status = note;
     }
 
     [RelayCommand]
@@ -565,13 +561,13 @@ public partial class NoteEditorViewModel : ObservableObject
     {
         if (SelectedOther == null) return;
         int tick = ParseTime(OtherWhen) ?? SelectedOther.Event.Tick;
-        var e = OtherFromFields(tick);
-        if (e == null) { _owner.Status = "Value: instrument = hex 00-3F, volume and pan = 0-127 (pan 64 = centre)."; return; }
+        var updated = OtherFromFields(tick);
+        if (updated == null) { _owner.Status = "Value: instrument = hex 00-3F, volume and pan = 0-127 (pan 64 = centre)."; return; }
         Checkpoint();
         int i = Current.Others.IndexOf(SelectedOther.Event);
-        if (i >= 0) Current.Others[i] = e;
+        if (i >= 0) Current.Others[i] = updated;
         Touch();
-        SelectedOther = Others.FirstOrDefault(r => ReferenceEquals(r.Event, e));
+        SelectedOther = Others.FirstOrDefault(r => ReferenceEquals(r.Event, updated));
     }
 
     [RelayCommand]
@@ -584,7 +580,7 @@ public partial class NoteEditorViewModel : ObservableObject
         Touch();
     }
 
-    // ── loop ────────────────────────────────────────────────────────────────
+    // loop
 
     [ObservableProperty] private string _loopText = "";
 
@@ -592,40 +588,40 @@ public partial class NoteEditorViewModel : ObservableObject
 
     public void SetLoopStart(int tick)
     {
-        foreach (var c in LoopTargets)
+        foreach (var channel in LoopTargets)
         {
-            if (c.LoopEnd == null) { c.LoopEnd = c.EndTick ?? Math.Max(tick + TicksPerBar, LengthTicks); c.EndTick = null; }
-            c.LoopStart = Math.Min(tick, c.LoopEnd.Value - 1);
+            if (channel.LoopEnd == null) { channel.LoopEnd = channel.EndTick ?? Math.Max(tick + TicksPerBar, LengthTicks); channel.EndTick = null; }
+            channel.LoopStart = Math.Min(tick, channel.LoopEnd.Value - 1);
         }
     }
 
     public void SetLoopEnd(int tick)
     {
-        foreach (var c in LoopTargets)
+        foreach (var channel in LoopTargets)
         {
-            c.EndTick = null;
-            c.LoopStart ??= 0;
-            c.LoopEnd = Math.Max(tick, c.LoopStart.Value + 1);
+            channel.EndTick = null;
+            channel.LoopStart ??= 0;
+            channel.LoopEnd = Math.Max(tick, channel.LoopStart.Value + 1);
         }
     }
 
     [RelayCommand] private void LoopStartHere() { Checkpoint(); SetLoopStart(CursorTick); Touch(); }
     [RelayCommand] private void LoopEndHere() { Checkpoint(); SetLoopEnd(Math.Max(1, CursorTick)); Touch(); }
 
-    /// <summary>The song stops at the cursor instead of repeating.</summary>
+    // the song stops at the cursor instead of repeating
     [RelayCommand]
     private void StopHere()
     {
         Checkpoint();
-        foreach (var c in LoopTargets) { c.LoopStart = c.LoopEnd = null; c.EndTick = Math.Max(1, CursorTick); }
+        foreach (var channel in LoopTargets) { channel.LoopStart = channel.LoopEnd = null; channel.EndTick = Math.Max(1, CursorTick); }
         Touch();
     }
 
     private void RefreshChannelLabels()
     {
-        var ch = Current;
-        LoopText = ch.LoopEnd != null ? $"Repeats from {TimeText(ch.LoopStart ?? 0)} to {TimeText(ch.LoopEnd.Value)}."
-                 : ch.EndTick != null ? $"Stops at {TimeText(ch.EndTick.Value)} (no repeat)."
+        var current = Current;
+        LoopText = current.LoopEnd != null ? $"Repeats from {TimeText(current.LoopStart ?? 0)} to {TimeText(current.LoopEnd.Value)}."
+                 : current.EndTick != null ? $"Stops at {TimeText(current.EndTick.Value)} (no repeat)."
                  : "Repeats from the start when it runs out.";
         for (int c = 0; c < 8; c++)
         {
@@ -642,7 +638,7 @@ public partial class NoteEditorViewModel : ObservableObject
         set { if (Current.Drum == value) return; Checkpoint(); Current.Drum = value; Touch(); }
     }
 
-    // ── playing ─────────────────────────────────────────────────────────────
+    // playing
 
     [RelayCommand] private void PlayFromStart() => _owner.PlayEdited(0);
     [RelayCommand] private void PlayFromCursor() => _owner.PlayEdited(CursorTick);
@@ -655,33 +651,33 @@ public partial class NoteEditorViewModel : ObservableObject
         if (PreviewNotes) _owner.PreviewNote(CurrentChannel, pitch, tick);
     }
 
-    // ── names and times ─────────────────────────────────────────────────────
+    // names and times
 
     private static readonly string[] Names = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
-    public static string NoteName(int n) => $"{Names[(n % 12 + 12) % 12]}{n / 12 - 1}";
-    /// <summary>The name of the note the game plays for note number <paramref name="n"/> (<see cref="ISongEditorHost.NoteNameOffset"/>).</summary>
-    public string Name(int n) => NoteName(n + _owner.NoteNameOffset);
-    /// <summary>A typed note name (or number) as the game's note number.</summary>
-    public int? Parse(string s) => ParseNote(s) is int n && (s.Trim().All(char.IsDigit) ? n : n - _owner.NoteNameOffset) is int g && g is >= 0 and <= 127 ? g : null;
-    public static int? ParseNote(string s)
+    public static string NoteName(int note) => $"{Names[(note % 12 + 12) % 12]}{note / 12 - 1}";
+    // the name of the note the game plays for this note number (with ISongEditorHost.NoteNameOffset added)
+    public string Name(int note) => NoteName(note + _owner.NoteNameOffset);
+    // a typed note name (or number) as the game's note number
+    public int? Parse(string text) => ParseNote(text) is int parsed && (text.Trim().All(char.IsDigit) ? parsed : parsed - _owner.NoteNameOffset) is int note && note is >= 0 and <= 127 ? note : null;
+    public static int? ParseNote(string text)
     {
-        s = s.Trim().ToUpperInvariant();
-        if (int.TryParse(s, out int raw) && raw is >= 0 and <= 127) return raw;
+        text = text.Trim().ToUpperInvariant();
+        if (int.TryParse(text, out int raw) && raw is >= 0 and <= 127) return raw;
         for (int k = 11; k >= 0; k--)
-            if (s.StartsWith(Names[k]) && int.TryParse(s[Names[k].Length..], out int oct))
+            if (text.StartsWith(Names[k]) && int.TryParse(text[Names[k].Length..], out int octave))
             {
-                int n = (oct + 1) * 12 + k;
-                return n is >= 0 and <= 127 ? n : null;
+                int note = (octave + 1) * 12 + k;
+                return note is >= 0 and <= 127 ? note : null;
             }
         return null;
     }
-    /// <summary>bar.beat.tick, counting from 1.1.00 (48 ticks per beat, 4 beats per bar).</summary>
-    public static string TimeText(int t) => $"{t / TicksPerBar + 1}.{t % TicksPerBar / TicksPerBeat + 1}.{t % TicksPerBeat:D2}";
-    public static int? ParseTime(string s)
+    // bar.beat.tick, counting from 1.1.00 (48 ticks per beat, 4 beats per bar)
+    public static string TimeText(int tick) => $"{tick / TicksPerBar + 1}.{tick % TicksPerBar / TicksPerBeat + 1}.{tick % TicksPerBeat:D2}";
+    public static int? ParseTime(string text)
     {
-        var p = s.Trim().Split('.', ':');
-        if (p.Length is < 1 or > 3 || !p.All(x => int.TryParse(x, out _))) return null;
-        int bar = int.Parse(p[0]), beat = p.Length > 1 ? int.Parse(p[1]) : 1, tick = p.Length > 2 ? int.Parse(p[2]) : 0;
+        var parts = text.Trim().Split('.', ':');
+        if (parts.Length is < 1 or > 3 || !parts.All(x => int.TryParse(x, out _))) return null;
+        int bar = int.Parse(parts[0]), beat = parts.Length > 1 ? int.Parse(parts[1]) : 1, tick = parts.Length > 2 ? int.Parse(parts[2]) : 0;
         if (bar < 1 || beat < 1) return null;
         return (bar - 1) * TicksPerBar + (beat - 1) * TicksPerBeat + tick;
     }

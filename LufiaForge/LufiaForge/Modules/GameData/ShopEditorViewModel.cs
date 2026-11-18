@@ -11,9 +11,9 @@ public partial class ShopSlot : ObservableObject
     [ObservableProperty] private int _item;
 }
 
-/// <summary>Shop type and the items each shop sells. The game's shops keep their number of slots unless they are given
-/// more (then Lufia Forge keeps them, with room for 11); new shops are made with Add a new shop
-/// (<see cref="ShopTable"/>).</summary>
+// shop type and the items each shop sells. the game's shops keep their number of slots unless they get
+// more (then Lufia Forge keeps them, with room for 11). new shops get made with Add a new shop
+// (ShopTable)
 public partial class ShopEditorViewModel : GameDataEditorBase
 {
     public ObservableCollection<string>   Shops { get; } = new();
@@ -44,17 +44,17 @@ public partial class ShopEditorViewModel : GameDataEditorBase
     private void RefreshList()
     {
         if (Ctx == null) return;
-        int keep = SelectedIndex;
+        int keepIndex = SelectedIndex;
         _ids = ShopTable.Ids(Ctx.Rom);
         Shops.Clear();
-        foreach (int i in _ids)
-            Shops.Add($"{i:X2}  " + (i < GameDataLabels.ShopTowns.Length ? GameDataLabels.ShopTowns[i] : "") +
-                      (i >= ShopTable.GameShops ? "(added)" : ShopTable.IsOwn(Ctx.Rom, i) ? "  (more slots)" : ""));
+        foreach (int shop in _ids)
+            Shops.Add($"{shop:X2}  " + (shop < GameDataLabels.ShopTowns.Length ? GameDataLabels.ShopTowns[shop] : "") +
+                      (shop >= ShopTable.GameShops ? "(added)" : ShopTable.IsOwn(Ctx.Rom, shop) ? "  (more slots)" : ""));
         CanAddShop = ShopTable.CanInstall(Ctx.Rom, out var why) && ShopTable.NextId(Ctx.Rom) > 0;
         NewShopNote = CanAddShop
             ? $"a copy of the shop shown as shop {ShopTable.NextId(Ctx.Rom):X2}, with room for {ShopTable.MaxItems} items. An event opens it with \"Open a shop\" (1C {ShopTable.NextId(Ctx.Rom):X2}) on the Events tab, for example in a character's talk event."
             : why.Length > 0 ? why : "Every shop id is used.";
-        SelectedIndex = keep;
+        SelectedIndex = keepIndex;
     }
 
     partial void OnSelectedIndexChanged(int value) => LoadSelected();
@@ -66,16 +66,16 @@ public partial class ShopEditorViewModel : GameDataEditorBase
         var rom = Ctx.Rom;
         int id = Id;
         _own = ShopTable.IsOwn(rom, id);
-        int o = _recordOffset = ShopTable.RecordOffset(rom, id);
+        int record = _recordOffset = ShopTable.RecordOffset(rom, id);
         int size;
         if (_own) size = ShopTable.MaxItems;
         else
         {
             int next = Ctx.ShopOffset(id + 1);
-            size = next - o - 2;    // minus the type byte and the 00 terminator
+            size = next - record - 2;    // minus the type byte and the 00 terminator
         }
 
-        int type = rom.ReadByte(o);
+        int type = rom.ReadByte(record);
         ShopTypeOptions = GameDataLabels.WithValue(GameDataLabels.ShopTypes, type);
         ShopType = type;
 
@@ -84,14 +84,14 @@ public partial class ShopEditorViewModel : GameDataEditorBase
         if (IsEditable)
         {
             for (int i = 0; i < size; i++)
-                Slots.Add(new ShopSlot { Number = i + 1, Item = rom.ReadByte(o + 1 + i) });
+                Slots.Add(new ShopSlot { Number = i + 1, Item = rom.ReadByte(record + 1 + i) });
             OffsetText = _own
-                ? $"Kept by Lufia Forge at 0x{o:X6}: type + {size} item slots. Opened by event command 1C {id:X2} (Open a shop)."
-                : $"Shop data at 0x{o:X6}: type + {size} item slots + 00 terminator. Opened by event command 1C {id:X2} (Open a shop).";
+                ? $"Kept by Lufia Forge at 0x{record:X6}: type + {size} item slots. Opened by event command 1C {id:X2} (Open a shop)."
+                : $"Shop data at 0x{record:X6}: type + {size} item slots + 00 terminator. Opened by event command 1C {id:X2} (Open a shop).";
         }
         else
         {
-            OffsetText = $"Shop data at 0x{o:X6}: this shop has no item slots.";
+            OffsetText = $"Shop data at 0x{record:X6}: this shop has no item slots.";
         }
     }
 
@@ -99,7 +99,7 @@ public partial class ShopEditorViewModel : GameDataEditorBase
     private void Apply()
     {
         if (Ctx == null || Id < 0 || !IsEditable) return;
-        int o = _recordOffset, id = Id;
+        int record = _recordOffset, id = Id;
 
         if (_own)
         {
@@ -109,30 +109,30 @@ public partial class ShopEditorViewModel : GameDataEditorBase
         else
             Commit($"Shop {id:X2}", () =>
             {
-                Ctx.Rom.WriteByte(o, (byte)ShopType);
+                Ctx.Rom.WriteByte(record, (byte)ShopType);
                 for (int i = 0; i < Slots.Count; i++)
-                    Ctx.Rom.WriteByte(o + 1 + i, (byte)Clamp(Slots[i].Item, 0, 255));
+                    Ctx.Rom.WriteByte(record + 1 + i, (byte)Clamp(Slots[i].Item, 0, 255));
             });
 
         if (Slots.Any(s => s.Item == 0))
             Status += " Note: an empty slot (00) ends the shop's list at that point.";
     }
 
-    /// <summary>A new shop: a copy of the one shown (type and items) with an id of its own and room for 11 items.</summary>
+    // a new shop: a copy of the one showing (type and items) with an id of its own and room for 11 items
     [RelayCommand]
     private void AddShop()
     {
         if (Ctx == null || Id < 0) return;
         if (Edited) WritePendingEdits();
-        int from = Id, made = -1;
-        Commit("New shop", () => made = ShopTable.Add(Ctx.Rom, from, UsedByEvents()));
+        int template = Id, made = -1;
+        Commit("New shop", () => made = ShopTable.Add(Ctx.Rom, template, UsedByEvents()));
         if (made < 0) return;
         RefreshList();
         SelectedIndex = _ids.IndexOf(made);
-        Status = $"Shop {made:X2} made (a copy of shop {from:X2}). Pick its items, then open it from an event: \"Open a shop\" (1C {made:X2}) on the Events tab.";
+        Status = $"Shop {made:X2} made (a copy of shop {template:X2}). Pick its items, then open it from an event: \"Open a shop\" (1C {made:X2}) on the Events tab.";
     }
 
-    /// <summary>The game shop shown gets room for 11 items (Lufia Forge keeps it from then on; events open it as before).</summary>
+    // the game shop showing gets room for 11 items (Lufia Forge keeps it from then on, events open it like before)
     [RelayCommand]
     private void GiveMoreSlots()
     {
@@ -145,7 +145,7 @@ public partial class ShopEditorViewModel : GameDataEditorBase
         LoadSelected();
     }
 
-    /// <summary>Shop ids events already open (1C xx), so a new shop doesn't take one of them.</summary>
+    // shop ids that events already open (1C xx), so a new shop doesn't take one of them
     private HashSet<int> UsedByEvents()
     {
         var used = new HashSet<int>();
@@ -153,13 +153,13 @@ public partial class ShopEditorViewModel : GameDataEditorBase
         try
         {
             foreach (var map in Core.Maps.MapCatalog.Scan(Ctx.Rom))
-                for (int ev = 0, n = Core.Maps.EventScript.SlotCount(Ctx.Rom, map.MapId); ev < n; ev++)
+                for (int ev = 0, slots = Core.Maps.EventScript.SlotCount(Ctx.Rom, map.MapId); ev < slots; ev++)
                 {
                     try
                     {
-                        var s = Core.Maps.EventScript.Load(Ctx.Rom, map.MapId, ev);
-                        if (s == null) continue;
-                        foreach (var o in s.Ops) if (!o.IsText && o.Bytes.Length >= 2 && o.Bytes[0] == 0x1C) used.Add(o.Bytes[1]);
+                        var script = Core.Maps.EventScript.Load(Ctx.Rom, map.MapId, ev);
+                        if (script == null) continue;
+                        foreach (var op in script.Ops) if (!op.IsText && op.Bytes.Length >= 2 && op.Bytes[0] == 0x1C) used.Add(op.Bytes[1]);
                     }
                     catch { }
                 }

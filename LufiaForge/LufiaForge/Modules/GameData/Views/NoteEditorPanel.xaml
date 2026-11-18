@@ -3,8 +3,8 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:v="clr-namespace:LufiaForge.Modules.GameData.Views"
              xmlns:common="clr-namespace:LufiaForge.Modules.Common">
-    <!-- The note editor (piano roll, channels, selected notes, channel events, loop) over a NoteEditorViewModel:
-         Lufia 1's and Lufia II's Music pages. -->
+    <!-- the note editor (piano roll, channels, selected notes, channel events, loop) on top of a NoteEditorViewModel.
+         both Lufia 1's and Lufia II's Music pages use it -->
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>

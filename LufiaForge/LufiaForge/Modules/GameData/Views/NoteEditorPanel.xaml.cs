@@ -1,6 +1,6 @@
 namespace LufiaForge.Modules.GameData.Views;
 
-/// <summary>The note editor's layout over a <see cref="NoteEditorViewModel"/> (its DataContext).</summary>
+// the note editor's layout on top of a NoteEditorViewModel (its DataContext)
 public partial class NoteEditorPanel : UserControl
 {
     public NoteEditorPanel() => InitializeComponent();

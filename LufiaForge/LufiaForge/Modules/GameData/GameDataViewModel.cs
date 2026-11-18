@@ -4,7 +4,7 @@ using LufiaForge.ViewModels;
 
 namespace LufiaForge.Modules.GameData;
 
-/// <summary>Hosts the Game Data editors (the L1ME feature set) and hands them the loaded ROM.</summary>
+// holds the Game Data editors (the L1ME feature set) and hands them the loaded ROM
 public partial class GameDataViewModel : ObservableObject, LufiaForge.ViewModels.IPendingEdits
 {
     public CharacterEditorViewModel Characters     { get; } = new();

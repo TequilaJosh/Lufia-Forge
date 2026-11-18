@@ -5,14 +5,14 @@ using System.Globalization;
 
 namespace LufiaForge.Modules.GameData;
 
-/// <summary>One 3-byte equipment property entry: id + 16-bit value.</summary>
+// one 3 byte equipment property entry: id + 16-bit value
 public partial class ItemProperty : ObservableObject
 {
     [ObservableProperty] private int _id;
     [ObservableProperty] private int _value;
 }
 
-/// <summary>Item names, type, equipment rules, icon, price and properties (ATP, DFP, ...).</summary>
+// item names, type, who can equip it, icon, price and properties (ATP, DFP, ...)
 public partial class ItemEditorViewModel : GameDataEditorBase
 {
     [ObservableProperty] private int    _selectedIndex = -1;
@@ -33,7 +33,7 @@ public partial class ItemEditorViewModel : GameDataEditorBase
     [ObservableProperty] private int    _price;
     [ObservableProperty] private string _headerHex = "";
 
-    /// <summary>True when the data after +21 is a clean list of 3-byte properties.</summary>
+    // true when the data after +21 is a clean list of 3 byte properties
     [ObservableProperty] private bool   _hasPropertyList;
     [ObservableProperty] private string _effectHex = "";
     [ObservableProperty] private string _offsetText = "";
@@ -48,7 +48,7 @@ public partial class ItemEditorViewModel : GameDataEditorBase
     private Core.ItemDescriptions? _descriptions;
 
     private int _recordOffset;
-    private int _tailLength;   // bytes from +21 to the end of the record (incl. terminator)
+    private int _tailLength;   // bytes from +21 to the end of the record (with the 00 at the end)
 
     protected override void OnRomLoaded()
     {
@@ -67,7 +67,7 @@ public partial class ItemEditorViewModel : GameDataEditorBase
         LoadSelected();
     }
 
-    // Replacing a renamed entry in the shared list clears the ListBox selection; restore it.
+    // replacing a renamed entry in the shared list clears the ListBox selection, so put it back
     protected override void OnNamesChanged()
     {
         if (SelectedIndex < 0) SelectedIndex = _lastIndex;
@@ -78,19 +78,19 @@ public partial class ItemEditorViewModel : GameDataEditorBase
     {
         if (Ctx == null || SelectedIndex < 0) return;
         var rom = Ctx.Rom;
-        int o   = _recordOffset = Ctx.ItemOffset(SelectedIndex);
+        int record = _recordOffset = Ctx.ItemOffset(SelectedIndex);
 
-        Name = Ctx.ReadName(o, GameDataOffsets.ItemNameLen);
+        Name = Ctx.ReadName(record, GameDataOffsets.ItemNameLen);
 
-        int type = rom.ReadByte(o + 12);
+        int type = rom.ReadByte(record + 12);
         TypeOptions = GameDataLabels.WithValue(GameDataLabels.ItemTypes, type);
         Type = type;
 
-        int slot = rom.ReadByte(o + 13);
+        int slot = rom.ReadByte(record + 13);
         SlotOptions = GameDataLabels.WithValue(GameDataLabels.EquipSlots, slot);
         Slot = slot;
 
-        int equip  = rom.ReadByte(o + 14);
+        int equip  = rom.ReadByte(record + 14);
         EquipHero  = (equip & 0x10) != 0;
         EquipLufia = (equip & 0x20) != 0;
         EquipAguro = (equip & 0x40) != 0;
@@ -98,29 +98,29 @@ public partial class ItemEditorViewModel : GameDataEditorBase
         TargetOptions = GameDataLabels.WithValue(GameDataLabels.Targets, equip & 0x0F);
         Target = equip & 0x0F;
 
-        int icon = rom.ReadByte(o + 15);
+        int icon = rom.ReadByte(record + 15);
         IconOptions = GameDataLabels.WithValue(GameDataLabels.ItemIcons, icon);
         Icon = icon;
 
-        Price     = rom.ReadUInt16Le(o + 16);
-        HeaderHex = ToHex(rom.ReadBytes(o + 18, 3));
+        Price     = rom.ReadUInt16Le(record + 16);
+        HeaderHex = ToHex(rom.ReadBytes(record + 18, 3));
 
-        // The record ends where the next one starts (the last record: at its 00 terminator).
-        // (the nearest record after this one: a record that grew may have moved to the end of the bank)
-        int next = o + Core.Battle.ItemTable.Length(rom, SelectedIndex);
-        // (a record in the item bank keeps its own length, ItemTable.Length: scanning 3-byte entries read past its end
-        // into the next record, and Apply wrote them back there)
-        if (o >= Core.Battle.ItemTable.FreeStart && o < Core.Battle.ItemTable.FreeEnd && !Core.Battle.ItemTable.InItemBank(rom, SelectedIndex)) next = -1;
-        int p = o + 21, count = 0;
-        while (count < 16 && p < rom.Length && rom.ReadByte(p) != 0) { p += 3; count++; }
-        int parsedEnd = p + 1;
+        // the record ends where the next one starts (for the last record, at its 00 at the end).
+        // that's the nearest record after this one, a record that grew may have moved to the end of the bank
+        int next = record + Core.Battle.ItemTable.Length(rom, SelectedIndex);
+        // a record in the item bank keeps its own length (ItemTable.Length). scanning 3 byte entries used to read past
+        // its end into the next record, and Apply wrote them back there
+        if (record >= Core.Battle.ItemTable.FreeStart && record < Core.Battle.ItemTable.FreeEnd && !Core.Battle.ItemTable.InItemBank(rom, SelectedIndex)) next = -1;
+        int entry = record + 21, count = 0;
+        while (count < 16 && entry < rom.Length && rom.ReadByte(entry) != 0) { entry += 3; count++; }
+        int parsedEnd = entry + 1;
         if (next < 0) next = parsedEnd;
 
-        _tailLength     = next - (o + 21);
-        // (a list that was shortened in place is followed by zeros up to the next record)
-        // (byte +20 is a mask of extra data pointers on usable items, as ItemTable.Properties reads it: such a record
-        // isn't a property list even when its bytes happen to parse as one, Arrows and Bombs among them)
-        HasPropertyList = rom.ReadByte(o + 20) == 0 && count < 16 && (parsedEnd == next || parsedEnd < next && Enumerable.Range(parsedEnd, next - parsedEnd).All(i => rom.ReadByte(i) == 0));
+        _tailLength     = next - (record + 21);
+        // a list that got shortened in place is followed by zeros up to the next record.
+        // byte +20 is a mask of extra data pointers on usable items (that's how ItemTable.Properties reads it), so such
+        // a record isn't a property list even if its bytes happen to parse as one. Arrows and Bombs are like that
+        HasPropertyList = rom.ReadByte(record + 20) == 0 && count < 16 && (parsedEnd == next || parsedEnd < next && Enumerable.Range(parsedEnd, next - parsedEnd).All(i => rom.ReadByte(i) == 0));
 
         Properties.Clear();
         if (HasPropertyList)
@@ -128,13 +128,13 @@ public partial class ItemEditorViewModel : GameDataEditorBase
             for (int i = 0; i < count; i++)
                 Properties.Add(new ItemProperty
                 {
-                    Id    = rom.ReadByte(o + 21 + i * 3),
-                    Value = rom.ReadUInt16Le(o + 22 + i * 3),
+                    Id    = rom.ReadByte(record + 21 + i * 3),
+                    Value = rom.ReadUInt16Le(record + 22 + i * 3),
                 });
         }
-        EffectHex = _tailLength > 0 ? ToHex(rom.ReadBytes(o + 21, _tailLength)) : "";
+        EffectHex = _tailLength > 0 ? ToHex(rom.ReadBytes(record + 21, _tailLength)) : "";
 
-        OffsetText = $"Record at 0x{o:X6}, {next - o} bytes  (pointer at 0x{GameDataOffsets.ItemPointerTable + SelectedIndex * 2:X6})";
+        OffsetText = $"Record at 0x{record:X6}, {next - record} bytes  (pointer at 0x{GameDataOffsets.ItemPointerTable + SelectedIndex * 2:X6})";
         LoadStatus();
 
         if (_descriptions != null)
@@ -151,9 +151,9 @@ public partial class ItemEditorViewModel : GameDataEditorBase
     {
         if (Ctx == null || SelectedIndex < 0) return;
         var rom = Ctx.Rom;
-        int o   = _recordOffset;
+        int record = _recordOffset;
 
-        // Validate the hex fields before touching the ROM.
+        // check the hex fields before touching the ROM
         if (!TryParseHex(HeaderHex, out var header) || header.Length != 3)
         {
             Refuse("Header bytes (+18..+20) must be exactly 3 hex bytes.");
@@ -183,30 +183,30 @@ public partial class ItemEditorViewModel : GameDataEditorBase
         }
 
         if (Core.DutchLetters.Unwritable(Ctx.Rom, Name) is string badName) { Refuse("Name: " + badName + "."); return; }
-        bool renamed = Name != Ctx.ReadName(o, GameDataOffsets.ItemNameLen);
+        bool renamed = Name != Ctx.ReadName(record, GameDataOffsets.ItemNameLen);
         bool written = Commit($"Item {SelectedIndex:X2}", () =>
         {
-            if (renamed) Ctx.WriteName(o, GameDataOffsets.ItemNameLen, Name);
-            rom.WriteByte(o + 12, (byte)Type);
-            rom.WriteByte(o + 13, (byte)Slot);
+            if (renamed) Ctx.WriteName(record, GameDataOffsets.ItemNameLen, Name);
+            rom.WriteByte(record + 12, (byte)Type);
+            rom.WriteByte(record + 13, (byte)Slot);
             int equip = (EquipHero ? 0x10 : 0) | (EquipLufia ? 0x20 : 0) |
                         (EquipAguro ? 0x40 : 0) | (EquipJerin ? 0x80 : 0) | (Target & 0x0F);
-            rom.WriteByte(o + 14, (byte)equip);
-            rom.WriteByte(o + 15, (byte)Icon);
-            rom.WriteUInt16Le(o + 16, (ushort)Clamp(Price, 0, 0xFFFF));
-            rom.WriteBytes(o + 18, header);
+            rom.WriteByte(record + 14, (byte)equip);
+            rom.WriteByte(record + 15, (byte)Icon);
+            rom.WriteUInt16Le(record + 16, (ushort)Clamp(Price, 0, 0xFFFF));
+            rom.WriteBytes(record + 18, header);
 
             if (HasPropertyList)
             {
                 for (int i = 0; i < Properties.Count; i++)
                 {
-                    rom.WriteByte(o + 21 + i * 3, (byte)Properties[i].Id);
-                    rom.WriteUInt16Le(o + 22 + i * 3, (ushort)Clamp(Properties[i].Value, 0, 0xFFFF));
+                    rom.WriteByte(record + 21 + i * 3, (byte)Properties[i].Id);
+                    rom.WriteUInt16Le(record + 22 + i * 3, (ushort)Clamp(Properties[i].Value, 0, 0xFFFF));
                 }
             }
             else if (effect!.Length > 0)
             {
-                rom.WriteBytes(o + 21, effect);
+                rom.WriteBytes(record + 21, effect);
             }
             if (newDescription != null)
             {
@@ -214,12 +214,12 @@ public partial class ItemEditorViewModel : GameDataEditorBase
                 all[SelectedIndex] = newDescription;
                 _descriptions!.WriteAll(all);
             }
-            Core.Battle.ItemTable.Sync(rom, SelectedIndex);   // (the item bank's copy, which the game reads)
+            Core.Battle.ItemTable.Sync(rom, SelectedIndex);   // the item bank's copy, the one the game reads
         }, namesChanged: renamed);
-        if (!written) return;   // (the edits stay, with the error)
+        if (!written) return;   // the edits stay, with the error
 
         if (!renamed) LoadSelected();
-        if (newDescription != null && Core.ItemDescriptions.Warning(newDescription) is { Length: > 0 } warn) Status += " Warning, description: " + warn + ".";
+        if (newDescription != null && Core.ItemDescriptions.Warning(newDescription) is { Length: > 0 } warning) Status += " Warning, description: " + warning + ".";
     }
 
     private List<string> AllDescriptions() =>

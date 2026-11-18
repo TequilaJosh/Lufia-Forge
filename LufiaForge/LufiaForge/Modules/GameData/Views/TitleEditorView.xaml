@@ -56,7 +56,7 @@
             <ColumnDefinition Width="370" MinWidth="160"/>
         </Grid.ColumnDefinitions>
 
-        <!-- ═══ the canvas ═══ -->
+        <!-- the canvas -->
         <common:PopOutHost Grid.Column="0" Title="Title screen canvas" Key="gamedata.title.canvas" ButtonMargin="0,14,12,0">
         <Grid Margin="12,12,8,0">
             <Grid.RowDefinitions>
@@ -94,7 +94,7 @@
 
         <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch"/>
 
-        <!-- ═══ tools ═══ -->
+        <!-- tools -->
         <common:PopOutHost Grid.Column="2" Title="Title screen tools" Key="gamedata.title.tools" ButtonMargin="0,14,32,0">
         <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,12,12,0">
             <StackPanel>

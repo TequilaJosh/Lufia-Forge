@@ -9,13 +9,12 @@ using System.Windows.Media.Imaging;
 
 namespace LufiaForge.Modules.GameData;
 
-/// <summary>
-/// The world map's encounter zones (resource B0: 80 x 64 cells, one per 4x4 tiles, each a group number; 0 = no
-/// battles, the game skips the encounter when the group is 0). Shown over the world map, picked, painted and filled.
-/// </summary>
+// the world map's encounter zones. resource B0: 80 x 64 cells, one per 4x4 tiles, each one a group number
+// (0 = no battles, the game skips the encounter when the group is 0). shown over the world map, you can pick,
+// paint and fill them
 public partial class EncounterEditorViewModel
 {
-    /// <summary>Pixels per world map tile in <see cref="WorldImage"/> (16 would be full size).</summary>
+    // pixels per world map tile in WorldImage (16 would be full size)
     public const int TileScale = 4;
     public const int CellPixels = 4 * TileScale;
     public double WorldPixelWidth => Encounters.ZoneWidth * CellPixels;
@@ -26,10 +25,10 @@ public partial class EncounterEditorViewModel
     [ObservableProperty] private WriteableBitmap? _zoneImage;
     [ObservableProperty] private bool _zonesDirty;
     [ObservableProperty] private bool _showAllZones = true;
-    /// <summary>0 = pick (click a zone to select its group), 1 = paint, 2 = fill an area.</summary>
+    // 0 = pick (click a zone to select its group), 1 = paint, 2 = fill an area
     [ObservableProperty] private int _toolIndex;
     [ObservableProperty] private int _brushSize = 1;
-    /// <summary>Paint "no battles" (group 0) instead of the selected group.</summary>
+    // paint "no battles" (group 0) instead of the selected group
     [ObservableProperty] private bool _eraseZones;
     [ObservableProperty] private string _hoverText = "";
     [ObservableProperty] private string _worldStatus = "";
@@ -48,74 +47,74 @@ public partial class EncounterEditorViewModel
         Task.Run(() =>
         {
             var map = LufiaMap.Load(rom, LufiaMap.WorldMap);
-            var px = MapTileset.ForMap(rom, map).RenderMap(map);
-            int w = map.Width * 16, h = map.Height * 16, ow = w / 4, oh = h / 4;
-            var small = new uint[ow * oh];
-            for (int y = 0; y < oh; y++)
-                for (int x = 0; x < ow; x++)
+            var pixels = MapTileset.ForMap(rom, map).RenderMap(map);
+            int w = map.Width * 16, h = map.Height * 16, smallWidth = w / 4, smallHeight = h / 4;
+            var small = new uint[smallWidth * smallHeight];
+            for (int y = 0; y < smallHeight; y++)
+                for (int x = 0; x < smallWidth; x++)
                 {
                     uint r = 0, g = 0, b = 0;
                     for (int dy = 0; dy < 4; dy++)
                         for (int dx = 0; dx < 4; dx++)
                         {
-                            uint c = px[(y * 4 + dy) * w + x * 4 + dx];
-                            r += c >> 16 & 255; g += c >> 8 & 255; b += c & 255;
+                            uint color = pixels[(y * 4 + dy) * w + x * 4 + dx];
+                            r += color >> 16 & 255; g += color >> 8 & 255; b += color & 255;
                         }
-                    small[y * ow + x] = 0xFF000000u | (r / 16) << 16 | (g / 16) << 8 | b / 16;
+                    small[y * smallWidth + x] = 0xFF000000u | (r / 16) << 16 | (g / 16) << 8 | b / 16;
                 }
-            return (small, ow, oh);
-        }).ContinueWith(t =>
+            return (small, smallWidth, smallHeight);
+        }).ContinueWith(task =>
         {
-            if (t.IsFaulted) { WorldStatus = "The world map could not be drawn: " + t.Exception?.GetBaseException().Message; return; }
-            var (small, ow, oh) = t.Result;
-            var bmp = BitmapSource.Create(ow, oh, 96, 96, PixelFormats.Bgra32, null, small, ow * 4);
+            if (task.IsFaulted) { WorldStatus = "The world map could not be drawn: " + task.Exception?.GetBaseException().Message; return; }
+            var (small, smallWidth, smallHeight) = task.Result;
+            var bmp = BitmapSource.Create(smallWidth, smallHeight, 96, 96, PixelFormats.Bgra32, null, small, smallWidth * 4);
             bmp.Freeze();
             WorldImage = bmp;
             WorldStatus = "";
         }, TaskScheduler.FromCurrentSynchronizationContext());
     }
 
-    private static uint Hue(int g, uint alpha)
+    private static uint Hue(int group, uint alpha)
     {
-        double h = (g * 47 % 360) / 60.0, x = 1 - Math.Abs(h % 2 - 1);
-        (double r, double gg, double b) = h switch
+        double h = (group * 47 % 360) / 60.0, x = 1 - Math.Abs(h % 2 - 1);
+        (double red, double green, double blue) = h switch
         {
             < 1 => (1.0, x, 0.0), < 2 => (x, 1.0, 0.0), < 3 => (0.0, 1.0, x),
             < 4 => (0.0, x, 1.0), < 5 => (x, 0.0, 1.0), _ => (1.0, 0.0, x),
         };
-        return alpha << 24 | (uint)(r * 255) << 16 | (uint)(gg * 255) << 8 | (uint)(b * 255);
+        return alpha << 24 | (uint)(red * 255) << 16 | (uint)(green * 255) << 8 | (uint)(blue * 255);
     }
 
     private void DrawZones()
     {
         int w = Encounters.ZoneWidth, h = Encounters.ZoneHeight;
         if (_zones.Length < w * h) { ZoneImage = null; return; }
-        int sel = SelectedGroup;
-        var px = new uint[w * h];
-        for (int i = 0; i < px.Length; i++)
+        int selected = SelectedGroup;
+        var pixels = new uint[w * h];
+        for (int i = 0; i < pixels.Length; i++)
         {
-            int g = _zones[i];
-            px[i] = g == 0 ? 0u : g == sel ? 0xA8FFE040u : ShowAllZones ? Hue(g, 0x38) : 0u;
+            int group = _zones[i];
+            pixels[i] = group == 0 ? 0u : group == selected ? 0xA8FFE040u : ShowAllZones ? Hue(group, 0x38) : 0u;
         }
         var bmp = new WriteableBitmap(w, h, 96, 96, PixelFormats.Bgra32, null);
-        bmp.WritePixels(new Int32Rect(0, 0, w, h), px, w * 4, 0);
+        bmp.WritePixels(new Int32Rect(0, 0, w, h), pixels, w * 4, 0);
         ZoneImage = bmp;
     }
 
     private bool InGrid(int cx, int cy) => cx >= 0 && cy >= 0 && cx < Encounters.ZoneWidth && cy < Encounters.ZoneHeight && _zones.Length >= Encounters.ZoneWidth * Encounters.ZoneHeight;
 
-    /// <summary>Mouse over cell (cx, cy).</summary>
+    // mouse over cell (cx, cy)
     public void HoverCell(int cx, int cy)
     {
         if (!InGrid(cx, cy)) { HoverText = ""; return; }
-        int g = _zones[cy * Encounters.ZoneWidth + cx];
-        HoverText = $"Zone {cx},{cy} (tiles {cx * 4}-{cx * 4 + 3}, {cy * 4}-{cy * 4 + 3}): " + (g == 0 ? "no battles" : $"group {g:X2}" + (g <= Count ? $" - {GroupMonsterSummary(g)}" : " (no such group!)"));
+        int group = _zones[cy * Encounters.ZoneWidth + cx];
+        HoverText = $"Zone {cx},{cy} (tiles {cx * 4}-{cx * 4 + 3}, {cy * 4}-{cy * 4 + 3}): " + (group == 0 ? "no battles" : $"group {group:X2}" + (group <= Count ? $" - {GroupMonsterSummary(group)}" : " (no such group!)"));
     }
 
-    private string GroupMonsterSummary(int g) =>
-        string.Join(", ", _groups[g - 1].Distinct().SelectMany(s => Monsters(s)).Where(m => m != 0xFF).Select(MonsterName).Distinct().Take(6));
+    private string GroupMonsterSummary(int group) =>
+        string.Join(", ", _groups[group - 1].Distinct().SelectMany(s => Monsters(s)).Where(m => m != 0xFF).Select(MonsterName).Distinct().Take(6));
 
-    // ── tools: a stroke is mouse down .. mouse up; each stroke can be undone ──
+    // tools: a stroke is mouse down .. mouse up, and each stroke can be undone
 
     private readonly Stack<byte[]> _undo = new(), _redo = new();
     [ObservableProperty] private bool _canUndo;
@@ -131,7 +130,7 @@ public partial class EncounterEditorViewModel
     }
     private (int X, int Y)? _rectStart;
     private byte[]? _beforeRect;
-    /// <summary>A "no battles" area bigger than this is joined to the open map; filling it asks first.</summary>
+    // a "no battles" area bigger than this is joined up with the open map, so filling it asks first
     private const int BigEmptyArea = 150;
 
     private int Brush => EraseZones ? 0 : SelectedGroup;
@@ -145,12 +144,12 @@ public partial class EncounterEditorViewModel
     private void PushUndo()
     {
         _undo.Push(_zones.ToArray());
-        if (_undo.Count > 300) { var keep = _undo.Take(300).Reverse().ToList(); _undo.Clear(); foreach (var z in keep) _undo.Push(z); }
+        if (_undo.Count > 300) { var kept = _undo.Take(300).Reverse().ToList(); _undo.Clear(); foreach (var zones in kept) _undo.Push(zones); }
         _redo.Clear();
         UpdateUndo();
     }
 
-    /// <summary>Mouse down on cell (cx, cy).</summary>
+    // mouse down on cell (cx, cy)
     public void BeginStroke(int cx, int cy)
     {
         if (!InGrid(cx, cy)) return;
@@ -158,9 +157,9 @@ public partial class EncounterEditorViewModel
         switch (ToolIndex)
         {
             case 0:   // pick
-                int g = _zones[i];
-                if (g == 0) { Status = "No battles in this zone. Pick a group in the list and paint to add some."; return; }
-                if (g <= Count) SelectedIndex = g - 1;
+                int group = _zones[i];
+                if (group == 0) { Status = "No battles in this zone. Pick a group in the list and paint to add some."; return; }
+                if (group <= Count) SelectedIndex = group - 1;
                 return;
             case 1:   // paint
                 if (!CheckBrush()) return;
@@ -180,24 +179,24 @@ public partial class EncounterEditorViewModel
         }
     }
 
-    /// <summary>Mouse moved with the button down.</summary>
+    // mouse moved with the button down
     public void DragStroke(int cx, int cy)
     {
         cx = Math.Clamp(cx, 0, Encounters.ZoneWidth - 1); cy = Math.Clamp(cy, 0, Encounters.ZoneHeight - 1);
         if (ToolIndex == 1) { if (Brush != 0 || EraseZones) PaintAt(cx, cy); return; }
-        if (ToolIndex == 3 && _rectStart is var (sx, sy) && _beforeRect != null)
+        if (ToolIndex == 3 && _rectStart is var (startX, startY) && _beforeRect != null)
         {
-            // preview: the zones before the stroke, with the rectangle on top
+            // preview: the zones from before the stroke, with the rectangle on top
             _beforeRect.CopyTo(_zones, 0);
-            for (int y = Math.Min(sy, cy); y <= Math.Max(sy, cy); y++)
-                for (int x = Math.Min(sx, cx); x <= Math.Max(sx, cx); x++)
+            for (int y = Math.Min(startY, cy); y <= Math.Max(startY, cy); y++)
+                for (int x = Math.Min(startX, cx); x <= Math.Max(startX, cx); x++)
                     _zones[y * Encounters.ZoneWidth + x] = (byte)Brush;
             DrawZones();
-            HoverText = $"Rectangle {Math.Abs(cx - sx) + 1} x {Math.Abs(cy - sy) + 1} zones";
+            HoverText = $"Rectangle {Math.Abs(cx - startX) + 1} x {Math.Abs(cy - startY) + 1} zones";
         }
     }
 
-    /// <summary>Mouse up.</summary>
+    // mouse up
     public void EndStroke(int cx, int cy)
     {
         if (ToolIndex == 3 && _beforeRect != null)
@@ -214,15 +213,15 @@ public partial class EncounterEditorViewModel
 
     private void PaintAt(int cx, int cy)
     {
-        int brush = Brush, r0 = (BrushSize - 1) / 2;
+        int brush = Brush, half = (BrushSize - 1) / 2;
         bool changed = false;
-        for (int y = cy - r0; y < cy - r0 + BrushSize; y++)
-            for (int x = cx - r0; x < cx - r0 + BrushSize; x++)
+        for (int y = cy - half; y < cy - half + BrushSize; y++)
+            for (int x = cx - half; x < cx - half + BrushSize; x++)
                 if (InGrid(x, y) && _zones[y * Encounters.ZoneWidth + x] != brush) { _zones[y * Encounters.ZoneWidth + x] = (byte)brush; changed = true; }
         if (changed) { ZonesDirty = true; DrawZones(); HoverCell(cx, cy); }
     }
 
-    /// <summary>The connected cells with the same group as (cx, cy).</summary>
+    // the connected cells that have the same group as (cx, cy)
     private List<int> Area(int cx, int cy)
     {
         int from = _zones[cy * Encounters.ZoneWidth + cx];
@@ -292,12 +291,12 @@ public partial class EncounterEditorViewModel
             _autoZones = true;
             try { WriteZones(); }
             finally { _autoZones = false; }
-            if (ZonesDirty) return $"{PageName}: {Status}";   // (still to write: Status says why)
+            if (ZonesDirty) return $"{PageName}: {Status}";   // still not written, Status says why
         }
         return null;
     }
 
-    /// <summary>The zones are written by the app (with the other edits): no questions then.</summary>
+    // the app is writing the zones (along with the other edits), so no questions then
     private bool _autoZones;
 
     [RelayCommand]
@@ -315,9 +314,9 @@ public partial class EncounterEditorViewModel
         Commit("World map battle zones", () => { Encounters.WriteZones(rom, zones, allowExpand: true); ok = true; });
         if (!ok) return;
         ZonesDirty = false;
-        int keep = SelectedIndex;
+        int keepIndex = SelectedIndex;
         BuildEntries();
-        SelectedIndex = -1; SelectedIndex = keep;
+        SelectedIndex = -1; SelectedIndex = keepIndex;
     }
 
     [RelayCommand]

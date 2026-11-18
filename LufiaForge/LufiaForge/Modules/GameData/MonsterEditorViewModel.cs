@@ -4,7 +4,7 @@ using System.Collections.ObjectModel;
 
 namespace LufiaForge.Modules.GameData;
 
-/// <summary>A "cast spell" step of a monster's AI script (op 07), edited with a spell list.</summary>
+// a "cast spell" step of a monster's AI script (op 07), edited with a spell list
 public partial class AiSpellStep : ObservableObject
 {
     public int Offset { get; init; }
@@ -13,29 +13,29 @@ public partial class AiSpellStep : ObservableObject
     [ObservableProperty] private int _spell;
 }
 
-/// <summary>One spell of the "give spells" builder: the share of turns it is tried.</summary>
+// one spell of the "give spells" builder: the share of turns it gets tried
 public partial class GiveSpellRow : ObservableObject
 {
     [ObservableProperty] private int _percent = 25;
     [ObservableProperty] private int _spell = 1;
 }
 
-/// <summary>How much damage a monster takes from spells of one element, in percent (100 = normal).</summary>
+// how much damage a monster takes from spells of one element, in percent (100 = normal)
 public partial class ElementRow : ObservableObject
 {
     public string Name { get; init; } = "";
     [ObservableProperty] private int _percent = 100;
 }
 
-/// <summary>Monster names, stats, rewards, drops, weakness and graphics.</summary>
+// monster names, stats, rewards, drops, weakness and graphics
 public partial class MonsterEditorViewModel : GameDataEditorBase
 {
-    // Bytes in the fixed part of the record whose meaning is unknown; shown raw so they can be edited.
+    // bytes in the fixed part of the record nobody knows the meaning of yet, shown raw so they can be edited
     private static readonly int[] UnknownFields = { 11, 29 };
     public static readonly string[] ElementNames = { "Fire", "Ice", "Bolt", "Water", "Blast", "Light", "Dark" };
-    /// <summary>Spell damage per element (the record's second masked group).</summary>
+    // spell damage per element (the record's second masked group)
     public ObservableCollection<ElementRow> MagicElements { get; } = new(ElementNames.Select(n => new ElementRow { Name = n }));
-    /// <summary>Physical damage from attacks of the "weak against" element, in percent (+13, in 16ths).</summary>
+    // physical damage from attacks of the "weak against" element, in percent (+13, in 16ths)
     [ObservableProperty] private int _physicalPercent = 100;
     private static int ToPercent(int sixteenths) => sixteenths == 0 ? 100 : (sixteenths * 100 + 8) / 16;
     private static int ToSixteenths(int percent) => Math.Clamp((percent * 16 + 50) / 100, 1, 255);
@@ -63,16 +63,16 @@ public partial class MonsterEditorViewModel : GameDataEditorBase
     [ObservableProperty] private int    _dropItem;
     [ObservableProperty] private int    _dropRate;
     [ObservableProperty] private string _unknownHex = "";
-    /// <summary>The monster's AI script, one decoded command per line ("+27  With chance ...").</summary>
+    // the monster's AI script, one decoded command per line ("+27  With chance ...")
     public System.Collections.ObjectModel.ObservableCollection<string> AiLines { get; } = new();
-    /// <summary>The script's bytes (hex), edited in place: same length.</summary>
+    // the script's bytes (hex), edited in place so the length stays the same
     [ObservableProperty] private string _aiHex = "";
     [ObservableProperty] private string _aiNote = "";
     private int _aiStart, _aiLength;
     [ObservableProperty] private string _offsetText = "";
-    /// <summary>The script's "cast spell" steps, each with a spell list.</summary>
+    // the script's "cast spell" steps, each with a spell list
     public ObservableCollection<AiSpellStep> SpellSteps { get; } = new();
-    /// <summary>The "give spells" builder's rows.</summary>
+    // the "give spells" builder's rows
     public ObservableCollection<GiveSpellRow> GiveSpells { get; } = new();
     [ObservableProperty] private string _giveSpellsNote = "";
 
@@ -82,12 +82,12 @@ public partial class MonsterEditorViewModel : GameDataEditorBase
     partial void OnDropRateChanged(int value) => OnPropertyChanged(nameof(DropChanceText));
 
     private int _recordOffset;
-    private int _typeMiddleBits;   // bits 3-5 of the type byte, preserved as-is
+    private int _typeMiddleBits;   // bits 3-5 of the type byte, kept as they are
     private int _lastIndex;
 
     [ObservableProperty] private string _newMonsterNote = "";
 
-    /// <summary>A new monster: a copy of the selected one (see <see cref="Core.Battle.MonsterTable.Add"/>).</summary>
+    // a new monster, a copy of the selected one (see Core.Battle.MonsterTable.Add)
     [RelayCommand]
     private void NewMonster()
     {
@@ -100,20 +100,20 @@ public partial class MonsterEditorViewModel : GameDataEditorBase
     public void MakeMonster()
     {
         if (Ctx == null || SelectedIndex < 0) return;
-        int t = SelectedIndex, made = -1;
-        Commit("New monster", () => made = Core.Battle.MonsterTable.Add(Ctx.Rom, t), namesChanged: true);
+        int template = SelectedIndex, made = -1;
+        Commit("New monster", () => made = Core.Battle.MonsterTable.Add(Ctx.Rom, template), namesChanged: true);
         if (made < 0) return;
         RefreshList();
         SelectedIndex = made;
-        Status = $"Monster {made:X2} made (a copy of {t:X2}). Rename it, change it, then put it in encounters (Encounters tab).";
+        Status = $"Monster {made:X2} made (a copy of {template:X2}). Rename it, change it, then put it in encounters (Encounters tab).";
     }
 
-    /// <summary>Gives the selected monster a picture of its own (a copy of its current one).</summary>
+    // gives the selected monster a picture of its own (a copy of its current one)
     [RelayCommand]
     private void NewPicture()
     {
         if (Ctx == null || SelectedIndex < 0) return;
-        if (WritePendingEdits() != null) return;   // the typed values first (the record is read again after)
+        if (WritePendingEdits() != null) return;   // the typed values go first (the record gets read again after)
         int id = SelectedIndex, old = Graphic, made = -1;
         Commit($"Monster {id:X2} picture", () =>
         {
@@ -135,11 +135,11 @@ public partial class MonsterEditorViewModel : GameDataEditorBase
     private void RefreshList()
     {
         if (Ctx == null) return;
-        int keep = SelectedIndex;
+        int keepIndex = SelectedIndex;
         Monsters.Clear();
-        for (int i = 0, n = Ctx.MonsterCount; i < n; i++)
+        for (int i = 0, count = Ctx.MonsterCount; i < count; i++)
             Monsters.Add($"{i:X2}  {Ctx.ReadName(Ctx.MonsterOffset(i), GameDataOffsets.MonsterNameLen)}");
-        SelectedIndex = keep;
+        SelectedIndex = keepIndex;
         try { NewMonsterNote = $"Room for {Core.Battle.MonsterTable.Room(Ctx.Rom)} more monsters."; } catch { NewMonsterNote = ""; }
     }
 
@@ -153,39 +153,39 @@ public partial class MonsterEditorViewModel : GameDataEditorBase
     {
         if (Ctx == null || SelectedIndex < 0) return;
         var rom = Ctx.Rom;
-        int o   = _recordOffset = Ctx.MonsterOffset(SelectedIndex);
+        int record = _recordOffset = Ctx.MonsterOffset(SelectedIndex);
 
-        Name = Ctx.ReadName(o, GameDataOffsets.MonsterNameLen);
-        int type        = rom.ReadByte(o + 10);
+        Name = Ctx.ReadName(record, GameDataOffsets.MonsterNameLen);
+        int type        = rom.ReadByte(record + 10);
         MonsterType     = type & 0x07;
         _typeMiddleBits = type & 0x38;
         Flag40          = (type & 0x40) != 0;
         Flag80          = (type & 0x80) != 0;
 
-        int weak = rom.ReadByte(o + 12);
+        int weak = rom.ReadByte(record + 12);
         WeaknessOptions = GameDataLabels.WithValue(GameDataLabels.Elements, weak);
         Weakness = weak;
-        PhysicalPercent = ToPercent(rom.ReadByte(o + 13));
-        var magic = Core.Battle.MonsterTable.ReadElements(rom, o);
+        PhysicalPercent = ToPercent(rom.ReadByte(record + 13));
+        var magic = Core.Battle.MonsterTable.ReadElements(rom, record);
         for (int e = 0; e < MagicElements.Count; e++) MagicElements[e].Percent = ToPercent(magic[e]);
 
-        Graphic      = rom.ReadByte(o + 14);
-        Palette      = rom.ReadByte(o + 15);
-        Hp           = rom.ReadUInt16Le(o + 16);
-        Mp           = rom.ReadUInt16Le(o + 18);
-        Atp          = rom.ReadUInt16Le(o + 20);
-        Dfp          = rom.ReadUInt16Le(o + 22);
-        MagicDefense = rom.ReadByte(o + 24);
-        Agl          = rom.ReadByte(o + 25);
-        Mgr          = rom.ReadByte(o + 26);
-        Exp          = rom.ReadUInt16Le(o + 27);
-        Gold         = rom.ReadUInt16Le(o + 30);
-        DropItem     = rom.ReadByte(o + 32);
-        DropRate     = rom.ReadByte(o + 33);
-        UnknownHex   = ItemEditorViewModel.ToHex(UnknownFields.Select(f => rom.ReadByte(o + f)).ToArray());
-        LoadAi(rom, o);
+        Graphic      = rom.ReadByte(record + 14);
+        Palette      = rom.ReadByte(record + 15);
+        Hp           = rom.ReadUInt16Le(record + 16);
+        Mp           = rom.ReadUInt16Le(record + 18);
+        Atp          = rom.ReadUInt16Le(record + 20);
+        Dfp          = rom.ReadUInt16Le(record + 22);
+        MagicDefense = rom.ReadByte(record + 24);
+        Agl          = rom.ReadByte(record + 25);
+        Mgr          = rom.ReadByte(record + 26);
+        Exp          = rom.ReadUInt16Le(record + 27);
+        Gold         = rom.ReadUInt16Le(record + 30);
+        DropItem     = rom.ReadByte(record + 32);
+        DropRate     = rom.ReadByte(record + 33);
+        UnknownHex   = ItemEditorViewModel.ToHex(UnknownFields.Select(f => rom.ReadByte(record + f)).ToArray());
+        LoadAi(rom, record);
 
-        OffsetText = $"Record at 0x{o:X6}{(SelectedIndex >= Core.Battle.MonsterTable.OriginalCount ? " (a new monster)" : "")}. " +
+        OffsetText = $"Record at 0x{record:X6}{(SelectedIndex >= Core.Battle.MonsterTable.OriginalCount ? " (a new monster)" : "")}. " +
                      "Its AI script is decoded below.";
     }
 
@@ -196,30 +196,30 @@ public partial class MonsterEditorViewModel : GameDataEditorBase
         GiveSpells.Clear();
         GiveSpellsNote = "Writes a new AI script: each spell is tried that share of turns (a monster needs MP for it, or it attacks instead), the rest of the turns it attacks. " +
                          "Its old script (calling for help, special attacks...) is replaced. It fits in place when the old script is long enough, otherwise it goes in the free space at the end of bank 0, and when that is used up in the ROM's added space.";
-        var cmds = LufiaForge.Core.Battle.MonsterAi.Decode(rom, record,
+        var commands = LufiaForge.Core.Battle.MonsterAi.Decode(rom, record,
             id => id < SpellNames.Count ? SpellNames[id][3..].Trim() : $"spell {id:X2}");
-        if (cmds.Count == 0)
+        if (commands.Count == 0)
         {
             _aiStart = _aiLength = 0; AiHex = "";
             AiNote = "No AI script: this monster just attacks. Use Give spells to make it cast spells.";
             return;
         }
-        // numbered steps in script order; jumps name the step they land on
-        var stepOf = cmds.Select((c, i) => (c.Offset, i + 1)).ToDictionary(t => t.Offset, t => t.Item2);
-        string Step(int offset) => stepOf.TryGetValue(offset, out int n) ? $"step {n}" : $"+{offset:X2}";
+        // numbered steps in script order, jumps name the step they land on
+        var stepOf = commands.Select((c, i) => (c.Offset, i + 1)).ToDictionary(t => t.Offset, t => t.Item2);
+        string Step(int offset) => stepOf.TryGetValue(offset, out int step) ? $"step {step}" : $"+{offset:X2}";
         Func<int, string> spell = id => id < SpellNames.Count ? SpellNames[id][3..].Trim() : $"spell {id:X2}";
         Func<int, string> item = id => id < ItemNames.Count ? ItemNames[id][3..].Trim() : $"item {id:X2}";
-        for (int i = 0; i < cmds.Count; i++)
+        for (int i = 0; i < commands.Count; i++)
         {
-            AiLines.Add($"{i + 1,2}.  {LufiaForge.Core.Battle.MonsterAi.Plain(cmds[i], Step, spell, item)}");
-            if (cmds[i].Op == 0x07)
-                SpellSteps.Add(new AiSpellStep { Offset = cmds[i].Offset, Original = cmds[i].Args[0], Spell = cmds[i].Args[0], Label = $"Step {i + 1} casts" });
+            AiLines.Add($"{i + 1,2}.  {LufiaForge.Core.Battle.MonsterAi.Plain(commands[i], Step, spell, item)}");
+            if (commands[i].Op == 0x07)
+                SpellSteps.Add(new AiSpellStep { Offset = commands[i].Offset, Original = commands[i].Args[0], Spell = commands[i].Args[0], Label = $"Step {i + 1} casts" });
         }
         // the builder starts from the spells it already casts, split evenly
         var known = SpellSteps.Select(x => x.Spell).Distinct().Take(8).ToList();
-        foreach (int sp in known) GiveSpells.Add(new GiveSpellRow { Spell = sp, Percent = Math.Max(1, 60 / known.Count) });
-        _aiStart = cmds.Min(c => c.Offset);
-        _aiLength = cmds.Max(c => c.Offset + 1 + c.Args.Length) - _aiStart;
+        foreach (int knownSpell in known) GiveSpells.Add(new GiveSpellRow { Spell = knownSpell, Percent = Math.Max(1, 60 / known.Count) });
+        _aiStart = commands.Min(c => c.Offset);
+        _aiLength = commands.Max(c => c.Offset + 1 + c.Args.Length) - _aiStart;
         AiHex = ItemEditorViewModel.ToHex(Enumerable.Range(0, _aiLength).Select(k => rom.ReadByte(Core.Battle.MonsterAi.ByteAt(rom, record, _aiStart + k))).ToArray());
         AiNote = "Every turn the monster starts at step 1 and works down the list until a step chooses what it does (attack, spell, ability...). " +
                  (Core.Battle.MonsterAi.HomeOf(rom, record).Far
@@ -227,24 +227,24 @@ public partial class MonsterEditorViewModel : GameDataEditorBase
                      : $"The bytes below are the script itself ({_aiLength} bytes at record +{_aiStart:X2}); edit them in place, the length can't change.");
     }
 
-    /// <summary>The AI script editor (steps, every command incl. Lufia Forge's own); writes the script when it closes with Use.</summary>
+    // opens the AI script editor (steps, every command, Lufia Forge's own too). writes the script when it closes with Use
     [RelayCommand]
     private void EditAiScript()
     {
         if (Ctx == null || SelectedIndex < 0) return;
-        if (WritePendingEdits() != null) return;   // the monster's other edits first (they share the record); Status says why not
+        if (WritePendingEdits() != null) return;   // the monster's other edits go first (they share the record), Status says why not
         int id = SelectedIndex;
-        var w = new AiScriptWindow(Ctx.Rom, id, Name.Replace('@', ' ').Trim(), SpellNames, ItemNames) { Owner = System.Windows.Application.Current?.MainWindow };
-        if (w.ShowDialog() != true || w.Result is not { } steps) return;
-        int at = 0;
+        var window = new AiScriptWindow(Ctx.Rom, id, Name.Replace('@', ' ').Trim(), SpellNames, ItemNames) { Owner = System.Windows.Application.Current?.MainWindow };
+        if (window.ShowDialog() != true || window.Result is not { } steps) return;
+        int scriptOffset = 0;
         bool patched = !LufiaForge.Core.Battle.AiCommandsPatch.IsApplied(Ctx.Rom) && LufiaForge.Core.Battle.AiScript.UsesNewCommands(steps);
         try
         {
-            Commit($"Monster {id:X2}'s AI script", () => at = LufiaForge.Core.Battle.AiScript.Write(Ctx.Rom, id, steps));
+            Commit($"Monster {id:X2}'s AI script", () => scriptOffset = LufiaForge.Core.Battle.AiScript.Write(Ctx.Rom, id, steps));
         }
         catch (InvalidOperationException ex) { Status = ex.Message; return; }
         LoadSelected();
-        Status = (at > 0 ? $"AI script written ({LufiaForge.Core.Battle.AiScript.Length(steps)} bytes at 0x{at:X5})." : "AI script removed: it just attacks.") +
+        Status = (scriptOffset > 0 ? $"AI script written ({LufiaForge.Core.Battle.AiScript.Length(steps)} bytes at 0x{scriptOffset:X5})." : "AI script removed: it just attacks.") +
                  (patched ? " Lufia Forge's new AI commands were added to the ROM." : "");
     }
 
@@ -273,41 +273,41 @@ public partial class MonsterEditorViewModel : GameDataEditorBase
         }
 
         var rom = Ctx.Rom;
-        int o   = _recordOffset;
+        int record = _recordOffset;
         if (Core.DutchLetters.Unwritable(Ctx.Rom, Name) is string badName) { Refuse("Name: " + badName + "."); return; }
-        bool renamed = Name != Ctx.ReadName(o, GameDataOffsets.MonsterNameLen);
+        bool renamed = Name != Ctx.ReadName(record, GameDataOffsets.MonsterNameLen);
 
         bool written = Commit($"Monster {SelectedIndex:X2}", () =>
         {
-            if (renamed) Ctx.WriteName(o, GameDataOffsets.MonsterNameLen, Name);
+            if (renamed) Ctx.WriteName(record, GameDataOffsets.MonsterNameLen, Name);
             int type = (MonsterType & 0x07) | _typeMiddleBits | (Flag40 ? 0x40 : 0) | (Flag80 ? 0x80 : 0);
-            rom.WriteByte(o + 10, (byte)type);
-            rom.WriteByte(o + 12, (byte)Weakness);
-            rom.WriteByte(o + 13, (byte)(PhysicalPercent == 100 && Weakness == 0 ? rom.ReadByte(o + 13) : ToSixteenths(PhysicalPercent)));
-            rom.WriteByte(o + 14, (byte)Clamp(Graphic, 0, 255));
-            rom.WriteByte(o + 15, (byte)Clamp(Palette, 0, 255));
-            rom.WriteUInt16Le(o + 16, (ushort)Clamp(Hp,  0, 0xFFFF));
-            rom.WriteUInt16Le(o + 18, (ushort)Clamp(Mp,  0, 0xFFFF));
-            rom.WriteUInt16Le(o + 20, (ushort)Clamp(Atp, 0, 0xFFFF));
-            rom.WriteUInt16Le(o + 22, (ushort)Clamp(Dfp, 0, 0xFFFF));
-            rom.WriteByte(o + 24, (byte)Clamp(MagicDefense, 0, 255));
-            rom.WriteByte(o + 25, (byte)Clamp(Agl, 0, 255));
-            rom.WriteByte(o + 26, (byte)Clamp(Mgr, 0, 255));
-            rom.WriteUInt16Le(o + 27, (ushort)Clamp(Exp,  0, 0xFFFF));
-            rom.WriteUInt16Le(o + 30, (ushort)Clamp(Gold, 0, 0xFFFF));
-            rom.WriteByte(o + 32, (byte)Clamp(DropItem, 0, 255));
-            rom.WriteByte(o + 33, (byte)Clamp(DropRate, 0, 255));
+            rom.WriteByte(record + 10, (byte)type);
+            rom.WriteByte(record + 12, (byte)Weakness);
+            rom.WriteByte(record + 13, (byte)(PhysicalPercent == 100 && Weakness == 0 ? rom.ReadByte(record + 13) : ToSixteenths(PhysicalPercent)));
+            rom.WriteByte(record + 14, (byte)Clamp(Graphic, 0, 255));
+            rom.WriteByte(record + 15, (byte)Clamp(Palette, 0, 255));
+            rom.WriteUInt16Le(record + 16, (ushort)Clamp(Hp,  0, 0xFFFF));
+            rom.WriteUInt16Le(record + 18, (ushort)Clamp(Mp,  0, 0xFFFF));
+            rom.WriteUInt16Le(record + 20, (ushort)Clamp(Atp, 0, 0xFFFF));
+            rom.WriteUInt16Le(record + 22, (ushort)Clamp(Dfp, 0, 0xFFFF));
+            rom.WriteByte(record + 24, (byte)Clamp(MagicDefense, 0, 255));
+            rom.WriteByte(record + 25, (byte)Clamp(Agl, 0, 255));
+            rom.WriteByte(record + 26, (byte)Clamp(Mgr, 0, 255));
+            rom.WriteUInt16Le(record + 27, (ushort)Clamp(Exp,  0, 0xFFFF));
+            rom.WriteUInt16Le(record + 30, (ushort)Clamp(Gold, 0, 0xFFFF));
+            rom.WriteByte(record + 32, (byte)Clamp(DropItem, 0, 255));
+            rom.WriteByte(record + 33, (byte)Clamp(DropRate, 0, 255));
             for (int i = 0; i < UnknownFields.Length; i++)
-                rom.WriteByte(o + UnknownFields[i], unknown[i]);
-            for (int i = 0; i < ai.Length; i++) rom.WriteByte(Core.Battle.MonsterAi.ByteAt(rom, o, _aiStart + i), ai[i]);
-            foreach (var st in SpellSteps)
-                if (st.Spell != st.Original && st.Spell >= 0) rom.WriteByte(Core.Battle.MonsterAi.ByteAt(rom, o, st.Offset + 1), (byte)st.Spell);
-            // spell damage per element: the record's tail changes length, so it may have to move
-            var want = MagicElements.Select(e => e.Percent == 100 ? 0 : ToSixteenths(e.Percent)).ToArray();
-            if (!want.SequenceEqual(Core.Battle.MonsterTable.ReadElements(rom, o)))
-                Core.Battle.MonsterTable.SetRecord(rom, SelectedIndex, Core.Battle.MonsterTable.WithElements(rom, o, want));
+                rom.WriteByte(record + UnknownFields[i], unknown[i]);
+            for (int i = 0; i < ai.Length; i++) rom.WriteByte(Core.Battle.MonsterAi.ByteAt(rom, record, _aiStart + i), ai[i]);
+            foreach (var step in SpellSteps)
+                if (step.Spell != step.Original && step.Spell >= 0) rom.WriteByte(Core.Battle.MonsterAi.ByteAt(rom, record, step.Offset + 1), (byte)step.Spell);
+            // spell damage per element. the record's tail changes length, so it may have to move
+            var wanted = MagicElements.Select(e => e.Percent == 100 ? 0 : ToSixteenths(e.Percent)).ToArray();
+            if (!wanted.SequenceEqual(Core.Battle.MonsterTable.ReadElements(rom, record)))
+                Core.Battle.MonsterTable.SetRecord(rom, SelectedIndex, Core.Battle.MonsterTable.WithElements(rom, record, wanted));
         });
-        if (!written) return;   // (the edits stay, with the error)
+        if (!written) return;   // the edits stay, with the error
 
         if (renamed) RefreshList();
         LoadSelected();
@@ -332,36 +332,36 @@ public partial class MonsterEditorViewModel : GameDataEditorBase
         if (Ctx == null || SelectedIndex < 0) return;
         if (GiveSpells.Count == 0) { Status = "Add at least one spell."; return; }
         if (GiveSpells.Sum(g => g.Percent) > 100) { Status = "The shares add up to more than 100%."; return; }
-        // the spells as picked: writing the typed values (next) reads the record again, and the list with it
+        // grab the spells as picked now: writing the typed values (next) reads the record again, and the list with it
         var give = GiveSpells.Select(g => (Clamp(g.Percent, 0, 100), Clamp(g.Spell, 0, SpellNames.Count - 1))).ToList();
-        if (WritePendingEdits() != null) return;   // the typed values first (the record is read again after)
+        if (WritePendingEdits() != null) return;   // the typed values go first (the record gets read again after)
         var rom = Ctx.Rom;
-        int id = SelectedIndex, at = 0;
+        int id = SelectedIndex, scriptOffset = 0;
         bool gaveMp = false;
         Commit($"Monster {id:X2}'s spells", () =>
         {
-            at = LufiaForge.Core.Battle.MonsterAi.WriteSpellScript(rom, id, give);
-            int o = Ctx.MonsterOffset(id);
-            if (rom.ReadUInt16Le(o + 18) == 0) { rom.WriteUInt16Le(o + 18, 40); gaveMp = true; }   // a caster needs MP
+            scriptOffset = LufiaForge.Core.Battle.MonsterAi.WriteSpellScript(rom, id, give);
+            int record = Ctx.MonsterOffset(id);
+            if (rom.ReadUInt16Le(record + 18) == 0) { rom.WriteUInt16Le(record + 18, 40); gaveMp = true; }   // a caster needs MP
         });
         LoadSelected();
-        if (at > 0) Status = $"New AI script written at 0x{at:X6} (unsaved)." + (gaveMp ? " It had no MP, so it now has 40." : "");
+        if (scriptOffset > 0) Status = $"New AI script written at 0x{scriptOffset:X6} (unsaved)." + (gaveMp ? " It had no MP, so it now has 40." : "");
     }
 
     [RelayCommand]
     private void RandomizeStats()
     {
-        // Each stat becomes a random value between half and one and a half times the monster's value in the ROM.
-        // Rolled from the ROM each click (not from the boxes), so clicking again re-rolls instead of piling up.
+        // each stat becomes a random value between half and one and a half times the monster's value in the ROM.
+        // rolled from the ROM each click (not from the boxes), so clicking again re-rolls instead of piling up
         if (Ctx == null || SelectedIndex < 0) return;
         var rom = Ctx.Rom;
-        int o   = _recordOffset;
+        int record = _recordOffset;
         int Roll(int stat, int max) => Clamp((int)Math.Round(stat * (0.5 + Random.Shared.NextDouble())), stat > 0 ? 1 : 0, max);
-        Hp  = Roll(rom.ReadUInt16Le(o + 16), 0xFFFF);
-        Atp = Roll(rom.ReadUInt16Le(o + 20), 0xFFFF);
-        Dfp = Roll(rom.ReadUInt16Le(o + 22), 0xFFFF);
-        Agl = Roll(rom.ReadByte(o + 25), 255);
-        Mgr = Roll(rom.ReadByte(o + 26), 255);
+        Hp  = Roll(rom.ReadUInt16Le(record + 16), 0xFFFF);
+        Atp = Roll(rom.ReadUInt16Le(record + 20), 0xFFFF);
+        Dfp = Roll(rom.ReadUInt16Le(record + 22), 0xFFFF);
+        Agl = Roll(rom.ReadByte(record + 25), 255);
+        Mgr = Roll(rom.ReadByte(record + 26), 255);
         Status = "Stats randomized to 50-150% of the monster's current ROM values (not yet applied; click again to re-roll).";
     }
 

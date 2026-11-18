@@ -18,13 +18,11 @@ using Size = System.Windows.Size;
 
 namespace LufiaForge.Modules.GameData.Views;
 
-/// <summary>
-/// The note editor's piano roll: a keyboard on the left, a ruler on top (bars, the loop, the cursor), the channel's
-/// events (instrument, volume...) in a lane under it and the notes in a grid. Other channels show faintly behind.
-/// Mouse: click empty space = new note (drag to set its length), drag a note = move, drag its right edge = length,
-/// right-click = delete, Shift+drag = select a box, Ctrl+click = add to the selection, click the ruler = cursor,
-/// drag the green/red ruler marks = loop start/end. Wheel = up/down, Shift+wheel = sideways, Ctrl+wheel = zoom.
-/// </summary>
+// the note editor's piano roll: a keyboard on the left, a ruler on top (bars, the loop, the cursor), the channel's
+// events (instrument, volume...) in a lane under it and the notes in a grid. other channels show faintly behind.
+// mouse: click empty space = new note (drag to set its length), drag a note = move, drag its right edge = length,
+// right click = delete, Shift+drag = select a box, Ctrl+click = add to the selection, click the ruler = cursor,
+// drag the green/red ruler marks = loop start/end. wheel = up/down, Shift+wheel = sideways, Ctrl+wheel = zoom
 public sealed class PianoRoll : FrameworkElement
 {
     private const double KeyW = 54, RulerH = 22, LaneH = 18, Bar = 14;
@@ -52,8 +50,8 @@ public sealed class PianoRoll : FrameworkElement
 
     private void OnModel(DependencyPropertyChangedEventArgs e)
     {
-        if (e.OldValue is NoteEditorViewModel o) { o.Changed -= Redraw; o.PropertyChanged -= ModelProp; }
-        if (e.NewValue is NoteEditorViewModel n) { n.Changed += Redraw; n.PropertyChanged += ModelProp; }
+        if (e.OldValue is NoteEditorViewModel oldModel) { oldModel.Changed -= Redraw; oldModel.PropertyChanged -= ModelProp; }
+        if (e.NewValue is NoteEditorViewModel newModel) { newModel.Changed += Redraw; newModel.PropertyChanged += ModelProp; }
         Redraw();
     }
 
@@ -64,11 +62,11 @@ public sealed class PianoRoll : FrameworkElement
         InvalidateVisual();
     }
 
-    /// <summary>A song was just opened: centre its notes (once there's a size to centre in).</summary>
+    // a song was just opened, so centre its notes (once there's a size to centre in)
     private void CentreOnNotes()
     {
-        if (_scrolledToNotes || Model is not { Loaded: true } m || ActualHeight <= 0) return;
-        var notes = m.Channels.SelectMany(c => c.Notes).ToList();
+        if (_scrolledToNotes || Model is not { Loaded: true } model || ActualHeight <= 0) return;
+        var notes = model.Channels.SelectMany(c => c.Notes).ToList();
         if (notes.Count == 0) return;
         double mid = notes.Average(n => n.Pitch);
         ScrollY = Math.Clamp(127 - mid - Rows / 2, 0, Math.Max(0, 128 - Rows));
@@ -76,26 +74,26 @@ public sealed class PianoRoll : FrameworkElement
         UpdateBars();
     }
 
-    private void ModelProp(object? s, System.ComponentModel.PropertyChangedEventArgs e)
+    private void ModelProp(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(NoteEditorViewModel.PlayheadTick) && Model != null)
         {
-            double t = Model.PlayheadTick;
-            if (t >= 0 && Model.FollowPlayhead && (t < ScrollX || t > ScrollX + ViewTicks * 0.9)) { ScrollX = Math.Max(0, t - ViewTicks * 0.1); UpdateBars(); }
+            double tick = Model.PlayheadTick;
+            if (tick >= 0 && Model.FollowPlayhead && (tick < ScrollX || tick > ScrollX + ViewTicks * 0.9)) { ScrollX = Math.Max(0, tick - ViewTicks * 0.1); UpdateBars(); }
             InvalidateVisual();
         }
         else if (e.PropertyName is nameof(NoteEditorViewModel.CursorTick) or nameof(NoteEditorViewModel.SnapIndex)) InvalidateVisual();
         else if (e.PropertyName == nameof(NoteEditorViewModel.Loaded)) { _scrolledToNotes = false; ScrollX = 0; CentreOnNotes(); Redraw(); }
     }
 
-    // ── geometry ────────────────────────────────────────────────────────────
+    // geometry
 
-    /// <summary>Pixels per tick.</summary>
+    // pixels per tick
     public double Zoom { get; set; } = 0.75;
     public double RowH { get; set; } = 11;
-    /// <summary>First tick shown.</summary>
+    // first tick showing
     public double ScrollX { get; set; }
-    /// <summary>First row shown (row 0 = pitch 127).</summary>
+    // first row showing (row 0 = pitch 127)
     public double ScrollY { get; set; }
 
     private double GridW => Math.Max(10, ActualWidth - KeyW - Bar);
@@ -109,8 +107,8 @@ public sealed class PianoRoll : FrameworkElement
 
     private void UpdateBars()
     {
-        int len = (Model?.LengthTicks ?? 768) + NoteEditorViewModel.TicksPerBar * 4;
-        _hBar.Minimum = 0; _hBar.Maximum = Math.Max(0, len - ViewTicks); _hBar.ViewportSize = ViewTicks; _hBar.LargeChange = ViewTicks * 0.8; _hBar.SmallChange = 48;
+        int length = (Model?.LengthTicks ?? 768) + NoteEditorViewModel.TicksPerBar * 4;
+        _hBar.Minimum = 0; _hBar.Maximum = Math.Max(0, length - ViewTicks); _hBar.ViewportSize = ViewTicks; _hBar.LargeChange = ViewTicks * 0.8; _hBar.SmallChange = 48;
         _vBar.Minimum = 0; _vBar.Maximum = Math.Max(0, 128 - Rows); _vBar.ViewportSize = Rows; _vBar.LargeChange = Rows * 0.8; _vBar.SmallChange = 1;
         ScrollX = Math.Clamp(ScrollX, 0, _hBar.Maximum); ScrollY = Math.Clamp(ScrollY, 0, _vBar.Maximum);
         _hBar.Value = ScrollX; _vBar.Value = ScrollY;
@@ -131,7 +129,7 @@ public sealed class PianoRoll : FrameworkElement
         return size;
     }
 
-    // ── drawing ─────────────────────────────────────────────────────────────
+    // drawing
 
     private static readonly Color[] ChannelColours =
     {
@@ -158,9 +156,9 @@ public sealed class PianoRoll : FrameworkElement
     {
         double w = ActualWidth, h = ActualHeight;
         dc.DrawRectangle(BgWhite, null, new Rect(0, 0, w, h));
-        var m = Model;
-        if (m == null || !m.Loaded) { dc.DrawText(Text("Pick a song.", 13, TextB), new Point(KeyW + 10, Top + 10)); return; }
-        var ch = m.Current;
+        var model = Model;
+        if (model == null || !model.Loaded) { dc.DrawText(Text("Pick a song.", 13, TextB), new Point(KeyW + 10, Top + 10)); return; }
+        var channel = model.Current;
         double t0 = ScrollX, t1 = ScrollX + ViewTicks;
         int pTop = Math.Min(127, PitchAt(Top) + 1), pBottom = Math.Max(0, PitchAt(Top + GridH) - 1);
         var grid = new Rect(KeyW, Top, GridW, GridH);
@@ -173,11 +171,11 @@ public sealed class PianoRoll : FrameworkElement
             dc.DrawRectangle(black ? BgBlack : BgWhite, null, new Rect(KeyW, Y(p), GridW, RowH));
             dc.DrawLine(p % 12 == 0 ? CPen : RowLine, new Point(KeyW, Y(p) + RowH), new Point(KeyW + GridW, Y(p) + RowH));
         }
-        // past the loop end / song end: shaded
-        int? stop = ch.LoopEnd ?? ch.EndTick;
-        if (stop is int st && st < t1) dc.DrawRectangle(BgPast, null, new Rect(X(Math.Max(st, t0)), Top, X(t1) - X(Math.Max(st, t0)), GridH));
+        // past the loop end / song end gets shaded
+        int? stop = channel.LoopEnd ?? channel.EndTick;
+        if (stop is int stopTick && stopTick < t1) dc.DrawRectangle(BgPast, null, new Rect(X(Math.Max(stopTick, t0)), Top, X(t1) - X(Math.Max(stopTick, t0)), GridH));
         // vertical lines
-        int snap = m.Snap >= 4 && m.Snap * Zoom >= 5 ? m.Snap : 48;
+        int snap = model.Snap >= 4 && model.Snap * Zoom >= 5 ? model.Snap : 48;
         for (int t = (int)(t0 / snap) * snap; t <= t1; t += snap)
         {
             var pen = t % NoteEditorViewModel.TicksPerBar == 0 ? BarLine : t % NoteEditorViewModel.TicksPerBeat == 0 ? BeatLine : SubLine;
@@ -186,24 +184,24 @@ public sealed class PianoRoll : FrameworkElement
         // other channels, faint
         for (int c = 0; c < 8; c++)
         {
-            if (c == m.CurrentChannel) continue;
-            var col = ChannelColour(c); var fill = new SolidColorBrush(Color.FromArgb(0x38, col.R, col.G, col.B));
-            foreach (var n in m.Channels[c].Notes)
+            if (c == model.CurrentChannel) continue;
+            var colour = ChannelColour(c); var fill = new SolidColorBrush(Color.FromArgb(0x38, colour.R, colour.G, colour.B));
+            foreach (var note in model.Channels[c].Notes)
             {
-                if (n.End < t0 || n.Tick > t1 || n.Pitch < pBottom || n.Pitch > pTop) continue;
-                dc.DrawRectangle(fill, null, new Rect(X(n.Tick), Y(n.Pitch) + 1, Math.Max(2, n.Length * Zoom), RowH - 2));
+                if (note.End < t0 || note.Tick > t1 || note.Pitch < pBottom || note.Pitch > pTop) continue;
+                dc.DrawRectangle(fill, null, new Rect(X(note.Tick), Y(note.Pitch) + 1, Math.Max(2, note.Length * Zoom), RowH - 2));
             }
         }
         // this channel's notes
-        var c0 = ChannelColour(m.CurrentChannel);
-        foreach (var n in ch.Notes)
+        var currentColour = ChannelColour(model.CurrentChannel);
+        foreach (var note in channel.Notes)
         {
-            if (n.End < t0 || n.Tick > t1 || n.Pitch < pBottom || n.Pitch > pTop) continue;
-            byte a = (byte)(110 + n.Velocity);
-            var fill = new SolidColorBrush(Color.FromArgb(a, c0.R, c0.G, c0.B));
-            var r = new Rect(X(n.Tick), Y(n.Pitch) + 0.5, Math.Max(3, n.Length * Zoom), RowH - 1);
-            dc.DrawRoundedRectangle(fill, m.Selected.Contains(n) ? SelPen : NotePen, r, 2, 2);
-            if (r.Width > 26 && RowH >= 10) dc.DrawText(Text(m.Name(n.Pitch), 8.5, Brushes.Black), new Point(r.X + 2, r.Y));
+            if (note.End < t0 || note.Tick > t1 || note.Pitch < pBottom || note.Pitch > pTop) continue;
+            byte alpha = (byte)(110 + note.Velocity);
+            var fill = new SolidColorBrush(Color.FromArgb(alpha, currentColour.R, currentColour.G, currentColour.B));
+            var rect = new Rect(X(note.Tick), Y(note.Pitch) + 0.5, Math.Max(3, note.Length * Zoom), RowH - 1);
+            dc.DrawRoundedRectangle(fill, model.Selected.Contains(note) ? SelPen : NotePen, rect, 2, 2);
+            if (rect.Width > 26 && RowH >= 10) dc.DrawText(Text(model.Name(note.Pitch), 8.5, Brushes.Black), new Point(rect.X + 2, rect.Y));
         }
         if (_mode == Mode.Box) dc.DrawRectangle(SelBox, SelBoxPen, _box);
         dc.Pop();
@@ -220,40 +218,40 @@ public sealed class PianoRoll : FrameworkElement
             if (t / barT % every == 0) dc.DrawText(Text((t / barT + 1).ToString(CultureInfo.InvariantCulture), 10, TextB), new Point(X(t) + 3, 2));
         }
         // the channel's events, one label per tick ("I0A V96 P48")
-        foreach (var g in ch.Others.Where(o => o.Tick >= t0 - 400 && o.Tick <= t1).GroupBy(o => o.Tick))
+        foreach (var atTick in channel.Others.Where(o => o.Tick >= t0 - 400 && o.Tick <= t1).GroupBy(o => o.Tick))
         {
-            string label = string.Join(" ", g.Select(o => o.Kind switch
+            string label = string.Join(" ", atTick.Select(o => o.Kind switch
             {
                 Core.Audio.SongCodec.Kind.Program => $"I{o.A:X2}", Core.Audio.SongCodec.Kind.Volume => $"V{o.A}",
                 Core.Audio.SongCodec.Kind.Pan => $"P{o.A}", _ => "fx",
             }));
-            dc.DrawRectangle(Gold, null, new Rect(X(g.Key), RulerH + 2, 2, LaneH - 4));
-            dc.DrawText(Text(label, 9, Gold), new Point(X(g.Key) + 4, RulerH + 3));
+            dc.DrawRectangle(Gold, null, new Rect(X(atTick.Key), RulerH + 2, 2, LaneH - 4));
+            dc.DrawText(Text(label, 9, Gold), new Point(X(atTick.Key) + 4, RulerH + 3));
         }
-        if (ch.LoopEnd is int le)
+        if (channel.LoopEnd is int loopEnd)
         {
-            Flag(dc, ch.LoopStart ?? 0, LoopIn, "loop");
-            Flag(dc, le, LoopOut, "back");
+            Flag(dc, channel.LoopStart ?? 0, LoopIn, "loop");
+            Flag(dc, loopEnd, LoopOut, "back");
         }
-        else if (ch.EndTick is int et) Flag(dc, et, LoopOut, "end");
+        else if (channel.EndTick is int endTick) Flag(dc, endTick, LoopOut, "end");
         // cursor and playhead
-        dc.DrawLine(P(CursorB, 1.5), new Point(X(m.CursorTick), 0), new Point(X(m.CursorTick), Top + GridH));
-        if (m.PlayheadTick >= 0) dc.DrawLine(P(Playhead, 1.5), new Point(X(m.PlayheadTick), 0), new Point(X(m.PlayheadTick), Top + GridH));
+        dc.DrawLine(P(CursorB, 1.5), new Point(X(model.CursorTick), 0), new Point(X(model.CursorTick), Top + GridH));
+        if (model.PlayheadTick >= 0) dc.DrawLine(P(Playhead, 1.5), new Point(X(model.PlayheadTick), 0), new Point(X(model.PlayheadTick), Top + GridH));
         dc.Pop();
-        if (stop is int s2 && s2 >= t0 && s2 <= t1) dc.DrawLine(P(LoopOut, 1), new Point(X(s2), Top), new Point(X(s2), Top + GridH));
+        if (stop is int stopLine && stopLine >= t0 && stopLine <= t1) dc.DrawLine(P(LoopOut, 1), new Point(X(stopLine), Top), new Point(X(stopLine), Top + GridH));
 
         // keyboard
         dc.DrawRectangle(RulerBg, null, new Rect(0, 0, KeyW, Top));
-        dc.DrawText(Text($"Ch {m.CurrentChannel + 1}", 11, new SolidColorBrush(c0)), new Point(6, 4));
+        dc.DrawText(Text($"Ch {model.CurrentChannel + 1}", 11, new SolidColorBrush(currentColour)), new Point(6, 4));
         dc.PushClip(new RectangleGeometry(new Rect(0, Top, KeyW, GridH)));
         for (int p = pBottom; p <= pTop; p++)
         {
             bool black = (p % 12) is 1 or 3 or 6 or 8 or 10;
-            var r = new Rect(0, Y(p), black ? KeyW * 0.62 : KeyW, RowH);
+            var key = new Rect(0, Y(p), black ? KeyW * 0.62 : KeyW, RowH);
             if (black) dc.DrawRectangle(KeyWhite, null, new Rect(0, Y(p), KeyW, RowH));
-            dc.DrawRectangle(black ? KeyBlack : KeyWhite, RowLine, r);
+            dc.DrawRectangle(black ? KeyBlack : KeyWhite, RowLine, key);
             if (p % 12 == 0 || RowH >= 13 && !black)
-                dc.DrawText(Text(m.Name(p), 8.5, Brushes.Black), new Point(KeyW - 26, Y(p) + (RowH - 11) / 2));
+                dc.DrawText(Text(model.Name(p), 8.5, Brushes.Black), new Point(KeyW - 26, Y(p) + (RowH - 11) / 2));
         }
         dc.Pop();
         dc.DrawRectangle(RulerBg, null, new Rect(w - Bar, 0, Bar, Top));
@@ -269,7 +267,7 @@ public sealed class PianoRoll : FrameworkElement
         dc.DrawText(Text(label, 9, b), new Point(x + 10, 9));
     }
 
-    // ── mouse ───────────────────────────────────────────────────────────────
+    // mouse
 
     private enum Mode { None, Move, Resize, Box, Cursor, LoopStart, LoopEnd, EndMark }
     private Mode _mode;
@@ -279,17 +277,17 @@ public sealed class PianoRoll : FrameworkElement
     private bool _changed;
     private Rect _box;
 
-    private int SnapDown(double t) { int s = Model?.Snap ?? 1; return Math.Max(0, (int)Math.Floor(t / s) * s); }
-    private int SnapRound(double t) { int s = Model?.Snap ?? 1; return Math.Max(0, (int)Math.Round(t / s) * s); }
+    private int SnapDown(double tick) { int snap = Model?.Snap ?? 1; return Math.Max(0, (int)Math.Floor(tick / snap) * snap); }
+    private int SnapRound(double tick) { int snap = Model?.Snap ?? 1; return Math.Max(0, (int)Math.Round(tick / snap) * snap); }
 
     private NoteItem? HitNote(Point p)
     {
         if (Model == null) return null;
-        double t = TickAt(p.X); int pitch = PitchAt(p.Y);
-        return Model.Current.Notes.LastOrDefault(n => n.Pitch == pitch && t >= n.Tick && t < n.Tick + Math.Max(n.Length, 3 / Zoom));
+        double tick = TickAt(p.X); int pitch = PitchAt(p.Y);
+        return Model.Current.Notes.LastOrDefault(n => n.Pitch == pitch && tick >= n.Tick && tick < n.Tick + Math.Max(n.Length, 3 / Zoom));
     }
 
-    private bool NearEnd(NoteItem n, Point p) => Math.Abs(p.X - X(n.End)) <= 5 && n.Length * Zoom > 8;
+    private bool NearEnd(NoteItem note, Point p) => Math.Abs(p.X - X(note.End)) <= 5 && note.Length * Zoom > 8;
 
     protected override void OnMouseDown(MouseButtonEventArgs e)
     {
@@ -299,11 +297,11 @@ public sealed class PianoRoll : FrameworkElement
         if (Down(e.GetPosition(this), e.ChangedButton, Keyboard.Modifiers)) { CaptureMouse(); e.Handled = true; }
     }
 
-    /// <summary>A mouse button pressed at <paramref name="p"/>; true when a drag starts (or the click was used).</summary>
+    // a mouse button pressed at p. true when a drag starts (or the click got used)
     public bool Down(Point p, MouseButton button, ModifierKeys mods)
     {
-        var m = Model;
-        if (m == null || !m.Loaded) return false;
+        var model = Model;
+        if (model == null || !model.Loaded) return false;
         if (p.X >= ActualWidth - Bar || p.Y >= ActualHeight - Bar) return false;
         _down = p; _changed = false; _orig.Clear();
         bool ctrl = mods.HasFlag(ModifierKeys.Control), shift = mods.HasFlag(ModifierKeys.Shift);
@@ -311,17 +309,17 @@ public sealed class PianoRoll : FrameworkElement
         if (p.Y < Top && p.X > KeyW)
         {
             // ruler: loop marks or the cursor
-            var ch = m.Current;
-            if (ch.LoopEnd is int le && Math.Abs(p.X - X(le)) <= 6) _mode = Mode.LoopEnd;
-            else if (ch.LoopEnd != null && Math.Abs(p.X - X(ch.LoopStart ?? 0)) <= 6) _mode = Mode.LoopStart;
-            else if (ch.EndTick is int et && Math.Abs(p.X - X(et)) <= 6) _mode = Mode.EndMark;
-            else { _mode = Mode.Cursor; m.CursorTick = SnapRound(TickAt(p.X)); }
-            if (_mode is Mode.LoopStart or Mode.LoopEnd or Mode.EndMark) m.Checkpoint();
+            var channel = model.Current;
+            if (channel.LoopEnd is int le && Math.Abs(p.X - X(le)) <= 6) _mode = Mode.LoopEnd;
+            else if (channel.LoopEnd != null && Math.Abs(p.X - X(channel.LoopStart ?? 0)) <= 6) _mode = Mode.LoopStart;
+            else if (channel.EndTick is int et && Math.Abs(p.X - X(et)) <= 6) _mode = Mode.EndMark;
+            else { _mode = Mode.Cursor; model.CursorTick = SnapRound(TickAt(p.X)); }
+            if (_mode is Mode.LoopStart or Mode.LoopEnd or Mode.EndMark) model.Checkpoint();
             return true;
         }
         if (p.X < KeyW)
         {
-            if (p.Y > Top) m.PreviewNote(PitchAt(p.Y), m.CursorTick);
+            if (p.Y > Top) model.PreviewNote(PitchAt(p.Y), model.CursorTick);
             return false;
         }
 
@@ -329,43 +327,43 @@ public sealed class PianoRoll : FrameworkElement
         if (button == MouseButton.Right)
         {
             if (hit == null) return false;
-            m.Checkpoint();
-            if (m.Selected.Contains(hit)) { m.Current.Notes.RemoveAll(m.Selected.Contains); m.Selected.Clear(); }
-            else m.Current.Notes.Remove(hit);
-            m.Touch();
+            model.Checkpoint();
+            if (model.Selected.Contains(hit)) { model.Current.Notes.RemoveAll(model.Selected.Contains); model.Selected.Clear(); }
+            else model.Current.Notes.Remove(hit);
+            model.Touch();
             return false;
         }
         if (button != MouseButton.Left) return false;
 
         if (hit != null)
         {
-            if (ctrl) { if (!m.Selected.Remove(hit)) m.Selected.Add(hit); m.Refresh(); return false; }
-            if (!m.Selected.Contains(hit)) { m.Selected.Clear(); m.Selected.Add(hit); }
+            if (ctrl) { if (!model.Selected.Remove(hit)) model.Selected.Add(hit); model.Refresh(); return false; }
+            if (!model.Selected.Contains(hit)) { model.Selected.Clear(); model.Selected.Add(hit); }
             _mode = NearEnd(hit, p) ? Mode.Resize : Mode.Move;
             _downTick = (int)TickAt(p.X); _downPitch = hit.Pitch;
-            foreach (var n in m.Selected) _orig.Add((n, n.Tick, n.Pitch, n.Length));
-            if (_mode == Mode.Move) m.PreviewNote(hit.Pitch, hit.Tick);
-            m.Refresh();
+            foreach (var note in model.Selected) _orig.Add((note, note.Tick, note.Pitch, note.Length));
+            if (_mode == Mode.Move) model.PreviewNote(hit.Pitch, hit.Tick);
+            model.Refresh();
         }
         else if (shift)
         {
             _mode = Mode.Box; _box = new Rect(p, p);
-            if (!ctrl) m.Selected.Clear();
+            if (!ctrl) model.Selected.Clear();
         }
         else
         {
-            // a new note; dragging sets its length
-            m.Selected.Clear();
-            m.Checkpoint(); _changed = true;
-            int len = m.LengthIndex >= 0 ? m.NewLength : m.LastLength;
-            var n = m.AddNote(SnapDown(TickAt(p.X)), PitchAt(p.Y), len);
-            m.Selected.Add(n);
-            _orig.Add((n, n.Tick, n.Pitch, n.Length));
-            _downTick = n.Tick + n.Length; _downPitch = n.Pitch;
+            // a new note, dragging sets its length
+            model.Selected.Clear();
+            model.Checkpoint(); _changed = true;
+            int length = model.LengthIndex >= 0 ? model.NewLength : model.LastLength;
+            var note = model.AddNote(SnapDown(TickAt(p.X)), PitchAt(p.Y), length);
+            model.Selected.Add(note);
+            _orig.Add((note, note.Tick, note.Pitch, note.Length));
+            _downTick = note.Tick + note.Length; _downPitch = note.Pitch;
             _mode = Mode.Resize;
-            m.CursorTick = n.Tick;
-            m.PreviewNote(n.Pitch, n.Tick);
-            m.Touch();
+            model.CursorTick = note.Tick;
+            model.PreviewNote(note.Pitch, note.Tick);
+            model.Touch();
         }
         return true;
     }
@@ -376,68 +374,68 @@ public sealed class PianoRoll : FrameworkElement
         Move(e.GetPosition(this), Keyboard.Modifiers);
     }
 
-    /// <summary>The mouse moved to <paramref name="p"/> (dragging when a button went down on the roll).</summary>
+    // the mouse moved to p (dragging if a button went down on the roll)
     public void Move(Point p, ModifierKeys mods)
     {
-        var m = Model;
-        if (m == null) return;
+        var model = Model;
+        if (model == null) return;
         if (_mode == Mode.None)
         {
             var hit = p.X > KeyW && p.Y > Top ? HitNote(p) : null;
-            bool onMark = p.Y < Top && m.Current is var ch &&
-                (ch.LoopEnd is int le && Math.Abs(p.X - X(le)) <= 6 || ch.LoopEnd != null && Math.Abs(p.X - X(ch.LoopStart ?? 0)) <= 6 || ch.EndTick is int et && Math.Abs(p.X - X(et)) <= 6);
+            bool onMark = p.Y < Top && model.Current is var channel &&
+                (channel.LoopEnd is int le && Math.Abs(p.X - X(le)) <= 6 || channel.LoopEnd != null && Math.Abs(p.X - X(channel.LoopStart ?? 0)) <= 6 || channel.EndTick is int et && Math.Abs(p.X - X(et)) <= 6);
             Cursor = hit != null && NearEnd(hit, p) || onMark ? Cursors.SizeWE : hit != null ? Cursors.SizeAll : p.X > KeyW && p.Y > Top ? Cursors.Pen : Cursors.Arrow;
             return;
         }
-        double t = TickAt(p.X);
+        double tick = TickAt(p.X);
         switch (_mode)
         {
             case Mode.Move:
             {
-                int dt = SnapRound(Math.Abs(t - _downTick)) * Math.Sign(t - _downTick), dp = PitchAt(p.Y) - _downPitch;
+                int moveTicks = SnapRound(Math.Abs(tick - _downTick)) * Math.Sign(tick - _downTick), movePitch = PitchAt(p.Y) - _downPitch;
                 int least = _orig.Min(o => o.Tick);
-                if (least + dt < 0) dt = -least;
-                if (dt == 0 && dp == 0 && !_changed) return;
-                if (!_changed) { m.Checkpoint(); _changed = true; }
+                if (least + moveTicks < 0) moveTicks = -least;
+                if (moveTicks == 0 && movePitch == 0 && !_changed) return;
+                if (!_changed) { model.Checkpoint(); _changed = true; }
                 bool pitchMoved = false;
-                foreach (var o in _orig)
+                foreach (var original in _orig)
                 {
-                    int np = Math.Clamp(o.Pitch + dp, 0, 127);
-                    if (o.N.Pitch != np) pitchMoved = true;
-                    o.N.Tick = o.Tick + dt; o.N.Pitch = np;
+                    int newPitch = Math.Clamp(original.Pitch + movePitch, 0, 127);
+                    if (original.N.Pitch != newPitch) pitchMoved = true;
+                    original.N.Tick = original.Tick + moveTicks; original.N.Pitch = newPitch;
                 }
-                if (pitchMoved && _orig.Count == 1) m.PreviewNote(_orig[0].N.Pitch, _orig[0].N.Tick);
-                m.Touch();
+                if (pitchMoved && _orig.Count == 1) model.PreviewNote(_orig[0].N.Pitch, _orig[0].N.Tick);
+                model.Touch();
                 break;
             }
             case Mode.Resize:
             {
-                int s = Math.Max(1, m.Snap);
-                int dt = (int)Math.Round((t - _downTick) / s) * s;
-                if (dt == 0 && !_changed) return;
-                if (!_changed) { m.Checkpoint(); _changed = true; }
-                foreach (var o in _orig) o.N.Length = Math.Clamp(o.Length + dt, Math.Min(s, 255), 255);
-                m.LastLength = _orig[0].N.Length;
-                m.Touch();
+                int snap = Math.Max(1, model.Snap);
+                int lengthChange = (int)Math.Round((tick - _downTick) / snap) * snap;
+                if (lengthChange == 0 && !_changed) return;
+                if (!_changed) { model.Checkpoint(); _changed = true; }
+                foreach (var original in _orig) original.N.Length = Math.Clamp(original.Length + lengthChange, Math.Min(snap, 255), 255);
+                model.LastLength = _orig[0].N.Length;
+                model.Touch();
                 break;
             }
             case Mode.Box:
             {
                 _box = new Rect(_down, p);
-                double a = TickAt(_box.Left), b = TickAt(_box.Right);
+                double fromTick = TickAt(_box.Left), toTick = TickAt(_box.Right);
                 int hi = PitchAt(_box.Top), lo = PitchAt(_box.Bottom);
-                if (!mods.HasFlag(ModifierKeys.Control)) m.Selected.Clear();
-                foreach (var n in m.Current.Notes) if (n.Pitch >= lo && n.Pitch <= hi && n.End > a && n.Tick < b) m.Selected.Add(n);
-                m.Refresh();
+                if (!mods.HasFlag(ModifierKeys.Control)) model.Selected.Clear();
+                foreach (var note in model.Current.Notes) if (note.Pitch >= lo && note.Pitch <= hi && note.End > fromTick && note.Tick < toTick) model.Selected.Add(note);
+                model.Refresh();
                 InvalidateVisual();
                 break;
             }
-            case Mode.Cursor: m.CursorTick = SnapRound(t); break;
-            case Mode.LoopStart: m.SetLoopStart(SnapRound(t)); m.Touch(); break;
-            case Mode.LoopEnd: m.SetLoopEnd(Math.Max(1, SnapRound(t))); m.Touch(); break;
+            case Mode.Cursor: model.CursorTick = SnapRound(tick); break;
+            case Mode.LoopStart: model.SetLoopStart(SnapRound(tick)); model.Touch(); break;
+            case Mode.LoopEnd: model.SetLoopEnd(Math.Max(1, SnapRound(tick))); model.Touch(); break;
             case Mode.EndMark:
-                foreach (var c in m.LoopAllChannels ? m.Channels.Where(c => c.EndTick != null) : new[] { m.Current }) c.EndTick = Math.Max(1, SnapRound(t));
-                m.Touch(); break;
+                foreach (var target in model.LoopAllChannels ? model.Channels.Where(c => c.EndTick != null) : new[] { model.Current }) target.EndTick = Math.Max(1, SnapRound(tick));
+                model.Touch(); break;
         }
     }
 
@@ -449,7 +447,7 @@ public sealed class PianoRoll : FrameworkElement
         ReleaseMouseCapture();
     }
 
-    /// <summary>The button came up: the drag ends.</summary>
+    // the button came up, the drag ends
     public void Up()
     {
         _mode = Mode.None;
@@ -457,9 +455,9 @@ public sealed class PianoRoll : FrameworkElement
         InvalidateVisual();
     }
 
-    /// <summary>Screen position of a tick and pitch (the middle of that grid cell), for tests.</summary>
+    // screen position of a tick and pitch (the middle of that grid cell), for tests
     public Point PointAt(double tick, int pitch) => new(X(tick), Y(pitch) + RowH / 2);
-    /// <summary>Shows this tick and pitch range.</summary>
+    // shows this tick and pitch range
     public void ScrollTo(double tick, int topPitch) { ScrollX = tick; ScrollY = 127 - topPitch; UpdateBars(); InvalidateVisual(); }
 
     protected override void OnMouseWheel(MouseWheelEventArgs e)
@@ -468,9 +466,9 @@ public sealed class PianoRoll : FrameworkElement
         var p = e.GetPosition(this);
         if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
         {
-            double at = TickAt(p.X);
+            double mouseTick = TickAt(p.X);
             Zoom = Math.Clamp(Zoom * (e.Delta > 0 ? 1.25 : 0.8), 0.05, 8);
-            ScrollX = Math.Max(0, at - (p.X - KeyW) / Zoom);
+            ScrollX = Math.Max(0, mouseTick - (p.X - KeyW) / Zoom);
         }
         else if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)) ScrollX -= e.Delta / 120.0 * 96 / Math.Max(0.25, Zoom);
         else ScrollY -= e.Delta / 120.0 * 3;
@@ -482,26 +480,26 @@ public sealed class PianoRoll : FrameworkElement
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
-        var m = Model;
-        if (m == null) return;
+        var model = Model;
+        if (model == null) return;
         bool ctrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control), shift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
         switch (e.Key)
         {
-            case Key.Delete or Key.Back: m.DeleteSelectedCommand.Execute(null); break;
-            case Key.Z when ctrl: m.UndoCommand.Execute(null); break;
-            case Key.Y when ctrl: m.RedoCommand.Execute(null); break;
-            case Key.C when ctrl: m.CopyCommand.Execute(null); break;
-            case Key.X when ctrl: m.CutCommand.Execute(null); break;
-            case Key.V when ctrl: m.PasteCommand.Execute(null); break;
-            case Key.A when ctrl: m.SelectAllCommand.Execute(null); break;
-            case Key.Up: m.Transpose(shift ? 12 : 1); break;
-            case Key.Down: m.Transpose(shift ? -12 : -1); break;
-            case Key.Left: m.Shift(-Math.Max(1, m.Snap)); break;
-            case Key.Right: m.Shift(Math.Max(1, m.Snap)); break;
+            case Key.Delete or Key.Back: model.DeleteSelectedCommand.Execute(null); break;
+            case Key.Z when ctrl: model.UndoCommand.Execute(null); break;
+            case Key.Y when ctrl: model.RedoCommand.Execute(null); break;
+            case Key.C when ctrl: model.CopyCommand.Execute(null); break;
+            case Key.X when ctrl: model.CutCommand.Execute(null); break;
+            case Key.V when ctrl: model.PasteCommand.Execute(null); break;
+            case Key.A when ctrl: model.SelectAllCommand.Execute(null); break;
+            case Key.Up: model.Transpose(shift ? 12 : 1); break;
+            case Key.Down: model.Transpose(shift ? -12 : -1); break;
+            case Key.Left: model.Shift(-Math.Max(1, model.Snap)); break;
+            case Key.Right: model.Shift(Math.Max(1, model.Snap)); break;
             case Key.Space:
-                if (m.PlayheadTick >= 0) m.StopPlayingCommand.Execute(null); else m.PlayFromCursorCommand.Execute(null);
+                if (model.PlayheadTick >= 0) model.StopPlayingCommand.Execute(null); else model.PlayFromCursorCommand.Execute(null);
                 break;
-            case Key.Escape: m.Selected.Clear(); m.Refresh(); break;
+            case Key.Escape: model.Selected.Clear(); model.Refresh(); break;
             default: return;
         }
         e.Handled = true;

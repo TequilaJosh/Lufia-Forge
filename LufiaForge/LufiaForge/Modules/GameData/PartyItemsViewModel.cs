@@ -11,10 +11,8 @@ public partial class PartyItemSlot : ObservableObject
     [ObservableProperty] private int _quantity;
 }
 
-/// <summary>
-/// The items Maxim's party carries in the prologue. Stored as ten "give item" event commands
-/// (3E item quantity), so only the item and quantity bytes are edited.
-/// </summary>
+// the items Maxim's party carries in the prologue. they're stored as ten "give item" event commands
+// (3E item quantity), so only the item and quantity bytes get edited
 public partial class PartyItemsViewModel : GameDataEditorBase
 {
     private const byte GiveItemCommand = 0x3E;
@@ -34,9 +32,9 @@ public partial class PartyItemsViewModel : GameDataEditorBase
         bool layoutOk = true;
         for (int i = 0; i < GameDataOffsets.FinalPartyItemCount; i++)
         {
-            int o = GameDataOffsets.FinalPartyItems + i * 3;
-            if (rom.ReadByte(o - 1) != GiveItemCommand) layoutOk = false;
-            Slots.Add(new PartyItemSlot { Number = i + 1, Item = rom.ReadByte(o), Quantity = rom.ReadByte(o + 1) });
+            int itemOffset = GameDataOffsets.FinalPartyItems + i * 3;
+            if (rom.ReadByte(itemOffset - 1) != GiveItemCommand) layoutOk = false;
+            Slots.Add(new PartyItemSlot { Number = i + 1, Item = rom.ReadByte(itemOffset), Quantity = rom.ReadByte(itemOffset + 1) });
         }
 
         OffsetText = $"Event commands at 0x{GameDataOffsets.FinalPartyItems - 1:X6} (3E item qty) x {GameDataOffsets.FinalPartyItemCount}.";
@@ -52,9 +50,9 @@ public partial class PartyItemsViewModel : GameDataEditorBase
         {
             for (int i = 0; i < Slots.Count; i++)
             {
-                int o = GameDataOffsets.FinalPartyItems + i * 3;
-                Ctx.Rom.WriteByte(o,     (byte)Clamp(Slots[i].Item, 0, 255));
-                Ctx.Rom.WriteByte(o + 1, (byte)(Slots[i].Item == 0 ? 0 : Clamp(Slots[i].Quantity, 0, 99)));
+                int itemOffset = GameDataOffsets.FinalPartyItems + i * 3;
+                Ctx.Rom.WriteByte(itemOffset,     (byte)Clamp(Slots[i].Item, 0, 255));
+                Ctx.Rom.WriteByte(itemOffset + 1, (byte)(Slots[i].Item == 0 ? 0 : Clamp(Slots[i].Quantity, 0, 99)));
             }
         });
     }

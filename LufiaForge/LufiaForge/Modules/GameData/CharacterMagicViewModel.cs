@@ -5,7 +5,7 @@ using System.Collections.ObjectModel;
 
 namespace LufiaForge.Modules.GameData;
 
-/// <summary>One (level, spell) entry of a character's spell-learning list.</summary>
+// one (level, spell) entry of a character's spell learning list
 public partial class SpellSlot : ObservableObject
 {
     public int Number { get; init; }
@@ -13,8 +13,8 @@ public partial class SpellSlot : ObservableObject
     [ObservableProperty] private int _spell;
 }
 
-/// <summary>Which spells the Hero, Lufia and Jerin learn and at what level (Aguro too with the Guy / Aguro magic patch,
-/// whose lists live in its own block).</summary>
+// which spells the Hero, Lufia and Jerin learn and at what level. Aguro too with the Guy / Aguro magic patch
+// (those lists live in its own block)
 public partial class CharacterMagicViewModel : GameDataEditorBase
 {
     private static readonly (int Slot, int Offset)[] Lists =
@@ -23,9 +23,9 @@ public partial class CharacterMagicViewModel : GameDataEditorBase
         (1, GameDataOffsets.LufiaSpellList),
         (3, GameDataOffsets.JerinSpellList),
     };
-    // With the "Up to 128 spells, 64 per character" patch the lists live in its spell memory block (offset 0 here);
-    // Aguro has one when the Guy / Aguro patch gave him magic. An earlier Guy / Aguro version is shown the same way
-    // and brought up to date on Apply.
+    // with the "Up to 128 spells, 64 per character" patch the lists live in its spell memory block (offset 0 here).
+    // Aguro gets one when the Guy / Aguro patch gave him magic. an earlier Guy / Aguro version shows the same way
+    // and gets brought up to date on Apply
     private static readonly (int Slot, int Offset)[] Expanded4 = { (0, 0), (1, 0), (2, 0), (3, 0) };
     private static readonly (int Slot, int Offset)[] Expanded3 = { (0, 0), (1, 0), (3, 0) };
     private bool IsExpanded => Ctx != null && (SpellMemory.Installed(Ctx.Rom) || SpellMemory.OldBlock(Ctx.Rom) > 0);
@@ -33,8 +33,8 @@ public partial class CharacterMagicViewModel : GameDataEditorBase
         !IsExpanded ? Lists
         : AguroMagicPatch.IsApplied(Ctx!.Rom) || Ctx.Rom.ReadByte(AguroMagicPatch.MenuSkip) == 0xFF ? Expanded4 : Expanded3;
 
-    /// <summary>The Patch Manager can add the patches while this editor is open: when it is shown again, it switches
-    /// lists if that changed.</summary>
+    // the Patch Manager can add the patches while this editor is open, so when it shows again it switches
+    // lists if that changed
     public override void Recheck()
     {
         base.Recheck();
@@ -67,7 +67,7 @@ public partial class CharacterMagicViewModel : GameDataEditorBase
     private void RefreshCasters()
     {
         if (Ctx == null) return;
-        int keep = SelectedIndex;
+        int keepIndex = SelectedIndex;
         Casters.Clear();
         foreach (var (slot, _) in Current) Casters.Add(Ctx.CharacterName(slot));
         _shownExpanded = IsExpanded;
@@ -75,7 +75,7 @@ public partial class CharacterMagicViewModel : GameDataEditorBase
             ? "The lists can't change length and Aguro doesn't learn magic: add \"Up to 128 spells, 64 per character\" (longer lists, up to 64 each) and \"Spells and MP for Guy / Aguro\" in the Patch Manager. Entries are checked in order; keep levels ascending. Level 0 = known from the start."
             : $"Entries are checked in order; keep levels ascending. Level 0 = known from the start. Add or remove entries with the buttons: up to {SpellMemory.MaxPerCharacter} spells each." +
               (Current == Expanded3 ? " Aguro learns no magic until the \"Spells and MP for Guy / Aguro\" patch is added." : "");
-        SelectedIndex = keep < Current.Length ? keep : 0;
+        SelectedIndex = keepIndex < Current.Length ? keepIndex : 0;
     }
 
     partial void OnSelectedIndexChanged(int value) => LoadSelected();
@@ -87,9 +87,9 @@ public partial class CharacterMagicViewModel : GameDataEditorBase
         if (Ctx == null || SelectedIndex < 0 || SelectedIndex >= Current.Length) return;
         if (IsExpanded)
         {
-            int slot = Current[SelectedIndex].Slot, n = 1;
-            foreach (var (lv, sp) in SpellMemory.ReadLists(Ctx.Rom)[slot])
-                Slots.Add(new SpellSlot { Number = n++, Level = lv, Spell = sp });
+            int slot = Current[SelectedIndex].Slot, number = 1;
+            foreach (var (level, spell) in SpellMemory.ReadLists(Ctx.Rom)[slot])
+                Slots.Add(new SpellSlot { Number = number++, Level = level, Spell = spell });
             CanResize = true;
             OffsetText = SpellMemory.Installed(Ctx.Rom)
                 ? $"Spell memory block at 0x{SpellMemory.BlockOffset(Ctx.Rom):X6}: {Slots.Count} entries (up to {SpellMemory.MaxPerCharacter}). Level 0 = known from the start."
@@ -98,11 +98,11 @@ public partial class CharacterMagicViewModel : GameDataEditorBase
         }
 
         int start = Lists[SelectedIndex].Offset;
-        int o = start;
-        for (int n = 1; n <= 64 && Ctx.Rom.ReadByte(o) != 0xFF; n++, o += 2)
-            Slots.Add(new SpellSlot { Number = n, Level = Ctx.Rom.ReadByte(o), Spell = Ctx.Rom.ReadByte(o + 1) });
+        int entryOffset = start;
+        for (int n = 1; n <= 64 && Ctx.Rom.ReadByte(entryOffset) != 0xFF; n++, entryOffset += 2)
+            Slots.Add(new SpellSlot { Number = n, Level = Ctx.Rom.ReadByte(entryOffset), Spell = Ctx.Rom.ReadByte(entryOffset + 1) });
 
-        OffsetText = $"List at 0x{start:X6}, {Slots.Count} entries, FF terminator at 0x{o:X6}. " +
+        OffsetText = $"List at 0x{start:X6}, {Slots.Count} entries, FF terminator at 0x{entryOffset:X6}. " +
                      "Level 0 = known from the start.";
     }
 
@@ -134,9 +134,9 @@ public partial class CharacterMagicViewModel : GameDataEditorBase
             bool updating = !SpellMemory.Installed(Ctx.Rom) || !SpellMemory.SwapFixed(Ctx.Rom);
             Commit($"{Casters[SelectedIndex]}'s spell list", () =>
             {
-                if (updating) { SpellTablePatch.Apply(Ctx.Rom); Ctx.Rom.FixChecksum(); }   // an earlier version: up to date first
+                if (updating) { SpellTablePatch.Apply(Ctx.Rom); Ctx.Rom.FixChecksum(); }   // an earlier version, bring it up to date first
                 var lists = SpellMemory.ReadLists(Ctx.Rom);
-                // (spell 00 "Nothing" is left out: as the lowest bit it would sort first and the field Magic list would look empty)
+                // spell 00 "Nothing" is left out. as the lowest bit it would sort first and the field Magic list would look empty
                 lists[slot] = Slots.Where(x => x.Spell > 0).Select(x => (Clamp(x.Level, 0, 0xFE), Clamp(x.Spell, 1, Ctx.SpellNames.Count - 1))).ToList();
                 SpellMemory.WriteLists(Ctx.Rom, lists);
             });
@@ -149,7 +149,7 @@ public partial class CharacterMagicViewModel : GameDataEditorBase
         {
             for (int i = 0; i < Slots.Count; i++)
             {
-                // Level FF would be read as the list terminator.
+                // level FF would read as the end of the list
                 Ctx.Rom.WriteByte(start + i * 2,     (byte)Clamp(Slots[i].Level, 0, 0xFE));
                 Ctx.Rom.WriteByte(start + i * 2 + 1, (byte)Clamp(Slots[i].Spell, 0, Ctx.SpellNames.Count - 1));
             }

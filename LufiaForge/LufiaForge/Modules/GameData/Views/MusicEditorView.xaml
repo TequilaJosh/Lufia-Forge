@@ -39,7 +39,7 @@
 
         <common:PopOutHost Grid.Column="2" Title="Music" Key="gamedata.music.detail" ButtonMargin="0,10,12,0">
         <TabControl Margin="0,8,8,0" Style="{StaticResource LufiaTabControl}" SelectedIndex="{Binding TabIndex}">
-            <!-- ═══ SONG: listen, instruments, files ═══ -->
+            <!-- song: listen, instruments, files -->
             <TabItem Header="Song" Style="{StaticResource LufiaTabItem}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="4,8,4,0">
@@ -89,7 +89,7 @@
                 </ScrollViewer>
             </TabItem>
 
-            <!-- ═══ NOTES: the piano roll ═══ -->
+            <!-- notes: the piano roll -->
             <TabItem Header="Notes" Style="{StaticResource LufiaTabItem}">
                 <v:NoteEditorPanel DataContext="{Binding Notes}" Margin="0,6,0,0"/>
             </TabItem>
