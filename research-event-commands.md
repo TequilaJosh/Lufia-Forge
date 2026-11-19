@@ -18,7 +18,7 @@ Conventions used below:
 
 | op | handler | len | operands | semantics | pauses? | RAM touched | conf. | notes |
 |---|---|---|---|---|---|---|---|---|
-| 00 | CA2B | 1 | – | End script: `$0D14=FF` (no script), exit. | ends | $0D14 | confirmed | |
+| 00 | CA2B | 1 | - | End script: `$0D14=FF` (no script), exit. | ends | $0D14 | confirmed | |
 | 01 | CA63 | 3 | ww = offset from event start | Goto (C700: Y = $0D0F base + ww, bank from base). | continue | Y/DB | confirmed | |
 | 02 | CAC4 | 6 | ff, w1, w2 | Map-local flag (ff + `$0D0C`) in `$1336` bitfield: if clear → **set it** and goto w1; if already set → goto w2. | continue | $1336.., $0D0C | confirmed | "first time only" |
 | 03 | CAEF | 2+2n | n, n×ww | Store choice jump table: `$0D3E=n-1`, targets → `$0D3F..`, `$0D3C=2` (choice pending; next text box shows the menu). | continue | $0D3C-$0D3F+2n | confirmed | |
@@ -26,26 +26,26 @@ Conventions used below:
 | 05 | CA70 | 4 | ff, ww | If story flag ff clear → goto ww. | continue | $1296.. | confirmed | |
 | 06 | CA90 | 2 | ff | Set story flag ff (`$1296 + ff>>3`, bit via $032B table). | continue | $1296 | confirmed | |
 | 07 | CAA7 | 2 | ff | Clear story flag ff. | continue | $1296 | confirmed | |
-| 08 | CA33 | 1 | – | Save script state, `$0D1F=FF`, run map object setup ($9717/$9817 = re-spawn NPCs per flags), restore state. | continue (setup runs synchronously) | $0D0F-$0D14, $0D1F, actor tables | confirmed | |
+| 08 | CA33 | 1 | - | Save script state, `$0D1F=FF`, run map object setup ($9717/$9817 = re-spawn NPCs per flags), restore state. | continue (setup runs synchronously) | $0D0F-$0D14, $0D1F, actor tables | confirmed | |
 | 09 | CECA | 5 | xx xx(word X), yy yy(word Y) | Snap camera: centre BG1 camera ([$7D]) on tile (X,Y): cam+06 = X−7, cam+08 = Y−7 (wrapped by map size cam+02/+04), clear cam+0A/+0B; BG2 camera ([$7F]) same unless `$77`≠0 (then 0,0). Redraws map ($B7D2). | continue | [$7D]+06..0B, [$7F]+06..0B | confirmed | X,Y are tile coords of screen centre |
 | 0A | CBEB | 2 | mm | Music: `$92=mm` (map music, restored after battles/inn). mm≠FF → play song mm ($9D0A: skipped if `$93` bit7; `$078E=mm`, JSL $008E13). mm=FF → `$078E=FF`, JSL $008F98 (stop/fade out music). | continue | $92, $078E | confirmed | |
 | 0B | CBD8 | 2 | nn | Wait nn×4 frames: `$0D26=nn*4`, `$07B4=FF`, yield. Field loop decrements `$0D26` per frame ($01:8348), clears `$07B4` at 0. | **yield nn×4 frames** | $0D26, $07B4 | confirmed | 0B 3C = 240 frames. Note nn≥$40 overflows (×4 is 8-bit). |
-| 0C | CBD5 | 1+text | – | Enter text mode (no window/speaker change) → text until 04 (back to commands) / 00 (end). | text | – | confirmed | |
-| 0D | CBC7 | 1+text | – | No speaker: `$0D0D=0`, `$0D09=0`, open window style 1 (`$0D01`, DD52), text mode. | text | $0D0D,$0D09,$0D01 | confirmed | |
+| 0C | CBD5 | 1+text | - | Enter text mode (no window/speaker change) → text until 04 (back to commands) / 00 (end). | text | - | confirmed | |
+| 0D | CBC7 | 1+text | - | No speaker: `$0D0D=0`, `$0D09=0`, open window style 1 (`$0D01`, DD52), text mode. | text | $0D0D,$0D09,$0D01 | confirmed | |
 | 0E | CBA1 | 2+text | aa (absolute actor) | Actor aa speaks: `$0D0D=aa`, `$0D09` = voice/style from actor+1D&7 via table $01:E2F3, window style 0, text mode. | text | $0D0D,$0D09,$0D01 | confirmed (field meaning of $0D09 inferred) | same code as 31/33/35/37 and 88-8F |
 | 0F | CB98 | 2+text | nn (NPC) | As 0E with actor = nn+7 (DEC; +8). | text | same | confirmed | same as 30/32/34/36, 90-AF |
 | 10-13 | CD62/66/6A/6E | 3 | nn = tiles, ss = speed idx | **Scroll camera** nn tiles; direction by opcode: 10=right(mask1), 11=left(2), 12=down(4), 13=up(8). Speed = table $01:E237[ss] = {10,02,04,08,10,20,40,80}. Per tile: cam+0E=mask, +0F=FF, +0C/+0D=speed on [$7D]; BG2 [$7F] too if `$77`=0 (if `$77`=5 BG2 gets parallax speed $10). Runs its own frame loop (actors still updated via $9D1F) until cam+0E=0, nn times. | **inline block** until scroll done | $0D22 (mask), $0D23 (count), $0D24 (speed), [$7D]/[$7F]+0C..0F | confirmed | nn=0 → 256 tiles (DEC before test). Speed: 10 likely = 1 px/frame (inferred) |
 | 14 | CFAC | 3 | pp = path #, aa (NPC) | **Run movement path** pp (1-based) from the map's path section (bank $7F, ptr `$07AE`) on actor aa+7. See path format below. If path flags bit4 clear: warp actor to path start (X,Y) first (keeps facing). Sets actor+19=record, +13=first step, +15/+18=step count, +16=first step's tile count, +17=flags, clears +1D bit7. If actor == `$0D0A` (NPC being talked to) clear `$0D0A`. | flags bit0=0 → **yield until all pending movement ends** (`$07B4=FF`; resume when `$0D27` underflows → `$0D26=2`). bit0=1 → continue (bit1=0 → `$0D27++`). | actor+00..+1D, $0D0A, $0D27, $07B4 | confirmed | e.g. `14 0F 06` path 15 on NPC 6 |
 | 15 | CFA2 | 3 | pp, aa (absolute) | Same as 14 with absolute actor id. | as 14 | as 14 | confirmed | `15 01 01` path 1 on leader |
 | 16 | D0AB | 2 | aa (NPC) | aa=0: release **all** actors from path/script control (actor+19=0 for every active actor) and clear `$07B4` (cancels any movement wait). aa≠0: intended "release actor aa", but see bug. | continue | actor+19, $07B4 | confirmed | **Bug**: aa≠0 adds 8 (CMP#0 sets carry, then ADC #7) and the code never loads X from $06, so it zeroes DP $45/$46 instead of the actor. Effectively a no-op except possibly clearing $07B4. All observed uses are `16 00`. |
-| 17 | D0A6 | 2 | aa (absolute) | Same as 16 non-zero path with absolute id — same stale-X bug (writes DP $47/$48). | continue | (buggy) | confirmed | only 2 uses (17 02, 17 00) |
-| 18 | CDFA | 2 | ss = frames per step | **Fade screen out** (palette to black): rebuild reference palette (CE07: map palette from table $01:E160 by `$7F0009`, $02:9300, decompress → $7E:F600..), clear target `$7E:037F-053E`, start 32-step fade, ss frames per step (`$BD/$BA`), `$077B=4`. | continue (fade runs in NMI/frame task; use 5A to wait) | $7E:F600-F7FF, $7E:033F+, $077B, $BA,$BD,$BE,$B1-B5 | confirmed (direction "out" inferred from target=black) | colors from index $20 up (first 2 BG palettes untouched — inferred) |
+| 17 | D0A6 | 2 | aa (absolute) | Same as 16 non-zero path with absolute id - same stale-X bug (writes DP $47/$48). | continue | (buggy) | confirmed | only 2 uses (17 02, 17 00) |
+| 18 | CDFA | 2 | ss = frames per step | **Fade screen out** (palette to black): rebuild reference palette (CE07: map palette from table $01:E160 by `$7F0009`, $02:9300, decompress → $7E:F600..), clear target `$7E:037F-053E`, start 32-step fade, ss frames per step (`$BD/$BA`), `$077B=4`. | continue (fade runs in NMI/frame task; use 5A to wait) | $7E:F600-F7FF, $7E:033F+, $077B, $BA,$BD,$BE,$B1-B5 | confirmed (direction "out" inferred from target=black) | colors from index $20 up (first 2 BG palettes untouched - inferred) |
 | 19 | CE79 | 2 | ss | **Fade screen in**: save current target palette `$7E:037F-053E` → `$7E:F640..`, start 32-step fade back to it, ss frames/step, `$077B=3`. | continue (5A waits) | same | confirmed (direction inferred) | typical: `18 02` … `19 01` |
 | 1A | CB11 | 3 | cc = character, ss = spawn source | **Character joins / follower appears**: spawn source actor = 1 (leader) if ss=0 else ss+7 (NPC). Copies its X/Y/facing/layer, creates a new chain actor id `++$8C` with sprite = table $01:E23F[cc*2]; `$0CE3+i`=sprite, `$0CE8+i`=cc. If table high byte E240[cc*2] < $80 → JSL $08EA8F (add party member hi&3: restores level from $1577 or inits). | continue | $8C,$8C+i, $07B6, actor table, $0CE3+, $0CE8+, $156F, $1577, $14D2, $14CE | confirmed (character names inferred) | cc 0-3: Hero/Lufia/Aguro/Jerin (sprites 0-3, slots 0-3); cc 4-7: sprites 27-2A, slots 0-3 (prologue heroes, inferred); cc 8-F: sprite-only followers (0C,10,0C,07,04,1A,1B,08), no party change |
 | 1B | CB73 | 2 | cc | **Character leaves**: if E240[cc*2] < $80 → JSL $08EA4A (remove party member hi&3: level saved to $1577, $156F=0, removed from order $14D2.., `$14CE--`). Then deletes the **last** chain actor (`$07B6[$8C]=0`, `$8C--`). | continue | $8C, $07B6, $156F, $1577, $14D2-D5, $14CE | confirmed | removes last follower sprite regardless of cc |
 | 1C | CF43 | 2 | nn | Shop nn: clear story flag FF, JSL $00CDB5 (shop UI), if result≠0 set flag FF. | inline block (shop UI) | $1296+$1F | confirmed | flag FF = "bought/sold" result |
 | 1D | CF59 | 3 | ww (price) | Inn: subtract ww gold from `$14CF-$14D1` (only if enough; carry result is **ignored**), JSL $08E850 (heal), play song $1E, fade out (`$0540=$78`, `$053F=FF`), wait 60 frames, fade in, restore music `$92`. | inline block (~2-3 s) | $14CF-D1, $0540, $053F, $38 | confirmed | script must check gold itself |
-| 1E | CF19 | 1 | – | Church: save return pointer into `$0D19-$0D1E` (CF27), then shared sub-script call at $D96F with `$16=$0A`, `$1A=$63` (same mechanism as 51). | transfers control (sub-script) | $0D19-$0D1E | confirmed (call mechanics), details in 51 analysis | |
+| 1E | CF19 | 1 | - | Church: save return pointer into `$0D19-$0D1E` (CF27), then shared sub-script call at $D96F with `$16=$0A`, `$1A=$63` (same mechanism as 51). | transfers control (sub-script) | $0D19-$0D1E | confirmed (call mechanics), details in 51 analysis | |
 | 1F | D185 | 2 | ee = formation | **Scripted battle**: `$142D=ee`, `$0D21=FF`, yield. Field loop ($8920) runs battle (JSL $088000), restores music `$92`, then resumes script ($C2DF) because `$0D21` was set. `$142E` bits0-1 = outcome. | **yield until battle ends** | $142D, $0D21, $142E, $92 | confirmed | examples 1F F0/E6/EF boss formations |
 | 20-27 | CC08..CC30 | 4 | aa, xx, yy | **Place actor**: actor = (aa&7F)+7 for even ops (NPC), aa&7F for odd ops (absolute). Facing = (op>>1)&3. X = ((aa>>7)<<8) | xx, Y = yy (tiles). If actor inactive: nothing (except D0FE). Else (leader/NPC): remove from collision map ($AF6E), set +0B, +01/+04, clear +00,+03,+0A, re-add ($AF36). If actor is party leader with followers: snap all followers (not on a path) to same tile, clear trail `$0CDE-$0CE3`. Finally D0FE: actor+19=FFFF ("held by script"), +15,+17,+18=0. | continue | actor+00..+0B,+15..+1A, $0CDE-E3 | confirmed | bit7 of aa = X high bit (maps >255 wide). `24 11 00 00` = park NPC $11 at (0,0) (hide). Followers (actors 2-6) get position only. |
 | 28-2F | CCFA..CD1E | 2 | aa | **Face direction**: dir = (op>>1)&3; actor = aa+7 (even ops) or aa (odd). Writes actor+0B, `$0D28=actor`, `$3E=FF` (redraw pending). If the same actor as last face command and `$3E` still pending: rewind 2 bytes, wait 1 frame (`$0D26=1`) and retry. | continue (1-frame yield only on back-to-back face of same actor) | actor+0B, $0D28, $3E, $0D26, $07B4 | confirmed | 28/29 right, 2A/2B left, 2C/2D down, 2E/2F up |
@@ -60,7 +60,7 @@ Conventions used below:
 
 ## Shared RAM structures
 
-### Actor table — `$07DE + 0x20*id`, id 0..$27 (computed by $01:AC38 → pointer in DP $06)
+### Actor table - `$07DE + 0x20*id`, id 0..$27 (computed by $01:AC38 → pointer in DP $06)
 | off | meaning |
 |---|---|
 | +00 | X half-tile/sub-step flag (nonzero = between tiles; tile+1 used for collision) |
@@ -83,12 +83,12 @@ Conventions used below:
 - `$07B6[id]` (40 bytes): actor active/sprite slot (0 = absent).
 - Party chain: `$8C` = number of chain actors, `$8D..$8C+$8C` = chain actor ids (`$8D` = leader, normally 1); `$0CE3+i` sprite id, `$0CE8+i` character id; follower trail `$0CDE-$0CE3`.
 
-### Camera structs — BG1 at pointer `$7D`, BG2 at pointer `$7F` (`$77` = BG2 mode: 0 = follows BG1, 5 = parallax, else independent)
+### Camera structs - BG1 at pointer `$7D`, BG2 at pointer `$7F` (`$77` = BG2 mode: 0 = follows BG1, 5 = parallax, else independent)
 +02 map width, +04 map height (wrap), +06 scroll X tile (centre−7), +08 scroll Y tile, +0A/+0B cleared on snap, +0C/+0D scroll speed, +0E scroll direction mask (0 = idle), +0F set FF when scrolling.
 
 ### Movement path records (map data, bank $7F, base `$07AE`, last map-data section; count probably `$079F`)
 Record n (1-based) found by skipping `6 + 3*count` bytes per record.
-- Header 6 bytes: [0] flags — bit0 = don't wait (async), bit1 = loop forever (restart at end), bits2-3 = camera follows actor (nonzero: scroll [$7D]/[$7F] with the actor), bit4 = walk to start position instead of warping; [1] step count; [2-3] start X; [4-5] start Y.
+- Header 6 bytes: [0] flags - bit0 = don't wait (async), bit1 = loop forever (restart at end), bits2-3 = camera follows actor (nonzero: scroll [$7D]/[$7F] with the actor), bit4 = walk to start position instead of warping; [1] step count; [2-3] start X; [4-5] start Y.
 - Steps, 3 bytes: [0] bit0 → actor+08 layer, bits2-4 face mode (0 = face move dir, 1-4 = face dir 0-3, 5 = keep facing/no turn), bits5-7 speed index (E237); [1] bits0-1 direction (0 R,1 L,2 D,3 U); [2] tile count.
 (confirmed from $01:9D62-$9F41.)
 
@@ -102,17 +102,17 @@ Record n (1-based) found by skipping `6 + 3*count` bytes per record.
 - `$0D3C` choice mode, `$0D3E` choice count−1, `$0D3F..` choice targets.
 - `$92` map music, `$078E` current song, `$93` bit7 music lock.
 - `$142D` battle formation (scripted/random), `$0D21` scripted-battle flag, `$142E` battle result.
-- `$077B` fade state (4 = fading out, 3 = fading in, 0 idle — 5A waits on it), `$BA/$BD` fade step timer, `$BE` steps left (32).
+- `$077B` fade state (4 = fading out, 3 = fading in, 0 idle - 5A waits on it), `$BA/$BD` fade step timer, `$BE` steps left (32).
 - `$14CF-14D1` gold, `$156F+c` level (0 = not in party), `$1577+c` saved level, `$14D2-14D5` party order, `$14CE` party size.
 
 ## Length table corrections
 
 None for 00-2F: every length in `EventScript.CommandLength` matches the handlers (03 = 2+2n; 0C/0D = opener 1 + text; 0E/0F = opener 2 + text; 10-15 = 3; 16-19 = 2; 1A = 3; 1B/1C = 2; 1D = 3; 1E = 1; 1F = 2; 20-27 = 4; 28-2F = 2). No handler in this range has conditional/variable operand reads other than 03 (and 02/04/05 always consume both words).
 
-Opstats oddities like `20 0C B6 20`, `21 20 44 65`, `10 20 0C`, `11 00 FF` are text bytes ($20 = space etc.) decoded as commands: the desync comes from somewhere else (another opcode's length, a text control code with operands — text codes 09/0A take 1 byte, others in $C9C9/$C9F4 read bytes/words — or a jump into data), not from 00-2F lengths.
+Opstats oddities like `20 0C B6 20`, `21 20 44 65`, `10 20 0C`, `11 00 FF` are text bytes ($20 = space etc.) decoded as commands: the desync comes from somewhere else (another opcode's length, a text control code with operands - text codes 09/0A take 1 byte, others in $C9C9/$C9F4 read bytes/words - or a jump into data), not from 00-2F lengths.
 
 Other editor-relevant notes:
-- 1E transfers into a sub-script and 1F/0B/14/15 yield — `IsTerminal`-style flow analysis should treat them as "continue at next byte" (they all resume at the following command).
+- 1E transfers into a sub-script and 1F/0B/14/15 yield - `IsTerminal`-style flow analysis should treat them as "continue at next byte" (they all resume at the following command).
 - 16/17 with a non-zero operand do not actually release the actor (engine bug); only `16 00` is meaningful.
 
 

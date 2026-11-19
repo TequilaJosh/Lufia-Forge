@@ -11,7 +11,7 @@ Confidence: **confirmed** = seen in code and in traces; *inferred* = consistent 
 - Scripts are addressed by a 24-bit offset **T relative to file 0x18000** (bank `$03`): file = `0x18000 + T`.
   This is why searching for ordinary SNES pointers to dialogue finds nothing. **(confirmed)**
 - The script reader crosses bank boundaries seamlessly (Y wraps to `$8000`, bank+1), so scripts/text run
-  continuously across banks `$03`–`$07`+. **(confirmed)**
+  continuously across banks `$03` - `$07`+. **(confirmed)**
 
 ## Engine routines (bank `$01`)
 
@@ -70,7 +70,7 @@ Trigger (caller of `$C2DF`, logged as `caller=` by the tracer): **(inferred from
 
 ## Battle messages
 
-- Separate printer (PC `$86B3`), strings in bank `$08` (`0x41290`–`0x47FFF`), `00`-terminated, using
+- Separate printer (PC `$86B3`), strings in bank `$08` (`0x41290` - `0x47FFF`), `00`-terminated, using
   `0C nn` formatting codes for inserted names/numbers. Examples: `0x04136F` "Gets ... Experience",
   `0x0412B4` "'s level is up!", `0x047ED4` "uses the magic mirror!". **(confirmed by trace)**
 
@@ -141,9 +141,9 @@ Object block sections (counts from the first 8 bytes; offsets relative to the bl
 | B (count 1) | 6 bytes: ?, x, y (u16) | *inferred*: arrival points for doors |
 | C (count 2) | 14 bytes: sprite, flags (facing/movement), x, y, box x1, y1, x2, y2 | **NPCs** (positions match the live actor table at `$0800`) |
 | D, E (counts 3, 4) | 12 bytes | not decoded yet |
-| F (count 5) | — | empty in the maps seen |
+| F (count 5) | - | empty in the maps seen |
 | G (count 6) | variable length | not decoded yet (likely event triggers) |
-| first ~163 bytes | — | not decoded yet |
+| first ~163 bytes | - | not decoded yet |
 
 Live actor table: WRAM `$0800`, 32 bytes per actor; party in slots 0-3; tile x/y at +0F/+11 (u16).
 
@@ -178,7 +178,7 @@ Live actor table: WRAM `$0800`, 32 bytes per actor; party in slots 0-3; tile x/y
   than the original packing overall. Verified in the emulator: a recompressed Alekia loads and shows the edit.
 - **Saving**: `MapWriter` writes in place when the new stream fits; otherwise it expands the ROM to 2 MB, writes
   above 1 MB and repoints the resource (`0x60000 + id*3`, bank `$A0+`). Also verified in the emulator.
-- Lufia Forge: **Map Editor tab** (`Modules/MapEditor`, `Core/Maps`) — browse all maps, characters with dialogue,
+- Lufia Forge: **Map Editor tab** (`Modules/MapEditor`, `Core/Maps`) - browse all maps, characters with dialogue,
   exits with destinations; paint blocks, move characters, change exit destinations, Apply to ROM.
 
 ## Composite blocks / second layer (session 7, 2026-10-05) **(confirmed from WRAM after load)**
@@ -243,7 +243,7 @@ Live actor table: WRAM `$0800`, 32 bytes per actor; party in slots 0-3; tile x/y
   max 0x18) → `$01:AC50`: record pointer = word at **`$01:E25F + sprite*2`** (bank 01).
 - Record (17 bytes): `[0]` width, `[1]` height in tiles, `[4]` OAM attribute (low 3 bits = palette row),
   `[6..8]` LoROM address of the 4bpp graphics (uncompressed, e.g. bank 07), `[9..16]` first tile of 8 frames
-  (frame = w*h tiles, row order). Sprite palettes: resource `0xAF` (8 rows × 16). Sprites 00–49 are valid.
+  (frame = w*h tiles, row order). Sprite palettes: resource `0xAF` (8 rows × 16). Sprites 00-49 are valid.
 - More event commands: `1C nn` open shop nn, `1D ww` stay at the inn (ww GP), `1E` church menu.
 
 ## Event script grammar (session 7, 2026-10-06) **(confirmed: 14,520 texts round-trip; relocated event shown in game)**
@@ -285,7 +285,7 @@ Event lists skip table entries that point into the pointer table, into another e
 
 ## Editor requirements vs. what the playthrough tracer records
 
-Requirements are taken from README phases 5–9. "Tracer" = `BizHawk/LufiaForge_PlaythroughTracer.lua`.
+Requirements are taken from README phases 5-9. "Tracer" = `BizHawk/LufiaForge_PlaythroughTracer.lua`.
 
 | Editor need (phase) | What the tracer records | Still needs |
 |---|---|---|
@@ -297,11 +297,11 @@ Requirements are taken from README phases 5–9. "Tracer" = `BizHawk/LufiaForge_
 | NPC placement & which event they run (7) | map blob via `RES`; `START` events per map | NPC record format inside the map blob |
 | Tilesets & graphics (5, 7) | `DMA` source → VRAM address, `RES` graphics unpacks | tile/metatile arrangement format |
 | Palettes (5) | `DMA` → CGRAM with source | mapping palette sources to maps |
-| Battle text (2) | `PRINT` with offsets | — |
-| Menu text (2) | `PRINT` with offsets (status, options, save screens) | — |
+| Battle text (2) | `PRINT` with offsets | - |
+| Menu text (2) | `PRINT` with offsets (status, options, save screens) | - |
 | Monsters per area / encounters (8) | `MONSTER` per map, battle bursts (formation/AI reads) | encounter table format |
 | Level-up growth (8) | level-up burst (ROM reads right after "level is up!") | growth table format |
-| Shops, inns, chests (6) | event bursts (first time each), `RAM` inventory changes | — |
+| Shops, inns, chests (6) | event bursts (first time each), `RAM` inventory changes | - |
 | Music per map (9/other) | `RES` ids `< $25`, `LOAD8E13`, `APU` port writes | confirming those ids are songs |
 | Sprite sheets (8) | `DMA` to VRAM/OAM, `RES` battle sprite unpacks | field sprite format |
 

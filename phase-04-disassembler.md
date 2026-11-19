@@ -1,4 +1,4 @@
-# Phase 4 — 65816 Disassembler + Research Tools
+# Phase 4 - 65816 Disassembler + Research Tools
 
 Full 65816 disassembler with bookmark system, live PC tracking from the emulator, and a cross-reference builder to map out the entire ROM's call graph.
 
@@ -6,34 +6,34 @@ Full 65816 disassembler with bookmark system, live PC tracking from the emulator
 
 **Status: ✅ Complete (closed 2026-10-07).** Built as the Disassembler tab (`Modules/Disassembler`). Live PC tracking uses the
 BizHawk bridge (`BizHawkBridge.CpuSnapshotReady`) instead of an embedded emulator. Differences from the original plan are
-marked *(changed)* or *(deferred)* below. The disassembler was then used to decode the whole event-script engine
+marked *(changed)* or *(dropped)* below. The disassembler was then used to decode the whole event-script engine
 (see `research-script-engine.md` and `research-event-commands.md`).
 
 ---
 
-## 4.1 — Core Disassembler Engine
+## 4.1 - Core Disassembler Engine
 
-- [x] `Cpu65816.cs` — full WDC 65816 instruction decoder
+- [x] `Cpu65816.cs` - full WDC 65816 instruction decoder
   - [x] All 256 opcodes with correct mnemonic, addressing mode, and base cycle count (cycles shown in the line tooltip and the `.asm` export)
   - [x] Variable operand size: immediate operands are 1 byte when M=1 (8-bit acc) or 2 bytes when M=0 (16-bit acc); same for X flag and index registers
   - [x] `DecodeInstruction(RomBuffer rom, int fileOffset, CpuState state) -> DisassemblyLine`
-  - [x] `CpuState` struct: `bool M, bool X, int DirectPage, int DataBank` — affects operand size and address display
+  - [x] `CpuState` struct: `bool M, bool X, int DirectPage, int DataBank` - affects operand size and address display
   - [x] All addressing modes: Implied, Immediate, Direct Page, Absolute, Absolute Long, Relative, Relative Long, Indexed (all variants), Indirect, Indirect Long, Stack-relative
-- [x] `DisassemblyLine.cs` — model for one decoded instruction
+- [x] `DisassemblyLine.cs` - model for one decoded instruction
   - [x] `int FileOffset`, `int SnesAddress`, `byte[] RawBytes`
   - [x] `string Mnemonic`, `string Operand`, `string? Comment`
-  - [x] `int? JumpTarget` — resolved target address for branches and jumps
+  - [x] `int? JumpTarget` - resolved target address for branches and jumps
   - [x] `bool IsJump`, `bool IsCall`, `bool IsReturn`, `bool IsConditional`
-- [x] `LinearDisassembler.cs` — sweep disassembler that walks forward from a start offset
+- [x] `LinearDisassembler.cs` - sweep disassembler that walks forward from a start offset
   - [x] `Disassemble(RomBuffer rom, int startOffset, int byteCount, CpuState initialState) -> List<DisassemblyLine>`
   - [x] Stops at `BRK`, `RTI`, `RTS`, `RTL` or when `byteCount` is exhausted
   - [x] Emits a `[DATA?]` warning line when it hits a byte sequence that doesn't decode cleanly
 
 ---
 
-## 4.2 — Disassembler UI
+## 4.2 - Disassembler UI
 
-- [x] `DisassemblerView.xaml` — main disassembler tab
+- [x] `DisassemblerView.xaml` - main disassembler tab
   - [x] Address input: file offset or SNES address *(changed: LoROM only. Lufia is a LoROM game, so there is no HiROM toggle)*
   - [x] Byte count / end address input
   - [x] M flag and X flag checkboxes (default both unchecked = 16-bit mode)
@@ -51,48 +51,48 @@ marked *(changed)* or *(deferred)* below. The disassembler was then used to deco
     - Follow jump target
     - Mark as data (removes from disassembly)
 - [x] `DisassemblerViewModel.cs`
-  - [x] `DisassembleCommand` — runs `LinearDisassembler` and populates output
-  - [x] `FollowJumpCommand(DisassemblyLine line)` — re-disassembles from the jump target
-  - [x] Navigation history stack — back/forward buttons like a browser
+  - [x] `DisassembleCommand` - runs `LinearDisassembler` and populates output
+  - [x] `FollowJumpCommand(DisassemblyLine line)` - re-disassembles from the jump target
+  - [x] Navigation history stack - back/forward buttons like a browser
   - [x] Export current view as `.asm` text file
 - [x] Live PC tracking (requires Phase 3)
   - [x] Subscribe to CPU snapshots *(changed: `BizHawkBridge.CpuSnapshotReady`, fed by the BizHawk Lua bridge)*
   - [x] Read CPU registers from snapshot (PC, P flags, D, DB)
   - [x] Highlight the current instruction line in gold
   - [x] Auto-scroll to keep current PC visible (with toggle to disable auto-scroll)
-  - [x] "Follow PC" mode — continuously disassembles around the current program counter
+  - [x] "Follow PC" mode - continuously disassembles around the current program counter
 
 ---
 
-## 4.3 — Bookmark System
+## 4.3 - Bookmark System
 
-- [x] `BookmarkStore.cs` — persistent address labels
+- [x] `BookmarkStore.cs` - persistent address labels
   - [x] Load/save from `<romfilename>.lfbookmarks.json`
   - [x] `Add(int snesAddress, string label, string? comment)`
   - [x] `GetByAddress(int snesAddress) -> Bookmark?`
   - [x] `GetAll() -> List<Bookmark>`
-  - [x] Auto-applied to disassembly output — any address with a bookmark shows its label as a comment
+  - [x] Auto-applied to disassembly output - any address with a bookmark shows its label as a comment
 - [x] `Bookmark.cs` model: `SnesAddress`, `Label`, `Comment`, `Color` (for gutter color coding)
 - [x] Bookmark panel: dockable list of all bookmarks, click to jump to address
-- [ ] Bookmarks shared with Research Notes from Phase 3 — `Confirmed` notes auto-create bookmarks *(deferred: Phase 3's Research Notes don't exist yet; research lives in the `research-*.md` files)*
+- [x] Bookmarks shared with Research Notes from Phase 3 - `Confirmed` notes auto-create bookmarks *(dropped: there's no Research Notes panel; research lives in the `research-*.md` files and `LufiaForge/docs/`, and bookmarks are saved per ROM by `BookmarkStore`)*
 
 ---
 
-## 4.4 — Cross-Reference Builder
+## 4.4 - Cross-Reference Builder
 
-- [x] `CrossReferenceBuilder.cs` — scans the entire ROM and builds a call/jump graph
+- [x] `CrossReferenceBuilder.cs` - scans the entire ROM and builds a call/jump graph
   - [x] Walk every LoROM bank, attempt to disassemble, collect all `JSR`, `JSL`, `JMP`, `JML`, `BRA`, `BRL` targets
-  - [x] Output: `Dictionary<int, List<int>>` — address -> list of addresses that call/jump to it
+  - [x] Output: `Dictionary<int, List<int>>` - address -> list of addresses that call/jump to it
   - [x] Run as a background task with progress reporting (the full ROM scan takes about 0.1 s)
   - [x] Indirect jumps/calls (`JMP (a)`, `JMP (a,X)`, `JML [a]`, `JSR (a,X)`) are listed as unresolved, and the count is shown after a build
 - [x] Cross-ref panel in the disassembler tab *(changed: part of `DisassemblerView.xaml`, not a separate view)*
   - [x] For the currently selected address: "Called from" list + "Calls to" list
   - [x] Click any entry to jump to that address in the disassembler
-- [x] Integrate with bookmark labels — known addresses show their label instead of raw hex in the xref list
+- [x] Integrate with bookmark labels - known addresses show their label instead of raw hex in the xref list
 
 ---
 
-## 4.5 — Known Technical Challenges
+## 4.5 - Known Technical Challenges
 
 | Challenge | Notes |
 |-----------|-------|

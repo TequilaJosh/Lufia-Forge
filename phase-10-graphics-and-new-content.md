@@ -1,4 +1,4 @@
-# Phase 10 — Graphics Import & New Content
+# Phase 10 - Graphics Import & New Content
 
 Import self-made graphics and add new content: tilesets for town/dungeon maps, brand-new maps, character sprites
 (including new ones) and monsters (including new ones). Asked for by Ok Impala! ("only the graphics importer /
@@ -18,9 +18,9 @@ Branch: `phase-10-graphics` (from `phase-06-cutscenes`, released as 0.4.0-beta.7
 
 ---
 
-## 10.1 — Foundations
+## 10.1 - Foundations
 
-- [x] **Bigger resource table.** The table at 0x60000 holds ids 0x000–0x13E and has no room after it. Move it into
+- [x] **Bigger resource table.** The table at 0x60000 holds ids 0x000-0x13E and has no room after it. Move it into
       the added space with room for new ids (hook the game's resource lookup), keeping old ids where they are.
       Everything below that needs new graphics or new maps depends on this.
 - [x] Verify the resource lookup hook in BizHawk (title, town, world map, battle) before building on it.
@@ -29,20 +29,20 @@ Branch: `phase-10-graphics` (from `phase-06-cutscenes`, released as 0.4.0-beta.7
 - [x] Palette editor (shared, Game Data > Palettes): edit the 16-colour rows a tileset / sprite / monster uses, with PNG palette import / export. Map palettes (with the maps using
       each), shared map rows 0-1, character sprites (0AF), battle sprites (0x11200), monster pictures. Checked in game.
 
-## 10.2 — Tilesets for town & dungeon maps
+## 10.2 - Tilesets for town & dungeon maps
 
 - [x] Import a whole tileset sheet (PNG, 4bpp, up to 16 KB of tiles) as well as the existing block-by-block import.
       Block editor > Export / Import tile sheet (indexed PNG keeps colour numbers).
 - [x] Block editor: build 16x16 blocks from tiles, set each block's walkability / collision attribute.
       Attribute checked in game: the block walked INTO is tested; 01 = wall on its left, 02 right, 04 top, 08 bottom,
       20 = solid; 10 / 40 don't affect walking. (Map editor > Edit blocks; `Core/Maps/BlockSet.cs`)
-- [x] Map palette rows editable (the rows 2–7 a map uses) - Palettes tab (10.1).
+- [x] Map palette rows editable (the rows 2-7 a map uses) - Palettes tab (10.1).
 - [x] New tilesets: room for 64 (tables at $01:E134 / E140 / E14B move to the added space; `Core/Maps/Tilesets.cs`).
       Checked in game: map 94 on a new tileset 11 (copy of 10, recoloured) while map 93 keeps tileset 10.
 - [x] World map tiles and blocks import (resource 0x124 and the world map's own block records) - Block editor on the
       world map (its 240 blocks can be edited, not added).
 
-## 10.3 — New maps
+## 10.3 - New maps
 
 - [x] **New map**: start from an empty map or a copy of an existing one; pick tileset, palette, size.
       Uses free map numbers 46-86 (35 of them); fills the data select ($01:E19B), setup (0x18000), event (0x18200) and
@@ -54,7 +54,7 @@ Branch: `phase-10-graphics` (from `phase-06-cutscenes`, released as 0.4.0-beta.7
 - [x] World map: zones are painted already (encounter groups); exits are edited with the exit tools; world tiles and
       blocks in the Block editor (10.2).
 
-## 10.4 — Character sprites
+## 10.4 - Character sprites
 
 - [x] Indexed-PNG export / import (keep colour numbers; a full-colour picture is matched to the row), with the
       palette row editable.
@@ -73,7 +73,7 @@ Branch: `phase-10-graphics` (from `phase-06-cutscenes`, released as 0.4.0-beta.7
       characters on (commands put first, jumps moved) and hidden ones off (40 = no-op). *Checked in game: all 117
       scripts moved -> intro, prologue and maps unchanged; new characters appear.*
 
-## 10.5 — Monsters
+## 10.5 - Monsters
 
 - [x] **New monster pictures**: a hook at $08:D959 (where graphic + 0x43 became the resource id) reads a table of
       resource ids (block "LFMP"; graphics 00-6B keep theirs), so new pictures get new resource ids. "New picture for
@@ -87,7 +87,7 @@ Branch: `phase-10-graphics` (from `phase-06-cutscenes`, released as 0.4.0-beta.7
       *Checked in game: a new monster with its own recoloured picture in a random battle - named on the target
       cursor, casting spells from its copied script, battle won normally.*
 
-## 10.6 — Testing & release
+## 10.6 - Testing & release
 
 - [x] Every new piece tested in BizHawk (new map walked into through an exit, new sprite on an NPC, new monster
       fought in an encounter, imported tileset rendered in game). Also all together on one ROM with the earlier
