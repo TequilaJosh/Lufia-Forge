@@ -4,24 +4,20 @@ namespace LufiaForge.Core.Cave;
 
 public static partial class AncientCave
 {
-    /// <summary>The Sinistrals of the floor 100 battle, in formation order (Gades, Amon, Erim, Daos).</summary>
+    // the Sinistrals of the floor 100 battle, in formation order (Gades, Amon, Erim, Daos)
     public static readonly int[] Sinistrals = { 0x91, 0x92, 0x93, 0x94 };
     public const int BossFormation = 0xFA;   // a copy of F6 that no event uses (the story uses E6, F0, F5)
     public const int ShrunkWidth = 48;
 
-    /// <summary>
-    /// Floor 100: all four Sinistrals at once (the project's boss4.asm). The battle code takes at most 3 picture
-    /// groups and gives each a palette slot; a 4th group gets the 1st group's slot, because BG palette 7 is used by
-    /// battle effects, so Gades and Daos share one palette. Their pictures are shrunk to 48 pixels wide to fit.
-    /// <code>
-    /// $08:D2CD  22 GroupCount           up to 4 picture groups in the floor 100 battle, 3 in any other (was LDA #$03 / STA $DF)
-    /// $08:D8B8  22 PaletteSlot EA x4    palette slot of a group (was LDA $DF / SEC / SBC #$02 / EOR #$FF / INC)
-    /// $08:D1C1  22 CountLoop EA         count the 4th group's monsters too (was INX / CPX #$03 / BNE $D175)
-    /// $08:D20A  22 SetupLoop EA         and set it up (was INX / CPX #$03 / BNE $D1CD)
-    /// </code>
-    /// The floor 100 monsters are new copies of the Sinistrals with the shrunken pictures, so the story's own
-    /// Sinistral fights look as before; formation FA (a duplicate of F6 that no event uses) becomes the four of them.
-    /// </summary>
+    // floor 100: all four Sinistrals at once (the project's boss4.asm). the battle code takes at most 3 picture
+    // groups and gives each a palette slot. a 4th group gets the 1st group's slot, because BG palette 7 is used by
+    // battle effects, so Gades and Daos share one palette. their pictures get shrunk to 48 pixels wide to fit.
+    //   $08:D2CD  22 GroupCount           up to 4 picture groups in the floor 100 battle, 3 in any other (was LDA #$03 / STA $DF)
+    //   $08:D8B8  22 PaletteSlot EA x4    palette slot of a group (was LDA $DF / SEC / SBC #$02 / EOR #$FF / INC)
+    //   $08:D1C1  22 CountLoop EA         count the 4th group's monsters too (was INX / CPX #$03 / BNE $D175)
+    //   $08:D20A  22 SetupLoop EA         and set it up (was INX / CPX #$03 / BNE $D1CD)
+    // the floor 100 monsters are new copies of the Sinistrals with the shrunk pictures, so the story's own
+    // Sinistral fights look like before. formation FA (a duplicate of F6 that no event uses) becomes the four of them
     private const string BossSource = """
         GroupCount:                 ; $DF = how many picture groups the battle loads: 4 only for the floor 100 formation
             LDA $7E142D             ; (the battle's formation; with 4 in other battles a stale 4th entry loaded as a
@@ -84,37 +80,37 @@ public static partial class AncientCave
         """;
 
     private const int GroupsSite = 0x452CD, PaletteSite = 0x458B8;
-    /// <summary>The fight's two group loops: INX / CPX #$03 / BNE ($08:D1C1 back to $D175, $08:D20A back to $D1CD),
-    /// each becoming JSL + NOP.</summary>
+    // the fight's two group loops: INX / CPX #$03 / BNE ($08:D1C1 back to $D175, $08:D20A back to $D1CD),
+    // each one becomes JSL + NOP
     private const int CountLoopSite = 0x451C1, SetupLoopSite = 0x4520A;
     private static readonly byte[] CountLoopOriginal = { 0xE8, 0xE0, 0x03, 0xD0, 0xAF };
     private static readonly byte[] SetupLoopOriginal = { 0xE8, 0xE0, 0x03, 0xD0, 0xBE };
     private static readonly byte[] GroupsOriginal = { 0xA9, 0x03, 0x85, 0xDF };
     private static readonly byte[] PaletteOriginal = { 0xA5, 0xDF, 0x38, 0xE9, 0x02, 0x49, 0xFF, 0x1A };
 
-    /// <summary>Makes the four floor 100 monsters (copies with 48-pixel pictures). Returns their ids.</summary>
+    // makes the four floor 100 monsters (copies with 48-pixel pictures). returns their ids
     private static int[] MakeBosses(RomBuffer rom)
     {
-        var pics = Sinistrals.Select(m => MonsterGraphics.Load(rom, rom.ReadByte(MonsterTable.RecordOffset(rom, m) + 14))).ToArray();
-        var shrunk = pics.Select(Shrink).ToArray();
-        // Gades (group 1) and Daos (group 4) share a palette slot: one palette for both; Amon and Erim keep theirs
+        var pictures = Sinistrals.Select(m => MonsterGraphics.Load(rom, rom.ReadByte(MonsterTable.RecordOffset(rom, m) + 14))).ToArray();
+        var shrunk = pictures.Select(Shrink).ToArray();
+        // Gades (group 1) and Daos (group 4) share a palette slot so they get one palette for both, Amon and Erim keep theirs
         var shared = SharedPalette(shrunk[0].Pixels.Concat(shrunk[3].Pixels));
         var ids = new int[4];
         for (int i = 0; i < 4; i++)
         {
-            uint[] palette = i is 0 or 3 ? shared : MonsterGraphics.Colours(pics[i], 0).Skip(1).ToArray();
-            var (w, h, px) = shrunk[i];
-            var idx = new byte[w * h];
-            for (int k = 0; k < px.Length; k++) idx[k] = (px[k] >> 24) == 0 ? (byte)0 : (byte)(1 + Nearest(palette, px[k]));
-            var pal = (byte[])pics[i].Data.Take(0x40).ToArray().Clone();
+            uint[] palette = i is 0 or 3 ? shared : MonsterGraphics.Colours(pictures[i], 0).Skip(1).ToArray();
+            var (width, height, pixels) = shrunk[i];
+            var indices = new byte[width * height];
+            for (int p = 0; p < pixels.Length; p++) indices[p] = (pixels[p] >> 24) == 0 ? (byte)0 : (byte)(1 + Nearest(palette, pixels[p]));
+            var paletteBytes = (byte[])pictures[i].Data.Take(0x40).ToArray().Clone();
             for (int c = 0; c < 15; c++)
             {
-                ushort v = MonsterGraphics.ToBgr555(c < palette.Length ? palette[c] : 0xFF000000u);
-                pal[2 + 2 * c] = (byte)v; pal[3 + 2 * c] = (byte)(v >> 8);
+                ushort bgr = MonsterGraphics.ToBgr555(c < palette.Length ? palette[c] : 0xFF000000u);
+                paletteBytes[2 + 2 * c] = (byte)bgr; paletteBytes[3 + 2 * c] = (byte)(bgr >> 8);
             }
             int graphic = rom.ReadByte(MonsterTable.RecordOffset(rom, Sinistrals[i]) + 14);
             int newGraphic = MonsterTable.AddPicture(rom, graphic);
-            var data = MonsterGraphics.Build(pics[i], idx, w, h, pal);
+            var data = MonsterGraphics.Build(pictures[i], indices, width, height, paletteBytes);
             ResourceWriter.Save(rom, MonsterTable.PictureResource(rom, newGraphic), data, allowExpand: true);
             ids[i] = MonsterTable.Add(rom, Sinistrals[i]);
             rom.WriteByte(MonsterTable.RecordOffset(rom, ids[i]) + 14, (byte)newGraphic);
@@ -122,92 +118,90 @@ public static partial class AncientCave
         return ids;
     }
 
-    /// <summary>
-    /// Takes the floor 100 monsters out again (Remove), last first, and then their pictures (and those pictures'
-    /// resource ids): each only while it is the last of its kind and nothing else uses it (an encounter, a boss
-    /// formation, another monster's picture). What stays is found and used again by the next Apply (<see cref="LeftBosses"/>).
-    /// </summary>
+    // takes the floor 100 monsters out again (Remove), last first, and then their pictures (and those pictures'
+    // resource ids). each one only while it's the last of its kind and nothing else uses it (an encounter, a boss
+    // formation, another monster's picture). whatever stays gets found and used again by the next Apply (LeftBosses)
     private static void RemoveBosses(RomBuffer rom, int[] bosses)
     {
         var graphics = new List<int>();
-        bool Used(int m) =>
-            Enumerable.Range(1, Encounters.SubgroupCount(rom)).Any(s => Encounters.SubgroupMonsters(rom, s).Contains(m)) ||
-            Enumerable.Range(Encounters.FirstBoss, Encounters.LastBoss - Encounters.FirstBoss + 1).Any(f => Encounters.BossMonsters(rom, f).Contains(m));
-        foreach (int m in bosses.OrderByDescending(m => m))
+        bool Used(int monster) =>
+            Enumerable.Range(1, Encounters.SubgroupCount(rom)).Any(s => Encounters.SubgroupMonsters(rom, s).Contains(monster)) ||
+            Enumerable.Range(Encounters.FirstBoss, Encounters.LastBoss - Encounters.FirstBoss + 1).Any(f => Encounters.BossMonsters(rom, f).Contains(monster));
+        foreach (int monster in bosses.OrderByDescending(m => m))
         {
-            if (m < MonsterTable.OriginalCount || m != MonsterTable.Count(rom) - 1 || Used(m)) break;
-            graphics.Add(rom.ReadByte(MonsterTable.RecordOffset(rom, m) + 14));
-            MonsterTable.RemoveLast(rom, m);
+            if (monster < MonsterTable.OriginalCount || monster != MonsterTable.Count(rom) - 1 || Used(monster)) break;
+            graphics.Add(rom.ReadByte(MonsterTable.RecordOffset(rom, monster) + 14));
+            MonsterTable.RemoveLast(rom, monster);
         }
-        foreach (int g in graphics.OrderByDescending(g => g))
+        foreach (int graphic in graphics.OrderByDescending(g => g))
         {
-            bool shown = Enumerable.Range(0, MonsterTable.Count(rom)).Any(m => rom.ReadByte(MonsterTable.RecordOffset(rom, m) + 14) == g);
-            if (shown || !MonsterTable.RemoveLastPicture(rom, g)) break;
+            bool shown = Enumerable.Range(0, MonsterTable.Count(rom)).Any(m => rom.ReadByte(MonsterTable.RecordOffset(rom, m) + 14) == graphic);
+            if (shown || !MonsterTable.RemoveLastPicture(rom, graphic)) break;
         }
     }
 
-    /// <summary>The floor 100 monsters a cave taken out earlier left in the ROM (when monsters were added after them):
-    /// new monsters that are copies of the Sinistrals (all but the picture and the script's place) with a 48-pixel
-    /// picture of their own. Null unless all four are there.</summary>
+    // the floor 100 monsters an earlier cave left in the rom when it was taken out (when monsters were added after
+    // them): new monsters that are copies of the Sinistrals (everything but the picture and the script's place) with a
+    // 48-pixel picture of their own. null unless all four are there
     private static int[]? LeftBosses(RomBuffer rom)
     {
         var ids = new int[4];
         for (int i = 0; i < 4; i++)
         {
-            int src = MonsterTable.RecordOffset(rom, Sinistrals[i]);
-            var want = rom.ReadBytes(src, MonsterTable.RecordLength(rom, src));
+            int sinistralRecord = MonsterTable.RecordOffset(rom, Sinistrals[i]);
+            var wanted = rom.ReadBytes(sinistralRecord, MonsterTable.RecordLength(rom, sinistralRecord));
             ids[i] = -1;
-            for (int m = MonsterTable.Count(rom) - 1; m >= MonsterTable.OriginalCount && ids[i] < 0; m--)
+            for (int monster = MonsterTable.Count(rom) - 1; monster >= MonsterTable.OriginalCount && ids[i] < 0; monster--)
             {
-                int r = MonsterTable.RecordOffset(rom, m);
-                var rec = rom.ReadBytes(r, MonsterTable.RecordLength(rom, r));
-                int g = rec[14];
-                if (rec.Length != want.Length || g < MonsterTable.OriginalPictures || g == want[14] || ids.Take(i).Contains(m)) continue;
-                if (Enumerable.Range(0, rec.Length).Any(k => k is not (14 or 0x22 or 0x23) && rec[k] != want[k])) continue;
-                try { if (MonsterGraphics.Load(rom, g).PixelWidth != ShrunkWidth) continue; } catch (Exception) { continue; }
-                ids[i] = m;
+                int recordOffset = MonsterTable.RecordOffset(rom, monster);
+                var record = rom.ReadBytes(recordOffset, MonsterTable.RecordLength(rom, recordOffset));
+                int graphic = record[14];
+                if (record.Length != wanted.Length || graphic < MonsterTable.OriginalPictures || graphic == wanted[14] || ids.Take(i).Contains(monster)) continue;
+                if (Enumerable.Range(0, record.Length).Any(k => k is not (14 or 0x22 or 0x23) && record[k] != wanted[k])) continue;
+                try { if (MonsterGraphics.Load(rom, graphic).PixelWidth != ShrunkWidth) continue; } catch (Exception) { continue; }
+                ids[i] = monster;
             }
             if (ids[i] < 0) return null;
         }
         return ids;
     }
 
-    /// <summary>A picture cropped to what's drawn and shrunk to 48 pixels wide (box filter), bottom-aligned on a
-    /// height that's a multiple of 16. Pixels: ARGB, alpha 0 = see-through.</summary>
-    private static (int W, int H, uint[] Pixels) Shrink(MonsterGraphics.Picture p)
+    // a picture cropped to what's drawn and shrunk to 48 pixels wide (box filter), bottom-aligned on a
+    // height that's a multiple of 16. pixels: ARGB, alpha 0 = see-through
+    private static (int W, int H, uint[] Pixels) Shrink(MonsterGraphics.Picture picture)
     {
-        var idx = MonsterGraphics.Indices(p);
-        var col = MonsterGraphics.Colours(p, 0);
-        int sw = p.PixelWidth, sh = p.PixelHeight;
-        int x0 = sw, x1 = 0, y0 = sh, y1 = 0;
-        for (int y = 0; y < sh; y++) for (int x = 0; x < sw; x++)
-                if (idx[y * sw + x] != 0) { x0 = Math.Min(x0, x); x1 = Math.Max(x1, x + 1); y0 = Math.Min(y0, y); y1 = Math.Max(y1, y + 1); }
-        int cw = x1 - x0, ch = y1 - y0;
-        double s = (double)ShrunkWidth / cw;
-        int th = Math.Max(1, (int)Math.Round(ch * s));
-        int rows = Math.Min(MonsterGraphics.MaxHeight, (th + 15) / 16), H = rows * 16;
-        th = Math.Min(th, H);
-        var outPx = new uint[ShrunkWidth * H];
-        for (int ty = 0; ty < th; ty++)
+        var indices = MonsterGraphics.Indices(picture);
+        var colours = MonsterGraphics.Colours(picture, 0);
+        int sourceWidth = picture.PixelWidth, sourceHeight = picture.PixelHeight;
+        int x0 = sourceWidth, x1 = 0, y0 = sourceHeight, y1 = 0;
+        for (int y = 0; y < sourceHeight; y++) for (int x = 0; x < sourceWidth; x++)
+                if (indices[y * sourceWidth + x] != 0) { x0 = Math.Min(x0, x); x1 = Math.Max(x1, x + 1); y0 = Math.Min(y0, y); y1 = Math.Max(y1, y + 1); }
+        int cropWidth = x1 - x0, cropHeight = y1 - y0;
+        double scale = (double)ShrunkWidth / cropWidth;
+        int targetHeight = Math.Max(1, (int)Math.Round(cropHeight * scale));
+        int rows = Math.Min(MonsterGraphics.MaxHeight, (targetHeight + 15) / 16), H = rows * 16;
+        targetHeight = Math.Min(targetHeight, H);
+        var outPixels = new uint[ShrunkWidth * H];
+        for (int ty = 0; ty < targetHeight; ty++)
             for (int tx = 0; tx < ShrunkWidth; tx++)
             {
-                double fx0 = x0 + tx / s, fx1 = x0 + (tx + 1) / s, fy0 = y0 + ty / s, fy1 = y0 + (ty + 1) / s;
+                double fx0 = x0 + tx / scale, fx1 = x0 + (tx + 1) / scale, fy0 = y0 + ty / scale, fy1 = y0 + (ty + 1) / scale;
                 double r = 0, g = 0, b = 0, opaque = 0, total = 0;
-                for (int y = (int)fy0; y < Math.Ceiling(fy1) && y < sh; y++)
-                    for (int x = (int)fx0; x < Math.Ceiling(fx1) && x < sw; x++)
+                for (int y = (int)fy0; y < Math.Ceiling(fy1) && y < sourceHeight; y++)
+                    for (int x = (int)fx0; x < Math.Ceiling(fx1) && x < sourceWidth; x++)
                     {
-                        double wx = Math.Min(fx1, x + 1) - Math.Max(fx0, x), wy = Math.Min(fy1, y + 1) - Math.Max(fy0, y), wgt = wx * wy;
-                        if (wgt <= 0) continue;
-                        total += wgt;
-                        int c = idx[y * sw + x];
-                        if (c == 0) continue;
-                        uint v = col[c];
-                        r += (v >> 16 & 0xFF) * wgt; g += (v >> 8 & 0xFF) * wgt; b += (v & 0xFF) * wgt; opaque += wgt;
+                        double wx = Math.Min(fx1, x + 1) - Math.Max(fx0, x), wy = Math.Min(fy1, y + 1) - Math.Max(fy0, y), weight = wx * wy;
+                        if (weight <= 0) continue;
+                        total += weight;
+                        int colourIndex = indices[y * sourceWidth + x];
+                        if (colourIndex == 0) continue;
+                        uint colour = colours[colourIndex];
+                        r += (colour >> 16 & 0xFF) * weight; g += (colour >> 8 & 0xFF) * weight; b += (colour & 0xFF) * weight; opaque += weight;
                     }
                 if (total <= 0 || opaque / total < 110 / 255.0) continue;
-                outPx[(H - th + ty) * ShrunkWidth + tx] = 0xFF000000u | (uint)Math.Round(r / opaque) << 16 | (uint)Math.Round(g / opaque) << 8 | (uint)Math.Round(b / opaque);
+                outPixels[(H - targetHeight + ty) * ShrunkWidth + tx] = 0xFF000000u | (uint)Math.Round(r / opaque) << 16 | (uint)Math.Round(g / opaque) << 8 | (uint)Math.Round(b / opaque);
             }
-        return (ShrunkWidth, H, outPx);
+        return (ShrunkWidth, H, outPixels);
     }
 
     private static int Dist(uint a, uint b)
@@ -216,30 +210,30 @@ public static partial class AncientCave
         return dr * dr * 30 + dg * dg * 59 + db * db * 11;
     }
 
-    private static int Nearest(uint[] palette, uint c)
+    private static int Nearest(uint[] palette, uint colour)
     {
-        int best = 0, bd = int.MaxValue;
-        for (int i = 0; i < palette.Length; i++) { int d = Dist(palette[i], c); if (d < bd) { bd = d; best = i; } }
+        int best = 0, bestDistance = int.MaxValue;
+        for (int i = 0; i < palette.Length; i++) { int distance = Dist(palette[i], colour); if (distance < bestDistance) { bestDistance = distance; best = i; } }
         return best;
     }
 
-    /// <summary>15 colours for two pictures together (k-means from the most common colours, snapped to the SNES's 5 bits).</summary>
+    // 15 colours for two pictures together (k-means from the most common colours, snapped to the SNES's 5 bits)
     private static uint[] SharedPalette(IEnumerable<uint> pixels)
     {
         uint Snap(uint c) => 0xFF000000u | (c & 0xF8F8F8u);
-        var pts = pixels.Where(p => p >> 24 != 0).Select(Snap).ToArray();
-        var centres = pts.GroupBy(p => p).OrderByDescending(g => g.Count()).Select(g => g.Key).Take(15).ToList();
+        var points = pixels.Where(p => p >> 24 != 0).Select(Snap).ToArray();
+        var centres = points.GroupBy(p => p).OrderByDescending(g => g.Count()).Select(g => g.Key).Take(15).ToList();
         while (centres.Count < 15) centres.Add(centres.Count > 0 ? centres[^1] : 0xFF000000u);
         for (int iter = 0; iter < 12; iter++)
         {
-            var sum = new double[15, 3]; var n = new int[15];
-            foreach (var p in pts)
+            var sum = new double[15, 3]; var counts = new int[15];
+            foreach (var point in points)
             {
-                int k = Nearest(centres.ToArray(), p);
-                sum[k, 0] += p >> 16 & 0xFF; sum[k, 1] += p >> 8 & 0xFF; sum[k, 2] += p & 0xFF; n[k]++;
+                int nearest = Nearest(centres.ToArray(), point);
+                sum[nearest, 0] += point >> 16 & 0xFF; sum[nearest, 1] += point >> 8 & 0xFF; sum[nearest, 2] += point & 0xFF; counts[nearest]++;
             }
             for (int k = 0; k < 15; k++)
-                if (n[k] > 0) centres[k] = Snap(0xFF000000u | (uint)(sum[k, 0] / n[k]) << 16 | (uint)(sum[k, 1] / n[k]) << 8 | (uint)(sum[k, 2] / n[k]));
+                if (counts[k] > 0) centres[k] = Snap(0xFF000000u | (uint)(sum[k, 0] / counts[k]) << 16 | (uint)(sum[k, 1] / counts[k]) << 8 | (uint)(sum[k, 2] / counts[k]));
         }
         return centres.ToArray();
     }

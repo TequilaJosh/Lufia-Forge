@@ -2,14 +2,10 @@ namespace LufiaForge.Core.Cave;
 
 public static partial class AncientCave
 {
-    /// <summary>
-    /// Battles in the cave give 1/8 of the gold: each defeated monster's gold (its base plus the random part) is added to
-    /// the battle's total at $141D-$141F; in the cave it's divided by 8 first, so the victory message shows what the party
-    /// gets.
-    /// <code>
-    /// $08:BC70  22 GoldHook EA          a monster's gold (was LDA $1C / CLC / ADC $16)
-    /// </code>
-    /// </summary>
+    // battles in the cave give 1/8 of the gold. each defeated monster's gold (its base plus the random part) gets added
+    // to the battle's total at $141D-$141F, and in the cave we divide it by 8 first, so the victory message shows what
+    // the party actually gets.
+    //   $08:BC70  22 GoldHook EA          a monster's gold (was LDA $1C / CLC / ADC $16)
     private const string GoldSource = """
         GoldHook:                   ; M = 16: A = this monster's gold ($1C random part + $16 base)
             LDA $1C
@@ -31,13 +27,10 @@ public static partial class AncientCave
     private const int GoldSite = 0x43C70;   // $08:BC70
     private static readonly byte[] GoldOriginal = { 0xA5, 0x1C, 0x18, 0x65, 0x16 };
 
-    /// <summary>EXP in the cave (x <see cref="ExpMultiplier"/>): the party starts at level 1 and has to keep up with the
-    /// floors, so each defeated monster's EXP is multiplied before it goes into the battle's total at $141A-$141C (at
-    /// most FFFF a monster).
-    /// <code>
-    /// $08:BC3E  22 ExpHook               a monster's EXP (was LDA $001F,X / CLC)
-    /// </code>
-    /// </summary>
+    // EXP in the cave (x ExpMultiplier): the party starts at level 1 and has to keep up with the
+    // floors, so each defeated monster's EXP gets multiplied before it goes into the battle's total at $141A-$141C (at
+    // most FFFF a monster).
+    //   $08:BC3E  22 ExpHook               a monster's EXP (was LDA $001F,X / CLC)
     public const int ExpMultiplier = 3;
 
     private const string ExpSource = """

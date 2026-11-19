@@ -2,20 +2,16 @@ namespace LufiaForge.Core.Battle;
 
 public static partial class AiCommandsPatch
 {
-    /// <summary>
-    /// Command 25 n: the monster takes n actions this turn (1-8, as Ok Impala's op 1B in the AI extension v2). After
-    /// each action has played out, the monster acts again at once and its script carries on from the next line (not
-    /// from the top). Hooks:
-    /// <code>
-    /// $08:CAC6  22 TurnStart EA          a monster's turn starts: count it, or carry on where an extra action left off
-    /// $08:CAE2  22 PostAction D0 20 80 E1 EA   after each command (was STA $0A / LDA $1460 / BNE $CB08 / BRA $CACB):
-    ///                                    an action was chosen with extra actions left: note where the script stopped
-    /// $08:B578  22 TimerHook             a battler's turn timer is set after its action (was ASL / STA $06C1,X): a
-    ///                                    monster with an extra action left gets 0, so it acts again right away
-    /// </code>
-    /// Battle record (+$70 turn count ...): +$72 extra actions left, +$73 "carry on" flag, +$74/+$75 where to carry on.
-    /// +$72/+$73 are cleared when a monster enters a battle (InitHook).
-    /// </summary>
+    // command 25 n: the monster takes n actions this turn (1-8, like Ok Impala's op 1B in the AI extension v2). after
+    // each action plays out the monster acts again right away and its script carries on from the next line (not
+    // from the top). hooks:
+    //   $08:CAC6  22 TurnStart EA          a monster's turn starts: count it, or carry on where an extra action left off
+    //   $08:CAE2  22 PostAction D0 20 80 E1 EA   after each command (was STA $0A / LDA $1460 / BNE $CB08 / BRA $CACB):
+    //                                      if an action was chosen and extra actions are left, note where the script stopped
+    //   $08:B578  22 TimerHook             a battler's turn timer gets set after its action (was ASL / STA $06C1,X): a
+    //                                      monster with an extra action left gets 0 so it acts again right away
+    // battle record (+$70 turn count ...): +$72 extra actions left, +$73 "carry on" flag, +$74/+$75 where to carry on.
+    // +$72/+$73 get cleared when a monster enters a battle (InitHook)
     private const string MultiSource = """
         !EXTRA  = $7EE572
         !RESUME = $7EE573

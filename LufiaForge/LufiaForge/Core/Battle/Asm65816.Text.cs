@@ -3,15 +3,12 @@ using System.Text.RegularExpressions;
 
 namespace LufiaForge.Core.Battle;
 
-/// <summary>
-/// Assembly text for <see cref="Asm65816"/>, in the style of asar (so routines from other hackers can be ported
-/// almost as they are): one statement per line or several separated by " : ", <c>; comments</c>, <c>Label:</c>,
-/// local <c>.labels</c> (inside the last global label), anonymous <c>-</c> / <c>+</c> / <c>++</c> labels,
-/// <c>!name = value</c> defines, <c>db</c> / <c>dw</c>, and <c>.b</c> / <c>.w</c> / <c>.l</c> size suffixes.
-/// Operand sizes follow asar: <c>$12</c> is direct page, <c>$1234</c> absolute, <c>$7E1234</c> long; an immediate
-/// is as wide as it is written (<c>#$00</c> 8-bit, <c>#$0000</c> 16-bit) unless a suffix says otherwise.
-/// Labels in operands are 16-bit addresses in the block (JSL / JML to a label: 24-bit).
-/// </summary>
+// assembly text for Asm65816, written like asar so routines from other hackers can be ported mostly as they are.
+// one statement per line or several split by " : ", ; comments, Label:, local .labels (inside the last global
+// label), anonymous - / + / ++ labels, !name = value defines, db / dw, and .b / .w / .l size suffixes.
+// operand sizes follow asar: $12 is direct page, $1234 absolute, $7E1234 long. an immediate is as wide as it's
+// written (#$00 8-bit, #$0000 16-bit) unless a suffix says otherwise.
+// labels in operands are 16-bit addresses in the block (JSL / JML to a label is 24-bit)
 public sealed partial class Asm65816
 {
     private enum Mode { Imp, Acc, Imm, Dp, DpX, DpY, Abs, AbsX, AbsY, Long, LongX, IndDp, IndDpX, IndDpY, IndLDp, IndLDpY, Sr, SrY, Rel, IndAbs, IndAbsX, IndLAbs }
@@ -27,16 +24,16 @@ public sealed partial class Asm65816
 
     private static Dictionary<(string, Mode), byte> BuildOps()
     {
-        var d = new Dictionary<(string, Mode), byte>();
+        var ops = new Dictionary<(string, Mode), byte>();
         var alu = new[] { ("ORA", 0x00), ("AND", 0x20), ("EOR", 0x40), ("ADC", 0x60), ("STA", 0x80), ("LDA", 0xA0), ("CMP", 0xC0), ("SBC", 0xE0) };
         var aluModes = new[] { (Mode.IndDpX, 0x01), (Mode.Sr, 0x03), (Mode.Dp, 0x05), (Mode.IndLDp, 0x07), (Mode.Imm, 0x09), (Mode.Abs, 0x0D), (Mode.Long, 0x0F),
             (Mode.IndDpY, 0x11), (Mode.IndDp, 0x12), (Mode.SrY, 0x13), (Mode.DpX, 0x15), (Mode.IndLDpY, 0x17), (Mode.AbsY, 0x19), (Mode.AbsX, 0x1D), (Mode.LongX, 0x1F) };
-        foreach (var (mn, b) in alu)
-            foreach (var (m, o) in aluModes)
-                if (!(mn == "STA" && m == Mode.Imm)) d[(mn, m)] = (byte)(b + o);
-        void Add(string mn, params (Mode, int)[] ms) { foreach (var (m, o) in ms) d[(mn, m)] = (byte)o; }
-        foreach (var (mn, b) in new[] { ("ASL", 0x00), ("ROL", 0x20), ("LSR", 0x40), ("ROR", 0x60) })
-            Add(mn, (Mode.Acc, b + 0x0A), (Mode.Dp, b + 0x06), (Mode.Abs, b + 0x0E), (Mode.DpX, b + 0x16), (Mode.AbsX, b + 0x1E));
+        foreach (var (mnemonic, baseOpcode) in alu)
+            foreach (var (mode, modeOffset) in aluModes)
+                if (!(mnemonic == "STA" && mode == Mode.Imm)) ops[(mnemonic, mode)] = (byte)(baseOpcode + modeOffset);
+        void Add(string mnemonic, params (Mode, int)[] modes) { foreach (var (mode, opcode) in modes) ops[(mnemonic, mode)] = (byte)opcode; }
+        foreach (var (mnemonic, baseOpcode) in new[] { ("ASL", 0x00), ("ROL", 0x20), ("LSR", 0x40), ("ROR", 0x60) })
+            Add(mnemonic, (Mode.Acc, baseOpcode + 0x0A), (Mode.Dp, baseOpcode + 0x06), (Mode.Abs, baseOpcode + 0x0E), (Mode.DpX, baseOpcode + 0x16), (Mode.AbsX, baseOpcode + 0x1E));
         Add("INC", (Mode.Acc, 0x1A), (Mode.Dp, 0xE6), (Mode.Abs, 0xEE), (Mode.DpX, 0xF6), (Mode.AbsX, 0xFE));
         Add("DEC", (Mode.Acc, 0x3A), (Mode.Dp, 0xC6), (Mode.Abs, 0xCE), (Mode.DpX, 0xD6), (Mode.AbsX, 0xDE));
         Add("BIT", (Mode.Imm, 0x89), (Mode.Dp, 0x24), (Mode.Abs, 0x2C), (Mode.DpX, 0x34), (Mode.AbsX, 0x3C));
@@ -49,34 +46,34 @@ public sealed partial class Asm65816
         Add("JMP", (Mode.Abs, 0x4C), (Mode.Long, 0x5C), (Mode.IndAbs, 0x6C), (Mode.IndAbsX, 0x7C), (Mode.IndLAbs, 0xDC));
         Add("JML", (Mode.Long, 0x5C), (Mode.IndLAbs, 0xDC));
         Add("JSR", (Mode.Abs, 0x20), (Mode.IndAbsX, 0xFC)); Add("JSL", (Mode.Long, 0x22));
-        foreach (var (mn, o) in new[] { ("BPL", 0x10), ("BMI", 0x30), ("BVC", 0x50), ("BVS", 0x70), ("BRA", 0x80), ("BCC", 0x90), ("BCS", 0xB0), ("BNE", 0xD0), ("BEQ", 0xF0) })
-            Add(mn, (Mode.Rel, o));
+        foreach (var (mnemonic, opcode) in new[] { ("BPL", 0x10), ("BMI", 0x30), ("BVC", 0x50), ("BVS", 0x70), ("BRA", 0x80), ("BCC", 0x90), ("BCS", 0xB0), ("BNE", 0xD0), ("BEQ", 0xF0) })
+            Add(mnemonic, (Mode.Rel, opcode));
         Add("REP", (Mode.Imm, 0xC2)); Add("SEP", (Mode.Imm, 0xE2)); Add("PEA", (Mode.Abs, 0xF4)); Add("PEI", (Mode.IndDp, 0xD4));
-        foreach (var (mn, o) in new[] { ("CLC", 0x18), ("SEC", 0x38), ("CLI", 0x58), ("SEI", 0x78), ("CLV", 0xB8), ("CLD", 0xD8), ("SED", 0xF8), ("NOP", 0xEA),
+        foreach (var (mnemonic, opcode) in new[] { ("CLC", 0x18), ("SEC", 0x38), ("CLI", 0x58), ("SEI", 0x78), ("CLV", 0xB8), ("CLD", 0xD8), ("SED", 0xF8), ("NOP", 0xEA),
             ("XBA", 0xEB), ("XCE", 0xFB), ("TAX", 0xAA), ("TAY", 0xA8), ("TXA", 0x8A), ("TYA", 0x98), ("TXY", 0x9B), ("TYX", 0xBB), ("TXS", 0x9A), ("TSX", 0xBA),
             ("TCD", 0x5B), ("TDC", 0x7B), ("TCS", 0x1B), ("TSC", 0x3B), ("INX", 0xE8), ("INY", 0xC8), ("DEX", 0xCA), ("DEY", 0x88), ("PHA", 0x48), ("PLA", 0x68),
             ("PHX", 0xDA), ("PLX", 0xFA), ("PHY", 0x5A), ("PLY", 0x7A), ("PHB", 0x8B), ("PLB", 0xAB), ("PHD", 0x0B), ("PLD", 0x2B), ("PHK", 0x4B), ("PHP", 0x08),
             ("PLP", 0x28), ("RTS", 0x60), ("RTL", 0x6B), ("RTI", 0x40), ("WAI", 0xCB) })
-            Add(mn, (Mode.Imp, o));
-        return d;
+            Add(mnemonic, (Mode.Imp, opcode));
+        return ops;
     }
 
-    /// <summary>Assembles <paramref name="text"/> into the block (labels can refer to ones made with the other methods).</summary>
+    // assembles text into the block (labels can point at ones made with the other methods)
     public Asm65816 Source(string text)
     {
         int lineNo = 0;
-        foreach (var raw in text.Split('\n'))
+        foreach (var rawLine in text.Split('\n'))
         {
             lineNo++;
-            string line = raw;
-            int semi = line.IndexOf(';');
-            if (semi >= 0) line = line[..semi];
+            string line = rawLine;
+            int commentAt = line.IndexOf(';');
+            if (commentAt >= 0) line = line[..commentAt];
             foreach (var part in Regex.Split(line, @"\s:\s"))
             {
                 try { Statement(part.Trim()); }
                 catch (Exception e) when (e is not InvalidOperationException { Data.Count: > 0 })
                 {
-                    var ex = new InvalidOperationException($"Line {lineNo} \"{raw.Trim()}\": {e.Message}", e);
+                    var ex = new InvalidOperationException($"Line {lineNo} \"{rawLine.Trim()}\": {e.Message}", e);
                     ex.Data["line"] = lineNo;
                     throw ex;
                 }
@@ -85,176 +82,174 @@ public sealed partial class Asm65816
         return this;
     }
 
-    private void Statement(string s)
+    private void Statement(string statement)
     {
-        if (s.Length == 0) return;
-        var def = Regex.Match(s, @"^!(\w+)\s*=\s*(.+)$");
-        if (def.Success) { _defines[def.Groups[1].Value] = def.Groups[2].Value.Trim(); return; }
-        var anon = Regex.Match(s, @"^([+-]+)(\s+(.*))?$");
-        if (anon.Success && (anon.Groups[3].Success || s.All(c => c is '+' or '-')))
+        if (statement.Length == 0) return;
+        var define = Regex.Match(statement, @"^!(\w+)\s*=\s*(.+)$");
+        if (define.Success) { _defines[define.Groups[1].Value] = define.Groups[2].Value.Trim(); return; }
+        var anon = Regex.Match(statement, @"^([+-]+)(\s+(.*))?$");
+        if (anon.Success && (anon.Groups[3].Success || statement.All(c => c is '+' or '-')))
         {
-            string n = anon.Groups[1].Value;
-            string label = n[0] == '+' && _anonFwd.Remove(n, out var pending) ? pending : $"@anon{_anon++}";
+            string signs = anon.Groups[1].Value;
+            string label = signs[0] == '+' && _anonFwd.Remove(signs, out var pending) ? pending : $"@anon{_anon++}";
             Label(label);
-            if (n[0] == '-') _anonBack[n] = label;
+            if (signs[0] == '-') _anonBack[signs] = label;
             Statement(anon.Groups[3].Value.Trim());
             return;
         }
-        var glob = Regex.Match(s, @"^([A-Za-z_]\w*):(.*)$");
-        if (glob.Success) { _scope = glob.Groups[1].Value; Label(_scope); Statement(glob.Groups[2].Value.Trim()); return; }
-        if (Regex.IsMatch(s, @"^\.\w+$")) { Label(_scope + s); return; }
-        var loc = Regex.Match(s, @"^(\.\w+):(.*)$");
-        if (loc.Success) { Label(_scope + loc.Groups[1].Value); Statement(loc.Groups[2].Value.Trim()); return; }
+        var globalLabel = Regex.Match(statement, @"^([A-Za-z_]\w*):(.*)$");
+        if (globalLabel.Success) { _scope = globalLabel.Groups[1].Value; Label(_scope); Statement(globalLabel.Groups[2].Value.Trim()); return; }
+        if (Regex.IsMatch(statement, @"^\.\w+$")) { Label(_scope + statement); return; }
+        var localLabel = Regex.Match(statement, @"^(\.\w+):(.*)$");
+        if (localLabel.Success) { Label(_scope + localLabel.Groups[1].Value); Statement(localLabel.Groups[2].Value.Trim()); return; }
 
-        s = Expand(s);
-        var m = Regex.Match(s, @"^([A-Za-z]{2,3})(\.([bwl]))?\s*(.*)$");
-        if (!m.Success) throw new FormatException("can't read this");
-        string mn = m.Groups[1].Value.ToUpperInvariant();
-        char size = m.Groups[3].Success ? char.ToLowerInvariant(m.Groups[3].Value[0]) : ' ';
-        string arg = m.Groups[4].Value.Trim();
+        statement = Expand(statement);
+        var instruction = Regex.Match(statement, @"^([A-Za-z]{2,3})(\.([bwl]))?\s*(.*)$");
+        if (!instruction.Success) throw new FormatException("can't read this");
+        string mnemonic = instruction.Groups[1].Value.ToUpperInvariant();
+        char size = instruction.Groups[3].Success ? char.ToLowerInvariant(instruction.Groups[3].Value[0]) : ' ';
+        string operand = instruction.Groups[4].Value.Trim();
 
-        if (mn is "DB" or "DW" or "DL")
+        if (mnemonic is "DB" or "DW" or "DL")
         {
-            foreach (var item in Regex.Matches(arg, @"""[^""]*""|[^,]+").Select(x => x.Value.Trim()))
+            foreach (var item in Regex.Matches(operand, @"""[^""]*""|[^,]+").Select(x => x.Value.Trim()))
             {
-                if (item.StartsWith('"')) { if (mn != "DB") throw new FormatException("text only in db"); B(System.Text.Encoding.ASCII.GetBytes(item.Trim('"'))); continue; }
+                if (item.StartsWith('"')) { if (mnemonic != "DB") throw new FormatException("text only in db"); B(System.Text.Encoding.ASCII.GetBytes(item.Trim('"'))); continue; }
                 if (IsLabelRef(item))
                 {
-                    if (mn == "DB") throw new FormatException("db of a label");
-                    if (mn == "DW") Word(LabelName(item)); else LongWord(LabelName(item));
+                    if (mnemonic == "DB") throw new FormatException("db of a label");
+                    if (mnemonic == "DW") Word(LabelName(item)); else LongWord(LabelName(item));
                     continue;
                 }
-                int iv = Eval(item, out _);
-                B((byte)iv);
-                if (mn != "DB") B((byte)(iv >> 8));
-                if (mn == "DL") B((byte)(iv >> 16));
+                int itemValue = Eval(item, out _);
+                B((byte)itemValue);
+                if (mnemonic != "DB") B((byte)(itemValue >> 8));
+                if (mnemonic == "DL") B((byte)(itemValue >> 16));
             }
             return;
         }
-        if (mn == "BRL") { Br16(0x82, RefName(arg)); return; }
+        if (mnemonic == "BRL") { Br16(0x82, RefName(operand)); return; }
         // ASL #3, NOP #4 ...: the same one-byte instruction n times
-        var rep = Regex.Match(arg, @"^#(\d+)$");
-        if (rep.Success && !Ops.ContainsKey((mn, Mode.Imm)) && (Ops.ContainsKey((mn, Mode.Imp)) || Ops.ContainsKey((mn, Mode.Acc))))
+        var repeat = Regex.Match(operand, @"^#(\d+)$");
+        if (repeat.Success && !Ops.ContainsKey((mnemonic, Mode.Imm)) && (Ops.ContainsKey((mnemonic, Mode.Imp)) || Ops.ContainsKey((mnemonic, Mode.Acc))))
         {
-            byte one = Ops.TryGetValue((mn, Mode.Imp), out var io) ? io : Ops[(mn, Mode.Acc)];
-            for (int k = int.Parse(rep.Groups[1].Value); k > 0; k--) B(one);
+            byte oneByteOp = Ops.TryGetValue((mnemonic, Mode.Imp), out var impliedOp) ? impliedOp : Ops[(mnemonic, Mode.Acc)];
+            for (int times = int.Parse(repeat.Groups[1].Value); times > 0; times--) B(oneByteOp);
             return;
         }
 
-        if (Branches.Contains(mn)) { Br(Ops[(mn, Mode.Rel)], RefName(arg)); return; }
+        if (Branches.Contains(mnemonic)) { Br(Ops[(mnemonic, Mode.Rel)], RefName(operand)); return; }
 
-        Mode mode; string e = arg;
-        Match g;
-        if (arg.Length == 0) mode = Ops.ContainsKey((mn, Mode.Imp)) ? Mode.Imp : Mode.Acc;
-        else if (arg is "A" or "a") mode = Mode.Acc;
-        else if (arg.StartsWith('#')) { mode = Mode.Imm; e = arg[1..]; }
-        else if ((g = Regex.Match(arg, @"^\((.+),\s*[sS]\)\s*,\s*[yY]$")).Success) { mode = Mode.SrY; e = g.Groups[1].Value; }
-        else if ((g = Regex.Match(arg, @"^\((.+)\)\s*,\s*[yY]$")).Success) { mode = Mode.IndDpY; e = g.Groups[1].Value; }
-        else if ((g = Regex.Match(arg, @"^\((.+),\s*[xX]\)$")).Success) { mode = mn is "JMP" or "JSR" ? Mode.IndAbsX : Mode.IndDpX; e = g.Groups[1].Value; }
-        else if ((g = Regex.Match(arg, @"^\((.+)\)$")).Success) { mode = mn == "JMP" ? Mode.IndAbs : Mode.IndDp; e = g.Groups[1].Value; }
-        else if ((g = Regex.Match(arg, @"^\[(.+)\]\s*,\s*[yY]$")).Success) { mode = Mode.IndLDpY; e = g.Groups[1].Value; }
-        else if ((g = Regex.Match(arg, @"^\[(.+)\]$")).Success) { mode = mn is "JMP" or "JML" ? Mode.IndLAbs : Mode.IndLDp; e = g.Groups[1].Value; }
-        else if ((g = Regex.Match(arg, @"^(.+),\s*[sS]$")).Success) { mode = Mode.Sr; e = g.Groups[1].Value; }
-        else if ((g = Regex.Match(arg, @"^(.+),\s*([xXyY])$")).Success)
+        Mode mode; string expr = operand;
+        Match match;
+        if (operand.Length == 0) mode = Ops.ContainsKey((mnemonic, Mode.Imp)) ? Mode.Imp : Mode.Acc;
+        else if (operand is "A" or "a") mode = Mode.Acc;
+        else if (operand.StartsWith('#')) { mode = Mode.Imm; expr = operand[1..]; }
+        else if ((match = Regex.Match(operand, @"^\((.+),\s*[sS]\)\s*,\s*[yY]$")).Success) { mode = Mode.SrY; expr = match.Groups[1].Value; }
+        else if ((match = Regex.Match(operand, @"^\((.+)\)\s*,\s*[yY]$")).Success) { mode = Mode.IndDpY; expr = match.Groups[1].Value; }
+        else if ((match = Regex.Match(operand, @"^\((.+),\s*[xX]\)$")).Success) { mode = mnemonic is "JMP" or "JSR" ? Mode.IndAbsX : Mode.IndDpX; expr = match.Groups[1].Value; }
+        else if ((match = Regex.Match(operand, @"^\((.+)\)$")).Success) { mode = mnemonic == "JMP" ? Mode.IndAbs : Mode.IndDp; expr = match.Groups[1].Value; }
+        else if ((match = Regex.Match(operand, @"^\[(.+)\]\s*,\s*[yY]$")).Success) { mode = Mode.IndLDpY; expr = match.Groups[1].Value; }
+        else if ((match = Regex.Match(operand, @"^\[(.+)\]$")).Success) { mode = mnemonic is "JMP" or "JML" ? Mode.IndLAbs : Mode.IndLDp; expr = match.Groups[1].Value; }
+        else if ((match = Regex.Match(operand, @"^(.+),\s*[sS]$")).Success) { mode = Mode.Sr; expr = match.Groups[1].Value; }
+        else if ((match = Regex.Match(operand, @"^(.+),\s*([xXyY])$")).Success)
         {
-            e = g.Groups[1].Value;
-            bool x = g.Groups[2].Value is "x" or "X";
-            int w = Width(e, size, mn);
-            mode = w switch { 1 => x ? Mode.DpX : Mode.DpY, 2 => x ? Mode.AbsX : Mode.AbsY, _ => x ? Mode.LongX : throw new FormatException("long,Y doesn't exist") };
+            expr = match.Groups[1].Value;
+            bool indexX = match.Groups[2].Value is "x" or "X";
+            int width = Width(expr, size, mnemonic);
+            mode = width switch { 1 => indexX ? Mode.DpX : Mode.DpY, 2 => indexX ? Mode.AbsX : Mode.AbsY, _ => indexX ? Mode.LongX : throw new FormatException("long,Y doesn't exist") };
         }
         else
         {
-            int w = Width(arg, size, mn);
-            mode = w switch { 1 => Mode.Dp, 2 => Mode.Abs, _ => Mode.Long };
+            int width = Width(operand, size, mnemonic);
+            mode = width switch { 1 => Mode.Dp, 2 => Mode.Abs, _ => Mode.Long };
         }
-        if (!Ops.TryGetValue((mn, mode), out byte op)) throw new FormatException($"{mn} has no {mode} mode");
-        e = e.Trim();
+        if (!Ops.TryGetValue((mnemonic, mode), out byte op)) throw new FormatException($"{mnemonic} has no {mode} mode");
+        expr = expr.Trim();
         if (mode is Mode.Imp or Mode.Acc) { B(op); return; }
 
-        var plus = Regex.Match(e, @"^(\.?[A-Za-z_]\w*)\s*([+-].+)$");
-        if (plus.Success && !Regex.IsMatch(plus.Groups[1].Value, "^[0-9]"))
+        var labelPlus = Regex.Match(expr, @"^(\.?[A-Za-z_]\w*)\s*([+-].+)$");
+        if (labelPlus.Success && !Regex.IsMatch(labelPlus.Groups[1].Value, "^[0-9]"))
         {
             // label + number
-            string l = LabelName(plus.Groups[1].Value) + Eval(plus.Groups[2].Value, out _).ToString("+0;-0");
-            if (mode is Mode.Long or Mode.LongX) LongLabel(op, l);
-            else if (mode is Mode.Abs or Mode.AbsX or Mode.AbsY or Mode.IndAbs or Mode.IndAbsX) Abs(op, l);
+            string target = LabelName(labelPlus.Groups[1].Value) + Eval(labelPlus.Groups[2].Value, out _).ToString("+0;-0");
+            if (mode is Mode.Long or Mode.LongX) LongLabel(op, target);
+            else if (mode is Mode.Abs or Mode.AbsX or Mode.AbsY or Mode.IndAbs or Mode.IndAbsX) Abs(op, target);
             else throw new FormatException("a label needs an absolute or long operand");
             return;
         }
-        if (IsLabelRef(e))
+        if (IsLabelRef(expr))
         {
-            string l = LabelName(e);
-            if (mode is Mode.Long or Mode.LongX) LongLabel(op, l);
-            else if (mode is Mode.Abs or Mode.AbsX or Mode.AbsY or Mode.IndAbs or Mode.IndAbsX) Abs(op, l);
+            string target = LabelName(expr);
+            if (mode is Mode.Long or Mode.LongX) LongLabel(op, target);
+            else if (mode is Mode.Abs or Mode.AbsX or Mode.AbsY or Mode.IndAbs or Mode.IndAbsX) Abs(op, target);
             else throw new FormatException("a label needs an absolute or long operand");
             return;
         }
-        int v = Eval(e, out int hint);
+        int value = Eval(expr, out int hint);
         int bytes = mode switch
         {
-            Mode.Imm => size == 'b' ? 1 : size == 'w' ? 2 : mn is "REP" or "SEP" ? 1 : hint > 0 ? Math.Min(hint, 2) : v > 0xFF ? 2 : 1,
+            Mode.Imm => size == 'b' ? 1 : size == 'w' ? 2 : mnemonic is "REP" or "SEP" ? 1 : hint > 0 ? Math.Min(hint, 2) : value > 0xFF ? 2 : 1,
             Mode.Dp or Mode.DpX or Mode.DpY or Mode.IndDp or Mode.IndDpX or Mode.IndDpY or Mode.IndLDp or Mode.IndLDpY or Mode.Sr or Mode.SrY => 1,
             Mode.Long or Mode.LongX => 3,
             _ => 2,
         };
         B(op);
-        for (int i = 0; i < bytes; i++) B((byte)(v >> (8 * i)));
+        for (int i = 0; i < bytes; i++) B((byte)(value >> (8 * i)));
     }
 
-    /// <summary>Operand width in bytes: the suffix, else a label = 2 (JSL/JML 3), else how the number is written.</summary>
-    private int Width(string e, char size, string mn)
+    // operand width in bytes: the suffix, else a label = 2 (JSL/JML 3), else how the number is written
+    private int Width(string expr, char size, string mnemonic)
     {
         if (size == 'b') return 1;
         if (size == 'w') return 2;
         if (size == 'l') return 3;
-        if (IsLabelRef(e.Trim()) || Regex.IsMatch(e.Trim(), @"^\.?[A-Za-z_]\w*\s*[+-]")) return mn is "JSL" or "JML" ? 3 : 2;
-        Eval(e, out int hint);
-        if (hint == 0) throw new FormatException($"say how wide \"{e}\" is (.b / .w / .l)");
+        if (IsLabelRef(expr.Trim()) || Regex.IsMatch(expr.Trim(), @"^\.?[A-Za-z_]\w*\s*[+-]")) return mnemonic is "JSL" or "JML" ? 3 : 2;
+        Eval(expr, out int hint);
+        if (hint == 0) throw new FormatException($"say how wide \"{expr}\" is (.b / .w / .l)");
         return hint;
     }
 
-    private string Expand(string s)
+    private string Expand(string statement)
     {
-        foreach (var k in _defines.Keys.OrderByDescending(k => k.Length)) s = s.Replace("!" + k, _defines[k]);
-        return s;
+        foreach (var name in _defines.Keys.OrderByDescending(k => k.Length)) statement = statement.Replace("!" + name, _defines[name]);
+        return statement;
     }
 
-    private static bool IsLabelRef(string e) => Regex.IsMatch(e, @"^(\.?[A-Za-z_][\w]*|\.\w+|[+-]+)$") && !Regex.IsMatch(e, @"^[0-9]");
+    private static bool IsLabelRef(string expr) => Regex.IsMatch(expr, @"^(\.?[A-Za-z_][\w]*|\.\w+|[+-]+)$") && !Regex.IsMatch(expr, @"^[0-9]");
 
-    private string LabelName(string e) => e.StartsWith('.') ? _scope + e : e[0] is '+' or '-' ? RefName(e) : e;
+    private string LabelName(string expr) => expr.StartsWith('.') ? _scope + expr : expr[0] is '+' or '-' ? RefName(expr) : expr;
 
-    private string RefName(string e)
+    private string RefName(string expr)
     {
-        e = e.Trim();
-        if (e.All(c => c == '-')) return _anonBack.TryGetValue(e, out var b) ? b : throw new FormatException($"no {e} label before this");
-        if (e.All(c => c == '+'))
+        expr = expr.Trim();
+        if (expr.All(c => c == '-')) return _anonBack.TryGetValue(expr, out var backLabel) ? backLabel : throw new FormatException($"no {expr} label before this");
+        if (expr.All(c => c == '+'))
         {
-            if (!_anonFwd.TryGetValue(e, out var f)) _anonFwd[e] = f = $"@anon{_anon++}";
-            return f;
+            if (!_anonFwd.TryGetValue(expr, out var forwardLabel)) _anonFwd[expr] = forwardLabel = $"@anon{_anon++}";
+            return forwardLabel;
         }
-        return LabelName(e);
+        return LabelName(expr);
     }
 
-    /// <summary>
-    /// A number expression: $hex, %binary, decimal and 'c' terms with ( ), unary - and ~, * / + - &lt;&lt; &gt;&gt; &amp; ^ |
-    /// (usual precedence; asar sources keep their sums in brackets anyway). hint = bytes the first written number has
-    /// ($12 = 1, $1234 = 2, $7E1234 = 3, decimal = 0).
-    /// </summary>
-    private static int Eval(string e, out int hint)
+    // a number expression: $hex, %binary, decimal and 'c' terms with ( ), unary - and ~, * / + - << >> & ^ |
+    // (usual precedence, asar sources keep their sums in brackets anyway). hint = bytes the first written number has
+    // ($12 = 1, $1234 = 2, $7E1234 = 3, decimal = 0)
+    private static int Eval(string expr, out int hint)
     {
-        var first = Regex.Match(e, @"[$%]([0-9A-Fa-f]+)");
-        hint = !first.Success ? 0 : e[first.Index] == '$' ? (first.Groups[1].Length + 1) / 2 : (first.Groups[1].Length + 7) / 8;
-        var p = new ExprParser(e.Replace(" ", ""));
-        long v = p.Or();
-        if (p.Pos != p.Text.Length) throw new FormatException($"can't work out \"{e}\" (labels can't be used in sums)");
-        return (int)v;
+        var first = Regex.Match(expr, @"[$%]([0-9A-Fa-f]+)");
+        hint = !first.Success ? 0 : expr[first.Index] == '$' ? (first.Groups[1].Length + 1) / 2 : (first.Groups[1].Length + 7) / 8;
+        var parser = new ExprParser(expr.Replace(" ", ""));
+        long value = parser.Or();
+        if (parser.Pos != parser.Text.Length) throw new FormatException($"can't work out \"{expr}\" (labels can't be used in sums)");
+        return (int)value;
     }
 
     private sealed class ExprParser
     {
         public readonly string Text; public int Pos;
-        public ExprParser(string t) { Text = t; }
-        private bool Eat(string s) { if (string.CompareOrdinal(Text, Pos, s, 0, s.Length) == 0) { Pos += s.Length; return true; } return false; }
+        public ExprParser(string text) { Text = text; }
+        private bool Eat(string token) { if (string.CompareOrdinal(Text, Pos, token, 0, token.Length) == 0) { Pos += token.Length; return true; } return false; }
         public long Or() { long v = Xor(); while (Eat("|")) v |= Xor(); return v; }
         private long Xor() { long v = And(); while (Eat("^")) v ^= And(); return v; }
         private long And() { long v = Shift(); while (Eat("&")) v &= Shift(); return v; }
@@ -265,11 +260,11 @@ public sealed partial class Asm65816
         private long Primary()
         {
             if (Eat("(")) { long v = Or(); if (!Eat(")")) throw new FormatException("missing )"); return v; }
-            var m = Regex.Match(Text[Pos..], @"^(\$[0-9A-Fa-f]+|%[01]+|\d+|'.')");
-            if (!m.Success) throw new FormatException($"can't work out \"{Text}\" (labels can't be used in sums)");
-            Pos += m.Length;
-            string t = m.Value;
-            return t[0] == '$' ? long.Parse(t[1..], NumberStyles.HexNumber) : t[0] == '%' ? Convert.ToInt64(t[1..], 2) : t[0] == '\'' ? t[1] : long.Parse(t);
+            var number = Regex.Match(Text[Pos..], @"^(\$[0-9A-Fa-f]+|%[01]+|\d+|'.')");
+            if (!number.Success) throw new FormatException($"can't work out \"{Text}\" (labels can't be used in sums)");
+            Pos += number.Length;
+            string token = number.Value;
+            return token[0] == '$' ? long.Parse(token[1..], NumberStyles.HexNumber) : token[0] == '%' ? Convert.ToInt64(token[1..], 2) : token[0] == '\'' ? token[1] : long.Parse(token);
         }
     }
 }

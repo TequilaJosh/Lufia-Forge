@@ -1,198 +1,193 @@
 namespace LufiaForge.Core.Battle;
 
-/// <summary>
-/// Turns a picture into a spell animation sheet (128 x 64, colour numbers 0-15, 0 = see-through) for
-/// <see cref="SpellAnimations.Import"/>, and says what it did:
-/// <list type="bullet">
-/// <item>See-through: transparent pixels, or (a picture without any) the colour of its top-left corner.</item>
-/// <item>Pixel art drawn bigger (every pixel 2 x 2, 3 x 3 ...) is brought back to its own size.</item>
-/// <item>Frames are the cells of a grid, left to right, top to bottom, empty cells left out, each kept as drawn (so
-/// sparks and pieces stay where they are) and centred in a frame of the cell size rounded up to 16. The grid is the
-/// given cell size, or (none given) the smallest cell size that divides the picture and that no drawing crosses.</item>
-/// <item>No grid fits: the frames are the drawings separated by empty space, each cut to what it covers.</item>
-/// </list>
-/// </summary>
+// turns a picture into a spell animation sheet (128 x 64, colour numbers 0-15, 0 = see-through) for
+// SpellAnimations.Import, and says what it did:
+// - see-through: transparent pixels, or (for a picture without any) the colour of its top-left corner
+// - pixel art drawn bigger (every pixel 2 x 2, 3 x 3 ...) gets brought back to its own size
+// - frames are the cells of a grid, left to right, top to bottom, empty cells left out. each is kept as drawn (so
+//   sparks and pieces stay where they are) and centred in a frame of the cell size rounded up to 16. the grid is the
+//   given cell size, or if none is given, the smallest cell size that divides the picture and that no drawing crosses
+// - if no grid fits, the frames are the drawings separated by empty space, each cut to what it covers
 public static class SpellAnimationSheet
 {
     public sealed record Result(byte[] Indices, uint[] Palette, int FrameWidth, int FrameHeight, int Frames, List<string> Notes, List<Frame> FrameImages);
 
-    /// <summary>One frame as cut from the picture: w x h pixels, 0xAARRGGBB, 0 = see-through.</summary>
+    // one frame as cut from the picture: w x h pixels, 0xAARRGGBB, 0 = see-through
     public sealed record Frame(int W, int H, uint[] Argb);
 
-    /// <param name="argb">The picture, 0xAARRGGBB per pixel, row by row.</param>
-    /// <param name="gridWidth">The cell size of the frames on the picture (after shrinking pixel art drawn bigger), or 0 to
-    /// find it.</param>
-    /// <param name="frames">At most this many frames (0 = all).</param>
+    // argb: the picture, 0xAARRGGBB per pixel, row by row.
+    // gridWidth: the cell size of the frames on the picture (after shrinking pixel art drawn bigger), or 0 to find it.
+    // frames: at most this many frames (0 = all)
     public static Result Prepare(uint[] argb, int width, int height, int gridWidth = 0, int gridHeight = 0, int frames = 0)
     {
         var notes = new List<string>();
         // see-through
         bool alpha = argb.Any(c => c >> 24 < 128);
-        uint bg = argb[0] | 0xFF000000u;
-        if (!alpha) notes.Add($"No see-through pixels, so the corner colour #{bg & 0xFFFFFF:X6} is see-through.");
-        bool Empty(uint c) => alpha ? c >> 24 < 128 : (c | 0xFF000000u) == bg;
+        uint background = argb[0] | 0xFF000000u;
+        if (!alpha) notes.Add($"No see-through pixels, so the corner colour #{background & 0xFFFFFF:X6} is see-through.");
+        bool Empty(uint c) => alpha ? c >> 24 < 128 : (c | 0xFF000000u) == background;
 
         // pixel art drawn bigger: the largest scale every run of one colour is a multiple of
         int scale = Scale(argb, width, height);
         if (scale > 1)
         {
-            int w2 = width / scale, h2 = height / scale;
-            var small = new uint[w2 * h2];
-            for (int y = 0; y < h2; y++) for (int x = 0; x < w2; x++) small[y * w2 + x] = argb[y * scale * width + x * scale];
-            argb = small; width = w2; height = h2;
+            int smallWidth = width / scale, smallHeight = height / scale;
+            var small = new uint[smallWidth * smallHeight];
+            for (int y = 0; y < smallHeight; y++) for (int x = 0; x < smallWidth; x++) small[y * smallWidth + x] = argb[y * scale * width + x * scale];
+            argb = small; width = smallWidth; height = smallHeight;
             notes.Add($"The picture is drawn {scale} times bigger: used at {width} x {height}.");
         }
         var mask = argb.Select(c => !Empty(c)).ToArray();
         if (!mask.Any(m => m)) throw new InvalidOperationException("The picture is empty (everything is see-through).");
 
-        // the frames: cells of a grid, else the drawings
+        // the frames: cells of a grid, otherwise the drawings
         List<(int X, int Y, int W, int H)> boxes;
-        int cw, ch;
+        int cellWidth, cellHeight;
         bool manual = gridWidth > 0 && gridHeight > 0;
         if (manual)
         {
-            cw = gridWidth; ch = gridHeight;
-            if (cw > 80 || ch > 64) throw new InvalidOperationException($"A frame can be at most 80 x 64 pixels (asked for {cw} x {ch}).");
-            boxes = Cells(mask, width, height, cw, ch);
-            notes.Add($"Cut into {cw} x {ch} cells (the frame size you set): {boxes.Count} with something in them.");
+            cellWidth = gridWidth; cellHeight = gridHeight;
+            if (cellWidth > 80 || cellHeight > 64) throw new InvalidOperationException($"A frame can be at most 80 x 64 pixels (asked for {cellWidth} x {cellHeight}).");
+            boxes = Cells(mask, width, height, cellWidth, cellHeight);
+            notes.Add($"Cut into {cellWidth} x {cellHeight} cells (the frame size you set): {boxes.Count} with something in them.");
         }
         else if (FindGrid(mask, width, height) is { } grid)
         {
-            (cw, ch) = grid;
-            boxes = Cells(mask, width, height, cw, ch);
-            notes.Add($"Frames on a {cw} x {ch} grid: {boxes.Count} with something in them, kept as drawn.");
+            (cellWidth, cellHeight) = grid;
+            boxes = Cells(mask, width, height, cellWidth, cellHeight);
+            notes.Add($"Frames on a {cellWidth} x {cellHeight} grid: {boxes.Count} with something in them, kept as drawn.");
         }
         else
         {
             boxes = Drawings(mask, width, height);
-            cw = boxes.Max(b => b.W); ch = boxes.Max(b => b.H);
-            notes.Add($"No even grid in the picture, so the drawings separated by empty space are the frames: {boxes.Count} of up to {cw} x {ch} pixels.");
+            cellWidth = boxes.Max(b => b.W); cellHeight = boxes.Max(b => b.H);
+            notes.Add($"No even grid in the picture, so the drawings separated by empty space are the frames: {boxes.Count} of up to {cellWidth} x {cellHeight} pixels.");
         }
         if (boxes.Count == 0) throw new InvalidOperationException("No frame has anything in it.");
         if (frames > 0 && frames < boxes.Count) { boxes = boxes.Take(frames).ToList(); notes.Add($"The first {frames} are used."); }
 
-        if (cw > 80 || ch > 64)
-            throw new InvalidOperationException($"The frames are {cw} x {ch} pixels; a frame can be at most 80 x 64. Set a smaller frame size, or draw them smaller.");
-        var cut = boxes.Select(b =>
+        if (cellWidth > 80 || cellHeight > 64)
+            throw new InvalidOperationException($"The frames are {cellWidth} x {cellHeight} pixels; a frame can be at most 80 x 64. Set a smaller frame size, or draw them smaller.");
+        var cut = boxes.Select(box =>
         {
-            var px = new uint[b.W * b.H];
-            for (int y = 0; y < b.H; y++)
-                for (int x = 0; x < b.W; x++)
+            var pixels = new uint[box.W * box.H];
+            for (int y = 0; y < box.H; y++)
+                for (int x = 0; x < box.W; x++)
                 {
-                    int sx = b.X + x, sy = b.Y + y;
-                    if (sx < width && sy < height && mask[sy * width + sx]) px[y * b.W + x] = argb[sy * width + sx] | 0xFF000000u;
+                    int sx = box.X + x, sy = box.Y + y;
+                    if (sx < width && sy < height && mask[sy * width + sx]) pixels[y * box.W + x] = argb[sy * width + sx] | 0xFF000000u;
                 }
-            return new Frame(b.W, b.H, px);
+            return new Frame(box.W, box.H, pixels);
         }).ToList();
         return Pack(cut, notes);
     }
 
-    /// <summary>Frames (of one or more pictures) on one sheet: frame f in cell f, each centred in a frame of the biggest
-    /// size rounded up to 16, at most 15 colours in all.</summary>
+    // frames (from one or more pictures) on one sheet: frame f in cell f, each centred in a frame of the biggest
+    // size rounded up to 16, at most 15 colours in all
     public static Result Pack(List<Frame> frames, List<string>? notes = null, int minWidth = 0, int minHeight = 0)
     {
         notes ??= new List<string>();
         if (frames.Count == 0) throw new InvalidOperationException("There are no frames.");
-        int cw = Math.Max(minWidth, frames.Max(f => f.W)), ch = Math.Max(minHeight, frames.Max(f => f.H));
-        if (cw > 80 || ch > 64)
-            throw new InvalidOperationException($"The biggest frame is {cw} x {ch} pixels; a frame can be at most 80 x 64.");
-        int fw = Math.Max(16, (cw + 15) / 16 * 16), fh = Math.Max(16, (ch + 15) / 16 * 16);
-        int max = SpellAnimations.MaxFrames(fw, fh);
+        int biggestWidth = Math.Max(minWidth, frames.Max(f => f.W)), biggestHeight = Math.Max(minHeight, frames.Max(f => f.H));
+        if (biggestWidth > 80 || biggestHeight > 64)
+            throw new InvalidOperationException($"The biggest frame is {biggestWidth} x {biggestHeight} pixels; a frame can be at most 80 x 64.");
+        int frameWidth = Math.Max(16, (biggestWidth + 15) / 16 * 16), frameHeight = Math.Max(16, (biggestHeight + 15) / 16 * 16);
+        int max = SpellAnimations.MaxFrames(frameWidth, frameHeight);
         if (frames.Count > max)
-            throw new InvalidOperationException($"{frames.Count} frames of {fw} x {fh}, but only {max} of that size fit on the game's sheet. Use fewer frames (the frames box), or smaller ones.");
-        if ((fw != cw || fh != ch) && minWidth == 0) notes.Add($"Each goes in a {fw} x {fh} frame (the game's frames come in steps of 16).");
+            throw new InvalidOperationException($"{frames.Count} frames of {frameWidth} x {frameHeight}, but only {max} of that size fit on the game's sheet. Use fewer frames (the frames box), or smaller ones.");
+        if ((frameWidth != biggestWidth || frameHeight != biggestHeight) && minWidth == 0) notes.Add($"Each goes in a {frameWidth} x {frameHeight} frame (the game's frames come in steps of 16).");
 
         var colours = new List<uint>();
-        foreach (var f in frames)
-            foreach (uint c in f.Argb)
+        foreach (var frame in frames)
+            foreach (uint c in frame.Argb)
             {
                 if (c == 0) continue;
-                uint k = c & 0xF8F8F8u;
-                if (!colours.Contains(k)) colours.Add(k);
+                uint key = c & 0xF8F8F8u;
+                if (!colours.Contains(key)) colours.Add(key);
             }
         if (colours.Count > 15)
             throw new InvalidOperationException($"The frames use {colours.Count} colours; an animation can use 15 (plus see-through).");
 
-        var idx = new byte[SpellAnimations.SheetWidth * SpellAnimations.SheetHeight];
-        int perRow = 8 / (fw / 16);
-        for (int n = 0; n < frames.Count; n++)
+        var indices = new byte[SpellAnimations.SheetWidth * SpellAnimations.SheetHeight];
+        int perRow = 8 / (frameWidth / 16);
+        for (int index = 0; index < frames.Count; index++)
         {
-            var f = frames[n];
-            int cx = n % perRow * fw, cy = n / perRow * fh;
-            int ox = cx + (fw - f.W) / 2, oy = cy + (fh - f.H) / 2;
-            for (int y = 0; y < f.H; y++)
-                for (int x = 0; x < f.W; x++)
+            var frame = frames[index];
+            int cx = index % perRow * frameWidth, cy = index / perRow * frameHeight;
+            int ox = cx + (frameWidth - frame.W) / 2, oy = cy + (frameHeight - frame.H) / 2;
+            for (int y = 0; y < frame.H; y++)
+                for (int x = 0; x < frame.W; x++)
                 {
-                    uint c = f.Argb[y * f.W + x];
-                    if (c != 0) idx[(oy + y) * SpellAnimations.SheetWidth + ox + x] = (byte)(colours.IndexOf(c & 0xF8F8F8u) + 1);
+                    uint c = frame.Argb[y * frame.W + x];
+                    if (c != 0) indices[(oy + y) * SpellAnimations.SheetWidth + ox + x] = (byte)(colours.IndexOf(c & 0xF8F8F8u) + 1);
                 }
         }
-        var pal = new uint[16];
-        for (int i = 0; i < colours.Count; i++) pal[i + 1] = 0xFF000000u | colours[i];
-        return new Result(idx, pal, fw, fh, frames.Count, notes, frames);
+        var palette = new uint[16];
+        for (int i = 0; i < colours.Count; i++) palette[i + 1] = 0xFF000000u | colours[i];
+        return new Result(indices, palette, frameWidth, frameHeight, frames.Count, notes, frames);
     }
 
-    /// <summary>The cells of a cw x ch grid with something in them, left to right, top to bottom.</summary>
-    private static List<(int X, int Y, int W, int H)> Cells(bool[] mask, int w, int h, int cw, int ch)
+    // the cells of a cellWidth x cellHeight grid with something in them, left to right, top to bottom
+    private static List<(int X, int Y, int W, int H)> Cells(bool[] mask, int width, int height, int cellWidth, int cellHeight)
     {
         var list = new List<(int, int, int, int)>();
-        for (int y0 = 0; y0 < h; y0 += ch)
-            for (int x0 = 0; x0 < w; x0 += cw)
+        for (int y0 = 0; y0 < height; y0 += cellHeight)
+            for (int x0 = 0; x0 < width; x0 += cellWidth)
             {
                 bool any = false;
-                for (int y = y0; y < Math.Min(h, y0 + ch) && !any; y++)
-                    for (int x = x0; x < Math.Min(w, x0 + cw); x++) if (mask[y * w + x]) { any = true; break; }
-                if (any) list.Add((x0, y0, cw, ch));
+                for (int y = y0; y < Math.Min(height, y0 + cellHeight) && !any; y++)
+                    for (int x = x0; x < Math.Min(width, x0 + cellWidth); x++) if (mask[y * width + x]) { any = true; break; }
+                if (any) list.Add((x0, y0, cellWidth, cellHeight));
             }
         return list;
     }
 
-    /// <summary>The smallest cell size (16-80 x 16-64, steps of 8) that divides the picture and that no drawing
-    /// crosses (no two touching pixels on either side of a cell edge); null if none.</summary>
-    private static (int, int)? FindGrid(bool[] mask, int w, int h)
+    // the smallest cell size (16-80 x 16-64, steps of 8) that divides the picture and that no drawing
+    // crosses (no two touching pixels on either side of a cell edge), null if there's none
+    private static (int, int)? FindGrid(bool[] mask, int width, int height)
     {
         (int, int)? best = null;
         int bestArea = int.MaxValue;
-        for (int cw = 16; cw <= 80; cw += 8)
+        for (int cellWidth = 16; cellWidth <= 80; cellWidth += 8)
         {
-            if (w % cw != 0) continue;
-            for (int ch = 16; ch <= 64; ch += 8)
+            if (width % cellWidth != 0) continue;
+            for (int cellHeight = 16; cellHeight <= 64; cellHeight += 8)
             {
-                if (h % ch != 0 || cw * ch >= bestArea) continue;
-                if (Crosses(mask, w, h, cw, ch)) continue;
-                best = (cw, ch); bestArea = cw * ch;
+                if (height % cellHeight != 0 || cellWidth * cellHeight >= bestArea) continue;
+                if (Crosses(mask, width, height, cellWidth, cellHeight)) continue;
+                best = (cellWidth, cellHeight); bestArea = cellWidth * cellHeight;
             }
         }
         return best;
     }
 
-    private static bool Crosses(bool[] mask, int w, int h, int cw, int ch)
+    private static bool Crosses(bool[] mask, int width, int height, int cellWidth, int cellHeight)
     {
-        for (int x = cw; x < w; x += cw)
-            for (int y = 0; y < h; y++)
-                if (mask[y * w + x] && (mask[y * w + x - 1] || y > 0 && mask[(y - 1) * w + x - 1] || y + 1 < h && mask[(y + 1) * w + x - 1])) return true;
-        for (int y = ch; y < h; y += ch)
-            for (int x = 0; x < w; x++)
-                if (mask[y * w + x] && (mask[(y - 1) * w + x] || x > 0 && mask[(y - 1) * w + x - 1] || x + 1 < w && mask[(y - 1) * w + x + 1])) return true;
+        for (int x = cellWidth; x < width; x += cellWidth)
+            for (int y = 0; y < height; y++)
+                if (mask[y * width + x] && (mask[y * width + x - 1] || y > 0 && mask[(y - 1) * width + x - 1] || y + 1 < height && mask[(y + 1) * width + x - 1])) return true;
+        for (int y = cellHeight; y < height; y += cellHeight)
+            for (int x = 0; x < width; x++)
+                if (mask[y * width + x] && (mask[(y - 1) * width + x] || x > 0 && mask[(y - 1) * width + x - 1] || x + 1 < width && mask[(y - 1) * width + x + 1])) return true;
         return false;
     }
 
-    /// <summary>The drawings: rows of them separated by empty rows, then in each row the ones separated by empty
-    /// columns (a gap of 2 or more), each cut to what it covers.</summary>
-    private static List<(int X, int Y, int W, int H)> Drawings(bool[] mask, int w, int h)
+    // the drawings: rows of them separated by empty rows, then in each row the ones separated by empty
+    // columns (a gap of 2 or more), each cut to what it covers
+    private static List<(int X, int Y, int W, int H)> Drawings(bool[] mask, int width, int height)
     {
         var list = new List<(int, int, int, int)>();
-        foreach (var (y0, y1) in Runs(Enumerable.Range(0, h).Select(y => Enumerable.Range(0, w).Any(x => mask[y * w + x])).ToArray()))
-            foreach (var (x0, x1) in Runs(Enumerable.Range(0, w).Select(x => Enumerable.Range(y0, y1 - y0).Any(y => mask[y * w + x])).ToArray()))
+        foreach (var (y0, y1) in Runs(Enumerable.Range(0, height).Select(y => Enumerable.Range(0, width).Any(x => mask[y * width + x])).ToArray()))
+            foreach (var (x0, x1) in Runs(Enumerable.Range(0, width).Select(x => Enumerable.Range(y0, y1 - y0).Any(y => mask[y * width + x])).ToArray()))
             {
-                int top = Enumerable.Range(y0, y1 - y0).First(y => Enumerable.Range(x0, x1 - x0).Any(x => mask[y * w + x]));
-                int bottom = Enumerable.Range(y0, y1 - y0).Last(y => Enumerable.Range(x0, x1 - x0).Any(x => mask[y * w + x]));
+                int top = Enumerable.Range(y0, y1 - y0).First(y => Enumerable.Range(x0, x1 - x0).Any(x => mask[y * width + x]));
+                int bottom = Enumerable.Range(y0, y1 - y0).Last(y => Enumerable.Range(x0, x1 - x0).Any(x => mask[y * width + x]));
                 list.Add((x0, top, x1 - x0, bottom - top + 1));
             }
         return list;
     }
 
-    /// <summary>Stretches of "used" separated by at least 2 unused (as start, end exclusive).</summary>
+    // stretches of "used" separated by at least 2 unused (as start, end exclusive)
     private static List<(int, int)> Runs(bool[] used)
     {
         var runs = new List<(int, int)>();
@@ -215,30 +210,30 @@ public static class SpellAnimationSheet
         return runs;
     }
 
-    /// <summary>The biggest n where every horizontal and vertical run of one colour (away from the edges) is a multiple
-    /// of n, and the picture's size too; 1 for ordinary pixel art.</summary>
-    private static int Scale(uint[] px, int w, int h)
+    // the biggest n where every horizontal and vertical run of one colour (away from the edges) is a multiple
+    // of n, and the picture's size too. 1 for ordinary pixel art
+    private static int Scale(uint[] pixels, int width, int height)
     {
-        int g = 0;
+        int divisor = 0;
         int Gcd(int a, int b) { while (b != 0) (a, b) = (b, a % b); return a; }
-        for (int y = 0; y < h && g != 1; y++)
-            for (int x = 0; x < w;)
+        for (int y = 0; y < height && divisor != 1; y++)
+            for (int x = 0; x < width;)
             {
-                int s = x; uint c = px[y * w + x];
-                while (x < w && px[y * w + x] == c) x++;
-                if (s > 0 && x < w) g = Gcd(g, x - s);
-                if (g == 1) break;
+                int runStart = x; uint c = pixels[y * width + x];
+                while (x < width && pixels[y * width + x] == c) x++;
+                if (runStart > 0 && x < width) divisor = Gcd(divisor, x - runStart);
+                if (divisor == 1) break;
             }
-        for (int x = 0; x < w && g != 1; x++)
-            for (int y = 0; y < h;)
+        for (int x = 0; x < width && divisor != 1; x++)
+            for (int y = 0; y < height;)
             {
-                int s = y; uint c = px[y * w + x];
-                while (y < h && px[y * w + x] == c) y++;
-                if (s > 0 && y < h) g = Gcd(g, y - s);
-                if (g == 1) break;
+                int runStart = y; uint c = pixels[y * width + x];
+                while (y < height && pixels[y * width + x] == c) y++;
+                if (runStart > 0 && y < height) divisor = Gcd(divisor, y - runStart);
+                if (divisor == 1) break;
             }
-        if (g <= 1) return 1;
-        // the picture's own size may have a partial border: only use scales that leave a sensible picture
-        return g > 16 ? 1 : g;
+        if (divisor <= 1) return 1;
+        // the picture's own size can have a partial border, so only use scales that leave a sensible picture
+        return divisor > 16 ? 1 : divisor;
     }
 }

@@ -2,23 +2,19 @@ using LufiaForge.Core.Maps;
 
 namespace LufiaForge.Core.Battle;
 
-/// <summary>
-/// Patch for more than 67 encounter subgroups. The game reads subgroup s at $08:DBE2 + 4 x (s - 1) with a 16-bit
-/// pointer in bank 08 ($08:DA20-$08:DA4D), and bank 08 is full, so the table can't grow there. The patch replaces
-/// that piece with a JSL to a small routine in the expanded ROM that does the same thing (pick the k-th monster
-/// of the subgroup, k = random(4) + 1, skipping empty FF slots, cycling) but reads a 255-entry table with long
-/// addressing. The old table in bank 08 is then unused, so the group lists may grow into it (up to the boss
-/// formations at $08:DCEE).
-///
-/// Bank 08 after patching:
-/// <code>
-/// DA20  B9 00 00     LDA $0000,Y       ; subgroup number (unchanged)
-/// DA23  22 xx xx xx  JSL routine       ; returns the monster in A
-/// DA27  85 01        STA $01
-/// DA29  80 24        BRA $DA4F         ; the rest as before (monster count, STZ $02/$03, return)
-/// DA2B  EA ...       NOP up to DA4E
-/// </code>
-/// </summary>
+// patch for more than 67 encounter subgroups. the game reads subgroup s at $08:DBE2 + 4 x (s - 1) with a 16-bit
+// pointer in bank 08 ($08:DA20-$08:DA4D), and bank 08 is full, so the table can't grow there. we swap
+// that piece for a JSL to a small routine in the expanded rom that does the same thing (pick the k-th monster
+// of the subgroup, k = random(4) + 1, skipping empty FF slots, cycling) but reads a 255-entry table with long
+// addressing. the old table in bank 08 is unused after that, so the group lists can grow into it (up to the boss
+// formations at $08:DCEE).
+//
+// bank 08 after patching:
+//   DA20  B9 00 00     LDA $0000,Y       ; subgroup number (unchanged)
+//   DA23  22 xx xx xx  JSL routine       ; returns the monster in A
+//   DA27  85 01        STA $01
+//   DA29  80 24        BRA $DA4F         ; the rest as before (monster count, STZ $02/$03, return)
+//   DA2B  EA ...       NOP up to DA4E
 public static class SubgroupPatch
 {
     public const int Site = 0x45A20;                 // $08:DA20
@@ -26,7 +22,7 @@ public static class SubgroupPatch
     public const int MaxSubgroups = 255;
     public const int TableBytes = MaxSubgroups * 4;
 
-    /// <summary>The game's code at the patch site, to recognise an unpatched ROM.</summary>
+    // the game's code at the patch site, to recognise an unpatched rom
     private static readonly byte[] Original = Convert.FromHexString("B900003AC2200A0A1869E2DB8502E220A9042229B8081AAAA00000B1021AF003CAF008C8C00400D0F280EDB1028501");
 
     public static bool IsOriginal(RomBuffer rom) => rom.ReadBytes(Site, Original.Length).SequenceEqual(Original);
@@ -34,33 +30,31 @@ public static class SubgroupPatch
     public static bool IsApplied(RomBuffer rom) =>
         rom.ReadByte(Site + 3) == 0x22 && rom.ReadByte(Site + 7) == 0x85 && rom.ReadByte(Site + 9) == 0x80 && TableOffset(rom) > 0;
 
-    private static int FileOffset(int snes) => (snes >> 16 & 0x7F) * 0x8000 + (snes & 0x7FFF);
-    private static int SnesAddress(int file) => (file / 0x8000 | 0x80) << 16 | (file % 0x8000 | 0x8000);
+    private static int FileOffset(int snesAddress) => (snesAddress >> 16 & 0x7F) * 0x8000 + (snesAddress & 0x7FFF);
+    private static int SnesAddress(int fileOffset) => (fileOffset / 0x8000 | 0x80) << 16 | (fileOffset % 0x8000 | 0x8000);
 
-    /// <summary>The routine's first byte (file offset), from the JSL at the patch site.</summary>
+    // the routine's first byte (file offset), from the JSL at the patch site
     public static int RoutineOffset(RomBuffer rom) =>
         FileOffset(rom.ReadByte(Site + 4) | rom.ReadByte(Site + 5) << 8 | rom.ReadByte(Site + 6) << 16);
 
-    /// <summary>Where the 255-entry table is (file offset), read from the routine's LDA long,X; 0 if not found.</summary>
+    // where the 255-entry table is (file offset), read from the routine's LDA long,X. 0 if not found
     public static int TableOffset(RomBuffer rom)
     {
-        int r = RoutineOffset(rom);
-        if (r <= 0 || r + Routine(0).Length > rom.Length) return 0;
+        int routineOffset = RoutineOffset(rom);
+        if (routineOffset <= 0 || routineOffset + Routine(0).Length > rom.Length) return 0;
         for (int i = 0; i < 64; i++)
-            if (rom.ReadByte(r + i) == 0xBF)
-                return FileOffset(rom.ReadByte(r + i + 1) | rom.ReadByte(r + i + 2) << 8 | rom.ReadByte(r + i + 3) << 16);
+            if (rom.ReadByte(routineOffset + i) == 0xBF)
+                return FileOffset(rom.ReadByte(routineOffset + i + 1) | rom.ReadByte(routineOffset + i + 2) << 8 | rom.ReadByte(routineOffset + i + 3) << 16);
         return 0;
     }
 
-    /// <summary>
-    /// The routine, for a table at SNES address <paramref name="table"/>. Entered with M = 8-bit, X/Y = 16-bit,
-    /// A = subgroup number, B = 0, DB = 08 (the random number routine $08:B829 needs nothing else); $02-$03 are
-    /// the scratch word the original used (cleared by the code after it).
-    /// </summary>
+    // the routine, for a table at SNES address table. entered with M = 8-bit, X/Y = 16-bit,
+    // A = subgroup number, B = 0, DB = 08 (the random number routine $08:B829 needs nothing else). $02-$03 are
+    // the scratch word the original used (the code after it clears them)
     public static byte[] Routine(int table)
     {
         byte t0 = (byte)table, t1 = (byte)(table >> 8), t2 = (byte)(table >> 16);
-        var c = new List<byte>
+        var code = new List<byte>
         {
             0xC2, 0x20,             // REP #$20
             0x29, 0xFF, 0x00,       // AND #$00FF
@@ -98,43 +92,41 @@ public static class SubgroupPatch
             0xBF, t0, t1, t2,       // LDA table,X
             0x6B,                   // RTL
         };
-        return c.ToArray();
+        return code.ToArray();
     }
 
-    /// <summary>
-    /// Applies the patch: expands the ROM if needed, puts the routine and a 255-entry table (the 67 subgroups,
-    /// then empty FF slots) in the expanded space, and points the game at them.
-    /// </summary>
+    // applies the patch: expands the rom if needed, puts the routine and a 255-entry table (the 67 subgroups,
+    // then empty FF slots) in the expanded space, and points the game at them
     public static void Apply(RomBuffer rom)
     {
         if (IsApplied(rom)) return;
         if (!IsOriginal(rom)) throw new InvalidOperationException("The game's code at $08:DA20 isn't the original, so the subgroup patch can't be applied safely.");
         if (rom.Length < MapWriter.ExpandedSize) rom.Expand(MapWriter.ExpandedSize);
-        var space = ExpansionSpace.Load(rom);
-        int at = space.AllocateInOneBank(TableBytes + Routine(0).Length, ExpansionSpace.Kind.Patch, 1);
-        int table = at, routine = at + TableBytes;
-        var t = Enumerable.Repeat((byte)0xFF, TableBytes).ToArray();
-        rom.ReadBytes(Encounters.OldSubgroups, Encounters.OldSubgroupCount * 4).CopyTo(t, 0);
-        rom.WriteBytes(table, t);
+        var freeSpace = ExpansionSpace.Load(rom);
+        int blockOffset = freeSpace.AllocateInOneBank(TableBytes + Routine(0).Length, ExpansionSpace.Kind.Patch, 1);
+        int table = blockOffset, routine = blockOffset + TableBytes;
+        var tableBytes = Enumerable.Repeat((byte)0xFF, TableBytes).ToArray();
+        rom.ReadBytes(Encounters.OldSubgroups, Encounters.OldSubgroupCount * 4).CopyTo(tableBytes, 0);
+        rom.WriteBytes(table, tableBytes);
         rom.WriteBytes(routine, Routine(SnesAddress(table)));
-        int r = SnesAddress(routine);
-        var site = new List<byte> { 0xB9, 0x00, 0x00, 0x22, (byte)r, (byte)(r >> 8), (byte)(r >> 16), 0x85, 0x01, 0x80, 0x24 };
+        int routineSnes = SnesAddress(routine);
+        var site = new List<byte> { 0xB9, 0x00, 0x00, 0x22, (byte)routineSnes, (byte)(routineSnes >> 8), (byte)(routineSnes >> 16), 0x85, 0x01, 0x80, 0x24 };
         while (site.Count < SiteEnd - Site) site.Add(0xEA);
         rom.WriteBytes(Site, site.ToArray());
-        space.Save();
+        freeSpace.Save();
         rom.FixChecksum();
     }
 
-    /// <summary>A copy of the patch for a test ROM at a chosen place (inside 1 MB), so it can run from a save state.</summary>
-    public static void ApplyAtForTest(RomBuffer rom, int at)
+    // a copy of the patch for a test rom at a place we pick (inside 1 MB), so it can run from a save state
+    public static void ApplyAtForTest(RomBuffer rom, int offset)
     {
-        int table = at, routine = at + TableBytes;
-        var t = Enumerable.Repeat((byte)0xFF, TableBytes).ToArray();
-        rom.ReadBytes(Encounters.OldSubgroups, Encounters.OldSubgroupCount * 4).CopyTo(t, 0);
-        rom.WriteBytes(table, t);
+        int table = offset, routine = offset + TableBytes;
+        var tableBytes = Enumerable.Repeat((byte)0xFF, TableBytes).ToArray();
+        rom.ReadBytes(Encounters.OldSubgroups, Encounters.OldSubgroupCount * 4).CopyTo(tableBytes, 0);
+        rom.WriteBytes(table, tableBytes);
         rom.WriteBytes(routine, Routine(SnesAddress(table)));
-        int r = SnesAddress(routine);
-        var site = new List<byte> { 0xB9, 0x00, 0x00, 0x22, (byte)r, (byte)(r >> 8), (byte)(r >> 16), 0x85, 0x01, 0x80, 0x24 };
+        int routineSnes = SnesAddress(routine);
+        var site = new List<byte> { 0xB9, 0x00, 0x00, 0x22, (byte)routineSnes, (byte)(routineSnes >> 8), (byte)(routineSnes >> 16), 0x85, 0x01, 0x80, 0x24 };
         while (site.Count < SiteEnd - Site) site.Add(0xEA);
         rom.WriteBytes(Site, site.ToArray());
     }

@@ -2,51 +2,40 @@ using LufiaForge.Core.Maps;
 
 namespace LufiaForge.Core.Battle;
 
-/// <summary>
-/// Monsters you can see, as in Lufia II: on a map that has them, monster characters walk about and a fight starts when
-/// one reaches the party; random battles are off there. Beaten monsters vanish, and come back when the map is entered
-/// again. (Not on the world map.)
-/// <para>
-/// A monster is an ordinary map character n (sprite, place, wander box) whose talk event (n + 1) is
-/// <c>1F gg</c> (a battle with encounter group gg, its own, as a random battle would pick: $142D = group) then
-/// <c>5C n+1 00</c> (hide it: 5C k hides character k - 1). A 256-entry table (first monster character, count) says which characters of each map are
-/// monsters, and the step check for random battles ($01:881D) is hooked to make none on those maps (their setup scripts
-/// stay as they were, so taking the monsters off brings the random battles back):
-/// <code>
-/// $01:8820  22 NoRandom / D0 4E / EA   (was LDA $07B4 / BNE $8874 / LDA $94; BNE $8874 stays)
-/// </code>
-/// </para>
-/// <para>
-/// Moving like Lufia II's (seen in Lufia II: they stand still while the hero does, take a step for each of his,
-/// drift towards him): the map characters' wander routine ($01:9FF1, X = the character's record, $18 = actor id,
-/// map character n = actor n + 8) is hooked where it checks the "frozen" bit; for a monster it takes a step only when
-/// the hero has reached a new tile, towards him within 6 tiles (else at random), inside its box, not onto him, with
-/// the game's own target ($01:A053) and wall ($01:AFAC) checks:
-/// <code>
-/// $01:9FFF  22 Step         (was LDA $1D,X / BIT #$20; BNE $9FDC stays: not 0 = only animate)
-/// </code>
-/// When a monster stands next to the hero (both still) it waits there, and the talk check ($01:8394, A pressed) is
-/// made to happen with the hero facing it, so the game runs its event as if he had talked to it:
-/// <code>
-/// $01:8394  22 Talk         (was LDA $30 / AND #$80; BEQ $840E stays)
-/// </code>
-/// A beaten monster (hidden by its event: $1D bit 80) is taken out of the map's actor list ($07BE, 32 actor ids),
-/// which the wandering and the "who is on that tile" check of talking ($01:87DC) go through.
-/// After a fight the other monsters can't start one until the hero has taken <see cref="GraceSteps"/> steps.
-/// RAM: $7F:FEC0-FEC7 (the hero's tile, the turn count, the waiting monster and its direction, the grace steps left),
-/// $7F:FC00-FC3F (the turn each actor last moved on; $7F:FF80-FFBF before version 5, which the Ancient Cave's spell
-/// chests also use).
-/// </para>
-/// <para>
-/// Talking to character n runs event n + 1 of the map's script block (the talk's $16 = actor - 7 = n + 1 is the event
-/// number, traced at $01:C2BA; ROMs made before 2026-10-22 had event n, which only worked while the monsters' events
-/// all had the same group, and froze on the last one: <see cref="EventOf"/> reads both),
-/// and from the map the character's record names ($1C), which can still be the map it came from: the talk is made to
-/// use the map the party is on. The monsters take characters whose events nobody else uses (no script, no step-on area,
-/// no "run event"); skipped ones stay unused. A cutscene that brings in characters a map doesn't list (the opening on
-/// map 4F does) can clash with them, so such maps want a try in the game.
-/// </para>
-/// </summary>
+// monsters you can see, like in Lufia II: on a map that has them, monster characters walk around and a fight starts
+// when one reaches the party, and random battles are off there. beaten monsters vanish and come back when the map is
+// entered again. (not on the world map)
+//
+// a monster is an ordinary map character n (sprite, place, wander box) whose talk event (n + 1) is
+// 1F gg (a battle with encounter group gg, its own, like a random battle would pick: $142D = group) then
+// 5C n+1 00 (hide it, 5C k hides character k - 1). a 256-entry table (first monster character, count) says which
+// characters of each map are monsters, and the step check for random battles ($01:881D) is hooked so there are none
+// on those maps (their setup scripts stay as they were, so taking the monsters off brings the random battles back):
+//   $01:8820  22 NoRandom / D0 4E / EA   (was LDA $07B4 / BNE $8874 / LDA $94. BNE $8874 stays)
+//
+// they move like Lufia II's (watched in Lufia II: they stand still while the hero does, take a step for each of his,
+// drift towards him). the map characters' wander routine ($01:9FF1, X = the character's record, $18 = actor id,
+// map character n = actor n + 8) is hooked where it checks the "frozen" bit. a monster only takes a step when
+// the hero has reached a new tile, towards him within 6 tiles (else at random), inside its box, not onto him, using
+// the game's own target ($01:A053) and wall ($01:AFAC) checks:
+//   $01:9FFF  22 Step         (was LDA $1D,X / BIT #$20. BNE $9FDC stays: not 0 = only animate)
+// when a monster stands next to the hero (both still) it waits there, and we make the talk check ($01:8394, A pressed)
+// happen with the hero facing it, so the game runs its event as if he'd talked to it:
+//   $01:8394  22 Talk         (was LDA $30 / AND #$80. BEQ $840E stays)
+// a beaten monster (hidden by its event: $1D bit 80) gets taken out of the map's actor list ($07BE, 32 actor ids),
+// which the wandering and the "who is on that tile" check of talking ($01:87DC) go through.
+// after a fight the other monsters can't start one until the hero has taken GraceSteps steps.
+// RAM: $7F:FEC0-FEC7 (the hero's tile, the turn count, the waiting monster and its direction, the grace steps left),
+// $7F:FC00-FC3F (the turn each actor last moved on. before version 5 it was $7F:FF80-FFBF, which the Ancient Cave's
+// spell chests also use).
+//
+// talking to character n runs event n + 1 of the map's script block (the talk's $16 = actor - 7 = n + 1 is the event
+// number, traced at $01:C2BA. roms made before 2026-10-22 had event n, which only worked while the monsters' events
+// all had the same group, and froze on the last one. EventOf reads both), and it uses the map the character's
+// record names ($1C), which can still be the map it came from, so we make the talk use the map the party is on.
+// the monsters take characters whose events nobody else uses (no script, no step-on area, no "run event"), skipped
+// ones stay unused. a cutscene that brings in characters a map doesn't list (the opening on map 4F does) can clash
+// with them, so those maps want a try in the game
 public static class VisibleMonsters
 {
     private const int StepSite = 0x9FFF;        // $01:9FFF
@@ -56,33 +45,33 @@ public static class VisibleMonsters
     private const int RandomSite = 0x8820;      // $01:8820
     private static readonly byte[] RandomOriginal = { 0xAD, 0xB4, 0x07, 0xD0, 0x4F, 0xA5, 0x94 };
     private const string Magic = "LFVM";
-    /// <summary>The block (version 3): header, code, the table of each map's monsters, a behaviour byte per monster,
-    /// each map's paths (u16 into the heap, 0 = none) and the heap: per map 16 u16 (each monster's path, 0 = none),
-    /// a path = [mode][count][x y]... Versions 1-2 had the code to 0x300 and the tables after it (2 added behaviours).</summary>
+    // the block (version 3): header, code, the table of each map's monsters, a behaviour byte per monster,
+    // each map's paths (u16 into the heap, 0 = none) and the heap: per map 16 u16 (each monster's path, 0 = none),
+    // a path = [mode][count][x y]... versions 1-2 had the code up to 0x300 and the tables after it (2 added behaviours)
     private const int Header = 8, MapTable = 0x1000, BehaviourTable = MapTable + 512, PathMaps = BehaviourTable + 256 * 16,
                       Heap = PathMaps + 512, BlockSize = 0x7000, HeapSize = BlockSize - Heap;
-    /// <summary>The block's version (header byte 4); an older block is rebuilt, keeping its monsters.</summary>
+    // the block's version (header byte 4). an older block gets rebuilt, keeping its monsters
     private const int Version = 6;
     public const int MaxPathPoints = 32;
 
-    /// <summary>Where the block keeps its tables (by its version).</summary>
-    private static (int Maps, int Behaviours, int Paths) Layout(RomBuffer rom, int b) => rom.ReadByte(b + 4) switch
+    // where the block keeps its tables (depends on its version)
+    private static (int Maps, int Behaviours, int Paths) Layout(RomBuffer rom, int block) => rom.ReadByte(block + 4) switch
     {
         Version or 5 or 4 or 3 => (MapTable, BehaviourTable, PathMaps),
         2 => (0x300, 0x500, -1),
         _ => (0x300, -1, -1),
     };
-    /// <summary>Behaviour bits (a byte per monster: map x 16 + its number among the map's monsters).</summary>
+    // behaviour bits (a byte per monster: map x 16 + its number among the map's monsters)
     private const int KeepsToItself = 0x01, ChasesInItsArea = 0x02;
     public const int ChaseRange = 6;
-    /// <summary>Characters a map can have (actor records $07DE + 32 x (n + 8) run up to the event engine's RAM; the
-    /// biggest towns have 32).</summary>
+    // characters a map can have (actor records $07DE + 32 x (n + 8) run up to the event engine's RAM, the
+    // biggest towns have 32)
     public const int MaxCharacters = 32;
-    /// <summary>Steps the hero can take after a fight before another monster can start one.</summary>
+    // steps the hero can take after a fight before another monster can start one
     public const int GraceSteps = 3;
 
-    private static int SnesAddress(int file) => (file / 0x8000 | 0x80) << 16 | (file % 0x8000 | 0x8000);
-    private static int FileOffset(int snes) => (snes >> 16 & 0x7F) * 0x8000 + (snes & 0x7FFF);
+    private static int SnesAddress(int fileOffset) => (fileOffset / 0x8000 | 0x80) << 16 | (fileOffset % 0x8000 | 0x8000);
+    private static int FileOffset(int snesAddress) => (snesAddress >> 16 & 0x7F) * 0x8000 + (snesAddress & 0x7FFF);
 
     private static string Source(int maps, int behaviour, int pathMaps, int heap) => $$"""
         !MAPS = ${{maps:X6}}
@@ -927,255 +916,252 @@ public static class VisibleMonsters
     private static int Block(RomBuffer rom)
     {
         if (rom.ReadByte(StepSite) != 0x22) return -1;
-        int b = FileOffset(rom.ReadByte(StepSite + 1) | rom.ReadByte(StepSite + 2) << 8 | rom.ReadByte(StepSite + 3) << 16) - Header;
-        return b >= 0 && b + 4 < rom.Length && rom.ReadBytes(b, 4).SequenceEqual(Magic.Select(c => (byte)c)) ? b : -1;
+        int block = FileOffset(rom.ReadByte(StepSite + 1) | rom.ReadByte(StepSite + 2) << 8 | rom.ReadByte(StepSite + 3) << 16) - Header;
+        return block >= 0 && block + 4 < rom.Length && rom.ReadBytes(block, 4).SequenceEqual(Magic.Select(c => (byte)c)) ? block : -1;
     }
 
-    /// <summary>Which characters of a map are monsters: (first character, count), count 0 = none.</summary>
+    // which characters of a map are monsters: (first character, count), count 0 = none
     public static (int First, int Count) Monsters(RomBuffer rom, int mapId)
     {
-        int b = Block(rom);
-        if (b < 0) return (0, 0);
-        int t = Layout(rom, b).Maps;
-        return (rom.ReadByte(b + t + mapId * 2), rom.ReadByte(b + t + mapId * 2 + 1));
+        int block = Block(rom);
+        if (block < 0) return (0, 0);
+        int table = Layout(rom, block).Maps;
+        return (rom.ReadByte(block + table + mapId * 2), rom.ReadByte(block + table + mapId * 2 + 1));
     }
 
-    /// <summary>Puts the code in (once).</summary>
+    // puts the code in (only once)
     public static void Apply(RomBuffer rom)
     {
-        int old = Block(rom);
-        if (old > 0 && rom.ReadByte(old + 4) == Version) return;
-        // an older block: its monsters are read as it has them, taken off, and put back the way this version does
-        // (their events in slot n + 1)
-        var again = new Dictionary<int, List<Monster>>();
-        if (old > 0)
+        int oldBlock = Block(rom);
+        if (oldBlock > 0 && rom.ReadByte(oldBlock + 4) == Version) return;
+        // an older block: we read its monsters the way it has them, take them off, and put them back the way this
+        // version does (their events in slot n + 1)
+        var putBack = new Dictionary<int, List<Monster>>();
+        if (oldBlock > 0)
         {
-            foreach (int m in Enumerable.Range(0, 256).Where(m => Monsters(rom, m).Count > 0))
+            foreach (int mapId in Enumerable.Range(0, 256).Where(m => Monsters(rom, m).Count > 0))
             {
-                again[m] = Placed(rom, LufiaMap.Load(rom, m));
-                RemoveFromMap(rom, m);
+                putBack[mapId] = Placed(rom, LufiaMap.Load(rom, mapId));
+                RemoveFromMap(rom, mapId);
             }
-            old = Block(rom);
+            oldBlock = Block(rom);
         }
-        if (old < 0 && !IsOriginal(rom)) throw new InvalidOperationException("The game's code at $01:9FFF, $01:8394 or $01:8820 isn't the original (another patch changed it), so visible monsters can't be added safely.");
+        if (oldBlock < 0 && !IsOriginal(rom)) throw new InvalidOperationException("The game's code at $01:9FFF, $01:8394 or $01:8820 isn't the original (another patch changed it), so visible monsters can't be added safely.");
         if (rom.Length < MapWriter.ExpandedSize) rom.Expand(MapWriter.ExpandedSize);
         // (a block of an older version: its tables come along, the code is new)
-        var lay = old > 0 ? Layout(rom, old) : (-1, -1, -1);
-        var maps = old > 0 ? rom.ReadBytes(old + lay.Item1, 512) : new byte[512];
-        var behaviours = lay.Item2 > 0 ? rom.ReadBytes(old + lay.Item2, 256 * 16) : new byte[256 * 16];
-        var space = ExpansionSpace.Load(rom);
-        if (old > 0 && space.At(old)?.Start == old) space.Free(old);
-        int b = space.AllocateInOneBank(BlockSize, ExpansionSpace.Kind.Patch, 0);
-        space.Save();
-        int snes = SnesAddress(b);
-        var a = new Asm65816();
-        a.Source(Source(snes + MapTable, snes + BehaviourTable, snes + PathMaps, snes + Heap));
-        var code = a.Build(snes + Header);
+        var oldLayout = oldBlock > 0 ? Layout(rom, oldBlock) : (-1, -1, -1);
+        var maps = oldBlock > 0 ? rom.ReadBytes(oldBlock + oldLayout.Item1, 512) : new byte[512];
+        var behaviours = oldLayout.Item2 > 0 ? rom.ReadBytes(oldBlock + oldLayout.Item2, 256 * 16) : new byte[256 * 16];
+        var freeSpace = ExpansionSpace.Load(rom);
+        if (oldBlock > 0 && freeSpace.At(oldBlock)?.Start == oldBlock) freeSpace.Free(oldBlock);
+        int block = freeSpace.AllocateInOneBank(BlockSize, ExpansionSpace.Kind.Patch, 0);
+        freeSpace.Save();
+        int blockSnes = SnesAddress(block);
+        var asm = new Asm65816();
+        asm.Source(Source(blockSnes + MapTable, blockSnes + BehaviourTable, blockSnes + PathMaps, blockSnes + Heap));
+        var code = asm.Build(blockSnes + Header);
         if (Header + code.Length > MapTable) throw new InvalidOperationException("The visible monster code doesn't fit.");
-        rom.WriteBytes(b, Magic.Select(c => (byte)c).ToArray());
-        rom.WriteByte(b + 4, Version);
-        rom.WriteBytes(b + Header, code);
-        rom.WriteBytes(b + MapTable, maps);
-        // (monsters of a block without behaviours came after the party within 6 tiles: bits 0)
-        rom.WriteBytes(b + BehaviourTable, behaviours);
-        rom.WriteBytes(b + PathMaps, new byte[512 + HeapSize]);
-        int step = snes + Header + a.Offset("Step"), talk = snes + Header + a.Offset("Talk");
+        rom.WriteBytes(block, Magic.Select(c => (byte)c).ToArray());
+        rom.WriteByte(block + 4, Version);
+        rom.WriteBytes(block + Header, code);
+        rom.WriteBytes(block + MapTable, maps);
+        // (monsters of a block without behaviours came after the party within 6 tiles, so bits 0)
+        rom.WriteBytes(block + BehaviourTable, behaviours);
+        rom.WriteBytes(block + PathMaps, new byte[512 + HeapSize]);
+        int step = blockSnes + Header + asm.Offset("Step"), talk = blockSnes + Header + asm.Offset("Talk");
         rom.WriteBytes(StepSite, new byte[] { 0x22, (byte)step, (byte)(step >> 8), (byte)(step >> 16) });
         rom.WriteBytes(TalkSite, new byte[] { 0x22, (byte)talk, (byte)(talk >> 8), (byte)(talk >> 16) });
-        int noRandom = snes + Header + a.Offset("NoRandom");
+        int noRandom = blockSnes + Header + asm.Offset("NoRandom");
         rom.WriteBytes(RandomSite, new byte[] { 0x22, (byte)noRandom, (byte)(noRandom >> 8), (byte)(noRandom >> 16), 0xD0, 0x4E, 0xEA });
         rom.FixChecksum();
-        foreach (var (m, list) in again) AddToMap(rom, m, list);
+        foreach (var (mapId, list) in putBack) AddToMap(rom, mapId, list);
     }
 
-    /// <summary>The map's encounter group from its setup script (command 0D gg), or -1.</summary>
+    // the map's encounter group from its setup script (command 0D gg), or -1
     public static int Group(RomBuffer rom, int mapId)
     {
-        var s = SetupScripts.Read(rom, mapId);
-        var (ops, _) = SetupScripts.Parse(s);
-        foreach (int p in ops) if (s[p] == 0x0D) return s[p + 1];
+        var script = SetupScripts.Read(rom, mapId);
+        var (ops, _) = SetupScripts.Parse(script);
+        foreach (int opAt in ops) if (script[opAt] == 0x0D) return script[opAt + 1];
         return -1;
     }
 
-    /// <summary>The group the map's monsters fight (from the first one's event), or -1.</summary>
+    // the group the map's monsters fight (from the first one's event), or -1
     public static int MonsterGroup(RomBuffer rom, int mapId)
     {
         var (first, count) = Monsters(rom, mapId);
         if (count == 0) return -1;
-        int o = EventOf(rom, mapId, first);
-        return o >= 0 ? rom.ReadByte(o + 1) : -1;
+        int eventOffset = EventOf(rom, mapId, first);
+        return eventOffset >= 0 ? rom.ReadByte(eventOffset + 1) : -1;
     }
 
-    /// <summary>The block keeps monster character n's event in slot n (versions 1-3, written before 2026-10-22: wrong,
-    /// see the class notes) instead of n + 1.</summary>
-    /// <summary>Visible monsters are in the ROM with an older version of the code (<see cref="Apply"/> updates it).</summary>
-    public static bool NeedsUpdate(RomBuffer rom) => Block(rom) is int b && b > 0 && rom.ReadByte(b + 4) < Version;
-    public static bool IsCurrent(RomBuffer rom) => Block(rom) is int b && b > 0 && rom.ReadByte(b + 4) == Version;
+    // OldEvents: the block keeps monster character n's event in slot n (versions 1-3, written before 2026-10-22,
+    // which was wrong, see the notes at the top) instead of n + 1.
+    // NeedsUpdate: visible monsters are in the rom with an older version of the code (Apply updates it)
+    public static bool NeedsUpdate(RomBuffer rom) => Block(rom) is int block && block > 0 && rom.ReadByte(block + 4) < Version;
+    public static bool IsCurrent(RomBuffer rom) => Block(rom) is int block && block > 0 && rom.ReadByte(block + 4) == Version;
 
-    private static bool OldEvents(RomBuffer rom) => Block(rom) is int b && b > 0 && rom.ReadByte(b + 4) < 4;
+    private static bool OldEvents(RomBuffer rom) => Block(rom) is int block && block > 0 && rom.ReadByte(block + 4) < 4;
 
-    /// <summary>File offset of monster character <paramref name="n"/>'s event (1F gg 5C k 00 00), or -1.</summary>
-    private static int EventOf(RomBuffer rom, int mapId, int n)
+    // file offset of monster character's event (1F gg 5C k 00 00), or -1
+    private static int EventOf(RomBuffer rom, int mapId, int character)
     {
-        int slot = OldEvents(rom) ? n : n + 1;
+        int slot = OldEvents(rom) ? character : character + 1;
         if (!HasScript(rom, mapId, slot)) return -1;
-        int o = LufiaMap.EventScriptOffset(rom, mapId, slot);
-        return o >= 0 && o + 6 <= rom.Length && rom.ReadByte(o) == 0x1F && rom.ReadByte(o + 2) == 0x5C && rom.ReadByte(o + 3) == slot ? o : -1;
+        int eventOffset = LufiaMap.EventScriptOffset(rom, mapId, slot);
+        return eventOffset >= 0 && eventOffset + 6 <= rom.Length && rom.ReadByte(eventOffset) == 0x1F && rom.ReadByte(eventOffset + 2) == 0x5C && rom.ReadByte(eventOffset + 3) == slot ? eventOffset : -1;
     }
 
-    /// <summary>A monster on a map: where it starts, its sprite, how far it may wander (0 = anywhere on the map) and
-    /// the encounter group it fights.</summary>
+    // a monster on a map: where it starts, its sprite, how far it can wander (0 = anywhere on the map) and
+    // the encounter group it fights
     public sealed record Monster(int X, int Y, int Sprite, int Range, int Group, bool Chases = true,
                                  PathMode Mode = PathMode.None, IReadOnlyList<(int X, int Y)>? Path = null);
 
-    /// <summary>How a monster walks its path: round and round, there and back, or once (then it stays at the end).</summary>
+    // how a monster walks its path: round and round, there and back, or once (then it stays at the end)
     public enum PathMode { None = 0, Loop = 1, BackAndForth = 2, Once = 3 }
 
-    /// <summary>The block has the behaviour table (version 2 on; before it, every monster came after the party).</summary>
-    private static bool HasBehaviours(RomBuffer rom) => Block(rom) is int b && b > 0 && Layout(rom, b).Behaviours > 0;
+    // the block has the behaviour table (version 2 on, before that every monster came after the party)
+    private static bool HasBehaviours(RomBuffer rom) => Block(rom) is int block && block > 0 && Layout(rom, block).Behaviours > 0;
 
-    /// <summary>Each map's paths, read from the heap (map -> 16 paths, null = none).</summary>
+    // each map's paths, read from the heap (map -> 16 paths, null = none)
     private static Dictionary<int, (PathMode, List<(int, int)>)?[]> ReadPaths(RomBuffer rom)
     {
         var all = new Dictionary<int, (PathMode, List<(int, int)>)?[]>();
-        int b = Block(rom);
-        if (b < 0 || Layout(rom, b).Paths < 0) return all;
-        for (int m = 0; m < 256; m++)
+        int block = Block(rom);
+        if (block < 0 || Layout(rom, block).Paths < 0) return all;
+        for (int mapId = 0; mapId < 256; mapId++)
         {
-            int blob = rom.ReadUInt16Le(b + PathMaps + m * 2);
+            int blob = rom.ReadUInt16Le(block + PathMaps + mapId * 2);
             if (blob == 0) continue;
             var paths = new (PathMode, List<(int, int)>)?[16];
-            for (int k = 0; k < 16; k++)
+            for (int index = 0; index < 16; index++)
             {
-                int o = rom.ReadUInt16Le(b + Heap + blob + k * 2);
-                if (o == 0) continue;
-                int mode = rom.ReadByte(b + Heap + o), n = rom.ReadByte(b + Heap + o + 1);
-                var pts = Enumerable.Range(0, n).Select(i => ((int)rom.ReadByte(b + Heap + o + 2 + i * 2), (int)rom.ReadByte(b + Heap + o + 3 + i * 2))).ToList();
-                paths[k] = ((PathMode)mode, pts);
+                int pathAt = rom.ReadUInt16Le(block + Heap + blob + index * 2);
+                if (pathAt == 0) continue;
+                int mode = rom.ReadByte(block + Heap + pathAt), count = rom.ReadByte(block + Heap + pathAt + 1);
+                var points = Enumerable.Range(0, count).Select(i => ((int)rom.ReadByte(block + Heap + pathAt + 2 + i * 2), (int)rom.ReadByte(block + Heap + pathAt + 3 + i * 2))).ToList();
+                paths[index] = ((PathMode)mode, points);
             }
-            all[m] = paths;
+            all[mapId] = paths;
         }
         return all;
     }
 
-    /// <summary>Writes every map's paths into the heap again (packed), with <paramref name="mapId"/>'s replaced.</summary>
+    // writes every map's paths into the heap again (packed), with mapId's replaced
     private static void WritePaths(RomBuffer rom, int mapId, (PathMode, List<(int, int)>)?[]? paths)
     {
-        int b = Block(rom);
+        int block = Block(rom);
         var all = ReadPaths(rom);
         if (paths != null && paths.Any(p => p != null)) all[mapId] = paths; else all.Remove(mapId);
         var heap = new List<byte> { 0, 0 };   // (offset 0 means none)
         var table = new byte[512];
-        foreach (var (m, ps) in all.OrderBy(kv => kv.Key))
+        foreach (var (map, mapPaths) in all.OrderBy(kv => kv.Key))
         {
             int blob = heap.Count;
-            table[m * 2] = (byte)blob; table[m * 2 + 1] = (byte)(blob >> 8);
+            table[map * 2] = (byte)blob; table[map * 2 + 1] = (byte)(blob >> 8);
             heap.AddRange(new byte[32]);
-            for (int k = 0; k < 16; k++)
+            for (int index = 0; index < 16; index++)
             {
-                if (ps[k] is not { } p || p.Item2.Count == 0) continue;
-                int o = heap.Count;
-                heap[blob + k * 2] = (byte)o; heap[blob + k * 2 + 1] = (byte)(o >> 8);
-                heap.Add((byte)p.Item1); heap.Add((byte)p.Item2.Count);
-                foreach (var (x, y) in p.Item2) { heap.Add((byte)x); heap.Add((byte)y); }
+                if (mapPaths[index] is not { } path || path.Item2.Count == 0) continue;
+                int pathAt = heap.Count;
+                heap[blob + index * 2] = (byte)pathAt; heap[blob + index * 2 + 1] = (byte)(pathAt >> 8);
+                heap.Add((byte)path.Item1); heap.Add((byte)path.Item2.Count);
+                foreach (var (x, y) in path.Item2) { heap.Add((byte)x); heap.Add((byte)y); }
             }
         }
         if (heap.Count > HeapSize) throw new InvalidOperationException($"The monsters' paths need {heap.Count} bytes and there are {HeapSize}: shorten some.");
-        rom.WriteBytes(b + PathMaps, table);
-        rom.WriteBytes(b + Heap, heap.Concat(new byte[HeapSize - heap.Count]).ToArray());
+        rom.WriteBytes(block + PathMaps, table);
+        rom.WriteBytes(block + Heap, heap.Concat(new byte[HeapSize - heap.Count]).ToArray());
     }
 
-    /// <summary>The map's monsters as placed.</summary>
+    // the map's monsters as placed
     public static List<Monster> Placed(RomBuffer rom, LufiaMap map)
     {
         var (first, count) = Monsters(rom, map.MapId);
         if (count == 0) return new();
-        int GroupOf(int n)
+        int GroupOf(int character)
         {
-            int o = EventOf(rom, map.MapId, n);
-            return o >= 0 ? rom.ReadByte(o + 1) : -1;
+            int eventOffset = EventOf(rom, map.MapId, character);
+            return eventOffset >= 0 ? rom.ReadByte(eventOffset + 1) : -1;
         }
-        int bb = Block(rom);
-        var behav = Layout(rom, bb).Behaviours;
+        int block = Block(rom);
+        var behaviours = Layout(rom, block).Behaviours;
         ReadPaths(rom).TryGetValue(map.MapId, out var paths);
         return map.Npcs.Where(n => n.Index >= first && n.Index < first + count)
-                       .Select(n =>
+                       .Select(npc =>
                        {
-                           int k = Math.Min(15, n.Index - first);
-                           var path = paths?[k];
-                           return new Monster(n.X, n.Y, n.Sprite,
-                                     path != null || (n.BoxX1 == 0 && n.BoxY1 == 0 && n.BoxX2 >= map.Width && n.BoxY2 >= map.Height) ? 0 : Math.Max(n.X - n.BoxX1, n.BoxX2 - 1 - n.X),
-                                     GroupOf(n.Index),
-                                     behav < 0 || (rom.ReadByte(bb + behav + map.MapId * 16 + k) & KeepsToItself) == 0,
+                           int slot = Math.Min(15, npc.Index - first);
+                           var path = paths?[slot];
+                           return new Monster(npc.X, npc.Y, npc.Sprite,
+                                     path != null || (npc.BoxX1 == 0 && npc.BoxY1 == 0 && npc.BoxX2 >= map.Width && npc.BoxY2 >= map.Height) ? 0 : Math.Max(npc.X - npc.BoxX1, npc.BoxX2 - 1 - npc.X),
+                                     GroupOf(npc.Index),
+                                     behaviours < 0 || (rom.ReadByte(block + behaviours + map.MapId * 16 + slot) & KeepsToItself) == 0,
                                      path?.Item1 ?? PathMode.None, path?.Item2);
                        })
                        .ToList();
     }
 
-    private static bool IsMonsterEvent(EventScript? ev, int n) =>
-        ev != null && ev.Ops.Count == 3 && ev.Ops[0].Bytes is [0x1F, _] && ev.Ops[1].Bytes is [0x5C, var who, 0x00] && who == n && ev.Ops[2].Bytes is [0x00];
+    private static bool IsMonsterEvent(EventScript? script, int character) =>
+        script != null && script.Ops.Count == 3 && script.Ops[0].Bytes is [0x1F, _] && script.Ops[1].Bytes is [0x5C, var who, 0x00] && who == character && script.Ops[2].Bytes is [0x00];
 
-    private static byte[] MonsterScript(int n, int group) => new byte[] { 0x1F, (byte)group, 0x5C, (byte)n, 0x00, 0x00 };
+    private static byte[] MonsterScript(int character, int group) => new byte[] { 0x1F, (byte)group, 0x5C, (byte)character, 0x00, 0x00 };
 
-    /// <summary>Slot <paramref name="ev"/> holds what taking a monster off leaves: its script with the first byte
-    /// ended (00 gg 5C n 00 00).</summary>
-    private static bool IsRemovedMonster(RomBuffer rom, int mapId, int ev)
+    // slot holds what taking a monster off leaves behind: its script with the first byte
+    // ended (00 gg 5C n 00 00)
+    private static bool IsRemovedMonster(RomBuffer rom, int mapId, int slot)
     {
-        if (!HasScript(rom, mapId, ev)) return false;
-        int o = LufiaMap.EventScriptOffset(rom, mapId, ev);
-        if (o < 0 || o + 6 > rom.Length) return false;
-        var x = rom.ReadBytes(o, 6);
-        return x[0] == 0x00 && x[2] == 0x5C && x[3] == ev && x[4] == 0x00 && x[5] == 0x00;
+        if (!HasScript(rom, mapId, slot)) return false;
+        int scriptAt = LufiaMap.EventScriptOffset(rom, mapId, slot);
+        if (scriptAt < 0 || scriptAt + 6 > rom.Length) return false;
+        var bytes = rom.ReadBytes(scriptAt, 6);
+        return bytes[0] == 0x00 && bytes[2] == 0x5C && bytes[3] == slot && bytes[4] == 0x00 && bytes[5] == 0x00;
     }
 
-    /// <summary>The monster events of <paramref name="chars"/>: rewritten where a removed monster's script is, the
-    /// rest added after the map's script block (copied to the added space once, for all of them).</summary>
+    // the monster events of chars: rewritten where a removed monster's script is, the
+    // rest added after the map's script block (copied to the added space once, for all of them)
     private static void WriteEvents(RomBuffer rom, int mapId, List<(int N, int Group)> chars)
     {
         var fresh = new List<int>();
         var groups = chars.ToDictionary(c => c.N, c => c.Group);
-        foreach (var (n, group) in chars)
+        foreach (var (character, group) in chars)
         {
-            if (IsRemovedMonster(rom, mapId, n)) rom.WriteBytes(LufiaMap.EventScriptOffset(rom, mapId, n), MonsterScript(n, group));
-            else fresh.Add(n);
+            if (IsRemovedMonster(rom, mapId, character)) rom.WriteBytes(LufiaMap.EventScriptOffset(rom, mapId, character), MonsterScript(character, group));
+            else fresh.Add(character);
         }
         if (fresh.Count == 0) return;
-        int b = EventScript.BlockOffset(rom, mapId), len = MapEvents.BlockLength(rom, mapId);
-        var block = new List<byte>(rom.ReadBytes(b, len));
-        var rels = new List<int>();
-        foreach (int n in fresh) { rels.Add(block.Count); block.AddRange(MonsterScript(n, groups[n])); }
+        int blockOffset = EventScript.BlockOffset(rom, mapId), length = MapEvents.BlockLength(rom, mapId);
+        var block = new List<byte>(rom.ReadBytes(blockOffset, length));
+        var offsets = new List<int>();
+        foreach (int character in fresh) { offsets.Add(block.Count); block.AddRange(MonsterScript(character, groups[character])); }
         block.Add(0x00);   // guard
         if (block.Count > 0xFFFF) throw new InvalidOperationException("This map's events are too big to add monsters.");
         var data = block.ToArray();
-        for (int i = 0; i < fresh.Count; i++) { data[fresh[i] * 2] = (byte)rels[i]; data[fresh[i] * 2 + 1] = (byte)(rels[i] >> 8); }
-        var space = ExpansionSpace.Load(rom);
-        int at = space.Allocate(data.Length, ExpansionSpace.Kind.ScriptBlock, mapId, EventScript.ScriptLimit);
-        rom.WriteBytes(at, data);
-        int t = at - 0x18000, p = LufiaMap.MapScriptTable + mapId * 5;
-        rom.WriteBytes(p, new[] { (byte)t, (byte)(t >> 8), (byte)(t >> 16) });
-        if (b >= MapWriter.ExpansionStart && space.At(b)?.Start == b && !MapCatalog.Scan(rom).Any(m => m.MapId != mapId && EventScript.BlockOffset(rom, m.MapId) == b))
-            space.Free(b);
-        space.Save();
+        for (int i = 0; i < fresh.Count; i++) { data[fresh[i] * 2] = (byte)offsets[i]; data[fresh[i] * 2 + 1] = (byte)(offsets[i] >> 8); }
+        var freeSpace = ExpansionSpace.Load(rom);
+        int newBlock = freeSpace.Allocate(data.Length, ExpansionSpace.Kind.ScriptBlock, mapId, EventScript.ScriptLimit);
+        rom.WriteBytes(newBlock, data);
+        int pointer = newBlock - 0x18000, tableAt = LufiaMap.MapScriptTable + mapId * 5;
+        rom.WriteBytes(tableAt, new[] { (byte)pointer, (byte)(pointer >> 8), (byte)(pointer >> 16) });
+        if (blockOffset >= MapWriter.ExpansionStart && freeSpace.At(blockOffset)?.Start == blockOffset && !MapCatalog.Scan(rom).Any(m => m.MapId != mapId && EventScript.BlockOffset(rom, m.MapId) == blockOffset))
+            freeSpace.Free(blockOffset);
+        freeSpace.Save();
         rom.FixChecksum();
     }
 
-    /// <summary>Slot <paramref name="ev"/> has a script of its own (not FFFF, nor 0 / 1, which mean no event).</summary>
-    private static bool HasScript(RomBuffer rom, int mapId, int ev)
+    // slot has a script of its own (not FFFF, and not 0 / 1, which mean no event)
+    private static bool HasScript(RomBuffer rom, int mapId, int slot)
     {
         if (!MapEvents.HasBlock(rom, mapId)) return false;
-        int p = EventScript.BlockOffset(rom, mapId) + ev * 2;
-        if (p + 1 >= rom.Length) return false;
-        int rel = rom.ReadUInt16Le(p);
-        return rel != 0xFFFF && rel >= 2;
+        int entryAt = EventScript.BlockOffset(rom, mapId) + slot * 2;
+        if (entryAt + 1 >= rom.Length) return false;
+        int relative = rom.ReadUInt16Le(entryAt);
+        return relative != 0xFFFF && relative >= 2;
     }
 
-    /// <summary>
-    /// Gives a map (not the world map) monsters, in place of the ones it has: one character per place in
-    /// <paramref name="places"/> with <paramref name="sprite"/>, wandering anywhere on the map (<paramref name="range"/>
-    /// 0) or up to <paramref name="range"/> tiles from where it starts, each fighting encounter group
-    /// <paramref name="group"/> (-1 = the group they fight now, else the one the map's setup script gives random
-    /// battles) when it reaches the party. The map has no random battles while it has monsters.
-    /// </summary>
+    // gives a map (not the world map) monsters, in place of the ones it has: one character per place in
+    // places with sprite, wandering anywhere on the map (range 0) or up to range tiles from where it starts, each
+    // fighting the encounter group in group (-1 = the group they fight now, else the one the map's setup script gives random
+    // battles) when it reaches the party. the map has no random battles while it has monsters
     public static void AddToMap(RomBuffer rom, int mapId, IReadOnlyList<(int X, int Y)> places, int sprite, int range = 0, int group = -1)
     {
         if (places.Count == 0) { RemoveFromMap(rom, mapId); return; }
@@ -1185,11 +1171,9 @@ public static class VisibleMonsters
         AddToMap(rom, mapId, places.Select(p => new Monster(p.X, p.Y, sprite, range, group)).ToList());
     }
 
-    /// <summary>
-    /// Gives a map (not the world map) <paramref name="monsters"/>, in place of the ones it has: each its own sprite,
-    /// wandering range and encounter group (the fight its event starts when it reaches the party). The map has no
-    /// random battles while it has monsters.
-    /// </summary>
+    // gives a map (not the world map) monsters, in place of the ones it has: each with its own sprite,
+    // wandering range and encounter group (the fight its event starts when it reaches the party). the map has no
+    // random battles while it has monsters
     public static void AddToMap(RomBuffer rom, int mapId, IReadOnlyList<Monster> monsters)
     {
         if (mapId == LufiaMap.WorldMap) throw new InvalidOperationException("Visible monsters aren't for the world map.");
@@ -1201,35 +1185,35 @@ public static class VisibleMonsters
         RemoveFromMap(rom, mapId);
         var map = LufiaMap.Load(rom, mapId);
         // talking to character n runs event n + 1 of the block, a step-on area runs event base + area + 1 and "run
-        // event" rr runs base + rr: the monsters take characters whose events nobody else uses (characters skipped on
+        // event" rr runs base + rr. the monsters take characters whose events nobody else uses (characters skipped on
         // the way stay unused, never shown)
         int eventBase = LufiaMap.EventBase(rom, mapId), slots = MapEvents.HasBlock(rom, mapId) ? MapEvents.TableLength(rom, mapId) : 0;
         var taken = new HashSet<int>();
         var cast = new HashSet<int>();
-        foreach (var t in map.Triggers) taken.Add((eventBase + t.Index + 1) & 0xFF);
-        for (int ev = 0; ev < slots; ev++)
+        foreach (var trigger in map.Triggers) taken.Add((eventBase + trigger.Index + 1) & 0xFF);
+        for (int slot = 0; slot < slots; slot++)
         {
-            if (!HasScript(rom, mapId, ev) || IsRemovedMonster(rom, mapId, ev)) continue;
-            taken.Add(ev);
-            EventScript? es;
-            try { es = EventScript.Load(rom, mapId, ev); } catch { continue; }
-            if (es == null) continue;
-            foreach (var op in es.Ops)
+            if (!HasScript(rom, mapId, slot) || IsRemovedMonster(rom, mapId, slot)) continue;
+            taken.Add(slot);
+            EventScript? script;
+            try { script = EventScript.Load(rom, mapId, slot); } catch { continue; }
+            if (script == null) continue;
+            foreach (var op in script.Ops)
             {
                 if (op.IsText || op.Bytes.Length == 0) continue;
                 if (op.Bytes.Length >= 3 && op.Bytes[0] == 0x51 && op.Bytes[1] == mapId) taken.Add(MapEvents.Chained(rom, op.Bytes));
-                // characters a cutscene shows, moves or places (also ones the map doesn't list yet): not for monsters
+                // characters a cutscene shows, moves or places (even ones the map doesn't list yet) aren't for monsters
                 // (the editor's "character k" and the game's can be one apart, so both)
                 if (EventCommands.Find(op.Bytes[0]) is { } def)
                     foreach (var prm in def.Params.Where(pr => pr.Kind == ParamKind.Who))
                     {
-                        int v;
-                        try { v = prm.Get(op.Bytes); } catch { continue; }
-                        if (v >= 0x100) { cast.Add(v - 0x100); cast.Add(v - 0x101); }
+                        int who;
+                        try { who = prm.Get(op.Bytes); } catch { continue; }
+                        if (who >= 0x100) { cast.Add(who - 0x100); cast.Add(who - 0x101); }
                     }
             }
         }
-        bool Free(int n) => !taken.Contains(n + 1) && !cast.Contains(n) && (n >= map.Npcs.Count || map.Npcs[n].IsUnused);
+        bool Free(int character) => !taken.Contains(character + 1) && !cast.Contains(character) && (character >= map.Npcs.Count || map.Npcs[character].IsUnused);
         int first = 0;
         while (first < MaxCharacters && !Enumerable.Range(first, places.Count).All(Free)) first++;
         if (first + places.Count > MaxCharacters)
@@ -1248,168 +1232,166 @@ public static class VisibleMonsters
         WriteEvents(rom, mapId, monsters.Select((m, i) => (first + i + 1, m.Group)).ToList());   // (slot n + 1: 1F gg 5C n+1)
         MapWriter.Save(rom, map, true);
         CompactSetup(rom, mapId);
-        int b = Block(rom);
-        rom.WriteByte(b + MapTable + mapId * 2, (byte)first);
-        rom.WriteByte(b + MapTable + mapId * 2 + 1, (byte)places.Count);
+        int block = Block(rom);
+        rom.WriteByte(block + MapTable + mapId * 2, (byte)first);
+        rom.WriteByte(block + MapTable + mapId * 2 + 1, (byte)places.Count);
         var behaviour = new byte[16];
         for (int i = 0; i < monsters.Count && i < 16; i++)
         {
             bool onPath = monsters[i].Mode != PathMode.None && monsters[i].Path is { Count: > 0 };
             behaviour[i] = (byte)((monsters[i].Chases ? 0 : KeepsToItself) | (monsters[i].Range > 0 && !onPath ? ChasesInItsArea : 0));
         }
-        rom.WriteBytes(b + BehaviourTable + mapId * 16, behaviour);
+        rom.WriteBytes(block + BehaviourTable + mapId * 16, behaviour);
         var paths = new (PathMode, List<(int, int)>)?[16];
         for (int i = 0; i < monsters.Count && i < 16; i++)
-            if (monsters[i].Mode != PathMode.None && monsters[i].Path is { Count: > 0 } pts)
+            if (monsters[i].Mode != PathMode.None && monsters[i].Path is { Count: > 0 } points)
             {
-                if (pts.Count > MaxPathPoints) throw new InvalidOperationException($"A path can have {MaxPathPoints} points.");
-                paths[i] = (monsters[i].Mode, pts.Select(p => (p.X, p.Y)).ToList());
+                if (points.Count > MaxPathPoints) throw new InvalidOperationException($"A path can have {MaxPathPoints} points.");
+                paths[i] = (monsters[i].Mode, points.Select(p => (p.X, p.Y)).ToList());
             }
         WritePaths(rom, mapId, paths);
         rom.FixChecksum();
     }
 
-    /// <summary>The map's doors and gates: setup script spots with FE (event command 52 n + 1 opens spot n for good).</summary>
+    // the map's doors and gates: setup script spots with FE (event command 52 n + 1 opens spot n for good)
     public static List<int> Doors(RomBuffer rom, int mapId) =>
         MapSetupScript.ReadSpots(rom, mapId).Where(sp => sp.Kind == SpotKind.Door).Select(sp => sp.Spot).Distinct().OrderBy(n => n).ToList();
 
-    /// <summary>
-    /// A switch tile at x, y: a step-on area of one tile (the party and monsters set it off, once a visit; areas that
-    /// run only once stay done) whose event opens door <paramref name="door"/> for good (52 n), or does nothing yet
-    /// (-1: to write in the Events editor). Its area number is one whose event nobody uses. Returns (area, event).
-    /// </summary>
+    // a switch tile at x, y: a step-on area of one tile (the party and monsters set it off, once a visit, areas that
+    // only run once stay done) whose event opens door for good (52 n), or does nothing yet
+    // (-1, to write in the Events editor). its area number is one whose event nobody uses. returns (area, event)
     public static (int Area, int Event) AddSwitch(RomBuffer rom, int mapId, int x, int y, int door = -1)
     {
         if (mapId == LufiaMap.WorldMap) throw new InvalidOperationException("Switch tiles aren't for the world map.");
         var map = LufiaMap.Load(rom, mapId);
         int area = MapEvents.NextAreaIndex(rom, map);
         map.AddTrigger(x, y, x + 1, y + 1, area);
-        MapWriter.Save(rom, map, true);   // (the new area gets its event and is switched on)
-        int ev = MapEvents.AreaEvent(rom, mapId, area);
+        MapWriter.Save(rom, map, true);   // (the new area gets its event and gets switched on)
+        int eventId = MapEvents.AreaEvent(rom, mapId, area);
         if (door >= 0)
         {
-            var es = EventScript.Load(rom, mapId, ev) ?? throw new InvalidOperationException($"Event {ev} of map {mapId:X2} can't be read.");
-            es.Ops.Clear();
-            es.Ops.Add(new ScriptOp { Bytes = new byte[] { 0x52, (byte)(door + 1) } });   // (52 counts objects from 1)
-            es.Ops.Add(new ScriptOp { Bytes = new byte[] { 0x00 } });
-            es.Save(true);
+            var script = EventScript.Load(rom, mapId, eventId) ?? throw new InvalidOperationException($"Event {eventId} of map {mapId:X2} can't be read.");
+            script.Ops.Clear();
+            script.Ops.Add(new ScriptOp { Bytes = new byte[] { 0x52, (byte)(door + 1) } });   // (52 counts objects from 1)
+            script.Ops.Add(new ScriptOp { Bytes = new byte[] { 0x00 } });
+            script.Save(true);
         }
         rom.FixChecksum();
-        return (area, ev);
+        return (area, eventId);
     }
 
-    /// <summary>Takes a step-on area off (the switch tiles of <see cref="AddSwitch"/>, or any area).</summary>
+    // takes a step-on area off (the switch tiles of AddSwitch, or any area)
     public static void RemoveArea(RomBuffer rom, int mapId, int area)
     {
         var map = LufiaMap.Load(rom, mapId);
-        var t = map.Triggers.FirstOrDefault(t => t.Index == area) ?? throw new InvalidOperationException($"Map {mapId:X2} has no area {area}.");
-        map.RemoveTrigger(t);
+        var trigger = map.Triggers.FirstOrDefault(t => t.Index == area) ?? throw new InvalidOperationException($"Map {mapId:X2} has no area {area}.");
+        map.RemoveTrigger(trigger);
         MapWriter.Save(rom, map, true);
         rom.FixChecksum();
     }
 
-    /// <summary>Drops the "nothing" commands (40) at the start of the map's setup script: switching characters off
-    /// leaves them where their "switch on" (41 + n) was, and the new ones go in front, so the script would grow a
-    /// little with every change. Jumps (04 ww, from the script's start) move with the rest.</summary>
+    // drops the "nothing" commands (40) at the start of the map's setup script. switching characters off
+    // leaves them where their "switch on" (41 + n) was, and the new ones go in front, so the script would grow a
+    // little with every change. jumps (04 ww, from the script's start) move with the rest
     private static void CompactSetup(RomBuffer rom, int mapId)
     {
-        byte[] s;
-        try { s = SetupScripts.Read(rom, mapId); } catch (InvalidOperationException) { return; }
-        int k = 0;
-        while (2 + k < s.Length && s[2 + k] == SetupScripts.Nothing) k++;
-        if (k == 0) return;
-        var (ops, _) = SetupScripts.Parse(s);
-        var result = new byte[s.Length - k];
-        s.AsSpan(0, 2).CopyTo(result);
-        s.AsSpan(2 + k).CopyTo(result.AsSpan(2));
-        foreach (int p in ops)
-            if (p >= 2 + k && s[p] == 0x04)
+        byte[] script;
+        try { script = SetupScripts.Read(rom, mapId); } catch (InvalidOperationException) { return; }
+        int skip = 0;
+        while (2 + skip < script.Length && script[2 + skip] == SetupScripts.Nothing) skip++;
+        if (skip == 0) return;
+        var (ops, _) = SetupScripts.Parse(script);
+        var result = new byte[script.Length - skip];
+        script.AsSpan(0, 2).CopyTo(result);
+        script.AsSpan(2 + skip).CopyTo(result.AsSpan(2));
+        foreach (int opAt in ops)
+            if (opAt >= 2 + skip && script[opAt] == 0x04)
             {
-                int q = p - k, w = result[q + 1] | result[q + 2] << 8;
-                if (w >= 2 + k) w -= k; else if (w > 2) w = 2;
-                result[q + 1] = (byte)w; result[q + 2] = (byte)(w >> 8);
+                int newAt = opAt - skip, target = result[newAt + 1] | result[newAt + 2] << 8;
+                if (target >= 2 + skip) target -= skip; else if (target > 2) target = 2;
+                result[newAt + 1] = (byte)target; result[newAt + 2] = (byte)(target >> 8);
             }
         SetupScripts.Replace(rom, mapId, result);
     }
 
-    /// <summary>Takes the map's monsters off (their characters become unused, their events empty): random battles
-    /// come back as the map's setup script has them.</summary>
+    // takes the map's monsters off (their characters become unused, their events empty). random battles
+    // come back the way the map's setup script has them
     public static void RemoveFromMap(RomBuffer rom, int mapId)
     {
         var (first, count) = Monsters(rom, mapId);
         if (count == 0) return;
         var map = LufiaMap.Load(rom, mapId);
-        for (int n = first; n < first + count && n < map.Npcs.Count; n++)
+        for (int character = first; character < first + count && character < map.Npcs.Count; character++)
         {
-            var old = map.Npcs[n];
-            map.Npcs[n] = new MapNpc { Index = n, Sprite = 0xFF, X = old.X, Y = old.Y, BoxX1 = 0, BoxY1 = 0, BoxX2 = 1, BoxY2 = 1 };
-            int o = EventOf(rom, mapId, n);
-            if (o >= 0) rom.WriteByte(o, 0x00);   // ends at once (the slot stays as it is)
+            var old = map.Npcs[character];
+            map.Npcs[character] = new MapNpc { Index = character, Sprite = 0xFF, X = old.X, Y = old.Y, BoxX1 = 0, BoxY1 = 0, BoxX2 = 1, BoxY2 = 1 };
+            int eventOffset = EventOf(rom, mapId, character);
+            if (eventOffset >= 0) rom.WriteByte(eventOffset, 0x00);   // ends right away (the slot stays as it is)
         }
         MapWriter.Save(rom, map, true);
         CompactSetup(rom, mapId);
-        int b = Block(rom);
-        var lay = Layout(rom, b);
-        rom.WriteByte(b + lay.Maps + mapId * 2, 0);
-        rom.WriteByte(b + lay.Maps + mapId * 2 + 1, 0);
-        if (lay.Behaviours > 0) rom.WriteBytes(b + lay.Behaviours + mapId * 16, new byte[16]);
-        if (lay.Paths > 0) WritePaths(rom, mapId, null);
+        int block = Block(rom);
+        var layout = Layout(rom, block);
+        rom.WriteByte(block + layout.Maps + mapId * 2, 0);
+        rom.WriteByte(block + layout.Maps + mapId * 2 + 1, 0);
+        if (layout.Behaviours > 0) rom.WriteBytes(block + layout.Behaviours + mapId * 16, new byte[16]);
+        if (layout.Paths > 0) WritePaths(rom, mapId, null);
         rom.FixChecksum();
     }
 
-    /// <summary>Floor a monster can stand on and get around from: enterable from every side; not near an exit or an
-    /// arrival point (the party comes in there); not a step-on area or a character's tile; in the part of the map the
-    /// arrival points lead to (or its biggest open space).</summary>
+    // floor a monster can stand on and get around from: enterable from every side, not near an exit or an
+    // arrival point (the party comes in there), not a step-on area or a character's tile, and in the part of the map
+    // the arrival points lead to (or its biggest open space)
     public static List<(int X, int Y)> OpenTiles(RomBuffer rom, LufiaMap map)
     {
-        var ts = MapTileset.ForMap(rom, map);
-        int w = map.Width, h = map.Height;
-        var open = new bool[w * h];
-        var stand = new bool[w * h];
+        var tileset = MapTileset.ForMap(rom, map);
+        int width = map.Width, height = map.Height;
+        var open = new bool[width * height];
+        var stand = new bool[width * height];
         var blank = new Dictionary<int, bool>();
         for (int i = 0; i < open.Length; i++)
         {
-            int blk = map.Layer[i] & 0x3FF, a;
-            if (ts.CompositeParts(blk) is var (g, o)) a = ts.Attribute(g) | ts.Attribute(o); else a = ts.Attribute(blk);
-            open[i] = (a & BlockSet.AttrBlocked) == 0;
+            int metatile = map.Layer[i] & 0x3FF, attributes;
+            if (tileset.CompositeParts(metatile) is var (ground, overlay)) attributes = tileset.Attribute(ground) | tileset.Attribute(overlay); else attributes = tileset.Attribute(metatile);
+            open[i] = (attributes & BlockSet.AttrBlocked) == 0;
             // (stand on floor with no one-sided walls either, so it can step off any way)
-            stand[i] = (a & (BlockSet.AttrBlocked | BlockSet.AttrLeft | BlockSet.AttrRight | BlockSet.AttrUp | BlockSet.AttrDown)) == 0;
-            // (nor on the empty black around a building, open in the game but nowhere the party goes)
-            if (stand[i] && !blank.TryGetValue(blk, out _))
+            stand[i] = (attributes & (BlockSet.AttrBlocked | BlockSet.AttrLeft | BlockSet.AttrRight | BlockSet.AttrUp | BlockSet.AttrDown)) == 0;
+            // (and not on the empty black around a building, open in the game but nowhere the party goes)
+            if (stand[i] && !blank.TryGetValue(metatile, out _))
             {
-                var px = ts.MetatilePixels(blk);
-                blank[blk] = px.All(c => c == px[0]) && (px[0] & 0xFF) < 0x20 && ((px[0] >> 8) & 0xFF) < 0x20 && ((px[0] >> 16) & 0xFF) < 0x20;
+                var pixels = tileset.MetatilePixels(metatile);
+                blank[metatile] = pixels.All(c => c == pixels[0]) && (pixels[0] & 0xFF) < 0x20 && ((pixels[0] >> 8) & 0xFF) < 0x20 && ((pixels[0] >> 16) & 0xFF) < 0x20;
             }
-            if (stand[i] && blank[blk]) stand[i] = false;
+            if (stand[i] && blank[metatile]) stand[i] = false;
         }
-        var avoid = new bool[w * h];
+        var avoid = new bool[width * height];
         void Mark(int x1, int y1, int x2, int y2)
         {
-            for (int y = Math.Max(0, y1); y < Math.Min(h, y2); y++)
-                for (int x = Math.Max(0, x1); x < Math.Min(w, x2); x++) avoid[y * w + x] = true;
+            for (int y = Math.Max(0, y1); y < Math.Min(height, y2); y++)
+                for (int x = Math.Max(0, x1); x < Math.Min(width, x2); x++) avoid[y * width + x] = true;
         }
-        foreach (var e in map.Exits) Mark(e.X1 - 1, e.Y1 - 1, e.X2 + 1, e.Y2 + 1);
-        foreach (var a in map.Arrivals) Mark(a.X - 3, a.Y - 3, a.X + 4, a.Y + 4);
-        foreach (var t in map.Triggers.Where(t => !t.IsUnused)) Mark(t.X1, t.Y1, t.X2, t.Y2);
-        foreach (var n in map.Npcs.Where(n => !n.IsUnused)) Mark(n.X, n.Y, n.X + 1, n.Y + 1);
-        // open spaces, numbered; the ones with an arrival point are where the party walks
-        var region = new int[w * h];
+        foreach (var exit in map.Exits) Mark(exit.X1 - 1, exit.Y1 - 1, exit.X2 + 1, exit.Y2 + 1);
+        foreach (var arrival in map.Arrivals) Mark(arrival.X - 3, arrival.Y - 3, arrival.X + 4, arrival.Y + 4);
+        foreach (var trigger in map.Triggers.Where(t => !t.IsUnused)) Mark(trigger.X1, trigger.Y1, trigger.X2, trigger.Y2);
+        foreach (var npc in map.Npcs.Where(n => !n.IsUnused)) Mark(npc.X, npc.Y, npc.X + 1, npc.Y + 1);
+        // open spaces, numbered. the ones with an arrival point are where the party walks
+        var region = new int[width * height];
         var sizes = new List<int> { 0 };
-        for (int s = 0; s < open.Length; s++)
+        for (int start = 0; start < open.Length; start++)
         {
-            if (!open[s] || region[s] != 0) continue;
-            int r = sizes.Count, size = 0;
-            var q = new Queue<int>(); q.Enqueue(s); region[s] = r;
-            while (q.Count > 0)
+            if (!open[start] || region[start] != 0) continue;
+            int regionId = sizes.Count, size = 0;
+            var queue = new Queue<int>(); queue.Enqueue(start); region[start] = regionId;
+            while (queue.Count > 0)
             {
-                int c = q.Dequeue(); size++;
-                int cx = c % w, cy = c / w;
+                int cell = queue.Dequeue(); size++;
+                int cx = cell % width, cy = cell / width;
                 foreach (var (dx, dy) in new[] { (1, 0), (-1, 0), (0, 1), (0, -1) })
                 {
                     int nx = cx + dx, ny = cy + dy;
-                    if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
-                    int ni = ny * w + nx;
-                    if (open[ni] && region[ni] == 0) { region[ni] = r; q.Enqueue(ni); }
+                    if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+                    int neighbour = ny * width + nx;
+                    if (open[neighbour] && region[neighbour] == 0) { region[neighbour] = regionId; queue.Enqueue(neighbour); }
                 }
             }
             sizes.Add(size);
@@ -1418,30 +1400,30 @@ public static class VisibleMonsters
         {
             var list = new List<(int, int)>();
             for (int i = 0; i < open.Length; i++)
-                if (stand[i] && !avoid[i] && regions.Contains(region[i])) list.Add((i % w, i / w));
+                if (stand[i] && !avoid[i] && regions.Contains(region[i])) list.Add((i % width, i / width));
             return list;
         }
-        var walked = map.Arrivals.Where(a => a.X >= 0 && a.Y >= 0 && a.X < w && a.Y < h).Select(a => region[a.Y * w + a.X]).Where(r => r != 0).ToHashSet();
+        var walked = map.Arrivals.Where(a => a.X >= 0 && a.Y >= 0 && a.X < width && a.Y < height).Select(a => region[a.Y * width + a.X]).Where(r => r != 0).ToHashSet();
         var found = In(walked);
         if (found.Count == 0 && sizes.Count > 1) found = In(new HashSet<int> { Enumerable.Range(1, sizes.Count - 1).MaxBy(r => sizes[r]) });
         return found;
     }
 
-    /// <summary><paramref name="count"/> places for monsters on the map's open floor (<see cref="OpenTiles"/>), spread
-    /// out: each about as far from the others as can be, the first at random.</summary>
+    // count places for monsters on the map's open floor (OpenTiles), spread
+    // out: each about as far from the others as it can be, the first one at random
     public static List<(int X, int Y)> AutoPlaces(RomBuffer rom, LufiaMap map, int count, int seed)
     {
         var tiles = OpenTiles(rom, map);
-        var rnd = new Random(seed);
+        var random = new Random(seed);
         var chosen = new List<(int X, int Y)>();
         if (tiles.Count == 0) return chosen;
-        chosen.Add(tiles[rnd.Next(tiles.Count)]);
+        chosen.Add(tiles[random.Next(tiles.Count)]);
         while (chosen.Count < count && chosen.Count < tiles.Count)
         {
             var best = tiles.Where(t => !chosen.Contains(t))
-                            .Select(t => (t, d: chosen.Min(c => Math.Abs(c.X - t.X) + Math.Abs(c.Y - t.Y))))
-                            .OrderByDescending(x => x.d).Take(4).ToList();
-            chosen.Add(best[rnd.Next(best.Count)].t);
+                            .Select(t => (t, distance: chosen.Min(c => Math.Abs(c.X - t.X) + Math.Abs(c.Y - t.Y))))
+                            .OrderByDescending(x => x.distance).Take(4).ToList();
+            chosen.Add(best[random.Next(best.Count)].t);
         }
         return chosen;
     }

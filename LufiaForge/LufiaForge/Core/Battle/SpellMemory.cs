@@ -2,53 +2,46 @@ using LufiaForge.Core.Maps;
 
 namespace LufiaForge.Core.Battle;
 
-/// <summary>
-/// Spell memory for up to 64 spells per character, part of the "Up to 128 spells" patch (<see cref="SpellTablePatch"/>).
-/// The game kept each character's learned spells as a list in $158F-$15EE (96 bytes, saved with the game): the Hero
-/// and Aguro shared 32 entries, Lufia and Jerin had 32 each. Now every character has one bit per spell, 16 bytes at
-/// $158F + 16 x slot (spell s: byte s / 8, bit s % 8), and $15EE = B1 marks the new format. Spell memory in a save
-/// from before (or a new game) is converted the first time any of the routines below runs. The save file layout is
-/// unchanged.
-/// <list type="bullet">
-/// <item>$08:E829 learn (JML): sets the bit (used by event 3D, level-ups and joining).</item>
-/// <item>$08:E65E level-up and $08:EC07 joining: the four learn lists, which live here (up to 64 entries each).</item>
-/// <item>$08:EAEC a new member's spells cleared; $01:D2A7 / $01:D2BC event 45 "knows spell" tests the bit.</item>
-/// <item>$08:BD07 the battle spell menu and $00:D100 / $00:9C27 the field Magic menu's count and "nth spell": each
-/// character's own order, at most 64 (the battle menu's buffers hold 64).</item>
-/// <item>Spell order: a list of 64 spell numbers per character in save RAM ($70:1A00 + 64 x slot while playing; save
-/// slot + $500 in a save, inside the slot's checksum), copied by saving ($00:920A) and loading ($00:9293). Before a
-/// menu shows it, the list is tidied: spells not known (or garbage, as in older saves) dropped, newly learned ones added
-/// at the end. The field Magic menu's swap ($00:C21F) swaps two entries, as the game did with its own lists.</item>
-/// </list>
-/// <item>$00:C21F the field Magic menu's swap: it swapped two entries of the old lists (through the pointers at
-/// $00:9CAD; Aguro's pointed at the party names, $14B5), which now scrambled the spell bits and Guy's names. A spell
-/// order can't be kept in the new format, so the swap is skipped (BRA to its end: the selection is just dropped).</item>
-/// </list>
-/// Earlier versions of the Guy / Aguro magic patch (lists per slot, before 0.4.0-beta.7) are recognised: their lists
-/// are read, their code is put back, then this is installed.
-/// </summary>
+// spell memory for up to 64 spells per character, part of the "Up to 128 spells" patch (SpellTablePatch).
+// the game kept each character's learned spells as a list in $158F-$15EE (96 bytes, saved with the game): the Hero
+// and Aguro shared 32 entries, Lufia and Jerin had 32 each. now every character has one bit per spell, 16 bytes at
+// $158F + 16 x slot (spell s: byte s / 8, bit s % 8), and $15EE = B1 marks the new format. spell memory from an older
+// save (or a new game) gets converted the first time any of the routines below runs. the save file layout doesn't
+// change.
+// - $08:E829 learn (JML): sets the bit (event 3D, level-ups and joining use it)
+// - $08:E65E level-up and $08:EC07 joining: the four learn lists, which live here (up to 64 entries each)
+// - $08:EAEC clears a new member's spells, $01:D2A7 / $01:D2BC event 45 "knows spell" tests the bit
+// - $08:BD07 the battle spell menu and $00:D100 / $00:9C27 the field Magic menu's count and "nth spell": each
+//   character's own order, at most 64 (the battle menu's buffers hold 64)
+// - spell order: a list of 64 spell numbers per character in save RAM ($70:1A00 + 64 x slot while playing, save
+//   slot + $500 in a save, inside the slot's checksum), copied by saving ($00:920A) and loading ($00:9293). before a
+//   menu shows it the list gets tidied: spells not known (or garbage, like in older saves) dropped, newly learned ones
+//   added at the end. the field Magic menu's swap ($00:C21F) swaps two entries, same as the game did with its own lists
+// - $00:C21F the field Magic menu's swap: it swapped two entries of the old lists (through the pointers at
+//   $00:9CAD, Aguro's pointed at the party names, $14B5), which now scrambled the spell bits and Guy's names. a spell
+//   order can't be kept in the new format, so the swap is skipped (BRA to its end, the selection just gets dropped)
+// earlier versions of the Guy / Aguro magic patch (lists per slot, before 0.4.0-beta.7) are recognised: we read
+// their lists, put their code back, then install this
 public static class SpellMemory
 {
     public const int MaxPerCharacter = 64;
     public const int LearnSite = 0x46829, LevelUpSite = 0x4665E, JoinSite = 0x46C07, ClearSite = 0x46AEC, KnowsSite = 0xD2A7,
                      KnowsLoopSite = 0xD2BC, CountSite = 0x5100, NthSite = 0x1C27, MenuSite = 0x43D07;
-    /// <summary>
-    /// The field Magic menu's swap at $00:C21F (A9 00 EB 18 A5 11 in the game): JSL swap, BRA $C24D. beta.8 skipped it
-    /// (80 2C) instead. Saving ($00:920A, AD 53 19 A0 E3 03) and loading ($00:9293, E2 20 A9 00 48 AB) copy the order.
-    /// </summary>
+    // the field Magic menu's swap at $00:C21F (A9 00 EB 18 A5 11 in the game): JSL swap, BRA $C24D. beta.8 skipped it
+    // (80 2C) instead. saving ($00:920A, AD 53 19 A0 E3 03) and loading ($00:9293, E2 20 A9 00 48 AB) copy the order
     public const int SwapSite = 0x421F, SaveSite = 0x120A, LoadSite = 0x1293;
     private static readonly byte[] SwapOriginal = Convert.FromHexString("A900EB18A511"), SwapSkip = { 0x80, 0x2C },
                                    SaveOriginal = Convert.FromHexString("AD5319A0E303"), LoadOriginal = Convert.FromHexString("E220A90048AB");
-    /// <summary>The spell order's save RAM: $70:1A00 + 64 x slot while playing, save slot + $500 in a save.</summary>
+    // the spell order's save RAM: $70:1A00 + 64 x slot while playing, save slot + $500 in a save
     public const int OrderRam = 0x701A00, OrderInSlot = 0x500;
     private static bool Hooked(RomBuffer rom, int site, int entry) =>
         rom.ReadByte(site) == 0x22 && FileOffset(rom.ReadByte(site + 1) | rom.ReadByte(site + 2) << 8 | rom.ReadByte(site + 3) << 16) == BlockOffset(rom) + entry;
-    /// <summary>Whether this ROM has the spell order (beta.9 on).</summary>
+    // does this rom have the spell order (beta.9 on)
     public static bool SwapFixed(RomBuffer rom) => Current(rom) && Hooked(rom, SwapSite, Swap) && Hooked(rom, SaveSite, SaveOrder) && Hooked(rom, LoadSite, LoadOrder);
-    /// <summary>Brings an installed spell memory up to date (the spell order); see <see cref="Install"/>.</summary>
+    // brings an installed spell memory up to date (the spell order), see Install
     public static void FixSwap(RomBuffer rom) { if (Installed(rom) && !SwapFixed(rom)) Upgrade(rom); }
 
-    /// <summary>The battle spell menu skips slot 2 ($08:BD03 CPX #$02): 02, or FF when Aguro has magic.</summary>
+    // the battle spell menu skips slot 2 ($08:BD03 CPX #$02): 02, or FF when Aguro has magic
     public const int MenuSkip = 0x43D04;
     private static readonly byte[] LearnOriginal = Convert.FromHexString("088BE220");
     private static readonly byte[] LevelUpOriginal = Convert.FromHexString("8AC902F0210AA8B9EBE7A8B90DEEF012C9FFF012DD6F15D009B90EEE85D82229E808C8C880E5");
@@ -63,20 +56,20 @@ public static class SpellMemory
                       KnowsSetup = 399, KnowsCheck = 403, CountAll = 756, Nth = 839, BuildMenu = 910,
                       Swap = 1036, SaveOrder = 1141, LoadOrder = 1170,
                       Magic = 1205, Offs = 1209, Blob = 1217;
-    /// <summary>The block of the version before the spell order (0.4.0-beta.7 to beta.8, "LFM2"): same start, the lists
-    /// elsewhere. Recognised so Update can move its lists over.</summary>
+    // the block of the version before the spell order (0.4.0-beta.7 to beta.8, "LFM2"): same start, the lists
+    // somewhere else. we recognise it so Update can move its lists over
     private const int MagicV2 = 811, OffsV2 = 815, BlobV2 = 823;
-    /// <summary>The first spell-order build (a test ROM only; it moved the direct page): "LFM3" at another place.</summary>
+    // the first spell order build (only ever in a test rom, it moved the direct page): "LFM3" at another place
     private const int MagicV3a = 1192, OffsV3a = 1196, BlobV3a = 1204;
-    /// <summary>Room for the four learn lists: (level, spell) pairs and an FF each.</summary>
+    // room for the four learn lists: (level, spell) pairs and an FF each
     public const int BlobSize = 4 * (MaxPerCharacter * 2 + 1);
     public const int BlockSize = Blob + BlobSize;
-    /// <summary>Long operands to fix up when placed: (operand offset, block offset it points at).</summary>
+    // long operands to fix up when placed: (operand offset, block offset it points at)
     private static readonly (int At, int Target)[] Fixups =
     {
         (93, 1197), (169, 0), (185, 1197), (248, 1209), (255, 1217), (271, 1218), (287, 151), (309, 1209), (316, 1217), (328, 1218), (342, 151), (366, 0), (411, 0), (427, 1197), (678, 1197), (767, 0), (852, 0), (925, 0),
     };
-    /// <summary>JSR operands inside the block (16-bit: the block is in one bank).</summary>
+    // JSR operands inside the block (16-bit, the block is in one bank)
     private static readonly (int At, int Target)[] JsrFixups =
     {
         (559, 666), (566, 712), (573, 641), (592, 666), (599, 712), (606, 641), (624, 641), (776, 479), (931, 479),
@@ -825,111 +818,111 @@ public static class SpellMemory
         // offs:
     };
 
-    private static int FileOffset(int snes) => (snes >> 16 & 0x7F) * 0x8000 + (snes & 0x7FFF);
-    private static int SnesAddress(int file) => (file / 0x8000 | 0x80) << 16 | (file % 0x8000 | 0x8000);
-    private static bool Same(RomBuffer rom, int at, byte[] b) => at + b.Length <= rom.Length && rom.ReadBytes(at, b.Length).SequenceEqual(b);
+    private static int FileOffset(int snesAddress) => (snesAddress >> 16 & 0x7F) * 0x8000 + (snesAddress & 0x7FFF);
+    private static int SnesAddress(int fileOffset) => (fileOffset / 0x8000 | 0x80) << 16 | (fileOffset % 0x8000 | 0x8000);
+    private static bool Same(RomBuffer rom, int offset, byte[] expected) => offset + expected.Length <= rom.Length && rom.ReadBytes(offset, expected.Length).SequenceEqual(expected);
 
-    /// <summary>File offset of the installed block, or 0.</summary>
+    // file offset of the installed block, or 0
     public static int BlockOffset(RomBuffer rom)
     {
         if (rom.ReadByte(LearnSite) != 0x5C) return 0;
-        int r = FileOffset(rom.ReadByte(LearnSite + 1) | rom.ReadByte(LearnSite + 2) << 8 | rom.ReadByte(LearnSite + 3) << 16) - Learn;
-        if (r <= 0) return 0;
-        if (r + BlockSize <= rom.Length && rom.ReadByte(r + Magic) == 'L' && rom.ReadByte(r + Magic + 3) == '3') return r;
-        if (r + BlobV2 + BlobSize <= rom.Length && rom.ReadByte(r + MagicV2) == 'L' && rom.ReadByte(r + MagicV2 + 3) == '2') return r;
-        if (r + BlobV3a + BlobSize <= rom.Length && rom.ReadByte(r + MagicV3a) == 'L' && rom.ReadByte(r + MagicV3a + 3) == '3') return r;
+        int block = FileOffset(rom.ReadByte(LearnSite + 1) | rom.ReadByte(LearnSite + 2) << 8 | rom.ReadByte(LearnSite + 3) << 16) - Learn;
+        if (block <= 0) return 0;
+        if (block + BlockSize <= rom.Length && rom.ReadByte(block + Magic) == 'L' && rom.ReadByte(block + Magic + 3) == '3') return block;
+        if (block + BlobV2 + BlobSize <= rom.Length && rom.ReadByte(block + MagicV2) == 'L' && rom.ReadByte(block + MagicV2 + 3) == '2') return block;
+        if (block + BlobV3a + BlobSize <= rom.Length && rom.ReadByte(block + MagicV3a) == 'L' && rom.ReadByte(block + MagicV3a + 3) == '3') return block;
         return 0;
     }
 
-    /// <summary>The block is this version's (with the spell order), not beta.7/8's.</summary>
-    public static bool Current(RomBuffer rom) { int b = BlockOffset(rom); return b > 0 && b + BlockSize <= rom.Length && rom.ReadByte(b + Magic) == 'L' && rom.ReadByte(b + Magic + 1) == 'F' && rom.ReadByte(b + Magic + 3) == '3'; }
+    // the block is this version's (with the spell order), not beta.7/8's
+    public static bool Current(RomBuffer rom) { int block = BlockOffset(rom); return block > 0 && block + BlockSize <= rom.Length && rom.ReadByte(block + Magic) == 'L' && rom.ReadByte(block + Magic + 1) == 'F' && rom.ReadByte(block + Magic + 3) == '3'; }
     private static (int Offs, int Blob) Layout(RomBuffer rom)
     {
         if (Current(rom)) return (Offs, Blob);
-        int b = BlockOffset(rom);
-        return b > 0 && rom.ReadByte(b + MagicV3a) == 'L' && rom.ReadByte(b + MagicV3a + 3) == '3' ? (OffsV3a, BlobV3a) : (OffsV2, BlobV2);
+        int block = BlockOffset(rom);
+        return block > 0 && rom.ReadByte(block + MagicV3a) == 'L' && rom.ReadByte(block + MagicV3a + 3) == '3' ? (OffsV3a, BlobV3a) : (OffsV2, BlobV2);
     }
 
-    /// <summary>A JSL from <paramref name="site"/> into the installed block (any version's routine).</summary>
+    // a JSL from site into the installed block (any version's routine)
     private static bool HookedIntoBlock(RomBuffer rom, int site)
     {
-        int b = BlockOffset(rom);
-        if (b <= 0 || rom.ReadByte(site) != 0x22) return false;
-        int t = FileOffset(rom.ReadByte(site + 1) | rom.ReadByte(site + 2) << 8 | rom.ReadByte(site + 3) << 16);
-        return t >= b && t < b + BlockSize;
+        int block = BlockOffset(rom);
+        if (block <= 0 || rom.ReadByte(site) != 0x22) return false;
+        int target = FileOffset(rom.ReadByte(site + 1) | rom.ReadByte(site + 2) << 8 | rom.ReadByte(site + 3) << 16);
+        return target >= block && target < block + BlockSize;
     }
 
     public static bool Installed(RomBuffer rom) => BlockOffset(rom) > 0;
 
-    /// <summary>SNES address of the routine that converts old spell memory (A8 X16; DB with work RAM; keeps A X Y).</summary>
+    // SNES address of the routine that converts old spell memory (A8 X16, DB with work RAM, keeps A X Y)
     public static int EnsureAddress(RomBuffer rom) => SnesAddress(BlockOffset(rom) + Ensure);
 
-    /// <summary>The game's own code at every site (nothing else changed it).</summary>
+    // the game's own code at every site (nothing else changed it)
     public static bool SitesOriginal(RomBuffer rom) =>
         Same(rom, LearnSite, LearnOriginal) && Same(rom, LevelUpSite, LevelUpOriginal) && Same(rom, JoinSite, JoinOriginal) &&
         Same(rom, ClearSite, ClearOriginal) && Same(rom, KnowsSite, KnowsOriginal) && Same(rom, KnowsLoopSite, KnowsLoopOriginal) &&
         Same(rom, CountSite, CountOriginal) && Same(rom, NthSite, NthOriginal) && Same(rom, MenuSite, MenuOriginal);
 
-    // ------------------------------------------------------------------ earlier Guy / Aguro patch (lists per slot)
+    // earlier Guy / Aguro patch (lists per slot)
 
-    /// <summary>File offset of an earlier Guy / Aguro magic block, or 0 (its level-up hook leads to PHX / LDA $156F,X).</summary>
+    // file offset of an earlier Guy / Aguro magic block, or 0 (its level-up hook leads to PHX / LDA $156F,X)
     public static int OldBlock(RomBuffer rom)
     {
         if (rom.ReadByte(LevelUpSite) != 0x22) return 0;
-        int r = FileOffset(rom.ReadByte(LevelUpSite + 1) | rom.ReadByte(LevelUpSite + 2) << 8 | rom.ReadByte(LevelUpSite + 3) << 16);
-        return r > 0 && r + 400 <= rom.Length && rom.ReadByte(r) == 0xDA && rom.ReadByte(r + 1) == 0xBD ? r : 0;
+        int block = FileOffset(rom.ReadByte(LevelUpSite + 1) | rom.ReadByte(LevelUpSite + 2) << 8 | rom.ReadByte(LevelUpSite + 3) << 16);
+        return block > 0 && block + 400 <= rom.Length && rom.ReadByte(block) == 0xDA && rom.ReadByte(block + 1) == 0xBD ? block : 0;
     }
-    /// <summary>The earlier block's layout: with its battle menu routine (offs 191, lists 203) or without (132, 144).</summary>
-    private static (int Offs, int Blob, bool Menu) OldLayout(RomBuffer rom, int r) => rom.ReadByte(r + 132) == 0xBF ? (191, 203, true) : (132, 144, false);
+    // the earlier block's layout: with its battle menu routine (offs 191, lists 203) or without (132, 144)
+    private static (int Offs, int Blob, bool Menu) OldLayout(RomBuffer rom, int block) => rom.ReadByte(block + 132) == 0xBF ? (191, 203, true) : (132, 144, false);
 
-    /// <summary>Puts the game's code back where the earlier version changed it (it gave Aguro magic: true).</summary>
+    // puts the game's code back where the earlier version changed it. returns true if it gave Aguro magic
     private static bool RemoveOld(RomBuffer rom)
     {
-        int r = OldBlock(rom);
-        if (r == 0) return false;
+        int block = OldBlock(rom);
+        if (block == 0) return false;
         bool aguro = rom.ReadByte(MenuSkip) == 0xFF;
         rom.WriteBytes(LevelUpSite, LevelUpOriginal);
         rom.WriteBytes(JoinSite, JoinOriginal);
         rom.WriteBytes(ClearSite, ClearOriginal);
         rom.WriteBytes(KnowsSite, KnowsOriginal);
-        if (OldLayout(rom, r).Menu) rom.WriteBytes(MenuSite, MenuOriginal);
+        if (OldLayout(rom, block).Menu) rom.WriteBytes(MenuSite, MenuOriginal);
         rom.WriteByte(0x4684C + 2, 0x00);           // learn offsets ($08:E84C)
         rom.WriteByte(0x43D3F + 2, 0x00);           // menu offsets ($08:BD3F)
         rom.WriteUInt16Le(0x1CAD + 4, 0x14B5);      // the field menu's slot-2 pointer
         rom.WriteByte(MenuSkip, 0x02);
-        var space = ExpansionSpace.Load(rom);
-        if (space.At(r) is { } e && e.Start == r) { space.Free(r); space.Save(); }
+        var freeSpace = ExpansionSpace.Load(rom);
+        if (freeSpace.At(block) is { } entry && entry.Start == block) { freeSpace.Free(block); freeSpace.Save(); }
         return aguro;
     }
 
-    // ------------------------------------------------------------------ learn lists
+    // learn lists
 
-    /// <summary>The four learn lists (Hero, Lufia, Aguro, Jerin): this patch's, an earlier version's, or the game's
-    /// own (Aguro's empty).</summary>
+    // the four learn lists (Hero, Lufia, Aguro, Jerin): this patch's, an earlier version's, or the game's
+    // own (Aguro's is empty)
     public static List<(int Level, int Spell)>[] ReadLists(RomBuffer rom)
     {
         var lists = new List<(int, int)>[4];
-        int block = BlockOffset(rom), old = block == 0 ? OldBlock(rom) : 0;
-        var layout = old > 0 ? OldLayout(rom, old) : default;
-        for (int s = 0; s < 4; s++)
+        int block = BlockOffset(rom), oldBlock = block == 0 ? OldBlock(rom) : 0;
+        var layout = oldBlock > 0 ? OldLayout(rom, oldBlock) : default;
+        for (int slot = 0; slot < 4; slot++)
         {
-            lists[s] = new List<(int, int)>();
-            int p;
-            if (block > 0) { var (o, bl) = Layout(rom); p = block + bl + rom.ReadUInt16Le(block + o + 2 * s); }
-            else if (old > 0) p = old + layout.Blob + rom.ReadByte(old + layout.Offs + s);
-            else if (s == 2) continue;
-            else p = 0x46E0D + rom.ReadByte(0x467EB + s * 2);
-            for (int n = 0; n < MaxPerCharacter && p + 1 < rom.Length && rom.ReadByte(p) != 0xFF; n++, p += 2) lists[s].Add((rom.ReadByte(p), rom.ReadByte(p + 1)));
+            lists[slot] = new List<(int, int)>();
+            int position;
+            if (block > 0) { var (offs, blob) = Layout(rom); position = block + blob + rom.ReadUInt16Le(block + offs + 2 * slot); }
+            else if (oldBlock > 0) position = oldBlock + layout.Blob + rom.ReadByte(oldBlock + layout.Offs + slot);
+            else if (slot == 2) continue;
+            else position = 0x46E0D + rom.ReadByte(0x467EB + slot * 2);
+            for (int n = 0; n < MaxPerCharacter && position + 1 < rom.Length && rom.ReadByte(position) != 0xFF; n++, position += 2) lists[slot].Add((rom.ReadByte(position), rom.ReadByte(position + 1)));
         }
         return lists;
     }
 
-    /// <summary>Why the lists can't be stored, or null.</summary>
+    // why the lists can't be stored, or null
     public static string? Problem(IReadOnlyList<IReadOnlyList<(int Level, int Spell)>> lists)
     {
         string[] names = { "The Hero", "Lufia", "Aguro", "Jerin" };
-        for (int s = 0; s < 4; s++)
-            if (lists[s].Count > MaxPerCharacter) return $"{names[s]} can learn at most {MaxPerCharacter} spells.";
+        for (int slot = 0; slot < 4; slot++)
+            if (lists[slot].Count > MaxPerCharacter) return $"{names[slot]} can learn at most {MaxPerCharacter} spells.";
         return null;
     }
 
@@ -940,20 +933,20 @@ public static class SpellMemory
         if (!Current(rom)) { Upgrade(rom); block = BlockOffset(rom); }
         if (Problem(lists) is string bad) throw new InvalidOperationException(bad);
         var blob = new List<byte>();
-        for (int s = 0; s < 4; s++)
+        for (int slot = 0; slot < 4; slot++)
         {
-            rom.WriteUInt16Le(block + Offs + 2 * s, (ushort)blob.Count);
-            foreach (var (lv, sp) in lists[s]) { blob.Add((byte)Math.Clamp(lv, 0, 0xFE)); blob.Add((byte)sp); }
+            rom.WriteUInt16Le(block + Offs + 2 * slot, (ushort)blob.Count);
+            foreach (var (level, spell) in lists[slot]) { blob.Add((byte)Math.Clamp(level, 0, 0xFE)); blob.Add((byte)spell); }
             blob.Add(0xFF);
         }
         while (blob.Count < BlobSize) blob.Add(0xFF);
         rom.WriteBytes(block + Blob, blob.ToArray());
     }
 
-    // ------------------------------------------------------------------ install / remove
+    // install / remove
 
-    /// <summary>Installs the spell memory (taking over an earlier Guy / Aguro version's lists). Returns whether that
-    /// earlier version had given Aguro magic.</summary>
+    // installs the spell memory (taking over an earlier Guy / Aguro version's lists). returns whether that
+    // earlier version had given Aguro magic
     public static bool Install(RomBuffer rom)
     {
         if (Installed(rom)) { if (!SwapFixed(rom)) Upgrade(rom); return rom.ReadByte(MenuSkip) == 0xFF; }
@@ -961,62 +954,60 @@ public static class SpellMemory
         bool aguro = RemoveOld(rom);
         if (!SitesOriginal(rom)) throw new InvalidOperationException("The game's spell memory code isn't the original (another patch changed it), so spells can't be expanded safely.");
         if (rom.Length < MapWriter.ExpandedSize) rom.Expand(MapWriter.ExpandedSize);
-        var space = ExpansionSpace.Load(rom);
-        int at = space.AllocateInOneBank(BlockSize, ExpansionSpace.Kind.Patch, 10);
-        space.Save();
-        WriteAt(rom, at, lists);
+        var freeSpace = ExpansionSpace.Load(rom);
+        int blockOffset = freeSpace.AllocateInOneBank(BlockSize, ExpansionSpace.Kind.Patch, 10);
+        freeSpace.Save();
+        WriteAt(rom, blockOffset, lists);
         if (aguro) rom.WriteByte(MenuSkip, 0xFF);
         return aguro;
     }
 
-    /// <summary>
-    /// Moves an installed spell memory to this version (beta.7/8 had no spell order): its learn lists are kept, the
-    /// old block freed, a new one written and every hook pointed at it.
-    /// </summary>
+    // moves an installed spell memory to this version (beta.7/8 had no spell order): its learn lists are kept, the
+    // old block freed, a new one written and every hook pointed at it
     private static void Upgrade(RomBuffer rom)
     {
         var lists = ReadLists(rom);
-        int old = BlockOffset(rom);
+        int oldBlock = BlockOffset(rom);
         if (!Current(rom) || !SwapFixed(rom))
         {
             if (!(Same(rom, SwapSite, SwapOriginal) || Same(rom, SwapSite, SwapSkip) || HookedIntoBlock(rom, SwapSite)) ||
                 !(Same(rom, SaveSite, SaveOriginal) || HookedIntoBlock(rom, SaveSite)) || !(Same(rom, LoadSite, LoadOriginal) || HookedIntoBlock(rom, LoadSite)))
                 throw new InvalidOperationException("The game's save or field Magic menu code isn't the original, so the spell order can't be added safely.");
-            var space = ExpansionSpace.Load(rom);
-            int at = space.AllocateInOneBank(BlockSize, ExpansionSpace.Kind.Patch, 10);
-            if (!Current(rom) && space.At(old) is { } e && e.Start == old) space.Free(old);
-            space.Save();
-            WriteAt(rom, at, lists);
+            var freeSpace = ExpansionSpace.Load(rom);
+            int blockOffset = freeSpace.AllocateInOneBank(BlockSize, ExpansionSpace.Kind.Patch, 10);
+            if (!Current(rom) && freeSpace.At(oldBlock) is { } entry && entry.Start == oldBlock) freeSpace.Free(oldBlock);
+            freeSpace.Save();
+            WriteAt(rom, blockOffset, lists);
             rom.FixChecksum();
         }
     }
 
-    /// <summary>Writes the routines and lists at <paramref name="at"/> and hooks the game's code (also for test copies).</summary>
-    public static void WriteAt(RomBuffer rom, int at, IReadOnlyList<IReadOnlyList<(int Level, int Spell)>> lists)
+    // writes the routines and lists at offset and hooks the game's code (test copies use this too)
+    public static void WriteAt(RomBuffer rom, int offset, IReadOnlyList<IReadOnlyList<(int Level, int Spell)>> lists)
     {
         var code = new byte[BlockSize];
         Routine.CopyTo(code, 0);
-        int baseSnes = SnesAddress(at);
-        foreach (var (o, t) in Fixups)
+        int baseSnes = SnesAddress(offset);
+        foreach (var (operandAt, target) in Fixups)
         {
-            int a = baseSnes + t;
-            code[o] = (byte)a; code[o + 1] = (byte)(a >> 8); code[o + 2] = (byte)(a >> 16);
+            int address = baseSnes + target;
+            code[operandAt] = (byte)address; code[operandAt + 1] = (byte)(address >> 8); code[operandAt + 2] = (byte)(address >> 16);
         }
-        foreach (var (o, t) in JsrFixups)
+        foreach (var (operandAt, target) in JsrFixups)
         {
-            int a = baseSnes + t;
-            code[o] = (byte)a; code[o + 1] = (byte)(a >> 8);
+            int address = baseSnes + target;
+            code[operandAt] = (byte)address; code[operandAt + 1] = (byte)(address >> 8);
         }
-        rom.WriteBytes(at, code);
+        rom.WriteBytes(offset, code);
         void Hook(int site, int length, byte op, int entry, params byte[] after)
         {
-            var b = Enumerable.Repeat((byte)0xEA, length).ToArray();
-            int r = baseSnes + entry;
-            b[0] = op; b[1] = (byte)r; b[2] = (byte)(r >> 8); b[3] = (byte)(r >> 16);
-            after.CopyTo(b, 4);
-            rom.WriteBytes(site, b);
+            var siteBytes = Enumerable.Repeat((byte)0xEA, length).ToArray();
+            int routine = baseSnes + entry;
+            siteBytes[0] = op; siteBytes[1] = (byte)routine; siteBytes[2] = (byte)(routine >> 8); siteBytes[3] = (byte)(routine >> 16);
+            after.CopyTo(siteBytes, 4);
+            rom.WriteBytes(site, siteBytes);
         }
-        Hook(LearnSite, LearnOriginal.Length, 0x5C, Learn);                                   // JML: the routine returns with RTL
+        Hook(LearnSite, LearnOriginal.Length, 0x5C, Learn);                                   // JML, the routine returns with RTL
         Hook(LevelUpSite, LevelUpOriginal.Length, 0x22, LearnLevel, 0x80, 0x20);              // then BRA $E684
         Hook(JoinSite, JoinOriginal.Length, 0x22, LearnInitial, 0x80, 0x1B);                  // then BRA $EC28
         Hook(ClearSite, ClearOriginal.Length, 0x22, ClearSpells);
@@ -1033,8 +1024,8 @@ public static class SpellMemory
 
     public static void Remove(RomBuffer rom)
     {
-        int b = BlockOffset(rom);
-        if (b == 0) return;
+        int block = BlockOffset(rom);
+        if (block == 0) return;
         rom.WriteBytes(LearnSite, LearnOriginal);
         rom.WriteBytes(LevelUpSite, LevelUpOriginal);
         rom.WriteBytes(JoinSite, JoinOriginal);
@@ -1048,8 +1039,8 @@ public static class SpellMemory
         if (!Same(rom, SaveSite, SaveOriginal)) rom.WriteBytes(SaveSite, SaveOriginal);
         if (!Same(rom, LoadSite, LoadOriginal)) rom.WriteBytes(LoadSite, LoadOriginal);
         rom.WriteByte(MenuSkip, 0x02);
-        var space = ExpansionSpace.Load(rom);
-        space.Free(b);
-        space.Save();
+        var freeSpace = ExpansionSpace.Load(rom);
+        freeSpace.Free(block);
+        freeSpace.Save();
     }
 }

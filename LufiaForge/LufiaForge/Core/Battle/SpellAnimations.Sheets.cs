@@ -4,19 +4,15 @@ namespace LufiaForge.Core.Battle;
 
 public static partial class SpellAnimations
 {
-    /// <summary>
-    /// Animations with more than one sheet (a start, middle and end that each need a sheet of their own): track command
-    /// <c>70 lo hi bank</c> (7x was never used by the game) loads another sheet in the middle of an animation. The extra
-    /// sheets are kept unpacked in the added space (the game's unpacker, called in the middle of a battle frame, crashed),
-    /// so the command copies one to $7E:7000 (where the animation's setup unpacks the first) and has it put on screen as
-    /// the setup does: its tiles at the next refresh ($C4 bit 6), its colours queued on DMA channel 2 ($BF/$C0/$C2,
-    /// as $08:9FDA). The track interpreter's dispatch is hooked, as bank 08 has no room:
-    /// <code>
-    /// $08:E13A  22 Dispatch FC 58 E1 EA EA   (was LSR / LSR / LSR / AND #$1E / TAX / JSR ($E158,X))
-    /// </code>
-    /// Dispatch hands the game's commands on (X = table index); for 70 it switches the sheet and returns entry 0, which
-    /// for 70 (low nibble 0) just carries on (entry 7, where 7x pointed, is a BRK: the game never used 7x).
-    /// </summary>
+    // animations with more than one sheet (a start, middle and end that each need their own sheet): track command
+    // 70 lo hi bank (the game never used 7x) loads another sheet in the middle of an animation. the extra
+    // sheets are kept unpacked in the added space (calling the game's unpacker in the middle of a battle frame crashed),
+    // so the command copies one to $7E:7000 (where the animation's setup unpacks the first) and has it put on screen
+    // the way the setup does: its tiles at the next refresh ($C4 bit 6), its colours queued on DMA channel 2
+    // ($BF/$C0/$C2, like $08:9FDA). bank 08 has no room, so we hook the track interpreter's dispatch:
+    //   $08:E13A  22 Dispatch FC 58 E1 EA EA   (was LSR / LSR / LSR / AND #$1E / TAX / JSR ($E158,X))
+    // Dispatch hands the game's commands on (X = table index). for 70 it switches the sheet and returns entry 0, which
+    // for 70 (low nibble 0) just carries on (entry 7, where 7x pointed, is a BRK since the game never used 7x)
     private const int DispatchSite = 0x4613A;   // $08:E13A
     private static readonly byte[] DispatchOriginal = { 0x4A, 0x4A, 0x4A, 0x29, 0x1E, 0xAA, 0xFC, 0x58, 0xE1 };
     private const int DispatchCode = 0x0650;   // in the animation bank, after the resource hook and the state
@@ -94,29 +90,27 @@ public static partial class SpellAnimations
             RTL
         """;
 
-    /// <summary>The sheet switch is in (the hook and its code).</summary>
+    // the sheet switch is in (the hook and its code)
     public static bool HasSheetSwitch(RomBuffer rom) => rom.ReadByte(DispatchSite) == 0x22;
 
-    /// <summary>Puts the sheet switch in (the area must be moved first).</summary>
+    // puts the sheet switch in (the area has to be moved first)
     private static void AddSheetSwitch(RomBuffer rom)
     {
         if (HasSheetSwitch(rom)) return;
         if (!rom.ReadBytes(DispatchSite, DispatchOriginal.Length).SequenceEqual(DispatchOriginal))
             throw new InvalidOperationException("The battle animation interpreter ($08:E13A) isn't the original, so animations with several sheets can't be added safely.");
-        int b = Block(rom);
-        int at = SnesAddress(b + DispatchCode);
-        var a = new Asm65816();
-        a.Source(DispatchSource);
-        var code = a.Build(at);
+        int block = Block(rom);
+        int dispatchAddress = SnesAddress(block + DispatchCode);
+        var asm = new Asm65816();
+        asm.Source(DispatchSource);
+        var code = asm.Build(dispatchAddress);
         if (DispatchCode + code.Length > DataStart) throw new InvalidOperationException("No room for the sheet switch.");
-        rom.WriteBytes(b + DispatchCode, code);
-        rom.WriteBytes(DispatchSite, new byte[] { 0x22, (byte)at, (byte)(at >> 8), (byte)(at >> 16), 0xFC, 0x58, 0xE1, 0xEA, 0xEA });
+        rom.WriteBytes(block + DispatchCode, code);
+        rom.WriteBytes(DispatchSite, new byte[] { 0x22, (byte)dispatchAddress, (byte)(dispatchAddress >> 8), (byte)(dispatchAddress >> 16), 0xFC, 0x58, 0xE1, 0xEA, 0xEA });
     }
 
-    /// <summary>
-    /// A new animation from several sheets (a start, a middle repeated, an end, each on a sheet of its own): one frame
-    /// size for all, the first sheet loaded as usual, each next one by a 70 command before its frames. Returns its id.
-    /// </summary>
+    // a new animation from several sheets (a start, a middle repeated, an end, each on its own sheet): one frame
+    // size for all, the first sheet loaded as usual, each next one by a 70 command before its frames. returns its id
     public static int ImportParts(RomBuffer rom, IReadOnlyList<(byte[] Indices, uint[] Palette, IReadOnlyList<int> Order)> parts,
         int frameWidth, int frameHeight, int stepFrames, bool fromBottom, uint? flash)
     {
@@ -124,35 +118,35 @@ public static partial class SpellAnimations
             return Import(rom, parts[0].Indices, parts[0].Palette, new ImportOptions(frameWidth, frameHeight, parts[0].Order.Max() + 1, stepFrames, fromBottom, flash, parts[0].Order));
         Move(rom);
         AddSheetSwitch(rom);
-        // the first part as an ordinary animation; then its track gets the others
+        // the first part as an ordinary animation, then its track gets the others
         int id = Import(rom, parts[0].Indices, parts[0].Palette, new ImportOptions(frameWidth, frameHeight, parts[0].Order.Max() + 1, stepFrames, fromBottom, flash, parts[0].Order));
-        int b = Block(rom);
-        int h = HeaderOffset(rom, id);
-        int track = At(rom, rom.ReadUInt16Le(h + 4));
+        int block = Block(rom);
+        int header = HeaderOffset(rom, id);
+        int track = At(rom, rom.ReadUInt16Le(header + 4));
         // the first track as written: speed, frames (5 bytes each), 01
-        int len = 1 + parts[0].Order.Count * 5;
-        var t = rom.ReadBytes(track, len).ToList();
+        int length = 1 + parts[0].Order.Count * 5;
+        var trackBytes = rom.ReadBytes(track, length).ToList();
         int shape = rom.ReadByte(track + 2);
         int cols = frameWidth / 16, rows = frameHeight / 16, perRow = 8 / cols;
-        for (int k = 1; k < parts.Count; k++)
+        for (int part = 1; part < parts.Count; part++)
         {
-            var raw = BuildResource(parts[k].Indices, parts[k].Palette);
-            var space = ExpansionSpace.Load(rom);
-            int at = space.AllocateInOneBank(raw.Length, ExpansionSpace.Kind.Patch, 0);
-            space.Save();
-            rom.WriteBytes(at, raw);
-            int snes = SnesAddress(at);
-            t.AddRange(new byte[] { 0x70, (byte)snes, (byte)(snes >> 8), (byte)(snes >> 16) });
-            foreach (int f in parts[k].Order)
+            var raw = BuildResource(parts[part].Indices, parts[part].Palette);
+            var freeSpace = ExpansionSpace.Load(rom);
+            int sheetOffset = freeSpace.AllocateInOneBank(raw.Length, ExpansionSpace.Kind.Patch, 0);
+            freeSpace.Save();
+            rom.WriteBytes(sheetOffset, raw);
+            int sheetSnes = SnesAddress(sheetOffset);
+            trackBytes.AddRange(new byte[] { 0x70, (byte)sheetSnes, (byte)(sheetSnes >> 8), (byte)(sheetSnes >> 16) });
+            foreach (int frame in parts[part].Order)
             {
-                int cx = f % perRow * cols, cy = f / perRow * rows;
-                t.AddRange(new byte[] { 0x50, (byte)shape, 0x03, (byte)(2 * cx + 0x20 * cy), 0x0F });
+                int cx = frame % perRow * cols, cy = frame / perRow * rows;
+                trackBytes.AddRange(new byte[] { 0x50, (byte)shape, 0x03, (byte)(2 * cx + 0x20 * cy), 0x0F });
             }
         }
-        t.Add(0x01);
-        b = Block(rom);
-        int newTrack = Put(rom, t.ToArray());
-        rom.WriteUInt16Le(h + 4, (ushort)newTrack);
+        trackBytes.Add(0x01);
+        block = Block(rom);
+        int newTrack = Put(rom, trackBytes.ToArray());
+        rom.WriteUInt16Le(header + 4, (ushort)newTrack);
         rom.FixChecksum();
         return id;
     }
