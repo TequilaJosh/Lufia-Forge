@@ -1,40 +1,38 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:conv="clr-namespace:LufiaForge.Converters">
+                    xmlns:conv="clr-namespace:LufiaForge.Converters"
+                    xmlns:common="clr-namespace:LufiaForge.Modules.Common">
 
-    <!-- Converters -->
+    <!-- converters -->
     <conv:BoolToVisibilityConverter        x:Key="BoolToVisibilityConverter"/>
     <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter"/>
     <conv:InverseBoolConverter             x:Key="InverseBoolConverter"/>
 
-    <!-- =====================================================================
-         LUFIA FORGE COLOR PALETTE
-         Inspired by Lufia 1's deep purples, ancient stone, and golden accents
-         ===================================================================== -->
+    <!-- lufia forge colours, after lufia 1's deep purples, old stone and gold -->
 
-    <!-- Base colors -->
+    <!-- base colours -->
     <Color x:Key="DeepPurple">#1A0D2E</Color>
     <Color x:Key="MidPurple">#2D1B4E</Color>
     <Color x:Key="SurfacePurple">#3D2466</Color>
     <Color x:Key="ElevatedPurple">#4A2D7A</Color>
     <Color x:Key="BorderPurple">#5C3D8F</Color>
 
-    <!-- Gold accent -->
+    <!-- gold accent -->
     <Color x:Key="Gold">#C8942A</Color>
     <Color x:Key="GoldLight">#E8B84B</Color>
     <Color x:Key="GoldDim">#8B6518</Color>
 
-    <!-- Text -->
+    <!-- text -->
     <Color x:Key="TextPrimary">#F0E6D3</Color>
     <Color x:Key="TextSecondary">#A89880</Color>
     <Color x:Key="TextDisabled">#5C5040</Color>
 
-    <!-- Status -->
+    <!-- status -->
     <Color x:Key="ErrorRed">#C0392B</Color>
     <Color x:Key="SuccessGreen">#27AE60</Color>
     <Color x:Key="WarningAmber">#E67E22</Color>
 
-    <!-- Brushes -->
+    <!-- brushes -->
     <SolidColorBrush x:Key="DeepPurpleBrush"     Color="{StaticResource DeepPurple}"/>
     <SolidColorBrush x:Key="MidPurpleBrush"      Color="{StaticResource MidPurple}"/>
     <SolidColorBrush x:Key="SurfacePurpleBrush"  Color="{StaticResource SurfacePurple}"/>
@@ -50,7 +48,7 @@
     <SolidColorBrush x:Key="SuccessBrush"        Color="{StaticResource SuccessGreen}"/>
     <SolidColorBrush x:Key="WarningBrush"        Color="{StaticResource WarningAmber}"/>
 
-    <!-- Window / panel gradient backgrounds -->
+    <!-- window / panel gradient backgrounds -->
     <LinearGradientBrush x:Key="WindowBackgroundBrush" StartPoint="0,0" EndPoint="1,1">
         <GradientStop Color="#1A0D2E" Offset="0.0"/>
         <GradientStop Color="#0D0718" Offset="1.0"/>
@@ -66,11 +64,9 @@
         <GradientStop Color="#C8942A" Offset="1.0"/>
     </LinearGradientBrush>
 
-    <!-- =====================================================================
-         CONTROL STYLES
-         ===================================================================== -->
+    <!-- control styles -->
 
-    <!-- Button -->
+    <!-- button -->
     <Style x:Key="LufiaButton" TargetType="Button">
         <Setter Property="Background"   Value="{StaticResource SurfacePurpleBrush}"/>
         <Setter Property="Foreground"   Value="{StaticResource GoldLightBrush}"/>
@@ -108,7 +104,7 @@
         </Setter>
     </Style>
 
-    <!-- Gold accent button (primary actions) -->
+    <!-- gold accent button (main actions) -->
     <Style x:Key="LufiaButtonGold" TargetType="Button" BasedOn="{StaticResource LufiaButton}">
         <Setter Property="Background"  Value="{StaticResource GoldDimBrush}"/>
         <Setter Property="Foreground"  Value="#1A0D2E"/>
@@ -121,7 +117,7 @@
         </Style.Triggers>
     </Style>
 
-    <!-- TextBox -->
+    <!-- textbox -->
     <Style x:Key="LufiaTextBox" TargetType="TextBox">
         <Setter Property="Background"        Value="{StaticResource MidPurpleBrush}"/>
         <Setter Property="Foreground"        Value="{StaticResource TextPrimaryBrush}"/>
@@ -139,7 +135,7 @@
         </Style.Triggers>
     </Style>
 
-    <!-- Label -->
+    <!-- label -->
     <Style x:Key="LufiaLabel" TargetType="TextBlock">
         <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
         <Setter Property="FontFamily" Value="Segoe UI"/>
@@ -152,7 +148,7 @@
         <Setter Property="FontSize"   Value="13"/>
     </Style>
 
-    <!-- Tab control -->
+    <!-- tab control -->
     <Style x:Key="LufiaTabControl" TargetType="TabControl">
         <Setter Property="Background"       Value="Transparent"/>
         <Setter Property="BorderBrush"      Value="{StaticResource BorderPurpleBrush}"/>
@@ -196,7 +192,7 @@
         </Setter>
     </Style>
 
-    <!-- Side navigation: a TabControl whose tabs are a list on the left (group them with LufiaSideGroup items) -->
+    <!-- side navigation: a TabControl whose tabs are a list on the left (group them with LufiaSideGroup items) -->
     <Style x:Key="LufiaSideTabControl" TargetType="TabControl">
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="Template">
@@ -247,7 +243,7 @@
         </Setter>
     </Style>
 
-    <!-- A heading between side tabs (not selectable) -->
+    <!-- a heading between side tabs (can't be selected) -->
     <Style x:Key="LufiaSideGroup" TargetType="TabItem">
         <Setter Property="IsEnabled" Value="False"/>
         <Setter Property="Focusable" Value="False"/>
@@ -262,7 +258,7 @@
         </Setter>
     </Style>
 
-    <!-- ListBox -->
+    <!-- listbox -->
     <Style x:Key="LufiaListBox" TargetType="ListBox">
         <Setter Property="Background"      Value="{StaticResource MidPurpleBrush}"/>
         <Setter Property="Foreground"      Value="{StaticResource TextPrimaryBrush}"/>
@@ -286,13 +282,13 @@
         </Style.Triggers>
     </Style>
 
-    <!-- Separator / divider -->
+    <!-- separator / divider -->
     <Style x:Key="LufiaSeparator" TargetType="Separator">
         <Setter Property="Background" Value="{StaticResource BorderPurpleBrush}"/>
         <Setter Property="Margin"     Value="8,4"/>
     </Style>
 
-    <!-- Status bar text -->
+    <!-- status bar text -->
     <Style x:Key="StatusBarText" TargetType="TextBlock">
         <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
         <Setter Property="FontFamily" Value="Segoe UI"/>
@@ -300,7 +296,7 @@
         <Setter Property="VerticalAlignment" Value="Center"/>
     </Style>
 
-    <!-- ComboBox -->
+    <!-- combobox -->
     <Style x:Key="LufiaComboBox" TargetType="ComboBox">
         <Setter Property="Background"      Value="{StaticResource MidPurpleBrush}"/>
         <Setter Property="Foreground"      Value="Black"/>
@@ -309,7 +305,7 @@
         <Setter Property="Padding"         Value="6,4"/>
         <Setter Property="FontFamily"      Value="Segoe UI"/>
         <Setter Property="FontSize"        Value="12"/>
-        <!-- Dropdown items: black text on the system's light popup background -->
+        <!-- dropdown items: black text on the system's light popup background -->
         <Setter Property="ItemContainerStyle">
             <Setter.Value>
                 <Style TargetType="ComboBoxItem">
@@ -330,14 +326,14 @@
         </Setter>
     </Style>
 
-    <!-- CheckBox -->
+    <!-- checkbox -->
     <Style x:Key="LufiaCheckBox" TargetType="CheckBox">
         <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
         <Setter Property="FontFamily" Value="Segoe UI"/>
         <Setter Property="FontSize"   Value="12"/>
     </Style>
 
-    <!-- Tool button: a RadioButton / ToggleButton drawn as a button; checked = gold (one of a group of tools) -->
+    <!-- tool button: a RadioButton / ToggleButton drawn as a button, checked = gold (one of a group of tools) -->
     <Style x:Key="LufiaToolButton" TargetType="ToggleButton">
         <Setter Property="Background"   Value="{StaticResource MidPurpleBrush}"/>
         <Setter Property="Foreground"   Value="{StaticResource TextPrimaryBrush}"/>
@@ -376,7 +372,7 @@
     </Style>
     <Style x:Key="LufiaToolRadio" TargetType="RadioButton" BasedOn="{StaticResource LufiaToolButton}"/>
 
-    <!-- Chip: a small on/off toggle (what to show, filters) -->
+    <!-- chip: a small on/off toggle (what to show, filters) -->
     <Style x:Key="LufiaChip" TargetType="ToggleButton" BasedOn="{StaticResource LufiaToolButton}">
         <Setter Property="Padding"  Value="9,2"/>
         <Setter Property="Margin"   Value="0,0,4,0"/>
@@ -407,7 +403,7 @@
     </Style>
     <Style x:Key="LufiaChipCheck" TargetType="CheckBox" BasedOn="{StaticResource LufiaChip}"/>
 
-    <!-- Search box: a text box with a placeholder (set Tag to the placeholder text) -->
+    <!-- search box: a text box with a placeholder (set Tag to the placeholder text) -->
     <Style x:Key="LufiaSearchBox" TargetType="TextBox" BasedOn="{StaticResource LufiaTextBox}">
         <Setter Property="FontFamily" Value="Segoe UI"/>
         <Setter Property="Padding" Value="24,5,6,5"/>
@@ -433,7 +429,7 @@
         </Setter>
     </Style>
 
-    <!-- Card and card header (the Patch Manager look) -->
+    <!-- card and card header (the patch manager look) -->
     <Style x:Key="LufiaCard" TargetType="Border">
         <Setter Property="Background" Value="{StaticResource SurfacePurpleBrush}"/>
         <Setter Property="BorderBrush" Value="{StaticResource BorderPurpleBrush}"/>
@@ -446,9 +442,73 @@
         <Setter Property="Margin" Value="0,0,0,6"/>
     </Style>
 
-    <!-- ScrollBar -->
+    <!-- scrollbar -->
     <Style TargetType="ScrollBar">
         <Setter Property="Background" Value="{StaticResource MidPurpleBrush}"/>
+    </Style>
+
+    <!-- splitters and pop-out sections. every splitter is a thin band that lights up gold under the mouse (drag to
+         resize, double-click puts the sizes back where the view keeps them, see LayoutMemory). PopOutHost moves a
+         section into a window of its own -->
+    <Style TargetType="GridSplitter">
+        <Setter Property="Focusable" Value="False"/>
+        <Setter Property="ToolTip" Value="Drag to resize (double-click: back to the normal size)"/>
+        <Setter Property="ToolTipService.InitialShowDelay" Value="900"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="GridSplitter">
+                    <Border Background="Transparent">
+                        <Border x:Name="Band" Background="{StaticResource BorderPurpleBrush}" Opacity="0.55" Margin="1" CornerRadius="1"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Band" Property="Background" Value="{StaticResource GoldDimBrush}"/>
+                            <Setter TargetName="Band" Property="Opacity" Value="1"/>
+                        </Trigger>
+                        <Trigger Property="IsDragging" Value="True">
+                            <Setter TargetName="Band" Property="Background" Value="{StaticResource GoldBrush}"/>
+                            <Setter TargetName="Band" Property="Opacity" Value="1"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="common:PopOutHost">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="common:PopOutHost">
+                    <!-- a background so the whole section counts as "the mouse is over it", gaps and margins too, so
+                         the button stays up while the mouse crosses empty space on its way to it -->
+                    <Grid Background="Transparent">
+                        <ContentPresenter/>
+                        <Border x:Name="Placeholder" Visibility="Collapsed" Background="{StaticResource SurfacePurpleBrush}"
+                                BorderBrush="{StaticResource BorderPurpleBrush}" BorderThickness="1" CornerRadius="4" Padding="10,6" Margin="2">
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <TextBlock Text="{TemplateBinding PlaceholderText}" Foreground="{StaticResource TextSecondaryBrush}"
+                                           TextWrapping="Wrap" TextAlignment="Center"/>
+                                <Button x:Name="PART_Return" Content="⇲ Bring it back" Style="{StaticResource LufiaButton}" Padding="10,3"
+                                        Margin="0,6,0,0" HorizontalAlignment="Center" ToolTip="Closes its window and puts it back here"/>
+                            </StackPanel>
+                        </Border>
+                        <Button x:Name="PART_PopOut" Content="⧉" Visibility="Hidden" Panel.ZIndex="50"
+                                HorizontalAlignment="Right" VerticalAlignment="Top" Margin="{TemplateBinding ButtonMargin}"
+                                Padding="5,0" FontSize="12" Style="{StaticResource LufiaButton}"
+                                ToolTip="Pop this section out into its own window (close the window to put it back)"/>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="PART_PopOut" Property="Visibility" Value="Visible"/>
+                        </Trigger>
+                        <Trigger Property="IsPoppedOut" Value="True">
+                            <Setter TargetName="Placeholder" Property="Visibility" Value="Visible"/>
+                            <Setter TargetName="PART_PopOut" Property="Visibility" Value="Collapsed"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
 </ResourceDictionary>

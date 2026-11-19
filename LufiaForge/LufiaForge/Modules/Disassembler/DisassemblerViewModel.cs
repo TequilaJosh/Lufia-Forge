@@ -12,17 +12,11 @@ namespace LufiaForge.Modules.Disassembler;
 
 public partial class DisassemblerViewModel : ObservableObject
 {
-    // -------------------------------------------------------------------------
-    // Dependencies
-    // -------------------------------------------------------------------------
-
     private RomBuffer?    _rom;
     private readonly BookmarkStore       _bookmarks = new();
     private readonly CrossReferenceBuilder _xref    = new();
 
-    // -------------------------------------------------------------------------
-    // Observable properties — toolbar inputs
-    // -------------------------------------------------------------------------
+    // toolbar inputs
 
     [ObservableProperty] private string _newBookmarkLabel = "";
     [ObservableProperty] private string _addressText      = "0x808000";
@@ -32,9 +26,7 @@ public partial class DisassemblerViewModel : ObservableObject
     [ObservableProperty] private bool   _followPc      = false;
     [ObservableProperty] private bool   _autoScroll    = true;
 
-    // -------------------------------------------------------------------------
-    // Observable properties — state / status
-    // -------------------------------------------------------------------------
+    // state / status
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanGoBack))]
@@ -55,20 +47,14 @@ public partial class DisassemblerViewModel : ObservableObject
 
     public bool HasCurrentPc => LivePcSnesAddress.HasValue;
 
-    // -------------------------------------------------------------------------
-    // Collections
-    // -------------------------------------------------------------------------
-
     public ObservableCollection<DisassemblyLine> DisassemblyLines { get; } = new();
     public ObservableCollection<Bookmark>        AllBookmarks     { get; } = new();
 
-    // Cross-reference lists for the currently selected line
+    // cross-references of the selected line
     public ObservableCollection<string> XrefCalledFrom { get; } = new();
     public ObservableCollection<string> XrefCallsTo    { get; } = new();
 
-    // -------------------------------------------------------------------------
-    // Selection + live PC
-    // -------------------------------------------------------------------------
+    // selection + live PC
 
     private DisassemblyLine? _selectedLine;
     public DisassemblyLine? SelectedLine
@@ -84,15 +70,11 @@ public partial class DisassemblerViewModel : ObservableObject
     private DisassemblyLine? _currentPcLine;
     private int?             _lastFollowPcAddress;
 
-    /// <summary>
-    /// Wired by MainWindow to MemoryMonitorViewModel.AddWatch so the
-    /// disassembler can push addresses across without a direct dependency.
-    /// </summary>
+    // MainWindow hooks this up to MemoryMonitorViewModel.AddWatch so we can send addresses over
+    // without the disassembler knowing about the memory monitor
     public Action<int, string>? RequestAddWatch { get; set; }
 
-    // -------------------------------------------------------------------------
-    // Navigation history
-    // -------------------------------------------------------------------------
+    // back / forward history
 
     private readonly Stack<int> _backStack    = new();
     private readonly Stack<int> _forwardStack = new();
@@ -100,15 +82,13 @@ public partial class DisassemblerViewModel : ObservableObject
     public bool CanGoBack    => _backStack.Count > 0;
     public bool CanGoForward => _forwardStack.Count > 0;
 
-    // -------------------------------------------------------------------------
-    // Init
-    // -------------------------------------------------------------------------
-
     public DisassemblerViewModel()
     {
-        // Subscribe to BizHawk live CPU snapshots
+        // live CPU snapshots from BizHawk
         BizHawkBridge.CpuSnapshotReady += OnCpuSnapshot;
     }
+
+    private CancellationTokenSource? _xrefCts;
 
     public void SetRom(RomBuffer rom)
     {
@@ -116,32 +96,30 @@ public partial class DisassemblerViewModel : ObservableObject
         _bookmarks.Open(rom.FilePath);
         RefreshBookmarkList();
         DisassemblyLines.Clear();
-        _xref.Xref.Clear();
+        // a build still going is for the old ROM, so stop it (its index never gets put in)
+        _xrefCts?.Cancel();
+        _xref.Clear();
         IsXrefBuilt   = false;
         LivePcSnesAddress    = null;
         _currentPcLine       = null;
         _lastFollowPcAddress = null;
         StatusText = "ROM loaded. Enter an address and click Disassemble.";
 
-        // Default to the reset vector (program entry point) if file is big enough
+        // start at the reset vector (where the program starts) if the file's big enough
         if (rom.Length >= 0x8000)
         {
-            // LoROM reset vector is at $FFFC (file offset 0x7FFC) — 2-byte LE pointer
-            ushort resetVec = rom.ReadUInt16Le(0x7FFC);
-            AddressText = $"0x{Lufia1Constants.FileOffsetToSnesAddress((resetVec & 0x7FFF)):X6}";
+            // LoROM reset vector is at $FFFC (file offset 0x7FFC), a 2-byte little-endian pointer
+            ushort resetVector = rom.ReadUInt16Le(0x7FFC);
+            AddressText = $"0x{Lufia1Constants.FileOffsetToSnesAddress((resetVector & 0x7FFF)):X6}";
         }
     }
-
-    // -------------------------------------------------------------------------
-    // Disassemble command
-    // -------------------------------------------------------------------------
 
     [RelayCommand]
     private void Disassemble()
     {
         if (_rom == null) { StatusText = "No ROM loaded."; return; }
 
-        if (!TryParseAddress(AddressText, out int startAddr))
+        if (!TryParseAddress(AddressText, out int startAddress))
         {
             StatusText = $"Invalid address: \"{AddressText}\"  (use hex, e.g. 0x808000 or $808000)";
             return;
@@ -150,10 +128,10 @@ public partial class DisassemblerViewModel : ObservableObject
         if (!TryParseHex(ByteCountText, out int byteCount) || byteCount <= 0)
             byteCount = 0x200;
 
-        int fileOffset = Lufia1Constants.SnesAddressToFileOffset(startAddr);
+        int fileOffset = Lufia1Constants.SnesAddressToFileOffset(startAddress);
         if (fileOffset < 0 || fileOffset >= _rom.Length)
         {
-            StatusText = $"Address ${startAddr:X6} is outside the ROM (offset 0x{fileOffset:X6}).";
+            StatusText = $"Address ${startAddress:X6} is outside the ROM (offset 0x{fileOffset:X6}).";
             return;
         }
 
@@ -166,17 +144,15 @@ public partial class DisassemblerViewModel : ObservableObject
         foreach (var line in lines)
             DisassemblyLines.Add(line);
 
-        // Re-apply current PC highlight
+        // put the PC highlight back
         if (LivePcSnesAddress.HasValue)
-            ApplyPcHighlight(LivePcSnesAddress.Value);
+            { if (RomPc(LivePcSnesAddress.Value) is int pc and >= 0) ApplyPcHighlight(pc); }
 
-        StatusText = $"Disassembled {lines.Count} instruction(s) from ${startAddr:X6}  " +
+        StatusText = $"Disassembled {lines.Count} instruction(s) from ${startAddress:X6}  " +
                      $"({byteCount} bytes requested)  |  M={Bit(FlagM)} X={Bit(FlagX)}";
     }
 
-    // -------------------------------------------------------------------------
-    // Navigation
-    // -------------------------------------------------------------------------
+    // navigation
 
     public void NavigateTo(int snesAddress, bool pushHistory = true)
     {
@@ -198,12 +174,12 @@ public partial class DisassemblerViewModel : ObservableObject
     private void GoBack()
     {
         if (_backStack.Count == 0) return;
-        int addr = _backStack.Pop();
+        int address = _backStack.Pop();
 
         if (DisassemblyLines.Count > 0)
             _forwardStack.Push(Lufia1Constants.FileOffsetToSnesAddress(DisassemblyLines[0].FileOffset));
 
-        AddressText = $"${addr:X6}";
+        AddressText = $"${address:X6}";
         OnPropertyChanged(nameof(CanGoBack));
         OnPropertyChanged(nameof(CanGoForward));
         Disassemble();
@@ -213,12 +189,12 @@ public partial class DisassemblerViewModel : ObservableObject
     private void GoForward()
     {
         if (_forwardStack.Count == 0) return;
-        int addr = _forwardStack.Pop();
+        int address = _forwardStack.Pop();
 
         if (DisassemblyLines.Count > 0)
             _backStack.Push(Lufia1Constants.FileOffsetToSnesAddress(DisassemblyLines[0].FileOffset));
 
-        AddressText = $"${addr:X6}";
+        AddressText = $"${address:X6}";
         OnPropertyChanged(nameof(CanGoBack));
         OnPropertyChanged(nameof(CanGoForward));
         Disassemble();
@@ -231,9 +207,7 @@ public partial class DisassemblerViewModel : ObservableObject
         NavigateTo(line.JumpTarget.Value);
     }
 
-    // -------------------------------------------------------------------------
-    // Export
-    // -------------------------------------------------------------------------
+    // export
 
     [RelayCommand]
     private void ExportAsm()
@@ -268,13 +242,13 @@ public partial class DisassemblerViewModel : ObservableObject
                     continue;
                 }
 
-                string addr    = $"${line.SnesAddress:X6}";
-                string raw     = line.RawBytesHex.PadRight(10);
-                string mnem    = line.Mnemonic.PadRight(5);
+                string address = $"${line.SnesAddress:X6}";
+                string rawText = line.RawBytesHex.PadRight(10);
+                string mnemonic = line.Mnemonic.PadRight(5);
                 string operand = line.Operand.PadRight(14);
                 string comment = (line.Comment != null ? $"  {line.Comment}" : "") + $"  ; {line.BaseCycles} cyc";
 
-                sb.AppendLine($"{addr}  {raw}  {mnem} {operand}{comment}");
+                sb.AppendLine($"{address}  {rawText}  {mnemonic} {operand}{comment}");
             }
 
             File.WriteAllText(dlg.FileName, sb.ToString());
@@ -286,9 +260,7 @@ public partial class DisassemblerViewModel : ObservableObject
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Bookmark commands (called from context menu via CommandParameter binding)
-    // -------------------------------------------------------------------------
+    // bookmark commands (the context menu calls these through CommandParameter)
 
     [RelayCommand]
     private void AddBookmark(DisassemblyLine? line)
@@ -301,7 +273,7 @@ public partial class DisassemblerViewModel : ObservableObject
 
         _bookmarks.Add(line.SnesAddress, label);
 
-        // Update inline comment on the visible line
+        // show it on the line right away too
         string bookmarkComment = $"; {label}";
         line.Comment = string.IsNullOrEmpty(line.Comment)
             ? bookmarkComment
@@ -313,25 +285,25 @@ public partial class DisassemblerViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void RemoveBookmark(Bookmark? bm)
+    private void RemoveBookmark(Bookmark? bookmark)
     {
-        if (bm == null) return;
-        _bookmarks.Remove(bm.SnesAddress);
+        if (bookmark == null) return;
+        _bookmarks.Remove(bookmark.SnesAddress);
         RefreshBookmarkList();
 
-        // Clear the comment from any currently visible line at that address
-        var line = DisassemblyLines.FirstOrDefault(l => l.SnesAddress == bm.SnesAddress);
-        if (line != null && line.Comment?.Contains(bm.Label) == true)
+        // take the comment off the line at that address if it's showing
+        var line = DisassemblyLines.FirstOrDefault(l => l.SnesAddress == bookmark.SnesAddress);
+        if (line != null && line.Comment?.Contains(bookmark.Label) == true)
             line.Comment = null;
 
-        StatusText = $"Bookmark removed: {bm.Label}";
+        StatusText = $"Bookmark removed: {bookmark.Label}";
     }
 
     [RelayCommand]
-    private void NavigateToBookmark(Bookmark? bm)
+    private void NavigateToBookmark(Bookmark? bookmark)
     {
-        if (bm == null) return;
-        NavigateTo(bm.SnesAddress);
+        if (bookmark == null) return;
+        NavigateTo(bookmark.SnesAddress);
     }
 
     [RelayCommand]
@@ -354,7 +326,7 @@ public partial class DisassemblerViewModel : ObservableObject
     private void MarkAsData(DisassemblyLine? line)
     {
         if (line == null) return;
-        // a data region (joined with one right before/after): shown as .db lines and skipped by the XRef builder
+        // a data region (joined with one right before/after it) shows as .db lines and the XRef builder skips it
         _bookmarks.MarkData(line.SnesAddress, Math.Max(1, line.RawBytes.Length));
         RefreshBookmarkList();
         Disassemble();
@@ -362,20 +334,18 @@ public partial class DisassemblerViewModel : ObservableObject
                      "remove its DATA_ bookmark to undo.";
     }
 
-    // -------------------------------------------------------------------------
-    // Add to Watchlist
-    // -------------------------------------------------------------------------
+    // add to watchlist
 
     [RelayCommand]
     private void AddToWatchlist(DisassemblyLine? line)
     {
         if (line == null || RequestAddWatch == null) return;
 
-        // Try to pull a WRAM address out of the operand first.
-        // Fall back to the instruction address itself (useful for tracing code paths).
+        // try to get a WRAM address out of the operand first, if there isn't one use the instruction's own address
+        // (handy for tracing code paths)
         int address = TryExtractWramAddress(line.Operand) ?? line.SnesAddress;
 
-        // Build a label: "<mnemonic> <operand>" so the user knows where it came from
+        // label is "<mnemonic> <operand>" so you can tell where it came from
         string baseLabel = $"{line.Mnemonic} {line.Operand}".Trim();
         string label     = string.IsNullOrEmpty(line.Comment)
             ? baseLabel
@@ -385,15 +355,12 @@ public partial class DisassemblerViewModel : ObservableObject
         StatusText = $"Added to watchlist: ${address:X6}  ({label})";
     }
 
-    /// <summary>
-    /// Attempts to parse a WRAM address ($7Exxxx / $7Fxxxx, or $xxxx ≤ $1FFF)
-    /// from a formatted operand string. Returns null if no WRAM address is found.
-    /// </summary>
+    // pulls a WRAM address ($7Exxxx / $7Fxxxx, or $xxxx <= $1FFF) out of a formatted operand. null if there isn't one
     private static int? TryExtractWramAddress(string operand)
     {
         if (string.IsNullOrEmpty(operand)) return null;
 
-        // Walk through the operand looking for '$' followed by hex digits
+        // look for '$' followed by hex digits
         int i = 0;
         while (i < operand.Length)
         {
@@ -405,16 +372,16 @@ public partial class DisassemblerViewModel : ObservableObject
             while (end < operand.Length && Uri.IsHexDigit(operand[end]))
                 end++;
 
-            int len = end - start;
-            if (len >= 4 && int.TryParse(operand.AsSpan(start, Math.Min(len, 6)),
+            int length = end - start;
+            if (length >= 4 && int.TryParse(operand.AsSpan(start, Math.Min(length, 6)),
                                           System.Globalization.NumberStyles.HexNumber,
-                                          null, out int addr))
+                                          null, out int address))
             {
-                // Full 24-bit WRAM address
-                if (addr >= 0x7E0000 && addr <= 0x7FFFFF) return addr;
+                // full 24-bit WRAM address
+                if (address >= 0x7E0000 && address <= 0x7FFFFF) return address;
 
-                // 16-bit address in first WRAM mirror ($0000–$1FFF)
-                if (len == 4 && addr <= 0x1FFF) return 0x7E0000 | addr;
+                // 16-bit address in the first WRAM mirror ($0000-$1FFF)
+                if (length == 4 && address <= 0x1FFF) return 0x7E0000 | address;
             }
 
             i = end + 1;
@@ -422,9 +389,7 @@ public partial class DisassemblerViewModel : ObservableObject
         return null;
     }
 
-    // -------------------------------------------------------------------------
-    // Cross-reference builder
-    // -------------------------------------------------------------------------
+    // cross-references
 
     [RelayCommand]
     private async Task BuildXref()
@@ -436,14 +401,18 @@ public partial class DisassemblerViewModel : ObservableObject
         XrefProgress   = 0;
         StatusText     = "Building cross-reference index: scanning entire ROM…";
 
-        var progress = new Progress<int>(p =>
+        var progress = new Progress<int>(percent =>
         {
-            XrefProgress = p;
+            XrefProgress = percent;
         });
 
+        _xrefCts?.Cancel();
+        var tokenSource = _xrefCts = new CancellationTokenSource();
+        var rom = _rom;
         try
         {
-            await _xref.BuildAsync(_rom, _bookmarks, progress);
+            await _xref.BuildAsync(rom, _bookmarks, progress, tokenSource.Token);
+            if (tokenSource.IsCancellationRequested || rom != _rom) throw new OperationCanceledException();
             IsXrefBuilt    = true;
             IsXrefBuilding = false;
             StatusText     = $"Cross-reference complete: {_xref.Xref.Count:N0} unique targets indexed; " +
@@ -462,38 +431,52 @@ public partial class DisassemblerViewModel : ObservableObject
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Live PC tracking
-    // -------------------------------------------------------------------------
+    // live PC tracking
 
     private void OnCpuSnapshot(BizHawkBridge.CpuSnapshot snapshot)
     {
-        // Marshal to UI thread
+        // over to the UI thread
         System.Windows.Application.Current?.Dispatcher.BeginInvoke(() =>
         {
             LivePcSnesAddress = snapshot.SnesAddress;
-            ApplyPcHighlight(snapshot.SnesAddress);
+            // the lines are labelled in banks $80 up (FileOffsetToSnesAddress) but Lufia 1 runs in $00-$3F, the same ROM,
+            // so compared as is the PC never matched. a PC in RAM ($7E/$7F, or below $8000) isn't ROM code, we don't follow it
+            int pc = RomPc(snapshot.SnesAddress);
+            if (pc < 0) { ClearPcHighlight(); return; }
+            ApplyPcHighlight(pc, snapshot.FlagM, snapshot.FlagX);
         });
     }
 
-    private void ApplyPcHighlight(int snesAddress)
+    // the PC the way the lines label it (banks $80 up), or -1 when it isn't in the ROM (RAM, below $8000)
+    private static int RomPc(int snesAddress)
     {
-        // Clear old highlight
-        if (_currentPcLine != null)
-        {
-            _currentPcLine.IsCurrentPc = false;
-            _currentPcLine = null;
-        }
+        int bank = snesAddress >> 16 & 0xFF, address = snesAddress & 0xFFFF;
+        return address < 0x8000 || bank is 0x7E or 0x7F ? -1 : ((bank & 0x7F) | 0x80) << 16 | address;
+    }
+
+    private void ClearPcHighlight()
+    {
+        if (_currentPcLine == null) return;
+        _currentPcLine.IsCurrentPc = false;
+        _currentPcLine = null;
+    }
+
+    private void ApplyPcHighlight(int snesAddress, bool? liveM = null, bool? liveX = null)
+    {
+        ClearPcHighlight();
 
         var line = DisassemblyLines.FirstOrDefault(l => l.SnesAddress == snesAddress);
 
-        // PC moved outside the current view — re-disassemble if Follow PC is on.
-        // _lastFollowPcAddress guards against re-building every frame while the PC
-        // sits in an off-screen loop.
+        // PC went outside the current view, disassemble again if Follow PC is on.
+        // _lastFollowPcAddress stops it rebuilding every frame while the PC sits in a loop that's off screen
         if (line == null && FollowPc && snesAddress != _lastFollowPcAddress)
         {
             _lastFollowPcAddress = snesAddress;
             AddressText = $"${snesAddress:X6}";
+            // decoded with the CPU's own M and X flags there (with the toolbar's, LDA #$1234 in 16-bit code was read as
+            // LDA #$34 and every line after it went wrong)
+            if (liveM is bool m) FlagM = m;
+            if (liveX is bool x) FlagX = x;
             Disassemble();
             line = DisassemblyLines.FirstOrDefault(l => l.SnesAddress == snesAddress);
         }
@@ -503,23 +486,19 @@ public partial class DisassemblerViewModel : ObservableObject
         line.IsCurrentPc = true;
         _currentPcLine   = line;
 
-        // AutoScroll signal is raised via an event that the View handles
+        // the view handles the scrolling through this event
         if (AutoScroll)
             ScrollRequested?.Invoke(line);
     }
 
-    /// <summary>Fired when the view should scroll a specific line into view (live PC tracking).</summary>
+    // fired when the view should scroll a line into view (live PC tracking)
     public event Action<DisassemblyLine>? ScrollRequested;
-
-    // -------------------------------------------------------------------------
-    // Helpers
-    // -------------------------------------------------------------------------
 
     private void RefreshBookmarkList()
     {
         AllBookmarks.Clear();
-        foreach (var bm in _bookmarks.GetAll())
-            AllBookmarks.Add(bm);
+        foreach (var bookmark in _bookmarks.GetAll())
+            AllBookmarks.Add(bookmark);
     }
 
     private void RefreshXrefPanel()
@@ -529,23 +508,23 @@ public partial class DisassemblerViewModel : ObservableObject
 
         if (_selectedLine == null || !_xref.IsBuilt) return;
 
-        foreach (int addr in _xref.GetCalledFrom(_selectedLine.SnesAddress))
+        foreach (int address in _xref.GetCalledFrom(_selectedLine.SnesAddress))
         {
-            string label = _bookmarks.GetByAddress(addr)?.Label ?? $"${addr:X6}";
-            XrefCalledFrom.Add($"${addr:X6}  {label}");
+            string label = _bookmarks.GetByAddress(address)?.Label ?? $"${address:X6}";
+            XrefCalledFrom.Add($"${address:X6}  {label}");
         }
 
-        foreach (int addr in _xref.GetCallsTo(_selectedLine.SnesAddress))
+        foreach (int address in _xref.GetCallsTo(_selectedLine.SnesAddress))
         {
-            string label = _bookmarks.GetByAddress(addr)?.Label ?? $"${addr:X6}";
-            XrefCallsTo.Add($"${addr:X6}  {label}");
+            string label = _bookmarks.GetByAddress(address)?.Label ?? $"${address:X6}";
+            XrefCallsTo.Add($"${address:X6}  {label}");
         }
     }
 
     private static bool TryParseAddress(string text, out int value)
     {
         text = (text ?? "").Trim();
-        // Accept $XXXXXX, 0xXXXXXX, or plain decimal
+        // takes $XXXXXX, 0xXXXXXX, or plain decimal
         if (text.StartsWith('$'))
             return int.TryParse(text[1..], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out value);
         return TryParseHex(text, out value);
@@ -561,5 +540,5 @@ public partial class DisassemblerViewModel : ObservableObject
         return int.TryParse(text, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out value);
     }
 
-    private static string Bit(bool v) => v ? "1" : "0";
+    private static string Bit(bool isSet) => isSet ? "1" : "0";
 }

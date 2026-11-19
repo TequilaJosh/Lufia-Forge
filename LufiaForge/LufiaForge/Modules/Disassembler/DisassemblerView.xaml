@@ -1,10 +1,11 @@
 <UserControl x:Class="LufiaForge.Modules.Disassembler.DisassemblerView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:local="clr-namespace:LufiaForge.Modules.Disassembler">
+             xmlns:local="clr-namespace:LufiaForge.Modules.Disassembler"
+             xmlns:common="clr-namespace:LufiaForge.Modules.Common">
 
     <UserControl.Resources>
-        <!-- Color constants for syntax highlighting -->
+        <!-- colours for the syntax highlighting -->
         <SolidColorBrush x:Key="MnemonicBrush"   Color="#E8B84B"/>  <!-- gold -->
         <SolidColorBrush x:Key="AddressBrush"     Color="#8B6518"/>  <!-- gold-dim -->
         <SolidColorBrush x:Key="RawBytesBrush"    Color="#5C5040"/>  <!-- text-disabled -->
@@ -15,9 +16,9 @@
         <SolidColorBrush x:Key="DataLineBrush"    Color="#C0392B"/>  <!-- red for data markers -->
         <SolidColorBrush x:Key="CurrentPcBrush"   Color="#2A3A1A"/>  <!-- dark green PC highlight bg -->
 
-        <!-- Bool → Visibility converter inline for operand coloring -->
+        <!-- bool -> Visibility converter inline for operand colouring -->
 
-        <!-- Disassembly row DataTemplate -->
+        <!-- one disassembly row -->
         <DataTemplate x:Key="DisassemblyRowTemplate" DataType="{x:Type local:DisassemblyLine}">
             <Border x:Name="RowBorder"
                     Background="Transparent"
@@ -26,10 +27,10 @@
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="80"/>   <!-- SNES address -->
-                        <ColumnDefinition Width="88"/>   <!-- Raw bytes -->
-                        <ColumnDefinition Width="46"/>   <!-- Mnemonic -->
-                        <ColumnDefinition Width="150"/>  <!-- Operand -->
-                        <ColumnDefinition Width="*"/>    <!-- Comment -->
+                        <ColumnDefinition Width="88"/>   <!-- raw bytes -->
+                        <ColumnDefinition Width="46"/>   <!-- mnemonic -->
+                        <ColumnDefinition Width="150"/>  <!-- operand -->
+                        <ColumnDefinition Width="*"/>    <!-- comment -->
                     </Grid.ColumnDefinitions>
 
                     <!-- SNES address -->
@@ -39,14 +40,14 @@
                                FontFamily="Consolas"
                                FontSize="12"/>
 
-                    <!-- Raw bytes -->
+                    <!-- raw bytes -->
                     <TextBlock Grid.Column="1"
                                Text="{Binding RawBytesHex}"
                                Foreground="{StaticResource RawBytesBrush}"
                                FontFamily="Consolas"
                                FontSize="12"/>
 
-                    <!-- Mnemonic -->
+                    <!-- mnemonic -->
                     <TextBlock Grid.Column="2"
                                Text="{Binding Mnemonic}"
                                FontFamily="Consolas"
@@ -64,7 +65,7 @@
                         </TextBlock.Style>
                     </TextBlock>
 
-                    <!-- Operand — clickable when HasJumpTarget is true -->
+                    <!-- operand, clickable when HasJumpTarget is true -->
                     <TextBlock Grid.Column="3"
                                Text="{Binding Operand}"
                                FontFamily="Consolas"
@@ -88,7 +89,7 @@
                         </TextBlock.Style>
                     </TextBlock>
 
-                    <!-- Comment -->
+                    <!-- comment -->
                     <TextBlock Grid.Column="4"
                                Text="{Binding Comment}"
                                Foreground="{StaticResource CommentBrush}"
@@ -98,7 +99,7 @@
                 </Grid>
             </Border>
             <DataTemplate.Triggers>
-                <!-- Gold background for live PC line -->
+                <!-- gold background on the live PC line -->
                 <DataTrigger Binding="{Binding IsCurrentPc}" Value="True">
                     <Setter TargetName="RowBorder" Property="Background" Value="{StaticResource CurrentPcBrush}"/>
                     <Setter TargetName="RowBorder" Property="BorderBrush" Value="{StaticResource MnemonicBrush}"/>
@@ -111,16 +112,14 @@
 
     <Grid Background="{StaticResource MidPurpleBrush}">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>  <!-- Toolbar row 1: address / flags -->
-            <RowDefinition Height="Auto"/>  <!-- Toolbar row 2: live PC / xref / export -->
-            <RowDefinition Height="Auto"/>  <!-- Gold divider -->
-            <RowDefinition Height="*"/>     <!-- Main content -->
-            <RowDefinition Height="Auto"/>  <!-- Status bar -->
+            <RowDefinition Height="Auto"/>  <!-- toolbar row 1: address / flags -->
+            <RowDefinition Height="Auto"/>  <!-- toolbar row 2: live PC / xref / export -->
+            <RowDefinition Height="Auto"/>  <!-- gold divider -->
+            <RowDefinition Height="*"/>     <!-- main area -->
+            <RowDefinition Height="Auto"/>  <!-- status bar -->
         </Grid.RowDefinitions>
 
-        <!-- ================================================================
-             TOOLBAR ROW 1 — address input, flags, disassemble
-             ================================================================ -->
+        <!-- toolbar row 1: address, flags, disassemble -->
         <Border Grid.Row="0"
                 Background="{StaticResource SurfacePurpleBrush}"
                 BorderBrush="{StaticResource BorderPurpleBrush}"
@@ -186,9 +185,7 @@
             </WrapPanel>
         </Border>
 
-        <!-- ================================================================
-             TOOLBAR ROW 2 — live PC / auto-scroll / cross-reference
-             ================================================================ -->
+        <!-- toolbar row 2: live PC / auto-scroll / cross-reference -->
         <Border Grid.Row="1"
                 Background="{StaticResource DeepPurpleBrush}"
                 BorderBrush="{StaticResource BorderPurpleBrush}"
@@ -209,7 +206,7 @@
                           ToolTip="Keep the current PC instruction visible"
                           Margin="0,0,20,0"/>
 
-                <!-- Live PC badge -->
+                <!-- live PC badge -->
                 <Border Background="{StaticResource SurfacePurpleBrush}"
                         BorderBrush="{StaticResource BorderPurpleBrush}"
                         BorderThickness="1"
@@ -260,23 +257,22 @@
             </WrapPanel>
         </Border>
 
-        <!-- Gold accent line -->
+        <!-- gold accent line -->
         <Rectangle Grid.Row="2" Height="1" Fill="{StaticResource GoldAccentBrush}"/>
 
-        <!-- ================================================================
-             MAIN CONTENT — disassembly list + side panels
-             ================================================================ -->
-        <Grid Grid.Row="3">
+        <!-- main area: disassembly list + side panels -->
+        <Grid Grid.Row="3" common:LayoutMemory.Key="disassembler.main">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="3*"/>  <!-- Disassembly -->
-                <ColumnDefinition Width="Auto"/> <!-- Splitter -->
-                <ColumnDefinition Width="220"/>  <!-- Side panels -->
+                <ColumnDefinition Width="3*" MinWidth="250"/>  <!-- disassembly -->
+                <ColumnDefinition Width="6"/>                  <!-- splitter -->
+                <ColumnDefinition Width="220" MinWidth="140"/> <!-- side panels -->
             </Grid.ColumnDefinitions>
 
-            <!-- ── Disassembly list ───────────────────────────────────────── -->
-            <DockPanel Grid.Column="0">
+            <!-- disassembly list -->
+            <common:PopOutHost Grid.Column="0" Title="Disassembly" ButtonMargin="0,1,20,0">
+            <DockPanel>
 
-                <!-- Column header row -->
+                <!-- column headers -->
                 <Border DockPanel.Dock="Top"
                         Background="{StaticResource SurfacePurpleBrush}"
                         BorderBrush="{StaticResource BorderPurpleBrush}"
@@ -364,24 +360,26 @@
 
             </ListBox>
             </DockPanel>
+            </common:PopOutHost>
 
             <GridSplitter Grid.Column="1"
-                          Width="3"
-                          Background="{StaticResource BorderPurpleBrush}"
+                          Width="6"
+                          HorizontalAlignment="Stretch"
                           VerticalAlignment="Stretch"
                           ResizeBehavior="PreviousAndNext"/>
 
-            <!-- ── Side panels ────────────────────────────────────────────── -->
-            <Grid Grid.Column="2" Background="{StaticResource DeepPurpleBrush}">
+            <!-- side panels -->
+            <common:PopOutHost Grid.Column="2" Title="Bookmarks and cross reference" ButtonMargin="0,2,6,0">
+            <Grid Background="{StaticResource DeepPurpleBrush}" common:LayoutMemory.Key="disassembler.side">
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="*"/>   <!-- Bookmarks -->
-                    <RowDefinition Height="Auto"/> <!-- XRef header -->
-                    <RowDefinition Height="*"/>    <!-- XRef content -->
+                    <RowDefinition Height="*" MinHeight="60"/>  <!-- bookmarks -->
+                    <RowDefinition Height="6"/>                 <!-- splitter -->
+                    <RowDefinition Height="*" MinHeight="60"/>  <!-- XRef header + content -->
                 </Grid.RowDefinitions>
 
-                <!-- Bookmarks panel -->
+                <!-- bookmarks panel -->
                 <DockPanel Grid.Row="0">
-                    <!-- Header -->
+                    <!-- header -->
                     <Border DockPanel.Dock="Top"
                             Background="{StaticResource SurfacePurpleBrush}"
                             BorderBrush="{StaticResource BorderPurpleBrush}"
@@ -395,7 +393,7 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- Add bookmark row -->
+                    <!-- add bookmark row -->
                     <Border DockPanel.Dock="Bottom"
                             Background="{StaticResource MidPurpleBrush}"
                             BorderBrush="{StaticResource BorderPurpleBrush}"
@@ -422,7 +420,7 @@
                         </Grid>
                     </Border>
 
-                    <!-- Bookmark list -->
+                    <!-- bookmark list -->
                     <ListBox ItemsSource="{Binding AllBookmarks}"
                              Style="{StaticResource LufiaListBox}"
                              BorderThickness="0"
@@ -476,8 +474,11 @@
                     </ListBox>
                 </DockPanel>
 
-                <!-- Cross-Reference panel -->
-                <Border Grid.Row="1"
+                <GridSplitter Grid.Row="1" Height="6" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" ResizeBehavior="PreviousAndNext"/>
+
+                <!-- cross-reference panel -->
+                <DockPanel Grid.Row="2">
+                <Border DockPanel.Dock="Top"
                         Background="{StaticResource SurfacePurpleBrush}"
                         BorderBrush="{StaticResource BorderPurpleBrush}"
                         BorderThickness="0,1,0,1"
@@ -486,8 +487,7 @@
                                Style="{StaticResource LufiaLabelGold}"/>
                 </Border>
 
-                <ScrollViewer Grid.Row="2"
-                              VerticalScrollBarVisibility="Auto"
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
                               Background="{StaticResource DeepPurpleBrush}">
                     <StackPanel Margin="6,4">
 
@@ -549,13 +549,13 @@
                                                 Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
                     </StackPanel>
                 </ScrollViewer>
+                </DockPanel>
 
             </Grid>
+            </common:PopOutHost>
         </Grid>
 
-        <!-- ================================================================
-             STATUS BAR
-             ================================================================ -->
+        <!-- status bar -->
         <Border Grid.Row="4"
                 Background="{StaticResource DeepPurpleBrush}"
                 BorderBrush="{StaticResource BorderPurpleBrush}"

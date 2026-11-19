@@ -8,16 +8,12 @@ public static partial class AncientCave
 {
     public const int FirstMarker = 0xF0, FirstSpellEvent = 7, MaxSpells = 64;   // (events 3-6: the priest and the merchants)
 
-    /// <summary>
-    /// Spell chests: in the cave a chest item F0-FF (key items, which the cave never gives) is a spell chest. Opening one
-    /// picks a spell (PickSpell: unlocked for the floor, its hero in the party and not knowing it yet), marks the chest
-    /// opened as usual, then runs the cave map's event 4 + k (the spell's) instead of the "found" message (map 63's
-    /// events); with nothing left to learn it gives a potion, as an item chest.
-    /// <code>
-    /// $01:86A3  22 ChestHook EA EA      an item chest opens (was LDA $04 / CMP #$FF / BEQ, the empty-chest test)
-    /// $01:8719  22 MsgHook EA EA        its message event starts (was STA $16 / LDA #$63 / STA $1A)
-    /// </code>
-    /// </summary>
+    // spell chests: in the cave a chest item F0-FF (key items, which the cave never gives) is a spell chest. opening one
+    // picks a spell (PickSpell: unlocked for the floor, its hero in the party and not knowing it yet), marks the chest
+    // opened as usual, then runs the cave map's event 4 + k (the spell's) instead of the "found" message (map 63's
+    // events). with nothing left to learn it gives a potion, like an item chest.
+    //   $01:86A3  22 ChestHook EA EA      an item chest opens (was LDA $04 / CMP #$FF / BEQ, the empty chest test)
+    //   $01:8719  22 MsgHook EA EA        its message event starts (was STA $16 / LDA #$63 / STA $1A)
     private const string SpellSource = """
         !SPELLEVENT = $7FFF28       ; the event a spell chest asks for (0 = none)
 
@@ -54,9 +50,12 @@ public static partial class AncientCave
 
         ; (Lufia Forge) PickSpell: A(8) = the event of a spell to learn (FirstSpellEvent + k), 0 = none. Candidates:
         ; SpellPool entries whose first floor is reached, whose hero is in the party and doesn't know the spell yet
-        ; (the spell list op 45 checks: $158F + 32 x min(hero, 2)); one of them at random.
+        ; (what op 45 checks: the game's lists, $158F + 32 x min(hero, 2); with the "Up to 128 spells" patch, once
+        ; $15EE = B1, one bit per spell, $158F + 16 x hero + spell / 8, bit spell % 8); one of them at random.
         !CANDN = $7FFF73
         !SPID  = $7FFF74
+        !SPBIT = $7FFF75
+        !SPBYTE = $7FFF76
         !CAND  = $7FFF80            ; up to 64 candidates (pool numbers)
         PickSpell:
             PHP
@@ -91,22 +90,8 @@ public static partial class AncientCave
             PHY
             LDA.l SpellPool+1,x
             STA !SPID
-            LDA.l SpellPool,x
-            CMP.b #$03
-            BCC +
-            LDA.b #$02
-        +   REP #$20
-            AND.w #$0003
-            ASL #5
-            TAX
-            SEP #$20
-            LDY.w #32
-        -   LDA.l $7E158F,x
-            CMP !SPID
-            BEQ .known
-            INX
-            DEY
-            BNE -
+            JSR KnownSpell
+            BNE .known
             PLY                     ; not known: a candidate
             PLX
             PHX
@@ -151,6 +136,58 @@ public static partial class AncientCave
             CMP.b #$00
             RTS
 
+        KnownSpell:                 ; M = 8, X = 16, X = 3 x k: A not 0 = pool entry k's hero knows spell !SPID (X, Y changed)
+            LDA $7E15EE
+            CMP.b #$B1
+            BEQ .bits
+            LDA.l SpellPool,x       ; the game's lists
+            CMP.b #$03
+            BCC +
+            LDA.b #$02
+        +   REP #$20
+            AND.w #$0003
+            ASL #5
+            TAX
+            SEP #$20
+            LDY.w #32
+        -   LDA.l $7E158F,x
+            CMP !SPID
+            BEQ .yes
+            INX
+            DEY
+            BNE -
+            LDA.b #$00
+            RTS
+        .yes
+            LDA.b #$01
+            RTS
+        .bits
+            LDA.l SpellPool,x       ; (Lufia Forge) bits: byte 16 x hero + spell / 8, bit spell % 8
+            AND.b #$03
+            ASL #4
+            STA !SPBYTE
+            LDA !SPID
+            AND.b #$07
+            REP #$20
+            AND.w #$00FF
+            TAX
+            SEP #$20
+            LDA.l SpellBit,x
+            STA !SPBIT
+            LDA !SPID
+            LSR #3
+            CLC
+            ADC !SPBYTE
+            REP #$20
+            AND.w #$00FF
+            TAX
+            SEP #$20
+            LDA.l $7E158F,x
+            AND !SPBIT
+            RTS
+        SpellBit:
+            db $01, $02, $04, $08, $10, $20, $40, $80
+
         MsgHook:                    ; A = map 63's message event
             STA $16
             LDA !AC_INCAVE
@@ -175,55 +212,53 @@ public static partial class AncientCave
 
     public sealed record CaveSpell(int Character, int Spell, int Level);
 
-    /// <summary>
-    /// The spells spell chests teach: from the heroes' learn lists (the spell patch's, else the game's), the ones
-    /// learned by levelling up (level 1 and up), sorted by level and 16 of them picked evenly, so chests deeper down
-    /// teach later spells.
-    /// </summary>
+    // the spells spell chests teach: from the heroes' learn lists (the spell patch's, else the game's), the ones
+    // learned by levelling up (level 1 and up), sorted by level and 16 of them picked evenly, so chests deeper down
+    // teach later spells
     public static List<CaveSpell> Spells(RomBuffer rom) => AllSpells(rom).Take(MaxSpells).ToList();
 
-    /// <summary>The spell pool for <c>PickSpell</c>: per spell its hero, the spell and the first floor where a chest can
-    /// teach it (level L: floor 2 x (L - 3), at least 1).</summary>
+    // the spell pool for PickSpell: per spell its hero, the spell and the first floor where a chest can
+    // teach it (level L: floor 2 x (L - 3), at least 1)
     private static byte[] SpellPool(RomBuffer rom) =>
         Spells(rom).SelectMany(s => new[] { (byte)s.Character, (byte)s.Spell, (byte)Math.Clamp(2 * (s.Level - 3), 1, 100) }).ToArray();
 
     public static int SpellFirstFloor(int level) => Math.Clamp(2 * (level - 3), 1, 100);
 
-    /// <summary>Every spell the heroes learn by levelling up (level 1 and up), sorted by level.</summary>
+    // every spell the heroes learn by levelling up (level 1 and up), sorted by level
     public static List<CaveSpell> AllSpells(RomBuffer rom)
     {
         var all = new List<CaveSpell>();
         if (SpellMemory.Installed(rom) || SpellMemory.OldBlock(rom) > 0)
         {
             var lists = SpellMemory.ReadLists(rom);
-            for (int c = 0; c < 4; c++) all.AddRange(lists[c].Select(e => new CaveSpell(c, e.Spell, e.Level)));
+            for (int character = 0; character < 4; character++) all.AddRange(lists[character].Select(e => new CaveSpell(character, e.Spell, e.Level)));
         }
         else
-            foreach (var (c, at) in new[] { (0, GameDataOffsets.HeroSpellList), (1, GameDataOffsets.LufiaSpellList), (3, GameDataOffsets.JerinSpellList) })
-                for (int o = at, n = 0; n < 64 && rom.ReadByte(o) != 0xFF; o += 2, n++) all.Add(new CaveSpell(c, rom.ReadByte(o + 1), rom.ReadByte(o)));
+            foreach (var (character, listOffset) in new[] { (0, GameDataOffsets.HeroSpellList), (1, GameDataOffsets.LufiaSpellList), (3, GameDataOffsets.JerinSpellList) })
+                for (int entryAt = listOffset, n = 0; n < 64 && rom.ReadByte(entryAt) != 0xFF; entryAt += 2, n++) all.Add(new CaveSpell(character, rom.ReadByte(entryAt + 1), rom.ReadByte(entryAt)));
         return all.Where(s => s.Level > 0).OrderBy(s => s.Level).ThenBy(s => s.Character).ToList();
     }
 
     private static readonly string[] HeroTags = { "[Hero]", "[Lufia]", "[Aguro]", "[Jerin]" };
 
-    /// <summary>Event for spell chest k: if the hero knows the spell, a potion; else they learn it.</summary>
-    private static byte[] SpellEvent(RomBuffer rom, CaveSpell s, int potion)
+    // event for spell chest k: if the hero already knows the spell, a potion, otherwise they learn it
+    private static byte[] SpellEvent(RomBuffer rom, CaveSpell caveSpell, int potion)
     {
-        byte[] Text(string t)
+        byte[] Text(string text)
         {
-            var b = TextDecoder.Encode(t, rom).ToList();
-            if (b.Count > 0 && b[^1] == 0x00) b.RemoveAt(b.Count - 1);
-            b.Add(0x00);   // end of the event
-            return b.ToArray();
+            var bytes = TextDecoder.Encode(text, rom).ToList();
+            if (bytes.Count > 0 && bytes[^1] == 0x00) bytes.RemoveAt(bytes.Count - 1);
+            bytes.Add(0x00);   // end of the event
+            return bytes.ToArray();
         }
-        var learn = new List<byte> { 0x3D, (byte)s.Character, (byte)s.Spell, 0x0D };
-        string spell = Maps.EventCommands.SpellName(rom, s.Spell), item = Maps.MapSetupScript.ItemName(rom, potion).Replace('@', ' ').Trim();
-        learn.AddRange(Text($"{HeroTags[s.Character]} learned {spell}!"));
+        var learn = new List<byte> { 0x3D, (byte)caveSpell.Character, (byte)caveSpell.Spell, 0x0D };
+        string spell = Maps.EventCommands.SpellName(rom, caveSpell.Spell), item = Maps.MapSetupScript.ItemName(rom, potion).Replace('@', ' ').Trim();
+        learn.AddRange(Text($"{HeroTags[caveSpell.Character]} learned {spell}!"));
         int known = 5 + learn.Count;
-        var ev = new List<byte> { 0x45, (byte)s.Character, (byte)s.Spell, (byte)known, (byte)(known >> 8) };
-        ev.AddRange(learn);
-        ev.AddRange(new byte[] { 0x3E, (byte)potion, 0x01, 0x0D });
-        ev.AddRange(Text($"{HeroTags[s.Character]} knows {spell} already.[NL]Found {item} instead."));
-        return ev.ToArray();
+        var script = new List<byte> { 0x45, (byte)caveSpell.Character, (byte)caveSpell.Spell, (byte)known, (byte)(known >> 8) };
+        script.AddRange(learn);
+        script.AddRange(new byte[] { 0x3E, (byte)potion, 0x01, 0x0D });
+        script.AddRange(Text($"{HeroTags[caveSpell.Character]} knows {spell} already.[NL]Found {item} instead."));
+        return script.ToArray();
     }
 }

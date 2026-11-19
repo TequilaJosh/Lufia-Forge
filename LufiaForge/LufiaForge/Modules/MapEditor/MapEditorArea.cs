@@ -7,17 +7,18 @@ using System.Windows.Media.Imaging;
 
 namespace LufiaForge.Modules.MapEditor;
 
-/// <summary>
-/// Areas of blocks: select a rectangle (Area tool), copy / cut / fill / clear it, and stamp copies (paste) anywhere,
-/// also on other maps with the same tileset. A rectangle dragged in the block palette is a multi-block brush,
-/// stamped the same way. Every stamp, fill and cut can be undone.
-/// </summary>
+// areas of blocks: select a rectangle (Area tool), copy / cut / fill / clear it, and stamp copies (paste) anywhere,
+// other maps with the same tileset too. a rectangle dragged in the block palette is a multi-block brush and gets
+// stamped the same way. every stamp, fill and cut can be undone
 public partial class MapEditorViewModel
 {
-    /// <summary>A rectangle of blocks. Raw = the map's own words (copied from a map), else metatile numbers (from the palette).</summary>
-    public sealed record BlockPattern(int W, int H, ushort[] Tiles, bool Raw, int TilesetKey, string Source);
+    // a rectangle of blocks to stamp. Raw = the map's own words (copied from a map), otherwise metatile numbers (from the palette)
+    // SourceThreshold = the composite threshold of the map a raw copy came from (-1 = none). a composite is threshold +
+    // its pair's number in the tileset's table, and the threshold is the map's own (Make room raises it), so a pasted
+    // composite gets moved to the target's threshold
+    public sealed record BlockPattern(int W, int H, ushort[] Tiles, bool Raw, int TilesetKey, string Source, int SourceMap = -1, int SourceThreshold = -1);
 
-    /// <summary>Shared by every map (and the Map Editor windows), like a clipboard.</summary>
+    // shared by every map (and the Map Editor windows), like a clipboard
     private static BlockPattern? _clipboard;
 
     private (int X1, int Y1, int X2, int Y2)? _area;
@@ -43,7 +44,7 @@ public partial class MapEditorViewModel
 
     private int TilesetKey => _map == null ? -2 : _map.IsWorld ? -1 : _map.Tileset;
 
-    // ── area selection ──
+    // area selection
 
     private void ShowArea()
     {
@@ -71,9 +72,9 @@ public partial class MapEditorViewModel
 
     private void AreaDrag(int x, int y)
     {
-        if (_map == null || _areaStart is not var (sx, sy)) return;
+        if (_map == null || _areaStart is not var (startX, startY)) return;
         x = Math.Clamp(x, 0, _map.Width - 1); y = Math.Clamp(y, 0, _map.Height - 1);
-        _area = (Math.Min(sx, x), Math.Min(sy, y), Math.Max(sx, x), Math.Max(sy, y));
+        _area = (Math.Min(startX, x), Math.Min(startY, y), Math.Max(startX, x), Math.Max(startY, y));
         ShowArea();
     }
 
@@ -87,22 +88,34 @@ public partial class MapEditorViewModel
 
     public void ClearAreaSelection() { _area = null; _areaStart = null; ShowArea(); }
 
+    // keeps the area inside the map as it is now (corners too). one picked before a resize (or an Undo of one) could
+    // reach past the edge, and then Copy / Fill / Cut read and wrote the next row or past the end
+    private void ClampArea()
+    {
+        if (_map == null || _area is not var (x1, y1, x2, y2)) return;
+        int mapWidth = _map.Width, mapHeight = _map.Height;
+        if (x1 >= mapWidth || y1 >= mapHeight) { ClearAreaSelection(); return; }
+        _area = (x1, y1, Math.Min(x2, mapWidth - 1), Math.Min(y2, mapHeight - 1));
+        if (_area != (x1, y1, x2, y2)) ShowArea();
+    }
+
     private BlockPattern? AreaPattern()
     {
+        ClampArea();
         if (_map == null || _area is not var (x1, y1, x2, y2)) return null;
-        int w = x2 - x1 + 1, h = y2 - y1 + 1;
-        var t = new ushort[w * h];
-        for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) t[y * w + x] = _map.GetTile(x1 + x, y1 + y);
-        return new BlockPattern(w, h, t, true, TilesetKey, $"map {_map.MapId:X2}");
+        int width = x2 - x1 + 1, height = y2 - y1 + 1;
+        var tiles = new ushort[width * height];
+        for (int y = 0; y < height; y++) for (int x = 0; x < width; x++) tiles[y * width + x] = _map.GetTile(x1 + x, y1 + y);
+        return new BlockPattern(width, height, tiles, true, TilesetKey, $"map {_map.MapId:X2}", _map.MapId, _map.CompositeThreshold);
     }
 
     [RelayCommand(CanExecute = nameof(HasArea))]
     private void CopyArea()
     {
-        if (AreaPattern() is not { } p) return;
-        _clipboard = p;
+        if (AreaPattern() is not { } pattern) return;
+        _clipboard = pattern;
         OnPropertyChanged(nameof(HasClipboard)); PasteCommand.NotifyCanExecuteChanged();
-        Status = $"Copied {p.W} x {p.H} blocks. Ctrl+V (or Paste) to stamp them, here or on another map with the same tileset.";
+        Status = $"Copied {pattern.W} x {pattern.H} blocks. Ctrl+V (or Paste) to stamp them, here or on another map (on other graphics their blocks are added to that map's tileset).";
     }
 
     [RelayCommand(CanExecute = nameof(HasArea))]
@@ -120,6 +133,7 @@ public partial class MapEditorViewModel
 
     private void FillArea(int metatile, string verb)
     {
+        ClampArea();
         if (_map == null || _area is not var (x1, y1, x2, y2)) return;
         var stroke = new List<(int x, int y, ushort before)>();
         for (int y = y1; y <= y2; y++)
@@ -133,51 +147,68 @@ public partial class MapEditorViewModel
         Status = $"{verb} {x2 - x1 + 1} x {y2 - y1 + 1} blocks with block {metatile:X3} ({stroke.Count} changed). Undo takes it back.";
     }
 
-    /// <summary>The selected area as a preset of the user's (Buildings... > My presets).</summary>
+    // saves the selected area as one of the user's presets (Buildings... > My presets)
     [RelayCommand(CanExecute = nameof(HasArea))]
     private void SaveAreaAsPreset()
     {
+        ClampArea();
         if (_rom == null || _map == null || _area is not var (x1, y1, x2, y2)) return;
         if (_map.IsWorld) { Status = "Presets are made from town and dungeon maps (the world map has its own blocks)."; return; }
-        var w = new SavePresetWindow(_rom, _map, x1, y1, x2 - x1 + 1, y2 - y1 + 1) { Owner = Application.Current?.MainWindow };
-        if (w.ShowDialog() != true || w.Result is not { } p) return;
+        var window = new SavePresetWindow(_rom, _map, x1, y1, x2 - x1 + 1, y2 - y1 + 1) { Owner = Application.Current?.MainWindow };
+        if (window.ShowDialog() != true || window.Result is not { } preset) return;
         try
         {
-            CustomPresets.Add(p);
-            Status = $"Preset \"{p.Name}\" saved ({p.W} x {p.H} blocks): Buildings... > My presets places it.";
+            CustomPresets.Add(preset);
+            Status = $"Preset \"{preset.Name}\" saved ({preset.W} x {preset.H} blocks): Buildings... > My presets places it.";
         }
         catch (Exception ex) { Status = "The preset couldn't be saved: " + ex.Message; }
     }
 
-    // ── stamping (paste / multi-block brush) ──
+    // stamping (paste / multi-block brush)
 
     [RelayCommand(CanExecute = nameof(HasClipboard))]
     private void Paste()
     {
-        if (_clipboard is not { } p || _map == null) return;
-        if (p.TilesetKey != TilesetKey &&
-            MessageBox.Show($"These blocks were copied from {p.Source}, which uses a different tileset, so they will look different here. Paste anyway?",
+        if (_clipboard is not { } pattern || _map == null) return;
+        if (pattern.TilesetKey != TilesetKey && pattern.TilesetKey >= 0 && TilesetKey >= 0 && pattern.SourceMap >= 0 && _rom != null)
+        {
+            // copied on another tileset: bring its blocks into this map's tileset first, like From does
+            LufiaMap? sourceMap = null;
+            try { sourceMap = LufiaMap.Load(_rom, pattern.SourceMap); } catch { }
+            if (sourceMap != null && !sourceMap.IsWorld && sourceMap.Tileset == pattern.TilesetKey)
+            {
+                var ids = pattern.Tiles.Where(t => t != Prefabs.Keep).Select(t => t & 0x3FF).Distinct().ToList();
+                if (BringBlocks(sourceMap, ids) is not { } result) return;
+                var broughtBlock = ids.Select((b, i) => (b, result.Blocks[i])).ToDictionary(x => x.b, x => x.Item2);
+                var tiles = pattern.Tiles.Select(t => t == Prefabs.Keep ? t : (ushort)broughtBlock[t & 0x3FF]).ToArray();
+                StartStamp(new BlockPattern(pattern.W, pattern.H, tiles, false, TilesetKey, pattern.Source, _map!.MapId));
+                Status = BroughtText(result) + $"Pasting {pattern.W} x {pattern.H} blocks: click to stamp (as many times as you like), Esc or right-click to stop.";
+                return;
+            }
+        }
+        if (pattern.TilesetKey != TilesetKey &&
+            MessageBox.Show($"These blocks were copied from {pattern.Source}, which uses a different tileset, so they will look different here. Paste anyway?",
                 "Different tileset", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
-        StartStamp(p);
-        Status = $"Pasting {p.W} x {p.H} blocks: click to stamp (as many times as you like), Esc or right-click to stop.";
+        StartStamp(pattern);
+        Status = $"Pasting {pattern.W} x {pattern.H} blocks: click to stamp (as many times as you like), Esc or right-click to stop.";
     }
 
-    private void StartStamp(BlockPattern p)
+    private void StartStamp(BlockPattern pattern)
     {
         if (_tileset == null) return;
-        _stamp = p;
-        var px = new uint[p.W * 16 * p.H * 16];
-        for (int by = 0; by < p.H; by++)
-            for (int bx = 0; bx < p.W; bx++)
+        _stamp = pattern;
+        var pixels = new uint[pattern.W * 16 * pattern.H * 16];
+        for (int by = 0; by < pattern.H; by++)
+            for (int bx = 0; bx < pattern.W; bx++)
             {
-                ushort t = p.Tiles[by * p.W + bx];
-                if (t == Prefabs.Keep) continue;   // see-through: the map keeps its block there
-                var block = _tileset.MetatilePixels(p.Raw ? t : (ushort)(t & 0x3FF));
+                ushort tile = pattern.Tiles[by * pattern.W + bx];
+                if (tile == Prefabs.Keep) continue;   // see-through, the map keeps its own block there
+                var block = _tileset.MetatilePixels(pattern.Raw ? tile : (ushort)(tile & 0x3FF));
                 for (int y = 0; y < 16; y++)
                     for (int x = 0; x < 16; x++)
-                        px[(by * 16 + y) * p.W * 16 + bx * 16 + x] = block[y * 16 + x];
+                        pixels[(by * 16 + y) * pattern.W * 16 + bx * 16 + x] = block[y * 16 + x];
             }
-        var bmp = BitmapSource.Create(p.W * 16, p.H * 16, 96, 96, PixelFormats.Bgra32, null, px, p.W * 16 * 4);
+        var bmp = BitmapSource.Create(pattern.W * 16, pattern.H * 16, 96, 96, PixelFormats.Bgra32, null, pixels, pattern.W * 16 * 4);
         bmp.Freeze();
         StampImage = bmp;
         StampVisible = false;
@@ -203,24 +234,32 @@ public partial class MapEditorViewModel
 
     private void StampAt(int x0, int y0)
     {
-        if (_map == null || _stamp is not { } p) return;
+        if (_map == null || _stamp is not { } pattern) return;
         var stroke = new List<(int x, int y, ushort before)>();
-        for (int by = 0; by < p.H; by++)
-            for (int bx = 0; bx < p.W; bx++)
+        for (int by = 0; by < pattern.H; by++)
+            for (int bx = 0; bx < pattern.W; bx++)
             {
                 int x = x0 + bx, y = y0 + by;
                 if (x < 0 || y < 0 || x >= _map.Width || y >= _map.Height) continue;
-                ushort before = _map.GetTile(x, y), t = p.Tiles[by * p.W + bx];
-                if (t == Prefabs.Keep) continue;
-                if (p.Raw && _map.IsWorld == (p.TilesetKey == -1)) _map.Layer[y * _map.Width + x] = t;
-                else _map.SetTile(x, y, t & 0x3FF);
+                ushort before = _map.GetTile(x, y), tile = pattern.Tiles[by * pattern.W + bx];
+                if (tile == Prefabs.Keep) continue;
+                // a composite copied with a different threshold (another map, or this one before Make room) becomes the
+                // same pair under this map's threshold. one this map can't have (no composites, past 3FF) isn't stamped
+                if (pattern.Raw && pattern.SourceThreshold >= 0 && (tile & 0x3FF) >= pattern.SourceThreshold && pattern.SourceThreshold != _map.CompositeThreshold)
+                {
+                    int newBlock = _map.CompositeThreshold < 0 ? -1 : _map.CompositeThreshold + ((tile & 0x3FF) - pattern.SourceThreshold);
+                    if (newBlock < 0 || newBlock > 0x3FF) continue;
+                    tile = (ushort)(tile & ~0x3FF | newBlock);
+                }
+                if (pattern.Raw && _map.IsWorld == (pattern.TilesetKey == -1)) _map.Layer[y * _map.Width + x] = tile;
+                else _map.SetTile(x, y, tile & 0x3FF);
                 if (_map.GetTile(x, y) != before) { stroke.Add((x, y, before)); RedrawBlock(x, y); }
             }
         if (stroke.Count > 0) MarkEdited();
-        Status = $"Stamped {p.W} x {p.H} blocks at ({x0}, {y0}). Click again to stamp more, Esc to stop, Undo to take it back.";
+        Status = $"Stamped {pattern.W} x {pattern.H} blocks at ({x0}, {y0}). Click again to stamp more, Esc to stop, Undo to take it back.";
     }
 
-    // ── multi-block brush from the palette ──
+    // multi-block brush from the palette
 
     private (int X, int Y)? _paletteStart;
 
@@ -233,10 +272,10 @@ public partial class MapEditorViewModel
 
     public void PaletteDrag(double px, double py)
     {
-        if (_paletteStart is not var (sx, sy)) return;
+        if (_paletteStart is not var (startX, startY)) return;
         int x = Math.Clamp((int)(px / 16), 0, 15), y = Math.Max(0, (int)(py / 16));
-        BrushBoxW = (Math.Abs(x - sx) + 1) * 16; BrushBoxH = (Math.Abs(y - sy) + 1) * 16;
-        _paletteRect = (Math.Min(sx, x), Math.Min(sy, y), Math.Max(sx, x), Math.Max(sy, y));
+        BrushBoxW = (Math.Abs(x - startX) + 1) * 16; BrushBoxH = (Math.Abs(y - startY) + 1) * 16;
+        _paletteRect = (Math.Min(startX, x), Math.Min(startY, y), Math.Max(startX, x), Math.Max(startY, y));
         OnPropertyChanged(nameof(PaletteBoxX)); OnPropertyChanged(nameof(PaletteBoxY));
     }
 
@@ -249,7 +288,8 @@ public partial class MapEditorViewModel
         if (_paletteStart == null || _tileset == null) return;
         _paletteStart = null;
         var (x1, y1, x2, y2) = _paletteRect;
-        if (x1 == x2 && y1 == y2 || _paletteOrder != null)   // a sorted palette: one block (its neighbours aren't neighbours in the tileset)
+        if (_srcTileset != null) { PickFromOther(x1, y1, x2, y2); OnPropertyChanged(nameof(PaletteBoxX)); OnPropertyChanged(nameof(PaletteBoxY)); return; }
+        if (x1 == x2 && y1 == y2 || _paletteOrder != null)   // sorted palette = one block only (its neighbours there aren't neighbours in the tileset)
         {
             BrushBoxW = BrushBoxH = 16;
             CancelStamp();
@@ -257,16 +297,16 @@ public partial class MapEditorViewModel
             OnPropertyChanged(nameof(PaletteBoxX)); OnPropertyChanged(nameof(PaletteBoxY));
             return;
         }
-        int w = x2 - x1 + 1, h = y2 - y1 + 1;
-        var t = new ushort[w * h];
-        for (int y = 0; y < h; y++)
-            for (int x = 0; x < w; x++)
-                t[y * w + x] = (ushort)Math.Min((y1 + y) * 16 + x1 + x, _tileset.MetatileCount - 1);
-        Brush = t[0];
+        int width = x2 - x1 + 1, height = y2 - y1 + 1;
+        var tiles = new ushort[width * height];
+        for (int y = 0; y < height; y++)
+            for (int x = 0; x < width; x++)
+                tiles[y * width + x] = (ushort)Math.Min((y1 + y) * 16 + x1 + x, _tileset.MetatileCount - 1);
+        Brush = tiles[0];
         if (Tool != MapTool.Paint) Tool = MapTool.Paint;
-        var (bw, bh) = (BrushBoxW, BrushBoxH);
-        StartStamp(new BlockPattern(w, h, t, false, TilesetKey, "the block palette"));
-        BrushBoxW = bw; BrushBoxH = bh;
-        Status = $"Multi-block brush {w} x {h}: click on the map to stamp it, Esc or right-click to stop.";
+        var (boxW, boxH) = (BrushBoxW, BrushBoxH);
+        StartStamp(new BlockPattern(width, height, tiles, false, TilesetKey, "the block palette"));
+        BrushBoxW = boxW; BrushBoxH = boxH;
+        Status = $"Multi-block brush {width} x {height}: click on the map to stamp it, Esc or right-click to stop.";
     }
 }

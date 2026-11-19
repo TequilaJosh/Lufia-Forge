@@ -2,26 +2,26 @@ using System.Windows.Media;
 
 namespace LufiaForge.Modules.Disassembler;
 
-/// <summary>A named, colored annotation attached to a SNES address.</summary>
+// a named, coloured note on a SNES address
 public sealed class Bookmark
 {
-    /// <summary>SNES address (24-bit), e.g. 0x808000.</summary>
+    // 24-bit SNES address, like 0x808000
     public int SnesAddress { get; set; }
 
-    /// <summary>Short identifier shown inline in the disassembly as a label.</summary>
+    // short name shown inline in the disassembly as a label
     public string Label { get; set; } = string.Empty;
 
-    /// <summary>Optional longer note (shown in the bookmark panel tooltip).</summary>
+    // optional longer note (shown in the bookmark panel tooltip)
     public string? Comment { get; set; }
 
-    /// <summary>Gutter color for this bookmark (serialized as ARGB hex string).</summary>
+    // gutter colour for this bookmark (saved as an ARGB hex string)
     public string ColorHex { get; set; } = "#C8942A"; // default: gold
 
-    /// <summary>Bytes of data starting at this address (0 = an ordinary label). Data regions show as .db lines and are
-    /// skipped by the cross-reference builder.</summary>
+    // how many bytes of data start here (0 = an ordinary label). data regions show as .db lines and the
+    // cross-reference builder skips them
     public int DataLength { get; set; }
 
-    /// <summary>Formatted SNES address for display.</summary>
+    // the SNES address formatted for display
     public string SnesAddressHex => $"${SnesAddress:X6}";
 
     [System.Text.Json.Serialization.JsonIgnore]

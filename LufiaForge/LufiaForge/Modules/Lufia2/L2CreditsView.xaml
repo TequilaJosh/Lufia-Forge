@@ -1,0 +1,18 @@
+<UserControl x:Class="LufiaForge.Modules.Lufia2.L2CreditsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
+    </UserControl.Resources>
+    <DockPanel Margin="12">
+        <TextBlock DockPanel.Dock="Top" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,6"
+                   Text="The staff roll, top to bottom. Each line is one of: heading: text, name: text (centred), gap: n (blank lines of scrolling), picture: tile (hex), effect. Plain letters, digits and punctuation only."/>
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,8,0,0">
+            <Button Content="Apply" Command="{Binding ApplyCommand}" Padding="18,4"/>
+            <Button Content="Revert" Command="{Binding RevertCommand}" Padding="18,4" Margin="8,0,0,0"/>
+            <TextBlock Text="{Binding Status}" Style="{StaticResource GdHint}" VerticalAlignment="Center" Margin="12,0,0,0"/>
+        </StackPanel>
+        <TextBox Style="{StaticResource GdText}" Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" FontFamily="Consolas"
+                 TextWrapping="NoWrap" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" VerticalContentAlignment="Top"/>
+    </DockPanel>
+</UserControl>

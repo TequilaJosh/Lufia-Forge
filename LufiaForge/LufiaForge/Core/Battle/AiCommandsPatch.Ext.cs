@@ -2,27 +2,24 @@ namespace LufiaForge.Core.Battle;
 
 public static partial class AiCommandsPatch
 {
-    /// <summary>
-    /// Commands 1E-24: Ok Impala's "Enemy AI extensions" (Lufia1_AI_Ext, ops 14-1A there), ported from the source
-    /// they shared: the same routines, renumbered to follow Lufia Forge's own 14-1D and called from Lufia Forge's
-    /// command hook instead of their own. Their bonus damage hook is the one at $08:C225.
-    /// Ops 17/18 (lowest / highest HP target) use the same party scan (characters in the party list $14D2, KO bit
-    /// $20 of $157B).
-    /// <code>
-    /// 1E who stat cmp val16 to   if a party member check is true, go to
-    /// 1F stat mode               target the standing party member with the highest (00) / lowest (01) stat
-    /// 20 n val                   number n (0-3) = val
-    /// 21 n add                   number n += add (signed, stays 0-255)
-    /// 22 n cmp val to            if number n cmp val, go to
-    /// 23 mode pct                this turn each hit adds pct% of the target's max (00) / current (01) HP, up to 9999
-    /// 24 n who stat              number n = a party value (stays 0-255)
-    /// </code>
-    /// who: 00-03 a character, 10 any standing member (24: the highest), 11 all standing (24: the lowest),
-    /// 12 the current target, 13 how many are standing. stat: 0 level, 1 HP, 2 max HP, 3 MP, 4 max MP, 5 HP %,
-    /// 6 status ($157B, $20 = KO), 7 standing (1/0). cmp: 0 =, 1 not =, 2 &lt;, 3 &lt;=, 4 &gt;, 5 &gt;=, 6 any bits, 7 no bits.
-    /// Numbers are battle record +$78-$7B, the bonus +$7C (percent) / +$7D (mode), as in Ok Impala's patch;
-    /// scratch work RAM $7F:FF00-$FF1F.
-    /// </summary>
+    // commands 1E-24: Ok Impala's "Enemy AI extensions" (Lufia1_AI_Ext, ops 14-1A there), ported from the source
+    // they shared. same routines, renumbered to come after our own 14-1D and called from our command hook
+    // instead of theirs. their bonus damage hook is the one at $08:C225.
+    // ops 17/18 (lowest / highest HP target) use the same party scan (characters in the party list $14D2, KO bit
+    // $20 of $157B)
+    //   1E who stat cmp val16 to   if a party member check is true, go to
+    //   1F stat mode               target the standing party member with the highest (00) / lowest (01) stat
+    //   20 n val                   number n (0-3) = val
+    //   21 n add                   number n += add (signed, stays 0-255)
+    //   22 n cmp val to            if number n cmp val, go to
+    //   23 mode pct                this turn each hit adds pct% of the target's max (00) / current (01) HP, up to 9999
+    //   24 n who stat              number n = a party value (stays 0-255)
+    // who: 00-03 a character, 10 any standing member (24: the highest), 11 all standing (24: the lowest),
+    // 12 the current target, 13 how many are standing.
+    // stat: 0 level, 1 HP, 2 max HP, 3 MP, 4 max MP, 5 HP %, 6 status ($157B, $20 = KO), 7 standing (1/0).
+    // cmp: 0 =, 1 not =, 2 <, 3 <=, 4 >, 5 >=, 6 any bits, 7 no bits.
+    // the numbers are battle record +$78-$7B, the bonus +$7C (percent) / +$7D (mode), same as Ok Impala's patch.
+    // scratch work RAM is $7F:FF00-$FF1F
     private const string ExtSource = """
         !who     = $7FFF00
         !stat    = $7FFF01

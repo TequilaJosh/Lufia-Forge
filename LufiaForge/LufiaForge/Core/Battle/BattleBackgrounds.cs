@@ -2,50 +2,40 @@ using LufiaForge.Core.Maps;
 
 namespace LufiaForge.Core.Battle;
 
-/// <summary>
-/// Pictures behind the fights. Lufia 1 has no battle backgrounds: a fight scrolls the field map to 0, redraws it and
-/// darkens its colours, then puts the monsters (sprites) and the windows on top. After the fight the game reloads the
-/// map's tiles, layout and colours itself, so a picture can take the map's place for the length of the fight.
-/// <para>
-/// Screen in a fight (mode 1): BG2 = the map's ground layer (layout in RAM at $7E:3000, 64 x 32, video memory $0800;
-/// the right half is a clean copy of the left that the fight puts back when a window closes, and spells' colour
-/// flashes tint the darkened colour copy at $7E:FF00),
-/// BG1 = its upper layer (the world map's clouds; $7E:2000, video memory $0000), both drawing tiles from video memory
-/// $1000 (512 tiles; tile 0x200 and up are the window frames the fight loads at $3000), colours 32-127 (palettes 2-7)
-/// for the map, 0-31 for the windows and text, 128-255 for the monsters.
-/// </para>
-/// <para>
-/// The hook runs once the fight's opening is over: the stretch effect done (it waits for frame 1C) and the map's
-/// colours faded down (the fade runs every other frame from the colour copy at $7E:033F, so colours put in earlier
-/// get faded over), the windows drawn:
-/// <code>
-/// $08:81AF  22 Hook EA EA   (was LDA #$00 / STA $7EDA09)
-/// </code>
-/// It looks up the current map ($077F) in a 256-byte table; for a background it rewrites the layouts in RAM (map tiles
-/// replaced, window tiles kept) and, with the screen blanked for a frame, copies the picture's tiles, both layouts
-/// and its colours in.
-/// </para>
-/// <para>
-/// The colour fade buffer $7E:FF00 holds the darkened map colours, and the fight's end fades back up by adding its
-/// steps onto them, so the hook keeps them at $7F:FE00 (never written by the game) and a third hook puts them back
-/// before that fade, with the screen off until the map is back:
-/// <code>
-/// $08:81F2  22 Exit EA EA   (was LDA #$02 / STA $C2 / STZ $B7)
-/// </code>
-/// </para>
-/// <para>
-/// The game doesn't reload the map's tiles after a fight (a fight never touched them), so a second hook does, where
-/// the field code carries on after the fight, with the map loader's own routines ($01:BE2E unpacks the map's tiles to
-/// $7E:9000, $01:BE57 copies them in with the screen off and refills the colour copy), reached through the RTL at
-/// $01:AF2C:
-/// <code>
-/// $01:894E  22 Leave EA     (was LDA #$00 / STA $0548)
-/// </code>
-/// </para>
-/// Lufia Forge's block: the code, the map table (256 bytes: background number from 1, 0 = none), 64 3-byte pointers
-/// and 64 16-byte names. Background data (one bank each): word tile bytes, 96 colours (palettes 2-7), 32 x 28 layout
-/// words, the tiles.
-/// </summary>
+// pictures behind the fights. lufia 1 has no battle backgrounds: a fight scrolls the field map to 0, redraws it and
+// darkens its colours, then puts the monsters (sprites) and the windows on top. after the fight the game reloads the
+// map's tiles, layout and colours by itself, so a picture can take the map's place for as long as the fight lasts.
+//
+// the screen in a fight (mode 1):
+// - BG2 = the map's ground layer (layout in RAM at $7E:3000, 64 x 32, video memory $0800). the right half is a clean
+//   copy of the left that the fight puts back when a window closes, and spell colour flashes tint the darkened
+//   colour copy at $7E:FF00
+// - BG1 = its upper layer (the world map's clouds, $7E:2000, video memory $0000)
+// both draw tiles from video memory $1000 (512 tiles, tile 0x200 and up are the window frames the fight loads at
+// $3000). colours 32-127 (palettes 2-7) are the map's, 0-31 the windows and text, 128-255 the monsters.
+//
+// the hook runs once the fight's opening is over: the stretch effect is done (it waits for frame 1C), the map's
+// colours are faded down (the fade runs every other frame from the colour copy at $7E:033F, so colours put in
+// earlier get faded over) and the windows are drawn:
+//   $08:81AF  22 Hook EA EA   (was LDA #$00 / STA $7EDA09)
+// it looks up the current map ($077F) in a 256-byte table. for a background it rewrites the layouts in RAM (map
+// tiles replaced, window tiles kept) and, with the screen blanked for a frame, copies the picture's tiles, both
+// layouts and its colours in.
+//
+// the colour fade buffer $7E:FF00 holds the darkened map colours and the end of the fight fades back up by adding
+// its steps onto them. so the hook keeps them at $7F:FE00 (the game never writes there) and a third hook puts them
+// back before that fade, with the screen off until the map is back:
+//   $08:81F2  22 Exit EA EA   (was LDA #$02 / STA $C2 / STZ $B7)
+//
+// the game doesn't reload the map's tiles after a fight (a fight never touched them), so a second hook does that
+// where the field code carries on after the fight. it uses the map loader's own routines ($01:BE2E unpacks the
+// map's tiles to $7E:9000, $01:BE57 copies them in with the screen off and refills the colour copy), reached
+// through the RTL at $01:AF2C:
+//   $01:894E  22 Leave EA     (was LDA #$00 / STA $0548)
+//
+// our block: the code, the map table (256 bytes: background number from 1, 0 = none), 64 3-byte pointers
+// and 64 16-byte names. background data (one bank each): word tile bytes, 96 colours (palettes 2-7), 32 x 28 layout
+// words, then the tiles
 public static partial class BattleBackgrounds
 {
     public const int Width = 256, Height = 224;
@@ -60,8 +50,8 @@ public static partial class BattleBackgrounds
     private const int MapTable = 0x200, PointerTable = 0x300, NameTable = PointerTable + 3 * MaxBackgrounds, BlockSize = NameTable + NameLength * MaxBackgrounds;
     private const int PaletteAt = 2, LayoutAt = PaletteAt + Palettes * 32, TilesAt = LayoutAt + 32 * 28 * 2;
 
-    private static int SnesAddress(int file) => (file / 0x8000 | 0x80) << 16 | (file % 0x8000 | 0x8000);
-    private static int FileOffset(int snes) => (snes >> 16 & 0x7F) * 0x8000 + (snes & 0x7FFF);
+    private static int SnesAddress(int fileOffset) => (fileOffset / 0x8000 | 0x80) << 16 | (fileOffset % 0x8000 | 0x8000);
+    private static int FileOffset(int snesAddress) => (snesAddress >> 16 & 0x7F) * 0x8000 + (snesAddress & 0x7FFF);
 
     private static string HookSource(int maps, int pointers) => $$"""
         !MAPS = ${{maps:X6}}
@@ -300,16 +290,16 @@ public static partial class BattleBackgrounds
             JML $01BE57
         """;
 
-    /// <summary>The hook is in.</summary>
+    // the hook is in
     public static bool IsApplied(RomBuffer rom) => rom.ReadByte(Site) == 0x22;
 
     private static int Block(RomBuffer rom) => FileOffset(rom.ReadByte(Site + 1) | rom.ReadByte(Site + 2) << 8 | rom.ReadByte(Site + 3) << 16);
 
-    /// <summary>A battle background as Lufia Forge keeps it: a name and the picture.</summary>
+    // a battle background the way Lufia Forge keeps it: a name and the picture
     public sealed record Background(string Name, Converted Picture);
 
-    /// <summary>The backgrounds in the ROM and the map table (map number to background number from 1, 0 = none);
-    /// none and all zeros when the hooks aren't in.</summary>
+    // the backgrounds in the rom and the map table (map number to background number from 1, 0 = none).
+    // empty and all zeros when the hooks aren't in
     public static (List<Background> Backgrounds, byte[] Maps) Read(RomBuffer rom)
     {
         var list = new List<Background>();
@@ -319,28 +309,26 @@ public static partial class BattleBackgrounds
         maps = rom.ReadBytes(block + MapTable, 256);
         for (int i = 0; i < MaxBackgrounds; i++)
         {
-            int snes = ReadPointer(rom, block, i);
-            if (snes == 0) break;
-            int at = FileOffset(snes);
-            int size = rom.ReadUInt16Le(at);
-            var colours = Enumerable.Range(0, Palettes * 16).Select(c => rom.ReadUInt16Le(at + PaletteAt + c * 2)).ToArray();
-            var layout = Enumerable.Range(0, TilesX * TilesY).Select(t => rom.ReadUInt16Le(at + LayoutAt + t * 2)).ToArray();
-            var tiles = rom.ReadBytes(at + TilesAt, size);
-            int pals = Enumerable.Range(0, Palettes).Count(p => Enumerable.Range(1, 15).Any(c => colours[p * 16 + c] != 0));
-            var nb = rom.ReadBytes(block + NameTable + i * NameLength, NameLength);
-            string name = new string(nb.TakeWhile(c => c != 0 && c != 0xFF).Select(c => (char)c).ToArray()).Trim();
-            list.Add(new Background(name.Length > 0 ? name : $"Background {i + 1}", new Converted(tiles, layout, colours, size / 32, Math.Max(1, pals))));
+            int snesAddress = ReadPointer(rom, block, i);
+            if (snesAddress == 0) break;
+            int dataOffset = FileOffset(snesAddress);
+            int size = rom.ReadUInt16Le(dataOffset);
+            var colours = Enumerable.Range(0, Palettes * 16).Select(c => rom.ReadUInt16Le(dataOffset + PaletteAt + c * 2)).ToArray();
+            var layout = Enumerable.Range(0, TilesX * TilesY).Select(t => rom.ReadUInt16Le(dataOffset + LayoutAt + t * 2)).ToArray();
+            var tiles = rom.ReadBytes(dataOffset + TilesAt, size);
+            int paletteCount = Enumerable.Range(0, Palettes).Count(p => Enumerable.Range(1, 15).Any(c => colours[p * 16 + c] != 0));
+            var nameBytes = rom.ReadBytes(block + NameTable + i * NameLength, NameLength);
+            string name = new string(nameBytes.TakeWhile(c => c != 0 && c != 0xFF).Select(c => (char)c).ToArray()).Trim();
+            list.Add(new Background(name.Length > 0 ? name : $"Background {i + 1}", new Converted(tiles, layout, colours, size / 32, Math.Max(1, paletteCount))));
         }
         return (list, maps);
     }
 
-    private static int ReadPointer(RomBuffer rom, int block, int i) =>
-        rom.ReadByte(block + PointerTable + i * 3) | rom.ReadByte(block + PointerTable + i * 3 + 1) << 8 | rom.ReadByte(block + PointerTable + i * 3 + 2) << 16;
+    private static int ReadPointer(RomBuffer rom, int block, int index) =>
+        rom.ReadByte(block + PointerTable + index * 3) | rom.ReadByte(block + PointerTable + index * 3 + 1) << 8 | rom.ReadByte(block + PointerTable + index * 3 + 2) << 16;
 
-    /// <summary>
-    /// Puts the backgrounds in (replacing what was there): <paramref name="maps"/> is the map table, map number to
-    /// background number from 1 (0 = the darkened map, as the game does). With no backgrounds the hooks come out.
-    /// </summary>
+    // puts the backgrounds in (replacing what was there). maps is the map table, map number to
+    // background number from 1 (0 = the darkened map like the game does). with no backgrounds the hooks come out
     public static void Apply(RomBuffer rom, IReadOnlyList<Background> backgrounds, byte[] maps)
     {
         if (backgrounds.Count > MaxBackgrounds) throw new InvalidOperationException($"At most {MaxBackgrounds} battle backgrounds.");
@@ -350,45 +338,45 @@ public static partial class BattleBackgrounds
             throw new InvalidOperationException("The battle setup ($08:81AF), the end of a fight ($08:81F2) or the field code after a fight ($01:894E) isn't the original, so battle backgrounds can't be added safely.");
         if (rom.Length < MapWriter.ExpandedSize) throw new InvalidOperationException("Battle backgrounds need the expanded ROM (2 MB).");
         FreeAll(rom);
-        var space = ExpansionSpace.Load(rom);
-        int block = space.AllocateInOneBank(BlockSize, ExpansionSpace.Kind.Patch, 0);
+        var freeSpace = ExpansionSpace.Load(rom);
+        int block = freeSpace.AllocateInOneBank(BlockSize, ExpansionSpace.Kind.Patch, 0);
         var pointers = new byte[3 * MaxBackgrounds];
         var names = new byte[NameLength * MaxBackgrounds];
         for (int i = 0; i < backgrounds.Count; i++)
         {
-            var b = backgrounds[i].Picture;
-            var data = new byte[TilesAt + b.Tiles.Length];
-            data[0] = (byte)b.Tiles.Length; data[1] = (byte)(b.Tiles.Length >> 8);
-            for (int c = 0; c < Palettes * 16; c++) { data[PaletteAt + c * 2] = (byte)b.Colours[c]; data[PaletteAt + c * 2 + 1] = (byte)(b.Colours[c] >> 8); }
-            for (int t = 0; t < b.Layout.Length; t++) { data[LayoutAt + t * 2] = (byte)b.Layout[t]; data[LayoutAt + t * 2 + 1] = (byte)(b.Layout[t] >> 8); }
-            b.Tiles.CopyTo(data, TilesAt);
-            int at = space.AllocateInOneBank(data.Length, ExpansionSpace.Kind.Patch, 0);
-            rom.WriteBytes(at, data);
-            int snes = SnesAddress(at);
-            pointers[i * 3] = (byte)snes; pointers[i * 3 + 1] = (byte)(snes >> 8); pointers[i * 3 + 2] = (byte)(snes >> 16);
-            var nb = backgrounds[i].Name.Where(c => c >= ' ' && c < (char)0x7F).Take(NameLength).Select(c => (byte)c).ToArray();
-            nb.CopyTo(names, i * NameLength);
+            var picture = backgrounds[i].Picture;
+            var data = new byte[TilesAt + picture.Tiles.Length];
+            data[0] = (byte)picture.Tiles.Length; data[1] = (byte)(picture.Tiles.Length >> 8);
+            for (int c = 0; c < Palettes * 16; c++) { data[PaletteAt + c * 2] = (byte)picture.Colours[c]; data[PaletteAt + c * 2 + 1] = (byte)(picture.Colours[c] >> 8); }
+            for (int t = 0; t < picture.Layout.Length; t++) { data[LayoutAt + t * 2] = (byte)picture.Layout[t]; data[LayoutAt + t * 2 + 1] = (byte)(picture.Layout[t] >> 8); }
+            picture.Tiles.CopyTo(data, TilesAt);
+            int dataOffset = freeSpace.AllocateInOneBank(data.Length, ExpansionSpace.Kind.Patch, 0);
+            rom.WriteBytes(dataOffset, data);
+            int snesAddress = SnesAddress(dataOffset);
+            pointers[i * 3] = (byte)snesAddress; pointers[i * 3 + 1] = (byte)(snesAddress >> 8); pointers[i * 3 + 2] = (byte)(snesAddress >> 16);
+            var nameBytes = backgrounds[i].Name.Where(c => c >= ' ' && c < (char)0x7F).Take(NameLength).Select(c => (byte)c).ToArray();
+            nameBytes.CopyTo(names, i * NameLength);
         }
-        space.Save();
+        freeSpace.Save();
         var table = new byte[256];
-        for (int m = 0; m < 256 && m < maps.Length; m++) table[m] = maps[m] <= backgrounds.Count ? maps[m] : (byte)0;
+        for (int map = 0; map < 256 && map < maps.Length; map++) table[map] = maps[map] <= backgrounds.Count ? maps[map] : (byte)0;
         int snesBlock = SnesAddress(block);
-        var a = new Asm65816();
-        a.Source(HookSource(snesBlock + MapTable, snesBlock + PointerTable));
-        var code = a.Build(snesBlock);
+        var asm = new Asm65816();
+        asm.Source(HookSource(snesBlock + MapTable, snesBlock + PointerTable));
+        var code = asm.Build(snesBlock);
         if (code.Length > MapTable) throw new InvalidOperationException("The battle background code doesn't fit.");
         rom.WriteBytes(block, code);
         rom.WriteBytes(block + MapTable, table);
         rom.WriteBytes(block + PointerTable, pointers);
         rom.WriteBytes(block + NameTable, names);
         rom.WriteBytes(Site, new byte[] { 0x22, (byte)snesBlock, (byte)(snesBlock >> 8), (byte)(snesBlock >> 16), 0xEA, 0xEA });
-        int exit = snesBlock + a.Offset("Exit");
-        rom.WriteBytes(ExitSite, new byte[] { 0x22, (byte)exit, (byte)(exit >> 8), (byte)(exit >> 16), 0xEA, 0xEA });
-        int leave = snesBlock + a.Offset("Leave");
-        rom.WriteBytes(LeaveSite, new byte[] { 0x22, (byte)leave, (byte)(leave >> 8), (byte)(leave >> 16), 0xEA });
+        int exitAddress = snesBlock + asm.Offset("Exit");
+        rom.WriteBytes(ExitSite, new byte[] { 0x22, (byte)exitAddress, (byte)(exitAddress >> 8), (byte)(exitAddress >> 16), 0xEA, 0xEA });
+        int leaveAddress = snesBlock + asm.Offset("Leave");
+        rom.WriteBytes(LeaveSite, new byte[] { 0x22, (byte)leaveAddress, (byte)(leaveAddress >> 8), (byte)(leaveAddress >> 16), 0xEA });
     }
 
-    /// <summary>Takes the backgrounds out: the game's code back, Lufia Forge's block and the pictures freed.</summary>
+    // takes the backgrounds out: the game's code goes back, our block and the pictures get freed
     public static void Remove(RomBuffer rom)
     {
         if (!IsApplied(rom)) return;
@@ -398,19 +386,19 @@ public static partial class BattleBackgrounds
         rom.WriteBytes(LeaveSite, LeaveOriginal);
     }
 
-    /// <summary>Frees the block and every picture it points to (the hooks stay until rewritten).</summary>
+    // frees the block and every picture it points to (the hooks stay until they get rewritten)
     private static void FreeAll(RomBuffer rom)
     {
         if (!IsApplied(rom)) return;
         int block = Block(rom);
-        var space = ExpansionSpace.Load(rom);
+        var freeSpace = ExpansionSpace.Load(rom);
         for (int i = 0; i < MaxBackgrounds; i++)
         {
-            int snes = ReadPointer(rom, block, i);
-            if (snes == 0) break;
-            space.Free(FileOffset(snes));
+            int snesAddress = ReadPointer(rom, block, i);
+            if (snesAddress == 0) break;
+            freeSpace.Free(FileOffset(snesAddress));
         }
-        space.Free(block);
-        space.Save();
+        freeSpace.Free(block);
+        freeSpace.Save();
     }
 }

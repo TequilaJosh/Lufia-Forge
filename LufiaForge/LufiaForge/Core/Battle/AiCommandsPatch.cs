@@ -2,26 +2,23 @@ using LufiaForge.Core.Maps;
 
 namespace LufiaForge.Core.Battle;
 
-/// <summary>
-/// More monster AI commands (14-25) for every monster: the game's own and new ones (1E-24 and the party scan of
-/// 17/18 are Ok Impala's AI extensions, see AiCommandsPatch.Ext.cs). The battle's AI interpreter
-/// ($08:CACB) reads a command and runs it through a table of 19 handlers ($08:CB0C), with no check of the number.
-/// Three hooks:
-/// <code>
-/// $08:CAC6  22 TurnStart EA            a monster's turn starts: count it (was SEP #$30 / STZ $1460)
-/// $08:CACB  A0 00                      LDY #0
-///           22 OpHook                  reads the command: C = end of script, V = done by the hook,
-///           B0 35                      BCS $CB08 (end)
-///           70 03                      BVS $CAD8 (carry on with the next command)
-///           FC 0C CB                   JSR ($CB0C,X): the game's own commands 01-13 as before
-/// $01:F658  22 InitHook EA EA          a monster enters a battle: clear its counters (was LDA $13,X / STA $44,X)
-/// $08:C225  22 DamageHook EA EA        a hit's damage is about to be shown: add the 23 bonus (was LDA #$32 / STA $7EDAC6)
-/// $08:CAE2, $08:B578                    command 25 (several actions a turn), see AiCommandsPatch.Multi.cs
-/// </code>
-/// Each monster's battle record ($7E:E500 + slot x $80) keeps, in bytes the game never uses: +$70 its turn count and
-/// +$71 eight switches for phases, +$78-$7B numbers 0-3, +$7C/+$7D the bonus damage of command 23. Party: current HP $7E:DA48 (FFFF = empty slot), max HP $16E0, slot order;
-/// a party member as a target is $80 + slot ($143F). Jumps count from the record's start, as the game's own.
-/// </summary>
+// more monster AI commands (14-25) for every monster, the game's own and new ones (1E-24 and the party scan of
+// 17/18 are Ok Impala's AI extensions, see AiCommandsPatch.Ext.cs). the battle's AI interpreter
+// ($08:CACB) reads a command and runs it through a table of 19 handlers ($08:CB0C), it never checks the number.
+// three hooks:
+//   $08:CAC6  22 TurnStart EA            a monster's turn starts: count it (was SEP #$30 / STZ $1460)
+//   $08:CACB  A0 00                      LDY #0
+//             22 OpHook                  reads the command: C = end of script, V = done by the hook,
+//             B0 35                      BCS $CB08 (end)
+//             70 03                      BVS $CAD8 (carry on with the next command)
+//             FC 0C CB                   JSR ($CB0C,X): the game's own commands 01-13 as before
+//   $01:F658  22 InitHook EA EA          a monster enters a battle: clear its counters (was LDA $13,X / STA $44,X)
+//   $08:C225  22 DamageHook EA EA        a hit's damage is about to be shown: add the 23 bonus (was LDA #$32 / STA $7EDAC6)
+//   $08:CAE2, $08:B578                   command 25 (several actions a turn), see AiCommandsPatch.Multi.cs
+// each monster's battle record ($7E:E500 + slot x $80) keeps these in bytes the game never uses: +$70 its turn count,
+// +$71 eight switches for phases, +$78-$7B numbers 0-3, +$7C/+$7D the bonus damage of command 23.
+// party: current HP $7E:DA48 (FFFF = empty slot), max HP $16E0, slot order.
+// a party member as a target is $80 + slot ($143F). jumps count from the record's start, same as the game's own
 public static partial class AiCommandsPatch
 {
     public const int First = 0x14, Count = 18;
@@ -41,52 +38,52 @@ public static partial class AiCommandsPatch
         Matches(rom, TurnSite, TurnOriginal) && Matches(rom, OpSite, OpOriginal) && Matches(rom, InitSite, InitOriginal) && Matches(rom, DamageSite, DamageOriginal) &&
         Matches(rom, PostSite, PostOriginal) && Matches(rom, TimerSite, TimerOriginal);
 
-    /// <summary>True when the ROM has Ok Impala's own AI extension patch (its ops 14-1A clash with Lufia Forge's).</summary>
+    // true when the rom has Ok Impala's own AI extension patch (its ops 14-1A clash with Lufia Forge's)
     public static bool HasOkImpalaPatch(RomBuffer rom) =>
         Matches(rom, 0x47F90, new byte[] { 0xE0, 0x26, 0xB0, 0x03, 0x7C, 0x0C, 0xCB }) && rom.ReadByte(0x44AD5) == 0x20 && rom.ReadByte(0x44AD7) == 0xFF;
 
     public static bool IsApplied(RomBuffer rom) => BlockOffset(rom) > 0;
 
-    private static bool Matches(RomBuffer rom, int at, byte[] b) => at + b.Length <= rom.Length && rom.ReadBytes(at, b.Length).SequenceEqual(b);
-    private static int FileOffset(int snes) => (snes >> 16 & 0x7F) * 0x8000 + (snes & 0x7FFF);
-    private static int SnesAddress(int file) => (file / 0x8000 | 0x80) << 16 | (file % 0x8000 | 0x8000);
+    private static bool Matches(RomBuffer rom, int offset, byte[] expected) => offset + expected.Length <= rom.Length && rom.ReadBytes(offset, expected.Length).SequenceEqual(expected);
+    private static int FileOffset(int snesAddress) => (snesAddress >> 16 & 0x7F) * 0x8000 + (snesAddress & 0x7FFF);
+    private static int SnesAddress(int fileOffset) => (fileOffset / 0x8000 | 0x80) << 16 | (fileOffset % 0x8000 | 0x8000);
 
-    /// <summary>File offset of the patch's block (its magic), or 0.</summary>
+    // file offset of the patch's block (where its magic is), or 0
     public static int BlockOffset(RomBuffer rom)
     {
         if (rom.ReadByte(OpSite + 2) != 0x22) return 0;
-        int hook = FileOffset(rom.ReadByte(OpSite + 3) | rom.ReadByte(OpSite + 4) << 8 | rom.ReadByte(OpSite + 5) << 16);
-        // the hook is a little way into the block (where depends on the version): look back for the magic
-        for (int block = hook - 4; block >= Math.Max(0, hook - 0x100); block--)
+        int hookOffset = FileOffset(rom.ReadByte(OpSite + 3) | rom.ReadByte(OpSite + 4) << 8 | rom.ReadByte(OpSite + 5) << 16);
+        // the hook is a little way into the block (how far depends on the version), so look back for the magic
+        for (int block = hookOffset - 4; block >= Math.Max(0, hookOffset - 0x100); block--)
             if (Matches(rom, block, Magic)) return block;
         return 0;
     }
 
-    /// <summary>Adds the commands (a no-op when they're there; an older version is brought up to date).</summary>
+    // adds the commands. does nothing when they're already there, an older version gets brought up to date
     public static void Apply(RomBuffer rom)
     {
-        int old = BlockOffset(rom);
-        if (old > 0 && rom.ReadByte(old + 4) == Version) return;
-        if (old == 0 && HasOkImpalaPatch(rom))
+        int oldBlock = BlockOffset(rom);
+        if (oldBlock > 0 && rom.ReadByte(oldBlock + 4) == Version) return;
+        if (oldBlock == 0 && HasOkImpalaPatch(rom))
             throw new InvalidOperationException("This ROM has Ok Impala's AI extension patch. Lufia Forge has the same commands built in (1E-24 here, 14-1A there), so use a ROM without that patch to edit monster scripts with the new commands.");
-        if (old == 0 && !IsOriginal(rom))
+        if (oldBlock == 0 && !IsOriginal(rom))
             throw new InvalidOperationException("The game's monster AI code ($08:CAC6, $08:C225, $01:F658) isn't the original, so the new AI commands can't be added safely.");
-        if (old > 0 && !Matches(rom, DamageSite, DamageOriginal) && rom.ReadByte(DamageSite) != 0x22)
+        if (oldBlock > 0 && !Matches(rom, DamageSite, DamageOriginal) && rom.ReadByte(DamageSite) != 0x22)
             throw new InvalidOperationException("The game's damage code at $08:C225 isn't the original, so the new AI commands can't be added safely.");
-        if (old > 0 && (!Matches(rom, PostSite, PostOriginal) && rom.ReadByte(PostSite) != 0x22 || !Matches(rom, TimerSite, TimerOriginal) && rom.ReadByte(TimerSite) != 0x22))
+        if (oldBlock > 0 && (!Matches(rom, PostSite, PostOriginal) && rom.ReadByte(PostSite) != 0x22 || !Matches(rom, TimerSite, TimerOriginal) && rom.ReadByte(TimerSite) != 0x22))
             throw new InvalidOperationException("The game's battle turn code ($08:CAE2, $08:B578) isn't the original, so the multi-action command can't be added safely.");
         if (rom.Length < MapWriter.ExpandedSize) rom.Expand(MapWriter.ExpandedSize);
-        var space = ExpansionSpace.Load(rom);
-        if (old > 0) space.Free(old);
+        var freeSpace = ExpansionSpace.Load(rom);
+        if (oldBlock > 0) freeSpace.Free(oldBlock);
         var probe = Build(0x808000);
-        int at = space.AllocateInOneBank(probe.Length, ExpansionSpace.Kind.Patch, 30);
-        space.Save();
-        int snes = SnesAddress(at);
-        rom.WriteBytes(at, Build(snes));
+        int blockOffset = freeSpace.AllocateInOneBank(probe.Length, ExpansionSpace.Kind.Patch, 30);
+        freeSpace.Save();
+        int blockSnes = SnesAddress(blockOffset);
+        rom.WriteBytes(blockOffset, Build(blockSnes));
         void Jsl(int site, int offset)
         {
-            int a = snes + offset;
-            rom.WriteBytes(site, new byte[] { 0x22, (byte)a, (byte)(a >> 8), (byte)(a >> 16) });
+            int target = blockSnes + offset;
+            rom.WriteBytes(site, new byte[] { 0x22, (byte)target, (byte)(target >> 8), (byte)(target >> 16) });
         }
         Jsl(TurnSite, TurnStartOffset); rom.WriteByte(TurnSite + 4, 0xEA);
         rom.WriteBytes(OpSite, new byte[] { 0xA0, 0x00 });
@@ -103,12 +100,12 @@ public static partial class AiCommandsPatch
 
     static AiCommandsPatch()
     {
-        var a = Assemble();
-        TurnStartOffset = a.Offset("TurnStart"); OpHookOffset = a.Offset("OpHook"); InitHookOffset = a.Offset("InitHook"); DamageHookOffset = a.Offset("DamageHook");
-        PostActionOffset = a.Offset("PostAction"); TimerHookOffset = a.Offset("TimerHook");
+        var asm = Assemble();
+        TurnStartOffset = asm.Offset("TurnStart"); OpHookOffset = asm.Offset("OpHook"); InitHookOffset = asm.Offset("InitHook"); DamageHookOffset = asm.Offset("DamageHook");
+        PostActionOffset = asm.Offset("PostAction"); TimerHookOffset = asm.Offset("TimerHook");
     }
 
-    private static byte[] Build(int snes) => Assemble().Build(snes);
+    private static byte[] Build(int snesAddress) => Assemble().Build(snesAddress);
 
     // opcodes used below
     private const byte LDA_dp = 0xA5, LDA_indY = 0xB1, CMP_indY = 0xD1, STA_dp = 0x85, LDA_absX = 0xBD, LDA_absl = 0xAF,
@@ -125,28 +122,28 @@ public static partial class AiCommandsPatch
 
         // (a monster's turn starts: TurnStart, in AiCommandsPatch.Multi.cs)
 
-        // ── reads a command (M = X = 8-bit, Y = 0): C = end, V = done here, else X = (op-1)*2 for the game's table ──
+        // reads a command (M = X = 8-bit, Y = 0): C = end, V = done here, otherwise X = (op-1)*2 for the game's table
         a.Label("OpHook").B(LDA_indY, 0x09).Br(BNE, "oh_op").B(0x38, 0xB8, RTL)
          .Label("oh_op").B(0xC8).B(0xC9, First).Br(BCS, "oh_new")
          .B(0x3A, 0x0A, 0xAA, 0x18, 0xB8, RTL)
          .Label("oh_new").B(0xC9, First + Count).Br(BCS, "oh_bad")
          .B(0x38, 0xE9, First, 0x0A, 0xAA).Abs(JSRix, "Table")
          .B(0xE2, 0x30, 0x18, 0xE2, 0x40, RTL)        // SEP #$30, CLC, SEP #$40 (V): carry on with the next command
-         .Label("oh_bad").B(0x38, 0xB8, RTL);         // a number nobody knows: the script ends
+         .Label("oh_bad").B(0x38, 0xB8, RTL);         // a number nobody knows, the script ends
 
         a.Label("Table");
-        foreach (var l in new[] { "op14", "op15", "op16", "Op17_LowestHp", "Op18_HighestHp", "op19", "op1A", "op1B", "op1C", "op1D",
+        foreach (var label in new[] { "op14", "op15", "op16", "Op17_LowestHp", "Op18_HighestHp", "op19", "op1A", "op1B", "op1C", "op1D",
                                   "Op1E_HeroCheck", "Op1F_TargetHero", "Op20_VarSet", "Op21_VarAdd", "Op22_VarCmp", "Op23_HPBonus", "Op24_VarGet",
-                                  "Op25_MultiAction" }) a.Word(l);
+                                  "Op25_MultiAction" }) a.Word(label);
 
-        // ── a monster enters a battle (M = X = 16-bit, DB = 7E, X = its record): as the game, then clear +$70-$73, +$78-$7D ──
+        // a monster enters a battle (M = X = 16-bit, DB = 7E, X = its record): do what the game does, then clear +$70-$73, +$78-$7D
         a.Label("InitHook").B(LDA_absX, 0x13, 0x00, STA_absX, 0x44, 0x00).B(STZ_absX, Turn, 0x00).B(STZ_absX, 0x72, 0x00)
          .B(STZ_absX, 0x78, 0x00).B(STZ_absX, 0x7A, 0x00).B(STZ_absX, 0x7C, 0x00).B(RTL);
 
-        // ── helpers ──
+        // shared bits
         // X = this monster's slot x $80 (M = 8-bit, X = 16-bit on return)
         a.Label("RecX").B(LDA_dp, 0x08, 0xC2, 0x30, 0x29, 0xFF, 0x00, 0xEB, 0x4A, 0xAA, 0xE2, 0x20, RTS);
-        // C set: go to the word at ($09),Y (from the record's start); clear: step over it
+        // C set: go to the word at ($09),Y (counted from the record's start), clear: step over it
         a.Label("Cond").Br(BCS, "c_go").B(0xC8, 0xC8, RTS)
          .Label("c_go").B(0xC2, 0x20, LDA_indY, 0x09, 0x18, 0x65, 0x0C, STA_dp, 0x09, 0xE2, 0x20, 0xA0, 0x00, RTS);
         // A = 1 << (A & 7)
@@ -175,7 +172,7 @@ public static partial class AiCommandsPatch
          .B(0x7A, 0x18, 0xC8).Abs(JMP, "Cond")
          .Label("h_yes").B(0xE2, 0x20, 0x7A, 0x38, 0xC8).Abs(JMP, "Cond");
 
-        // 19 to: if it is the only monster left, go to
+        // 19 to: if it's the only monster left, go to
         a.Label("op19").B(0x5A, 0xA0, 0x00, 0xA2, 0x00)
          .Label("a_l").B(LDA_absX, 0x7A, 0x13, 0xC9, 0xFF).Br(BEQ, "a_n").B(0xC8)
          .Label("a_n").B(0xE8, 0xE0, 0x08).Br(BNE, "a_l")

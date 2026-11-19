@@ -7,12 +7,10 @@ using LufiaForge.Core.Maps;
 
 namespace LufiaForge.Modules.MapEditor;
 
-/// <summary>
-/// Undo / redo for the open map's edits before Apply: blocks, size, characters, exits, arrival points and routes.
-/// After every finished edit (a paint stroke, a drag, a stamp, a typed value, a button) the map is compared with the
-/// last snapshot and, when it changed, the snapshot becomes an undo step named after what changed. Apply writes the map
-/// to the ROM: from then on Edit > Undo (the app's history) takes the whole Apply back.
-/// </summary>
+// undo / redo for the open map's edits before Apply: blocks, size, characters, exits, arrival points and routes.
+// after every finished edit (a paint stroke, a drag, a stamp, a typed value, a button) the map gets compared with the
+// last snapshot, and if it changed the snapshot becomes an undo step named after what changed. Apply writes the map
+// to the ROM, from then on Edit > Undo (the app's history) takes the whole Apply back
 public partial class MapEditorViewModel
 {
     private const int MapUndoLimit = 300;
@@ -23,10 +21,10 @@ public partial class MapEditorViewModel
     [ObservableProperty] private string _mapUndoText = "Nothing to undo on this map";
     [ObservableProperty] private string _mapRedoText = "Nothing to redo";
 
-    /// <summary>Steps on this map, newest first (the Undo button's list).</summary>
+    // steps on this map, newest first (the Undo button's list)
     public List<string> MapUndoSteps => _mapUndo.Select(s => s.What).Reverse().ToList();
 
-    /// <summary>A freshly loaded (or applied) map: the history starts here.</summary>
+    // a freshly loaded (or applied) map, the history starts here
     private void StartHistory()
     {
         _current = _baseline = _map?.Capture();
@@ -34,19 +32,19 @@ public partial class MapEditorViewModel
         UpdateHistoryUi();
     }
 
-    /// <summary>Call after changing the map: marks it unapplied and records a step once the edit is finished.</summary>
+    // call after changing the map: marks it unapplied and records a step once the edit is done
     private void MarkEdited()
     {
         HasUnappliedChanges = true;
-        if (_inGesture) return;   // the mouse is still down: OnMouseUp records the whole stroke / drag
+        if (_inGesture) return;   // mouse is still down, OnMouseUp records the whole stroke / drag
         if (_checkpointPending) return;
-        var d = Application.Current?.Dispatcher;
-        if (d == null) { Checkpoint(); return; }
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher == null) { Checkpoint(); return; }
         _checkpointPending = true;
-        d.BeginInvoke(() => { _checkpointPending = false; Checkpoint(); }, System.Windows.Threading.DispatcherPriority.Background);
+        dispatcher.BeginInvoke(() => { _checkpointPending = false; Checkpoint(); }, System.Windows.Threading.DispatcherPriority.Background);
     }
 
-    /// <summary>Records a step when the map differs from the last snapshot.</summary>
+    // records a step if the map differs from the last snapshot
     public void Checkpoint()
     {
         if (_map == null || _current == null) return;
@@ -89,55 +87,55 @@ public partial class MapEditorViewModel
     private void GoTo(LufiaMap.State state)
     {
         if (_map == null) return;
-        var sel = _selection;
+        var selected = _selection;
         if (state.Threshold != _map.CompositeThreshold) CancelStamp();   // its block numbers were for the other threshold
         _map.Restore(state);
         _current = state;
         if (_rom != null && _tileset != null && !_map.IsWorld) { _tileset = MapTileset.ForMap(_rom, _map); BuildPalette(); OnPropertyChanged(nameof(BrushText)); }
         RedrawMap();
         ClearSelection();
-        Reselect(sel);
+        Reselect(selected);
         RebuildOverlays();
         RefreshMapSettings();
         HasUnappliedChanges = _baseline == null || !state.SameAs(_baseline);
         UpdateHistoryUi();
     }
 
-    /// <summary>Selects the same object again (after the map was restored or reloaded) when it still exists.</summary>
-    private void Reselect((string kind, int index)? sel)
+    // selects the same object again after the map was restored or reloaded, if it's still there
+    private void Reselect((string kind, int index)? selected)
     {
-        if (_map == null || sel is not { } s) return;
-        if (s.kind == "npc" && s.index < _map.Npcs.Count && !_map.Npcs[s.index].IsUnused) SelectNpc(_map.Npcs[s.index]);
-        else if (s.kind == "exit" && s.index < _map.Exits.Count) SelectExit(_map.Exits[s.index], focusLinked: false);
-        else if (s.kind == "arrival" && s.index < _map.Arrivals.Count) SelectArrival(_map.Arrivals[s.index], focusLinked: false);
-        else if (s.kind == "trigger" && s.index < _map.Triggers.Count && !_map.Triggers[s.index].IsUnused) SelectTrigger(_map.Triggers[s.index]);
+        if (_map == null || selected is not { } sel) return;
+        if (sel.kind == "npc" && sel.index < _map.Npcs.Count && !_map.Npcs[sel.index].IsUnused) SelectNpc(_map.Npcs[sel.index]);
+        else if (sel.kind == "exit" && sel.index < _map.Exits.Count) SelectExit(_map.Exits[sel.index], focusLinked: false);
+        else if (sel.kind == "arrival" && sel.index < _map.Arrivals.Count) SelectArrival(_map.Arrivals[sel.index], focusLinked: false);
+        else if (sel.kind == "trigger" && sel.index < _map.Triggers.Count && !_map.Triggers[sel.index].IsUnused) SelectTrigger(_map.Triggers[sel.index]);
     }
 
-    /// <summary>
-    /// Writes this map's unapplied edits to the ROM without asking (the project is being saved), and carries on as if
-    /// nothing happened: the selection, the brush, a building being placed and this map's undo steps all stay. False
-    /// (with the reason) when they couldn't be written; the edits stay unapplied then.
-    /// </summary>
+    // writes this map's unapplied edits to the ROM without asking (the project is being saved) and carries on like
+    // nothing happened: the selection, the brush, a building being placed and this map's undo steps all stay.
+    // false (with the reason) if they couldn't be written, then the edits stay unapplied
     public bool FlushPendingEdits(out string? error)
     {
         error = null;
         if (_rom == null || _map == null || !HasUnappliedChanges) return true;
         if (_inGesture) { error = "a map edit is in progress"; return false; }
+        if (ChangedElsewhere()) { error = ChangedElsewhereText; return false; }
         try
         {
             var result = MapWriter.Save(_rom, _map, allowExpand: true);
-            int id = _map.MapId;
-            var sel = _selection;
-            _map = LufiaMap.Load(_rom, id);
-            _spotContents = MapSetupScript.ReadSpots(_rom, id);
+            int mapId = _map.MapId;
+            var selected = _selection;
+            _map = LufiaMap.Load(_rom, mapId);
+            RememberLoaded();
+            _spotContents = MapSetupScript.ReadSpots(_rom, mapId);
             _tileset = MapTileset.ForMap(_rom, _map);
             _baseline = _current = _map.Capture();
             HasUnappliedChanges = false;
             _links = MapLinks.Build(_rom, Maps.Select(m => m.MapId));
             ClearSelection();
-            Reselect(sel);
+            Reselect(selected);
             RebuildOverlays();
-            _mainVm?.NotifyRomModified($"Map {id:X2}: blocks/characters/exits ({(result.Moved ? $"moved to 0x{result.FileOffset:X6}" : $"in place at 0x{result.FileOffset:X6}")})");
+            _mainVm?.NotifyRomModified($"Map {mapId:X2}: blocks/characters/exits ({(result.Moved ? $"moved to 0x{result.FileOffset:X6}" : $"in place at 0x{result.FileOffset:X6}")})");
             UpdateHistoryUi();
             return true;
         }
@@ -148,7 +146,7 @@ public partial class MapEditorViewModel
         }
     }
 
-    /// <summary>The map's unapplied edits, or painted world map battle zones.</summary>
+    // the map's unapplied edits, or painted world map battle zones
     public bool HasPendingEdits => _rom != null && (HasUnappliedChanges || ZonesDirty);
 
     public string? WritePendingEdits()
@@ -158,7 +156,12 @@ public partial class MapEditorViewModel
         {
             try
             {
+                // changed somewhere else since we read them (Game Data's encounter tab), writing this copy would put
+                // the older zones back over that
+                if (!Core.Battle.Encounters.ReadZones(_rom).AsSpan().SequenceEqual(_zonesRead))
+                    return "Encounter zones: they were changed on another page since they were read here. Revert the map to read them again, then paint again.";
                 Core.Battle.Encounters.WriteZones(_rom, _zones, allowExpand: true);
+                _zonesRead = (byte[])_zones.Clone();
                 ZonesDirty = false;
                 _mainVm?.NotifyRomModified("World map encounter zones");
             }
@@ -167,8 +170,8 @@ public partial class MapEditorViewModel
         return null;
     }
 
-    /// <summary>Before something that reloads the map (the block editor, importing, make room...): its edits are
-    /// written first. False when they couldn't be (the reason is in the status bar).</summary>
+    // before anything that reloads the map (block editor, importing, make room...) its edits get written first.
+    // false if they couldn't be (the reason goes in the status bar)
     private bool WritePendingFirst()
     {
         if (FlushPendingEdits(out var error)) return true;
@@ -176,14 +179,14 @@ public partial class MapEditorViewModel
         return false;
     }
 
-    /// <summary>Draws the whole map again (after undo / redo, which can change its size).</summary>
+    // draws the whole map again (after undo / redo, which can change its size)
     private void RedrawMap()
     {
         if (_map == null || _tileset == null) return;
         _pixels = _tileset.RenderMap(_map);
-        int w = _map.Width * 16, h = _map.Height * 16;
-        var bmp = new WriteableBitmap(w, h, 96, 96, PixelFormats.Bgra32, null);
-        bmp.WritePixels(new Int32Rect(0, 0, w, h), _pixels, w * 4, 0);
+        int widthPx = _map.Width * 16, heightPx = _map.Height * 16;
+        var bmp = new WriteableBitmap(widthPx, heightPx, 96, 96, PixelFormats.Bgra32, null);
+        bmp.WritePixels(new Int32Rect(0, 0, widthPx, heightPx), _pixels, widthPx * 4, 0);
         MapImage = bmp;
     }
 
@@ -196,7 +199,7 @@ public partial class MapEditorViewModel
         RedoCommand.NotifyCanExecuteChanged();
     }
 
-    /// <summary>What changed between two snapshots, in a few words.</summary>
+    // what changed between two snapshots, in a few words
     private static string Describe(LufiaMap.State a, LufiaMap.State b)
     {
         var parts = new List<string>();

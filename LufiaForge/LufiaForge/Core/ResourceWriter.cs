@@ -2,69 +2,65 @@ using LufiaForge.Core.Maps;
 
 namespace LufiaForge.Core;
 
-/// <summary>
-/// Writes new contents for a compressed resource (the table at 0x60000): compresses, checks the stream unpacks
-/// to the same bytes, and stores it in place when it fits; otherwise in the space above 1 MB (expanding the ROM
-/// when allowed) with the resource pointer updated. Same rules as <see cref="MapWriter"/>.
-/// </summary>
+// writes new contents for a compressed resource (the table at 0x60000): compresses, checks the stream unpacks to the
+// same bytes, and stores it in place if it fits, otherwise in the space above 1 MB (expanding the rom when that's
+// allowed) with the resource pointer updated. same rules as MapWriter
 public static class ResourceWriter
 {
     public sealed record Result(int CompressedSize, int SlotSize, int FileOffset, bool Moved, bool Expanded);
 
-    /// <summary>
-    /// Bytes the resource may use where it is. A smaller stream written in place leaves the rest of its old room
-    /// filled with FF (see <see cref="Save"/>), so the room runs on to the next resource's start when every byte
-    /// in between is FF: that gives back what an earlier smaller write left unused. Anything else after a stream
-    /// (in the original game: other data or code) is never counted. Above 1 MB the space table knows the block.
-    /// </summary>
+    // bytes the resource can use where it is. a smaller stream written in place fills the rest of its old room with FF
+    // (see Save), so the room runs on to the next resource's start when every byte in between is FF. that gives back
+    // what an earlier smaller write left unused. anything else after a stream (in the original game, other data or
+    // code) never counts. above 1 MB the space table knows the block
     public static int SlotSize(RomBuffer rom, int resourceId)
     {
-        int at = LufiaCompression.ResourceOffset(rom, resourceId);
-        LufiaCompression.Decompress(rom, at, out int used);
-        if (at >= MapWriter.ExpansionStart)
+        int streamOffset = LufiaCompression.ResourceOffset(rom, resourceId);
+        LufiaCompression.Decompress(rom, streamOffset, out int used);
+        if (streamOffset >= MapWriter.ExpansionStart)
         {
-            // only a block Lufia Forge wrote for this stream counts (another hack's data above 1 MB is one big
-            // reserved block: its "room" isn't this resource's)
-            var block = rom.Length >= MapWriter.ExpandedSize ? ExpansionSpace.Load(rom).At(at) : null;
-            return block != null && block.Start == at && block.Kind is ExpansionSpace.Kind.Resource or ExpansionSpace.Kind.MapData
-                ? Math.Max(used, block.End - at) : used;
+            // only a block we wrote for this stream counts (another hack's data above 1 MB is one big reserved block,
+            // its "room" isn't this resource's)
+            var block = rom.Length >= MapWriter.ExpandedSize ? ExpansionSpace.Load(rom).At(streamOffset) : null;
+            return block != null && block.Start == streamOffset && block.Kind is ExpansionSpace.Kind.Resource or ExpansionSpace.Kind.MapData
+                ? Math.Max(used, block.End - streamOffset) : used;
         }
         int next = int.MaxValue;
-        for (int id = 0, n = ResourceIds.Count(rom); id < n; id++)
+        for (int id = 0, count = ResourceIds.Count(rom); id < count; id++)
         {
-            int o = LufiaCompression.ResourceOffset(rom, id);
-            if (o > at && o < next) next = o;
+            int otherOffset = LufiaCompression.ResourceOffset(rom, id);
+            if (otherOffset > streamOffset && otherOffset < next) next = otherOffset;
         }
-        if (next == int.MaxValue || next - at <= used || next - at - used >= 0x8000) return used;
-        for (int i = at + used; i < next; i++) if (rom.ReadByte(i) != 0xFF) return used;
-        return next - at;
+        if (next == int.MaxValue || next - streamOffset <= used || next - streamOffset - used >= 0x8000) return used;
+        for (int i = streamOffset + used; i < next; i++) if (rom.ReadByte(i) != 0xFF) return used;
+        return next - streamOffset;
     }
 
     public static Result Save(RomBuffer rom, int resourceId, byte[] data, bool allowExpand)
     {
-        int at = LufiaCompression.ResourceOffset(rom, resourceId);
-        int slot = SlotSize(rom, resourceId);
+        int oldOffset = LufiaCompression.ResourceOffset(rom, resourceId);
+        int slotSize = SlotSize(rom, resourceId);
         var stream = LufiaCompression.Compress(data);
         if (!LufiaCompression.Decompress(stream).AsSpan().SequenceEqual(data))
             throw new InvalidOperationException("Compression self-check failed; nothing was written.");
-        if (stream.Length <= slot)
+        if (stream.Length <= slotSize)
         {
-            rom.WriteBytes(at, stream);
-            // the unused rest of the room becomes FF, so a later, bigger write can have it back (SlotSize)
-            if (slot > stream.Length) rom.WriteBytes(at + stream.Length, Enumerable.Repeat((byte)0xFF, slot - stream.Length).ToArray());
-            return new Result(stream.Length, slot, at, false, false);
+            rom.WriteBytes(oldOffset, stream);
+            // the unused rest of the room becomes FF so a later, bigger write can have it back (SlotSize)
+            if (slotSize > stream.Length) rom.WriteBytes(oldOffset + stream.Length, Enumerable.Repeat((byte)0xFF, slotSize - stream.Length).ToArray());
+            return new Result(stream.Length, slotSize, oldOffset, false, false);
         }
         if (!allowExpand && rom.Length < MapWriter.ExpandedSize)
-            throw new InvalidOperationException($"The new data needs {stream.Length} bytes but its slot holds {slot}; the ROM has to be expanded to 2 MB.");
+            throw new InvalidOperationException($"The new data needs {stream.Length} bytes but its slot holds {slotSize}; the ROM has to be expanded to 2 MB.");
         bool expanded = false;
         if (rom.Length < MapWriter.ExpandedSize) { rom.Expand(MapWriter.ExpandedSize); expanded = true; }
-        var space = ExpansionSpace.Load(rom);
-        int offset = space.Allocate(stream.Length, ExpansionSpace.Kind.Resource, resourceId);
-        rom.WriteBytes(offset, stream);
-        ResourceIds.Point(rom, resourceId, offset);
-        if (at >= MapWriter.ExpansionStart && at != offset) space.Free(at);
-        space.Save();
+        var freeSpace = ExpansionSpace.Load(rom);
+        int newOffset = freeSpace.Allocate(stream.Length, ExpansionSpace.Kind.Resource, resourceId);
+        rom.WriteBytes(newOffset, stream);
+        ResourceIds.Point(rom, resourceId, newOffset);
+        if (oldOffset >= MapWriter.ExpansionStart && oldOffset != newOffset) freeSpace.Free(oldOffset);
+        freeSpace.Save();
         rom.FixChecksum();
-        return new Result(stream.Length, slot, offset, true, expanded);
+        return new Result(stream.Length, slotSize, newOffset, true, expanded);
     }
 }

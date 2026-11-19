@@ -1,16 +1,19 @@
 <UserControl x:Class="LufiaForge.Modules.Events.EventsView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:me="clr-namespace:LufiaForge.Modules.MapEditor">
+             xmlns:me="clr-namespace:LufiaForge.Modules.MapEditor"
+             xmlns:common="clr-namespace:LufiaForge.Modules.Common">
     <UserControl.Resources>
         <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
     </UserControl.Resources>
 
-    <Grid Background="{StaticResource MidPurpleBrush}">
+    <Grid Background="{StaticResource MidPurpleBrush}" common:LayoutMemory.Key="events.main">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="250"/>
-            <ColumnDefinition Width="380"/>
-            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="250" MinWidth="130"/>
+            <ColumnDefinition Width="6"/>
+            <ColumnDefinition Width="380" MinWidth="200"/>
+            <ColumnDefinition Width="6"/>
+            <ColumnDefinition Width="*" MinWidth="250"/>
         </Grid.ColumnDefinitions>
         <Grid.RowDefinitions>
             <RowDefinition Height="*"/>
@@ -18,14 +21,19 @@
         </Grid.RowDefinitions>
 
         <!-- maps -->
-        <DockPanel Grid.Column="0" Margin="8">
+        <common:PopOutHost Grid.Column="0" Title="Event maps" ButtonMargin="0,8,10,0">
+        <DockPanel Margin="8,8,2,8">
             <TextBlock DockPanel.Dock="Top" Text="MAPS" Style="{StaticResource GdSection}"/>
             <ListBox Style="{StaticResource GdFindList}" ItemsSource="{Binding Maps}" SelectedItem="{Binding SelectedMap}"
                      DisplayMemberPath="Label"/>
         </DockPanel>
+        </common:PopOutHost>
+
+        <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch"/>
 
         <!-- events of the map / story flags -->
-        <TabControl Grid.Column="1" Margin="0,8,8,8" Style="{StaticResource LufiaTabControl}" SelectedIndex="{Binding MiddleTab}">
+        <common:PopOutHost Grid.Column="2" Title="Events and flags" ButtonMargin="0,10,10,0">
+        <TabControl Margin="2,8,2,8" Style="{StaticResource LufiaTabControl}" SelectedIndex="{Binding MiddleTab}">
             <TabItem Header="Events of this map" Style="{StaticResource LufiaTabItem}">
                 <DockPanel Margin="4">
                     <StackPanel DockPanel.Dock="Top">
@@ -196,9 +204,12 @@
                 </Grid>
             </TabItem>
         </TabControl>
+        </common:PopOutHost>
 
-        <!-- editor -->
-        <Border Grid.Column="2" Margin="0,8,8,8" BorderBrush="{StaticResource BorderPurpleBrush}" BorderThickness="1">
+        <GridSplitter Grid.Column="3" Width="6" HorizontalAlignment="Stretch"/>
+
+        <!-- editor (its lines, stage and timeline pop out by themselves) -->
+        <Border Grid.Column="4" Margin="2,8,8,8" BorderBrush="{StaticResource BorderPurpleBrush}" BorderThickness="1">
             <Grid>
                 <me:EventEditorPanel x:Name="Editor" Visibility="Collapsed"/>
                 <TextBlock x:Name="EmptyText" Text="Pick an event on the left to see and edit it."
@@ -207,7 +218,7 @@
         </Border>
 
         <!-- status -->
-        <Border Grid.Row="1" Grid.ColumnSpan="3" Background="{StaticResource DeepPurpleBrush}"
+        <Border Grid.Row="1" Grid.ColumnSpan="5" Background="{StaticResource DeepPurpleBrush}"
                 BorderBrush="{StaticResource BorderPurpleBrush}" BorderThickness="0,1,0,0" Padding="10,6">
             <StackPanel>
                 <TextBlock Text="{Binding Status}" Style="{StaticResource LufiaLabel}" Foreground="{StaticResource GoldLightBrush}" TextTrimming="CharacterEllipsis"/>

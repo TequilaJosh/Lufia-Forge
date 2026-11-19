@@ -6,9 +6,9 @@ using ToolTip = System.Windows.Controls.ToolTip;
 
 namespace LufiaForge.Modules.MapEditor;
 
-public partial class MapEditorView : UserControl
+public partial class MapEditorView : UserControl, LufiaForge.Modules.Common.ILocalUndo
 {
-    // Floating tooltip that follows the mouse and describes what's under it (treasure, exits, arrivals).
+    // floating tooltip that follows the mouse and says what's under it (treasure, exits, arrivals)
     private readonly ToolTip _tip = new() { Placement = PlacementMode.Mouse, HorizontalOffset = 14, VerticalOffset = 14 };
     private MapEditorViewModel? _vmHooked;
     private bool _altWheel;
@@ -16,6 +16,7 @@ public partial class MapEditorView : UserControl
     public MapEditorView()
     {
         InitializeComponent();
+        MapSurface.LostMouseCapture += MapSurface_LostMouseCapture;
         // Ctrl + wheel zooms around the mouse, middle button drags the map
         LufiaForge.Modules.Common.MapNavigation.Attach(MapScroll, () => Vm?.Zoom ?? 1, z => { if (Vm != null) Vm.Zoom = z; }, 0.25, 6);
         LufiaForge.Modules.Common.MapNavigation.Attach(PaletteScroll, () => Vm?.PaletteZoom ?? 2, z => { if (Vm != null) Vm.PaletteZoom = z; }, 1, 4);
@@ -28,6 +29,10 @@ public partial class MapEditorView : UserControl
             if (fit >= 1) Vm.PaletteZoom = Math.Min(4, fit);
         };
         DataContextChanged += (_, _) => HookVm();
+        // shown again: read the map again if another tab, Undo or a patch changed it in the meantime
+        IsVisibleChanged += (_, e) => { if (e.NewValue is true) Vm?.RefreshIfStale(); };
+        // after working in the map, Ctrl+Z / Ctrl+Y come here first even when a tab or button has the focus
+        PreviewMouseDown += (_, _) => LufiaForge.Modules.Common.LocalUndoTarget.Set(this);
         // Alt + mouse wheel anywhere in the editor turns the brush block; letting go of Alt then doesn't open the menu bar
         PreviewMouseWheel += (_, e) =>
         {
@@ -38,8 +43,8 @@ public partial class MapEditorView : UserControl
         {
             if (_altWheel && e.Key == Key.System && e.SystemKey is Key.LeftAlt or Key.RightAlt) { e.Handled = true; _altWheel = false; }
         };
-        // Ctrl+Z / Ctrl+Y anywhere in the editor (text boxes keep their own): the map's edits first; with none left
-        // the key goes on to the app's history (Edit > Undo)
+        // Ctrl+Z / Ctrl+Y anywhere in the editor (text boxes keep their own) undo the map's edits first, when there are
+        // none left the key goes on to the app's history (Edit > Undo)
         KeyDown += (_, e) =>
         {
             if (e.Handled || Vm == null || Keyboard.FocusedElement is System.Windows.Controls.Primitives.TextBoxBase) return;
@@ -53,6 +58,9 @@ public partial class MapEditorView : UserControl
     }
 
     private MapEditorViewModel? Vm => DataContext as MapEditorViewModel;
+
+    public bool LocalUndo() { if (Vm == null || !Vm.UndoCommand.CanExecute(null)) return false; Vm.UndoCommand.Execute(null); return true; }
+    public bool LocalRedo() { if (Vm == null || !Vm.RedoCommand.CanExecute(null)) return false; Vm.RedoCommand.Execute(null); return true; }
 
     private void HookVm()
     {
@@ -73,7 +81,7 @@ public partial class MapEditorView : UserControl
         }
     }
 
-    /// <summary>Scroll so the given map pixel is centred (after a map switch, once the new image is laid out).</summary>
+    // scroll so the given map pixel is centred (after a map switch, once the new image is laid out)
     private void Vm_FocusRequested(double x, double y)
     {
         Dispatcher.BeginInvoke(() =>
@@ -89,8 +97,8 @@ public partial class MapEditorView : UserControl
     {
         if (Vm?.Rom == null) return;
         _tip.IsOpen = false;
-        var win = new EventEditorWindow(Vm.Rom, script, title, Vm) { Owner = System.Windows.Window.GetWindow(this) };
-        win.ShowDialog();
+        var window = new EventEditorWindow(Vm.Rom, script, title, Vm) { Owner = System.Windows.Window.GetWindow(this) };
+        window.ShowDialog();
     }
 
     private void Vm_PropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -108,9 +116,9 @@ public partial class MapEditorView : UserControl
     {
         if (Vm?.Rom == null || Vm.SelectedMap == null) return;
         _tip.IsOpen = false;
-        var win = new DestinationPickerWindow(Vm.Rom, Vm, exit, Vm.SelectedMap.MapId) { Owner = System.Windows.Window.GetWindow(this) };
-        if (win.ShowDialog() == true && win.ResultMap >= 0)
-            Vm.SetExitDestination(exit, win.ResultMap, win.ResultArrival, win.ResultNewArrival);
+        var picker = new DestinationPickerWindow(Vm.Rom, Vm, exit, Vm.SelectedMap.MapId) { Owner = System.Windows.Window.GetWindow(this) };
+        if (picker.ShowDialog() == true && picker.ResultMap >= 0)
+            Vm.SetExitDestination(exit, picker.ResultMap, picker.ResultArrival, picker.ResultNewArrival);
     }
 
     private void MapSurface_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
@@ -129,12 +137,12 @@ public partial class MapEditorView : UserControl
         }
     }
 
-    /// <summary>Zoom so the whole map fits the view.</summary>
+    // zoom so the whole map fits the view
     private void Fit_Click(object sender, System.Windows.RoutedEventArgs e)
     {
         if (Vm?.MapImage is not { } img || img.PixelWidth == 0) return;
-        double z = Math.Min((MapScroll.ViewportWidth - 4) / img.PixelWidth, (MapScroll.ViewportHeight - 4) / img.PixelHeight);
-        Vm.Zoom = Math.Clamp(z, 0.25, 6);
+        double fitZoom = Math.Min((MapScroll.ViewportWidth - 4) / img.PixelWidth, (MapScroll.ViewportHeight - 4) / img.PixelHeight);
+        Vm.Zoom = Math.Clamp(fitZoom, 0.25, 6);
         MapScroll.ScrollToHome();
     }
 
@@ -145,7 +153,7 @@ public partial class MapEditorView : UserControl
 
     private void PaletteImage_MouseMove(object sender, MouseEventArgs e)
     {
-        if (e.LeftButton == MouseButtonState.Pressed) { var p = e.GetPosition(PaletteImage); Vm?.PaletteDrag(p.X, p.Y); }
+        if (e.LeftButton == MouseButtonState.Pressed) { var pos = e.GetPosition(PaletteImage); Vm?.PaletteDrag(pos.X, pos.Y); }
     }
 
     private void PaletteImage_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
@@ -157,32 +165,39 @@ public partial class MapEditorView : UserControl
     private void MapSurface_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         MapSurface.Focus();
-        var p = e.GetPosition(MapSurface);
-        if (e.ClickCount == 2) { Vm?.OnDoubleClick(p.X, p.Y); return; }
+        var pos = e.GetPosition(MapSurface);
+        if (e.ClickCount == 2) { Vm?.OnDoubleClick(pos.X, pos.Y); return; }
         MapSurface.CaptureMouse();
-        Vm?.OnMouseDown(p.X, p.Y, (Keyboard.Modifiers & ModifierKeys.Control) != 0);
+        Vm?.OnMouseDown(pos.X, pos.Y, (Keyboard.Modifiers & ModifierKeys.Control) != 0, (Keyboard.Modifiers & ModifierKeys.Shift) != 0);
     }
 
     private void MapSurface_MouseMove(object sender, MouseEventArgs e)
     {
         // eyedropper cursor while Ctrl is held
         MapSurface.Cursor = (Keyboard.Modifiers & ModifierKeys.Control) != 0 ? System.Windows.Input.Cursors.Cross : null;
-        var p = e.GetPosition(MapSurface);
-        Vm?.OnMouseMove(p.X, p.Y, e.LeftButton == MouseButtonState.Pressed);
+        var pos = e.GetPosition(MapSurface);
+        Vm?.OnMouseMove(pos.X, pos.Y, e.LeftButton == MouseButtonState.Pressed);
     }
 
     private void MapSurface_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
-        MapSurface.ReleaseMouseCapture();
         Vm?.OnMouseUp();
+        MapSurface.ReleaseMouseCapture();   // after OnMouseUp: losing the capture only ends a stroke that's still going
+    }
+
+    // capture lost mid-stroke (Alt+Tab, the Windows key, a dialog): end the stroke like a button up would, otherwise
+    // every later edit counted as part of it and saving refused ("a map edit is in progress")
+    private void MapSurface_LostMouseCapture(object sender, MouseEventArgs e)
+    {
+        if (Vm?.InGesture == true) Vm.OnMouseUp();
     }
 
     private void MapSurface_MouseLeave(object sender, MouseEventArgs e) => Vm?.OnMouseLeave();
 
     private void PaletteImage_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        var p = e.GetPosition(PaletteImage);
+        var pos = e.GetPosition(PaletteImage);
         PaletteImage.CaptureMouse();
-        Vm?.PaletteDown(p.X, p.Y);
+        Vm?.PaletteDown(pos.X, pos.Y);
     }
 }

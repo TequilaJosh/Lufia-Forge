@@ -2,10 +2,8 @@ using System.IO;
 
 namespace LufiaForge.Core;
 
-/// <summary>
-/// Holds the entire ROM in memory and provides safe read/write helpers.
-/// All modules interact with the ROM through this class - never raw file I/O after load.
-/// </summary>
+// the whole rom in memory, with checked reads and writes.
+// every module goes through this to touch the rom, no raw file i/o after it's loaded
 public class RomBuffer
 {
     private byte[] _data;
@@ -13,17 +11,24 @@ public class RomBuffer
 
     public int Length => _data.Length;
     public bool IsDirty => _isDirty;
+
+    // goes up with every change to the bytes. a page that read the rom at one version reads it again when it's shown
+    // at another (another page, undo or a patch changed it in the meantime)
+    public int Version { get; private set; }
     public string FilePath { get; private set; }
 
     public RomBuffer(byte[] data, string filePath)
     {
         _data    = data;
         FilePath = filePath;
+        Game     = GameDetect.Detect(data);
     }
 
-    // -------------------------------------------------------------------------
-    // Read helpers
-    // -------------------------------------------------------------------------
+    // which game this rom is (from its header title, read when the buffer gets made)
+    public GameKind Game { get; private set; }
+    public bool IsLufia2 => Game == GameKind.Lufia2;
+
+    // reading
 
     public byte ReadByte(int offset)
     {
@@ -50,7 +55,7 @@ public class RomBuffer
                       (_data[offset + 2] << 16) | (_data[offset + 3] << 24));
     }
 
-    /// <summary>Read a slice of bytes. Returns a copy - not a reference into the buffer.</summary>
+    // reads a slice of bytes. returns a copy, not a reference into the buffer
     public byte[] ReadBytes(int offset, int count)
     {
         ValidateOffset(offset, count);
@@ -59,10 +64,8 @@ public class RomBuffer
         return result;
     }
 
-    /// <summary>
-    /// Read bytes from offset until a terminator byte is found (terminator not included).
-    /// Returns at most maxLength bytes to prevent runaway reads on bad offsets.
-    /// </summary>
+    // reads bytes from offset up to a terminator byte (terminator not included).
+    // at most maxLength bytes, so a bad offset can't run away
     public byte[] ReadUntil(int offset, byte terminator, int maxLength = 512)
     {
         var result = new List<byte>();
@@ -76,44 +79,43 @@ public class RomBuffer
         return result.ToArray();
     }
 
-    /// <summary>Read a fixed-length ASCII string (for the SNES header title field).</summary>
+    // reads a fixed-length ascii string (for the snes header title)
     public string ReadAscii(int offset, int length)
     {
         ValidateOffset(offset, length);
         return System.Text.Encoding.ASCII.GetString(_data, offset, length);
     }
 
-    // -------------------------------------------------------------------------
-    // Write helpers
-    // -------------------------------------------------------------------------
+    // writing
 
     public void WriteByte(int offset, byte value)
     {
         ValidateOffset(offset, 1);
+        Guard(offset, 1);
         _data[offset] = value;
-        _isDirty = true;
+        _isDirty = true; Version++;
     }
 
     public void WriteUInt16Le(int offset, ushort value)
     {
         ValidateOffset(offset, 2);
+        Guard(offset, 2);
         _data[offset]     = (byte)(value & 0xFF);
         _data[offset + 1] = (byte)(value >> 8);
-        _isDirty = true;
+        _isDirty = true; Version++;
     }
 
     public void WriteBytes(int offset, byte[] bytes)
     {
         ValidateOffset(offset, bytes.Length);
+        Guard(offset, bytes.Length);
         Array.Copy(bytes, 0, _data, offset, bytes.Length);
-        _isDirty = true;
+        _isDirty = true; Version++;
     }
 
-    // -------------------------------------------------------------------------
-    // Snapshot / save
-    // -------------------------------------------------------------------------
+    // snapshot / save
 
-    /// <summary>Return a full copy of the current ROM data (for patching or saving).</summary>
+    // a full copy of the rom as it is now (for patching or saving)
     public byte[] ToArray()
     {
         var copy = new byte[_data.Length];
@@ -121,48 +123,48 @@ public class RomBuffer
         return copy;
     }
 
-    /// <summary>
-    /// Save the current buffer to a new copy next to the ROM, named with the save date and time
-    /// (e.g. "Lufia_2026-10-03_14-05-22.sfc"). The opened ROM file is never overwritten, and
-    /// FilePath keeps pointing at it. Returns the path of the copy.
-    /// </summary>
+    // saves the buffer to a new copy next to the rom, named with the save date and time
+    // (like "Lufia_2026-10-03_14-05-22.sfc"). the rom file that was opened never gets overwritten and FilePath keeps
+    // pointing at it. returns the path of the copy
     public string SaveDatedCopy()
     {
-        string dir  = Path.GetDirectoryName(FilePath) ?? "";
-        string ext  = Path.GetExtension(FilePath);
-        // If the opened ROM is itself a dated copy, replace its stamp instead of stacking another.
+        string folder = Path.GetDirectoryName(FilePath) ?? "";
+        string extension = Path.GetExtension(FilePath);
+        // if the opened rom is a dated copy itself, replace its stamp instead of stacking another one on
         string name = DatedSuffix.Replace(Path.GetFileNameWithoutExtension(FilePath), "");
-        string path = Path.Combine(dir, $"{name}_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}{ext}");
+        string path = Path.Combine(folder, $"{name}_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}{extension}");
 
         WriteSafely(path);
         _isDirty = false;
         return path;
     }
 
-    /// <summary>Writes the ROM (with its checksum fixed: some edits write in place without it) to a temporary file
-    /// first, then puts it in place, so a failed write never leaves a cut-off ROM.</summary>
+    // writes the rom (checksum fixed, some edits write in place without it) to a temp file first and then puts it in
+    // place, so a failed write never leaves a cut-off rom. the checksum gets fixed in the copy we write, not in the rom
+    // being edited (that would count as an edit: project unsaved, an undo step)
     private void WriteSafely(string path)
     {
-        FixChecksum();
-        string tmp = path + ".tmp";
-        File.WriteAllBytes(tmp, _data);
-        if (File.Exists(path)) File.Replace(tmp, path, null);
-        else File.Move(tmp, path);
+        var written = new RomBuffer((byte[])_data.Clone(), FilePath);
+        written.FixChecksum();
+        string tempFile = path + ".tmp";
+        File.WriteAllBytes(tempFile, written._data);
+        if (File.Exists(path)) File.Replace(tempFile, path, null);
+        else File.Move(tempFile, path);
     }
 
     private static readonly System.Text.RegularExpressions.Regex DatedSuffix =
         new(@"_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}$");
 
-    /// <summary>Whether the ROM's bytes are exactly these.</summary>
+    // whether the rom's bytes are exactly these
     public bool SameAs(byte[] other) => _data.AsSpan().SequenceEqual(other);
 
-    /// <summary>Writes the ROM as it is now to a file (a playable copy), without changing FilePath.</summary>
+    // writes the rom as it is now to a file (a playable copy) without changing FilePath
     public void WriteCopy(string path) => WriteSafely(path);
 
-    /// <summary>Where copies of the ROM go (a project's ROM file next to the project): exports and the copy BizHawk plays.</summary>
+    // where copies of the rom go (a project's rom file next to the project): exports and the copy bizhawk plays
     public void SetFilePath(string path) => FilePath = path;
 
-    /// <summary>Save the current buffer to a new path (Save As) and update FilePath.</summary>
+    // saves the buffer to a new path (save as) and updates FilePath
     public void SaveToFile(string path)
     {
         WriteSafely(path);
@@ -170,67 +172,74 @@ public class RomBuffer
         _isDirty = false;
     }
 
-    /// <summary>
-    /// Overwrite the entire buffer with new data of equal length.
-    /// Used by the Patch Manager to apply an IPS patch in-place.
-    /// </summary>
+    // overwrites the whole buffer with new data.
+    // the patch manager uses it to apply an ips patch in place
     public void ReplaceAll(byte[] newData)
     {
-        // a patch may expand (or shrink) the ROM: take its size
+        // a patch can expand (or shrink) the rom, so take its size
         if (newData.Length != _data.Length) _data = new byte[newData.Length];
         Array.Copy(newData, _data, newData.Length);
-        _isDirty = true;
+        _isDirty = true; Version++;
         Maps.ExpansionSpace.Forget(this);
     }
 
-    /// <summary>The ROM's size before Lufia Forge first expanded it in this session (0 = not expanded).</summary>
+    // the rom's size before we first expanded it in this session (0 = not expanded)
     public int SizeBeforeExpansion { get; private set; }
 
-    /// <summary>
-    /// Grow the ROM to <paramref name="newSize"/> bytes, filling the new space with <paramref name="fill"/>,
-    /// and update the SNES header's ROM size byte. Existing data is unchanged.
-    /// </summary>
+    // grows the rom to newSize bytes, fills the new space with fill and updates the snes header's rom size byte.
+    // existing data stays the same
     public void Expand(int newSize, byte fill = 0xFF)
     {
         if (newSize <= _data.Length) return;
-        // a ROM another hack already made bigger than 1 MB: everything it put there must stay where it is
+        // a rom another hack already made bigger than 1 MB: everything it put there has to stay where it is
         if (SizeBeforeExpansion == 0) SizeBeforeExpansion = _data.Length;
         Maps.ExpansionSpace.Forget(this);
         var grown = new byte[newSize];
         Array.Copy(_data, grown, _data.Length);
         Array.Fill(grown, fill, _data.Length, newSize - _data.Length);
         _data = grown;
-        // Header ROM size byte: 2^n KB (0x0A = 1 MB, 0x0B = 2 MB)
-        int kb = newSize / 1024, n = 0;
-        while ((1 << n) < kb) n++;
-        _data[Lufia1Constants.SnesRomSizeOffset] = (byte)n;
-        _isDirty = true;
+        // header rom size byte: 2^n KB (0x0A = 1 MB, 0x0B = 2 MB)
+        int sizeKb = newSize / 1024, sizeExponent = 0;
+        while ((1 << sizeExponent) < sizeKb) sizeExponent++;
+        _data[Lufia1Constants.SnesRomSizeOffset] = (byte)sizeExponent;
+        _isDirty = true; Version++;
     }
 
-    /// <summary>Recompute the SNES header checksum and complement for the current data.</summary>
+    // recomputes the snes header checksum and complement for the current data
     public void FixChecksum()
     {
         Put16(Lufia1Constants.SnesComplementOffset, 0xFFFF);
         Put16(Lufia1Constants.SnesChecksumOffset, 0x0000);
+        bool exLoRom = IsExLoRomCopy();
+        if (exLoRom) CopyFirstBank();
         ushort checksum = SnesChecksum(_data);
         Put16(Lufia1Constants.SnesChecksumOffset, checksum);
         Put16(Lufia1Constants.SnesComplementOffset, (ushort)(checksum ^ 0xFFFF));
-        _isDirty = true;
+        if (exLoRom) CopyFirstBank();
+        _isDirty = true; Version++;
     }
 
-    /// <summary>
-    /// The SNES header checksum: the sum of all bytes, where a size that isn't a power of two (e.g. 1.5 MB) counts
-    /// its last part repeated up to the next power of two, as the console mirrors it (1 MB + 2 x 512 KB).
-    /// </summary>
+    // an 8 MB "ExLoROM" (a lufia 2 we made 8 MB): banks 00-7D read the upper 4 MB, so the console starts in, and takes
+    // its interrupts through, a copy of the first 32 KB kept at 0x400000 (header included). that copy is how we tell a
+    // rom like that apart. it gets renewed with the checksum so it follows changes to the first bank
+    public bool IsExLoRomCopy() =>
+        _data.Length == ExLoRomSize && _data.AsSpan(ExLoRomSize / 2 + 0x7FC0, 0x16).SequenceEqual(_data.AsSpan(0x7FC0, 0x16));
+
+    public const int ExLoRomSize = 0x800000;
+
+    private void CopyFirstBank() => Array.Copy(_data, 0, _data, ExLoRomSize / 2, 0x8000);
+
+    // the snes header checksum: the sum of all bytes, where a size that isn't a power of two (like 1.5 MB) counts its
+    // last part repeated up to the next power of two, the way the console mirrors it (1 MB + 2 x 512 KB)
     public static ushort SnesChecksum(byte[] rom)
     {
-        int p = 1;
-        while (p * 2 <= rom.Length) p *= 2;
+        int powerOfTwo = 1;
+        while (powerOfTwo * 2 <= rom.Length) powerOfTwo *= 2;
         uint low = 0, high = 0;
-        for (int i = 0; i < p; i++) low += rom[i];
-        for (int i = p; i < rom.Length; i++) high += rom[i];
-        int rest = rom.Length - p;
-        uint repeats = rest > 0 && p % rest == 0 ? (uint)(p / rest) : 1;
+        for (int i = 0; i < powerOfTwo; i++) low += rom[i];
+        for (int i = powerOfTwo; i < rom.Length; i++) high += rom[i];
+        int rest = rom.Length - powerOfTwo;
+        uint repeats = rest > 0 && powerOfTwo % rest == 0 ? (uint)(powerOfTwo / rest) : 1;
         return (ushort)(low + high * repeats);
     }
 
@@ -240,17 +249,13 @@ public class RomBuffer
         _data[offset + 1] = (byte)(value >> 8);
     }
 
-    /// <summary>Mark the buffer clean (e.g., after exporting a patch).</summary>
+    // marks the buffer clean (after exporting a patch, say)
     public void ClearDirty() => _isDirty = false;
 
-    // -------------------------------------------------------------------------
-    // Utilities
-    // -------------------------------------------------------------------------
+    // utilities
 
-    /// <summary>
-    /// Search for a byte pattern in the ROM. Returns all matching file offsets.
-    /// Useful for reverse-engineering string locations.
-    /// </summary>
+    // searches the rom for a byte pattern and returns every file offset that matches.
+    // handy for finding where strings are
     public List<int> FindPattern(byte[] pattern)
     {
         var results = new List<int>();
@@ -265,6 +270,21 @@ public class RomBuffer
             if (match) results.Add(i);
         }
         return results;
+    }
+
+    // the rom as it was when the project started (or when it was opened), so we know what another hack put in it,
+    // for RomIdentity.ForeignRanges. null when we don't know
+    public byte[]? Original { get; set; }
+
+    // places nothing can be written to: tables another hack moved away (their old bytes might be that hack's data
+    // now). set when a rom is opened (TableGuard.Protect)
+    public List<(int Start, int End, string Why)> Protected { get; } = new();
+
+    private void Guard(int offset, int count)
+    {
+        if (Protected.Count == 0) return;
+        foreach (var (start, end, why) in Protected)
+            if (offset < end && offset + count > start) throw new InvalidOperationException(why);
     }
 
     private void ValidateOffset(int offset, int count)

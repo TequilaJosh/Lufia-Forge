@@ -2,65 +2,54 @@ using LufiaForge.Modules.TextEditor;
 
 namespace LufiaForge.Core.Maps;
 
-/// <summary>Where a jump goes: another command of the same event, or a fixed place outside it.</summary>
+// where a jump goes: another command of the same event, or a fixed place outside it
 public sealed class JumpRef
 {
-    /// <summary>Target command inside this event (moves along when the event is rewritten).</summary>
+    // target command inside this event (moves along when the event gets rewritten)
     public ScriptOp? Op { get; set; }
-    /// <summary>Absolute file offset when the target is outside the decoded event.</summary>
+    // absolute file offset when the target is outside the decoded event
     public int Absolute { get; set; }
 }
 
-/// <summary>One command or text segment of an event script.</summary>
+// one command or text segment of an event script
 public sealed class ScriptOp
 {
-    /// <summary>File offset in the ROM (-1 for commands added in the editor).</summary>
+    // file offset in the rom (-1 for commands added in the editor)
     public int Offset { get; init; } = -1;
-    /// <summary>Command bytes; for text, the opener (and its operand) only. Jump operand bytes are filled in when saving.</summary>
+    // command bytes. for text it's only the opener (and its operand). jump operand bytes get filled in when saving
     public byte[] Bytes { get; set; } = Array.Empty<byte>();
     public byte[] OriginalBytes { get; init; } = Array.Empty<byte>();
     public bool IsText { get; init; }
-    /// <summary>One entry per jump operand (see <see cref="EventScript.JumpPositions"/>).</summary>
+    // one entry per jump operand (see EventScript.JumpPositions)
     public List<JumpRef> Targets { get; } = new();
 
-    // Text segments
-    /// <summary>Editable text (see <see cref="EventScript.DecodeText"/> for the tag syntax).</summary>
+    // text segments
+    // editable text (see EventScript.DecodeText for the tag syntax)
     public string Text { get; set; } = "";
     public string OriginalText { get; init; } = "";
-    /// <summary>0x04 (or 01-03) = back to script commands, 0x00 (or 08, 0E) = end of script.</summary>
+    // 0x04 (or 01-03) = back to script commands, 0x00 (or 08, 0E) = end of script
     public byte Terminator { get; init; } = 0x04;
-    /// <summary>Raw length of opener + text + terminator in the ROM.</summary>
+    // raw length of opener + text + terminator in the rom
     public int RawLength { get; init; }
-    /// <summary>Original bytes of opener + text + terminator (reused when nothing in the box changed).</summary>
+    // original bytes of opener + text + terminator (reused when nothing in the box changed)
     public byte[] Raw { get; init; } = Array.Empty<byte>();
 
     public bool IsNew => Offset < 0;
     public bool TextChanged => IsText && Text.Replace("\r", "") != OriginalText;
     public bool BytesChanged => IsNew || !Bytes.AsSpan().SequenceEqual(OriginalBytes);
-    /// <summary>Size in the ROM as decoded (opener + text + terminator for dialogue).</summary>
+    // size in the rom as decoded (opener + text + terminator for dialogue)
     public int Length => IsText ? RawLength : Bytes.Length;
 
-    /// <summary>True when execution never falls through to the next byte (end, goto, first-time branch, text ending the script).</summary>
+    // true when the script never falls through to the next byte (end, goto, first-time branch, text that ends the script)
     public bool EndsFlow => IsText ? Terminator is 0x00 or 0x08 or 0x0E : Bytes.Length > 0 && Bytes[0] is 0x00 or 0x01 or 0x02 or 0x51;
 }
 
-/// <summary>
-/// An event script (what runs when the party talks to a character or steps on a trigger), decoded into
-/// editable commands and dialogue. Command lengths come from the handlers at $01:C78C (00-6D) and the range
-/// table at $01:C868 (80-FF), checked against playthrough traces. Jump operands are offsets from the
-/// event's own start (the engine sets its base, $0D0F, to the event start). See research-script-engine.md.
-///
-/// Saving: when nothing changes size the event is rewritten in place. Otherwise the map's whole script
-/// block is copied into the expanded ROM area (so every other event and every jump into the old code keeps
-/// working), the rewritten event is appended to the copy, and the map's script table entry
-/// (0x18200 + map*5) points at the copy.
-/// </summary>
-/// <summary>The editable state of every line of a script at one moment (for undo/redo).</summary>
+// the editable state of every line of a script at one moment (for undo/redo)
 public sealed class ScriptSnapshot
 {
     internal List<(ScriptOp Op, byte[] Bytes, string Text, (ScriptOp? Op, int Absolute)[] Targets)> Items { get; } = new();
 
-    /// <summary>Same lines, order, bytes, text and jump targets.</summary>
+    // same lines, order, bytes, text and jump targets
     public bool SameAs(ScriptSnapshot other) =>
         Items.Count == other.Items.Count && Items.Zip(other.Items).All(p =>
             ReferenceEquals(p.First.Op, p.Second.Op) && p.First.Bytes.AsSpan().SequenceEqual(p.Second.Bytes) && p.First.Text == p.Second.Text &&
@@ -68,27 +57,34 @@ public sealed class ScriptSnapshot
             p.First.Targets.Zip(p.Second.Targets).All(t => ReferenceEquals(t.First.Op, t.Second.Op) && t.First.Absolute == t.Second.Absolute));
 }
 
+// an event script (what runs when the party talks to a character or steps on a trigger), decoded into editable
+// commands and dialogue. command lengths come from the handlers at $01:C78C (00-6D) and the range table at $01:C868
+// (80-FF), checked against playthrough traces. jump operands are offsets from the event's own start (the engine sets
+// its base, $0D0F, to the event start). see research-script-engine.md.
+// saving: if nothing changes size the event is rewritten in place. otherwise the map's whole script block gets copied
+// into the expanded rom area (so every other event and every jump into the old code keeps working), the rewritten
+// event goes on the end of the copy, and the map's script table entry (0x18200 + map*5) points at the copy
 public sealed class EventScript
 {
-    /// <summary>Record the editable state of every line.</summary>
+    // records the editable state of every line
     public ScriptSnapshot TakeSnapshot()
     {
-        var s = new ScriptSnapshot();
-        foreach (var o in Ops)
-            s.Items.Add((o, (byte[])o.Bytes.Clone(), o.Text, o.Targets.Select(t => (t.Op, t.Absolute)).ToArray()));
-        return s;
+        var snapshot = new ScriptSnapshot();
+        foreach (var op in Ops)
+            snapshot.Items.Add((op, (byte[])op.Bytes.Clone(), op.Text, op.Targets.Select(t => (t.Op, t.Absolute)).ToArray()));
+        return snapshot;
     }
 
-    /// <summary>Put every line back the way a snapshot recorded it (lines added since are dropped, removed ones come back).</summary>
-    public void Restore(ScriptSnapshot s)
+    // puts every line back the way a snapshot recorded it (lines added since are dropped, removed ones come back)
+    public void Restore(ScriptSnapshot snapshot)
     {
         Ops.Clear();
-        foreach (var (op, bytes, text, targets) in s.Items)
+        foreach (var (op, bytes, text, targets) in snapshot.Items)
         {
             op.Bytes = (byte[])bytes.Clone();
             op.Text = text;
             op.Targets.Clear();
-            foreach (var (t, abs) in targets) op.Targets.Add(new JumpRef { Op = t, Absolute = abs });
+            foreach (var (targetOp, absolute) in targets) op.Targets.Add(new JumpRef { Op = targetOp, Absolute = absolute });
             Ops.Add(op);
         }
     }
@@ -97,20 +93,19 @@ public sealed class EventScript
     public int Event { get; }
     public int BlockBase { get; }
     public int Start { get; }
-    /// <summary>
-    /// Where jump offsets are counted from: the start of the running event. Equals <see cref="Start"/> for a
-    /// whole event; differs when viewing code that an event jumps to (<see cref="LoadAt"/>).
-    /// </summary>
+    // where jump offsets count from: the start of the running event. same as Start for a whole event, different
+    // when viewing code that an event jumps to (LoadAt)
     public int JumpBase { get; private set; }
-    /// <summary>True when this is a view of code inside another event's reach, not an event of its own.</summary>
+    // true when this is a view of code inside another event's reach, not an event of its own
     public bool IsCodeView => JumpBase != Start;
-    /// <summary>End of the decoded region (exclusive).</summary>
+    // end of the decoded region (exclusive)
     public int End { get; private set; }
     public List<ScriptOp> Ops { get; } = new();
-    /// <summary>Set when decoding stopped at an unknown command; the rest is kept as-is when saving.</summary>
+    // set when decoding stopped at an unknown command, the rest is kept as it is when saving
     public string? StopReason { get; private set; }
 
     private readonly RomBuffer _rom;
+    public RomBuffer Rom => _rom;
     private readonly List<ScriptOp> _original = new();
 
     private EventScript(RomBuffer rom, int mapId, int ev, int blockBase, int start)
@@ -120,60 +115,56 @@ public sealed class EventScript
 
     public static int BlockOffset(RomBuffer rom, int mapId)
     {
-        int p = LufiaMap.MapScriptTable + mapId * 5;
-        return 0x18000 + (rom.ReadByte(p) | (rom.ReadByte(p + 1) << 8) | (rom.ReadByte(p + 2) << 16));
+        int entry = LufiaMap.MapScriptTable + mapId * 5;
+        return 0x18000 + (rom.ReadByte(entry) | (rom.ReadByte(entry + 1) << 8) | (rom.ReadByte(entry + 2) << 16));
     }
 
-    /// <summary>Decode event <paramref name="ev"/> of a map, or null if the event has no script.</summary>
+    // decodes event ev of a map, or null if the event has no script
     public static EventScript? Load(RomBuffer rom, int mapId, int ev)
     {
         int start = LufiaMap.EventScriptOffset(rom, mapId, ev);
         if (start < 0 || start >= rom.Length) return null;
-        var s = new EventScript(rom, mapId, ev, BlockOffset(rom, mapId), start);
-        s.Decode();
-        return s;
+        var script = new EventScript(rom, mapId, ev, BlockOffset(rom, mapId), start);
+        script.Decode();
+        return script;
     }
 
-    /// <summary>
-    /// Decode the code at <paramref name="start"/> that event <paramref name="ev"/> (whose script starts at
-    /// <paramref name="jumpBase"/>) jumps to. Edits that keep every line's size can be saved in place.
-    /// </summary>
+    // decodes the code at start that event ev (whose script starts at jumpBase) jumps to.
+    // edits that keep every line's size can be saved in place
     public static EventScript LoadAt(RomBuffer rom, int mapId, int ev, int start, int jumpBase)
     {
-        var s = new EventScript(rom, mapId, ev, BlockOffset(rom, mapId), start) { JumpBase = jumpBase };
-        s.Decode();
-        return s;
+        var script = new EventScript(rom, mapId, ev, BlockOffset(rom, mapId), start) { JumpBase = jumpBase };
+        script.Decode();
+        return script;
     }
 
-    /// <summary>
-    /// Decode an event together with the code its jumps lead to inside the map's script block (not other events'
-    /// starts), as one script. The intro, for instance, is a single jump to its real code. Saving lays every part out
-    /// again, so lines can be added or removed anywhere; same-size edits are still written in place.
-    /// </summary>
+    // decodes an event together with the code its jumps lead to inside the map's script block (not other events'
+    // starts), as one script. the intro for one is a single jump to its real code. saving lays every part out again,
+    // so lines can be added or removed anywhere, and same-size edits still get written in place
     public static EventScript? LoadWhole(RomBuffer rom, int mapId, int ev)
     {
-        var s = Load(rom, mapId, ev);
-        if (s == null || s.StopReason != null) return s;
-        var whole = new EventScript(rom, mapId, ev, s.BlockBase, s.Start) { MergesJumps = true };
+        var script = Load(rom, mapId, ev);
+        if (script == null || script.StopReason != null) return script;
+        var whole = new EventScript(rom, mapId, ev, script.BlockBase, script.Start) { MergesJumps = true };
         whole.Decode();
-        return whole.StopReason == null ? whole : s;
+        return whole.StopReason == null ? whole : script;
     }
 
-    /// <summary>Load the same event or code again (after saving or reverting).</summary>
-    public static EventScript? Reload(RomBuffer rom, EventScript s) =>
-        s.IsCodeView ? LoadAt(rom, s.MapId, s.Event, s.Start, s.JumpBase)
-        : s.MergesJumps ? LoadWhole(rom, s.MapId, s.Event)
-        : Load(rom, s.MapId, s.Event);
+    // loads the same event or code again (after saving or reverting)
+    public static EventScript? Reload(RomBuffer rom, EventScript script) =>
+        script.IsCodeView ? LoadAt(rom, script.MapId, script.Event, script.Start, script.JumpBase)
+        : script.MergesJumps ? LoadWhole(rom, script.MapId, script.Event)
+        : Load(rom, script.MapId, script.Event);
 
-    /// <summary>True when the code the event jumps to was decoded into this script too (see <see cref="LoadWhole"/>).</summary>
+    // true when the code the event jumps to got decoded into this script too (see LoadWhole)
     public bool MergesJumps { get; private init; }
 
-    /// <summary>The ROM ranges the decoded lines came from (one unless jumps were followed).</summary>
+    // the rom ranges the decoded lines came from (just one unless jumps were followed)
     public List<(int From, int To)> Regions { get; } = new();
 
     private Dictionary<int, int>? _eventStarts;
 
-    /// <summary>Which event of this map starts at a ROM offset, or -1.</summary>
+    // which event of this map starts at a rom offset, or -1
     public int EventStartingAt(int offset)
     {
         if (_eventStarts == null)
@@ -181,101 +172,114 @@ public sealed class EventScript
             _eventStarts = new();
             for (int ev = 0; ev < 256; ev++)
             {
-                int o = LufiaMap.EventScriptOffset(_rom, MapId, ev);
-                if (o >= 0) _eventStarts.TryAdd(o, ev);
+                int eventStart = LufiaMap.EventScriptOffset(_rom, MapId, ev);
+                if (eventStart >= 0) _eventStarts.TryAdd(eventStart, ev);
             }
         }
-        return _eventStarts.TryGetValue(offset, out int e) ? e : -1;
+        return _eventStarts.TryGetValue(offset, out int found) ? found : -1;
     }
 
-    private static Dictionary<int, int>? _blockEnds;
-    private static RomBuffer? _blockEndsRom;
+    // where each script block ends, for one rom, kept as a single object: the Cutscenes tab reads it on another
+    // thread, and two fields set one after the other could pair one rom with another rom's ends
+    private sealed record BlockEnds(RomBuffer Rom, Dictionary<int, int> Ends);
+    private static BlockEnds? _blockEnds;
 
-    /// <summary>
-    /// Event numbers that can really be used on a map: characters (0..count-1) and trigger/spot events
-    /// (event base + area), and only table entries that point inside the map's own script block. Entries
-    /// beyond that are other data and decode as garbage.
-    /// </summary>
+    // event numbers a map can really use: characters (0..count-1) and trigger/spot events (event base + area),
+    // and only table entries that point inside the map's own script block. entries past that are other data
+    // and decode as garbage
     public static List<int> PlausibleEvents(RomBuffer rom, int mapId)
     {
-        if (!ReferenceEquals(_blockEndsRom, rom) || _blockEnds == null)
+        var ends = _blockEnds;
+        if (ends == null || !ReferenceEquals(ends.Rom, rom))
         {
             var bases = MapCatalog.Scan(rom).Select(m => BlockOffset(rom, m.MapId)).Distinct().OrderBy(b => b).ToList();
-            _blockEnds = new();
-            for (int i = 0; i < bases.Count; i++) _blockEnds[bases[i]] = i + 1 < bases.Count ? bases[i + 1] : bases[i] + 0x8000;
-            _blockEndsRom = rom;
+            var endOfBlock = new Dictionary<int, int>();
+            for (int i = 0; i < bases.Count; i++) endOfBlock[bases[i]] = i + 1 < bases.Count ? bases[i + 1] : bases[i] + 0x8000;
+            _blockEnds = ends = new BlockEnds(rom, endOfBlock);
         }
         int block = BlockOffset(rom, mapId);
-        int end = _blockEnds.TryGetValue(block, out int e) ? e : block + 0x8000;
-        // a block moved above 1 MB: its exact length is in the space table
+        int end = ends.Ends.TryGetValue(block, out int knownEnd) ? knownEnd : block + 0x8000;
+        // a block moved above 1 MB has its exact length in the space table
         if (block >= MapWriter.ExpansionStart && ExpansionSpace.Load(rom).At(block) is { } moved && moved.Start == block) end = moved.End;
         int npcs = 0, areas = 0;
-        try { var m = LufiaMap.Load(rom, mapId); npcs = m.Npcs.Count; areas = Math.Max(m.SectionCounts[3], m.SectionCounts[4]); } catch { }
-        int max = Math.Max(npcs - 1, LufiaMap.EventBase(rom, mapId) + areas + 1);
+        try { var map = LufiaMap.Load(rom, mapId); npcs = map.Npcs.Count; areas = Math.Max(map.SectionCounts[3], map.SectionCounts[4]); } catch { }
+        int highestEvent = Math.Max(npcs - 1, LufiaMap.EventBase(rom, mapId) + areas + 1);
+        // a block written in the added space (a new map's, or a cutscene's) can use any event number, its table runs
+        // up to where the first event's code starts
+        // (a map with no block has entry FFFFFF, which points past the rom)
+        if (block >= MapWriter.ExpansionStart && block < rom.Length && end > block)
+        {
+            int tableEnd = Math.Min(end, rom.Length) - block;
+            for (int ev = 0; ev * 2 + 2 <= tableEnd && ev <= 255; ev++)
+            {
+                int relative = rom.ReadUInt16Le(block + ev * 2);
+                if (relative != 0xFFFF && relative >= ev * 2 + 2) tableEnd = Math.Min(tableEnd, relative);
+                highestEvent = Math.Max(highestEvent, ev);
+            }
+        }
         var list = new List<int>();
         var texts = new List<(int From, int To, int Ev)>();
-        for (int ev = 0; ev <= Math.Min(max, 255); ev++)
+        for (int ev = 0; ev <= Math.Min(highestEvent, 255); ev++)
         {
-            int o = LufiaMap.EventScriptOffset(rom, mapId, ev);
-            if (o < block || o >= end) continue;
-            // table entries that point into dialogue decode into commands 6E-7F, which have no handler: not events
-            var probe = new EventScript(rom, mapId, ev, block, o);
+            int eventStart = LufiaMap.EventScriptOffset(rom, mapId, ev);
+            if (eventStart < block || eventStart >= end) continue;
+            // table entries that point into dialogue decode into commands 6E-7F, which have no handler, so not events
+            var probe = new EventScript(rom, mapId, ev, block, eventStart);
             probe.Decode();
             if (probe.StopReason?.StartsWith("unknown command") == true) continue;
-            // jumps are relative to the event; real ones stay inside the map's script block (or the expanded area)
+            // jumps are relative to the event, real ones stay inside the map's script block (or the expanded area)
             if (probe.Ops.Any(op => op.Targets.Any(t => t.Absolute < block || t.Absolute >= end))) continue;
             list.Add(ev);
             foreach (var op in probe.Ops.Where(op => op.IsText)) texts.Add((op.Offset, op.Offset + op.RawLength, ev));
         }
-        // entries that point into another event's dialogue aren't events either (text always ends before a real start)
-        // and entries right after a text character (the middle of a box nobody decodes) unless a character or area uses them
+        // entries that point into another event's dialogue aren't events either (text always ends before a real start),
+        // and neither are entries right after a text character (the middle of a box nobody decodes) unless a
+        // character or area uses them
         HashSet<int> used = new();
         try
         {
-            used.UnionWith(LufiaMap.Load(rom, mapId).Npcs.Where(n => !n.IsUnused).Select(n => n.Index));
+            used.UnionWith(LufiaMap.Load(rom, mapId).Npcs.Where(n => !n.IsUnused).Select(n => MapEvents.TalkEvent(n.Index)));
             used.UnionWith(MapSetupScript.ReadTriggers(rom, mapId).Select(t => t.Event));
         }
         catch { }
         // when a start sits inside another candidate's "text" and starts right after an end byte (00) while that other
-        // candidate doesn't, the other one is the fake (e.g. an entry pointing into the pointer table, decoded as text)
+        // candidate doesn't, the other one is the fake (like an entry pointing into the pointer table, decoded as text)
         var fakes = new HashSet<int>();
         foreach (int ev in list)
         {
-            int o = LufiaMap.EventScriptOffset(rom, mapId, ev);
-            if (rom.ReadByte(o - 1) != 0x00) continue;
-            foreach (var t in texts.Where(t => t.Ev != ev && t.From < o && o < t.To))
-                if (rom.ReadByte(LufiaMap.EventScriptOffset(rom, mapId, t.Ev) - 1) != 0x00) fakes.Add(t.Ev);
+            int eventStart = LufiaMap.EventScriptOffset(rom, mapId, ev);
+            if (rom.ReadByte(eventStart - 1) != 0x00) continue;
+            foreach (var text in texts.Where(t => t.Ev != ev && t.From < eventStart && eventStart < t.To))
+                if (rom.ReadByte(LufiaMap.EventScriptOffset(rom, mapId, text.Ev) - 1) != 0x00) fakes.Add(text.Ev);
         }
         list.RemoveAll(fakes.Contains);
         texts.RemoveAll(t => fakes.Contains(t.Ev));
         list.RemoveAll(ev =>
         {
-            int o = LufiaMap.EventScriptOffset(rom, mapId, ev);
-            if (texts.Any(t => t.Ev != ev && t.From < o && o < t.To)) return true;
-            int prev = rom.ReadByte(o - 1);
-            return prev is >= 0x20 and < 0x7F && !used.Contains(ev);
+            int eventStart = LufiaMap.EventScriptOffset(rom, mapId, ev);
+            if (texts.Any(t => t.Ev != ev && t.From < eventStart && eventStart < t.To)) return true;
+            int previousByte = rom.ReadByte(eventStart - 1);
+            return previousByte is >= 0x20 and < 0x7F && !used.Contains(ev);
         });
         return list;
     }
 
-    /// <summary>Plain description of a jump target outside the decoded lines.</summary>
+    // plain description of a jump target outside the decoded lines
     public string DescribeOutside(int abs)
     {
         int ev = EventStartingAt(abs);
         return ev >= 0 ? $"event {ev}'s start (0x{abs:X6})" : $"code at 0x{abs:X6}";
     }
 
-    /// <summary>Optional names for story flags (set by the app from the user's flag names).</summary>
+    // optional names for story flags (the app sets it from the user's flag names)
     public static Func<int, string?>? FlagName;
 
-    private static string Flag(int f) => FlagName?.Invoke(f) is { Length: > 0 } n ? $"{f:X2} \"{n}\"" : $"{f:X2}";
+    private static string Flag(int flag) => FlagName?.Invoke(flag) is { Length: > 0 } name ? $"{flag:X2} \"{name}\"" : $"{flag:X2}";
 
-    // ── Command table ───────────────────────────────────────────────────────
+    // command table
 
-    /// <summary>
-    /// Length of a command from its opcode (and, for 03, its count byte). 0 = unknown;
-    /// negative = text opener of that many bytes, followed by text.
-    /// </summary>
+    // length of a command from its opcode (and for 03, its count byte). 0 = unknown,
+    // negative = a text opener of that many bytes, then text
     public static int CommandLength(int op, int next = 0) => op switch
     {
         0x00 => 1,
@@ -339,15 +343,15 @@ public sealed class EventScript
         _ => 0,
     };
 
-    /// <summary>Byte positions of 16-bit jump operands (offsets from the event start) in a command.</summary>
-    public static IReadOnlyList<int> JumpPositions(byte[] b)
+    // byte positions of the 16-bit jump operands (offsets from the event start) in a command
+    public static IReadOnlyList<int> JumpPositions(byte[] bytes)
     {
-        if (b.Length == 0) return Array.Empty<int>();
-        return b[0] switch
+        if (bytes.Length == 0) return Array.Empty<int>();
+        return bytes[0] switch
         {
             0x01 => new[] { 1 },
             0x02 => new[] { 2, 4 },
-            0x03 when b.Length >= 2 => Enumerable.Range(0, b[1]).Select(i => 2 + 2 * i).ToArray(),
+            0x03 when bytes.Length >= 2 => Enumerable.Range(0, bytes[1]).Select(i => 2 + 2 * i).ToArray(),
             0x04 or 0x05 => new[] { 2 },
             0x45 or 0x46 or 0x47 => new[] { 3 },
             0x48 or 0x49 => new[] { 4 },
@@ -359,7 +363,7 @@ public sealed class EventScript
 
     public static bool IsTextOpener(int op) => CommandLength(op) < 0;
 
-    /// <summary>Who speaks for a text opener.</summary>
+    // who's speaking for a text opener
     public static string SpeakerName(byte[] opener) => opener.Length == 0 ? "Text" : opener[0] switch
     {
         0x0C => "Narration",
@@ -370,15 +374,15 @@ public sealed class EventScript
         _ => $"Text ({string.Join(" ", opener.Select(x => x.ToString("X2")))})",
     };
 
-    /// <summary>Short name of a jump's target line, so the jump reads the same wherever that line moves.</summary>
-    private string TargetName(ScriptOp o)
+    // short name of a jump's target line, so the jump reads the same wherever that line moves to
+    private string TargetName(ScriptOp target)
     {
-        if (o.IsText)
+        if (target.IsText)
         {
-            var t = o.Text.Replace("\n", " ").Trim();
-            return "\"" + (t.Length > 28 ? t[..28].TrimEnd() + "…" : t) + "\"";
+            var text = target.Text.Replace("\n", " ").Trim();
+            return "\"" + (text.Length > 28 ? text[..28].TrimEnd() + "…" : text) + "\"";
         }
-        return o.Bytes.Length > 0 && EventCommands.Find(o.Bytes[0]) is { } d ? d.Name : $"command {(o.Bytes.Length > 0 ? o.Bytes[0] : 0):X2}";
+        return target.Bytes.Length > 0 && EventCommands.Find(target.Bytes[0]) is { } def ? def.Name : $"command {(target.Bytes.Length > 0 ? target.Bytes[0] : 0):X2}";
     }
 
     private static string ActorSays(int actor)
@@ -387,39 +391,39 @@ public sealed class EventScript
         return (who.Length > 0 ? char.ToUpper(who[0]) + who[1..] : who) + " says";
     }
 
-    /// <summary>Human description of a command; jump targets are shown as line numbers when known.</summary>
+    // plain description of a command, jump targets show as line numbers when we know them
     public string Describe(ScriptOp op)
     {
         if (op.IsText) return $"{SpeakerName(op.Bytes)}  ({Hex(op.Bytes)})";
-        var b = op.Bytes;
-        if (b.Length == 0) return "";
-        string T(int i)
+        var bytes = op.Bytes;
+        if (bytes.Length == 0) return "";
+        string JumpTarget(int i)
         {
             if (i >= op.Targets.Count) return "?";
-            var t = op.Targets[i];
-            int line = t.Op != null ? Ops.IndexOf(t.Op) : -1;
-            return line >= 0 ? $"line {line + 1} ({TargetName(t.Op!)})" : DescribeOutside(t.Absolute);
+            var target = op.Targets[i];
+            int line = target.Op != null ? Ops.IndexOf(target.Op) : -1;
+            return line >= 0 ? $"line {line + 1} ({TargetName(target.Op!)})" : DescribeOutside(target.Absolute);
         }
-        var def = EventCommands.Find(b[0]);
-        if (def == null || b.Length < CommandLength(b[0], b.Length > 1 ? b[1] : 0)) return $"Command {b[0]:X2} (unknown)";
+        var def = EventCommands.Find(bytes[0]);
+        if (def == null || bytes.Length < CommandLength(bytes[0], bytes.Length > 1 ? bytes[1] : 0)) return $"Command {bytes[0]:X2} (unknown)";
         var words = new EventCommands.Words
         {
             Item = id => MapSetupScript.ItemName(_rom, id),
             Spell = id => EventCommands.SpellName(_rom, id),
             Flag = Flag,
-            Jump = T,
+            Jump = JumpTarget,
             Map = m => MapLabel?.Invoke(m) ?? $"map {m:X2}",
         };
-        try { return def.Describe(b, words); }
+        try { return def.Describe(bytes, words); }
         catch (Exception) { return def.Name; }
     }
 
-    /// <summary>Optional map names for descriptions (set by the app).</summary>
+    // optional map names for descriptions (the app sets it)
     public static Func<int, string>? MapLabel { get; set; }
 
-    private static string Hex(byte[] b) => string.Join(" ", b.Select(x => x.ToString("X2")));
+    private static string Hex(byte[] bytes) => string.Join(" ", bytes.Select(x => x.ToString("X2")));
 
-    // ── Decoding ────────────────────────────────────────────────────────────
+    // decoding
 
     private void Decode()
     {
@@ -439,129 +443,162 @@ public sealed class EventScript
             }
         }
 
-        // Point jumps at the commands they land on.
+        // point jumps at the commands they land on
         var byOffset = Ops.ToDictionary(o => o.Offset);
         foreach (var op in Ops)
-            foreach (var t in op.Targets)
-                if (byOffset.TryGetValue(t.Absolute, out var target)) t.Op = target;
+            foreach (var jump in op.Targets)
+                if (byOffset.TryGetValue(jump.Absolute, out var target)) jump.Op = target;
         _original.AddRange(Ops);
+        _regionBytes = Regions.Select(r => _rom.ReadBytes(r.From, Math.Min(r.To, _rom.Length) - r.From)).ToList();
+        _readVersion = _rom.Version;
+    }
+
+    private List<byte[]> _regionBytes = new();
+    private int _readVersion;
+
+    // true while the rom still holds what this script was decoded from: the map's block and the event's start where
+    // they were, and the same bytes in every decoded region. false once something else wrote them (another tab, Undo,
+    // a patch), because saving then would put old lines back, or write at offsets the map doesn't use anymore
+    public bool MatchesRom()
+    {
+        if (_rom.Version == _readVersion) return true;
+        if (BlockOffset(_rom, MapId) != BlockBase || LufiaMap.EventScriptOffset(_rom, MapId, Event) != JumpBase) return false;
+        for (int i = 0; i < Regions.Count; i++)
+        {
+            var (from, to) = Regions[i];
+            if (Math.Min(to, _rom.Length) - from != _regionBytes[i].Length ||
+                !_rom.ReadBytes(from, _regionBytes[i].Length).AsSpan().SequenceEqual(_regionBytes[i])) return false;
+        }
+        _readVersion = _rom.Version;   // (other bytes changed, this event is still as it was read)
+        return true;
     }
 
     private void DecodeRegion(int from, SortedSet<int> targets)
     {
-        int p = from;
-        for (int guard = 0; guard < 4000 && p < _rom.Length; guard++)
+        int pos = from;
+        for (int guard = 0; guard < 4000 && pos < _rom.Length; guard++)
         {
-            int op = _rom.ReadByte(p);
-            int len = CommandLength(op, p + 1 < _rom.Length ? _rom.ReadByte(p + 1) : 0);
-            if (op == Battle.RenamePatch.Op && !Battle.RenamePatch.IsCommandAt(_rom, p)) len = 0;   // (only with the patch: 'n' in text is 6E too)
-            if (op == Battle.EmotePatch.Op && !Battle.EmotePatch.IsCommandAt(_rom, p)) len = 0;     // ('o' is 6F)
-            if (len == 0) { StopReason = $"unknown command {op:X2} at 0x{p:X6}"; break; }
+            int op = _rom.ReadByte(pos);
+            int len = CommandLength(op, pos + 1 < _rom.Length ? _rom.ReadByte(pos + 1) : 0);
+            if (op == Battle.RenamePatch.Op && !Battle.RenamePatch.IsCommandAt(_rom, pos)) len = 0;   // (only with the patch, 'n' in text is 6E too)
+            if (op == Battle.EmotePatch.Op && !Battle.EmotePatch.IsCommandAt(_rom, pos)) len = 0;     // ('o' is 6F)
+            if (len == 0) { StopReason = $"unknown command {op:X2} at 0x{pos:X6}"; break; }
 
-            ScriptOp sop;
+            ScriptOp scriptOp;
             if (len < 0)
             {
                 int openerLen = -len;
-                var opener = _rom.ReadBytes(p, openerLen);
-                var (text, raw, term) = DecodeText(_rom, p + openerLen);
-                sop = new ScriptOp
+                var opener = _rom.ReadBytes(pos, openerLen);
+                var (text, raw, terminator) = DecodeText(_rom, pos + openerLen);
+                scriptOp = new ScriptOp
                 {
-                    Offset = p, Bytes = opener, OriginalBytes = (byte[])opener.Clone(), IsText = true,
-                    Text = text, OriginalText = text, Terminator = term, RawLength = openerLen + raw,
-                    Raw = _rom.ReadBytes(p, openerLen + raw),
+                    Offset = pos, Bytes = opener, OriginalBytes = (byte[])opener.Clone(), IsText = true,
+                    Text = text, OriginalText = text, Terminator = terminator, RawLength = openerLen + raw,
+                    Raw = _rom.ReadBytes(pos, openerLen + raw),
                 };
             }
             else
             {
-                var b = _rom.ReadBytes(p, len);
-                sop = new ScriptOp { Offset = p, Bytes = b, OriginalBytes = (byte[])b.Clone() };
-                foreach (int j in JumpPositions(b))
+                var bytes = _rom.ReadBytes(pos, len);
+                scriptOp = new ScriptOp { Offset = pos, Bytes = bytes, OriginalBytes = (byte[])bytes.Clone() };
+                foreach (int j in JumpPositions(bytes))
                 {
-                    int abs = JumpBase + (b[j] | (b[j + 1] << 8));
+                    int abs = JumpBase + (bytes[j] | (bytes[j + 1] << 8));
                     targets.Add(abs);
-                    sop.Targets.Add(new JumpRef { Absolute = abs });
+                    scriptOp.Targets.Add(new JumpRef { Absolute = abs });
                 }
             }
-            Ops.Add(sop);
-            p += sop.Length;
+            Ops.Add(scriptOp);
+            pos += scriptOp.Length;
 
-            // Keep decoding past an end only when a jump in this event lands right here, or a little further on
-            // with whole commands in between (lines after a goto that the editor laid out; jumps skip over them).
-            if (sop.EndsFlow && !targets.Contains(p) && !ContinuesTo(p, targets)) break;
+            // only keep decoding past an end when a jump in this event lands right here, or a little further on
+            // with whole commands in between (lines after a goto that the editor laid out, jumps skip over them)
+            if (scriptOp.EndsFlow && !targets.Contains(pos) && !ContinuesTo(pos, targets)) break;
         }
-        Regions.Add((from, p));
+        Regions.Add((from, pos));
     }
 
-    /// <summary>
-    /// True when a pending jump target lies shortly after <paramref name="p"/> and the bytes up to it decode as whole
-    /// commands landing exactly on it, and <paramref name="p"/> isn't another event's start.
-    /// </summary>
-    /// <summary>Decode past an end to a nearby jump target (see <see cref="ContinuesTo"/>); off only for comparisons in tests.</summary>
+    // decode past an end to a nearby jump target (see ContinuesTo). only turned off for comparisons in tests
     public static bool DecodePastEnds { get; set; } = true;
 
-    private bool ContinuesTo(int p, SortedSet<int> targets)
+    // true when a pending jump target lies shortly after pos, the bytes up to it decode as whole commands landing
+    // exactly on it, and pos isn't another event's start
+    private bool ContinuesTo(int pos, SortedSet<int> targets)
     {
         if (!DecodePastEnds) return false;
-        int t = targets.FirstOrDefault(x => x > p, -1);
-        if (t < 0 || t - p > 0x800 || EventStartingAt(p) >= 0) return false;
-        int q = p;
-        for (int guard = 0; guard < 2000 && q < t; guard++)
+        int target = targets.FirstOrDefault(x => x > pos, -1);
+        if (target < 0 || target - pos > 0x800 || EventStartingAt(pos) >= 0) return false;
+        int scan = pos;
+        for (int guard = 0; guard < 2000 && scan < target; guard++)
         {
-            int op = _rom.ReadByte(q);
-            int len = CommandLength(op, q + 1 < _rom.Length ? _rom.ReadByte(q + 1) : 0);
-            if (op == Battle.RenamePatch.Op && !Battle.RenamePatch.IsCommandAt(_rom, q)) len = 0;
-            if (op == Battle.EmotePatch.Op && !Battle.EmotePatch.IsCommandAt(_rom, q)) len = 0;
+            int op = _rom.ReadByte(scan);
+            int len = CommandLength(op, scan + 1 < _rom.Length ? _rom.ReadByte(scan + 1) : 0);
+            if (op == Battle.RenamePatch.Op && !Battle.RenamePatch.IsCommandAt(_rom, scan)) len = 0;
+            if (op == Battle.EmotePatch.Op && !Battle.EmotePatch.IsCommandAt(_rom, scan)) len = 0;
             if (len == 0) return false;
-            if (len < 0) { var (_, raw, _) = DecodeText(_rom, q - len); q += -len + raw; }
-            else q += len;
+            if (len < 0) { var (_, raw, _) = DecodeText(_rom, scan - len); scan += -len + raw; }
+            else scan += len;
         }
-        return q == t;
+        return scan == target;
     }
 
-    /// <summary>
-    /// Decode dialogue text up to its terminator (04 = back to commands, 00 = end of script).
-    /// Returns editable text using these tags: \n new line, [Hero]..[Artea] names, [ITEM:xx], [SPELL:xx],
-    /// [TOWN:xx], [CHAR:xx], and [xx] / [xx:yy] for other control codes.
-    /// </summary>
+    // decodes dialogue text up to its terminator (04 = back to commands, 00 = end of script).
+    // returns editable text with these tags: \n new line, [Hero]..[Artea] names, [ITEM:xx], [SPELL:xx],
+    // [TOWN:xx], [CHAR:xx], and [xx] / [xx:yy] for other control codes
     public static (string Text, int RawLength, byte Terminator) DecodeText(RomBuffer rom, int start)
     {
-        var d = TextDecoder.Decode(rom, start, expandMte: true, stopAtPageBreak: true);
+        var decoded = TextDecoder.Decode(rom, start, expandMte: true, stopAtPageBreak: true);
         var sb = new System.Text.StringBuilder();
-        foreach (var t in d.Tokens)
+        foreach (var token in decoded.Tokens)
         {
-            byte b = rom.ReadByte(t.RomOffset);
-            switch (b)
+            byte code = rom.ReadByte(token.RomOffset);
+            switch (code)
             {
-                // 04 (and 01-03, which close the box in other styles) go back to commands; 00, 08 and 0E end the script
+                // 04 (and 01-03, which close the box in other styles) go back to commands, 00, 08 and 0E end the script
                 case 0x00: case 0x04:
                 case 0x01: case 0x02: case 0x03:
                 case 0x08: case 0x0E:
-                    return (sb.ToString(), t.RomOffset + 1 - start, b);
+                    return (sb.ToString(), token.RomOffset + 1 - start, code);
                 case 0x05: sb.Append('\n'); break;
                 case 0x07:
                 {
-                    byte id = rom.ReadByte(t.RomOffset + 1);
+                    byte id = rom.ReadByte(token.RomOffset + 1);
                     sb.Append(id < NameTags.Length ? $"[{NameTags[id]}]" : $"[CHAR:{id:X2}]");
                     break;
                 }
-                case 0x09: sb.Append($"[ITEM:{rom.ReadByte(t.RomOffset + 1):X2}]"); break;
-                case 0x0A: sb.Append($"[SPELL:{rom.ReadByte(t.RomOffset + 1):X2}]"); break;
-                case 0x0B: sb.Append($"[TOWN:{rom.ReadByte(t.RomOffset + 1):X2}]"); break;
+                case 0x09: sb.Append($"[ITEM:{rom.ReadByte(token.RomOffset + 1):X2}]"); break;
+                case 0x0A: sb.Append($"[SPELL:{rom.ReadByte(token.RomOffset + 1):X2}]"); break;
+                case 0x0B: sb.Append($"[TOWN:{rom.ReadByte(token.RomOffset + 1):X2}]"); break;
                 case 0x0C: case 0x0D:
                 case >= 0x10:
-                    sb.Append(t.Display); break;
+                    sb.Append(token.Display); break;
                 default:
-                    sb.Append(t.ByteLength == 2 ? $"[{b:X2}:{rom.ReadByte(t.RomOffset + 1):X2}]" : $"[{b:X2}]");
+                    sb.Append(token.ByteLength == 2 ? $"[{code:X2}:{rom.ReadByte(token.RomOffset + 1):X2}]" : $"[{code:X2}]");
                     break;
             }
         }
         // no terminator found within the decoder's window
-        return (sb.ToString(), d.BytesConsumed, 0x00);
+        return (sb.ToString(), decoded.BytesConsumed, 0x00);
     }
 
     public static readonly string[] NameTags = { "Hero", "Lufia", "Aguro", "Jerin", "Maxim", "Selan", "Guy", "Artea" };
 
-    /// <summary>Encode edited text plus its terminator.</summary>
+    // a tag in typed text that encodes a byte that ends the text (00-04, 08, 0E: DecodeText stops there and the game
+    // goes back to commands), so the rest would run as commands. or null
+    public static string? EndingTag(string text)
+    {
+        foreach (System.Text.RegularExpressions.Match match in System.Text.RegularExpressions.Regex.Matches(text, @"\[([^\]\[]+)\]"))
+        {
+            string tag = match.Groups[1].Value.Trim().ToUpperInvariant();
+            if (tag == "PAGE") return match.Value;
+            string code = tag.Split(':')[0];
+            if (code.Length is 1 or 2 && byte.TryParse(code, System.Globalization.NumberStyles.HexNumber, null, out byte value) && value is <= 0x04 or 0x08 or 0x0E)
+                return match.Value;
+        }
+        return null;
+    }
+
+    // encodes edited text plus its terminator
     public byte[] EncodeText(string text, byte terminator)
     {
         var bytes = TextDecoder.Encode(text.Replace("\r", ""), _rom).ToList();
@@ -570,16 +607,16 @@ public sealed class EventScript
         return bytes.ToArray();
     }
 
-    // ── Editing ─────────────────────────────────────────────────────────────
+    // editing
 
     public bool IsModified =>
         Ops.Count != _original.Count || Ops.Where((o, i) => !ReferenceEquals(o, _original[i])).Any() ||
         Ops.Any(o => o.TextChanged || o.BytesChanged || TargetsChanged(o));
 
-    private static bool TargetsChanged(ScriptOp o) =>
-        !o.IsNew && o.Targets.Any(t => t.Op != null ? t.Op.Offset != t.Absolute : false);
+    private static bool TargetsChanged(ScriptOp op) =>
+        !op.IsNew && op.Targets.Any(t => t.Op != null ? t.Op.Offset != t.Absolute : false);
 
-    /// <summary>A new command (jumps start pointing at the following line).</summary>
+    // a new command (its jumps start out pointing at the next line)
     public ScriptOp NewCommand(byte[] bytes, int insertAt)
     {
         var op = new ScriptOp { Bytes = bytes };
@@ -589,7 +626,7 @@ public sealed class EventScript
         return op;
     }
 
-    /// <summary>A new dialogue box.</summary>
+    // a new dialogue box
     public ScriptOp NewText(byte opener, string text, int insertAt)
     {
         var op = new ScriptOp { Bytes = new[] { opener }, IsText = true, Text = text, Terminator = 0x04 };
@@ -597,10 +634,8 @@ public sealed class EventScript
         return op;
     }
 
-    /// <summary>
-    /// Replace a command's bytes. Jump targets are kept where possible; new jump operands point at the next line.
-    /// Returns an error message, or null when the bytes are a valid command.
-    /// </summary>
+    // replaces a command's bytes. jump targets are kept where we can, new jump operands point at the next line.
+    // returns an error message, or null if the bytes are a valid command
     public string? SetCommandBytes(ScriptOp op, byte[] bytes)
     {
         if (op.IsText) return "This line is a dialogue box.";
@@ -610,17 +645,15 @@ public sealed class EventScript
         if (len < 0) return $"{bytes[0]:X2} starts a dialogue box; insert a text line instead.";
         if (bytes.Length != len) return $"Command {bytes[0]:X2} is {len} byte{(len == 1 ? "" : "s")} long.";
         var jumps = JumpPositions(bytes);
-        int idx = Ops.IndexOf(op);
+        int index = Ops.IndexOf(op);
         while (op.Targets.Count < jumps.Count)
-            op.Targets.Add(new JumpRef { Op = idx + 1 < Ops.Count ? Ops[idx + 1] : null, Absolute = End });
+            op.Targets.Add(new JumpRef { Op = index + 1 < Ops.Count ? Ops[index + 1] : null, Absolute = End });
         while (op.Targets.Count > jumps.Count) op.Targets.RemoveAt(op.Targets.Count - 1);
         op.Bytes = bytes;
         return null;
     }
 
-    /// <summary>
-    /// Move a line to another position (the index it ends up at). Jumps keep pointing at the same lines, wherever they go.
-    /// </summary>
+    // moves a line to another position (the index it ends up at). jumps keep pointing at the same lines wherever they go
     public void Move(ScriptOp op, int toIndex)
     {
         int from = Ops.IndexOf(op);
@@ -629,97 +662,92 @@ public sealed class EventScript
         Ops.Insert(Math.Clamp(toIndex, 0, Ops.Count), op);
     }
 
-    /// <summary>Remove a line. Jumps that pointed at it move to the following line.</summary>
+    // removes a line. jumps that pointed at it move to the next line
     public string? Remove(ScriptOp op)
     {
-        int idx = Ops.IndexOf(op);
-        if (idx < 0) return null;
-        var next = idx + 1 < Ops.Count ? Ops[idx + 1] : null;
+        int index = Ops.IndexOf(op);
+        if (index < 0) return null;
+        var next = index + 1 < Ops.Count ? Ops[index + 1] : null;
         bool targeted = Ops.Any(o => o != op && o.Targets.Any(t => t.Op == op));
         if (targeted && next == null) return "Other lines jump to this one and there's nothing after it to jump to instead.";
-        foreach (var o in Ops)
-            foreach (var t in o.Targets)
-                if (t.Op == op) t.Op = next;
-        Ops.RemoveAt(idx);
+        foreach (var line in Ops)
+            foreach (var jump in line.Targets)
+                if (jump.Op == op) jump.Op = next;
+        Ops.RemoveAt(index);
         return null;
     }
 
-    // ── Saving ──────────────────────────────────────────────────────────────
+    // saving
 
-    private byte[] Encode(ScriptOp o) =>
-        o.IsText
-            ? (o.TextChanged || o.BytesChanged ? o.Bytes.Concat(EncodeText(o.Text, o.Terminator)).ToArray() : (byte[])o.Raw.Clone())
-            : (byte[])o.Bytes.Clone();
+    private byte[] Encode(ScriptOp op) =>
+        op.IsText
+            ? (op.TextChanged || op.BytesChanged ? op.Bytes.Concat(EncodeText(op.Text, op.Terminator)).ToArray() : (byte[])op.Raw.Clone())
+            : (byte[])op.Bytes.Clone();
 
-    /// <summary>
-    /// Bytes of the edited event when placed at <paramref name="newStart"/> (file offset) inside a block
-    /// whose base is <paramref name="newBase"/>. Jumps to commands of this event follow them; jumps to places
-    /// outside it point into the copied block.
-    /// </summary>
+    // bytes of the edited event when placed at newStart (file offset) inside a block whose base is newBase.
+    // jumps to commands of this event follow them, jumps to places outside it point into the copied block
     private byte[] Build(int newStart, int newBase, out bool layoutUnchanged) => Build(newStart, newBase, out layoutUnchanged, null);
 
-    /// <param name="pieces">When given, lines keep their original ROM offsets (in-place save of a script with several
-    /// regions) and every line's bytes are returned with its offset.</param>
+    // pieces: when given, lines keep their original rom offsets (in-place save of a script with several regions)
+    // and every line's bytes come back with its offset
     private byte[] Build(int newStart, int newBase, out bool layoutUnchanged, List<(int Offset, byte[] Bytes)>? pieces,
                          List<(ScriptOp Op, int Offset, byte[] Bytes)>? layout = null)
     {
         var encoded = new List<byte[]>();
-        var newPos = new Dictionary<ScriptOp, int>();
+        var newOffsets = new Dictionary<ScriptOp, int>();
         int pos = newStart;
         layoutUnchanged = Ops.Count == _original.Count && Ops.Where((o, i) => !ReferenceEquals(o, _original[i])).Count() == 0;
-        foreach (var o in Ops)
+        foreach (var op in Ops)
         {
-            if (pieces != null && !o.IsNew) pos = o.Offset;
-            newPos[o] = pos;
-            var b = Encode(o);
-            if (o.IsNew || b.Length != (o.IsText ? o.RawLength : o.OriginalBytes.Length)) layoutUnchanged = false;
-            encoded.Add(b);
-            pos += b.Length;
+            if (pieces != null && !op.IsNew) pos = op.Offset;
+            newOffsets[op] = pos;
+            var bytes = Encode(op);
+            if (op.IsNew || bytes.Length != (op.IsText ? op.RawLength : op.OriginalBytes.Length)) layoutUnchanged = false;
+            encoded.Add(bytes);
+            pos += bytes.Length;
         }
 
         int newJump = newStart - (Start - JumpBase);   // = newStart for a whole event
         var outBytes = new List<byte>();
         for (int i = 0; i < Ops.Count; i++)
         {
-            var o = Ops[i]; var b = encoded[i];
-            if (!o.IsText)
+            var op = Ops[i]; var bytes = encoded[i];
+            if (!op.IsText)
             {
-                var jumps = JumpPositions(b);
+                var jumps = JumpPositions(bytes);
                 for (int k = 0; k < jumps.Count; k++)
                 {
                     int j = jumps[k];
-                    var t = k < o.Targets.Count ? o.Targets[k] : null;
-                    int rel;
-                    if (t?.Op != null && newPos.TryGetValue(t.Op, out int nt)) rel = nt - newJump;
+                    var target = k < op.Targets.Count ? op.Targets[k] : null;
+                    int relative;
+                    if (target?.Op != null && newOffsets.TryGetValue(target.Op, out int targetOffset)) relative = targetOffset - newJump;
                     else
                     {
-                        int abs = t?.Absolute ?? End;
-                        if (t?.Op == null && Regions.Any(r => abs >= r.From && abs < r.To))
+                        int abs = target?.Absolute ?? End;
+                        if (target?.Op == null && Regions.Any(r => abs >= r.From && abs < r.To))
                             throw new InvalidOperationException($"A jump at line {i + 1} lands inside a command; fix it before saving.");
-                        rel = abs - BlockBase + newBase - newJump;   // into the (copied) rest of the block
+                        relative = abs - BlockBase + newBase - newJump;   // into the (copied) rest of the block
                     }
-                    if (rel is < 0 or > 0xFFFF) throw new InvalidOperationException($"The jump at line {i + 1} can't reach its target from the new location.");
-                    b[j] = (byte)rel; b[j + 1] = (byte)(rel >> 8);
+                    if (relative is < 0 or > 0xFFFF) throw new InvalidOperationException($"The jump at line {i + 1} can't reach its target from the new location.");
+                    bytes[j] = (byte)relative; bytes[j + 1] = (byte)(relative >> 8);
                 }
             }
-            outBytes.AddRange(b);
-            pieces?.Add((newPos[o], b));
-            layout?.Add((o, newPos[o], b));
+            outBytes.AddRange(bytes);
+            pieces?.Add((newOffsets[op], bytes));
+            layout?.Add((op, newOffsets[op], bytes));
         }
-        // Decoding stopped early, or the event no longer ends: continue with the original code.
+        // decoding stopped early, or the event doesn't end anymore, so carry on into the original code
         if (StopReason != null || Ops.Count == 0 || !Ops[^1].EndsFlow)
         {
-            int rel = End - BlockBase + newBase - newJump;
-            if (rel is < 0 or > 0xFFFF) throw new InvalidOperationException("Can't continue into the original script from the new location.");
-            outBytes.AddRange(new byte[] { 0x01, (byte)rel, (byte)(rel >> 8) });
+            int relative = End - BlockBase + newBase - newJump;
+            if (relative is < 0 or > 0xFFFF) throw new InvalidOperationException("Can't continue into the original script from the new location.");
+            outBytes.AddRange(new byte[] { 0x01, (byte)relative, (byte)(relative >> 8) });
         }
         return outBytes.ToArray();
     }
 
-    /// <summary>
-    /// Every line's bytes as they would be written with the lines laid out from the event's start (jumps already
-    /// recalculated), or null when the event can't be built yet (e.g. a jump lands inside a command).
-    /// </summary>
+    // every line's bytes as they'd be written with the lines laid out from the event's start (jumps already
+    // worked out), or null when the event can't be built yet (like a jump landing inside a command)
     public List<(ScriptOp Op, int Offset, byte[] Bytes)>? PreviewLayout()
     {
         var layout = new List<(ScriptOp Op, int Offset, byte[] Bytes)>();
@@ -727,25 +755,25 @@ public sealed class EventScript
         catch (InvalidOperationException) { return null; }
     }
 
-    /// <summary>Total size of the event as it would be written.</summary>
+    // total size of the event as it would be written
     public int BuiltLength() { try { return Build(Start, BlockBase, out _).Length; } catch (InvalidOperationException) { return -1; } }
 
-    /// <summary>The line at an absolute jump target, or null.</summary>
+    // the line at an absolute jump target, or null
     public ScriptOp? OpAtJumpValue(int value) { int abs = JumpBase + value; return Ops.FirstOrDefault(o => o.Offset == abs && !o.IsNew); }
 
-    /// <summary>True when the edits keep every line the same size (no ROM expansion needed).</summary>
+    // true when the edits keep every line the same size (no rom expansion needed)
     public bool FitsInPlace()
     {
         var bytes = Build(Start, BlockBase, out bool same);
         return same || SameLengthInPlace(bytes);
     }
 
-    /// <summary>Lines were reordered (or swapped for others) but the event is exactly as long as before: it can be rewritten where it is.</summary>
+    // lines got reordered (or swapped for others) but the event is exactly as long as before, so it can be rewritten where it is
     private bool SameLengthInPlace(byte[] built) => Regions.Count <= 1 && built.Length == End - Start && !OthersJumpInside();
 
     private bool? _othersJumpInside;
 
-    /// <summary>Another event of this map jumps into the middle of this one (then its lines must keep their offsets).</summary>
+    // another event of this map jumps into the middle of this one (then its lines have to keep their offsets)
     private bool OthersJumpInside()
     {
         if (_othersJumpInside is bool known) return known;
@@ -764,9 +792,34 @@ public sealed class EventScript
         return found;
     }
 
-    /// <summary>Write the edited event to the ROM. Returns a description of what was done and where.</summary>
+    // writes the edited event to the rom, returns a description of what was done and where
     public string Save(bool allowExpand)
     {
+        // all or nothing: expanding, the rename / emote patches and the block copy go in before the lines are laid out,
+        // and a failure after them (a go to that can't reach its step from the new place) can't leave them behind
+        var before = _rom.ToArray();
+        try { return SaveCore(allowExpand); }
+        catch
+        {
+            if (!_rom.SameAs(before)) _rom.ReplaceAll(before);
+            throw;
+        }
+    }
+
+    private string SaveCore(bool allowExpand)
+    {
+        if (!MatchesRom())
+            throw new InvalidOperationException($"{(IsCodeView ? "This code" : $"Event {Event} of map {MapId:X2}")} was changed somewhere else since it was " +
+                                                "opened here (another tab, Undo or a patch), so these lines would write over the newer version. " +
+                                                "Revert to read it again, then make the changes again.");
+        foreach (var o in Ops.Where(o => o.IsText && (o.IsNew || o.TextChanged)))
+        {
+            if (DutchLetters.Unwritable(_rom, o.Text) is string bad)
+                throw new InvalidOperationException(bad + ".");
+            if (EndingTag(o.Text) is string end)
+                throw new InvalidOperationException($"{end} in the text \"{(o.Text.Length > 40 ? o.Text[..40] + "..." : o.Text)}\" would end the text there: " +
+                                                    "the game would run the rest of the line as event commands. Take it out (use a new line, or a new text step for a new box).");
+        }
         // the rename command needs its engine patch (added the first time an event uses it)
         if (Ops.Any(o => !o.IsText && o.Bytes.Length > 0 && o.Bytes[0] == Battle.RenamePatch.Op) && !Battle.RenamePatch.IsApplied(_rom))
         {
@@ -787,7 +840,7 @@ public sealed class EventScript
             Build(Start, BlockBase, out bool sameLayout, pieces);
             if (sameLayout)
             {
-                foreach (var (off, bytes) in pieces) _rom.WriteBytes(off, bytes);
+                foreach (var (offset, bytes) in pieces) _rom.WriteBytes(offset, bytes);
                 _rom.FixChecksum();
                 return $"Event {Event} of map {MapId:X2} (and the code it jumps to) was rewritten in place.";
             }
@@ -795,7 +848,7 @@ public sealed class EventScript
         var inPlace = Build(Start, BlockBase, out bool same);
         if ((same || SameLengthInPlace(inPlace)) && Regions.Count <= 1)
         {
-            // drop the continuation goto that Build may add; the original bytes after the event are still there
+            // leave off the carry-on goto that Build might add, the original bytes after the event are still there
             _rom.WriteBytes(Start, inPlace.AsSpan(0, End - Start).ToArray());
             return IsCodeView
                 ? $"Code at ROM offset 0x{Start:X6} (reached from event {Event} of map {MapId:X2}) was rewritten in place ({End - Start} bytes)."
@@ -810,15 +863,15 @@ public sealed class EventScript
         bool expanded = false;
         if (_rom.Length < MapWriter.ExpandedSize) { _rom.Expand(MapWriter.ExpandedSize); expanded = true; }
 
-        // Copy the map's whole script block (other events jump into it) to a new block above 1 MB, add the
-        // rewritten event after it, and repoint the map. The space table knows exact block lengths.
-        var space = ExpansionSpace.Load(_rom);
+        // copy the map's whole script block (other events jump into it) to a new block above 1 MB, put the rewritten
+        // event after it and repoint the map. the space table knows the exact block lengths
+        var freeSpace = ExpansionSpace.Load(_rom);
         int copyLen = BlockLength();
         if (copyLen < End - BlockBase) copyLen = End - BlockBase;
         int size = Build(0, 0, out _).Length;   // only the length matters here
         if (copyLen + size > 0xFFF0)
             throw new InvalidOperationException("This map's script block is too large to copy.");
-        int newBase = space.Allocate(copyLen + size + 1, ExpansionSpace.Kind.ScriptBlock, MapId, ScriptLimit);
+        int newBase = freeSpace.Allocate(copyLen + size + 1, ExpansionSpace.Kind.ScriptBlock, MapId, ScriptLimit);
         int newStart = newBase + copyLen;
         _rom.WriteBytes(newBase, _rom.ReadBytes(BlockBase, copyLen));
         var code = Build(newStart, newBase, out _);
@@ -827,112 +880,106 @@ public sealed class EventScript
         _rom.WriteBytes(newStart, code);
         _rom.WriteByte(newStart + code.Length, 0x00);          // guard so the free-space search skips it
 
-        int rel = newStart - newBase;
-        _rom.WriteUInt16Le(newBase + Event * 2, (ushort)rel);
-        int t = newBase - 0x18000;
-        int p = LufiaMap.MapScriptTable + MapId * 5;
-        _rom.WriteBytes(p, new[] { (byte)t, (byte)(t >> 8), (byte)(t >> 16) });
+        int relative = newStart - newBase;
+        _rom.WriteUInt16Le(newBase + Event * 2, (ushort)relative);
+        int blockPointer = newBase - 0x18000;
+        int tableEntry = LufiaMap.MapScriptTable + MapId * 5;
+        _rom.WriteBytes(tableEntry, new[] { (byte)blockPointer, (byte)(blockPointer >> 8), (byte)(blockPointer >> 16) });
 
         // the previous copy above 1 MB is free again, unless another map still uses it
         bool oldFreed = false;
-        if (BlockBase >= MapWriter.ExpansionStart && space.At(BlockBase)?.Start == BlockBase &&
+        if (BlockBase >= MapWriter.ExpansionStart && freeSpace.At(BlockBase)?.Start == BlockBase &&
             !MapCatalog.Scan(_rom).Any(m => m.MapId != MapId && BlockOffset(_rom, m.MapId) == BlockBase))
         {
-            space.Free(BlockBase);
+            freeSpace.Free(BlockBase);
             oldFreed = true;
         }
-        space.Save();
+        freeSpace.Save();
         _rom.FixChecksum();
         return $"Event {Event} of map {MapId:X2} changed size, so the map's script block was copied to ROM offset 0x{newBase:X6}" +
                $"{(expanded ? " in the newly expanded 2 MB ROM" : "")} and the event added at 0x{newStart:X6} ({code.Length} bytes). " +
                (oldFreed ? "The block's previous copy above 1 MB was freed." : "The original block is left untouched.");
     }
 
-    /// <summary>
-    /// Scripts run with the data bank set to their own bank (3 + offset from 0x18000 / 32 KB = file offset / 32 KB,
-    /// $01:C292), and the command handlers reach RAM through it ($0Dxx, $158F,X...). Only banks 00-3F mirror the
-    /// work RAM, so event script blocks must stay below 2 MB (file 0x200000), even in a 4 MB ROM.
-    /// </summary>
+    // scripts run with the data bank set to their own bank (3 + offset from 0x18000 / 32 KB = file offset / 32 KB,
+    // $01:C292), and the command handlers reach RAM through it ($0Dxx, $158F,X...). only banks 00-3F mirror the
+    // work RAM, so event script blocks have to stay below 2 MB (file 0x200000), even in a 4 MB rom
     public const int ScriptLimit = MapWriter.ExpandedSize;
 
-    /// <summary>How many event slots the map's block has (its offset table runs up to the first event's code).</summary>
+    // how many event slots the map's block has (its offset table runs up to the first event's code)
     public static int SlotCount(RomBuffer rom, int mapId)
     {
-        int b = BlockOffset(rom, mapId);
-        int len = new EventScript(rom, mapId, 0, b, b).BlockLength(), first = len, baseEv = LufiaMap.EventBase(rom, mapId);
-        for (int i = 0; i < 0x100 && i * 2 + 1 < first && b + i * 2 + 1 < rom.Length; i++)
+        int block = BlockOffset(rom, mapId);
+        int blockLength = new EventScript(rom, mapId, 0, block, block).BlockLength(), first = blockLength, baseEv = LufiaMap.EventBase(rom, mapId);
+        for (int i = 0; i < 0x100 && i * 2 + 1 < first && block + i * 2 + 1 < rom.Length; i++)
         {
-            int rel = rom.ReadUInt16Le(b + i * 2);
-            // (a block shared by maps with an event base: its entry 0 holds the base, not an event; e.g. map 97's
-            // 000C, whose events are 12-17: read as an event, the table looked 6 entries long)
-            if (i == 0 && baseEv > 0 && rel == baseEv) continue;
-            if (rel != 0xFFFF && rel >= 2 && rel < first) first = rel;
+            int relative = rom.ReadUInt16Le(block + i * 2);
+            // (a block shared by maps with an event base: its entry 0 holds the base, not an event. map 97's 000C
+            // for one, whose events are 12-17: read as an event, the table looked 6 entries long)
+            if (i == 0 && baseEv > 0 && relative == baseEv) continue;
+            if (relative != 0xFFFF && relative >= 2 && relative < first) first = relative;
         }
         return Math.Min(0x100, first / 2);
     }
 
-    /// <summary>
-    /// Gives map <paramref name="mapId"/> its own copy of the script block it uses (in the added space), so editing its
-    /// events in place doesn't change another map that shares the block. Used for new maps copied from another one.
-    /// </summary>
+    // gives map mapId its own copy of the script block it uses (in the added space), so editing its events in place
+    // doesn't change another map that shares the block. for new maps copied from another one
     public static void CopyBlockFor(RomBuffer rom, int mapId)
     {
-        var s = new EventScript(rom, mapId, 0, BlockOffset(rom, mapId), BlockOffset(rom, mapId));
-        int len = s.BlockLength();
-        if (len <= 0 || len > 0xFFF0) throw new InvalidOperationException("This map's script block can't be copied.");
-        var space = ExpansionSpace.Load(rom);
-        int at = space.Allocate(len + 1, ExpansionSpace.Kind.ScriptBlock, mapId, ScriptLimit);
-        rom.WriteBytes(at, rom.ReadBytes(s.BlockBase, len));
-        rom.WriteByte(at + len, 0x00);
-        space.Save();
-        int t = at - 0x18000, p = LufiaMap.MapScriptTable + mapId * 5;
-        rom.WriteBytes(p, new[] { (byte)t, (byte)(t >> 8), (byte)(t >> 16) });
+        var script = new EventScript(rom, mapId, 0, BlockOffset(rom, mapId), BlockOffset(rom, mapId));
+        int blockLength = script.BlockLength();
+        if (blockLength <= 0 || blockLength > 0xFFF0) throw new InvalidOperationException("This map's script block can't be copied.");
+        var freeSpace = ExpansionSpace.Load(rom);
+        int newBlock = freeSpace.Allocate(blockLength + 1, ExpansionSpace.Kind.ScriptBlock, mapId, ScriptLimit);
+        rom.WriteBytes(newBlock, rom.ReadBytes(script.BlockBase, blockLength));
+        rom.WriteByte(newBlock + blockLength, 0x00);
+        freeSpace.Save();
+        int blockPointer = newBlock - 0x18000, tableEntry = LufiaMap.MapScriptTable + mapId * 5;
+        rom.WriteBytes(tableEntry, new[] { (byte)blockPointer, (byte)(blockPointer >> 8), (byte)(blockPointer >> 16) });
     }
 
-    /// <summary>A new, empty script block for a map: <paramref name="slots"/> events, none with a script yet.</summary>
+    // a new empty script block for a map: slots events, none of them with a script yet
     public static void NewBlockFor(RomBuffer rom, int mapId, int slots)
     {
-        var space = ExpansionSpace.Load(rom);
-        int at = space.Allocate(slots * 2 + 1, ExpansionSpace.Kind.ScriptBlock, mapId, ScriptLimit);
-        rom.WriteBytes(at, Enumerable.Repeat((byte)0xFF, slots * 2).ToArray());
-        rom.WriteByte(at + slots * 2, 0x00);
-        space.Save();
-        int t = at - 0x18000, p = LufiaMap.MapScriptTable + mapId * 5;
-        rom.WriteBytes(p, new[] { (byte)t, (byte)(t >> 8), (byte)(t >> 16) });
+        var freeSpace = ExpansionSpace.Load(rom);
+        int newBlock = freeSpace.Allocate(slots * 2 + 1, ExpansionSpace.Kind.ScriptBlock, mapId, ScriptLimit);
+        rom.WriteBytes(newBlock, Enumerable.Repeat((byte)0xFF, slots * 2).ToArray());
+        rom.WriteByte(newBlock + slots * 2, 0x00);
+        freeSpace.Save();
+        int blockPointer = newBlock - 0x18000, tableEntry = LufiaMap.MapScriptTable + mapId * 5;
+        rom.WriteBytes(tableEntry, new[] { (byte)blockPointer, (byte)(blockPointer >> 8), (byte)(blockPointer >> 16) });
     }
 
-    /// <summary>
-    /// Creates event <paramref name="ev"/> of a map that has none yet (a slot with no script): the map's block is
-    /// copied to the added space with a one-command event (end) after it, which the event editor can then fill in.
-    /// </summary>
+    // creates event ev on a map that doesn't have it yet (a slot with no script). the map's block gets copied to the
+    // added space with a one-command event (end) after it, and the event editor can fill that in
     public static void CreateEvent(RomBuffer rom, int mapId, int ev)
     {
         if (LufiaMap.EventScriptOffset(rom, mapId, ev) >= 0) throw new InvalidOperationException($"Event {ev} already has a script.");
         if (ev >= SlotCount(rom, mapId)) throw new InvalidOperationException($"This map's script block has {SlotCount(rom, mapId)} event slots; event {ev} doesn't fit.");
         if (rom.Length < MapWriter.ExpandedSize) rom.Expand(MapWriter.ExpandedSize);
-        var s = new EventScript(rom, mapId, ev, BlockOffset(rom, mapId), BlockOffset(rom, mapId));
-        int len = s.BlockLength(), oldBase = s.BlockBase;
-        var space = ExpansionSpace.Load(rom);
-        int at = space.Allocate(len + 2, ExpansionSpace.Kind.ScriptBlock, mapId, ScriptLimit);
-        rom.WriteBytes(at, rom.ReadBytes(oldBase, len));
-        rom.WriteByte(at + len, 0x00);       // the new event: end
-        rom.WriteByte(at + len + 1, 0x00);   // guard
-        rom.WriteUInt16Le(at + ev * 2, (ushort)len);
-        int t = at - 0x18000, p = LufiaMap.MapScriptTable + mapId * 5;
-        rom.WriteBytes(p, new[] { (byte)t, (byte)(t >> 8), (byte)(t >> 16) });
-        if (oldBase >= MapWriter.ExpansionStart && space.At(oldBase)?.Start == oldBase &&
+        var script = new EventScript(rom, mapId, ev, BlockOffset(rom, mapId), BlockOffset(rom, mapId));
+        int blockLength = script.BlockLength(), oldBase = script.BlockBase;
+        var freeSpace = ExpansionSpace.Load(rom);
+        int newBlock = freeSpace.Allocate(blockLength + 2, ExpansionSpace.Kind.ScriptBlock, mapId, ScriptLimit);
+        rom.WriteBytes(newBlock, rom.ReadBytes(oldBase, blockLength));
+        rom.WriteByte(newBlock + blockLength, 0x00);       // the new event: end
+        rom.WriteByte(newBlock + blockLength + 1, 0x00);   // guard
+        rom.WriteUInt16Le(newBlock + ev * 2, (ushort)blockLength);
+        int blockPointer = newBlock - 0x18000, tableEntry = LufiaMap.MapScriptTable + mapId * 5;
+        rom.WriteBytes(tableEntry, new[] { (byte)blockPointer, (byte)(blockPointer >> 8), (byte)(blockPointer >> 16) });
+        if (oldBase >= MapWriter.ExpansionStart && freeSpace.At(oldBase)?.Start == oldBase &&
             !MapCatalog.Scan(rom).Any(m => m.MapId != mapId && BlockOffset(rom, m.MapId) == oldBase))
-            space.Free(oldBase);
-        space.Save();
+            freeSpace.Free(oldBase);
+        freeSpace.Save();
         rom.FixChecksum();
     }
 
-    /// <summary>Bytes from this block's start to the next map's script block (blocks are contiguous).</summary>
+    // bytes from this block's start to the next map's script block (the blocks sit right after each other)
     private int BlockLength()
     {
         if (BlockBase >= MapWriter.ExpansionStart)
         {
-            // exact length from the space table (rebuilt for ROMs from earlier versions)
+            // exact length from the space table (rebuilt for roms from earlier versions)
             var entry = ExpansionSpace.Load(_rom).At(BlockBase);
             if (entry != null) return entry.End - BlockBase;
             return Math.Min(0xC000, ExpansionSpace.TableStart - BlockBase);
@@ -944,22 +991,22 @@ public sealed class EventScript
 
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<RomBuffer, Tuple<byte[], int[]>> _blockStarts = new();
 
-    /// <summary>The script blocks of the game's maps, sorted (cached: rebuilt only when the map tables change, so
-    /// asking for every map's block length no longer lists every map each time).</summary>
+    // the script blocks of the game's maps, sorted. cached and only rebuilt when the map tables change, so asking for
+    // every map's block length doesn't list every map each time anymore
     public static int[] BlockStarts(RomBuffer rom)
     {
         // the tables a map's existence and block depend on: map data select, script table
         var key = rom.ReadBytes(LufiaMap.MapScriptTable, 256 * 5).Concat(rom.ReadBytes(LufiaMap.MapDataSelectTable, 256)).ToArray();
-        if (_blockStarts.TryGetValue(rom, out var c) && c.Item1.AsSpan().SequenceEqual(key)) return c.Item2;
+        if (_blockStarts.TryGetValue(rom, out var cached) && cached.Item1.AsSpan().SequenceEqual(key)) return cached.Item2;
         var starts = MapCatalog.Scan(rom).Select(m => BlockOffset(rom, m.MapId)).Distinct().OrderBy(x => x).ToArray();
         _blockStarts.AddOrUpdate(rom, Tuple.Create(key, starts));
         return starts;
     }
 
-    /// <summary>Where the next map's script block starts after <paramref name="blockBase"/> (int.MaxValue for none).</summary>
+    // where the next map's script block starts after blockBase (int.MaxValue for none)
     public static int NextBlockStart(RomBuffer rom, int blockBase)
     {
-        foreach (int b in BlockStarts(rom)) if (b > blockBase) return b;
+        foreach (int start in BlockStarts(rom)) if (start > blockBase) return start;
         return int.MaxValue;
     }
 

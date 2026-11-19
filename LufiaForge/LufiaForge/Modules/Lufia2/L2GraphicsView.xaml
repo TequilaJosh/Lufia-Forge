@@ -1,0 +1,208 @@
+<UserControl x:Class="LufiaForge.Modules.Lufia2.L2GraphicsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:common="clr-namespace:LufiaForge.Modules.Common"
+             xmlns:local="clr-namespace:LufiaForge.Modules.Lufia2">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+            <BooleanToVisibilityConverter x:Key="Vis"/>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <Grid common:LayoutMemory.Key="l2graphics.main">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="260" MinWidth="120"/>
+            <ColumnDefinition Width="6"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <common:PopOutHost Grid.Column="0" Title="Picture list" Key="l2graphics.list" ButtonMargin="0,14,32,0">
+        <ListBox Margin="12" Style="{StaticResource GdRecordList}" ItemsSource="{Binding ItemsView}" SelectedIndex="{Binding SelectedIndex}"
+                 DisplayMemberPath="Label" SelectionChanged="List_SelectionChanged">
+            <ListBox.GroupStyle>
+                <GroupStyle>
+                    <GroupStyle.HeaderTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Name}" Style="{StaticResource GdSection}" Margin="4,8,0,2"/>
+                        </DataTemplate>
+                    </GroupStyle.HeaderTemplate>
+                </GroupStyle>
+            </ListBox.GroupStyle>
+        </ListBox>
+        </common:PopOutHost>
+        <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch"/>
+        <common:PopOutHost Grid.Column="2" Title="Picture" Key="l2graphics.picture" ButtonMargin="0,0,12,0">
+        <DockPanel x:Name="PicturePanel" Margin="0,12,12,12" KeyDown="Picture_KeyDown">
+            <TextBlock DockPanel.Dock="Top" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,6"
+                       Text="The game's pictures. Paint on one below (pick a colour, then click or drag; Ctrl+Z and Ctrl+Y take strokes back until you write the painting), or use Export PNG and Import PNG to draw in another program. Click a colour square to paint with it and to change that colour; the Palettes groups list the game's colour sets. Writes go into the ROM at once; Edit, Undo takes them back."/>
+            <TextBlock DockPanel.Dock="Top" Text="{Binding Info}" Style="{StaticResource GdFieldLabel}" TextWrapping="Wrap" Margin="0,0,0,8"/>
+            <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,8" IsEnabled="{Binding IsEditable}">
+                <StackPanel Orientation="Horizontal" Margin="0,0,16,4">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding HasPaletteChoice}" Value="False">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                    <TextBlock Text="Colours" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <ComboBox Style="{StaticResource GdCombo}" Width="200" ItemsSource="{Binding PaletteOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding PaletteChoice}"
+                              ToolTip="{Binding PaletteTip}"/>
+                </StackPanel>
+                <Button Content="Export PNG" Style="{StaticResource LufiaButton}" Command="{Binding ExportCommand}" Width="110" Margin="0,0,8,4"/>
+                <Button Content="Import PNG" Style="{StaticResource LufiaButtonGold}" Command="{Binding ImportCommand}" Width="110" Margin="0,0,16,4"/>
+                <CheckBox Content="Take the colours from the picture" IsChecked="{Binding TakeColours}" Style="{StaticResource GdCheck}" VerticalAlignment="Center" Margin="0,0,0,4"
+                          ToolTip="For a palette PNG: also write its colours (the rows the picture uses) into the game's colours. Off: only the colour numbers are taken."/>
+            </WrapPanel>
+            <TextBlock DockPanel.Dock="Top" Text="{Binding Status}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,8"/>
+            <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                <ItemsControl ItemsSource="{Binding Swatches}" Margin="0,0,16,0" Width="336" VerticalAlignment="Top">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Button Width="18" Height="18" Margin="0,0,3,3" Padding="0" Cursor="Hand" ToolTip="{Binding Tip}"
+                                    Command="{Binding DataContext.PickColourCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border x:Name="b" Background="{Binding Brush}" BorderBrush="#40FFFFFF" BorderThickness="1"/>
+                                        <ControlTemplate.Triggers>
+                                            <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                <Setter TargetName="b" Property="BorderBrush" Value="Gold"/>
+                                                <Setter TargetName="b" Property="BorderThickness" Value="3"/>
+                                            </DataTrigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Button.Template>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Border Style="{StaticResource GdCard}" VerticalAlignment="Top" IsEnabled="{Binding IsEditable}" Margin="0,0,12,8">
+                    <StackPanel Width="250">
+                        <TextBlock Text="COLOUR" Style="{StaticResource GdSection}"/>
+                        <TextBlock Text="{Binding ColourInfo}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                        <StackPanel IsEnabled="{Binding HasColour}">
+                            <Border Height="32" Background="{Binding ColourPreview}" BorderBrush="#40FFFFFF" BorderThickness="1" Margin="0,0,0,6"/>
+                            <DockPanel Margin="0,0,0,2">
+                                <TextBlock Text="Red" Width="44" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center"/>
+                                <TextBlock DockPanel.Dock="Right" Text="{Binding Red}" Width="22" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center"/>
+                                <Slider Minimum="0" Maximum="31" IsSnapToTickEnabled="True" TickFrequency="1" Value="{Binding Red}" VerticalAlignment="Center"/>
+                            </DockPanel>
+                            <DockPanel Margin="0,0,0,2">
+                                <TextBlock Text="Green" Width="44" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center"/>
+                                <TextBlock DockPanel.Dock="Right" Text="{Binding Green}" Width="22" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center"/>
+                                <Slider Minimum="0" Maximum="31" IsSnapToTickEnabled="True" TickFrequency="1" Value="{Binding Green}" VerticalAlignment="Center"/>
+                            </DockPanel>
+                            <DockPanel Margin="0,0,0,6">
+                                <TextBlock Text="Blue" Width="44" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center"/>
+                                <TextBlock DockPanel.Dock="Right" Text="{Binding Blue}" Width="22" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center"/>
+                                <Slider Minimum="0" Maximum="31" IsSnapToTickEnabled="True" TickFrequency="1" Value="{Binding Blue}" VerticalAlignment="Center"/>
+                            </DockPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="SNES value" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <TextBox Style="{StaticResource GdText}" Width="64" Text="{Binding Hex, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="The colour as the game stores it: 4 hex digits, 0000 to 7FFF (blue, green, red, 5 bits each)."/>
+                                <Button Content="Apply" Style="{StaticResource LufiaButtonGold}" Command="{Binding ApplyColourCommand}" Width="80" Margin="12,0,0,0"
+                                        ToolTip="Write this colour into the ROM; the picture is redrawn. Edit, Undo takes it back."/>
+                            </StackPanel>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource GdCard}" VerticalAlignment="Top" IsEnabled="{Binding IsEditable}" Margin="0,0,0,8"
+                        Visibility="{Binding IsMapSprite, Converter={StaticResource Vis}}">
+                    <StackPanel Width="340">
+                        <TextBlock Text="MAP SPRITE" Style="{StaticResource GdSection}"/>
+                        <TextBlock Text="New palette for this sprite" Style="{StaticResource GdFieldLabel}" Margin="0,2,0,4"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <Button Content="Empty (black)" Style="{StaticResource LufiaButton}" Command="{Binding AddPaletteCommand}" CommandParameter="empty" Width="150" Margin="0,0,8,0"
+                                    ToolTip="Make a new palette of 16 black colours and give it to this sprite; then click its colours above to set them."/>
+                            <Button Content="Copy of these colours" Style="{StaticResource LufiaButton}" Command="{Binding AddPaletteCommand}" CommandParameter="copy" Width="180"
+                                    ToolTip="Make a new palette that starts as the colours shown and give it to this sprite, so you can change them without changing other sprites."/>
+                        </StackPanel>
+                        <TextBlock Text="New map sprite (3 on one map)" Style="{StaticResource GdFieldLabel}" Margin="0,0,0,4"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <Button Content="Copy of this sprite" Style="{StaticResource LufiaButton}" Command="{Binding AddSpriteCommand}" CommandParameter="copy" Width="150" Margin="0,0,8,0"
+                                    ToolTip="Make a new map sprite that starts as a copy of this one (its own tiles in the added space, so painting it leaves this one alone)."/>
+                            <Button Content="Empty, this size" Style="{StaticResource LufiaButton}" Command="{Binding AddSpriteCommand}" CommandParameter="empty" Width="180"
+                                    ToolTip="Make a new, empty map sprite with this one's size, frames, colours and way of walking, ready to paint."/>
+                        </StackPanel>
+                        <TextBlock Text="{Binding SpriteInfo}" Style="{StaticResource GdHint}" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource GdCard}" VerticalAlignment="Top" IsEnabled="{Binding IsEditable}" Margin="0,0,0,8"
+                        Visibility="{Binding IsMonsterSprite, Converter={StaticResource Vis}}">
+                    <StackPanel Width="340">
+                        <TextBlock Text="MONSTER BATTLE SPRITE" Style="{StaticResource GdSection}"/>
+                        <TextBlock Text="New palette for this sprite" Style="{StaticResource GdFieldLabel}" Margin="0,2,0,4"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <Button Content="Empty (black)" Style="{StaticResource LufiaButton}" Command="{Binding AddMonsterPaletteCommand}" CommandParameter="empty" Width="150" Margin="0,0,8,0"
+                                    ToolTip="Add a palette of 16 black colours to this sprite; then click its colours above to set them."/>
+                            <Button Content="Copy of these colours" Style="{StaticResource LufiaButton}" Command="{Binding AddMonsterPaletteCommand}" CommandParameter="copy" Width="180"
+                                    ToolTip="Add a palette that starts as the colours shown, so a monster can show this sprite in other colours."/>
+                        </StackPanel>
+                        <TextBlock Text="New monster sprite" Style="{StaticResource GdFieldLabel}" Margin="0,0,0,4"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <Button Content="Copy of this sprite" Style="{StaticResource LufiaButton}" Command="{Binding AddMonsterSpriteCommand}" CommandParameter="copy" Width="150" Margin="0,0,8,0"
+                                    ToolTip="Make a new monster sprite that starts as a copy of this one (its size, palettes and tiles), stored in the added space, so painting it leaves this one alone."/>
+                            <Button Content="From a picture..." Style="{StaticResource LufiaButtonGold}" Command="{Binding AddMonsterSpriteCommand}" CommandParameter="png" Width="180"
+                                    ToolTip="Make a new monster sprite from a PNG: a multiple of 16 pixels across and down, at most 240 x 240 and 64 squares of 16 x 16. A palette PNG of up to 16 colours keeps its colours (colour 0 see-through); other pictures get up to 15 colours of their own."/>
+                        </StackPanel>
+                        <TextBlock Text="Movement in battle (every monster with this sprite)" Style="{StaticResource GdFieldLabel}" Margin="0,0,0,2"/>
+                        <ItemsControl ItemsSource="{Binding MoveFlags}" Margin="0,0,0,4">
+                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="2"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <CheckBox Content="{Binding Label}" IsChecked="{Binding IsChecked}" Style="{StaticResource GdCheck}" Margin="0,1"/>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Text="{Binding MoveNote}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                        <TextBlock Text="Give it to a monster (this sprite, the palette shown)" Style="{StaticResource GdFieldLabel}" Margin="0,0,0,4"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <ComboBox Style="{StaticResource GdCombo}" Width="170" ItemsSource="{Binding MonsterOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding GiveTo}" Margin="0,0,8,0"/>
+                            <Button Content="Give it" Style="{StaticResource LufiaButton}" Command="{Binding GiveToMonsterCommand}" Width="110"
+                                    ToolTip="Set the monster's Battle sprite and Palette fields to this sprite and the palette shown."/>
+                        </StackPanel>
+                        <TextBlock Text="{Binding MonsterInfo}" Style="{StaticResource GdHint}" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
+            </WrapPanel>
+            <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,6" IsEnabled="{Binding IsEditable}" Visibility="{Binding CanPaint, Converter={StaticResource Vis}}">
+                <RadioButton Content="Pencil" Style="{StaticResource LufiaToolRadio}" GroupName="l2paint" IsChecked="{Binding PencilTool}" Margin="0,0,2,4"
+                             ToolTip="Paint pixels with the chosen colour: click, or drag for a line."/>
+                <RadioButton Content="Fill" Style="{StaticResource LufiaToolRadio}" GroupName="l2paint" IsChecked="{Binding FillTool}" Margin="0,0,12,4"
+                             ToolTip="Fill the area of one colour you click with the chosen colour."/>
+                <TextBlock Text="Colour" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,6,4"/>
+                <Border Width="22" Height="22" Background="{Binding PaintBrush}" BorderBrush="Gold" BorderThickness="1" Margin="0,0,4,4"
+                        ToolTip="The colour painted with (see-through shows the dark squares). Click a colour square above, or right click the picture, to pick another."/>
+                <TextBlock Text="{Binding PaintColour}" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Width="26" Margin="0,0,10,4"/>
+                <Button Content="−" Style="{StaticResource LufiaButton}" Command="{Binding ZoomOutCommand}" Width="40" Padding="0,4" Margin="0,0,4,4" ToolTip="Zoom out (Ctrl + mouse wheel on the picture)"/>
+                <TextBlock Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,4,4" Text="{Binding Zoom, StringFormat=x{0}}" Width="28" TextAlignment="Center"/>
+                <Button Content="+" Style="{StaticResource LufiaButton}" Command="{Binding ZoomInCommand}" Width="40" Padding="0,4" Margin="0,0,10,4" ToolTip="Zoom in (Ctrl + mouse wheel on the picture)"/>
+                <CheckBox Content="Grid" IsChecked="{Binding ShowGrid}" Style="{StaticResource GdCheck}" VerticalAlignment="Center" Margin="0,0,12,4"
+                          ToolTip="Lines between pixels (when zoomed in), between 8x8 squares, and in gold between sprite frames."/>
+                <Button Content="Undo" Style="{StaticResource LufiaButton}" Command="{Binding PaintUndoCommand}" Width="60" Margin="0,0,4,4" ToolTip="Take the last stroke back (Ctrl+Z)."/>
+                <Button Content="Redo" Style="{StaticResource LufiaButton}" Command="{Binding PaintRedoCommand}" Width="60" Margin="0,0,12,4" ToolTip="Put it back again (Ctrl+Y)."/>
+                <Button Content="Write the painting" Style="{StaticResource LufiaButtonGold}" Command="{Binding WritePaintingCommand}" Width="140" Margin="0,0,8,4"
+                        ToolTip="Put the painting into the ROM (the same way Import PNG does). Edit, Undo takes it back."/>
+                <Button Content="Throw it away" Style="{StaticResource LufiaButton}" Command="{Binding DiscardPaintingCommand}" Width="110" Margin="0,0,0,4"
+                        ToolTip="Forget the painting: the picture goes back to the game's."/>
+            </WrapPanel>
+            <DockPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
+                <TextBlock DockPanel.Dock="Right" Text="{Binding Pointer}" Style="{StaticResource GdHint}" Margin="12,0,0,0"/>
+                <TextBlock Text="{Binding PaintInfo}" Style="{StaticResource GdHint}" TextWrapping="Wrap"/>
+            </DockPanel>
+            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="#202020">
+                <local:L2PixelCanvas x:Name="Canvas" Source="{Binding PictureImage}" Zoom="{Binding Zoom}" ShowGrid="{Binding ShowGrid}"
+                                     CellWidth="{Binding CellWidth}" CellHeight="{Binding CellHeight}"
+                                     HorizontalAlignment="Left" VerticalAlignment="Top" Margin="8"/>
+            </ScrollViewer>
+        </DockPanel>
+        </common:PopOutHost>
+    </Grid>
+</UserControl>

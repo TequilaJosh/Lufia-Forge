@@ -7,16 +7,11 @@ using System.Windows.Forms;
 
 namespace LufiaForge.Modules.MemoryMonitor;
 
-/// <summary>
-/// Launches BizHawk (EmuHawk.exe) and reparents its main window
-/// into a WinForms Panel for embedding inside a WPF WindowsFormsHost.
-/// Also supports attaching to an already-running BizHawk instance.
-/// </summary>
+// starts BizHawk (EmuHawk.exe) and moves its main window into a WinForms Panel, so it sits inside a WPF
+// WindowsFormsHost. can also grab a BizHawk that's already running
 public sealed class BizHawkHost : IDisposable
 {
-    // -------------------------------------------------------------------------
-    // Win32 interop
-    // -------------------------------------------------------------------------
+    // win32 interop
     private const int GWL_STYLE   = -16;
     private const int GWL_EXSTYLE = -20;
 
@@ -84,9 +79,7 @@ public sealed class BizHawkHost : IDisposable
     [DllImport("user32.dll")]
     private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
 
-    // -------------------------------------------------------------------------
-    // State
-    // -------------------------------------------------------------------------
+    // state
     private Process? _process;
     private IntPtr   _bizHawkHwnd;
     private Panel?   _hostPanel;
@@ -102,9 +95,7 @@ public sealed class BizHawkHost : IDisposable
     public event Action<string>? StatusChanged;
     public event Action<bool>?   DockStateChanged;  // true = undocked
 
-    /// <summary>
-    /// Creates the WinForms Panel that will host the embedded BizHawk window.
-    /// </summary>
+    // makes the WinForms Panel the docked BizHawk window goes in
     public Panel CreateHostPanel()
     {
         _hostPanel = new Panel
@@ -122,17 +113,14 @@ public sealed class BizHawkHost : IDisposable
                 : "BizHawk isn't docked here.\n\nClick Launch BizHawk to play the open ROM in this space,\nwith Lufia Forge's live memory view on the right.\n\nA BizHawk you started yourself stays in its own window;\nits memory still shows on the right.";
             using var font = new System.Drawing.Font("Segoe UI", 11f);
             using var brush = new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(150, 140, 175));
-            var r = _hostPanel.ClientRectangle;
-            using var fmt = new System.Drawing.StringFormat { Alignment = System.Drawing.StringAlignment.Center, LineAlignment = System.Drawing.StringAlignment.Center };
-            e.Graphics.DrawString(text, font, brush, r, fmt);
+            var panelArea = _hostPanel.ClientRectangle;
+            using var centered = new System.Drawing.StringFormat { Alignment = System.Drawing.StringAlignment.Center, LineAlignment = System.Drawing.StringAlignment.Center };
+            e.Graphics.DrawString(text, font, brush, panelArea, centered);
         };
         return _hostPanel;
     }
 
-    /// <summary>
-    /// Tries to find a running BizHawk and embed it (non-async, for timer use).
-    /// Returns true if it found and embedded BizHawk.
-    /// </summary>
+    // looks for a running BizHawk and docks it (not async, the timer calls this). true if it found one and docked it
     public bool TryAttachToRunning()
     {
         if (IsRunning) return true;
@@ -146,18 +134,25 @@ public sealed class BizHawkHost : IDisposable
         return true;
     }
 
-    /// <summary>
-    /// Launches EmuHawk.exe, waits for its main window, and reparents it.
-    /// If BizHawk is already running, attaches to the existing instance.
-    /// </summary>
+    // starts EmuHawk.exe, waits for its main window and docks it. if BizHawk is already running we take that one
+    // the last LaunchAsync took a BizHawk that was already running (so it didn't get the ROM)
+    public bool LastLaunchAttached { get; private set; }
+
     public async Task LaunchAsync(string emuHawkPath, string? romPath = null)
     {
-        // If already embedded, do nothing
+        // already docked
         if (IsRunning) return;
+        if (CoreWarning(emuHawkPath, romPath) is { } warning)
+        {
+            StatusChanged?.Invoke(warning);
+            System.Windows.MessageBox.Show(warning, "BizHawk", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+        }
 
-        // First, check if BizHawk is already running
+        // is BizHawk running already?
+        LastLaunchAttached = false;
         if (TryFindRunningBizHawk())
         {
+            LastLaunchAttached = true;
             StatusChanged?.Invoke("Found running BizHawk - embedding...");
             await Task.Delay(300);
             ReparentWindow();
@@ -166,28 +161,28 @@ public sealed class BizHawkHost : IDisposable
             return;
         }
 
-        // Launch new instance
+        // start a new one
         StatusChanged?.Invoke("Starting BizHawk...");
 
-        var args = "";
+        var arguments = "";
         // the spell order watcher starts with every ROM BizHawk opens from here (it logs next to itself)
-        string watch = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(emuHawkPath) ?? "", "Lua", "LufiaForge_WatchSpellOrder.lua");
-        if (System.IO.File.Exists(watch))
-            args = $"\"--lua={watch}\" ";
+        string watcherScript = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(emuHawkPath) ?? "", "Lua", "LufiaForge_WatchSpellOrder.lua");
+        if (System.IO.File.Exists(watcherScript))
+            arguments = $"\"--lua={watcherScript}\" ";
         if (!string.IsNullOrEmpty(romPath))
-            args += $"\"{romPath}\"";
+            arguments += $"\"{romPath}\"";
 
-        var psi = new ProcessStartInfo
+        var startInfo = new ProcessStartInfo
         {
             FileName         = emuHawkPath,
-            Arguments        = args,
+            Arguments        = arguments,
             WorkingDirectory = System.IO.Path.GetDirectoryName(emuHawkPath) ?? "",
             UseShellExecute  = true,
         };
 
         try
         {
-            _process = Process.Start(psi);
+            _process = Process.Start(startInfo);
         }
         catch (Exception ex)
         {
@@ -211,12 +206,11 @@ public sealed class BizHawkHost : IDisposable
 
         StatusChanged?.Invoke("Waiting for BizHawk window...");
 
-        // Wait for the main window to appear
         _bizHawkHwnd = await WaitForMainWindowAsync(_process, TimeSpan.FromSeconds(20));
 
         if (_bizHawkHwnd == IntPtr.Zero)
         {
-            // Fallback: search by process ID
+            // fallback: look for it by process ID
             StatusChanged?.Invoke("MainWindowHandle not found, searching by PID...");
             await Task.Delay(2000);
             _bizHawkHwnd = FindWindowByProcessId((uint)_process.Id);
@@ -230,7 +224,7 @@ public sealed class BizHawkHost : IDisposable
 
         StatusChanged?.Invoke($"Found BizHawk window (0x{_bizHawkHwnd:X}). Embedding...");
 
-        // Extra delay for BizHawk to finish initializing its UI
+        // give BizHawk a moment to finish setting up its UI
         await Task.Delay(1500);
 
         ReparentWindow();
@@ -238,21 +232,37 @@ public sealed class BizHawkHost : IDisposable
         StatusChanged?.Invoke("BizHawk embedded successfully.");
     }
 
-    /// <summary>
-    /// Find an already-running EmuHawk process and grab its window.
-    /// </summary>
+    // an 8 MB Lufia II ROM (ExLoROM) can't run in BizHawk's older "BSNES" core. it only maps 4 MB and the game stops
+    // at the Natsume logo. BSNESv115+ and Snes9x run it fine. returns the warning when BizHawk's config picks that
+    // core, or null. we only read the config, never write it
+    public static string? CoreWarning(string emuHawkPath, string? romPath)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(romPath) || !System.IO.File.Exists(romPath) || new System.IO.FileInfo(romPath).Length != Core.RomBuffer.ExLoRomSize) return null;
+            string configPath = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(emuHawkPath) ?? "", "config.ini");
+            if (!System.IO.File.Exists(configPath)) return null;
+            var coreMatch = System.Text.RegularExpressions.Regex.Match(System.IO.File.ReadAllText(configPath), @"""SNES""\s*:\s*""([^""]*)""");
+            if (!coreMatch.Success || coreMatch.Groups[1].Value != "BSNES") return null;
+            return "This ROM is 8 MB, and BizHawk is set to its older BSNES core, which can't run an 8 MB ROM (the game stops at the Natsume logo). " +
+                   "In BizHawk pick Config > Preferred Cores > SNES > BSNESv115+ (or Snes9x), then open the ROM again.";
+        }
+        catch (Exception) { return null; }
+    }
+
+    // finds an EmuHawk that's already running and grabs its window
     private bool TryFindRunningBizHawk()
     {
-        var procs = Process.GetProcessesByName("EmuHawk");
-        foreach (var p in procs)
+        var emuHawks = Process.GetProcessesByName("EmuHawk");
+        foreach (var emuHawk in emuHawks)
         {
             try
             {
-                p.Refresh();
-                if (p.MainWindowHandle != IntPtr.Zero)
+                emuHawk.Refresh();
+                if (emuHawk.MainWindowHandle != IntPtr.Zero)
                 {
-                    _process      = p;
-                    _bizHawkHwnd  = p.MainWindowHandle;
+                    _process      = emuHawk;
+                    _bizHawkHwnd  = emuHawk.MainWindowHandle;
                     _weOwnProcess = false;
 
                     _process.EnableRaisingEvents = true;
@@ -265,12 +275,12 @@ public sealed class BizHawkHost : IDisposable
                     return true;
                 }
 
-                // Fallback: find by PID
-                IntPtr hwnd = FindWindowByProcessId((uint)p.Id);
-                if (hwnd != IntPtr.Zero)
+                // fallback: find it by PID
+                IntPtr windowHandle = FindWindowByProcessId((uint)emuHawk.Id);
+                if (windowHandle != IntPtr.Zero)
                 {
-                    _process      = p;
-                    _bizHawkHwnd  = hwnd;
+                    _process      = emuHawk;
+                    _bizHawkHwnd  = windowHandle;
                     _weOwnProcess = false;
 
                     _process.EnableRaisingEvents = true;
@@ -288,33 +298,30 @@ public sealed class BizHawkHost : IDisposable
         return false;
     }
 
-    /// <summary>
-    /// Reparents BizHawk's main window into our host panel.
-    /// </summary>
+    // moves BizHawk's main window into our host panel
     private void ReparentWindow()
     {
         if (_hostPanel == null || _bizHawkHwnd == IntPtr.Zero) return;
 
-        // Strip title bar, borders, taskbar presence
+        // no title bar, borders or taskbar button
         uint style = GetWindowLong(_bizHawkHwnd, GWL_STYLE);
         style &= ~(WS_CAPTION | WS_THICKFRAME | WS_SYSMENU | WS_MAXIMIZEBOX | WS_MINIMIZEBOX | WS_POPUP);
         style |= WS_CHILD | WS_VISIBLE;
         SetWindowLong(_bizHawkHwnd, GWL_STYLE, style);
 
-        // Strip extended styles
+        // and none of the extended styles
         uint exStyle = GetWindowLong(_bizHawkHwnd, GWL_EXSTYLE);
         exStyle &= ~(WS_EX_APPWINDOW | WS_EX_WINDOWEDGE | WS_EX_CLIENTEDGE | WS_EX_DLGMODALFRAME);
         SetWindowLong(_bizHawkHwnd, GWL_EXSTYLE, exStyle);
 
-        // Reparent into our panel
         SetParent(_bizHawkHwnd, _hostPanel.Handle);
 
-        // Make visible and fill panel
+        // show it and fill the panel
         ShowWindow(_bizHawkHwnd, SW_SHOW);
         ResizeBizHawk();
     }
 
-    /// <summary>Resize BizHawk to fill the host panel.</summary>
+    // sizes BizHawk to fill the host panel
     private void ResizeBizHawk()
     {
         if (_hostPanel == null || _bizHawkHwnd == IntPtr.Zero) return;
@@ -323,19 +330,14 @@ public sealed class BizHawkHost : IDisposable
         MoveWindow(_bizHawkHwnd, 0, 0, _hostPanel.Width, _hostPanel.Height, true);
     }
 
-    // -------------------------------------------------------------------------
-    // Dock / Undock
-    // -------------------------------------------------------------------------
+    // dock / undock
 
-    /// <summary>
-    /// Detaches BizHawk from the host panel and turns it into a floating,
-    /// always-on-top window so it remains visible on any tab.
-    /// </summary>
+    // takes BizHawk out of the host panel and makes it a floating always-on-top window, so you can see it on any tab
     public void Undock()
     {
         if (!IsRunning || IsUndocked) return;
 
-        // Restore full window chrome
+        // give it back its title bar and borders
         uint style = GetWindowLong(_bizHawkHwnd, GWL_STYLE);
         style &= ~(WS_CHILD);
         style |= WS_CAPTION | WS_THICKFRAME | WS_SYSMENU | WS_MAXIMIZEBOX | WS_MINIMIZEBOX | WS_VISIBLE;
@@ -345,10 +347,10 @@ public sealed class BizHawkHost : IDisposable
         exStyle |= WS_EX_APPWINDOW;
         SetWindowLong(_bizHawkHwnd, GWL_EXSTYLE, exStyle);
 
-        // Un-parent — makes it a top-level window again
+        // no parent = a top-level window again
         SetParent(_bizHawkHwnd, IntPtr.Zero);
 
-        // Float always-on-top so it's visible over LufiaForge on any tab
+        // always on top so it stays over Lufia Forge on any tab
         SetWindowPos(_bizHawkHwnd, HWND_TOPMOST, 100, 100, 800, 600,
                      SWP_SHOWWINDOW);
 
@@ -357,14 +359,12 @@ public sealed class BizHawkHost : IDisposable
         StatusChanged?.Invoke("BizHawk undocked: floating window active.");
     }
 
-    /// <summary>
-    /// Re-embeds BizHawk back into the host panel.
-    /// </summary>
+    // puts BizHawk back in the host panel
     public void Dock()
     {
         if (!IsRunning || !IsUndocked) return;
 
-        // Remove always-on-top before reparenting
+        // drop always-on-top before moving it back in
         SetWindowPos(_bizHawkHwnd, HWND_NOTOPMOST, 0, 0, 0, 0,
                      SWP_NOMOVE | SWP_NOSIZE);
 
@@ -375,28 +375,28 @@ public sealed class BizHawkHost : IDisposable
         StatusChanged?.Invoke("BizHawk re-docked.");
     }
 
-    /// <summary>Give BizHawk keyboard/mouse focus.</summary>
+    // gives BizHawk the keyboard and mouse
     public void Focus()
     {
         if (_bizHawkHwnd != IntPtr.Zero && IsWindow(_bizHawkHwnd))
             SetForegroundWindow(_bizHawkHwnd);
     }
 
-    /// <summary>Polls the process until a MainWindowHandle appears.</summary>
-    private static async Task<IntPtr> WaitForMainWindowAsync(Process proc, TimeSpan timeout)
+    // polls the process until it has a MainWindowHandle
+    private static async Task<IntPtr> WaitForMainWindowAsync(Process process, TimeSpan timeout)
     {
         var deadline = DateTime.UtcNow + timeout;
         while (DateTime.UtcNow < deadline)
         {
-            if (proc.HasExited) return IntPtr.Zero;
+            if (process.HasExited) return IntPtr.Zero;
 
-            proc.Refresh();
-            if (proc.MainWindowHandle != IntPtr.Zero)
+            process.Refresh();
+            if (process.MainWindowHandle != IntPtr.Zero)
             {
-                // Extra check: make sure the window has a title and is visible
-                string title = GetWindowTitle(proc.MainWindowHandle);
-                if (title.Length > 0 && IsWindowVisible(proc.MainWindowHandle))
-                    return proc.MainWindowHandle;
+                // and the window has a title and is visible
+                string title = GetWindowTitle(process.MainWindowHandle);
+                if (title.Length > 0 && IsWindowVisible(process.MainWindowHandle))
+                    return process.MainWindowHandle;
             }
 
             await Task.Delay(250);
@@ -404,14 +404,14 @@ public sealed class BizHawkHost : IDisposable
         return IntPtr.Zero;
     }
 
-    /// <summary>Find a visible top-level window belonging to a specific process ID.</summary>
-    private static IntPtr FindWindowByProcessId(uint pid)
+    // finds a visible top-level window that belongs to this process ID
+    private static IntPtr FindWindowByProcessId(uint processId)
     {
         IntPtr found = IntPtr.Zero;
         EnumWindows((hWnd, _) =>
         {
             GetWindowThreadProcessId(hWnd, out uint windowPid);
-            if (windowPid != pid) return true;
+            if (windowPid != processId) return true;
             if (!IsWindowVisible(hWnd)) return true;
 
             string title = GetWindowTitle(hWnd);
@@ -420,18 +420,18 @@ public sealed class BizHawkHost : IDisposable
                 title.Contains("SNES", StringComparison.OrdinalIgnoreCase))
             {
                 found = hWnd;
-                return false; // stop enumeration
+                return false; // stop looking
             }
             return true;
         }, IntPtr.Zero);
 
-        // If nothing matched by title, just grab the first visible window
+        // no title matched, so just take the first visible window
         if (found == IntPtr.Zero)
         {
             EnumWindows((hWnd, _) =>
             {
                 GetWindowThreadProcessId(hWnd, out uint windowPid);
-                if (windowPid != pid) return true;
+                if (windowPid != processId) return true;
                 if (!IsWindowVisible(hWnd)) return true;
                 if (GetWindowTextLength(hWnd) == 0) return true;
 
@@ -445,9 +445,9 @@ public sealed class BizHawkHost : IDisposable
 
     private static string GetWindowTitle(IntPtr hWnd)
     {
-        int len = GetWindowTextLength(hWnd);
-        if (len <= 0) return "";
-        var sb = new StringBuilder(len + 1);
+        int titleLength = GetWindowTextLength(hWnd);
+        if (titleLength <= 0) return "";
+        var sb = new StringBuilder(titleLength + 1);
         GetWindowText(hWnd, sb, sb.Capacity);
         return sb.ToString();
     }
@@ -456,10 +456,10 @@ public sealed class BizHawkHost : IDisposable
     {
         if (_bizHawkHwnd != IntPtr.Zero && IsWindow(_bizHawkHwnd))
         {
-            // Unparent so the window reappears normally
+            // let go of it so it shows up as a normal window again
             SetParent(_bizHawkHwnd, IntPtr.Zero);
 
-            // Restore standard styles
+            // with its normal styles back
             uint style = GetWindowLong(_bizHawkHwnd, GWL_STYLE);
             style &= ~WS_CHILD;
             style |= WS_CAPTION | WS_THICKFRAME | WS_SYSMENU | WS_MAXIMIZEBOX | WS_MINIMIZEBOX | WS_VISIBLE;
@@ -468,7 +468,7 @@ public sealed class BizHawkHost : IDisposable
             ShowWindow(_bizHawkHwnd, SW_SHOW);
         }
 
-        // Only kill the process if we launched it
+        // only kill the process if we started it
         if (_weOwnProcess)
         {
             try

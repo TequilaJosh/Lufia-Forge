@@ -2,48 +2,44 @@ using LufiaForge.Core.Maps;
 
 namespace LufiaForge.Core.Battle;
 
-/// <summary>
-/// A new event command the game didn't have: <c>6E cc n1 n2 n3 n4 n5</c> renames party member cc (0-7; Maxim shares
-/// the Hero's slot, Selan Lufia's, Guy Aguro's, Artea Jerin's) to the five letters n1-n5 (00 = nothing); n1 = FF gives
-/// the character their normal name back (the Hero: the name the player typed). Party names live in RAM at $14B6 +
-/// 6 x slot (5 letters, 00 after); the old heroes' names are only written when a new game starts, so a flashback that
-/// swaps in Maxim's sprite still shows the Hero's name without this.
-///
-/// Commands 6E-7F had no handler (their table entries at $01:C78C run into other data), so the engine's dispatcher
-/// is hooked:
-/// <code>
-/// $01:C674  5C xx xx xx  JML routine   (was CMP #$80 / BCS / ASL / TAX)
-/// </code>
-/// The routine handles 6E and goes back to $01:C67A / $01:C67D for every other command. It reads its operands the way
-/// $01:C740 does (DB = script bank, Y = pointer, next bank at $10000).
-/// </summary>
+// a new event command the game didn't have: 6E cc n1 n2 n3 n4 n5 renames party member cc (0-7, Maxim shares
+// the Hero's slot, Selan Lufia's, Guy Aguro's, Artea Jerin's) to the five letters n1-n5 (00 = nothing). n1 = FF gives
+// the character their normal name back (for the Hero that's the name the player typed). party names live in RAM at
+// $14B6 + 6 x slot (5 letters, 00 after). the old heroes' names only get written when a new game starts, so without
+// this a flashback that swaps in Maxim's sprite still shows the Hero's name.
+//
+// commands 6E-7F had no handler (their table entries at $01:C78C run into other data), so we hook the engine's
+// dispatcher:
+//   $01:C674  5C xx xx xx  JML routine   (was CMP #$80 / BCS / ASL / TAX)
+// the routine handles 6E and goes back to $01:C67A / $01:C67D for every other command. it reads its operands the way
+// $01:C740 does (DB = script bank, Y = pointer, next bank at $10000)
 public static class RenamePatch
 {
     public const int Op = 0x6E;
     public const int Site = 0x0C674;   // $01:C674
     private static readonly byte[] Original = { 0xC9, 0x80, 0xB0, 0x05, 0x0A, 0xAA };
-    /// <summary>Offsets in <see cref="Routine"/> of the JSR operands that call its own reader (fixed up when placed).</summary>
+    // offsets in Routine of the JSR operands that call its own reader (fixed up when it gets placed)
     private static readonly int[] ReaderCalls = { 19, 23, 27, 31, 35, 39 };
     private const int Reader = 185;
 
     public static bool IsOriginal(RomBuffer rom) => rom.ReadBytes(Site, Original.Length).SequenceEqual(Original);
     public static bool IsApplied(RomBuffer rom) => rom.ReadByte(Site) == 0x5C && RoutineOffset(rom) > 0;
 
-    private static int FileOffset(int snes) => (snes >> 16 & 0x7F) * 0x8000 + (snes & 0x7FFF);
-    private static int SnesAddress(int file) => (file / 0x8000 | 0x80) << 16 | (file % 0x8000 | 0x8000);
+    private static int FileOffset(int snesAddress) => (snesAddress >> 16 & 0x7F) * 0x8000 + (snesAddress & 0x7FFF);
+    private static int SnesAddress(int fileOffset) => (fileOffset / 0x8000 | 0x80) << 16 | (fileOffset % 0x8000 | 0x8000);
 
     public static int RoutineOffset(RomBuffer rom)
     {
-        int r = FileOffset(rom.ReadByte(Site + 1) | rom.ReadByte(Site + 2) << 8 | rom.ReadByte(Site + 3) << 16);
-        return r > 0 && r + Routine.Length <= rom.Length && rom.ReadByte(r) == 0xC9 && rom.ReadByte(r + 1) == Op ? r : 0;
+        int routineOffset = FileOffset(rom.ReadByte(Site + 1) | rom.ReadByte(Site + 2) << 8 | rom.ReadByte(Site + 3) << 16);
+        return routineOffset > 0 && routineOffset + Routine.Length <= rom.Length && rom.ReadByte(routineOffset) == 0xC9 && rom.ReadByte(routineOffset + 1) == Op ? routineOffset : 0;
     }
 
-    /// <summary>True when the bytes at <paramref name="p"/> are a rename command (used by the event decoder).</summary>
-    public static bool IsCommandAt(RomBuffer rom, int p)
+    // true when the bytes at offset are a rename command (the event decoder uses this)
+    public static bool IsCommandAt(RomBuffer rom, int offset)
     {
-        if (p + 7 > rom.Length || rom.ReadByte(p) != Op || rom.ReadByte(p + 1) > 7 || !IsApplied(rom)) return false;
-        if (rom.ReadByte(p + 2) == 0xFF) return true;
-        for (int i = 2; i < 7; i++) { int c = rom.ReadByte(p + i); if (c != 0 && (c < 0x20 || c > 0x7E)) return false; }
+        if (offset + 7 > rom.Length || rom.ReadByte(offset) != Op || rom.ReadByte(offset + 1) > 7 || !IsApplied(rom)) return false;
+        if (rom.ReadByte(offset + 2) == 0xFF) return true;
+        for (int i = 2; i < 7; i++) { int letter = rom.ReadByte(offset + i); if (letter != 0 && (letter < 0x20 || letter > 0x7E)) return false; }
         return true;
     }
 
@@ -167,35 +163,35 @@ public static class RenamePatch
         if (IsApplied(rom)) return;
         if (!IsOriginal(rom)) throw new InvalidOperationException("The event engine's code at $01:C674 isn't the original, so the rename command can't be added safely.");
         if (rom.Length < MapWriter.ExpandedSize) rom.Expand(MapWriter.ExpandedSize);
-        var space = ExpansionSpace.Load(rom);
-        WriteAt(rom, space.AllocateInOneBank(Routine.Length, ExpansionSpace.Kind.Patch, 6));
-        space.Save();
+        var freeSpace = ExpansionSpace.Load(rom);
+        WriteAt(rom, freeSpace.AllocateInOneBank(Routine.Length, ExpansionSpace.Kind.Patch, 6));
+        freeSpace.Save();
         rom.FixChecksum();
     }
 
-    /// <summary>Writes the routine at <paramref name="at"/> (one bank) and hooks the dispatcher to it.</summary>
-    public static void WriteAt(RomBuffer rom, int at)
+    // writes the routine at offset (one bank) and hooks the dispatcher to it
+    public static void WriteAt(RomBuffer rom, int offset)
     {
         var code = (byte[])Routine.Clone();
-        int reader = (SnesAddress(at) & 0xFFFF) + Reader;
-        foreach (int o in ReaderCalls) { code[o] = (byte)reader; code[o + 1] = (byte)(reader >> 8); }
-        rom.WriteBytes(at, code);
-        int r = SnesAddress(at);
-        rom.WriteBytes(Site, new byte[] { 0x5C, (byte)r, (byte)(r >> 8), (byte)(r >> 16), 0xEA, 0xEA });
+        int reader = (SnesAddress(offset) & 0xFFFF) + Reader;
+        foreach (int callAt in ReaderCalls) { code[callAt] = (byte)reader; code[callAt + 1] = (byte)(reader >> 8); }
+        rom.WriteBytes(offset, code);
+        int routineSnes = SnesAddress(offset);
+        rom.WriteBytes(Site, new byte[] { 0x5C, (byte)routineSnes, (byte)(routineSnes >> 8), (byte)(routineSnes >> 16), 0xEA, 0xEA });
     }
 
-    /// <summary>Events that use the rename command (map, event), found while the patch is in.</summary>
+    // events that use the rename command (map, event), found while the patch is in
     public static List<(int Map, int Event)> UsedBy(RomBuffer rom)
     {
         var list = new List<(int, int)>();
         if (!IsApplied(rom)) return list;
-        foreach (var m in Maps.MapCatalog.Scan(rom))
-            for (int ev = 0, n = Maps.EventScript.SlotCount(rom, m.MapId); ev < n; ev++)
+        foreach (var map in Maps.MapCatalog.Scan(rom))
+            for (int eventId = 0, slotCount = Maps.EventScript.SlotCount(rom, map.MapId); eventId < slotCount; eventId++)
             {
                 try
                 {
-                    var s = Maps.EventScript.Load(rom, m.MapId, ev);
-                    if (s != null && s.Ops.Any(o => !o.IsText && o.Bytes.Length > 0 && o.Bytes[0] == Op)) list.Add((m.MapId, ev));
+                    var script = Maps.EventScript.Load(rom, map.MapId, eventId);
+                    if (script != null && script.Ops.Any(o => !o.IsText && o.Bytes.Length > 0 && o.Bytes[0] == Op)) list.Add((map.MapId, eventId));
                 }
                 catch { }
             }
@@ -207,17 +203,17 @@ public static class RenamePatch
         if (!IsApplied(rom)) return;
         if (EmotePatch.IsApplied(rom))
             throw new InvalidOperationException("The emote command for cutscenes is built on this patch. Remove it first (Patch Manager), then this one.");
-        // without the patch the game jumps into data on command 6E: events using it would crash
+        // without the patch the game jumps into data on command 6E, so events using it would crash
         var used = UsedBy(rom);
         if (used.Count > 0)
             throw new InvalidOperationException("Events still use the rename command (" +
                 string.Join(", ", used.Take(6).Select(u => $"map {u.Map:X2} event {u.Event}")) + (used.Count > 6 ? ", ..." : "") +
                 "). Take it out of those events first; removing the patch now would make them crash the game.");
-        int r = RoutineOffset(rom);
+        int routineOffset = RoutineOffset(rom);
         rom.WriteBytes(Site, Original);
-        var space = ExpansionSpace.Load(rom);
-        space.Free(r);
-        space.Save();
+        var freeSpace = ExpansionSpace.Load(rom);
+        freeSpace.Free(routineOffset);
+        freeSpace.Save();
         rom.FixChecksum();
     }
 }

@@ -1,0 +1,9 @@
+<Window x:Class="LufiaForge.Modules.Lufia2.L2EventEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:LufiaForge.Modules.Lufia2"
+        Title="Event editor" Width="1400" Height="860" MinWidth="900" MinHeight="520"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{DynamicResource MidPurpleBrush}">
+    <local:L2EventEditorPanel x:Name="Panel"/>
+</Window>

@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -11,7 +11,7 @@
     <RootNamespace>LufiaForge</RootNamespace>
     <ApplicationIcon>Assets\icon.ico</ApplicationIcon>
     <!-- Bump before each release; the auto-updater compares against GitHub release versions. -->
-    <Version>0.4.0-beta.12</Version>
+    <Version>0.4.0-beta.30</Version>
     <!-- Custom Main (Program.cs) so Velopack can handle install/update hooks before WPF starts. -->
     <StartupObject>LufiaForge.Program</StartupObject>
   </PropertyGroup>
@@ -27,8 +27,12 @@
     <None Include="lufia_spc.dll" CopyToOutputDirectory="PreserveNewest" />
     <!-- community patches built into the Patch Manager (readmes ship with them for the credits and terms) -->
     <EmbeddedResource Include="Patches\*.ips" LogicalName="Patches.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Fingerprints\*.bin" LogicalName="Fingerprints.%(Filename)%(Extension)" />
     <EmbeddedResource Include="Backgrounds\*.png" LogicalName="Backgrounds.%(Filename)%(Extension)" />
     <EmbeddedResource Include="Sprites\*.png" LogicalName="Sprites.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Fixes\*.bin" LogicalName="Fixes.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Translations\*.json" LogicalName="Translations.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Data\*.json" LogicalName="Data.%(Filename)%(Extension)" />
     <None Include="Patches\*.txt" Link="licenses\patches\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\native\spc\LICENSE-LGPL-2.1.txt" Link="licenses\lufia_spc-LGPL-2.1.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

@@ -13,7 +13,7 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- ============ Top bar: tools | area actions | undo / redo ............ unapplied, revert, apply ============ -->
+        <!-- top bar: tools, area actions, undo / redo, then unapplied, revert, apply on the right -->
         <Border Grid.Row="0" Background="{StaticResource SurfacePurpleBrush}" BorderBrush="{StaticResource BorderPurpleBrush}" BorderThickness="0,0,0,1" Padding="10,7">
             <DockPanel LastChildFill="False">
                 <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
@@ -21,6 +21,8 @@
                                  ToolTip="Select / move (S): click characters, exits, arrival points and treasure to edit them; drag to move"/>
                     <RadioButton GroupName="MapTool" Style="{StaticResource LufiaToolRadio}" IsChecked="{Binding IsPaintTool}" Content="✎  Paint"
                                  ToolTip="Paint (B): paint the brush block; Ctrl + click picks a block from the map"/>
+                    <RadioButton GroupName="MapTool" Style="{StaticResource LufiaToolRadio}" IsChecked="{Binding IsFillTool}" Content="▧  Fill"
+                                 ToolTip="Fill (G): click a block: it and every same block joined to it become the brush block; Shift + click fills the whole map"/>
                     <RadioButton GroupName="MapTool" Style="{StaticResource LufiaToolRadio}" IsChecked="{Binding IsPickTool}" Content="⌖  Pick"
                                  ToolTip="Pick block (I): click the map to take its block as the brush"/>
                     <RadioButton GroupName="MapTool" Style="{StaticResource LufiaToolRadio}" IsChecked="{Binding IsAreaTool}" Content="▭  Area"
@@ -62,25 +64,26 @@
             </DockPanel>
         </Border>
 
-        <!-- ============ Body: maps | map | inspector + blocks ============ -->
-        <Grid Grid.Row="1">
+        <!-- body: maps, map, inspector + blocks -->
+        <Grid Grid.Row="1" common:LayoutMemory.Key="mapeditor.main">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="240" MinWidth="170"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="*" MinWidth="300"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="330" MinWidth="260"/>
+                <ColumnDefinition Width="240" MinWidth="130"/>
+                <ColumnDefinition Width="6"/>
+                <ColumnDefinition Width="*" MinWidth="200"/>
+                <ColumnDefinition Width="6"/>
+                <ColumnDefinition Width="330" MinWidth="220"/>
             </Grid.ColumnDefinitions>
 
             <!-- Maps -->
-            <DockPanel Grid.Column="0" Margin="8,8,4,8">
+            <common:PopOutHost Grid.Column="0" Title="Map list" ButtonMargin="0,10,10,0">
+            <DockPanel x:Name="MapListSection" Margin="8,8,4,8">
                 <TextBox DockPanel.Dock="Top" Style="{StaticResource LufiaSearchBox}" Tag="Search maps (name or number)" Margin="0,0,0,6"
                          Text="{Binding MapSearch, UpdateSourceTrigger=PropertyChanged}"/>
                 <Expander DockPanel.Dock="Bottom" Header="Rename or delete this map" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,6,0,0">
                     <StackPanel Margin="0,4,0,0">
                         <TextBox Style="{StaticResource GdText}" Text="{Binding MapNameText}" HorizontalAlignment="Stretch" Width="Auto"
                                  ToolTip="Type a name and press Tab. Clear it to go back to the automatic name."/>
-                        <TextBlock Text="Town names come from the game; others are worked out from where each map is entered. Your names are kept for every copy of the ROM."
+                        <TextBlock Text="Town names come from the game; others are worked out from where each map is entered. Your names are kept in this project."
                                    Style="{StaticResource GdHint}" TextWrapping="Wrap"/>
                         <Button Content="🗑  Delete this map..." Style="{StaticResource LufiaButton}" Padding="10,4" Command="{Binding DeleteMapCommand}" HorizontalAlignment="Left" Margin="0,8,0,0"
                                 ToolTip="Frees the map's number (for New map) and its space; first lists every exit and event that still leads to it"/>
@@ -94,11 +97,13 @@
                     </ListBox.ItemContainerStyle>
                 </ListBox>
             </DockPanel>
+            </common:PopOutHost>
 
-            <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Center" VerticalAlignment="Stretch" Background="Transparent" ResizeBehavior="PreviousAndNext"/>
+            <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" ResizeBehavior="PreviousAndNext"/>
 
-            <!-- Map canvas with its view bar -->
-            <DockPanel Grid.Column="2" Margin="0,8,0,8">
+            <!-- map canvas with its view bar -->
+            <common:PopOutHost Grid.Column="2" Title="Map" ButtonMargin="0,10,20,0">
+            <DockPanel x:Name="MapSection" Margin="0,8,0,8">
                 <Border DockPanel.Dock="Bottom" Background="{StaticResource SurfacePurpleBrush}" BorderBrush="{StaticResource BorderPurpleBrush}"
                         BorderThickness="1,0,1,1" CornerRadius="0,0,6,6" Padding="8,6">
                     <StackPanel>
@@ -128,6 +133,15 @@
                                 <Button Content="Fit" Style="{StaticResource LufiaButton}" Padding="7,1" Click="Fit_Click" ToolTip="Fit the whole map in view (hold the middle mouse button to drag the map)"/>
                             </StackPanel>
                         </DockPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
+                            <TextBlock Text="Brush size" Style="{StaticResource LufiaLabel}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <ComboBox Style="{StaticResource GdCombo}" Width="70" MinWidth="0" MaxWidth="70" ItemsSource="{Binding BrushSizes}" SelectedItem="{Binding BrushSize}"
+                                      ToolTip="Paint 1, 3, 5 or 7 blocks square around the mouse ([ and ] change it)">
+                                <ComboBox.ItemTemplate><DataTemplate><TextBlock><Run Text="{Binding Mode=OneWay}"/> x <Run Text="{Binding Mode=OneWay}"/></TextBlock></DataTemplate></ComboBox.ItemTemplate>
+                            </ComboBox>
+                            <Button Content="Fill the map" Style="{StaticResource LufiaButton}" Padding="9,2" Margin="8,0,0,0" Command="{Binding FillMapCommand}"
+                                    ToolTip="Every block of the map becomes the brush block (Undo takes it back)"/>
+                        </StackPanel>
                         <TextBlock Text="{Binding ToolHint}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,5,0,0"/>
                     </StackPanel>
                 </Border>
@@ -159,12 +173,12 @@
                                            Visibility="{Binding AreaVisible, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                 <!-- the brush block under the mouse (Paint tool) -->
                                 <Image Source="{Binding BrushPreviewImage}" Canvas.Left="{Binding BrushPreviewX}" Canvas.Top="{Binding BrushPreviewY}"
-                                       Width="16" Height="16" Opacity="0.75" RenderOptions.BitmapScalingMode="NearestNeighbor"
+                                       Width="{Binding BrushPreviewSize}" Height="{Binding BrushPreviewSize}" Opacity="0.75" RenderOptions.BitmapScalingMode="NearestNeighbor"
                                        Visibility="{Binding BrushPreviewVisible, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                                <Rectangle Canvas.Left="{Binding BrushPreviewX}" Canvas.Top="{Binding BrushPreviewY}" Width="16" Height="16"
+                                <Rectangle Canvas.Left="{Binding BrushPreviewX}" Canvas.Top="{Binding BrushPreviewY}" Width="{Binding BrushPreviewSize}" Height="{Binding BrushPreviewSize}"
                                            Stroke="White" StrokeThickness="0.75" Opacity="0.9"
                                            Visibility="{Binding BrushPreviewVisible, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                                <!-- camera view: outside the screen dimmed, the screen framed -->
+                                <!-- camera view: outside the screen is dimmed, the screen gets a frame -->
                                 <Path Data="{Binding CameraShade}" Fill="#8C000000"
                                       Visibility="{Binding CameraVisible, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                 <Rectangle Canvas.Left="{Binding CameraX}" Canvas.Top="{Binding CameraY}" Width="256" Height="224"
@@ -188,7 +202,7 @@
                                     <DataTemplate>
                                         <Grid>
                                             <Rectangle Width="{Binding W}" Height="{Binding H}" Stroke="{Binding Stroke}"
-                                                       StrokeThickness="{Binding Thickness}"
+                                                       StrokeThickness="{Binding Thickness}" HorizontalAlignment="Left" VerticalAlignment="Top"
                                                        Visibility="{Binding IsBox, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                             <Line X1="0" Y1="0" X2="{Binding LineDx}" Y2="{Binding LineDy}" Stroke="{Binding Stroke}"
                                                   StrokeThickness="{Binding Thickness}" StrokeDashArray="2 2" StrokeEndLineCap="Triangle" Opacity="0.7"
@@ -205,11 +219,13 @@
                     </ScrollViewer>
                 </Border>
             </DockPanel>
+            </common:PopOutHost>
 
-            <GridSplitter Grid.Column="3" Width="5" HorizontalAlignment="Center" VerticalAlignment="Stretch" Background="Transparent" ResizeBehavior="PreviousAndNext"/>
+            <GridSplitter Grid.Column="3" Width="6" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" ResizeBehavior="PreviousAndNext"/>
 
-            <!-- Inspector, blocks, map settings -->
-            <Grid Grid.Column="4" Margin="4,8,8,8">
+            <!-- inspector, blocks, map settings -->
+            <common:PopOutHost Grid.Column="4" Title="Map inspector" ButtonMargin="0,10,12,0">
+            <Grid x:Name="InspectorSection" Margin="4,8,8,8">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" MaxHeight="420"/>
                     <RowDefinition Height="*" MinHeight="160"/>
@@ -327,21 +343,21 @@
                             <TextBlock DockPanel.Dock="Right" Text="size" Style="{StaticResource LufiaLabel}" VerticalAlignment="Center" Margin="0,0,6,0"/>
                             <Rectangle/>
                         </DockPanel>
-                        <Grid DockPanel.Dock="Top" Margin="0,0,0,6" IsEnabled="{Binding IsTownMap}"
-                              ToolTip="The map's graphics: picking one shows the map with it at once; it&apos;s written with the map, Undo takes it back. New tileset (in Map settings) gives this map a copy of its own.">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="90"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="Tileset" Style="{StaticResource LufiaLabel}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <ComboBox Grid.Column="1" Style="{StaticResource GdCombo}" Width="Auto" HorizontalAlignment="Stretch" ItemsSource="{Binding TilesetChoices}" SelectedIndex="{Binding TilesetChoice}"/>
-                            <TextBlock Grid.Column="2" Text="Palette" Style="{StaticResource LufiaLabel}" VerticalAlignment="Center" Margin="8,0,6,0"/>
-                            <ComboBox Grid.Column="3" Style="{StaticResource GdCombo}" Width="Auto" HorizontalAlignment="Stretch" ItemsSource="{Binding PaletteChoices}" SelectedIndex="{Binding MapPalette}"/>
-                        </Grid>
+                        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6" IsEnabled="{Binding IsTownMap}"
+                                   ToolTip="The map's graphics (tileset and palette, as the game's maps have them): picking one shows the map with it at once; it&apos;s written with the map, Undo takes it back. To keep this map's look and add other graphics' blocks to it, use From. New tileset (in Map settings) gives this map a copy of its own.">
+                            <TextBlock DockPanel.Dock="Left" Text="Graphics" Width="56" Style="{StaticResource LufiaLabel}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <ComboBox Style="{StaticResource GdCombo}" Width="Auto" HorizontalAlignment="Stretch" ItemsSource="{Binding GraphicsChoices}" SelectedIndex="{Binding GraphicsChoice}"/>
+                        </DockPanel>
                         <TextBlock DockPanel.Dock="Top" Text="{Binding BrushText}" Style="{StaticResource LufiaLabel}" TextWrapping="Wrap"
                                    Foreground="{StaticResource GoldLightBrush}" Margin="0,0,0,6"/>
+                        <UniformGrid DockPanel.Dock="Top" Columns="3" Margin="0,0,0,6">
+                            <Button Content="↻ Rotate" Style="{StaticResource LufiaButton}" Padding="6,2" Margin="0,0,3,0" Command="{Binding RotateBrushCommand}"
+                                    ToolTip="Turn the brush, or the piece being placed (a building, preset or paste), a quarter clockwise (Q). Turned blocks the tileset doesn't have are added to it (quarter turns draw new tiles); Undo takes them out"/>
+                            <Button Content="↔ Flip" Style="{StaticResource LufiaButton}" Padding="6,2" Margin="3,0,3,0" Command="{Binding FlipBrushAcrossCommand}"
+                                    ToolTip="Flip the brush, or the piece being placed, across (F); walls flip with it"/>
+                            <Button Content="↕ Flip" Style="{StaticResource LufiaButton}" Padding="6,2" Margin="3,0,0,0" Command="{Binding FlipBrushUpDownCommand}"
+                                    ToolTip="Flip the brush, or the piece being placed, up/down (D); walls flip with it"/>
+                        </UniformGrid>
                         <UniformGrid DockPanel.Dock="Top" Columns="2" Margin="0,0,0,6">
                             <Button Content="🏠  Buildings..." Style="{StaticResource LufiaButtonGold}" Padding="9,4" Margin="0,0,3,0"
                                     Command="{Binding BuildingsCommand}"
@@ -391,9 +407,14 @@
                                 </ItemsControl>
                             </StackPanel>
                         </Expander>
+                        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4" Visibility="{Binding HasBlockSources, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <TextBlock DockPanel.Dock="Left" Text="From" Width="56" Style="{StaticResource LufiaLabel}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <ComboBox Style="{StaticResource GdCombo}" Width="Auto" HorizontalAlignment="Stretch" ItemsSource="{Binding BlockSourceChoices}" SelectedIndex="{Binding BlockSource}"
+                                      ToolTip="Paint with the blocks of other graphics too: a block picked there is added to this map's tileset (its tiles recoloured to this map's palette), and the map keeps its own look"/>
+                        </DockPanel>
                         <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4">
-                            <TextBlock DockPanel.Dock="Left" Text="Order" Style="{StaticResource LufiaLabel}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <ComboBox Style="{StaticResource GdCombo}" Width="Auto" HorizontalAlignment="Stretch" ItemsSource="{Binding PaletteModeChoices}" SelectedIndex="{Binding PaletteMode}"
+                            <TextBlock DockPanel.Dock="Left" Text="Order" Width="56" Style="{StaticResource LufiaLabel}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <ComboBox Style="{StaticResource GdCombo}" Width="Auto" HorizontalAlignment="Stretch" ItemsSource="{Binding PaletteModeChoices}" SelectedIndex="{Binding PaletteMode}" IsEnabled="{Binding OrderEnabled}"
                                       ToolTip="Tileset order (drag to make a multi-block brush), the blocks the game's maps use most first, or only the blocks this map uses"/>
                         </DockPanel>
                         <WrapPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
@@ -433,16 +454,16 @@
                         <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="360">
                             <StackPanel Margin="0,8,0,0">
                                 <TextBlock Text="This map" Style="{StaticResource GdSection}"/>
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="Tileset" Style="{StaticResource GdFieldLabel}" Width="54"/>
-                                    <ComboBox Style="{StaticResource GdCombo}" MinWidth="110" Width="110" ItemsSource="{Binding TilesetChoices}" SelectedIndex="{Binding TilesetChoice}"/>
+                                <DockPanel>
+                                    <TextBlock DockPanel.Dock="Left" Text="Graphics" Style="{StaticResource GdFieldLabel}" Width="54"/>
+                                    <ComboBox Style="{StaticResource GdCombo}" Width="Auto" HorizontalAlignment="Stretch" ItemsSource="{Binding GraphicsChoices}" SelectedIndex="{Binding GraphicsChoice}"/>
+                                </DockPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
                                     <Button Content="+ New tileset" Style="{StaticResource LufiaButton}" Padding="8,3" Command="{Binding NewTilesetCommand}" Margin="6,0,0,0"
                                             ToolTip="A copy of this map's tileset, given to this map: edit its blocks without changing other maps"/>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="Palette" Style="{StaticResource GdFieldLabel}" Width="54"/>
-                                    <TextBox Style="{StaticResource GdNumber}" Width="50" Text="{Binding MapPalette}" ToolTip="Map palette number (edit its colours in Game Data > Palettes)"/>
-                                    <TextBlock Text="  Size" Style="{StaticResource GdFieldLabel}"/>
+                                    <TextBlock Text="Size" Style="{StaticResource GdFieldLabel}" Width="54"/>
                                     <TextBox Style="{StaticResource GdNumber}" Width="44" Text="{Binding MapWidth}"/>
                                     <TextBlock Text="x" Style="{StaticResource GdFieldLabel}"/>
                                     <TextBox Style="{StaticResource GdNumber}" Width="44" Text="{Binding MapHeight}"/>
@@ -478,6 +499,7 @@
                     </Expander>
                 </Border>
             </Grid>
+            </common:PopOutHost>
         </Grid>
 
         <!-- Status bar -->

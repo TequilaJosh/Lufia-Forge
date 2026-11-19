@@ -10,28 +10,27 @@ public partial class MemoryMonitorView : UserControl
     {
         InitializeComponent();
 
-        // DataContext is set in XAML during InitializeComponent(),
-        // so DataContextChanged already fired before we can subscribe.
-        // Wire the Panel immediately if DataContext is already set.
-        if (DataContext is MemoryMonitorViewModel vm)
-            BizHawkFormsHost.Child = vm.HostPanel;
+        // the XAML sets DataContext inside InitializeComponent(), so DataContextChanged already fired before we
+        // could listen. hook up the panel right away if it's set
+        if (DataContext is MemoryMonitorViewModel viewModel)
+            BizHawkFormsHost.Child = viewModel.HostPanel;
 
         DataContextChanged += OnDataContextChanged;
     }
 
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
-        if (e.NewValue is MemoryMonitorViewModel vm)
-            BizHawkFormsHost.Child = vm.HostPanel;
+        if (e.NewValue is MemoryMonitorViewModel viewModel)
+            BizHawkFormsHost.Child = viewModel.HostPanel;
     }
 
-    /// <summary>Double-click a label search result to add it to the watchlist.</summary>
+    // double-click a label search result to put it on the watchlist
     private void LabelResult_DoubleClick(object sender, MouseButtonEventArgs e)
     {
         if (sender is ListBoxItem item && item.DataContext is KnownAddress known)
         {
-            if (DataContext is MemoryMonitorViewModel vm)
-                vm.AddKnownWatchCommand.Execute(known);
+            if (DataContext is MemoryMonitorViewModel viewModel)
+                viewModel.AddKnownWatchCommand.Execute(known);
         }
     }
 }

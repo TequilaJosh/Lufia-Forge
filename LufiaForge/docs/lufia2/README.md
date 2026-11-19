@@ -1,0 +1,91 @@
+# Lufia II (US) ROM map
+
+What Lufia Forge knows about *Lufia II: Rise of the Sinistrals* (US, 2.5 MB LoROM FastROM, no copier header).
+File offset = (bank & 0x7F) * 0x8000 + (address - 0x8000). Everything here was read from the ROM and its code;
+the items marked as checked were also tested in the running game (BizHawk). The Lufia Forge source
+(`LufiaForge/Core/Lufia2`) uses these addresses and says the same in its comments.
+
+| File | What it covers |
+|---|---|
+| [rommap.md](rommap.md) | Whole-ROM classification: code, tables, packed files, text; code entry points and jump tables (first pass, see the corrections below) |
+| [banks_8F_A6.md](banks_8F_A6.md) | The data banks $8F-$A6 range by range |
+| [events.md](events.md) | The event script interpreter: all 205 commands in plain words, text codes, jumps, flags and variables, the event blocks and map info lists, and how the event editor saves and adds events |
+| [cutscenes.md](cutscenes.md) | The event editor shared by the Cutscenes, Events and Maps pages: every cutscene of every map in one list, the steps as cards edited in place, the map as a stage that takes walks and appearances from clicks, the timeline, playback, how a cutscene starts, cutscene characters, testing in the game, what was checked in the game |
+| [scripts3.md](scripts3.md) | The dungeon puzzle interpreter: 191 opcodes, the per-map puzzle blocks |
+| [battlescript.md](battlescript.md) | The battle script interpreter (monster AI, item, spell and capsule effects); new spells, spell animations, IP attack names and new IP attacks (section 7) |
+| [spell-animations.md](spell-animations.md) | Battle animations: the animation engine and its script format, graphics and colours, playing them inside Lufia Forge, new animations and their hooks |
+| [characters.md](characters.md) | Heroes: starting stats, growth, the EXP curve, new-game records, RAM layout |
+| [capsules.md](capsules.md) | Capsule monsters: records, names, growth, attacks, evolution |
+| [music.md](music.md) | The sound driver, song format, samples, sound effects |
+| [maps.md](maps.md) | The Maps tab: tools, inspector, block editor, pieces and presets, map settings, test start, the world map and battle zones, and how each change is written |
+| [graphics.md](graphics.md) | Every packed file classified; battle backgrounds, title, fonts, sprites; map sprites, painting, new sprites and palettes; monster battle sprites, new ones |
+| [settings.md](settings.md) | Game-wide values: random battle rate, walking speed, run button, sell price, level cap, gold cap, inns |
+| [romsize.md](romsize.md) | The 8 MB ROM (ExLoROM): what goes in the upper 4 MB (events, map sprites, map info), where it runs, what was checked |
+| [dutch.md](dutch.md) | The Dutch Lufia II: where it keeps its text, putting its translation into a Lufia II (USA) or Frue Lufia ROM, its letters; Dutch letters and names for Lufia 1 |
+
+## The ROM at a glance
+
+| File offsets | Banks | Contents |
+|---|---|---|
+| 0x000000-0x037FFF | $80-$86 | Code (about 74% of these banks is reached code), plus tables: event command table $80:CA14, battle script handlers $85:B483, new-game data $85:B2A1 |
+| 0x038000-0x077FFF | $87-$8E | Map headers $87:8000, event blocks ("PH") and start-up scripts, the map names, menu and battle text, the dictionary $8E:EA00, capsule names $8E:D558 |
+| 0x078000-0x083E63 | $8F-$90 | Puzzle scripts (map table $8F:8000) |
+| 0x084000-0x087D36 | $90 | The sound driver (uploaded to sound RAM) |
+| 0x088000-0x0BFFFF | $91-$97 | Map info blocks, actor animation scripts, credits text, battle animation scripts, spells $95:FA5B, monsters $96:85C0, items $96:CF69, descriptions $97:8000, growth $97:B62C, starting stats $97:B93C, encounters $97:B9AC / $97:BE93, script battles $97:C53D, capsule monsters $97:DCB8, shops $97:EE9F, capsule attacks $97:F63B, battle backgrounds $97:FD40 |
+| 0x0C0000-0x0CDE6B | $98-$99 | Instrument samples (BRR, table $98:8000) |
+| 0x0CDE6C-0x137FFF | $99-$A6 | Fonts ($9A:F970, $9F:8500), world-map blocks, palettes, field sprite graphics, item names $9E:C7E8, description words $9E:DDCC, capsule attack names $A5:DF00, capsule growth curves $A6:F420 |
+| 0x138000-0x27E300 | $A7-$CF | Packed files (table $A7:8000, 0x2A9 files, the same LZ packer as Lufia 1): songs 00-3E, maps 41+, graphics |
+| 0x27F000-0x27FFFF | $CF | Map sprite table $CF:F000, map lists $CF:F72E.., map info pointers $CF:FCBC |
+
+The ROM is full: only about 0x14D bytes are unused FF runs, so data that grows goes into added space after
+0x280000 (event scripts can't: they must stay below 0x200000, so the event editor clears a bank of packed files in
+$A8-$BF for them, events.md section 8). Lufia Forge grows the ROM to 3 MB, then 4 MB (8 MB on request, romsize.md), and uses the largest empty run there (the fan hacks Frue,
+Spekkio and Kureji Lufia v8.2 fill 0x280000-0x30DAC2 and 0x3FFC00-0x3FFDD5 and move the monster table to $D0:A000).
+
+## Checked in the game
+
+- Map drawing (against video RAM), map and text edits.
+- Shops: a changed item.
+- Item descriptions: the X button shows an edited one.
+- The new game: gold, level, EXP, and stats from the growth tables.
+- A battle against an edited monster: its name, sprite, HP, EXP and gold ("Gets 500 EXP. Gets 777 GOLD.").
+- A battle background redrawn through the Graphics page (mirrored, new sky colour).
+- The staff roll with an edited heading (event command 5B 05 runs it).
+- A song imported from MIDI (it replaced Elcid's music, and the game loaded it into sound RAM byte for byte).
+- Walking in towns: the run button on R, and always running (8 tiles in 32 frames instead of 4).
+- The Patch Manager's Lufia II patches: fast world-map walking (114 steps in 480 frames instead of 57), hold B to avoid battles
+  (the step counter stays at 1 while B is held, and no battle can start before 6), free inns (500 gold stays 500 instead of 400),
+  faster IP gauge (255 instead of 206 after the same hit).
+- A ROM grown to 4 MB with a map moved past 0x300000, and Frue Lufia with a map moved into its free space: both draw the map.
+- A capsule monster (event command 81 00 makes it join, at level 8): its HP, ATP and DFP follow the edited record and growth exactly.
+- Events (events.md section 10): an edited line and added steps in the opening scene (the map's events moved into the
+  event space in bank $B5), a shortened line written in place, a new character with a talk event, a new trigger area,
+  "plays once" story flags, an event going on with new steps, and a few commands tried on their own (B6, 7A, 5A / 8A,
+  47, 48, BB).
+- Spells and IP attacks moved by Lufia Forge (battlescript.md section 7): a new spell cast by a monster and by Maxim with its own
+  name, effect and animation; a spell given another animation; a renamed IP attack; a new IP attack used from an item; a new spell
+  sold in a shop with its own description.
+
+## Corrections to the first-pass files
+
+- rommap.md says the third interpreter is at $80:E58B with about 194 opcodes. It is at $80:CC35 (table $80:E5A4),
+  with 191 opcodes; $80:E58B is a helper (scripts3.md).
+- $CF:FC98 holds pointers to tile-animation records in bank $A1, not packed-file numbers (banks_8F_A6.md).
+- Packed files 0x03F and 0x040 are not maps: 0x03F is the licence screen, 0x040 the credits font. Maps 0 and 1 are
+  the world maps, drawn from files 0x28B/0x28C and 0x28E/0x28F (graphics.md).
+- Battle script opcode 42 is a call into the shared script library at $96:FADD, and 43 returns (battlescript.md).
+- IP attack descriptions are entries 0x231 + n (the game asks for 0x300 + n counted from 1 and takes 0xD0 off), not 0x230 + n;
+  items give an IP attack counted from 1 (battlescript.md section 7).
+- LEdit's German addresses are often off for the US ROM; the files here are for the US ROM only.
+
+Shop menu bit 0 (shop 25) is not "several shops": the game builds that list itself ($82:E433) from every item with
+a count in the 4-bit table at $7F:F080, probably items sold earlier. The shop record has no data for it.
+
+## Still open
+
+- A few event, puzzle and battle commands are only named from what they touch (marked L / guess in the files).
+- Five high-entropy blocks at bank ends in $8F-$A6 (about 0x1C00 bytes) have no reader yet.
+- Which spell-effect tilemap goes with which tile file.
+- What the capsule monsters' default names ($8E:D558) are used for: the naming screen starts empty.
+
+New monsters, story battles and new shops (where the game reads them and what Lufia Forge moves to make room): ../new-monsters-and-shops.md.

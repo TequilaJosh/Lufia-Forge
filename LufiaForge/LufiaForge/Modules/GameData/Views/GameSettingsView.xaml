@@ -1,7 +1,8 @@
 <UserControl x:Class="LufiaForge.Modules.GameData.Views.GameSettingsView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:v="clr-namespace:LufiaForge.Modules.GameData.Views">
+             xmlns:v="clr-namespace:LufiaForge.Modules.GameData.Views"
+             xmlns:common="clr-namespace:LufiaForge.Modules.Common">
     <UserControl.Resources>
         <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
     </UserControl.Resources>
@@ -19,8 +20,7 @@
                     <StackPanel>
                         <TextBlock Text="MOVEMENT" Style="{StaticResource GdSection}"/>
                         <CheckBox Content="Fast walking" Style="{StaticResource GdCheck}" IsChecked="{Binding FastWalk}"/>
-                        <TextBlock Style="{StaticResource GdHint}" Margin="20,0,0,6"
-                                   Text="Warning: breaks the Foul Water item - its effect becomes permanent (a battle every step) until the game is reset."/>
+                        <TextBlock Style="{StaticResource GdHint}" Margin="20,0,0,6" TextWrapping="Wrap" Text="{Binding FastWalkText}"/>
                         <StackPanel Visibility="{Binding HasRestoredWalk, Converter={StaticResource BoolToVisibilityConverter}}">
                             <CheckBox Content="Lufia Restored's faster walking" Style="{StaticResource GdCheck}" IsChecked="{Binding RestoredWalk}"/>
                             <TextBlock Style="{StaticResource GdHint}" Margin="20,0,0,6" TextWrapping="Wrap"
@@ -28,6 +28,18 @@
                         </StackPanel>
                         <CheckBox Content="Fast sailing (ship)" Style="{StaticResource GdCheck}" IsChecked="{Binding FastShip}"/>
                         <CheckBox Content="Fast flying (airship)" Style="{StaticResource GdCheck}" IsChecked="{Binding FastAirship}"/>
+                        <TextBlock Text="CONTROLS" Style="{StaticResource GdSection}" Margin="0,12,0,0"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,2">
+                            <TextBlock Text="Menu button" Style="{StaticResource GdFieldLabel}" Width="110"/>
+                            <ComboBox Style="{StaticResource GdCombo}" Width="180" ItemsSource="{Binding MenuButtonLabels}" SelectedIndex="{Binding MenuButton}"
+                                      IsEnabled="{Binding CanMenuButton}"
+                                      ToolTip="The button that opens the menu on the field (the game uses B). Colmines92's menu button remap."/>
+                        </StackPanel>
+                        <TextBlock Text="{Binding MenuButtonText}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                        <CheckBox Content="Hold R to turn without walking" Style="{StaticResource GdCheck}" IsChecked="{Binding TurnPatch}"
+                                  IsEnabled="{Binding CanTurnPatch}" Margin="0,8,0,0"
+                                  ToolTip="Colmines92's patch: hold R and press a direction to face that way without taking a step"/>
+                        <TextBlock Text="{Binding TurnText}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="20,0,0,0"/>
                     </StackPanel>
                 </Border>
 
@@ -78,8 +90,26 @@
                             <TextBlock Grid.Row="2" Text="Max level (actual)" Style="{StaticResource GdFieldLabel}"/>
                             <TextBox   Grid.Row="2" Grid.Column="1" Style="{StaticResource GdNumber}" Text="{Binding MaxLevelActual}"/>
                         </Grid>
-                        <TextBlock Style="{StaticResource GdHint}" Margin="0,8,0,0"
-                                   Text="Swamp damage above ~50 can wipe the party quickly. The game is designed for a level cap of 99; higher values may not display correctly."/>
+                        <CheckBox Content="Higher limits: levels to 255, HP and MP to 9999" Style="{StaticResource GdCheck}" IsChecked="{Binding LimitsPatch}"
+                                  IsEnabled="{Binding CanLimitsPatch}" Margin="0,10,0,0"
+                                  ToolTip="Patch: levels show with 3 digits (Colmines92's patch), HP and MP with 4 in the menus, the battle windows (one column wider), the save screen, battle messages and damage numbers; max HP and MP stop at 9999; levels past 113 and near 200 work. Set the cap with Max level. Needs the 2 MB expanded ROM. Untick and Apply to remove it."/>
+                        <TextBlock Text="{Binding LimitsText}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                        <TextBlock Style="{StaticResource GdHint}" Margin="0,8,0,0" TextWrapping="Wrap"
+                                   Text="Swamp damage above ~50 can wipe the party quickly."/>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource GdCard}" Width="360">
+                    <StackPanel>
+                        <TextBlock Text="DUTCH" Style="{StaticResource GdSection}"/>
+                        <CheckBox Content="{Binding DutchLettersLabel}" Style="{StaticResource GdCheck}" IsChecked="{Binding DutchLetters}"
+                                  ToolTip="Puts accented letters in both fonts (dialogue and names). Needs the 2 MB expanded ROM. Untick and Apply to put the signs back."/>
+                        <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="20,0,0,6"
+                                   Text="They take the places of # $ % * ; = ^ \ ] ` | _, signs the game never shows as text (= is the name screen's last sign: it becomes ö there). Type the letters themselves in the text and event editors and in names (é, not #). Thanks to Sinrevi for asking."/>
+                        <Button Content="Dutch names from Lufia II" Command="{Binding DutchNamesCommand}" HorizontalAlignment="Left" Margin="0,6,0,0" Padding="10,3"
+                                ToolTip="The items, spells and monsters Lufia 1 shares with Lufia II get the names the Dutch translation of Lufia II gives them. Lufia Forge keeps a copy of those names, so no Dutch ROM is needed. Names you changed yourself are left as they are. Edit, Undo takes it back."/>
+                        <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0"
+                                   Text="There is no Dutch Lufia 1. This names the 135 items, spells and monsters both games share as the Dutch Lufia II does (Short Sword: Kort zwaard, Thunder: Donder). The rest, and the dialogue, are yours to write."/>
                     </StackPanel>
                 </Border>
 
@@ -95,6 +125,10 @@
                                        Foreground="{StaticResource TextPrimaryBrush}" TextWrapping="Wrap" MaxWidth="260"/>
                         </StackPanel>
                     </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource GdCard}">
+                    <common:SoundNamesPanel Lufia2="False" Width="520"/>
                 </Border>
 
             </WrapPanel>

@@ -13,18 +13,21 @@
         <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
     </UserControl.Resources>
 
-    <Grid>
+    <Grid common:LayoutMemory.Key="gamedata.encounters.main">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="300"/>
+            <ColumnDefinition Width="300" MinWidth="140"/>
+            <ColumnDefinition Width="6"/>
             <ColumnDefinition Width="*"/>
-            <ColumnDefinition Width="300"/>
+            <ColumnDefinition Width="6"/>
+            <ColumnDefinition Width="300" MinWidth="140"/>
         </Grid.ColumnDefinitions>
         <Grid.RowDefinitions>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <DockPanel Grid.Column="0" Margin="12">
+        <common:PopOutHost Grid.Column="0" Title="Battle groups" Key="gamedata.encounters.list" ButtonMargin="0,12,14,0">
+        <DockPanel Margin="12">
             <TextBlock DockPanel.Dock="Top" Text="BATTLE GROUPS" Style="{StaticResource GdSection}"/>
             <TextBlock DockPanel.Dock="Top" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,6"
                        Text="A group is the set of monsters you can meet in one area. Boss formations are the scripted battles of event command 1F."/>
@@ -36,8 +39,15 @@
             </StackPanel>
             <ListBox Style="{StaticResource GdFindList}" ItemsSource="{Binding Entries}" SelectedIndex="{Binding SelectedIndex}"/>
         </DockPanel>
+        </common:PopOutHost>
 
-        <TabControl Grid.Column="1" Grid.ColumnSpan="{Binding MiddleColumnSpan}" Margin="0,12,8,0" Background="Transparent" BorderThickness="0" SelectedIndex="{Binding EncounterTabIndex}">
+        <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch"/>
+
+        <!-- on the Visible monsters page the pages also take the map groups' place (MiddleColumnSpan); the host sits in a
+             grid of its own so popping it out never shrinks the main grid's rows -->
+        <Grid Grid.Column="2" Grid.ColumnSpan="{Binding MiddleColumnSpan}">
+        <common:PopOutHost Title="Encounters" Key="gamedata.encounters.detail" ButtonMargin="0,12,10,0">
+        <TabControl Margin="0,12,8,0" Background="Transparent" BorderThickness="0" SelectedIndex="{Binding EncounterTabIndex}">
             <TabItem Header="Monsters">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,8,0,0">
                     <StackPanel>
@@ -136,18 +146,19 @@
                 </DockPanel>
             </TabItem>
             <TabItem Header="Visible monsters">
-                <Grid Margin="0,8,0,0">
+                <Grid Margin="0,8,0,0" common:LayoutMemory.Key="gamedata.encounters.visible">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="370"/>
+                        <ColumnDefinition Width="370" MinWidth="160"/>
+                        <ColumnDefinition Width="6"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
 
                     <!-- the map, what it has -->
-                    <StackPanel Grid.Row="0" Grid.ColumnSpan="2" Margin="0,0,0,6">
+                    <StackPanel Grid.Row="0" Grid.ColumnSpan="3" Margin="0,0,0,6">
                         <DockPanel>
                             <TextBlock Text="Map" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,6,0"/>
                             <ComboBox Style="{StaticResource GdCombo}" Width="340" ItemsSource="{Binding MonsterMapOptions}" SelectedIndex="{Binding SelectedMonsterMap}"/>
@@ -262,8 +273,11 @@
                         </StackPanel>
                     </ScrollViewer>
 
+                    <GridSplitter Grid.Row="1" Grid.Column="1" Width="6" HorizontalAlignment="Stretch"/>
+
                     <!-- right: the map -->
-                    <DockPanel Grid.Row="1" Grid.Column="1">
+                    <common:PopOutHost Grid.Row="1" Grid.Column="2" Title="Visible monsters map" Key="gamedata.encounters.monstermap" ButtonMargin="0,2,20,0">
+                    <DockPanel>
                         <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,4">
                             <TextBlock Text="Click to add" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,6,4"/>
                             <RadioButton Content="Monsters" Style="{StaticResource LufiaToolRadio}" GroupName="MonsterClick" IsChecked="{Binding IsClickMonsters}" Margin="0,0,2,4"
@@ -286,11 +300,18 @@
                                    MouseLeftButtonDown="MonsterMap_MouseDown" MouseRightButtonDown="MonsterMap_RightDown" MouseMove="MonsterMap_MouseMove" MouseLeave="MonsterMap_MouseLeave"/>
                         </ScrollViewer>
                     </DockPanel>
+                    </common:PopOutHost>
                 </Grid>
             </TabItem>
         </TabControl>
+        </common:PopOutHost>
+        </Grid>
 
-        <DockPanel Grid.Column="2" Margin="0,12,12,8" Visibility="{Binding IsMapGroupsShown, Converter={StaticResource BoolToVisibilityConverter}}">
+        <GridSplitter Grid.Column="3" Width="6" HorizontalAlignment="Stretch" Visibility="{Binding IsMapGroupsShown, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+        <common:PopOutHost Grid.Column="4" Title="Group of each map" Key="gamedata.encounters.mapgroups" ButtonMargin="0,12,24,0"
+                           Visibility="{Binding IsMapGroupsShown, Converter={StaticResource BoolToVisibilityConverter}}">
+        <DockPanel Margin="0,12,12,8">
             <TextBlock DockPanel.Dock="Top" Text="GROUP OF EACH MAP" Style="{StaticResource GdSection}"/>
             <TextBlock DockPanel.Dock="Top" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,0,0,6"
                        Text="Towns, caves and towers choose their group in their setup script (command 0D). Maps not listed have no random battles. The world map uses zones instead (World map page)."/>
@@ -308,7 +329,8 @@
                 </ListBox.ItemTemplate>
             </ListBox>
         </DockPanel>
+        </common:PopOutHost>
 
-        <v:EditorFooter Grid.Row="1" Grid.ColumnSpan="3"/>
+        <v:EditorFooter Grid.Row="1" Grid.ColumnSpan="5"/>
     </Grid>
 </UserControl>

@@ -2,28 +2,21 @@ using LufiaForge.Core.Maps;
 
 namespace LufiaForge.Core.Battle;
 
-/// <summary>
-/// Party members retarget instead of missing. Party attacks and spells aim at a monster group ($076F,Y); when the
-/// action plays, $08:B39E picks a living monster of that group. If the whole group is already dead it falls
-/// through to $08:B47F, which picks a random slot of the group anyway (all dead), so the action misses.
-/// The patch replaces that fallback with a JSL to a routine that picks a random living monster of any group
-/// (monster slots 0-7, $137A,X = FF when gone); only with no monster left does it do what the game did.
-///
-/// <code>
-/// $08:B47F  22 xx xx xx  JSL routine     ; A = target slot
-/// $08:B483  8D 3F 14     STA $143F
-/// $08:B486  EA x 7       (to $B48D: PLY / PLP / RTS as before)
-/// </code>
-///
-/// Spells and items aimed at a whole group take another path: $08:B2DC (action type 4) hits the living monsters
-/// in the group's slot range ($13FA,X first slot, $13EA,X slots), so a beaten group meant no effect at all. There
-/// a second routine checks the group and, when nobody in it is left, switches to the group of a random living
-/// monster:
-/// <code>
-/// $08:B2E1  22 xx xx xx  JSL group routine  ; A = group in; X = the group to hit and A = $13FA,X out
-/// $08:B2E5  8D 62 14     STA $1462         (as before)
-/// </code>
-/// </summary>
+// party members retarget instead of missing. party attacks and spells aim at a monster group ($076F,Y), and when the
+// action plays $08:B39E picks a living monster of that group. if the whole group is already dead it falls
+// through to $08:B47F, which picks a random slot of the group anyway (all dead), so the action misses.
+// we swap that fallback for a JSL to a routine that picks a random living monster of any group
+// (monster slots 0-7, $137A,X = FF when gone). only when no monster is left does it do what the game did.
+//
+//   $08:B47F  22 xx xx xx  JSL routine     ; A = target slot
+//   $08:B483  8D 3F 14     STA $143F
+//   $08:B486  EA x 7       (to $B48D: PLY / PLP / RTS as before)
+//
+// spells and items aimed at a whole group take another path: $08:B2DC (action type 4) hits the living monsters
+// in the group's slot range ($13FA,X first slot, $13EA,X slots), so a beaten group meant no effect at all. there
+// a second routine checks the group and if nobody in it is left, switches to the group of a random living monster:
+//   $08:B2E1  22 xx xx xx  JSL group routine  ; A = group in. X = the group to hit and A = $13FA,X out
+//   $08:B2E5  8D 62 14     STA $1462         (as before)
 public static class RetargetPatch
 {
     public const int Site = 0x4347F;   // $08:B47F
@@ -37,27 +30,27 @@ public static class RetargetPatch
     private static bool GroupIsOriginal(RomBuffer rom) => rom.ReadBytes(GroupSite, GroupOriginal.Length).SequenceEqual(GroupOriginal);
     private static bool GroupApplied(RomBuffer rom) => rom.ReadByte(GroupSite) == 0x22 && rom.ReadByte(GroupSite + 4) == 0x8D && GroupRoutineOffset(rom) > 0;
 
-    /// <summary>True when the fix can be added: both places hold the game's own code (or one already has the fix, from an older version).</summary>
+    // true when the fix can be added: both places hold the game's own code (or one already has the fix from an older version)
     public static bool IsOriginal(RomBuffer rom) =>
         !IsApplied(rom) && (SingleOriginal(rom) || SingleApplied(rom)) && (GroupIsOriginal(rom) || GroupApplied(rom));
     public static bool IsApplied(RomBuffer rom) => SingleApplied(rom) && GroupApplied(rom);
 
-    private static int FileOffset(int snes) => (snes >> 16 & 0x7F) * 0x8000 + (snes & 0x7FFF);
-    private static int SnesAddress(int file) => (file / 0x8000 | 0x80) << 16 | (file % 0x8000 | 0x8000);
+    private static int FileOffset(int snesAddress) => (snesAddress >> 16 & 0x7F) * 0x8000 + (snesAddress & 0x7FFF);
+    private static int SnesAddress(int fileOffset) => (fileOffset / 0x8000 | 0x80) << 16 | (fileOffset % 0x8000 | 0x8000);
 
     public static int RoutineOffset(RomBuffer rom)
     {
-        int r = FileOffset(rom.ReadByte(Site + 1) | rom.ReadByte(Site + 2) << 8 | rom.ReadByte(Site + 3) << 16);
-        return r > 0 && r + Routine.Length <= rom.Length && rom.ReadByte(r) == 0xDA ? r : 0;
+        int routineOffset = FileOffset(rom.ReadByte(Site + 1) | rom.ReadByte(Site + 2) << 8 | rom.ReadByte(Site + 3) << 16);
+        return routineOffset > 0 && routineOffset + Routine.Length <= rom.Length && rom.ReadByte(routineOffset) == 0xDA ? routineOffset : 0;
     }
 
     public static int GroupRoutineOffset(RomBuffer rom)
     {
-        int r = FileOffset(rom.ReadByte(GroupSite + 1) | rom.ReadByte(GroupSite + 2) << 8 | rom.ReadByte(GroupSite + 3) << 16);
-        return r > 0 && r + GroupRoutine.Length <= rom.Length && rom.ReadByte(r) == 0xAA ? r : 0;
+        int routineOffset = FileOffset(rom.ReadByte(GroupSite + 1) | rom.ReadByte(GroupSite + 2) << 8 | rom.ReadByte(GroupSite + 3) << 16);
+        return routineOffset > 0 && routineOffset + GroupRoutine.Length <= rom.Length && rom.ReadByte(routineOffset) == 0xAA ? routineOffset : 0;
     }
 
-    /// <summary>Entered with M = X = 8-bit, X = the target group, DB = 08 (low RAM visible); returns A = slot.</summary>
+    // entered with M = X = 8-bit, X = the target group, DB = 08 (low RAM visible). returns A = slot
     public static readonly byte[] Routine =
     {
         0xDA,                   // 00 PHX               the group
@@ -99,10 +92,8 @@ public static class RetargetPatch
         0x6B,                   // 65 RTL
     };
 
-    /// <summary>
-    /// Group-target spells and items: entered with M = X = 8-bit, A = the target group, DB = 08. Returns X = the group
-    /// to hit (the same one while anybody in it is alive, else the group of a random living monster) and A = its first slot.
-    /// </summary>
+    // group target spells and items: entered with M = X = 8-bit, A = the target group, DB = 08. returns X = the group
+    // to hit (the same one while anybody in it is alive, else the group of a random living monster) and A = its first slot
     public static readonly byte[] GroupRoutine =
     {
         0xAA,                      // 00 TAX
@@ -177,42 +168,42 @@ public static class RetargetPatch
         if (IsApplied(rom)) return;
         if (!IsOriginal(rom)) throw new InvalidOperationException("The game's battle code at $08:B47F / $08:B2E1 isn't the original, so the retarget fix can't be applied safely.");
         if (rom.Length < MapWriter.ExpandedSize) rom.Expand(MapWriter.ExpandedSize);
-        var space = ExpansionSpace.Load(rom);
-        if (!SingleApplied(rom)) WriteSingle(rom, space.AllocateInOneBank(Routine.Length, ExpansionSpace.Kind.Patch, 3));
-        if (!GroupApplied(rom)) WriteGroup(rom, space.AllocateInOneBank(GroupRoutine.Length, ExpansionSpace.Kind.Patch, 3));
-        space.Save();
+        var freeSpace = ExpansionSpace.Load(rom);
+        if (!SingleApplied(rom)) WriteSingle(rom, freeSpace.AllocateInOneBank(Routine.Length, ExpansionSpace.Kind.Patch, 3));
+        if (!GroupApplied(rom)) WriteGroup(rom, freeSpace.AllocateInOneBank(GroupRoutine.Length, ExpansionSpace.Kind.Patch, 3));
+        freeSpace.Save();
         rom.FixChecksum();
     }
 
-    /// <summary>Writes both routines from <paramref name="at"/> and points the game at them (for 1 MB test copies).</summary>
-    public static void WriteAt(RomBuffer rom, int at)
+    // writes both routines from offset and points the game at them (for 1 MB test copies)
+    public static void WriteAt(RomBuffer rom, int offset)
     {
-        WriteSingle(rom, at);
-        WriteGroup(rom, at + Routine.Length);
+        WriteSingle(rom, offset);
+        WriteGroup(rom, offset + Routine.Length);
     }
 
-    private static void WriteSingle(RomBuffer rom, int at)
+    private static void WriteSingle(RomBuffer rom, int offset)
     {
-        rom.WriteBytes(at, Routine);
-        int r = SnesAddress(at);
-        var site = new List<byte> { 0x22, (byte)r, (byte)(r >> 8), (byte)(r >> 16), 0x8D, 0x3F, 0x14 };
+        rom.WriteBytes(offset, Routine);
+        int routineSnes = SnesAddress(offset);
+        var site = new List<byte> { 0x22, (byte)routineSnes, (byte)(routineSnes >> 8), (byte)(routineSnes >> 16), 0x8D, 0x3F, 0x14 };
         while (site.Count < Original.Length) site.Add(0xEA);
         rom.WriteBytes(Site, site.ToArray());
     }
 
-    private static void WriteGroup(RomBuffer rom, int at)
+    private static void WriteGroup(RomBuffer rom, int offset)
     {
-        rom.WriteBytes(at, GroupRoutine);
-        int r = SnesAddress(at);
-        rom.WriteBytes(GroupSite, new byte[] { 0x22, (byte)r, (byte)(r >> 8), (byte)(r >> 16), 0x8D, 0x62, 0x14 });
+        rom.WriteBytes(offset, GroupRoutine);
+        int routineSnes = SnesAddress(offset);
+        rom.WriteBytes(GroupSite, new byte[] { 0x22, (byte)routineSnes, (byte)(routineSnes >> 8), (byte)(routineSnes >> 16), 0x8D, 0x62, 0x14 });
     }
 
     public static void Remove(RomBuffer rom)
     {
-        var space = ExpansionSpace.Load(rom);
-        if (SingleApplied(rom)) { int r = RoutineOffset(rom); rom.WriteBytes(Site, Original); space.Free(r); }
-        if (GroupApplied(rom)) { int r = GroupRoutineOffset(rom); rom.WriteBytes(GroupSite, GroupOriginal); space.Free(r); }
-        space.Save();
+        var freeSpace = ExpansionSpace.Load(rom);
+        if (SingleApplied(rom)) { int routineOffset = RoutineOffset(rom); rom.WriteBytes(Site, Original); freeSpace.Free(routineOffset); }
+        if (GroupApplied(rom)) { int routineOffset = GroupRoutineOffset(rom); rom.WriteBytes(GroupSite, GroupOriginal); freeSpace.Free(routineOffset); }
+        freeSpace.Save();
         rom.FixChecksum();
     }
 }

@@ -5,69 +5,68 @@ namespace LufiaForge.Core.Cave;
 
 public static partial class AncientCave
 {
-    /// <summary>
-    /// People on some floors: a priest (the church menu: revive, cure, save) beside the arrival door on the save floors
-    /// (11, 21 ... 91), and a merchant on floors 25, 50 and 75 (an item shop of the game's that suits the depth).
-    /// The cave's copy of map 8E gets 6 characters: talking to character n runs event n + 1 of the map's script block
-    /// (seen in game), and events 1 and 2 are the arrival door and the stairs (step-on areas 0 and 1), so characters 0
-    /// and 1 are never shown; 2 is the priest (event 3), 3-5 the three merchants (events 4-6). The setup script shows the priest when the save flag is set and
-    /// merchant k when shop flag k is set; the generator sets the flags and puts them on open floor by the door.
-    /// </summary>
+    // people on some floors: a priest (the church menu: revive, cure, save) beside the arrival door on the save floors
+    // (11, 21 ... 91), and a merchant on floors 25, 50 and 75 (one of the game's item shops that suits the depth).
+    // the cave's copy of map 8E gets 6 characters. talking to character n runs event n + 1 of the map's script block
+    // (seen in game), and events 1 and 2 are the arrival door and the stairs (step-on areas 0 and 1), so characters 0
+    // and 1 are never shown. 2 is the priest (event 3), 3-5 the three merchants (events 4-6). the setup script shows
+    // the priest when the save flag is set and merchant k when shop flag k is set, the generator sets the flags and
+    // puts them on open floor by the door
     public const int PriestNpc = 2, FirstShopNpc = 3, CaveNpcCount = 6;
 
-    /// <summary>The cave has the priest and the merchants (an option: <see cref="SetPeople"/>).</summary>
+    // the cave has the priest and the merchants (it's an option, see SetPeople)
     public static bool HasPeople(RomBuffer rom) => Read(rom)?.People == true;
 
-    /// <summary>Puts the priest and the merchants in (or takes them out of) the cave that's in the ROM.</summary>
+    // puts the priest and the merchants in (or takes them out of) the cave that's in the rom
     public static void SetPeople(RomBuffer rom, bool on)
     {
         var info = Read(rom) ?? throw new InvalidOperationException("Add one of the Ancient Cave patches first.");
         Apply(rom, info.Mode, on);
     }
     public static readonly int[] ShopFloors = { 25, 50, 75 };
-    /// <summary>The game's item shops used on <see cref="ShopFloors"/> (Hi Potion / Stone Cure..., the special
-    /// arrows and Hi Magic, Ex Potion / Ex Magic).</summary>
+    // the game's item shops used on ShopFloors (Hi Potion / Stone Cure..., the special
+    // arrows and Hi Magic, Ex Potion / Ex Magic)
     public static readonly int[] CaveShops = { 0x18, 0x29, 0x3D };
-    private const int PriestSprite = 0x0E, MerchantSprite = 0x08;   // (the white robe some churches use; the most common shopkeeper)
+    private const int PriestSprite = 0x0E, MerchantSprite = 0x08;   // (the white robe some churches use, and the most common shopkeeper)
 
-    /// <summary>Map 8E's data (checked) with the cave's 7 characters added (section C).</summary>
+    // map 8E's data (checked) with the cave's 7 characters added (section C)
     private static byte[] CaveTemplate(RomBuffer rom)
     {
         var original = TemplateData(rom);
-        var m = LufiaMap.Load(rom, TemplateMap);
+        var map = LufiaMap.Load(rom, TemplateMap);
         for (int i = 0; i < CaveNpcCount; i++)
-            m.Npcs.Add(new MapNpc { Index = i, Sprite = i == PriestNpc ? PriestSprite : i >= FirstShopNpc ? MerchantSprite : PriestSprite, Flags = 0x20, X = 0, Y = 0, BoxX1 = 0, BoxY1 = 0, BoxX2 = 1, BoxY2 = 1 });
-        var data = m.BuildData();
-        var (ob, offs) = Layout(data);
-        var (ob0, offs0) = Layout(original);
-        if (ob != ob0 || offs[1] != offs0[1] || data.Length < original.Length)
+            map.Npcs.Add(new MapNpc { Index = i, Sprite = i == PriestNpc ? PriestSprite : i >= FirstShopNpc ? MerchantSprite : PriestSprite, Flags = 0x20, X = 0, Y = 0, BoxX1 = 0, BoxY1 = 0, BoxX2 = 1, BoxY2 = 1 });
+        var data = map.BuildData();
+        var (objectBlock, offsets) = Layout(data);
+        var (originalBlock, originalOffsets) = Layout(original);
+        if (objectBlock != originalBlock || offsets[1] != originalOffsets[1] || data.Length < original.Length)
             throw new InvalidOperationException("Adding the cave's people to its copy of map 8E moved its arrival points; the floor builder can't use it.");
         return data;
     }
 
-    /// <summary>A map's object block offset and its 8 section offsets (relative to the block).</summary>
+    // a map's object block offset and its 8 section offsets (relative to the block)
     private static (int Ob, int[] Offsets) Layout(byte[] data)
     {
-        int ob = data[0x30] | data[0x31] << 8 | data[0x32] << 16 | data[0x33] << 24;
-        return (ob, Enumerable.Range(0, 8).Select(i => data[ob + 8 + 2 * i] | data[ob + 9 + 2 * i] << 8).ToArray());
+        int objectBlock = data[0x30] | data[0x31] << 8 | data[0x32] << 16 | data[0x33] << 24;
+        return (objectBlock, Enumerable.Range(0, 8).Select(i => data[objectBlock + 8 + 2 * i] | data[objectBlock + 9 + 2 * i] << 8).ToArray());
     }
 
-    /// <summary>Where the generator finds things in the loaded copy (unpacked to $7F:0000): arrival points, the
-    /// characters, step-on areas and spots.</summary>
+    // where the generator finds things in the loaded copy (unpacked to $7F:0000): arrival points, the
+    // characters, step-on areas and spots
     private static string LayoutDefines(byte[] data)
     {
-        var (ob, o) = Layout(data);
-        int At(int section) => 0x7F0000 + ob + o[section];
+        var (objectBlock, offsets) = Layout(data);
+        int At(int section) => 0x7F0000 + objectBlock + offsets[section];
         return $"!ENTRANCES = ${At(1):X6}\n!NPCS = ${At(2):X6}\n!ZONES = ${At(3):X6}\n!OBJS = ${At(4):X6}\n";
     }
 
-    /// <summary>Three story flags no event, setup script or game code uses (not the cave's save and floor 100 ones).</summary>
+    // three story flags no event, setup script or game code uses (not the cave's save and floor 100 ones)
     private static int[] ShopFlags(RomBuffer rom, int saveFlag, int finalFlag)
     {
         StoryFlags.BuildIndex(rom, MapCatalog.Scan(rom).Select(m => m.MapId).ToList());
         var list = new List<int>();
-        for (int f = 0xEF; f >= 0 && list.Count < 3; f--)
-            if (f != saveFlag && f != finalFlag && StoryFlags.IsFree(rom, f)) list.Add(f);
+        for (int flag = 0xEF; flag >= 0 && list.Count < 3; flag--)
+            if (flag != saveFlag && flag != finalFlag && StoryFlags.IsFree(rom, flag)) list.Add(flag);
         if (list.Count < 3) throw new InvalidOperationException("Not enough unused story flags for the cave's merchants.");
         return list.ToArray();
     }
@@ -75,50 +74,48 @@ public static partial class AncientCave
     private static string FlagDefines(int[] shopFlags) => string.Concat(shopFlags.Select((f, k) =>
         $"!SHOPBYTE{k} = ${0x7E1296 + f / 8:X6}\n!SHOPBIT{k} = ${1 << (f % 8):X2}\n"));
 
-    /// <summary>The setup script's part for the people: priest when the save flag is set, merchant k when shop flag k
-    /// is (05 ff: test the flag, 04 ww: skip the next command when it isn't set; 06 is the opposite test). <paramref name="at"/> = where it starts
-    /// in the script (jumps count from the script's start).</summary>
-    private static byte[] PeopleSetup(int at, int saveFlag, int[] shopFlags)
+    // the setup script's part for the people: the priest when the save flag is set, merchant k when shop flag k
+    // is (05 ff: test the flag, 04 ww: skip the next command when it isn't set, 06 is the opposite test). start = where
+    // it starts in the script (jumps count from the script's start)
+    private static byte[] PeopleSetup(int start, int saveFlag, int[] shopFlags)
     {
-        var b = new List<byte>();
+        var bytes = new List<byte>();
         foreach (var (flag, npc) in new[] { (saveFlag, PriestNpc) }.Concat(shopFlags.Select((f, k) => (f, FirstShopNpc + k))))
         {
-            int next = at + b.Count + 6;
-            b.AddRange(new byte[] { 0x05, (byte)flag, 0x04, (byte)next, (byte)(next >> 8), (byte)(SetupScripts.CharacterOn + npc) });
+            int next = start + bytes.Count + 6;
+            bytes.AddRange(new byte[] { 0x05, (byte)flag, 0x04, (byte)next, (byte)(next >> 8), (byte)(SetupScripts.CharacterOn + npc) });
         }
-        return b.ToArray();
+        return bytes.ToArray();
     }
 
-    private static byte[] EventText(RomBuffer rom, string t)
+    private static byte[] EventText(RomBuffer rom, string text)
     {
-        var b = TextDecoder.Encode(t, rom).ToList();
-        if (b.Count > 0 && b[^1] == 0x00) b.RemoveAt(b.Count - 1);
-        b.Add(0x04);
-        return b.ToArray();
+        var bytes = TextDecoder.Encode(text, rom).ToList();
+        if (bytes.Count > 0 && bytes[^1] == 0x00) bytes.RemoveAt(bytes.Count - 1);
+        bytes.Add(0x04);
+        return bytes.ToArray();
     }
 
-    /// <summary>Event 3: the priest's church menu (revive, cure, save).</summary>
+    // event 3: the priest's church menu (revive, cure, save)
     private static byte[] PriestEvent(RomBuffer rom)
     {
-        var e = new List<byte> { 0x0C };
-        e.AddRange(EventText(rom, "Rest a while, travelers."));
-        e.AddRange(new byte[] { 0x1E, 0x00 });
-        return e.ToArray();
+        var script = new List<byte> { 0x0C };
+        script.AddRange(EventText(rom, "Rest a while, travelers."));
+        script.AddRange(new byte[] { 0x1E, 0x00 });
+        return script.ToArray();
     }
 
-    /// <summary>Events 4-6: merchant k's shop.</summary>
-    private static byte[] ShopEvent(RomBuffer rom, int k)
+    // events 4-6: merchant's shop
+    private static byte[] ShopEvent(RomBuffer rom, int merchant)
     {
-        var e = new List<byte> { 0x0C };
-        e.AddRange(EventText(rom, "Even down here, a merchant[NL]has to make a living."));
-        e.AddRange(new byte[] { 0x1C, (byte)CaveShops[k], 0x00 });
-        return e.ToArray();
+        var script = new List<byte> { 0x0C };
+        script.AddRange(EventText(rom, "Even down here, a merchant[NL]has to make a living."));
+        script.AddRange(new byte[] { 0x1C, (byte)CaveShops[merchant], 0x00 });
+        return script.ToArray();
     }
 
-    /// <summary>
-    /// The generator's part: shop flags for the floor (set with the floor 100 flag), and PlaceNpcs (after the
-    /// doorways: the priest and the merchants on open floor near the arrival spot, cells marked taken like chests).
-    /// </summary>
+    // the generator's part: shop flags for the floor (set along with the floor 100 flag), and PlaceNpcs (after the
+    // doorways: the priest and the merchants on open floor near the arrival spot, cells marked taken like chests)
     private const string NpcSource = """
         SetShopFlags:               ; M = 8: shop flag k on floor 25 / 50 / 75 only
             LDA !SHOPBYTE0

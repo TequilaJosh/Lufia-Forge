@@ -2,146 +2,158 @@ using System.IO;
 
 namespace LufiaForge.Core;
 
-/// <summary>
-/// IPS (International Patching System) patch apply and export.
-/// Spec: https://zerosoft.zophar.net/ips.php
-///
-/// IPS format:
-///   Header:  "PATCH" (5 bytes)
-///   Records: [3-byte offset][2-byte size][size bytes of data]
-///            If size == 0: RLE record [2-byte run length][1 byte fill value]
-///   EOF:     "EOF" (3 bytes)
-///   Optional truncate extension: 3 more bytes after EOF = final file size (Lunar IPS / Flips). Written whenever the
-///   patched ROM's size differs from the original (e.g. a ROM expanded to 2 MB), and honoured when applying.
-/// </summary>
+// ips (international patching system) patches, applying and exporting.
+// spec: https://zerosoft.zophar.net/ips.php
+//
+// ips format:
+//   header:  "PATCH" (5 bytes)
+//   records: [3-byte offset][2-byte size][size bytes of data]
+//            size 0 = RLE record [2-byte run length][1 byte fill value]
+//   eof:     "EOF" (3 bytes)
+//   optional truncate extension: 3 more bytes after EOF = final file size (lunar ips / flips). we write it whenever the
+//   patched rom's size differs from the original (like a rom expanded to 2 MB), and honour it when applying
 public static class IpsHandler
 {
     private static readonly byte[] IpsMagic = "PATCH"u8.ToArray();
     private static readonly byte[] IpsEof   = "EOF"u8.ToArray();
+    private const int EofOffset = 0x454F46;   // "EOF" read as a record's offset
 
-    // -------------------------------------------------------------------------
-    // Apply
-    // -------------------------------------------------------------------------
+    // apply
 
-    /// <summary>
-    /// Apply an IPS patch file to a copy of the ROM buffer.
-    /// The original RomBuffer is NOT modified.
-    /// Returns the patched bytes.
-    /// </summary>
+    // applies an ips patch file to a copy of the rom buffer and returns the patched bytes. the RomBuffer itself isn't touched
     public static byte[] ApplyPatch(RomBuffer rom, string patchPath) => ApplyPatch(rom.ToArray(), File.ReadAllBytes(patchPath));
 
-    /// <summary>Apply IPS patch bytes to a ROM image; returns the patched copy (the image passed in is not changed).</summary>
+    // applies ips patch bytes to a rom image and returns the patched copy (the image passed in stays the same).
+    // a patch that's cut off (a record running past its end, or no "EOF" at the end) throws and changes nothing,
+    // half a patch would leave the game broken
     public static byte[] ApplyPatch(byte[] rom, byte[] patchData)
     {
         byte[] romCopy   = (byte[])rom.Clone();
 
         ValidateMagic(patchData);
 
-        int pos = 5; // skip "PATCH"
-        while (pos + 3 <= patchData.Length)
+        int position = 5; // skip "PATCH"
+        bool ended = false;
+        while (position + 3 <= patchData.Length)
         {
-            // Check for EOF marker (and the optional final-size extension after it)
-            if (patchData[pos] == 'E' && patchData[pos + 1] == 'O' && patchData[pos + 2] == 'F')
+            // the EOF marker (and the optional final size after it)
+            if (patchData[position] == 'E' && patchData[position + 1] == 'O' && patchData[position + 2] == 'F')
             {
-                if (pos + 6 <= patchData.Length)
+                if (position + 6 <= patchData.Length)
                 {
-                    int finalSize = (patchData[pos + 3] << 16) | (patchData[pos + 4] << 8) | patchData[pos + 5];
+                    int finalSize = (patchData[position + 3] << 16) | (patchData[position + 4] << 8) | patchData[position + 5];
                     if (finalSize > 0) Array.Resize(ref romCopy, finalSize);
                 }
+                ended = true;
                 break;
             }
 
-            // Need 5 bytes minimum: 3 for offset + 2 for size
-            if (pos + 5 > patchData.Length) break;
+            // need at least 5 bytes, 3 for the offset + 2 for the size
+            if (position + 5 > patchData.Length) throw CutOff(position);
 
-            int offset = (patchData[pos] << 16) | (patchData[pos + 1] << 8) | patchData[pos + 2];
-            pos += 3;
+            int offset = (patchData[position] << 16) | (patchData[position + 1] << 8) | patchData[position + 2];
+            position += 3;
 
-            int size = (patchData[pos] << 8) | patchData[pos + 1];
-            pos += 2;
+            int size = (patchData[position] << 8) | patchData[position + 1];
+            position += 2;
 
             if (size == 0)
             {
-                // RLE record: needs 2 bytes for run length + 1 byte for fill value
-                if (pos + 3 > patchData.Length) break;
-                int runLength = (patchData[pos] << 8) | patchData[pos + 1];
-                pos += 2;
-                byte fillByte = patchData[pos++];
+                // RLE record: 2 bytes run length + 1 byte fill value
+                if (position + 3 > patchData.Length) throw CutOff(position - 5);
+                int runLength = (patchData[position] << 8) | patchData[position + 1];
+                position += 2;
+                byte fillByte = patchData[position++];
                 EnsureCapacity(ref romCopy, offset + runLength);
                 for (int i = 0; i < runLength; i++)
                     romCopy[offset + i] = fillByte;
             }
             else
             {
-                // Normal record: needs 'size' bytes of patch data
-                if (pos + size > patchData.Length) break;
+                // normal record: size bytes of patch data
+                if (position + size > patchData.Length) throw CutOff(position - 5);
                 EnsureCapacity(ref romCopy, offset + size);
-                Array.Copy(patchData, pos, romCopy, offset, size);
-                pos += size;
+                Array.Copy(patchData, position, romCopy, offset, size);
+                position += size;
             }
         }
+        if (!ended) throw CutOff(position);
 
         return romCopy;
     }
 
-    // -------------------------------------------------------------------------
-    // Export
-    // -------------------------------------------------------------------------
+    private static InvalidDataException CutOff(int byteIndex) =>
+        new($"The patch file is cut off (it ends inside its data at byte {byteIndex:N0}, or without the \"EOF\" that closes an IPS patch), " +
+            "so it wasn't applied. Download it again.");
 
-    /// <summary>
-    /// Export an IPS patch representing the diff between the original file and the current RomBuffer.
-    /// </summary>
+    // export
+
+    // exports an ips patch with the differences between the original file and the current RomBuffer
     public static void ExportPatch(RomBuffer modifiedRom, string originalRomPath, string outputPatchPath)
     {
         byte[] original = File.ReadAllBytes(originalRomPath);
-        // Strip SMC header from original if present
+        // strip the smc header off the original if it has one
         if (original.Length % 1024 == Lufia1Constants.SmcHeaderSize)
             original = original[Lufia1Constants.SmcHeaderSize..];
 
-        byte[] modified = modifiedRom.ToArray();
+        // the way a save writes it: checksum fixed and, on an 8 MB rom, the copy of the first bank renewed
+        var fixedRom = new RomBuffer(modifiedRom.ToArray(), modifiedRom.FilePath);
+        fixedRom.FixChecksum();
+        byte[] modified = fixedRom.ToArray();
 
         using var stream = new FileStream(outputPatchPath, FileMode.Create, FileAccess.Write);
         using var writer = new BinaryWriter(stream);
 
         writer.Write(IpsMagic);
 
-        // Walk both arrays and collect changed regions
+        // walk both arrays and collect the changed regions
         int i = 0;
-        int len = Math.Min(original.Length, modified.Length);
+        int commonLength = Math.Min(original.Length, modified.Length);
+        // a record can't start at 0x454F46: its offset bytes read "EOF" and patchers stop there (an 8 MB rom gets that
+        // far). so the record starts a byte earlier: those two bytes as data, then the rest from 0x454F47
+        bool SkipEof(ref int start, ref int count)
+        {
+            if (start != EofOffset) return false;
+            writer.Write(new byte[] { 0x45, 0x4F, 0x45, 0x00, 0x02 });   // offset 0x454F45, 2 bytes
+            writer.Write(modified, EofOffset - 1, 2);
+            start++; count--;
+            return count == 0;
+        }
         void Record(int start, int count)
         {
+            if (SkipEof(ref start, ref count)) return;
             writer.Write((byte)(start >> 16)); writer.Write((byte)(start >> 8)); writer.Write((byte)start);
             writer.Write((byte)(count >> 8)); writer.Write((byte)count);
             writer.Write(modified, start, count);
         }
         void Rle(int start, int count, byte value)
         {
+            if (SkipEof(ref start, ref count)) return;
             writer.Write((byte)(start >> 16)); writer.Write((byte)(start >> 8)); writer.Write((byte)start);
             writer.Write((byte)0); writer.Write((byte)0);
             writer.Write((byte)(count >> 8)); writer.Write((byte)count);
             writer.Write(value);
         }
 
-        while (i < len)
+        while (i < commonLength)
         {
             if (original[i] == modified[i]) { i++; continue; }
 
-            // Found a difference - collect the run of changed bytes (up to 65535)
+            // found a difference, collect the run of changed bytes (up to 65535)
             int start    = i;
-            int maxChunk = Math.Min(len - start, 0xFFFF);
+            int maxChunk = Math.Min(commonLength - start, 0xFFFF);
             int chunkLen = 0;
 
             while (chunkLen < maxChunk && original[start + chunkLen] != modified[start + chunkLen])
                 chunkLen++;
 
-            // Write IPS record: [3-byte offset][2-byte size][data]
             Record(start, chunkLen);
 
             i = start + chunkLen;
         }
 
-        // Bytes past the end of the original (an expanded ROM): runs of one value as RLE records, the rest as data.
-        // Everything is written, including the FF filler, so any patcher builds exactly the same ROM.
+        // bytes past the end of the original (an expanded rom): runs of one value as RLE records, the rest as data.
+        // everything gets written, the FF filler too, so any patcher builds exactly the same rom
         while (i < modified.Length)
         {
             int run = 1;
@@ -165,10 +177,6 @@ public static class IpsHandler
             writer.Write((byte)(modified.Length >> 16)); writer.Write((byte)(modified.Length >> 8)); writer.Write((byte)modified.Length);
         }
     }
-
-    // -------------------------------------------------------------------------
-    // Helpers
-    // -------------------------------------------------------------------------
 
     private static void ValidateMagic(byte[] data)
     {

@@ -1,14 +1,12 @@
 namespace LufiaForge.Core.Maps;
 
-/// <summary>
-/// Where each map's setup script is, and moving one to the added space so it can grow.
-/// <para>The game reads a 16-bit offset from 0x18000 + map*2 (at $01:9884, data bank 03) into the script base
-/// ($0D0F-$0D11) and position ($0D12-$0D14), with the top bytes $0D11 / $0D14 cleared, so its scripts can only be
-/// in banks 03-04. The reader itself takes 24-bit positions (event scripts use that), so a small hook at $01:9884
-/// first looks in a table of 24-bit offsets (block "LFSU" in the added space, FFFFFF = the map's original entry).</para>
-/// <para>Characters: a map's characters appear only when its setup script switches them on (41+n turns on
-/// character n, $01:9AB1). 40 does nothing (character FF is past every map's count, $01:9759).</para>
-/// </summary>
+// where each map's setup script is, and moving one to the added space so it can grow.
+// the game reads a 16-bit offset from 0x18000 + map*2 (at $01:9884, data bank 03) into the script base ($0D0F-$0D11)
+// and position ($0D12-$0D14), with the top bytes $0D11 / $0D14 cleared, so its scripts can only be in banks 03-04.
+// the reader itself takes 24-bit positions (event scripts use that), so a small hook at $01:9884 first looks in a
+// table of 24-bit offsets (block "LFSU" in the added space, FFFFFF = the map's original entry).
+// characters: a map's characters only show up when its setup script switches them on (41+n turns on character n,
+// $01:9AB1). 40 does nothing (character FF is past every map's count, $01:9759)
 public static class SetupScripts
 {
     private const int HookAt = 0x9884, HookEnd = 0x98A0;
@@ -26,44 +24,44 @@ public static class SetupScripts
     {
         if (rom.ReadByte(HookAt) != 0x22) return 0;
         int code = FileOffset(rom.ReadByte(HookAt + 1) | rom.ReadByte(HookAt + 2) << 8 | rom.ReadByte(HookAt + 3) << 16);
-        int b = code - Code;
-        return b > 0 && b + 4 <= rom.Length && rom.ReadBytes(b, 4).SequenceEqual(Magic) ? b : 0;
+        int block = code - Code;
+        return block > 0 && block + 4 <= rom.Length && rom.ReadBytes(block, 4).SequenceEqual(Magic) ? block : 0;
     }
     public static bool IsHooked(RomBuffer rom) => Block(rom) > 0;
 
-    /// <summary>File offset of the map's setup script.</summary>
+    // file offset of the map's setup script
     public static int Offset(RomBuffer rom, int mapId)
     {
-        int b = Block(rom);
-        if (b > 0)
+        int block = Block(rom);
+        if (block > 0)
         {
-            int p = b + Table + mapId * 3;
-            int t = rom.ReadByte(p) | rom.ReadByte(p + 1) << 8 | rom.ReadByte(p + 2) << 16;
-            if (t != 0xFFFFFF) return MapSetupScript.PointerTable + t;
+            int entry = block + Table + mapId * 3;
+            int relative = rom.ReadByte(entry) | rom.ReadByte(entry + 1) << 8 | rom.ReadByte(entry + 2) << 16;
+            if (relative != 0xFFFFFF) return MapSetupScript.PointerTable + relative;
         }
         return MapSetupScript.PointerTable + rom.ReadUInt16Le(MapSetupScript.PointerTable + mapId * 2);
     }
 
-    /// <summary>Whether the map's script was moved to the added space.</summary>
+    // whether the map's script got moved to the added space
     public static bool IsMoved(RomBuffer rom, int mapId)
     {
-        int b = Block(rom);
-        return b > 0 && !(rom.ReadByte(b + Table + mapId * 3) == 0xFF && rom.ReadUInt16Le(b + Table + mapId * 3 + 1) == 0xFFFF);
+        int block = Block(rom);
+        return block > 0 && !(rom.ReadByte(block + Table + mapId * 3) == 0xFF && rom.ReadUInt16Le(block + Table + mapId * 3 + 1) == 0xFFFF);
     }
 
-    /// <summary>Puts the hook in (once).</summary>
+    // puts the hook in (once)
     public static void Hook(RomBuffer rom)
     {
         if (IsHooked(rom)) return;
         if (!IsOriginal(rom)) throw new InvalidOperationException("The game's setup script loader isn't the original, so it can't be changed safely.");
         if (rom.Length < MapWriter.ExpandedSize) rom.Expand(MapWriter.ExpandedSize);
-        var space = ExpansionSpace.Load(rom);
+        var freeSpace = ExpansionSpace.Load(rom);
         var code = new List<byte>();
         int size = Code + 80;
-        int at = space.AllocateInOneBank(size, ExpansionSpace.Kind.Patch, 14);
-        space.Save();
-        int table = SnesAddress(at + Table);
-        void Op(params int[] b) { foreach (var x in b) code.Add((byte)x); }
+        int blockOffset = freeSpace.AllocateInOneBank(size, ExpansionSpace.Kind.Patch, 14);
+        freeSpace.Save();
+        int table = SnesAddress(blockOffset + Table);
+        void Op(params int[] bytes) { foreach (var x in bytes) code.Add((byte)x); }
         // entered with M = 8, X = 16, data bank 03 (banks 00-3F see work RAM at $0000-$1FFF)
         Op(0xDA);                                   // PHX
         Op(0xC2, 0x20);                             // REP #$20
@@ -82,23 +80,23 @@ public static class SetupScripts
         Op(0x8D, 0x0F, 0x0D, 0x8D, 0x12, 0x0D);     // STA $0D0F; STA $0D12
         Op(0xFA, 0x6B);                             // PLX; RTL
         // original:
-        foreach (var b in Original) code.Add(b);    // STZ $0D11 ... STA $0D12 (ends with M = 16)
+        foreach (var originalByte in Original) code.Add(originalByte);    // STZ $0D11 ... STA $0D12 (ends with M = 16)
         Op(0xFA, 0x6B);                             // PLX; RTL
         if (Code + code.Count > size) throw new InvalidOperationException("Setup hook too long.");
         var block = new byte[size];
         Magic.CopyTo(block, 0);
         Array.Fill(block, (byte)0xFF, Table, 256 * 3);
         code.CopyTo(block, Code);
-        rom.WriteBytes(at, block);
-        int c = SnesAddress(at + Code);
-        // JSL hook; BRA to the original LDA #$0000 / JSR $C700
-        rom.WriteBytes(HookAt, new byte[] { 0x22, (byte)c, (byte)(c >> 8), (byte)(c >> 16), 0x80, (byte)(HookEnd - (HookAt + 6)) });
+        rom.WriteBytes(blockOffset, block);
+        int codeAddress = SnesAddress(blockOffset + Code);
+        // JSL hook, then BRA to the original LDA #$0000 / JSR $C700
+        rom.WriteBytes(HookAt, new byte[] { 0x22, (byte)codeAddress, (byte)(codeAddress >> 8), (byte)(codeAddress >> 16), 0x80, (byte)(HookEnd - (HookAt + 6)) });
         rom.FixChecksum();
     }
 
-    // ── script contents ───────────────────────────────────────────────────
+    // script contents
 
-    /// <summary>Length of each command at <paramref name="p"/> (0 = end), or -1 for an unknown opcode.</summary>
+    // length of a command from its opcode (0 = end), or -1 for an unknown opcode
     private static int Length(int op) => op switch
     {
         0x00 => 0,
@@ -111,140 +109,141 @@ public static class SetupScripts
         _ => 4,
     };
 
-    /// <summary>The command positions (relative to the script start) of everything reachable, and the script's length.</summary>
-    public static (List<int> Ops, int Length) Parse(byte[] s)
+    // the command positions (relative to the script start) of everything reachable, and the script's length
+    public static (List<int> Ops, int Length) Parse(byte[] script)
     {
         var ops = new List<int>();
         var targets = new SortedSet<int>();
         var seen = new HashSet<int>();
-        int p = 2, end = 2;
+        int pos = 2, end = 2;
         while (true)
         {
-            while (p < s.Length && seen.Add(p))
+            while (pos < script.Length && seen.Add(pos))
             {
-                int op = s[p], len = Length(op);
-                if (len < 0) throw new InvalidOperationException($"Unknown setup command {op:X2} at +{p:X}.");
-                ops.Add(p);
-                if (len == 0) { end = Math.Max(end, p + 1); break; }
-                if (p + len > s.Length) throw new InvalidOperationException("The setup script runs past its end.");
-                if (op == 0x04) targets.Add(s[p + 1] | s[p + 2] << 8);
-                p += len;
-                end = Math.Max(end, p);
+                int op = script[pos], len = Length(op);
+                if (len < 0) throw new InvalidOperationException($"Unknown setup command {op:X2} at +{pos:X}.");
+                ops.Add(pos);
+                if (len == 0) { end = Math.Max(end, pos + 1); break; }
+                if (pos + len > script.Length) throw new InvalidOperationException("The setup script runs past its end.");
+                if (op == 0x04) targets.Add(script[pos + 1] | script[pos + 2] << 8);
+                pos += len;
+                end = Math.Max(end, pos);
             }
             int next = targets.FirstOrDefault(t => !seen.Contains(t) && t >= 2, -1);
             if (next < 0) break;
-            p = next;
+            pos = next;
         }
         ops.Sort();
         return (ops, end);
     }
 
-    /// <summary>The map's whole setup script.</summary>
+    // the map's whole setup script
     public static byte[] Read(RomBuffer rom, int mapId)
     {
-        int at = Offset(rom, mapId);
-        var s = rom.ReadBytes(at, Math.Min(0x2000, rom.Length - at));
-        return s.AsSpan(0, Parse(s).Length).ToArray();
+        int offset = Offset(rom, mapId);
+        var script = rom.ReadBytes(offset, Math.Min(0x2000, rom.Length - offset));
+        return script.AsSpan(0, Parse(script).Length).ToArray();
     }
 
-    /// <summary>Characters the script switches on (anywhere, also after a story check).</summary>
-    public static HashSet<int> CharactersOn(byte[] s)
+    // characters the script switches on (anywhere, also after a story check)
+    public static HashSet<int> CharactersOn(byte[] script)
     {
-        var (ops, _) = Parse(s);
-        return ops.Where(p => s[p] > Nothing && s[p] < 0x80).Select(p => s[p] - CharacterOn).ToHashSet();
+        var (ops, _) = Parse(script);
+        return ops.Where(p => script[p] > Nothing && script[p] < 0x80).Select(p => script[p] - CharacterOn).ToHashSet();
     }
 
-    /// <summary>Gives the map its own copy of the script in the added space (the old copy may be shared with other maps).</summary>
+    // gives the map its own copy of the script in the added space (the old copy might be shared with other maps)
     public static void Replace(RomBuffer rom, int mapId, byte[] script)
     {
         Hook(rom);
-        var space = ExpansionSpace.Load(rom);
+        var freeSpace = ExpansionSpace.Load(rom);
         if (IsMoved(rom, mapId))
         {
             int old = Offset(rom, mapId);
-            if (space.At(old) is { Kind: ExpansionSpace.Kind.Patch } e && e.Start == old && e.Id == 0x200 + mapId) space.Free(old);
+            if (freeSpace.At(old) is { Kind: ExpansionSpace.Kind.Patch } entry && entry.Start == old && entry.Id == 0x200 + mapId) freeSpace.Free(old);
         }
-        int at = space.AllocateInOneBank(script.Length, ExpansionSpace.Kind.Patch, 0x200 + mapId, EventScript.ScriptLimit);
-        space.Save();
-        rom.WriteBytes(at, script);
-        int t = at - MapSetupScript.PointerTable, b = Block(rom) + Table + mapId * 3;
-        rom.WriteBytes(b, new[] { (byte)t, (byte)(t >> 8), (byte)(t >> 16) });
+        int scriptOffset = freeSpace.AllocateInOneBank(script.Length, ExpansionSpace.Kind.Patch, 0x200 + mapId, EventScript.ScriptLimit);
+        freeSpace.Save();
+        rom.WriteBytes(scriptOffset, script);
+        int relative = scriptOffset - MapSetupScript.PointerTable, tableEntry = Block(rom) + Table + mapId * 3;
+        rom.WriteBytes(tableEntry, new[] { (byte)relative, (byte)(relative >> 8), (byte)(relative >> 16) });
         rom.FixChecksum();
     }
 
-    /// <summary>Forgets a map's moved script (its space is freed; the map falls back to its original table entry).</summary>
+    // forgets a map's moved script (its space gets freed and the map falls back to its original table entry)
     public static void Forget(RomBuffer rom, int mapId)
     {
         if (!IsMoved(rom, mapId)) return;
-        var space = ExpansionSpace.Load(rom);
+        var freeSpace = ExpansionSpace.Load(rom);
         int old = Offset(rom, mapId);
-        if (space.At(old) is { Kind: ExpansionSpace.Kind.Patch } e && e.Start == old && e.Id == 0x200 + mapId) { space.Free(old); space.Save(); }
+        if (freeSpace.At(old) is { Kind: ExpansionSpace.Kind.Patch } entry && entry.Start == old && entry.Id == 0x200 + mapId) { freeSpace.Free(old); freeSpace.Save(); }
         rom.WriteBytes(Block(rom) + Table + mapId * 3, new byte[] { 0xFF, 0xFF, 0xFF });
     }
 
-    /// <summary>Puts commands near the start of the map's setup script, so they always run: after its "current map"
-    /// command (01 mm) when that comes before any story check (step-on areas record the current map when switched
-    /// on, so they must come after it), else right after the leading word. Jumps past the insert move along.</summary>
+    // puts commands near the start of the map's setup script so they always run: after its "current map" command
+    // (01 mm) if that comes before any story check (step-on areas record the current map when they're switched on,
+    // so they have to come after it), otherwise right after the leading word. jumps past the insert move along
     public static void Insert(RomBuffer rom, int mapId, byte[] cmds)
     {
-        var s = Read(rom, mapId);
-        var (ops, _) = Parse(s);
-        int at = 2;
-        foreach (int p in ops)
+        var script = Read(rom, mapId);
+        var (ops, _) = Parse(script);
+        int insertAt = 2;
+        foreach (int pos in ops)
         {
-            if (s[p] is 0x04 or (>= 0x05 and <= 0x0A) || s[p] == 0x00) break;
-            if (s[p] == 0x01) { at = p + 2; break; }
+            if (script[pos] is 0x04 or (>= 0x05 and <= 0x0A) || script[pos] == 0x00) break;
+            if (script[pos] == 0x01) { insertAt = pos + 2; break; }
         }
-        int k = cmds.Length;
-        var result = new byte[s.Length + k];
-        s.AsSpan(0, at).CopyTo(result);
-        cmds.CopyTo(result, at);
-        s.AsSpan(at).CopyTo(result.AsSpan(at + k));
-        foreach (int p in ops)
-            if (s[p] == 0x04)
+        int inserted = cmds.Length;
+        var result = new byte[script.Length + inserted];
+        script.AsSpan(0, insertAt).CopyTo(result);
+        cmds.CopyTo(result, insertAt);
+        script.AsSpan(insertAt).CopyTo(result.AsSpan(insertAt + inserted));
+        foreach (int pos in ops)
+            if (script[pos] == 0x04)
             {
-                int q = p >= at ? p + k : p, w = result[q + 1] | result[q + 2] << 8;
-                if (w >= at) { w += k; result[q + 1] = (byte)w; result[q + 2] = (byte)(w >> 8); }
+                int moved = pos >= insertAt ? pos + inserted : pos, target = result[moved + 1] | result[moved + 2] << 8;
+                if (target >= insertAt) { target += inserted; result[moved + 1] = (byte)target; result[moved + 2] = (byte)(target >> 8); }
             }
         Replace(rom, mapId, result);
     }
 
-    /// <summary>
-    /// Switches on the map's new characters (added since it was loaded; not hidden) that its script doesn't switch on,
-    /// and switches off hidden ones (sprite FF). Commands for new characters go first, so they always appear.
-    /// Returns whether the script changed.
-    /// </summary>
+    // switches on the map's new characters (added since it loaded, not hidden) that its script doesn't switch on,
+    // and switches off hidden ones (sprite FF). commands for new characters go first, so they always show up.
+    // returns whether the script changed
     public static bool SyncCharacters(RomBuffer rom, LufiaMap map, bool allowExpand)
     {
-        byte[] s;
-        try { s = Read(rom, map.MapId); }
+        byte[] script;
+        try { script = Read(rom, map.MapId); }
         catch (InvalidOperationException) { return false; }   // (a script Lufia Forge can't read is left alone)
-        var on = CharactersOn(s);
-        // new characters, and hidden ones given a sprite again (hiding took their 41+n out)
+        var on = CharactersOn(script);
+        // new characters, and hidden ones that got a sprite again (hiding took their 41+n out)
         var add = map.Npcs.Where(n => (n.Index >= map.LoadedNpcCount || map.HiddenAtLoad.Contains(n.Index)) && !n.IsUnused && !on.Contains(n.Index) && n.Index < 0x3F)
                           .Select(n => n.Index).ToList();
-        // talking to a character runs event n: one with no script would run whatever the slot points at
-        foreach (int i in add)
-            if (i < EventScript.SlotCount(rom, map.MapId) && LufiaMap.EventScriptOffset(rom, map.MapId, i) < 0)
-                EventScript.CreateEvent(rom, map.MapId, i);
         var off = map.Npcs.Where(n => n.IsUnused && on.Contains(n.Index)).Select(n => n.Index).ToHashSet();
+        // characters switched on that the map doesn't have at all anymore (the last one taken out, an Undo after a save)
+        off.UnionWith(on.Where(i => i >= map.Npcs.Count));
         if (add.Count == 0 && off.Count == 0) { map.MarkNpcsSaved(); return false; }
+        // (checked before anything gets made, making the events below expands the rom)
         if (!allowExpand && rom.Length < MapWriter.ExpandedSize)
             throw new InvalidOperationException("Switching characters on or off needs the ROM expanded to 2 MB.");
-        var (ops, _) = Parse(s);
-        var n2 = (byte[])s.Clone();
-        foreach (int p in ops) if (n2[p] > Nothing && n2[p] < 0x80 && off.Contains(n2[p] - CharacterOn)) n2[p] = Nothing;
-        int k = add.Count;
-        var result = new byte[n2.Length + k];
-        n2.AsSpan(0, 2).CopyTo(result);
-        for (int i = 0; i < k; i++) result[2 + i] = (byte)(CharacterOn + add[i]);
-        n2.AsSpan(2).CopyTo(result.AsSpan(2 + k));
-        // jumps are relative to the script start: everything after the insert moved by k
-        foreach (int p in ops)
-            if (n2[p] == 0x04)
+        // talking to character n runs event n + 1, and one with no script would run whatever the slot points at (a
+        // number past the event table grows it)
+        foreach (int i in add)
+            if (!MapEvents.HasEvent(rom, map.MapId, MapEvents.TalkEvent(i))) MapEvents.Create(rom, map.MapId, MapEvents.TalkEvent(i));
+        var (ops, _) = Parse(script);
+        var newScript = (byte[])script.Clone();
+        foreach (int pos in ops) if (newScript[pos] > Nothing && newScript[pos] < 0x80 && off.Contains(newScript[pos] - CharacterOn)) newScript[pos] = Nothing;
+        int inserted = add.Count;
+        var result = new byte[newScript.Length + inserted];
+        newScript.AsSpan(0, 2).CopyTo(result);
+        for (int i = 0; i < inserted; i++) result[2 + i] = (byte)(CharacterOn + add[i]);
+        newScript.AsSpan(2).CopyTo(result.AsSpan(2 + inserted));
+        // jumps are relative to the script start, so everything after the insert moved by inserted
+        foreach (int pos in ops)
+            if (newScript[pos] == 0x04)
             {
-                int q = p + k, w = result[q + 1] | result[q + 2] << 8;
-                if (w >= 2) { w += k; result[q + 1] = (byte)w; result[q + 2] = (byte)(w >> 8); }
+                int moved = pos + inserted, target = result[moved + 1] | result[moved + 2] << 8;
+                if (target >= 2) { target += inserted; result[moved + 1] = (byte)target; result[moved + 2] = (byte)(target >> 8); }
             }
         Replace(rom, map.MapId, result);
         map.MarkNpcsSaved();

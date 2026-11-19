@@ -7,6 +7,7 @@
         xmlns:cs="clr-namespace:LufiaForge.Modules.Cutscenes"
         xmlns:pm="clr-namespace:LufiaForge.Modules.PatchManager"
         xmlns:dis="clr-namespace:LufiaForge.Modules.Disassembler"
+        xmlns:l2="clr-namespace:LufiaForge.Modules.Lufia2"
         xmlns:gd="clr-namespace:LufiaForge.Modules.GameData"
         xmlns:me="clr-namespace:LufiaForge.Modules.MapEditor"
         xmlns:ev="clr-namespace:LufiaForge.Modules.Events"
@@ -22,16 +23,14 @@ Title="{Binding WindowTitle}"
 
     <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/> <!-- Menu bar -->
-            <RowDefinition Height="Auto"/> <!-- Toolbar -->
-            <RowDefinition Height="Auto"/> <!-- Gold divider -->
-            <RowDefinition Height="*"/>    <!-- Tab content -->
-            <RowDefinition Height="Auto"/> <!-- Status bar -->
+            <RowDefinition Height="Auto"/> <!-- menu bar -->
+            <RowDefinition Height="Auto"/> <!-- toolbar -->
+            <RowDefinition Height="Auto"/> <!-- gold divider -->
+            <RowDefinition Height="*"/>    <!-- tab content -->
+            <RowDefinition Height="Auto"/> <!-- status bar -->
         </Grid.RowDefinitions>
 
-        <!-- ============================================================
-             MENU BAR
-             ============================================================ -->
+        <!-- menu bar -->
         <Menu Grid.Row="0"
               Background="{StaticResource DeepPurpleBrush}"
               Foreground="{StaticResource TextPrimaryBrush}">
@@ -65,6 +64,14 @@ Title="{Binding WindowTitle}"
                           Command="{Binding SaveProjectAsCommand}"
                           InputGestureText="Ctrl+Shift+S"
                           Foreground="Black"/>
+                <MenuItem Header="New Project From This One..."
+                          Command="{Binding NewProjectFromThisCommand}"
+                          ToolTip="Saves this project, then copies it into a new project in a folder of its own and goes on in the copy. This project stays as it is now: a version to go back to."
+                          Foreground="Black"/>
+                <MenuItem Header="Merge Another Project Into This One..."
+                          Command="{Binding MergeProjectCommand}"
+                          ToolTip="Takes the changes another project made (someone else's work on a copy of this project, or your own other version) into this one. You see everything it changed, with the differences, and tick what goes in."
+                          Foreground="Black"/>
                 <Separator Style="{StaticResource LufiaSeparator}"/>
                 <MenuItem Header="Export ROM (dated copy)" ToolTip="Writes a playable ROM with everything in the project, named with the date and time, next to the project"
                           Command="{Binding SaveRomCommand}"
@@ -94,6 +101,12 @@ Title="{Binding WindowTitle}"
                         </Style>
                     </MenuItem.ItemContainerStyle>
                 </MenuItem>
+                <Separator Style="{StaticResource LufiaSeparator}"/>
+                <MenuItem Header="Start from a Clean Slate..." Click="ClearStoryMenuItem_Click" Foreground="Black" IsEnabled="{Binding IsRomLoaded}"
+                          ToolTip="Takes out every event, cutscene, character and treasure (the maps, graphics, monsters, items, spells and music stay); a new game starts where you pick"/>
+                <Separator Style="{StaticResource LufiaSeparator}"/>
+                <MenuItem Header="Settings..." Click="SettingsMenuItem_Click" Foreground="Black"
+                          ToolTip="Lufia Forge's own settings, the same for every project (Snes9x 1.51 mode)"/>
             </MenuItem>
 
             <MenuItem Header="_Help" Foreground="{StaticResource TextPrimaryBrush}">
@@ -102,15 +115,13 @@ Title="{Binding WindowTitle}"
             </MenuItem>
         </Menu>
 
-        <!-- ============================================================
-             TOOLBAR
-             ============================================================ -->
+        <!-- toolbar -->
         <Border Grid.Row="1"
                 Background="{StaticResource ToolbarBackgroundBrush}"
                 Padding="8,6">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
 
-                <!-- App title/logo area -->
+                <!-- app title / logo -->
                 <StackPanel Orientation="Horizontal" Margin="0,0,24,0">
                     <TextBlock Text="⚔"
                                FontSize="20"
@@ -154,7 +165,7 @@ Title="{Binding WindowTitle}"
                 <Button Content="↷  Redo" Style="{StaticResource LufiaButton}" Command="{Binding RedoCommand}" Margin="0,0,8,0"
                         ToolTip="{Binding RedoText}" ToolTipService.ShowOnDisabled="True"/>
 
-                <!-- ROM info chip -->
+                <!-- rom info chip -->
                 <Border Background="{StaticResource MidPurpleBrush}"
                         BorderBrush="{StaticResource BorderPurpleBrush}"
                         BorderThickness="1"
@@ -176,18 +187,25 @@ Title="{Binding WindowTitle}"
             </StackPanel>
         </Border>
 
-        <!-- Gold accent line -->
+        <!-- gold accent line -->
         <Rectangle Grid.Row="2" Height="2" Fill="{StaticResource GoldAccentBrush}"/>
 
-        <!-- ============================================================
-             MAIN CONTENT - TABS
-             ============================================================ -->
+        <!-- main content, the tabs -->
         <TabControl Grid.Row="3"
                     Style="{StaticResource LufiaTabControl}"
                     SelectedIndex="{Binding SelectedTabIndex}"
                     Background="Transparent">
 
-            <TabItem Header="🗺  Map Editor"    Style="{StaticResource LufiaTabItem}">
+            <!-- lufia 2 editors (shown instead of the lufia 1 tabs when a lufia 2 rom is loaded) -->
+            <TabItem x:Name="Lufia2Tab" Header="🗡  Lufia II" Style="{StaticResource LufiaTabItem}" Visibility="Collapsed">
+                <l2:Lufia2View x:Name="Lufia2View">
+                    <l2:Lufia2View.DataContext>
+                        <l2:Lufia2ViewModel/>
+                    </l2:Lufia2View.DataContext>
+                </l2:Lufia2View>
+            </TabItem>
+
+            <TabItem x:Name="MapTab" Header="🗺  Map Editor"    Style="{StaticResource LufiaTabItem}">
                 <me:MapEditorView x:Name="MapEditorView">
                     <me:MapEditorView.DataContext>
                         <me:MapEditorViewModel/>
@@ -195,7 +213,7 @@ Title="{Binding WindowTitle}"
                 </me:MapEditorView>
             </TabItem>
 
-            <TabItem Header="💬  Events"         Style="{StaticResource LufiaTabItem}">
+            <TabItem x:Name="EventsTab" Header="💬  Events"         Style="{StaticResource LufiaTabItem}">
                 <ev:EventsView x:Name="EventsView">
                     <ev:EventsView.DataContext>
                         <ev:EventsViewModel/>
@@ -203,7 +221,7 @@ Title="{Binding WindowTitle}"
                 </ev:EventsView>
             </TabItem>
 
-            <TabItem Header="🎬  Cutscenes"     Style="{StaticResource LufiaTabItem}">
+            <TabItem x:Name="CutscenesTab" Header="🎬  Cutscenes"     Style="{StaticResource LufiaTabItem}">
                 <cs:CutscenesView x:Name="CutscenesView">
                     <cs:CutscenesView.DataContext>
                         <cs:CutscenesViewModel/>
@@ -211,7 +229,7 @@ Title="{Binding WindowTitle}"
                 </cs:CutscenesView>
             </TabItem>
 
-            <TabItem Header="📝  Text Editor" Style="{StaticResource LufiaTabItem}">
+            <TabItem x:Name="TextTab" Header="📝  Text Editor" Style="{StaticResource LufiaTabItem}">
                 <te:TextEditorView x:Name="TextEditorView">
                     <te:TextEditorView.DataContext>
                         <te:TextEditorViewModel/>
@@ -219,7 +237,7 @@ Title="{Binding WindowTitle}"
                 </te:TextEditorView>
             </TabItem>
 
-            <TabItem Header="⚔  Game Data"     Style="{StaticResource LufiaTabItem}">
+            <TabItem x:Name="GameDataTab" Header="⚔  Game Data"     Style="{StaticResource LufiaTabItem}">
                 <gd:GameDataView x:Name="GameDataView">
                     <gd:GameDataView.DataContext>
                         <gd:GameDataViewModel/>
@@ -227,7 +245,7 @@ Title="{Binding WindowTitle}"
                 </gd:GameDataView>
             </TabItem>
 
-            <TabItem Header="🔧  Patch Manager" Style="{StaticResource LufiaTabItem}">
+            <TabItem x:Name="PatchTab" Header="🔧  Patch Manager" Style="{StaticResource LufiaTabItem}">
                 <pm:PatchManagerView x:Name="PatchManagerView">
                     <pm:PatchManagerView.DataContext>
                         <pm:PatchManagerViewModel/>
@@ -235,7 +253,7 @@ Title="{Binding WindowTitle}"
                 </pm:PatchManagerView>
             </TabItem>
 
-            <TabItem Header="🔗  Memory Monitor" Style="{StaticResource LufiaTabItem}">
+            <TabItem x:Name="MemoryTab" Header="🔗  Memory Monitor" Style="{StaticResource LufiaTabItem}">
                 <mm:MemoryMonitorView x:Name="MemoryMonitorView">
                     <mm:MemoryMonitorView.DataContext>
                         <mm:MemoryMonitorViewModel/>
@@ -243,7 +261,7 @@ Title="{Binding WindowTitle}"
                 </mm:MemoryMonitorView>
             </TabItem>
 
-            <TabItem Header="⚙  Disassembler"  Style="{StaticResource LufiaTabItem}">
+            <TabItem x:Name="DisasmTab" Header="⚙  Disassembler"  Style="{StaticResource LufiaTabItem}">
                 <dis:DisassemblerView x:Name="DisassemblerView">
                     <dis:DisassemblerView.DataContext>
                         <dis:DisassemblerViewModel/>
@@ -251,7 +269,7 @@ Title="{Binding WindowTitle}"
                 </dis:DisassemblerView>
             </TabItem>
 
-            <TabItem Header="🔍  ROM Info"      Style="{StaticResource LufiaTabItem}">
+            <TabItem x:Name="RomInfoTab" Header="🔍  ROM Info"      Style="{StaticResource LufiaTabItem}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto"
                               Background="{StaticResource MidPurpleBrush}">
                     <StackPanel Margin="24" MaxWidth="700">
@@ -260,7 +278,7 @@ Title="{Binding WindowTitle}"
                                    FontSize="18"
                                    Margin="0,0,0,16"/>
 
-                        <!-- ROM detail rows are populated in code-behind -->
+                        <!-- the rom detail rows get filled in from the code-behind -->
                         <ItemsControl x:Name="RomInfoItems">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
@@ -287,9 +305,7 @@ Title="{Binding WindowTitle}"
         </TabControl>
 
 
-        <!-- ============================================================
-             WELCOME (no ROM open yet)
-             ============================================================ -->
+        <!-- welcome (no rom open yet) -->
         <Grid Grid.Row="3" Background="{StaticResource MidPurpleBrush}"
               Visibility="{Binding ShowWelcome, Converter={StaticResource BoolToVisibilityConverter}}">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -356,9 +372,7 @@ Title="{Binding WindowTitle}"
             </ScrollViewer>
         </Grid>
 
-        <!-- ============================================================
-             STATUS BAR
-             ============================================================ -->
+        <!-- status bar -->
         <Border Grid.Row="4"
                 Background="{StaticResource DeepPurpleBrush}"
                 BorderBrush="{StaticResource BorderPurpleBrush}"
@@ -379,9 +393,9 @@ Title="{Binding WindowTitle}"
                                Foreground="{StaticResource TextDisabledBrush}"/>
                 </StackPanel>
 
-                <TextBlock Grid.Column="1"
+                <TextBlock Grid.Column="1" x:Name="GameStatusText"
                            Style="{StaticResource StatusBarText}"
-                           Text="Lufia Forge v1.0  |  Lufia 1 US SNES"
+                           Text="Lufia Forge"
                            Foreground="{StaticResource GoldDimBrush}"/>
             </Grid>
         </Border>

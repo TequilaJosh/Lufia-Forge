@@ -17,10 +17,8 @@ public sealed class SpriteEntry
     public ImageSource? Picture { get; init; }
 }
 
-/// <summary>
-/// Map sprites (the party and every character on the maps): their 8 frames as one sheet, exported to and
-/// imported from a picture (see <see cref="NpcSprites.ImportSheet"/>).
-/// </summary>
+// map sprites (the party and every character on the maps): their 8 frames as one sheet, exported to and
+// imported from a picture (see NpcSprites.ImportSheet)
 public partial class SpriteEditorViewModel : GameDataEditorBase
 {
     public ObservableCollection<SpriteEntry> Sprites { get; } = new();
@@ -38,21 +36,21 @@ public partial class SpriteEditorViewModel : GameDataEditorBase
     private void Fill()
     {
         if (Ctx == null) return;
-        int keep = Selected?.Number ?? 0;
+        int keepNumber = Selected?.Number ?? 0;
         Sprites.Clear();
-        for (int s = 0, n = NpcSprites.Count(Ctx.Rom); s < n; s++)
+        for (int sprite = 0, count = NpcSprites.Count(Ctx.Rom); sprite < count; sprite++)
         {
-            if (NpcSprites.Info(Ctx.Rom, s) is not { } info) continue;
-            Sprites.Add(new SpriteEntry { Number = s, Label = $"Sprite {s:X2}  ({info.Width * 8}x{info.Height * 8}){(NpcSprites.IsNew(Ctx.Rom, s) ? "  new" : "")}", Picture = Image(NpcSprites.Render(Ctx.Rom, s)) });
+            if (NpcSprites.Info(Ctx.Rom, sprite) is not { } info) continue;
+            Sprites.Add(new SpriteEntry { Number = sprite, Label = $"Sprite {sprite:X2}  ({info.Width * 8}x{info.Height * 8}){(NpcSprites.IsNew(Ctx.Rom, sprite) ? "  new" : "")}", Picture = Image(NpcSprites.Render(Ctx.Rom, sprite)) });
         }
-        Selected = Sprites.FirstOrDefault(x => x.Number == keep) ?? Sprites.FirstOrDefault();
+        Selected = Sprites.FirstOrDefault(x => x.Number == keepNumber) ?? Sprites.FirstOrDefault();
         NewNote = $"Room for {NpcSprites.Room(Ctx.Rom)} more sprites.";
     }
 
-    private static ImageSource? Image((uint[] Px, int W, int H)? r)
+    private static ImageSource? Image((uint[] Px, int W, int H)? rendered)
     {
-        if (r is not var (px, w, h)) return null;
-        var bmp = BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgra32, null, px, w * 4);
+        if (rendered is not var (pixels, w, h)) return null;
+        var bmp = BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgra32, null, pixels, w * 4);
         bmp.Freeze();
         return bmp;
     }
@@ -80,12 +78,12 @@ public partial class SpriteEditorViewModel : GameDataEditorBase
         if (dlg.ShowDialog() == true) ExportTo(dlg.FileName);
     }
 
-    /// <summary>Saves the selected sprite's 8 frames as an indexed picture (16 colours of its palette row).</summary>
+    // saves the selected sprite's 8 frames as an indexed picture (the 16 colours of its palette row)
     public void ExportTo(string path)
     {
         if (Ctx == null || Selected == null || NpcSprites.Info(Ctx.Rom, Selected.Number) is not { } info) return;
-        var idx = NpcSprites.SheetIndices(Ctx.Rom, Selected.Number, out int w, out int h);
-        IndexedPng.Save(path, w, h, idx, NpcSprites.Colours(Ctx.Rom, info.Palette), firstTransparent: true);
+        var indices = NpcSprites.SheetIndices(Ctx.Rom, Selected.Number, out int w, out int h);
+        IndexedPng.Save(path, w, h, indices, NpcSprites.Colours(Ctx.Rom, info.Palette), firstTransparent: true);
         Status = $"Saved {path}: 8 frames side by side, an indexed picture (16 colours, colour 0 = see-through). " +
                  "Keep it indexed when editing so the colour numbers stay; import it back at the same size.";
     }
@@ -98,23 +96,23 @@ public partial class SpriteEditorViewModel : GameDataEditorBase
         if (dlg.ShowDialog() == true) ImportFrom(dlg.FileName);
     }
 
-    /// <summary>Draws a picture into the selected sprite: an indexed picture keeps its colour numbers, others are
-    /// matched to the sprite's palette row.</summary>
+    // draws a picture into the selected sprite. an indexed picture keeps its colour numbers, others get
+    // matched to the sprite's palette row
     public void ImportFrom(string path)
     {
         if (Ctx == null || Selected == null) return;
-        int n = Selected.Number;
-        Commit($"Sprite {n:X2}", () =>
+        int sprite = Selected.Number;
+        Commit($"Sprite {sprite:X2}", () =>
         {
             if (IndexedPng.TryLoad(path) is { } png && png.Indices.All(i => i < 16))
             {
-                NpcSprites.ImportIndices(Ctx.Rom, n, png.Indices, png.Width, png.Height);
+                NpcSprites.ImportIndices(Ctx.Rom, sprite, png.Indices, png.Width, png.Height);
                 return;
             }
             var bgra = new FormatConvertedBitmap(new BitmapImage(new Uri(path)), PixelFormats.Bgra32, null, 0);
-            var px = new uint[bgra.PixelWidth * bgra.PixelHeight];
-            bgra.CopyPixels(px, bgra.PixelWidth * 4, 0);
-            NpcSprites.ImportSheet(Ctx.Rom, n, px, bgra.PixelWidth, bgra.PixelHeight);
+            var pixels = new uint[bgra.PixelWidth * bgra.PixelHeight];
+            bgra.CopyPixels(pixels, bgra.PixelWidth * 4, 0);
+            NpcSprites.ImportSheet(Ctx.Rom, sprite, pixels, bgra.PixelWidth, bgra.PixelHeight);
         });
         Fill();
     }
@@ -123,12 +121,12 @@ public partial class SpriteEditorViewModel : GameDataEditorBase
     {
         if (_loading || Ctx == null || Selected == null || value < 0) return;
         if (NpcSprites.Info(Ctx.Rom, Selected.Number) is not { } info || info.Palette == value) return;
-        int n = Selected.Number;
-        Commit($"Sprite {n:X2} palette row", () => NpcSprites.SetPaletteRow(Ctx.Rom, n, value));
+        int sprite = Selected.Number;
+        Commit($"Sprite {sprite:X2} palette row", () => NpcSprites.SetPaletteRow(Ctx.Rom, sprite, value));
         Fill();
     }
 
-    /// <summary>A new sprite: a copy of the selected one (same size), with all 8 frames its own.</summary>
+    // a new sprite: a copy of the selected one (same size), with all 8 frames its own
     [RelayCommand]
     private void NewSprite()
     {
@@ -142,21 +140,21 @@ public partial class SpriteEditorViewModel : GameDataEditorBase
     public void MakeSprite()
     {
         if (Ctx == null || Selected == null) return;
-        int t = Selected.Number, made = -1;
-        Commit("New sprite", () => made = NpcSprites.Add(Ctx.Rom, t));
+        int template = Selected.Number, made = -1;
+        Commit("New sprite", () => made = NpcSprites.Add(Ctx.Rom, template));
         if (made < 0) return;
         Fill();
         Selected = Sprites.FirstOrDefault(x => x.Number == made);
-        Status = $"Sprite {made:X2} made (a copy of {t:X2}). Export it, draw it, import it back; give it to characters in the Map Editor.";
+        Status = $"Sprite {made:X2} made (a copy of {template:X2}). Export it, draw it, import it back; give it to characters in the Map Editor.";
     }
 
     [RelayCommand]
     private void Apply() => Status = "Sprites are written when imported.";
 
-    // ── battle sprites: resource 13D (party battle poses, command icons, damage digits, status icons) ──
+    // battle sprites: resource 13D (party battle poses, command icons, damage digits, status icons)
 
     public const int BattleSheetResource = 0x13D;
-    /// <summary>Battle sprite palettes 0-3 (uncompressed, 4 rows of 16 BGR555 colours).</summary>
+    // battle sprite palettes 0-3 (uncompressed, 4 rows of 16 BGR555 colours)
     public const int BattlePalettes = 0x11200;
     public ObservableCollection<string> BattleRows { get; } = new() { "Row 0", "Row 1", "Row 2", "Row 3" };
     [ObservableProperty] private int _battleRow = 1;
@@ -167,23 +165,23 @@ public partial class SpriteEditorViewModel : GameDataEditorBase
     private uint[] BattleColours(int row) =>
         Enumerable.Range(0, 16).Select(c =>
         {
-            int v = Ctx!.Rom.ReadUInt16Le(BattlePalettes + row * 32 + c * 2);
-            uint r = (uint)(v & 31) << 3, g = (uint)(v >> 5 & 31) << 3, b = (uint)(v >> 10 & 31) << 3;
+            int snesColor = Ctx!.Rom.ReadUInt16Le(BattlePalettes + row * 32 + c * 2);
+            uint r = (uint)(snesColor & 31) << 3, g = (uint)(snesColor >> 5 & 31) << 3, b = (uint)(snesColor >> 10 & 31) << 3;
             return c == 0 ? 0u : 0xFF000000u | r << 16 | g << 8 | b;
         }).ToArray();
 
-    /// <summary>Colour indices of the sheet: 16 tiles across (as in video memory), 8x8 tiles, 4bpp.</summary>
+    // colour numbers of the sheet: 16 tiles across (like in video memory), 8x8 tiles, 4bpp
     private byte[] BattleIndices(out int w, out int h)
     {
-        var d = LufiaCompression.DecompressResource(Ctx!.Rom, BattleSheetResource, out _);
-        int tiles = d.Length / 32; w = 128; h = (tiles + 15) / 16 * 8;
-        var idx = new byte[w * h];
-        for (int t = 0; t < tiles; t++)
+        var data = LufiaCompression.DecompressResource(Ctx!.Rom, BattleSheetResource, out _);
+        int tiles = data.Length / 32; w = 128; h = (tiles + 15) / 16 * 8;
+        var indices = new byte[w * h];
+        for (int tile = 0; tile < tiles; tile++)
         {
-            var px = Modules.TileViewer.SnesTileDecoder.DecodeTile(d, t * 32, Modules.TileViewer.BitDepth.Bpp4);
-            for (int y = 0; y < 8; y++) for (int x = 0; x < 8; x++) idx[(t / 16 * 8 + y) * w + t % 16 * 8 + x] = px[y * 8 + x];
+            var tilePixels = Modules.TileViewer.SnesTileDecoder.DecodeTile(data, tile * 32, Modules.TileViewer.BitDepth.Bpp4);
+            for (int y = 0; y < 8; y++) for (int x = 0; x < 8; x++) indices[(tile / 16 * 8 + y) * w + tile % 16 * 8 + x] = tilePixels[y * 8 + x];
         }
-        return idx;
+        return indices;
     }
 
     private void DrawBattleSheet()
@@ -191,9 +189,9 @@ public partial class SpriteEditorViewModel : GameDataEditorBase
         if (Ctx == null) return;
         try
         {
-            var idx = BattleIndices(out int w, out int h);
-            var pal = BattleColours(BattleRow);
-            BattleSheet = Image((idx.Select(i => pal[i]).ToArray(), w, h));
+            var indices = BattleIndices(out int w, out int h);
+            var palette = BattleColours(BattleRow);
+            BattleSheet = Image((indices.Select(i => palette[i]).ToArray(), w, h));
         }
         catch { BattleSheet = null; }
     }
@@ -202,11 +200,11 @@ public partial class SpriteEditorViewModel : GameDataEditorBase
     private void ExportBattle()
     {
         if (Ctx == null) return;
-        var idx = BattleIndices(out int w, out int h);
-        var pal = BattleColours(BattleRow);
+        var indices = BattleIndices(out int w, out int h);
+        var palette = BattleColours(BattleRow);
         var dlg = new SaveFileDialog { Title = "Export battle sprites", Filter = "PNG picture (*.png)|*.png", FileName = "battle sprites.png" };
         if (dlg.ShowDialog() != true) return;
-        IndexedPng.Save(dlg.FileName, w, h, idx, pal, firstTransparent: true);
+        IndexedPng.Save(dlg.FileName, w, h, indices, palette, firstTransparent: true);
         Status = $"Saved {dlg.FileName}: an indexed picture (16 colours). Keep it indexed when editing so every sprite keeps its own colours.";
     }
 
@@ -216,43 +214,43 @@ public partial class SpriteEditorViewModel : GameDataEditorBase
         if (Ctx == null) return;
         var dlg = new OpenFileDialog { Title = "Import battle sprites", Filter = "Pictures (*.png;*.bmp;*.gif)|*.png;*.bmp;*.gif" };
         if (dlg.ShowDialog() != true) return;
-        var ip = IndexedPng.TryLoad(dlg.FileName);
-        BitmapSource? src = ip == null ? new BitmapImage(new Uri(dlg.FileName)) : null;
+        var indexedPng = IndexedPng.TryLoad(dlg.FileName);
+        BitmapSource? source = indexedPng == null ? new BitmapImage(new Uri(dlg.FileName)) : null;
         BattleIndices(out int w, out int h);
-        if ((ip?.Width ?? src!.PixelWidth) != w || (ip?.Height ?? src!.PixelHeight) != h) { Status = $"The picture must be {w} x {h} pixels (the exported size)."; return; }
-        byte[] idx = new byte[w * h];
-        if (ip is { } png)
+        if ((indexedPng?.Width ?? source!.PixelWidth) != w || (indexedPng?.Height ?? source!.PixelHeight) != h) { Status = $"The picture must be {w} x {h} pixels (the exported size)."; return; }
+        byte[] indices = new byte[w * h];
+        if (indexedPng is { } png)
         {
             // colour numbers as they are (the way it was exported)
-            idx = png.Indices;
-            if (idx.Any(i => i > 15)) { Status = "The picture uses more than 16 colours."; return; }
+            indices = png.Indices;
+            if (indices.Any(i => i > 15)) { Status = "The picture uses more than 16 colours."; return; }
         }
         else
         {
-            // a full-colour picture: nearest colour of the chosen row
-            var bgra = new FormatConvertedBitmap(src!, PixelFormats.Bgra32, null, 0);
-            var px = new uint[w * h]; bgra.CopyPixels(px, w * 4, 0);
-            var pal = BattleColours(BattleRow);
-            for (int i = 0; i < px.Length; i++)
+            // a full colour picture: nearest colour of the picked row
+            var bgra = new FormatConvertedBitmap(source!, PixelFormats.Bgra32, null, 0);
+            var pixels = new uint[w * h]; bgra.CopyPixels(pixels, w * 4, 0);
+            var palette = BattleColours(BattleRow);
+            for (int i = 0; i < pixels.Length; i++)
             {
-                if (px[i] >> 24 < 128) continue;
+                if (pixels[i] >> 24 < 128) continue;
                 long best = long.MaxValue;
-                for (int c = 1; c < 16; c++)
+                for (int color = 1; color < 16; color++)
                 {
-                    long dr = (long)(px[i] >> 16 & 255) - (pal[c] >> 16 & 255), dg = (long)(px[i] >> 8 & 255) - (pal[c] >> 8 & 255), db = (long)(px[i] & 255) - (pal[c] & 255);
-                    long e = dr * dr * 3 + dg * dg * 4 + db * db * 2;
-                    if (e < best) { best = e; idx[i] = (byte)c; }
+                    long dr = (long)(pixels[i] >> 16 & 255) - (palette[color] >> 16 & 255), dg = (long)(pixels[i] >> 8 & 255) - (palette[color] >> 8 & 255), db = (long)(pixels[i] & 255) - (palette[color] & 255);
+                    long distance = dr * dr * 3 + dg * dg * 4 + db * db * 2;
+                    if (distance < best) { best = distance; indices[i] = (byte)color; }
                 }
             }
         }
         var data = new byte[w * h / 2];
-        for (int t = 0; t < data.Length / 32; t++)
+        for (int tile = 0; tile < data.Length / 32; tile++)
             for (int y = 0; y < 8; y++)
                 for (int x = 0; x < 8; x++)
                 {
-                    int c = idx[(t / 16 * 8 + y) * w + t % 16 * 8 + x], bit = 7 - x, a = t * 32;
-                    data[a + y * 2] |= (byte)((c & 1) << bit); data[a + y * 2 + 1] |= (byte)((c >> 1 & 1) << bit);
-                    data[a + 16 + y * 2] |= (byte)((c >> 2 & 1) << bit); data[a + 16 + y * 2 + 1] |= (byte)((c >> 3 & 1) << bit);
+                    int color = indices[(tile / 16 * 8 + y) * w + tile % 16 * 8 + x], bit = 7 - x, tileOffset = tile * 32;
+                    data[tileOffset + y * 2] |= (byte)((color & 1) << bit); data[tileOffset + y * 2 + 1] |= (byte)((color >> 1 & 1) << bit);
+                    data[tileOffset + 16 + y * 2] |= (byte)((color >> 2 & 1) << bit); data[tileOffset + 16 + y * 2 + 1] |= (byte)((color >> 3 & 1) << bit);
                 }
         Commit("Battle sprites", () =>
         {

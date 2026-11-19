@@ -2,11 +2,8 @@ namespace LufiaForge.Core.Cave;
 
 public static partial class AncientCave
 {
-    /// <summary>
-    /// The floor generator and its hooks, from the Ancient Cave project's ac.asm (assembled by Lufia Forge's
-    /// assembler to the same bytes as asar makes; the map numbers, encounter table and loot table are added by
-    /// <see cref="Assemble"/>).
-    /// </summary>
+    // the floor generator and its hooks, from the Ancient Cave project's ac.asm (our assembler turns it into the
+    // same bytes asar makes. Assemble adds the map numbers, encounter table and loot table)
     private const string Source = """
         !AC_FLOOR   = $7E1332       ; current floor 1-100 (Lufia Forge: in saved RAM, chest flags 3E0-3E7 no map uses)
         !AC_CHECK   = $7E1333       ; last checkpoint floor (1, 11, 21 ... 91): a game over brings you back there

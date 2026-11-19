@@ -2,29 +2,24 @@ using LufiaForge.Core;
 
 namespace LufiaForge.Modules.Disassembler;
 
-/// <summary>
-/// Sweeps the entire ROM linearly and collects call/jump cross-references.
-/// Output: for each target address, a list of SNES addresses that call or jump to it.
-///
-/// This is a best-effort linear sweep — it will generate false positives from data regions
-/// that happen to decode as JSR/JMP-like opcodes.  Bookmarks marked as data regions are
-/// excluded during the sweep.
-/// </summary>
+// sweeps the whole ROM in a straight line and collects call/jump cross-references:
+// for each target address, the SNES addresses that call or jump to it
+// it's a best guess, data that happens to decode as JSR/JMP-like opcodes gives false hits.
+// bookmarks marked as data regions get skipped in the sweep
 public sealed class CrossReferenceBuilder
 {
-    /// <summary>Target → callers.  Populated after <see cref="Build"/> completes.</summary>
-    public Dictionary<int, List<int>> Xref { get; } = new();
+    // target -> callers, filled in by Build. it's built on the side and swapped in whole when the build is done:
+    // when it was filled on the worker thread while the panel read it, the dictionary broke ("collection was modified")
+    public Dictionary<int, List<int>> Xref { get; private set; } = new();
 
-    /// <summary>Indirect jumps/calls (JMP (a), JMP (a,X), JML [a], JSR (a,X)) whose target depends on RAM/registers.</summary>
-    public List<int> Unresolved { get; } = new();
+    // indirect jumps/calls (JMP (a), JMP (a,X), JML [a], JSR (a,X)) where the target depends on RAM/registers
+    public List<int> Unresolved { get; private set; } = new();
 
-    /// <summary>
-    /// Run the sweep on a background thread.
-    /// </summary>
-    /// <param name="rom">Source ROM buffer.</param>
-    /// <param name="bookmarks">Bookmark store used to skip data-marked regions.</param>
-    /// <param name="progress">Progress callback (0–100).</param>
-    /// <param name="ct">Cancellation token.</param>
+    // forgets the index (for a new ROM)
+    public void Clear() { Xref = new(); Unresolved = new(); }
+
+    // runs the sweep on a background thread
+    // bookmarks = used to skip regions marked as data, progress = 0-100
     public Task BuildAsync(
         RomBuffer     rom,
         BookmarkStore bookmarks,
@@ -40,17 +35,16 @@ public sealed class CrossReferenceBuilder
         IProgress<int>? progress,
         CancellationToken ct)
     {
-        Xref.Clear();
-        Unresolved.Clear();
+        var xref = new Dictionary<int, List<int>>();
+        var unresolved = new List<int>();
 
-        // Walk ROM byte-by-byte in 32KB (LoROM) bank increments.
-        // For each position, attempt to decode one instruction and collect targets.
+        // walk the ROM byte by byte, 32KB (LoROM) banks at a time.
+        // at each spot try to decode one instruction and collect its target
         int total   = rom.Length;
-        int lastPct = -1;
+        int lastPercent = -1;
 
-        // Use default CpuState — we can't perfectly track M/X over the entire ROM,
-        // so we use a conservative 8-bit assumption.  Most false-positive noise comes
-        // from data, not from M/X mismatches on the opcodes we care about (JSR/JSL/JMP/JML/Bxx).
+        // default CpuState: we can't track M/X right over the whole ROM, so we go with 8-bit to be safe.
+        // most of the false hits come from data anyway, not from M/X being wrong on the opcodes we care about (JSR/JSL/JMP/JML/Bxx)
         var state = CpuState.Default;
 
         int offset = 0;
@@ -58,11 +52,11 @@ public sealed class CrossReferenceBuilder
         {
             ct.ThrowIfCancellationRequested();
 
-            int pct = offset * 100 / total;
-            if (pct != lastPct)
+            int percent = offset * 100 / total;
+            if (percent != lastPercent)
             {
-                progress?.Report(pct);
-                lastPct = pct;
+                progress?.Report(percent);
+                lastPercent = percent;
             }
 
             // skip regions the user marked as data
@@ -70,49 +64,52 @@ public sealed class CrossReferenceBuilder
 
             var line = Cpu65816.DecodeInstruction(rom, offset, state);
 
-            // Propagate flag changes (REP/SEP)
+            // carry the flag changes along (REP/SEP)
             if (line.StateAfter != null)
                 state = line.StateAfter;
 
-            // Bank boundary: reset state at the start of each 32KB bank
+            // reset the state at the start of each 32KB bank
             int bankStart = (offset / 0x8000) * 0x8000;
             if (offset == bankStart && offset > 0)
                 state = CpuState.Default;
 
             if (!line.IsData && line.RawBytes.Length > 0 && line.RawBytes[0] is 0x6C or 0x7C or 0xDC or 0xFC)
-                Unresolved.Add(line.SnesAddress);
+                unresolved.Add(line.SnesAddress);
 
-            // Collect cross-reference entries for instructions with a resolved target
+            // add a cross-reference for instructions with a known target
             if (!line.IsData && line.JumpTarget.HasValue)
             {
-                int from   = line.SnesAddress;
+                int caller = line.SnesAddress;
                 int target = line.JumpTarget.Value;
+                // in the lines' own banks ($80 up): a JSL $01xxxx was kept as $01xxxx while the line there is $81xxxx
+                if ((target & 0xFFFF) >= 0x8000 && (target >> 16 & 0xFF) is not (0x7E or 0x7F)) target = (target & 0x7FFFFF) | 0x800000;
 
-                if (!Xref.TryGetValue(target, out var callers))
+                if (!xref.TryGetValue(target, out var callers))
                 {
                     callers     = new List<int>();
-                    Xref[target] = callers;
+                    xref[target] = callers;
                 }
-                if (!callers.Contains(from))
-                    callers.Add(from);
+                if (!callers.Contains(caller))
+                    callers.Add(caller);
             }
 
             int step = line.RawBytes.Length > 0 ? line.RawBytes.Length : 1;
             offset += step;
         }
 
+        ct.ThrowIfCancellationRequested();
+        Xref = xref;
+        Unresolved = unresolved;
         progress?.Report(100);
     }
 
-    // -------------------------------------------------------------------------
-    // Query helpers
-    // -------------------------------------------------------------------------
+    // lookups
 
-    /// <summary>Returns addresses that call or jump to <paramref name="snesAddress"/>.</summary>
+    // addresses that call or jump to snesAddress
     public IReadOnlyList<int> GetCalledFrom(int snesAddress)
         => Xref.TryGetValue(snesAddress, out var list) ? list : Array.Empty<int>();
 
-    /// <summary>Returns all targets that <paramref name="snesAddress"/> calls or jumps to.</summary>
+    // every target snesAddress calls or jumps to
     public IReadOnlyList<int> GetCallsTo(int snesAddress)
     {
         var result = new List<int>();

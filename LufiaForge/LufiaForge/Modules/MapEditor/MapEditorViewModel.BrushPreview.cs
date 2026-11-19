@@ -4,31 +4,32 @@ using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace LufiaForge.Modules.MapEditor;
 
-/// <summary>
-/// With the Paint tool, a see-through copy of the brush block follows the mouse, snapped to the block it would paint.
-/// (A multi-block or pasted brush shows its own preview: the stamp.)
-/// </summary>
+// with the Paint tool a see-through copy of the brush block follows the mouse, snapped to the block it would paint
+// (a multi-block or pasted brush shows its own preview, the stamp)
 public partial class MapEditorViewModel
 {
     [ObservableProperty] private ImageSource? _brushPreviewImage;
     [ObservableProperty] private double _brushPreviewX, _brushPreviewY;
     [ObservableProperty] private bool _brushPreviewVisible;
 
-    /// <summary>The brush block's picture (after the brush or the tileset changes).</summary>
+    // the brush block's picture, BrushSize blocks square (redone when the brush or tileset changes)
     private void RefreshBrushPreview()
     {
         if (_tileset == null || Brush < 0 || Brush >= _tileset.MetatileCount) { BrushPreviewImage = null; return; }
-        var px = _tileset.MetatilePixels(Brush);
-        var bmp = BitmapSource.Create(16, 16, 96, 96, PixelFormats.Bgra32, null, px, 16 * 4);
+        var blockPixels = _tileset.MetatilePixels(Brush);
+        int brushBlocks = BrushSize, sizePx = brushBlocks * 16;
+        var pixels = new uint[sizePx * sizePx];
+        for (int y = 0; y < sizePx; y++) for (int x = 0; x < sizePx; x++) pixels[y * sizePx + x] = blockPixels[y % 16 * 16 + x % 16];
+        var bmp = BitmapSource.Create(sizePx, sizePx, 96, 96, PixelFormats.Bgra32, null, pixels, sizePx * 4);
         bmp.Freeze();
         BrushPreviewImage = bmp;
     }
 
-    /// <summary>On every mouse move over the map.</summary>
+    // runs on every mouse move over the map
     private void BrushPreviewFollow(int x, int y)
     {
         bool show = Tool == MapTool.Paint && _stamp == null && !_picking && BrushPreviewImage != null;
-        if (show) { BrushPreviewX = x * 16; BrushPreviewY = y * 16; }
+        if (show) { BrushPreviewX = (x - BrushSize / 2) * 16; BrushPreviewY = (y - BrushSize / 2) * 16; }
         BrushPreviewVisible = show;
     }
 }

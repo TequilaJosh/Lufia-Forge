@@ -3,16 +3,14 @@ using Velopack.Sources;
 
 namespace LufiaForge.Core;
 
-/// <summary>
-/// Checks the GitHub Releases of the release-only repository for a newer version and installs it.
-/// Beta builds (version with a suffix, e.g. 0.4.0-beta.2) also take pre-releases; stable builds only stable ones.
-/// Only works in the installed app (Setup.exe); in a dev build it reports that updates are unavailable.
-/// </summary>
+// checks the github releases of the release-only repo for a newer version and installs it.
+// beta builds (a version with a suffix, like 0.4.0-beta.2) take pre-releases too, stable builds only stable ones.
+// only works in the installed app (Setup.exe), a dev build just says updates aren't available
 public static class UpdateService
 {
     public const string RepoUrl = "https://github.com/TequilaJosh/Lufia-Forge-Releases";
 
-    /// <summary>True for beta builds: their version has a pre-release suffix.</summary>
+    // true for beta builds, their version has a pre-release suffix
     public static bool IsBeta =>
         (System.Reflection.CustomAttributeExtensions.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(
             typeof(UpdateService).Assembly)?.InformationalVersion ?? "").Split('+')[0].Contains('-');
@@ -25,16 +23,16 @@ public static class UpdateService
         ?? typeof(UpdateService).Assembly.GetName().Version?.ToString(3)
         ?? "dev";
 
-    /// <summary>
-    /// Checks for an update and, if the user agrees, downloads it and restarts into the new version.
-    /// When <paramref name="silentIfNone"/> is true (startup check), nothing is shown unless an update exists.
-    /// </summary>
-    public static async Task CheckAsync(bool silentIfNone, Func<bool>? hasUnsavedChanges = null)
+    // checks for an update and, if the user says yes, downloads it and restarts into the new version.
+    // with silentIfNone (the startup check) nothing shows up unless there's an update.
+    // the restart closes the app without asking about saving, so saveBeforeRestart saves the project first (after the
+    // download, so edits made in the meantime are kept too). if it can't save, there's no restart
+    public static async Task CheckAsync(bool silentIfNone, Func<bool>? hasUnsavedChanges = null, Func<Task<bool>>? saveBeforeRestart = null)
     {
         try
         {
-            var mgr = CreateManager();
-            if (!mgr.IsInstalled)
+            var manager = CreateManager();
+            if (!manager.IsInstalled)
             {
                 if (!silentIfNone)
                     MessageBox.Show("Automatic updates only work in the installed version of Lufia Forge " +
@@ -43,31 +41,38 @@ public static class UpdateService
                 return;
             }
 
-            var update = await mgr.CheckForUpdatesAsync();
+            var update = await manager.CheckForUpdatesAsync();
             if (update == null)
             {
                 if (!silentIfNone)
-                    MessageBox.Show($"You have the latest version ({mgr.CurrentVersion}).",
+                    MessageBox.Show($"You have the latest version ({manager.CurrentVersion}).",
                                     "Check for Updates", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
             string newVersion = update.TargetFullRelease.Version.ToString();
-            string prompt = $"Lufia Forge {newVersion} is available (you have {mgr.CurrentVersion}).\n\n" +
+            string prompt = $"Lufia Forge {newVersion} is available (you have {manager.CurrentVersion}).\n\n" +
                             "Download and install it now? Lufia Forge will restart.";
             if (hasUnsavedChanges?.Invoke() == true)
-                prompt += "\n\nWarning: you have unsaved ROM changes. Save first, or they will be lost.";
+                prompt += "\n\nThe project has unsaved changes: it is saved before Lufia Forge restarts.";
 
             if (MessageBox.Show(prompt, "Update Available", MessageBoxButton.YesNo,
                                 MessageBoxImage.Information) != MessageBoxResult.Yes)
                 return;
 
-            await mgr.DownloadUpdatesAsync(update);
-            mgr.ApplyUpdatesAndRestart(update);
+            await manager.DownloadUpdatesAsync(update);
+            if (saveBeforeRestart != null && !await saveBeforeRestart())
+            {
+                MessageBox.Show($"Lufia Forge {newVersion} is downloaded, but the project couldn't be saved, so Lufia Forge didn't restart " +
+                                "(the changes would have been lost).\n\nSave the project (or use Save Project As), then use Check for Updates " +
+                                "again to install it.", "Update Available", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            manager.ApplyUpdatesAndRestart(update);
         }
         catch (Exception ex)
         {
-            // Offline or GitHub unreachable: never block the app over an update check.
+            // offline or github can't be reached, never block the app over an update check
             if (!silentIfNone)
                 MessageBox.Show($"Could not check for updates:\n{ex.Message}", "Check for Updates",
                                 MessageBoxButton.OK, MessageBoxImage.Warning);

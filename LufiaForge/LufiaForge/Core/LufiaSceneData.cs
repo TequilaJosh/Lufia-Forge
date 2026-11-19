@@ -1,22 +1,16 @@
 namespace LufiaForge.Core;
 
-/// <summary>
-/// Story scene metadata for Lufia and the Fortress of Doom (US SNES).
-///
-/// Scene boundaries were derived empirically by scanning the ROM for each
-/// scene's opening dialogue line and recording the file offset of the first
-/// matching entry. Offsets are sorted by ROM position; scene indices reflect
-/// narrative order so the text editor can present dialogue in story sequence.
-///
-/// Scenes with no detected boundary (offset == -1) had no uniquely
-/// identifiable opening line in the scanned region — their entries may be
-/// grouped under the preceding scene or under "Battle / Menu".
-/// </summary>
+// story scenes for lufia and the fortress of doom (us snes).
+//
+// the scene boundaries came from scanning the rom for each scene's opening dialogue line and taking the file offset of
+// the first entry that matched. offsets are sorted by rom position, the scene numbers follow the story so the text
+// editor can show dialogue in story order.
+//
+// scenes with no boundary found (offset == -1) had no opening line that only showed up once in the scanned region,
+// so their entries can end up under the scene before them or under "Battle / Menu"
 public static class LufiaSceneData
 {
-    // -------------------------------------------------------------------------
-    // Full scene list in story order (index 0 = pre-story / battle+menu text)
-    // -------------------------------------------------------------------------
+    // every scene in story order (index 0 = before the story / battle+menu text)
     public static readonly SceneInfo[] AllScenes =
     {
         new( 0, "Battle / Menu"),
@@ -84,10 +78,8 @@ public static class LufiaSceneData
         new(64, "The Ending"),
     };
 
-    // -------------------------------------------------------------------------
-    // Scene boundaries sorted by ROM file offset (for entry assignment).
-    // Derived from empirical ROM scan; scenes with no match are omitted.
-    // -------------------------------------------------------------------------
+    // scene boundaries sorted by rom file offset (to put entries in scenes).
+    // from the rom scan, scenes with no match are left out
     private static readonly (int StartOffset, int SceneIndex)[] SceneBoundaries =
     {
         (0x0206A8, 12),  // Treck 1
@@ -138,30 +130,27 @@ public static class LufiaSceneData
         (0x0352C2, 55),  // Doom Island 1
     };
 
-    // Fast index: SceneIndex → SceneInfo
+    // SceneIndex -> SceneInfo
     private static readonly Dictionary<int, SceneInfo> _byIndex =
         AllScenes.ToDictionary(s => s.SceneIndex);
 
-    /// <summary>
-    /// Returns the scene (index + name) that owns the given ROM file offset.
-    /// Uses the last boundary whose StartOffset ≤ romOffset.
-    /// Returns scene 0 ("Battle / Menu") when no boundary precedes the offset.
-    /// </summary>
+    // the scene (index + name) a rom file offset belongs to: the last boundary with StartOffset <= romOffset,
+    // or scene 0 ("Battle / Menu") when no boundary comes before the offset
     public static SceneInfo GetScene(int romOffset)
     {
-        int best = 0;
-        foreach (var (start, idx) in SceneBoundaries)
+        int sceneIndex = 0;
+        foreach (var (start, index) in SceneBoundaries)
         {
             if (start <= romOffset)
-                best = idx;
+                sceneIndex = index;
             else
-                break;   // array is sorted ascending by StartOffset
+                break;   // the array is sorted by StartOffset, lowest first
         }
-        return _byIndex.TryGetValue(best, out var scene) ? scene : AllScenes[0];
+        return _byIndex.TryGetValue(sceneIndex, out var scene) ? scene : AllScenes[0];
     }
 }
 
-/// <summary>Lightweight value type carrying a scene's story index and display name.</summary>
+// a scene's story index and the name we show for it
 public sealed class SceneInfo
 {
     public int    SceneIndex { get; }

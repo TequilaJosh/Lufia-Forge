@@ -4,7 +4,7 @@ using System.Collections.ObjectModel;
 
 namespace LufiaForge.Modules.GameData;
 
-/// <summary>One stat's growth: what it gains over each band of 16 level-ups.</summary>
+// one stat's growth: what it gains over each band of 16 level-ups
 public partial class GrowthRow : ObservableObject
 {
     private readonly Action _changed;
@@ -12,8 +12,8 @@ public partial class GrowthRow : ObservableObject
     public string Stat { get; }
     private readonly int[] _bands;
     public int[] Bands => _bands;
-    private int Get(int b) => _bands[b];
-    private void Set(int b, int v) { _bands[b] = Math.Clamp(v, 0, 255); OnPropertyChanged($"B{b + 1}"); _changed(); }
+    private int Get(int band) => _bands[band];
+    private void Set(int band, int value) { _bands[band] = Math.Clamp(value, 0, 255); OnPropertyChanged($"B{band + 1}"); _changed(); }
     public int B1 { get => Get(0); set => Set(0, value); }
     public int B2 { get => Get(1); set => Set(1, value); }
     public int B3 { get => Get(2); set => Set(2, value); }
@@ -23,16 +23,14 @@ public partial class GrowthRow : ObservableObject
     public int B7 { get => Get(6); set => Set(6, value); }
 }
 
-/// <summary>A level in the preview.</summary>
+// one level in the preview
 public sealed record GrowthPreviewRow(int Level, string Exp, int Hp, int Mp, int Str, int Int, int Agl, int Mgr);
 
-/// <summary>
-/// EXP curve and stat growth of the four main characters (see <see cref="LevelGrowth"/>), with a level-by-level
-/// preview computed the way the game's level-up code does it.
-/// </summary>
+// EXP curve and stat growth of the four main characters (see LevelGrowth), with a level by level
+// preview worked out the same way the game's level-up code does it
 public partial class GrowthEditorViewModel : GameDataEditorBase
 {
-    /// <summary>(The editor footer shows a ROM offset; this editor has none of its own.)</summary>
+    // the editor footer shows a ROM offset, this editor doesn't have one of its own
     public string OffsetText => "";
 
     public ObservableCollection<string> Characters { get; } = new();
@@ -65,10 +63,10 @@ public partial class GrowthEditorViewModel : GameDataEditorBase
     private void RefreshList()
     {
         if (Ctx == null) return;
-        int keep = SelectedIndex;
+        int keepIndex = SelectedIndex;
         Characters.Clear();
         for (int i = 0; i < LevelGrowth.Characters; i++) Characters.Add($"{i}  {Ctx.CharacterName(i)}");
-        SelectedIndex = keep;
+        SelectedIndex = keepIndex;
     }
 
     partial void OnSelectedIndexChanged(int value) => LoadSelected();
@@ -81,10 +79,10 @@ public partial class GrowthEditorViewModel : GameDataEditorBase
         Counter = _setup.Counter; FirstLevelExp = (int)_setup.FirstLevelExp; Increment = (int)_setup.Increment;
         T1 = _setup.Thresholds[0]; T2 = _setup.Thresholds[1]; T3 = _setup.Thresholds[2]; T4 = _setup.Thresholds[3]; T5 = _setup.Thresholds[4];
         Growth.Clear();
-        for (int s = 0; s < 6; s++)
+        for (int stat = 0; stat < 6; stat++)
         {
-            var bands = Enumerable.Range(0, LevelGrowth.Bands).Select(b => _setup.Growth[s, b]).ToArray();
-            Growth.Add(new GrowthRow(LevelGrowth.StatNames[s], bands, UpdatePreview));
+            var bands = Enumerable.Range(0, LevelGrowth.Bands).Select(b => _setup.Growth[stat, b]).ToArray();
+            Growth.Add(new GrowthRow(LevelGrowth.StatNames[stat], bands, UpdatePreview));
         }
         _loading = false;
         UpdatePreview();
@@ -99,28 +97,28 @@ public partial class GrowthEditorViewModel : GameDataEditorBase
     partial void OnT4Changed(int value) => UpdatePreview();
     partial void OnT5Changed(int value) => UpdatePreview();
 
-    /// <summary>The edited values (not yet written).</summary>
+    // the edited values (not written yet)
     private LevelGrowth.Setup? Edited()
     {
         if (_setup == null) return null;
-        var p = new LevelGrowth.Setup
+        var setup = new LevelGrowth.Setup
         {
             StartLevel = _setup.StartLevel, StartExp = _setup.StartExp, StartStats = _setup.StartStats,
             Counter = Clamp(Counter, 0, 255), FirstLevelExp = Clamp(FirstLevelExp, 0, 0xFFFFFF), Increment = Clamp(Increment, 0, 0xFFFFFF),
             Thresholds = new[] { T1, T2, T3, T4, T5 }.Select(t => Clamp(t, 0, 255)).ToArray(),
         };
-        for (int s = 0; s < 6 && s < Growth.Count; s++)
-            for (int b = 0; b < LevelGrowth.Bands; b++) p.Growth[s, b] = Growth[s].Bands[b];
-        return p;
+        for (int stat = 0; stat < 6 && stat < Growth.Count; stat++)
+            for (int band = 0; band < LevelGrowth.Bands; band++) setup.Growth[stat, band] = Growth[stat].Bands[band];
+        return setup;
     }
 
     private void UpdatePreview()
     {
-        if (_loading || Edited() is not { } p) return;
+        if (_loading || Edited() is not { } setup) return;
         Preview.Clear();
-        var levels = LevelGrowth.Simulate(p);
-        foreach (var l in levels)
-            Preview.Add(new GrowthPreviewRow(l.Number, l.ExpToReach.ToString("N0"), l.Stats[0], l.Stats[1], l.Stats[2], l.Stats[3], l.Stats[4], l.Stats[5]));
+        var levels = LevelGrowth.Simulate(setup);
+        foreach (var level in levels)
+            Preview.Add(new GrowthPreviewRow(level.Number, level.ExpToReach.ToString("N0"), level.Stats[0], level.Stats[1], level.Stats[2], level.Stats[3], level.Stats[4], level.Stats[5]));
         var last = levels[^1];
         Summary = $"Level 99 needs {last.ExpToReach:N0} EXP. Stats then: HP {last.Stats[0]}, MP {last.Stats[1]}, STR {last.Stats[2]}, " +
                   $"INT {last.Stats[3]}, AGL {last.Stats[4]}, MGR {last.Stats[5]} (each level-up also adds a random -2..+2).";
@@ -129,7 +127,7 @@ public partial class GrowthEditorViewModel : GameDataEditorBase
     [RelayCommand]
     private void Apply()
     {
-        if (Ctx == null || SelectedIndex < 0 || Edited() is not { } p) return;
-        Commit($"{Ctx.CharacterName(SelectedIndex)}'s growth", () => LevelGrowth.Write(Ctx.Rom, SelectedIndex, p));
+        if (Ctx == null || SelectedIndex < 0 || Edited() is not { } setup) return;
+        Commit($"{Ctx.CharacterName(SelectedIndex)}'s growth", () => LevelGrowth.Write(Ctx.Rom, SelectedIndex, setup));
     }
 }

@@ -1,0 +1,21 @@
+
+ Back in 2005 relnqshd created the Foomy patch
+ together with help from ti83magic and SinclairC
+ where you can fight against Foomy the Foomistral.
+
+ Now, it's finally time for the second round.
+ After rainponcho trying to deal with the Capsule
+ Monsters' fastidiousness and snobbishness, the mighty
+ Foomy made silly Daos believe he could control and use
+ him - and now replaces the final boss fight in order
+ to bring death, chaos, destruction and terror upon thee!
+
+
+ This patch is the same as Frue Lufia (v8.2)
+ except that instead of Daos you will fight Foomy as the final boss.
+
+ Name:                  HP:      MP:    ATP:   DFP:    AGL:  INT:  GUT:  MGR:  DROP:
+ Snoomy               50000        0    2000  10000    510   510   510   510   Nothing
+
+ He is incredibly strong and you'll really need a miracle to survive that onslaught...
+ (There also are some more or less subtle changes regarding Erim, Egg Dragon and Master.)

@@ -1,10 +1,8 @@
 namespace LufiaForge.Core.Battle;
 
-/// <summary>
-/// A very small 65816 assembler for Lufia Forge's own routines: bytes are written as they are, with labels for
-/// branches (8-bit relative), JSR / JMP / table words inside the block (16-bit, from the block's SNES address) and
-/// long addresses. Mistakes (an unknown label, a branch too far) throw when the block is built.
-/// </summary>
+// a tiny 65816 assembler for Lufia Forge's own routines. bytes get written as they are, with labels for
+// branches (8-bit relative), JSR / JMP / table words inside the block (16-bit, from the block's SNES address) and
+// long addresses. mistakes (unknown label, branch too far) throw when the block is built
 public sealed partial class Asm65816
 {
     private readonly List<byte> _code = new();
@@ -13,7 +11,7 @@ public sealed partial class Asm65816
 
     public int Position => _code.Count;
 
-    /// <summary>Raw bytes (opcodes and operands).</summary>
+    // raw bytes (opcodes and operands)
     public Asm65816 B(params byte[] bytes) { _code.AddRange(bytes); return this; }
 
     public Asm65816 Label(string name)
@@ -23,7 +21,7 @@ public sealed partial class Asm65816
         return this;
     }
 
-    /// <summary>A branch (BRA BEQ BNE BCC BCS BPL BMI BVC BVS) to a label.</summary>
+    // a branch (BRA BEQ BNE BCC BCS BPL BMI BVC BVS) to a label
     public Asm65816 Br(byte opcode, string label)
     {
         _code.Add(opcode);
@@ -32,7 +30,7 @@ public sealed partial class Asm65816
         return this;
     }
 
-    /// <summary>An instruction with a 16-bit address of a label in this block (JSR, JMP, JSR (abs,X)...).</summary>
+    // an instruction with the 16-bit address of a label in this block (JSR, JMP, JSR (abs,X)...)
     public Asm65816 Abs(byte opcode, string label)
     {
         _code.Add(opcode);
@@ -41,7 +39,7 @@ public sealed partial class Asm65816
         return this;
     }
 
-    /// <summary>A 24-bit table entry holding a label's address in this block.</summary>
+    // a 24-bit table entry holding a label's address in this block
     public Asm65816 LongWord(string label)
     {
         _fixups.Add((_code.Count, label, 'l'));
@@ -49,7 +47,7 @@ public sealed partial class Asm65816
         return this;
     }
 
-    /// <summary>A 16-bit table word holding a label's address in this block.</summary>
+    // a 16-bit table word holding a label's address in this block
     public Asm65816 Word(string label)
     {
         _fixups.Add((_code.Count, label, 'w'));
@@ -57,7 +55,7 @@ public sealed partial class Asm65816
         return this;
     }
 
-    /// <summary>An instruction with a 24-bit address (JSL, LDA long, STA long...).</summary>
+    // an instruction with a 24-bit address (JSL, LDA long, STA long...)
     public Asm65816 Long(byte opcode, int address)
     {
         _code.Add(opcode);
@@ -65,7 +63,7 @@ public sealed partial class Asm65816
         return this;
     }
 
-    /// <summary>A 16-bit relative branch (BRL, PER) to a label.</summary>
+    // a 16-bit relative branch (BRL, PER) to a label
     public Asm65816 Br16(byte opcode, string label)
     {
         _code.Add(opcode);
@@ -74,7 +72,7 @@ public sealed partial class Asm65816
         return this;
     }
 
-    /// <summary>An instruction with the 24-bit address of a label in this block (JSL / JML).</summary>
+    // an instruction with the 24-bit address of a label in this block (JSL / JML)
     public Asm65816 LongLabel(byte opcode, string label)
     {
         _code.Add(opcode);
@@ -83,45 +81,45 @@ public sealed partial class Asm65816
         return this;
     }
 
-    /// <summary>The bytes, for a block that starts at <paramref name="snesBase"/> (bank in the top byte).</summary>
+    // the bytes, for a block that starts at snesBase (bank in the top byte)
     public byte[] Build(int snesBase)
     {
         var bytes = _code.ToArray();
-        foreach (var (at, label, kind) in _fixups)
+        foreach (var (fixupAt, label, kind) in _fixups)
         {
             if (!_labels.TryGetValue(label, out int target))
             {
                 // "label+12" / "label-3": a label's address plus a number
-                var m = System.Text.RegularExpressions.Regex.Match(label, @"^(.+?)([+-]\d+)$");
-                if (!m.Success || !_labels.TryGetValue(m.Groups[1].Value, out target)) throw new InvalidOperationException($"Unknown label {label}.");
-                target += int.Parse(m.Groups[2].Value);
+                var labelPlusNumber = System.Text.RegularExpressions.Regex.Match(label, @"^(.+?)([+-]\d+)$");
+                if (!labelPlusNumber.Success || !_labels.TryGetValue(labelPlusNumber.Groups[1].Value, out target)) throw new InvalidOperationException($"Unknown label {label}.");
+                target += int.Parse(labelPlusNumber.Groups[2].Value);
             }
             if (kind == 'r')
             {
-                int rel = target - (at + 1);
-                if (rel < -128 || rel > 127) throw new InvalidOperationException($"Branch to {label} is too far ({rel}).");
-                bytes[at] = (byte)(sbyte)rel;
+                int distance = target - (fixupAt + 1);
+                if (distance < -128 || distance > 127) throw new InvalidOperationException($"Branch to {label} is too far ({distance}).");
+                bytes[fixupAt] = (byte)(sbyte)distance;
             }
             else if (kind == 'R')
             {
-                int rel = target - (at + 2);
-                bytes[at] = (byte)rel; bytes[at + 1] = (byte)(rel >> 8);
+                int distance = target - (fixupAt + 2);
+                bytes[fixupAt] = (byte)distance; bytes[fixupAt + 1] = (byte)(distance >> 8);
             }
             else if (kind == 'l')
             {
                 int address = snesBase + target;
-                bytes[at] = (byte)address; bytes[at + 1] = (byte)(address >> 8); bytes[at + 2] = (byte)(address >> 16);
+                bytes[fixupAt] = (byte)address; bytes[fixupAt + 1] = (byte)(address >> 8); bytes[fixupAt + 2] = (byte)(address >> 16);
             }
             else
             {
                 int address = (snesBase & 0xFFFF) + target;
                 if ((snesBase & 0xFFFF) + bytes.Length > 0x10000) throw new InvalidOperationException("The block crosses a bank.");
-                bytes[at] = (byte)address; bytes[at + 1] = (byte)(address >> 8);
+                bytes[fixupAt] = (byte)address; bytes[fixupAt + 1] = (byte)(address >> 8);
             }
         }
         return bytes;
     }
 
-    /// <summary>Where a label is in the block (an offset).</summary>
+    // where a label is in the block (an offset)
     public int Offset(string label) => _labels[label];
 }

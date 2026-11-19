@@ -1,14 +1,16 @@
 <UserControl x:Class="LufiaForge.Modules.GameData.Views.ShopEditorView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:v="clr-namespace:LufiaForge.Modules.GameData.Views">
+             xmlns:v="clr-namespace:LufiaForge.Modules.GameData.Views"
+             xmlns:common="clr-namespace:LufiaForge.Modules.Common">
     <UserControl.Resources>
         <ResourceDictionary Source="/LufiaForge;component/Modules/GameData/GameDataStyles.xaml"/>
     </UserControl.Resources>
 
-    <Grid>
+    <Grid common:LayoutMemory.Key="gamedata.shops.main">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="230"/>
+            <ColumnDefinition Width="230" MinWidth="120"/>
+            <ColumnDefinition Width="6"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
         <Grid.RowDefinitions>
@@ -16,15 +18,28 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <ListBox Grid.Column="0" Margin="12"
+        <common:PopOutHost Grid.Column="0" Title="Shop list" Key="gamedata.shops.list" ButtonMargin="0,14,32,0">
+        <ListBox Margin="12"
                  Style="{StaticResource GdFindList}"
                  ItemsSource="{Binding Shops}"
                  SelectedIndex="{Binding SelectedIndex}"/>
+        </common:PopOutHost>
 
-        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" Padding="0,12,0,0">
+        <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch"/>
+
+        <common:PopOutHost Grid.Column="2" Title="Shop" Key="gamedata.shops.detail" ButtonMargin="0,2,22,0">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,12,0,0">
+            <StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="8,0,12,6">
+                <Button Content="Add a new shop" Command="{Binding AddShopCommand}" Style="{StaticResource LufiaButton}" Padding="10,3"
+                        IsEnabled="{Binding CanAddShop}" VerticalAlignment="Top"
+                        ToolTip="A copy of this shop (its type and items) with an id of its own and room for 11 items"/>
+                <TextBlock Text="{Binding NewShopNote}" Style="{StaticResource GdHint}" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="520" Margin="8,0,0,0"/>
+            </StackPanel>
             <Border Style="{StaticResource GdCard}" HorizontalAlignment="Left">
                 <StackPanel>
                     <TextBlock Text="SHOP" Style="{StaticResource GdSection}"/>
+                    <TextBlock Text="{Binding OffsetText}" Style="{StaticResource GdHint}" TextWrapping="Wrap" MaxWidth="340" Margin="0,0,0,6"/>
                     <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
                         <TextBlock Text="Type" Style="{StaticResource GdFieldLabel}"/>
                         <ComboBox Style="{StaticResource GdCombo}"
@@ -47,12 +62,17 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
-                    <TextBlock Style="{StaticResource GdHint}" MaxWidth="320" Margin="0,10,0,0"
-                               Text="Each shop keeps its original number of slots. Choosing 00 for a slot ends the list there (the shop sells fewer items)."/>
+                    <TextBlock Style="{StaticResource GdHint}" MaxWidth="340" Margin="0,10,0,0" TextWrapping="Wrap"
+                               Text="A game shop keeps its number of slots until it is given 11 (below). Choosing 00 for a slot ends the list there (the shop sells fewer items)."/>
+                    <Button Content="Give it 11 slots" Command="{Binding GiveMoreSlotsCommand}" Style="{StaticResource LufiaButton}" Padding="10,3" Margin="0,8,0,0"
+                            HorizontalAlignment="Left" IsEnabled="{Binding CanGiveMoreSlots}"
+                            ToolTip="Lufia Forge keeps this shop from now on, with room for 11 items; events open it as before"/>
                 </StackPanel>
             </Border>
+            </StackPanel>
         </ScrollViewer>
+        </common:PopOutHost>
 
-        <v:EditorFooter Grid.Row="1" Grid.ColumnSpan="2"/>
+        <v:EditorFooter Grid.Row="1" Grid.ColumnSpan="3"/>
     </Grid>
 </UserControl>

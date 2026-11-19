@@ -33,18 +33,16 @@ def hexrows(b, per=32):
 
 cs = f'''namespace LufiaForge.Core.Maps;
 
-/// <summary>
-/// The emote bubbles of the cutscene command 6F (see <see cref="Battle.EmotePatch"/>): 16x16, drawn as four 8x8
-/// sprite tiles each (top-left, top-right, bottom-left, bottom-right, 4bpp), all in one 16-colour palette.
-/// Generated from the pixel art in tools/emotes/make_emotes.py by tools/emotes/gen_cs.py.
-/// </summary>
+// the emote bubbles for cutscene command 6F (see Battle.EmotePatch). 16x16, each drawn as four 8x8 sprite tiles
+// (top-left, top-right, bottom-left, bottom-right, 4bpp), all in one 16-colour palette.
+// made from the pixel art in tools/emotes/make_emotes.py by tools/emotes/gen_cs.py
 public static partial class EmoteGraphics
 {{
     public static readonly string[] Names = {{ {', '.join('"' + n + '"' for n in names)} }};
 
     public const int BytesPerEmote = 128;
 
-    /// <summary>SNES colours (BGR555), colour 0 = see-through.</summary>
+    // snes colours (BGR555), colour 0 = see-through
     public static readonly ushort[] Palette = {{ {', '.join(f'0x{c:04X}' for c in pal)} }};
 
     public static readonly byte[] Tiles =

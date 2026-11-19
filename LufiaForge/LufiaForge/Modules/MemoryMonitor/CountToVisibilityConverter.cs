@@ -5,9 +5,7 @@ using System.Windows.Data;
 
 namespace LufiaForge.Modules.MemoryMonitor;
 
-/// <summary>
-/// Returns Visible when count > 0, Collapsed otherwise.
-/// </summary>
+// Visible when count > 0, otherwise Collapsed
 public class CountToVisibilityConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)

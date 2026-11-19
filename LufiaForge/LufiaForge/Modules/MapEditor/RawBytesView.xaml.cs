@@ -13,7 +13,7 @@ using TextBox = System.Windows.Controls.TextBox;
 
 namespace LufiaForge.Modules.MapEditor;
 
-/// <summary>One line of the event as raw bytes.</summary>
+// one line of the event as raw bytes
 public sealed class ByteRow
 {
     public int Index { get; init; }
@@ -25,10 +25,8 @@ public sealed class ByteRow
     public TextBox? Editor { get; init; }
 }
 
-/// <summary>
-/// Raw view of an event: each line's bytes as they will be written (jumps recalculated), colour-coded, with the
-/// decoded meaning beside them. Command bytes can be edited as hex; the line selection is shared with the Lines view.
-/// </summary>
+// raw view of an event: each line's bytes the way they'll be written (jumps worked out again), colour-coded,
+// with what they mean next to them. command bytes can be edited as hex. the selected line is shared with the Lines view
 public partial class RawBytesView : UserControl
 {
     private EventEditorPanel? _panel;
@@ -46,7 +44,7 @@ public partial class RawBytesView : UserControl
 
     public void Bind(EventEditorPanel panel) { _panel = panel; Refresh(); }
 
-    /// <summary>Rebuild the rows from the current lines.</summary>
+    // rebuilds the rows from the current lines
     public void Refresh()
     {
         if (_panel?.Script is not { } script) return;
@@ -88,34 +86,34 @@ public partial class RawBytesView : UserControl
         _syncing = false;
         ShowEditor();
 
-        int now = script.BuiltLength(), was = script.End - script.Start;
-        SizeText.Text = now < 0 ? "A jump lands inside a command: fix it in Lines before saving."
-            : now == was ? $"{now} bytes: same size as in the ROM (written in place)."
-            : $"{now} bytes (was {was}, {(now > was ? "+" : "")}{now - was}): the event will be moved when applied.";
+        int builtLength = script.BuiltLength(), oldLength = script.End - script.Start;
+        SizeText.Text = builtLength < 0 ? "A jump lands inside a command: fix it in Lines before saving."
+            : builtLength == oldLength ? $"{builtLength} bytes: same size as in the ROM (written in place)."
+            : $"{builtLength} bytes (was {oldLength}, {(builtLength > oldLength ? "+" : "")}{builtLength - oldLength}): the event will be moved when applied.";
     }
 
-    private static void Colorize(TextBlock tb, ScriptOp op, byte[] bytes)
+    private static void Colorize(TextBlock textBlock, ScriptOp op, byte[] bytes)
     {
         if (bytes.Length == 0) return;
-        var def = op.IsText ? null : EventCommands.Find(bytes[0]);
+        var command = op.IsText ? null : EventCommands.Find(bytes[0]);
         var jumps = op.IsText ? new HashSet<int>() : EventScript.JumpPositions(bytes).SelectMany(p => new[] { p, p + 1 }).ToHashSet();
         int openerLen = op.IsText ? op.Bytes.Length : 0;
         for (int i = 0; i < bytes.Length; i++)
         {
-            byte b = bytes[i];
+            byte value = bytes[i];
             Brush brush;
             bool underline = false;
-            if (op.IsText) brush = i < openerLen ? OpBrush : b < 0x10 ? CodeBrush : TextBrush;
-            else if (i == 0) brush = def == null ? UnknownBrush : OpBrush;
+            if (op.IsText) brush = i < openerLen ? OpBrush : value < 0x10 ? CodeBrush : TextBrush;
+            else if (i == 0) brush = command == null ? UnknownBrush : OpBrush;
             else if (jumps.Contains(i)) { brush = JumpBrush; underline = true; }
-            else brush = def == null ? UnknownBrush : OperandBrush;
-            var run = new Run(b.ToString("X2") + " ") { Foreground = brush };
+            else brush = command == null ? UnknownBrush : OperandBrush;
+            var run = new Run(value.ToString("X2") + " ") { Foreground = brush };
             if (underline) run.TextDecorations = TextDecorations.Underline;
-            tb.Inlines.Add(run);
+            textBlock.Inlines.Add(run);
         }
     }
 
-    /// <summary>Select a line (from the Lines view).</summary>
+    // selects a line (called from the Lines view)
     public void Select(int index)
     {
         if (Rows.Items.Count == 0) return;
@@ -135,59 +133,59 @@ public partial class RawBytesView : UserControl
     private void ShowEditor()
     {
         if (Rows.ItemsSource is not IEnumerable<ByteRow> rows) return;
-        foreach (var r in rows)
-            if (r.Editor != null) r.Editor.Visibility = r.Index == Rows.SelectedIndex ? Visibility.Visible : Visibility.Collapsed;
+        foreach (var row in rows)
+            if (row.Editor != null) row.Editor.Visibility = row.Index == Rows.SelectedIndex ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void Editor_KeyDown(object sender, KeyEventArgs e)
     {
-        if (sender is not TextBox tb || tb.Tag is not int index || _panel == null) return;
+        if (sender is not TextBox box || box.Tag is not int index || _panel == null) return;
         if (e.Key == Key.Escape) { Refresh(); e.Handled = true; return; }
         if (e.Key != Key.Enter) return;
         e.Handled = true;
-        string? error = ApplyHex(index, tb.Text);
+        string? error = ApplyHex(index, box.Text);
         if (error != null) { SizeText.Text = "✖ " + error; return; }
         Refresh();
     }
 
-    /// <summary>Turn typed hex into one or more commands replacing line <paramref name="index"/>.</summary>
+    // turns typed hex into one or more commands that replace line index
     private string? ApplyHex(int index, string text)
     {
         var script = _panel!.Script;
         var op = script.Ops[index];
         var parts = text.Split(new[] { ' ', ',', '\t' }, StringSplitOptions.RemoveEmptyEntries);
         var bytes = new List<byte>();
-        foreach (var p in parts)
+        foreach (var part in parts)
         {
-            var hex = p.StartsWith("$") ? p[1..] : p;
+            var hex = part.StartsWith("$") ? part[1..] : part;
             for (int k = 0; k + 1 < hex.Length + 1; k += 2)
             {
-                if (k + 2 > hex.Length || !byte.TryParse(hex.AsSpan(k, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out byte b))
-                    return $"\"{p}\" isn't hex bytes.";
-                bytes.Add(b);
+                if (k + 2 > hex.Length || !byte.TryParse(hex.AsSpan(k, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out byte value))
+                    return $"\"{part}\" isn't hex bytes.";
+                bytes.Add(value);
             }
         }
         if (bytes.Count == 0)
         {
-            var err = script.Remove(op);
-            if (err != null) return err;
+            var error = script.Remove(op);
+            if (error != null) return error;
             _panel.LinesChangedExternally(Math.Max(0, index - 1));
             return null;
         }
         // split into whole commands
         var commands = new List<byte[]>();
-        for (int p = 0; p < bytes.Count;)
+        for (int pos = 0; pos < bytes.Count;)
         {
-            int len = EventScript.CommandLength(bytes[p], p + 1 < bytes.Count ? bytes[p + 1] : 0);
-            if (len == 0) return $"{bytes[p]:X2} isn't a command the engine has.";
-            if (len < 0) return $"{bytes[p]:X2} starts a dialogue box: add dialogue from the Lines view.";
-            if (p + len > bytes.Count) return $"Command {bytes[p]:X2} needs {len} bytes; only {bytes.Count - p} given.";
-            commands.Add(bytes.Skip(p).Take(len).ToArray());
-            p += len;
+            int length = EventScript.CommandLength(bytes[pos], pos + 1 < bytes.Count ? bytes[pos + 1] : 0);
+            if (length == 0) return $"{bytes[pos]:X2} isn't a command the engine has.";
+            if (length < 0) return $"{bytes[pos]:X2} starts a dialogue box: add dialogue from the Lines view.";
+            if (pos + length > bytes.Count) return $"Command {bytes[pos]:X2} needs {length} bytes; only {bytes.Count - pos} given.";
+            commands.Add(bytes.Skip(pos).Take(length).ToArray());
+            pos += length;
         }
         var typed = commands[0];
-        var setErr = script.SetCommandBytes(op, typed);
-        if (setErr != null) return setErr;
+        var setError = script.SetCommandBytes(op, typed);
+        if (setError != null) return setError;
         RetargetTypedJumps(op, typed);
         for (int k = 1; k < commands.Count; k++)
         {
@@ -198,7 +196,7 @@ public partial class RawBytesView : UserControl
         return null;
     }
 
-    /// <summary>A typed jump value that differs from the computed one moves the jump to the line at that offset.</summary>
+    // if a typed jump value isn't the one we worked out, the jump moves to the line at that offset
     private void RetargetTypedJumps(ScriptOp op, byte[] typed)
     {
         if (_layout == null) return;
@@ -210,10 +208,10 @@ public partial class RawBytesView : UserControl
             int pos = positions[k];
             int value = typed[pos] | (typed[pos + 1] << 8);
             if (current != null && current.Length > pos + 1 && (current[pos] | (current[pos + 1] << 8)) == value) continue;
-            int abs = script.JumpBase + value;
-            var target = _layout.FirstOrDefault(l => l.Offset == abs).Op;
+            int absolute = script.JumpBase + value;
+            var target = _layout.FirstOrDefault(l => l.Offset == absolute).Op;
             op.Targets[k].Op = target;
-            op.Targets[k].Absolute = abs;
+            op.Targets[k].Absolute = absolute;
         }
     }
 }

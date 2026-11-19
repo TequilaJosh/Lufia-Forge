@@ -12,7 +12,7 @@ using System.Windows.Media.Imaging;
 
 namespace LufiaForge.Modules.GameData;
 
-/// <summary>One battle background in the list.</summary>
+// one battle background in the list
 public partial class BattleBackgroundItem : ObservableObject
 {
     [ObservableProperty] private string _name = "";
@@ -28,7 +28,7 @@ public partial class BattleBackgroundItem : ObservableObject
     }
 }
 
-/// <summary>A row that picks a background: one map, or every map of a kind of area.</summary>
+// a row that picks a background for one map, or for every map of a kind of area
 public partial class BattleBackgroundChoice : ObservableObject
 {
     public string Label { get; init; } = "";
@@ -37,20 +37,20 @@ public partial class BattleBackgroundChoice : ObservableObject
     public bool IsArea { get; init; }
     internal BattleBackgroundEditorViewModel Owner = null!;
 
-    /// <summary>0 = none (the darkened map), n = background n; -1 (an area only) = its maps differ.</summary>
+    // 0 = none (the darkened map), n = background n, -1 (areas only) = its maps don't all match
     public int Choice
     {
         get => _blank ? -1 : Owner.ChoiceOf(Maps);
         set
         {
-            // (a choice list being refilled sets -1: not a choice)
+            // a choice list being refilled sets -1, that's not a real pick
             if (value < 0 || value == Choice) return;
             Owner.SetChoice(Maps, value);
         }
     }
 
-    /// <summary>Shows the choice again. (A list that took new names can keep its index with nothing selected; going
-    /// through -1 makes it select again.)</summary>
+    // shows the choice again. a list that took new names can keep its index with nothing selected,
+    // going through -1 makes it select again
     public void Refresh()
     {
         _blank = true;
@@ -62,16 +62,14 @@ public partial class BattleBackgroundChoice : ObservableObject
     private bool _blank;
 }
 
-/// <summary>
-/// Battle backgrounds (see <see cref="BattleBackgrounds"/>): pictures shown behind the fights instead of the darkened
-/// field map, one per kind of area (world map, caves, towers...) or per map.
-/// </summary>
+// battle backgrounds (see BattleBackgrounds): pictures behind the fights instead of the darkened field map,
+// one per kind of area (world map, caves, towers...) or per map
 public partial class BattleBackgroundEditorViewModel : GameDataEditorBase
 {
     public string OffsetText => "";
 
     public ObservableCollection<BattleBackgroundItem> Backgrounds { get; } = new();
-    /// <summary>What the choice lists offer (a new list each time: changing one in place leaves the lists blank).</summary>
+    // what the choice lists offer. it's a new list each time, changing one in place leaves the lists blank
     [ObservableProperty] private List<string> _choiceNames = new();
     public ObservableCollection<BattleBackgroundChoice> Areas { get; } = new();
     public ObservableCollection<BattleBackgroundChoice> MapRows { get; } = new();
@@ -86,14 +84,14 @@ public partial class BattleBackgroundEditorViewModel : GameDataEditorBase
 
     public override bool HasPendingEdits => Dirty && Ctx != null;
 
-    /// <summary>The kinds of area, by tileset (what the game's maps of each are built from).</summary>
+    // the kinds of area by tileset (what the game's maps of each kind are built from)
     private static readonly (string Name, int[] Tilesets)[] AreaKinds =
     {
         ("Towns", new[] { 0, 1, 2 }), ("Castles", new[] { 3 }), ("Palaces", new[] { 4 }), ("Shrines", new[] { 5 }),
         ("Caves", new[] { 6 }), ("Towers", new[] { 7 }), ("Island", new[] { 8 }), ("Ruins", new[] { 9 }), ("Fortress of Doom", new[] { 10 }),
     };
 
-    /// <summary>Which Lufia II background goes to which area when they are added (areas that have none only).</summary>
+    // which Lufia II background each area gets when they're added (only areas that have none)
     private static readonly Dictionary<string, string> Lufia2For = new()
     {
         ["World map"] = "Grassland", ["Ancient Cave"] = "Dark Cave", ["Towns"] = "Grassland", ["Island"] = "Mountain Path",
@@ -110,34 +108,34 @@ public partial class BattleBackgroundEditorViewModel : GameDataEditorBase
         var (list, maps) = BattleBackgrounds.Read(rom);
         _maps = maps;
         Backgrounds.Clear();
-        foreach (var b in list) AddItem(new BattleBackgroundItem { Name = b.Name, Picture = b.Picture });
+        foreach (var background in list) AddItem(new BattleBackgroundItem { Name = background.Name, Picture = background.Picture });
         Areas.Clear();
         MapRows.Clear();
         var catalog = MapCatalog.ScanNamed(rom);
         var world = catalog.Where(m => m.MapId == LufiaMap.WorldMap).Select(m => m.MapId).ToList();
         if (world.Count > 0) Areas.Add(new BattleBackgroundChoice { Owner = this, IsArea = true, Label = "World map", Detail = "map 01", Maps = world });
         var placed = new HashSet<int>(world);
-        // the Ancient Cave's two floor maps (not in the map list: they are built while playing)
+        // the Ancient Cave's two floor maps. they're not in the map list, they get built while you play
         if (Core.Cave.AncientCave.Read(rom) is { } cave)
         {
             var floors = new List<int> { cave.Map1, cave.Map2 };
             Areas.Add(new BattleBackgroundChoice { Owner = this, IsArea = true, Label = "Ancient Cave", Detail = $"maps {cave.Map1:X2}, {cave.Map2:X2}", Maps = floors });
             placed.UnionWith(floors);
         }
-        foreach (var (name, sets) in AreaKinds)
+        foreach (var (name, tilesets) in AreaKinds)
         {
-            var ms = catalog.Where(m => m.MapId != LufiaMap.WorldMap && sets.Contains(m.Tileset)).ToList();
-            if (ms.Count == 0) continue;
-            placed.UnionWith(ms.Select(m => m.MapId));
-            Areas.Add(new BattleBackgroundChoice { Owner = this, IsArea = true, Label = name, Detail = $"{ms.Count} maps", Maps = ms.Select(m => m.MapId).ToList() });
+            var areaMaps = catalog.Where(m => m.MapId != LufiaMap.WorldMap && tilesets.Contains(m.Tileset)).ToList();
+            if (areaMaps.Count == 0) continue;
+            placed.UnionWith(areaMaps.Select(m => m.MapId));
+            Areas.Add(new BattleBackgroundChoice { Owner = this, IsArea = true, Label = name, Detail = $"{areaMaps.Count} maps", Maps = areaMaps.Select(m => m.MapId).ToList() });
         }
-        foreach (var g in catalog.Where(m => !placed.Contains(m.MapId)).GroupBy(m => m.Tileset).OrderBy(g => g.Key))
-            Areas.Add(new BattleBackgroundChoice { Owner = this, IsArea = true, Label = $"Tileset {g.Key}", Detail = $"{g.Count()} maps", Maps = g.Select(m => m.MapId).ToList() });
-        foreach (var m in catalog.OrderBy(m => m.MapId))
-            MapRows.Add(new BattleBackgroundChoice { Owner = this, Label = m.Label, Maps = new List<int> { m.MapId } });
-        foreach (var a in Areas.Where(a => a.Label == "Ancient Cave"))
-            foreach (int m in a.Maps)
-                MapRows.Add(new BattleBackgroundChoice { Owner = this, Label = $"{m:X2}  Ancient Cave floors", Maps = new List<int> { m } });
+        foreach (var group in catalog.Where(m => !placed.Contains(m.MapId)).GroupBy(m => m.Tileset).OrderBy(g => g.Key))
+            Areas.Add(new BattleBackgroundChoice { Owner = this, IsArea = true, Label = $"Tileset {group.Key}", Detail = $"{group.Count()} maps", Maps = group.Select(m => m.MapId).ToList() });
+        foreach (var map in catalog.OrderBy(m => m.MapId))
+            MapRows.Add(new BattleBackgroundChoice { Owner = this, Label = map.Label, Maps = new List<int> { map.MapId } });
+        foreach (var area in Areas.Where(a => a.Label == "Ancient Cave"))
+            foreach (int mapId in area.Maps)
+                MapRows.Add(new BattleBackgroundChoice { Owner = this, Label = $"{mapId:X2}  Ancient Cave floors", Maps = new List<int> { mapId } });
         RefreshChoices();
         SelectedBackground = Backgrounds.FirstOrDefault();
         UpdatePreview();
@@ -147,7 +145,7 @@ public partial class BattleBackgroundEditorViewModel : GameDataEditorBase
             : $"{Backgrounds.Count} battle backgrounds.";
     }
 
-    // ── choices ──────────────────────────────────────────────────────────────
+    // choices
 
     internal int ChoiceOf(List<int> maps)
     {
@@ -158,42 +156,42 @@ public partial class BattleBackgroundEditorViewModel : GameDataEditorBase
 
     internal void SetChoice(List<int> maps, int value)
     {
-        foreach (var m in maps) _maps[m] = (byte)value;
+        foreach (var mapId in maps) _maps[mapId] = (byte)value;
         Dirty = true;
-        foreach (var r in Areas) r.Refresh();
-        foreach (var r in MapRows) r.Refresh();
+        foreach (var row in Areas) row.Refresh();
+        foreach (var row in MapRows) row.Refresh();
     }
 
     private void RefreshChoices()
     {
         ChoiceNames = new List<string> { "None (the darkened map)" }.Concat(Backgrounds.Select(b => b.Name)).ToList();
         RefreshRows();
-        // (the lists drop their selection a little later, once they have taken the new names: show it again then)
+        // the lists drop their selection a little later, once they've taken the new names, so show it again then
         System.Windows.Application.Current?.Dispatcher.BeginInvoke(RefreshRows, System.Windows.Threading.DispatcherPriority.Background);
     }
 
     private void RefreshRows()
     {
-        foreach (var r in Areas) r.Refresh();
-        foreach (var r in MapRows) r.Refresh();
+        foreach (var row in Areas) row.Refresh();
+        foreach (var row in MapRows) row.Refresh();
     }
 
-    // ── preview ──────────────────────────────────────────────────────────────
+    // preview
 
     partial void OnSelectedBackgroundChanged(BattleBackgroundItem? value) => UpdatePreview();
     partial void OnShowGridChanged(bool value) => UpdatePreview();
 
     private void UpdatePreview()
     {
-        if (SelectedBackground is not { } b) { Preview = null; PreviewInfo = ""; return; }
-        var px = BattleBackgrounds.Render(b.Picture);
+        if (SelectedBackground is not { } background) { Preview = null; PreviewInfo = ""; return; }
+        var pixels = BattleBackgrounds.Render(background.Picture);
         if (ShowGrid)
         {
-            // where the fight puts things: the monsters' row and the party's windows (as on the world map)
-            void Box(int x0, int y0, int x1, int y1, uint c)
+            // where the fight puts things: the monsters' row and the party's windows (same as on the world map)
+            void Box(int x0, int y0, int x1, int y1, uint color)
             {
-                for (int x = x0; x <= x1; x++) { px[y0 * 256 + x] = c; px[y1 * 256 + x] = c; }
-                for (int y = y0; y <= y1; y++) { px[y * 256 + x0] = c; px[y * 256 + x1] = c; }
+                for (int x = x0; x <= x1; x++) { pixels[y0 * 256 + x] = color; pixels[y1 * 256 + x] = color; }
+                for (int y = y0; y <= y1; y++) { pixels[y * 256 + x0] = color; pixels[y * 256 + x1] = color; }
             }
             Box(48, 40, 207, 112, 0xFFF0C040);     // monsters
             Box(16, 136, 119, 168, 0xFFFFFFFF);    // party windows
@@ -201,29 +199,29 @@ public partial class BattleBackgroundEditorViewModel : GameDataEditorBase
             Box(16, 176, 119, 208, 0xFFFFFFFF);
             Box(136, 176, 239, 208, 0xFFFFFFFF);
         }
-        Preview = ToImage(px, 256, 224, 2);
-        int users = Enumerable.Range(0, 256).Count(m => _maps[m] == Backgrounds.IndexOf(b) + 1);
-        PreviewInfo = $"{b.SizeInfo}. Used by {users} map{(users == 1 ? "" : "s")}." + (b.Notes.Length > 0 ? " " + b.Notes : "");
+        Preview = ToImage(pixels, 256, 224, 2);
+        int users = Enumerable.Range(0, 256).Count(m => _maps[m] == Backgrounds.IndexOf(background) + 1);
+        PreviewInfo = $"{background.SizeInfo}. Used by {users} map{(users == 1 ? "" : "s")}." + (background.Notes.Length > 0 ? " " + background.Notes : "");
     }
 
     internal static ImageSource ToImage(uint[] px, int w, int h, int scale)
     {
-        var o = new uint[w * scale * h * scale];
-        for (int y = 0; y < h * scale; y++) for (int x = 0; x < w * scale; x++) o[y * w * scale + x] = px[(y / scale) * w + x / scale];
-        var bmp = BitmapSource.Create(w * scale, h * scale, 96, 96, PixelFormats.Bgra32, null, o, w * scale * 4);
+        var scaled = new uint[w * scale * h * scale];
+        for (int y = 0; y < h * scale; y++) for (int x = 0; x < w * scale; x++) scaled[y * w * scale + x] = px[(y / scale) * w + x / scale];
+        var bmp = BitmapSource.Create(w * scale, h * scale, 96, 96, PixelFormats.Bgra32, null, scaled, w * scale * 4);
         bmp.Freeze();
         return bmp;
     }
 
-    // ── pictures ─────────────────────────────────────────────────────────────
+    // pictures
 
-    private static (uint[] Px, int W, int H) LoadPicture(Stream s)
+    private static (uint[] Px, int W, int H) LoadPicture(Stream stream)
     {
-        var frame = BitmapDecoder.Create(s, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad).Frames[0];
+        var frame = BitmapDecoder.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad).Frames[0];
         var bmp = new FormatConvertedBitmap(frame, PixelFormats.Bgra32, null, 0);
-        var px = new uint[bmp.PixelWidth * bmp.PixelHeight];
-        bmp.CopyPixels(px, bmp.PixelWidth * 4, 0);
-        return (px, bmp.PixelWidth, bmp.PixelHeight);
+        var pixels = new uint[bmp.PixelWidth * bmp.PixelHeight];
+        bmp.CopyPixels(pixels, bmp.PixelWidth * 4, 0);
+        return (pixels, bmp.PixelWidth, bmp.PixelHeight);
     }
 
     private static string? PickPicture()
@@ -232,13 +230,13 @@ public partial class BattleBackgroundEditorViewModel : GameDataEditorBase
         return dlg.ShowDialog() == true ? dlg.FileName : null;
     }
 
-    private BattleBackgroundItem? MakeItem(string name, Stream s)
+    private BattleBackgroundItem? MakeItem(string name, Stream stream)
     {
         try
         {
-            var (px, w, h) = LoadPicture(s);
-            var (pic, notes) = BattleBackgrounds.Fit(px, w, h);
-            return new BattleBackgroundItem { Name = Clip(name), Picture = pic, Notes = notes.Count == 0 ? "" : "Made to fit: " + string.Join("; ", notes) + "." };
+            var (pixels, width, height) = LoadPicture(stream);
+            var (picture, notes) = BattleBackgrounds.Fit(pixels, width, height);
+            return new BattleBackgroundItem { Name = Clip(name), Picture = picture, Notes = notes.Count == 0 ? "" : "Made to fit: " + string.Join("; ", notes) + "." };
         }
         catch (Exception ex)
         {
@@ -249,8 +247,8 @@ public partial class BattleBackgroundEditorViewModel : GameDataEditorBase
 
     private static string Clip(string name)
     {
-        var s = new string(name.Where(c => c >= ' ' && c < (char)0x7F).ToArray()).Trim();
-        return s.Length > BattleBackgrounds.NameLength ? s[..BattleBackgrounds.NameLength] : s.Length == 0 ? "Background" : s;
+        var clipped = new string(name.Where(c => c >= ' ' && c < (char)0x7F).ToArray()).Trim();
+        return clipped.Length > BattleBackgrounds.NameLength ? clipped[..BattleBackgrounds.NameLength] : clipped.Length == 0 ? "Background" : clipped;
     }
 
     [RelayCommand]
@@ -262,12 +260,12 @@ public partial class BattleBackgroundEditorViewModel : GameDataEditorBase
         if (path != null) AddPictureFrom(path);
     }
 
-    /// <summary>Adds a background made from a picture file (Add picture without the file dialog).</summary>
+    // adds a background made from a picture file (Add picture, minus the file dialog)
     public void AddPictureFrom(string path)
     {
         if (Ctx == null) return;
-        using var s = File.OpenRead(path);
-        var item = MakeItem(Path.GetFileNameWithoutExtension(path), s);
+        using var stream = File.OpenRead(path);
+        var item = MakeItem(Path.GetFileNameWithoutExtension(path), stream);
         if (item == null) return;
         AddItem(item);
         RefreshChoices();
@@ -279,74 +277,74 @@ public partial class BattleBackgroundEditorViewModel : GameDataEditorBase
     [RelayCommand]
     private void ReplacePicture()
     {
-        if (Ctx == null || SelectedBackground is not { } b) return;
+        if (Ctx == null || SelectedBackground is not { } background) return;
         var path = PickPicture();
         if (path == null) return;
-        using var s = File.OpenRead(path);
-        var item = MakeItem(b.Name, s);
+        using var stream = File.OpenRead(path);
+        var item = MakeItem(background.Name, stream);
         if (item == null) return;
-        b.Picture = item.Picture;
-        b.Notes = item.Notes;
+        background.Picture = item.Picture;
+        background.Notes = item.Notes;
         Dirty = true;
         UpdatePreview();
-        Status = $"New picture for \"{b.Name}\"." + (item.Notes.Length > 0 ? " " + item.Notes : "");
+        Status = $"New picture for \"{background.Name}\"." + (item.Notes.Length > 0 ? " " + item.Notes : "");
     }
 
     [RelayCommand]
     private void RemoveBackground()
     {
-        if (Ctx == null || SelectedBackground is not { } b) return;
-        int n = Backgrounds.IndexOf(b) + 1;
+        if (Ctx == null || SelectedBackground is not { } background) return;
+        int number = Backgrounds.IndexOf(background) + 1;
         for (int m = 0; m < 256; m++)
         {
-            if (_maps[m] == n) _maps[m] = 0;
-            else if (_maps[m] > n) _maps[m]--;
+            if (_maps[m] == number) _maps[m] = 0;
+            else if (_maps[m] > number) _maps[m]--;
         }
-        Backgrounds.Remove(b);
+        Backgrounds.Remove(background);
         RefreshChoices();
         SelectedBackground = Backgrounds.FirstOrDefault();
         Dirty = true;
-        Status = $"Removed \"{b.Name}\"; its maps show the darkened map again.";
+        Status = $"Removed \"{background.Name}\"; its maps show the darkened map again.";
     }
 
     [RelayCommand]
     private void ExportPicture()
     {
-        if (SelectedBackground is not { } b) return;
-        var dlg = new SaveFileDialog { Title = "Save the background as a picture", Filter = "PNG picture|*.png", FileName = b.Name + ".png" };
+        if (SelectedBackground is not { } background) return;
+        var dlg = new SaveFileDialog { Title = "Save the background as a picture", Filter = "PNG picture|*.png", FileName = background.Name + ".png" };
         if (dlg.ShowDialog() != true) return;
-        var px = BattleBackgrounds.Render(b.Picture);
-        var bmp = BitmapSource.Create(256, 224, 96, 96, PixelFormats.Bgra32, null, px, 256 * 4);
-        using var f = File.Create(dlg.FileName);
-        var enc = new PngBitmapEncoder();
-        enc.Frames.Add(BitmapFrame.Create(bmp));
-        enc.Save(f);
+        var pixels = BattleBackgrounds.Render(background.Picture);
+        var bmp = BitmapSource.Create(256, 224, 96, 96, PixelFormats.Bgra32, null, pixels, 256 * 4);
+        using var file = File.Create(dlg.FileName);
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(bmp));
+        encoder.Save(file);
         Status = $"Saved {Path.GetFileName(dlg.FileName)} (256 x 224, the colours the game shows). Edit it and use Replace picture to bring it back.";
     }
 
-    /// <summary>Adds the 24 battle backgrounds of Lufia II and gives them to the areas that have no background yet:
-    /// the pictures built into Lufia Forge (Backgrounds\L2 *.png) when it has them, else read from the user's own
-    /// Lufia II ROM.</summary>
+    // adds Lufia II's 24 battle backgrounds and gives them to the areas that don't have one yet.
+    // uses the pictures built into Lufia Forge (Backgrounds\L2 *.png) if it has them, else reads them from the
+    // user's own Lufia II ROM
     [RelayCommand]
     private void AddLufia2()
     {
         if (Ctx == null) return;
-        var asm = typeof(BattleBackgroundEditorViewModel).Assembly;
-        var builtIn = Lufia2Backgrounds.Names.Select(n => asm.GetManifestResourceStream($"Backgrounds.{Clip("L2 " + n)}.png")).ToList();
-        if (builtIn.All(st => st != null))
+        var assembly = typeof(BattleBackgroundEditorViewModel).Assembly;
+        var builtIn = Lufia2Backgrounds.Names.Select(n => assembly.GetManifestResourceStream($"Backgrounds.{Clip("L2 " + n)}.png")).ToList();
+        if (builtIn.All(stream => stream != null))
         {
             var pictures = new List<uint[]>();
-            foreach (var st in builtIn) using (st) pictures.Add(LoadPicture(st!).Px);
+            foreach (var stream in builtIn) using (stream) pictures.Add(LoadPicture(stream!).Px);
             AddLufia2Pictures(pictures);
             return;
         }
-        foreach (var st in builtIn) st?.Dispose();
+        foreach (var stream in builtIn) stream?.Dispose();
         var dlg = new OpenFileDialog { Title = "Choose your Lufia II: Rise of the Sinistrals (USA) ROM", Filter = "SNES ROMs|*.sfc;*.smc|All files|*.*" };
         if (dlg.ShowDialog() != true) return;
         AddLufia2From(dlg.FileName);
     }
 
-    /// <summary>Add Lufia II backgrounds without the file dialog.</summary>
+    // add the Lufia II backgrounds without the file dialog
     public void AddLufia2From(string path)
     {
         if (Ctx == null) return;
@@ -360,8 +358,8 @@ public partial class BattleBackgroundEditorViewModel : GameDataEditorBase
         AddLufia2Pictures(pictures);
     }
 
-    /// <summary>The 24 Lufia II backgrounds (256 x 224 ARGB, in <see cref="Lufia2Backgrounds.Names"/> order) into the
-    /// list, and to the areas that have none.</summary>
+    // puts the 24 Lufia II backgrounds (256 x 224 ARGB, in Lufia2Backgrounds.Names order) in the list,
+    // and gives them to the areas that have none
     private void AddLufia2Pictures(List<uint[]> pictures)
     {
         var added = new List<string>();
@@ -372,8 +370,8 @@ public partial class BattleBackgroundEditorViewModel : GameDataEditorBase
             if (Backgrounds.Count >= BattleBackgrounds.MaxBackgrounds) { Status = $"There can be at most {BattleBackgrounds.MaxBackgrounds} backgrounds."; break; }
             try
             {
-                var (pic, notes) = BattleBackgrounds.Fit(pictures[k], BattleBackgrounds.Width, BattleBackgrounds.Height);
-                AddItem(new BattleBackgroundItem { Name = name, Picture = pic, Notes = notes.Count == 0 ? "From Lufia II." : "From Lufia II, made to fit: " + string.Join("; ", notes) + "." });
+                var (picture, notes) = BattleBackgrounds.Fit(pictures[k], BattleBackgrounds.Width, BattleBackgrounds.Height);
+                AddItem(new BattleBackgroundItem { Name = name, Picture = picture, Notes = notes.Count == 0 ? "From Lufia II." : "From Lufia II, made to fit: " + string.Join("; ", notes) + "." });
                 added.Add(name);
             }
             catch (Exception ex) { Status = $"Lufia II background {k} can't be read: {ex.Message}"; }
@@ -383,9 +381,9 @@ public partial class BattleBackgroundEditorViewModel : GameDataEditorBase
         foreach (var area in Areas)
         {
             if (area.Choice != 0 || !Lufia2For.TryGetValue(area.Label, out var pick)) continue;
-            int n = Backgrounds.ToList().FindIndex(b => b.Name == "L2 " + pick) + 1;
-            if (n <= 0) continue;
-            area.Choice = n;
+            int number = Backgrounds.ToList().FindIndex(b => b.Name == "L2 " + pick) + 1;
+            if (number <= 0) continue;
+            area.Choice = number;
             given.Add($"{area.Label}: {pick}");
         }
         SelectedBackground = Backgrounds.FirstOrDefault(b => added.Contains(b.Name)) ?? SelectedBackground;
@@ -396,7 +394,7 @@ public partial class BattleBackgroundEditorViewModel : GameDataEditorBase
 
     partial void OnDirtyChanged(bool value) { if (value) Edited = true; }
 
-    /// <summary>Adds a background to the list, watching its name (the choice lists show it).</summary>
+    // adds a background to the list and watches its name, since the choice lists show it
     private void AddItem(BattleBackgroundItem item)
     {
         Backgrounds.Add(item);
@@ -408,7 +406,7 @@ public partial class BattleBackgroundEditorViewModel : GameDataEditorBase
         };
     }
 
-    // ── writing ─────────────────────────────────────────────────────────────
+    // writing
 
     [RelayCommand]
     private void Apply()
@@ -418,14 +416,15 @@ public partial class BattleBackgroundEditorViewModel : GameDataEditorBase
         bool expand = Backgrounds.Count > 0 && rom.Length < MapWriter.ExpandedSize;
         if (expand && !AutoWriting &&
             MessageBox.Show("Battle backgrounds need the expanded ROM (2 MB). Expand it?", "Expand ROM?", MessageBoxButton.YesNo) != MessageBoxResult.Yes)
-        { Status = "Not applied."; return; }
+        { Refuse("Not applied: the ROM wasn't expanded."); return; }
         var list = Backgrounds.Select(b => new BattleBackgrounds.Background(Clip(b.Name), b.Picture)).ToList();
         var maps = _maps.ToArray();
-        Commit("Battle backgrounds", () =>
-        {
-            if (expand) rom.Expand(MapWriter.ExpandedSize);
-            BattleBackgrounds.Apply(rom, list, maps);
-        });
+        if (!Commit("Battle backgrounds", () =>
+            {
+                if (expand) rom.Expand(MapWriter.ExpandedSize);
+                BattleBackgrounds.Apply(rom, list, maps);
+            }))
+            return;   // still pending, with the error
         Dirty = false;
     }
 }

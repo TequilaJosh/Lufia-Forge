@@ -2,29 +2,19 @@ using LufiaForge.Core;
 
 namespace LufiaForge.Modules.Disassembler;
 
-/// <summary>
-/// Walks forward through ROM bytes from a start offset, decoding 65816 instructions
-/// one by one until <paramref name="byteCount"/> is exhausted or a terminal opcode is reached.
-///
-/// Known limitations:
-/// - Cannot perfectly track M/X state through indirect flag changes (e.g. via PLP).
-///   REP and SEP are detected and propagated; all others are not.
-/// - Data regions will decode as garbage opcodes. Mark them with <see cref="BookmarkStore"/>
-///   and re-disassemble to clean up.
-/// </summary>
+// walks forward through the ROM from a start offset, decoding 65816 instructions one at a time
+// until byteCount runs out or it hits an opcode that ends the routine
+// what it can't do:
+// - track M/X through indirect flag changes (like PLP). only REP and SEP are picked up and carried along
+// - data decodes as garbage opcodes. mark it with BookmarkStore and disassemble again to clean it up
 public static class LinearDisassembler
 {
-    // Opcodes that terminate a linear disassembly pass (unconditional returns / break)
+    // opcodes that end a pass (unconditional returns / break)
     private static readonly HashSet<byte> TerminatorOpcodes = [0x00, 0x40, 0x60, 0x6B];
 
-    /// <summary>
-    /// Disassemble up to <paramref name="byteCount"/> bytes starting at <paramref name="startOffset"/>.
-    /// </summary>
-    /// <param name="rom">Source ROM buffer.</param>
-    /// <param name="startOffset">File offset to begin decoding from.</param>
-    /// <param name="byteCount">Maximum number of ROM bytes to consume.</param>
-    /// <param name="initialState">CPU flag state at the entry point (M, X, D, DB).</param>
-    /// <returns>Ordered list of decoded lines, one per instruction.</returns>
+    // disassembles up to byteCount bytes starting at startOffset (a file offset)
+    // initialState = the CPU flag state at the entry point (M, X, D, DB)
+    // returns the decoded lines in order, one per instruction
     public static List<DisassemblyLine> Disassemble(
         RomBuffer rom,
         int       startOffset,
@@ -46,8 +36,8 @@ public static class LinearDisassembler
                 int stop = Math.Min(region.End, end);
                 while (offset < stop)
                 {
-                    int n = Math.Min(8, stop - offset);
-                    var bytes = rom.ReadBytes(offset, n);
+                    int count = Math.Min(8, stop - offset);
+                    var bytes = rom.ReadBytes(offset, count);
                     lines.Add(new DisassemblyLine
                     {
                         FileOffset = offset,
@@ -58,7 +48,7 @@ public static class LinearDisassembler
                         Comment = "; data",
                         IsData = true,
                     });
-                    offset += n;
+                    offset += count;
                 }
                 continue;
             }
@@ -80,15 +70,15 @@ public static class LinearDisassembler
             }
             lines.Add(line);
 
-            // Advance by the size of the decoded instruction (or 1 on data lines)
+            // move on by the instruction's size (or 1 on data lines)
             int step = line.RawBytes.Length > 0 ? line.RawBytes.Length : 1;
             offset += step;
 
-            // Propagate flag-change state from REP/SEP
+            // carry the flag state from REP/SEP along
             if (line.StateAfter != null)
                 state = line.StateAfter;
 
-            // Stop at unconditional terminators
+            // stop at unconditional ends
             if (!line.IsData && line.RawBytes.Length > 0 &&
                 TerminatorOpcodes.Contains(line.RawBytes[0]))
                 break;

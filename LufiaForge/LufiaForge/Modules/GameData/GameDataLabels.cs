@@ -1,12 +1,12 @@
 namespace LufiaForge.Modules.GameData;
 
-/// <summary>A byte value with a display label, for ComboBoxes bound via SelectedValue.</summary>
+// a byte value with a label to show, for ComboBoxes bound through SelectedValue
 public sealed record ByteOption(int Value, string Label)
 {
     public override string ToString() => Label;
 }
 
-/// <summary>Display names for enumerated fields (labels taken from L1ME, "?" = not yet understood).</summary>
+// names to show for the fields that pick from a list (labels taken from L1ME, "?" = not figured out yet)
 public static class GameDataLabels
 {
     public static readonly string[] CharacterSlots =
@@ -51,7 +51,7 @@ public static class GameDataLabels
         new(0xC, "C  Bow & arrow"),
     };
 
-    /// <summary>Equipment property ids (3-byte entries: id, u16 value).</summary>
+    // equipment property ids (3 byte entries: id, u16 value)
     public static readonly ByteOption[] ItemProperties = BuildItemProperties();
 
     private static ByteOption[] BuildItemProperties()
@@ -65,10 +65,10 @@ public static class GameDataLabels
             [0x13] = "Item use data", [0x14] = "Ring flags", [0x15] = "Animation / sound (items)", [0x16] = "Weapon special (1 drain, 3 death)",
             [0x17] = "Encounter rate (?)",
         };
-        // (ids 18 and up would be written past the game's work area: not offered)
+        // ids 18 and up would get written past the game's work area, so they're not offered
         var list = new ByteOption[0x18];
         for (int i = 0; i < 0x18; i++)
-            list[i] = new ByteOption(i, $"{i:X2}  {(known.TryGetValue(i, out var s) ? s : "?")}");
+            list[i] = new ByteOption(i, $"{i:X2}  {(known.TryGetValue(i, out var name) ? name : "?")}");
         return list;
     }
 
@@ -79,7 +79,7 @@ public static class GameDataLabels
         new(8, "8  Battle"), new(9, "9  Unused (?)"),
     };
 
-    /// <summary>Shop locations (index = shop id).</summary>
+    // shop locations (index = shop id)
     public static readonly string[] ShopTowns =
     {
         "Unused", "Alekia", "Alekia", "Alekia", "Chatam", "Treck", "Unused", "Treck", "Treck", "Treck",
@@ -141,7 +141,7 @@ public static class GameDataLabels
 
     public static readonly string[] TeleportKinds = { "None", "Warp", "Escape", "Elf" };
 
-    /// <summary>Returns options, adding an "unknown" entry for a value not in the list so it is preserved.</summary>
+    // returns options, plus an "unknown" entry for a value that isn't in the list so it doesn't get lost
     public static ByteOption[] WithValue(ByteOption[] options, int value)
     {
         if (options.Any(o => o.Value == value)) return options;

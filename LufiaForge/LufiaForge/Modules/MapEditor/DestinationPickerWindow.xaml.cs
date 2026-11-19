@@ -12,7 +12,7 @@ using Color = System.Windows.Media.Color;
 
 namespace LufiaForge.Modules.MapEditor;
 
-/// <summary>Choose an exit's destination by clicking an arrival point (or a new spot) on the destination map.</summary>
+// pick where an exit leads by clicking an arrival point (or a new spot) on the destination map
 public partial class DestinationPickerWindow : Window
 {
     private readonly RomBuffer _rom;
@@ -21,7 +21,7 @@ public partial class DestinationPickerWindow : Window
     private readonly int _currentMapId;
     private LufiaMap? _shown;
 
-    /// <summary>Chosen map (real id; the current map's own id when it leads to the same map).</summary>
+    // the chosen map, as its real id (the current map's own id when the exit leads to the same map)
     public int ResultMap { get; private set; } = -1;
     public int ResultArrival { get; private set; } = -1;
     public (int x, int y)? ResultNewArrival { get; private set; }
@@ -32,9 +32,9 @@ public partial class DestinationPickerWindow : Window
         _rom = rom; _vm = vm; _exit = exit; _currentMapId = currentMapId;
         HeaderText.Text = $"Exit E{exit.Index} of map {currentMapId:X2}: choose where it leads";
         MapList.ItemsSource = vm.Maps;
-        int dest = exit.DestMap == 0 ? currentMapId : exit.DestMap;
+        int destMap = exit.DestMap == 0 ? currentMapId : exit.DestMap;
         if (exit.Arrival is >= 0 and < 255) ResultArrival = exit.Arrival;   // before the map is shown, so it's highlighted
-        MapList.SelectedItem = vm.Maps.FirstOrDefault(m => m.MapId == dest) ?? vm.Maps.FirstOrDefault();
+        MapList.SelectedItem = vm.Maps.FirstOrDefault(m => m.MapId == destMap) ?? vm.Maps.FirstOrDefault();
         Loaded += (_, _) => { MapList.ScrollIntoView(MapList.SelectedItem); FocusChoice(); };
     }
 
@@ -43,8 +43,8 @@ public partial class DestinationPickerWindow : Window
         if (MapList.SelectedItem is not MapInfo info) return;
         _shown = _vm.MapForPicker(info.MapId);
         if (_shown == null) { ChoiceText.Text = $"Map {info.MapId:X2} can't be shown."; return; }
-        var ts = MapTileset.ForMap(_rom, _shown);
-        var px = ts.RenderMap(_shown);
+        var tileset = MapTileset.ForMap(_rom, _shown);
+        var px = tileset.RenderMap(_shown);
         int w = _shown.Width * 16, h = _shown.Height * 16;
         var bmp = new WriteableBitmap(w, h, 96, 96, PixelFormats.Bgra32, null);
         bmp.WritePixels(new Int32Rect(0, 0, w, h), px, w * 4, 0);
@@ -61,35 +61,35 @@ public partial class DestinationPickerWindow : Window
     {
         Marks.Children.Clear();
         if (_shown == null) return;
-        foreach (var a in _shown.Arrivals)
+        foreach (var arrival in _shown.Arrivals)
         {
-            bool chosen = ResultNewArrival == null && a.Index == ResultArrival;
-            var r = new Rectangle
+            bool chosen = ResultNewArrival == null && arrival.Index == ResultArrival;
+            var square = new Rectangle
             {
                 Width = 14, Height = 14, Stroke = chosen ? Brushes.White : Brushes.Cyan, StrokeThickness = chosen ? 3 : 2,
                 Fill = new SolidColorBrush(Color.FromArgb(chosen ? (byte)140 : (byte)60, 0, 255, 255)),
             };
-            Canvas.SetLeft(r, a.X * 16 + 1); Canvas.SetTop(r, a.Y * 16 + 1);
-            Marks.Children.Add(r);
-            var t = new TextBlock { Text = $"A{a.Index}", Foreground = Brushes.White, FontSize = 10, FontWeight = FontWeights.Bold,
+            Canvas.SetLeft(square, arrival.X * 16 + 1); Canvas.SetTop(square, arrival.Y * 16 + 1);
+            Marks.Children.Add(square);
+            var label = new TextBlock { Text = $"A{arrival.Index}", Foreground = Brushes.White, FontSize = 10, FontWeight = FontWeights.Bold,
                                     Background = new SolidColorBrush(Color.FromArgb(160, 0, 0, 0)) };
-            Canvas.SetLeft(t, a.X * 16 + 16); Canvas.SetTop(t, a.Y * 16);
-            Marks.Children.Add(t);
+            Canvas.SetLeft(label, arrival.X * 16 + 16); Canvas.SetTop(label, arrival.Y * 16);
+            Marks.Children.Add(label);
         }
-        if (ResultNewArrival is { } p)
+        if (ResultNewArrival is { } spot)
         {
-            var r = new Rectangle { Width = 16, Height = 16, Stroke = Brushes.HotPink, StrokeThickness = 3,
+            var square = new Rectangle { Width = 16, Height = 16, Stroke = Brushes.HotPink, StrokeThickness = 3,
                                     Fill = new SolidColorBrush(Color.FromArgb(120, 255, 105, 180)) };
-            Canvas.SetLeft(r, p.x * 16); Canvas.SetTop(r, p.y * 16);
-            Marks.Children.Add(r);
+            Canvas.SetLeft(square, spot.x * 16); Canvas.SetTop(square, spot.y * 16);
+            Marks.Children.Add(square);
         }
     }
 
     private void Surface_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (_shown == null) return;
-        var pt = e.GetPosition(MapImage);
-        int x = (int)(pt.X / 16), y = (int)(pt.Y / 16);
+        var pos = e.GetPosition(MapImage);
+        int x = (int)(pos.X / 16), y = (int)(pos.Y / 16);
         if (x < 0 || y < 0 || x >= _shown.Width || y >= _shown.Height) return;
         if (NewArrivalCheck.IsChecked == true)
         {
@@ -111,13 +111,13 @@ public partial class DestinationPickerWindow : Window
     {
         if (_shown == null) return;
         string map = _shown.IsWorld ? "the world map" : $"map {_shown.MapId:X2}";
-        if (ResultNewArrival is { } p)
-            ChoiceText.Text = $"Leads to a NEW arrival point at ({p.x}, {p.y}) on {map}." +
+        if (ResultNewArrival is { } spot)
+            ChoiceText.Text = $"Leads to a NEW arrival point at ({spot.x}, {spot.y}) on {map}." +
                               (_shown.MapId != _currentMapId ? $" Map {_shown.MapId:X2} will be saved in the project with the new point." : "");
         else if (ResultArrival >= 0 && ResultArrival < _shown.Arrivals.Count)
         {
-            var a = _shown.Arrivals[ResultArrival];
-            ChoiceText.Text = $"Leads to {map}, arrival point A{a.Index} at ({a.X}, {a.Y}).";
+            var arrival = _shown.Arrivals[ResultArrival];
+            ChoiceText.Text = $"Leads to {map}, arrival point A{arrival.Index} at ({arrival.X}, {arrival.Y}).";
         }
         else ChoiceText.Text = $"Showing {map}. Click an arrival point.";
         OkButton.IsEnabled = ResultNewArrival != null || (ResultArrival >= 0 && ResultArrival < _shown.Arrivals.Count);
@@ -126,12 +126,12 @@ public partial class DestinationPickerWindow : Window
     private void FocusChoice()
     {
         if (_shown == null) return;
-        (int x, int y)? at = ResultNewArrival ?? (ResultArrival >= 0 && ResultArrival < _shown.Arrivals.Count
+        (int x, int y)? target = ResultNewArrival ?? (ResultArrival >= 0 && ResultArrival < _shown.Arrivals.Count
             ? (_shown.Arrivals[ResultArrival].X, _shown.Arrivals[ResultArrival].Y) : null);
-        if (at is not { } p) return;
+        if (target is not { } spot) return;
         Scroll.UpdateLayout();
-        Scroll.ScrollToHorizontalOffset(Math.Max(0, p.x * 16 * Zoom.ScaleX - Scroll.ViewportWidth / 2));
-        Scroll.ScrollToVerticalOffset(Math.Max(0, p.y * 16 * Zoom.ScaleY - Scroll.ViewportHeight / 2));
+        Scroll.ScrollToHorizontalOffset(Math.Max(0, spot.x * 16 * Zoom.ScaleX - Scroll.ViewportWidth / 2));
+        Scroll.ScrollToVerticalOffset(Math.Max(0, spot.y * 16 * Zoom.ScaleY - Scroll.ViewportHeight / 2));
     }
 
     private void NewArrival_Changed(object sender, RoutedEventArgs e)

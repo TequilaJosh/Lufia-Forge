@@ -4,17 +4,16 @@
              xmlns:wf="clr-namespace:System.Windows.Forms.Integration;assembly=WindowsFormsIntegration"
              xmlns:local="clr-namespace:LufiaForge.Modules.MemoryMonitor"
              xmlns:conv="clr-namespace:LufiaForge.Converters"
+             xmlns:common="clr-namespace:LufiaForge.Modules.Common"
              Background="{StaticResource DeepPurpleBrush}">
 
     <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>  <!-- Toolbar / status -->
-            <RowDefinition Height="*"/>     <!-- Main content -->
+            <RowDefinition Height="Auto"/>  <!-- toolbar / status -->
+            <RowDefinition Height="*"/>     <!-- main part -->
         </Grid.RowDefinitions>
 
-        <!-- ================================================================
-             TOP BAR: Launch button + connection status
-             ================================================================ -->
+        <!-- top bar: Launch button and the connection status -->
         <Border Grid.Row="0"
                 Background="{StaticResource SurfacePurpleBrush}"
                 BorderBrush="{StaticResource BorderPurpleBrush}"
@@ -58,7 +57,7 @@
                     </Button>
                 </StackPanel>
 
-                <!-- Connection indicator -->
+                <!-- connected light -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                     <Ellipse Width="10" Height="10" Margin="0,0,8,0" VerticalAlignment="Center">
                         <Ellipse.Style>
@@ -85,23 +84,21 @@
             </Grid>
         </Border>
 
-        <!-- ================================================================
-             MAIN: BizHawk (left) + Memory Tools (right)
-             ================================================================ -->
-        <Grid Grid.Row="1">
+        <!-- main part: BizHawk on the left, memory tools on the right -->
+        <Grid Grid.Row="1" common:LayoutMemory.Key="memorymonitor.main">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="3*" MinWidth="300"/>  <!-- BizHawk game -->
-                <ColumnDefinition Width="Auto"/>               <!-- Splitter -->
-                <ColumnDefinition Width="2*" MinWidth="280"/>  <!-- Memory tools -->
+                <ColumnDefinition Width="3*" MinWidth="200"/>  <!-- BizHawk game -->
+                <ColumnDefinition Width="6"/>                  <!-- splitter -->
+                <ColumnDefinition Width="2*" MinWidth="200"/>  <!-- memory tools -->
             </Grid.ColumnDefinitions>
 
-            <!-- ========== LEFT: Embedded BizHawk ========== -->
+            <!-- left: the docked BizHawk -->
             <Border Grid.Column="0"
                     Background="#120C1C"
                     BorderBrush="{StaticResource BorderPurpleBrush}"
                     BorderThickness="0,0,1,0">
                 <Grid>
-                    <!-- Live embedded window — hidden while undocked -->
+                    <!-- the live docked window, hidden while undocked -->
                     <wf:WindowsFormsHost x:Name="BizHawkFormsHost"
                                          Background="#120C1C">
                         <wf:WindowsFormsHost.Visibility>
@@ -113,7 +110,7 @@
                         </wf:WindowsFormsHost.Visibility>
                     </wf:WindowsFormsHost>
 
-                    <!-- Placeholder shown while BizHawk is floating -->
+                    <!-- shown in its place while BizHawk floats -->
                     <Border Background="#120C1C"
                             HorizontalAlignment="Stretch"
                             VerticalAlignment="Stretch">
@@ -153,20 +150,19 @@
                 </Grid>
             </Border>
 
-            <!-- Splitter -->
+            <!-- splitter -->
             <GridSplitter Grid.Column="1"
-                          Width="4"
-                          HorizontalAlignment="Center"
+                          Width="6"
+                          HorizontalAlignment="Stretch"
                           VerticalAlignment="Stretch"
-                          Background="{StaticResource BorderPurpleBrush}"
                           ResizeBehavior="PreviousAndNext"/>
 
-            <!-- ========== RIGHT: Memory tools sub-tabs ========== -->
-            <TabControl Grid.Column="2"
-                        Style="{StaticResource LufiaTabControl}"
+            <!-- right: memory tools tabs. they can pop out (the BizHawk side has its own Undock) -->
+            <common:PopOutHost Grid.Column="2" Title="Memory tools" ButtonMargin="0,4,8,0">
+            <TabControl Style="{StaticResource LufiaTabControl}"
                         Background="Transparent">
 
-                <!-- ============ HEX VIEW ============ -->
+                <!-- hex view -->
                 <TabItem Header="Hex View" Style="{StaticResource LufiaTabItem}">
                     <Grid Background="{StaticResource MidPurpleBrush}">
                         <Grid.RowDefinitions>
@@ -207,16 +203,16 @@
                     </Grid>
                 </TabItem>
 
-                <!-- ============ WATCHLIST ============ -->
+                <!-- watchlist -->
                 <TabItem Header="Watchlist" Style="{StaticResource LufiaTabItem}">
                     <Grid Background="{StaticResource MidPurpleBrush}">
                         <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>  <!-- Label search -->
-                            <RowDefinition Height="Auto"/>  <!-- Manual add -->
-                            <RowDefinition Height="*"/>     <!-- Watch table -->
+                            <RowDefinition Height="Auto"/>  <!-- label search -->
+                            <RowDefinition Height="Auto"/>  <!-- add by hand -->
+                            <RowDefinition Height="*"/>     <!-- watch table -->
                         </Grid.RowDefinitions>
 
-                        <!-- Label search bar -->
+                        <!-- label search bar -->
                         <Border Grid.Row="0" Padding="8,6"
                                 Background="{StaticResource SurfacePurpleBrush}"
                                 BorderBrush="{StaticResource BorderPurpleBrush}"
@@ -245,7 +241,7 @@
                                             Padding="6,3"/>
                                 </StackPanel>
 
-                                <!-- Filtered results list -->
+                                <!-- the matches -->
                                 <ListBox Grid.Row="1"
                                          ItemsSource="{Binding FilteredAddresses}"
                                          SelectedItem="{Binding SelectedKnownAddress}"
@@ -303,7 +299,7 @@
                             </Grid>
                         </Border>
 
-                        <!-- Manual add bar -->
+                        <!-- add an address by hand -->
                         <Border Grid.Row="1" Padding="8,4"
                                 Background="{StaticResource SurfacePurpleBrush}">
                             <WrapPanel>
@@ -384,7 +380,7 @@
                     </Grid>
                 </TabItem>
 
-                <!-- ============ SEARCH ============ -->
+                <!-- search -->
                 <TabItem Header="Search" Style="{StaticResource LufiaTabItem}">
                     <Grid Background="{StaticResource MidPurpleBrush}">
                         <Grid.RowDefinitions>
@@ -469,6 +465,7 @@
                 </TabItem>
 
             </TabControl>
+            </common:PopOutHost>
         </Grid>
     </Grid>
 </UserControl>

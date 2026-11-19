@@ -8,10 +8,8 @@ using Point = System.Windows.Point;
 
 namespace LufiaForge.Modules.Common;
 
-/// <summary>
-/// Mouse navigation for map views: Ctrl + wheel zooms around the mouse pointer, holding the middle button and
-/// moving the mouse drags the map around. The plain wheel still scrolls as usual.
-/// </summary>
+// mouse controls for the map views. Ctrl + wheel zooms around the pointer, holding the middle button and moving
+// the mouse drags the map around. the plain wheel still scrolls like normal
 public sealed class MapNavigation
 {
     private readonly ScrollViewer _scroller;
@@ -19,7 +17,7 @@ public sealed class MapNavigation
     private readonly Action<double> _setZoom;
     private readonly double _min, _max;
     private Point _dragStart;
-    private double _startH, _startV;
+    private double _startHorizontal, _startVertical;
     private bool _dragging;
     private Cursor? _oldCursor;
 
@@ -33,8 +31,8 @@ public sealed class MapNavigation
         scroller.LostMouseCapture += (_, _) => EndDrag();
     }
 
-    /// <param name="getZoom">Current zoom factor of the content inside the scroll viewer.</param>
-    /// <param name="setZoom">Applies a new zoom factor (the content's LayoutTransform scale).</param>
+    // getZoom = the zoom of the content inside the scroll viewer right now
+    // setZoom = sets a new zoom (the content's LayoutTransform scale)
     public static MapNavigation Attach(ScrollViewer scroller, Func<double> getZoom, Action<double> setZoom, double min = 0.25, double max = 6) =>
         new(scroller, getZoom, setZoom, min, max);
 
@@ -42,14 +40,14 @@ public sealed class MapNavigation
     {
         if ((Keyboard.Modifiers & ModifierKeys.Control) == 0) return;
         e.Handled = true;
-        double old = _getZoom();
-        double zoom = Math.Clamp(e.Delta > 0 ? old * 1.2 : old / 1.2, _min, _max);
-        if (Math.Abs(zoom - old) < 1e-6) return;
+        double oldZoom = _getZoom();
+        double zoom = Math.Clamp(e.Delta > 0 ? oldZoom * 1.2 : oldZoom / 1.2, _min, _max);
+        if (Math.Abs(zoom - oldZoom) < 1e-6) return;
 
-        // keep the map point under the mouse where it is
+        // keep the map spot under the mouse where it is
         var mouse = e.GetPosition(_scroller);
-        double contentX = (_scroller.HorizontalOffset + mouse.X) / old;
-        double contentY = (_scroller.VerticalOffset + mouse.Y) / old;
+        double contentX = (_scroller.HorizontalOffset + mouse.X) / oldZoom;
+        double contentY = (_scroller.VerticalOffset + mouse.Y) / oldZoom;
         _setZoom(zoom);
         _scroller.UpdateLayout();
         _scroller.ScrollToHorizontalOffset(Math.Max(0, contentX * zoom - mouse.X));
@@ -61,8 +59,8 @@ public sealed class MapNavigation
         if (e.ChangedButton != MouseButton.Middle) return;
         _dragging = true;
         _dragStart = e.GetPosition(_scroller);
-        _startH = _scroller.HorizontalOffset;
-        _startV = _scroller.VerticalOffset;
+        _startHorizontal = _scroller.HorizontalOffset;
+        _startVertical = _scroller.VerticalOffset;
         _oldCursor = _scroller.Cursor;
         _scroller.Cursor = Cursors.SizeAll;
         _scroller.CaptureMouse();
@@ -72,9 +70,9 @@ public sealed class MapNavigation
     private void OnMove(object sender, MouseEventArgs e)
     {
         if (!_dragging) return;
-        var p = e.GetPosition(_scroller);
-        _scroller.ScrollToHorizontalOffset(_startH - (p.X - _dragStart.X));
-        _scroller.ScrollToVerticalOffset(_startV - (p.Y - _dragStart.Y));
+        var mouse = e.GetPosition(_scroller);
+        _scroller.ScrollToHorizontalOffset(_startHorizontal - (mouse.X - _dragStart.X));
+        _scroller.ScrollToVerticalOffset(_startVertical - (mouse.Y - _dragStart.Y));
         e.Handled = true;
     }
 

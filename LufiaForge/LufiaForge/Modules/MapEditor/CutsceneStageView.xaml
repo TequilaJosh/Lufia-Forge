@@ -10,8 +10,9 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*" MinHeight="60"/>
+            <RowDefinition x:Name="PathSplitRow" Height="0"/>
+            <RowDefinition x:Name="PathRow" Height="Auto"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
@@ -60,10 +61,14 @@
             </StackPanel>
         </Border>
 
-        <TextBlock x:Name="StageInfo" Grid.Row="2" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+        <TextBlock x:Name="StageInfo" Grid.Row="4" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0"/>
 
-        <!-- path editor -->
-        <Border x:Name="PathPanel" Grid.Row="3" Style="{StaticResource GdCard}" Margin="0,6,0,0" Padding="8" Visibility="Collapsed">
+        <!-- path editor (drag the band above it to give the stage or the walk more room) -->
+        <GridSplitter x:Name="PathSplitter" Grid.Row="2" Height="6" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                      ResizeBehavior="PreviousAndNext" Margin="0,2,0,0" Visibility="Collapsed"/>
+        <common:PopOutHost Grid.Row="3" Title="Walk editor" ButtonMargin="0,6,6,0">
+        <Border x:Name="PathPanel" Style="{StaticResource GdCard}" Margin="0,2,0,0" Padding="8" Visibility="Collapsed">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <StackPanel>
                 <DockPanel>
                     <TextBlock x:Name="PathHeader" Style="{StaticResource GdSection}" VerticalAlignment="Center"/>
@@ -109,6 +114,8 @@
                 </ItemsControl>
                 <TextBlock x:Name="PathStatus" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0"/>
             </StackPanel>
+            </ScrollViewer>
         </Border>
+        </common:PopOutHost>
     </Grid>
 </UserControl>

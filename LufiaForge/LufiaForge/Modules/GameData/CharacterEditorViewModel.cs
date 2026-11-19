@@ -4,7 +4,7 @@ using System.Collections.ObjectModel;
 
 namespace LufiaForge.Modules.GameData;
 
-/// <summary>Starting level, stats, EXP, equipment and names of the 8 playable characters.</summary>
+// starting level, stats, EXP, equipment and names of the 8 playable characters
 public partial class CharacterEditorViewModel : GameDataEditorBase
 {
     public ObservableCollection<string> Characters { get; } = new();
@@ -47,11 +47,11 @@ public partial class CharacterEditorViewModel : GameDataEditorBase
     private void RefreshCharacterList()
     {
         if (Ctx == null) return;
-        int keep = SelectedIndex;
+        int keepIndex = SelectedIndex;
         Characters.Clear();
         for (int i = 0; i < GameDataOffsets.CharacterCount; i++)
             Characters.Add($"{i}  {Ctx.CharacterName(i)}  ({GameDataLabels.CharacterSlots[i]})");
-        SelectedIndex = keep;
+        SelectedIndex = keepIndex;
     }
 
     partial void OnSelectedIndexChanged(int value) => LoadSelected();
@@ -60,25 +60,25 @@ public partial class CharacterEditorViewModel : GameDataEditorBase
     {
         if (Ctx == null || SelectedIndex < 0) return;
         var rom = Ctx.Rom;
-        int o   = RecordOffset;
+        int record = RecordOffset;
 
         CanRename = SelectedIndex > 0;
         Name      = Ctx.CharacterName(SelectedIndex);
-        Level     = rom.ReadByte(o + 0);
-        Hp        = rom.ReadUInt16Le(o + 2);
-        Mp        = rom.ReadUInt16Le(o + 4);
-        Agl       = rom.ReadUInt16Le(o + 6);
-        Int       = rom.ReadUInt16Le(o + 8);
-        Str       = rom.ReadUInt16Le(o + 10);
-        Mgr       = rom.ReadUInt16Le(o + 12);
-        Exp       = (int)rom.ReadUInt24Le(o + 14);
-        Weapon    = rom.ReadByte(o + 23);
-        Armor     = rom.ReadByte(o + 24);
-        Shield    = rom.ReadByte(o + 25);
-        Helmet    = rom.ReadByte(o + 26);
-        Shoes     = rom.ReadByte(o + 27);
-        Ring      = rom.ReadByte(o + 28);
-        OffsetText = $"Record at 0x{o:X6} ({GameDataOffsets.CharacterStride} bytes)";
+        Level     = rom.ReadByte(record +0);
+        Hp        = rom.ReadUInt16Le(record +2);
+        Mp        = rom.ReadUInt16Le(record +4);
+        Agl       = rom.ReadUInt16Le(record +6);
+        Int       = rom.ReadUInt16Le(record +8);
+        Str       = rom.ReadUInt16Le(record +10);
+        Mgr       = rom.ReadUInt16Le(record +12);
+        Exp       = (int)rom.ReadUInt24Le(record +14);
+        Weapon    = rom.ReadByte(record +23);
+        Armor     = rom.ReadByte(record +24);
+        Shield    = rom.ReadByte(record +25);
+        Helmet    = rom.ReadByte(record +26);
+        Shoes     = rom.ReadByte(record +27);
+        Ring      = rom.ReadByte(record +28);
+        OffsetText = $"Record at 0x{record:X6} ({GameDataOffsets.CharacterStride} bytes)";
     }
 
     [RelayCommand]
@@ -86,32 +86,33 @@ public partial class CharacterEditorViewModel : GameDataEditorBase
     {
         if (Ctx == null || SelectedIndex < 0) return;
         var rom = Ctx.Rom;
-        int o   = RecordOffset;
+        int record = RecordOffset;
         bool renamed = false;
+        if (CanRename && Core.DutchLetters.Unwritable(Ctx.Rom, Name) is string badName) { Refuse("Name: " + badName + "."); return; }
 
         Commit(GameDataLabels.CharacterSlots[SelectedIndex], () =>
         {
-            rom.WriteByte(o + 0, (byte)Clamp(Level, 0, 255));
-            rom.WriteUInt16Le(o + 2,  (ushort)Clamp(Hp,  0, 0xFFFF));
-            rom.WriteUInt16Le(o + 4,  (ushort)Clamp(Mp,  0, 0xFFFF));
-            rom.WriteUInt16Le(o + 6,  (ushort)Clamp(Agl, 0, 0xFFFF));
-            rom.WriteUInt16Le(o + 8,  (ushort)Clamp(Int, 0, 0xFFFF));
-            rom.WriteUInt16Le(o + 10, (ushort)Clamp(Str, 0, 0xFFFF));
-            rom.WriteUInt16Le(o + 12, (ushort)Clamp(Mgr, 0, 0xFFFF));
+            rom.WriteByte(record +0, (byte)Clamp(Level, 0, 255));
+            rom.WriteUInt16Le(record +2,  (ushort)Clamp(Hp,  0, 0xFFFF));
+            rom.WriteUInt16Le(record +4,  (ushort)Clamp(Mp,  0, 0xFFFF));
+            rom.WriteUInt16Le(record +6,  (ushort)Clamp(Agl, 0, 0xFFFF));
+            rom.WriteUInt16Le(record +8,  (ushort)Clamp(Int, 0, 0xFFFF));
+            rom.WriteUInt16Le(record +10, (ushort)Clamp(Str, 0, 0xFFFF));
+            rom.WriteUInt16Le(record +12, (ushort)Clamp(Mgr, 0, 0xFFFF));
 
             int exp = Clamp(Exp, 0, 0xFFFFFF);
-            rom.WriteBytes(o + 14, new[] { (byte)exp, (byte)(exp >> 8), (byte)(exp >> 16) });
+            rom.WriteBytes(record +14, new[] { (byte)exp, (byte)(exp >> 8), (byte)(exp >> 16) });
 
-            rom.WriteByte(o + 23, (byte)Clamp(Weapon, 0, 255));
-            rom.WriteByte(o + 24, (byte)Clamp(Armor,  0, 255));
-            rom.WriteByte(o + 25, (byte)Clamp(Shield, 0, 255));
-            rom.WriteByte(o + 26, (byte)Clamp(Helmet, 0, 255));
-            rom.WriteByte(o + 27, (byte)Clamp(Shoes,  0, 255));
-            rom.WriteByte(o + 28, (byte)Clamp(Ring,   0, 255));
+            rom.WriteByte(record +23, (byte)Clamp(Weapon, 0, 255));
+            rom.WriteByte(record +24, (byte)Clamp(Armor,  0, 255));
+            rom.WriteByte(record +25, (byte)Clamp(Shield, 0, 255));
+            rom.WriteByte(record +26, (byte)Clamp(Helmet, 0, 255));
+            rom.WriteByte(record +27, (byte)Clamp(Shoes,  0, 255));
+            rom.WriteByte(record +28, (byte)Clamp(Ring,   0, 255));
 
             if (CanRename && Name != Ctx.CharacterName(SelectedIndex))
             {
-                // The original names are padded with 00 (e.g. "Guy\0\0").
+                // the original names are padded with 00, like "Guy\0\0"
                 Ctx.WriteName(GameDataOffsets.CharacterNames + (SelectedIndex - 1) * GameDataOffsets.CharacterNameLen,
                               GameDataOffsets.CharacterNameLen, Name, pad: 0x00);
                 renamed = true;

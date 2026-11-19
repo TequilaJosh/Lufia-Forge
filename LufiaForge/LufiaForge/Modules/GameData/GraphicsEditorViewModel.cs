@@ -21,13 +21,11 @@ public sealed class GraphicsSource
     public int Size { get; init; }
 }
 
-/// <summary>
-/// Any graphics in the ROM: a packed resource (named when the game's tables say what it is) or raw bytes at an
-/// offset, shown as 2/4/8bpp tiles in a chosen palette, exported to and imported from a PNG picture.
-/// </summary>
+// any graphics in the ROM: a packed resource (named when the game's tables say what it is) or raw bytes at an
+// offset. shown as 2/4/8bpp tiles in a palette you pick, exported to and imported from a PNG picture
 public partial class GraphicsEditorViewModel : GameDataEditorBase
 {
-    /// <summary>(The editor footer shows a ROM offset; this editor has none of its own.)</summary>
+    // the editor footer shows a ROM offset, this editor doesn't have one of its own
     public string OffsetText => "";
 
     public ObservableCollection<GraphicsSource> Sources { get; } = new();
@@ -37,7 +35,7 @@ public partial class GraphicsEditorViewModel : GameDataEditorBase
     [ObservableProperty] private int _rawTiles = 128;
     [ObservableProperty] private int _depthIndex = 1;   // 2/4/8 bpp
     [ObservableProperty] private int _tilesPerRow = 16;
-    /// <summary>0 = grey, 1 = map palette, 2 = colours at a ROM offset.</summary>
+    // 0 = grey, 1 = map palette, 2 = colours at a ROM offset
     [ObservableProperty] private int _paletteMode = 1;
     [ObservableProperty] private int _mapPalette;
     [ObservableProperty] private int _paletteRow = 2;
@@ -60,20 +58,20 @@ public partial class GraphicsEditorViewModel : GameDataEditorBase
             [LufiaMap.WorldTilesResource] = "World map tiles",
             [0x13D] = "Battle sprites (party, command ring, numbers)",
         };
-        for (int t = 0, n = Tilesets.Count(rom); t < n; t++)
+        for (int tileset = 0, count = Tilesets.Count(rom); tileset < count; tileset++)
         {
-            int r = Tilesets.TilesResource(rom, t);
-            if (!names.ContainsKey(r)) names[r] = $"Town / dungeon tiles (tileset {t})";
+            int resource = Tilesets.TilesResource(rom, tileset);
+            if (!names.ContainsKey(resource)) names[resource] = $"Town / dungeon tiles (tileset {tileset})";
         }
         Sources.Clear();
-        for (int id = 0, n = ResourceIds.Count(rom); id < n; id++)
+        for (int id = 0, count = ResourceIds.Count(rom); id < count; id++)
         {
-            int at = LufiaCompression.ResourceOffset(rom, id);
-            if (at <= 0 || at >= rom.Length - 2) continue;
+            int offset = LufiaCompression.ResourceOffset(rom, id);
+            if (offset <= 0 || offset >= rom.Length - 2) continue;
             int size;
             try { size = LufiaCompression.DecompressResource(rom, id, out _).Length; } catch { continue; }
             if (size < 256 || size % 16 != 0) continue;
-            if (id >= 0x43 && id < 0x43 + Core.Battle.MonsterTable.OriginalPictures) continue;   // monster pictures: Monsters tab
+            if (id >= 0x43 && id < 0x43 + Core.Battle.MonsterTable.OriginalPictures) continue;   // monster pictures go in the Monsters tab
             Sources.Add(new GraphicsSource { Resource = id, Size = size, Label = $"{id:X3}  {names.GetValueOrDefault(id, "resource")}  ({size / 32} tiles at 4bpp)" });
         }
         var first = Sources.OrderBy(s => names.ContainsKey(s.Resource) ? 0 : 1).First();
@@ -94,44 +92,44 @@ public partial class GraphicsEditorViewModel : GameDataEditorBase
 
     protected override void LoadRecord() => Draw();
 
-    private static bool Hex(string s, out int v)
+    private static bool Hex(string text, out int value)
     {
-        s = (s ?? "").Trim().TrimStart('$');
-        if (s.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) s = s[2..];
-        return int.TryParse(s, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out v);
+        text = (text ?? "").Trim().TrimStart('$');
+        if (text.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) text = text[2..];
+        return int.TryParse(text, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out value);
     }
 
-    /// <summary>The bytes being shown.</summary>
+    // the bytes being shown
     private byte[] Load()
     {
         if (Ctx == null) return Array.Empty<byte>();
         var rom = Ctx.Rom;
         if (RawMode)
         {
-            if (!Hex(RawOffsetText, out int off) || off < 0 || off >= rom.Length) return Array.Empty<byte>();
-            int len = Math.Min(Math.Clamp(RawTiles, 1, 4096) * SnesTileDecoder.BytesPerTile(Depth), rom.Length - off);
-            return rom.ReadBytes(off, len);
+            if (!Hex(RawOffsetText, out int offset) || offset < 0 || offset >= rom.Length) return Array.Empty<byte>();
+            int length = Math.Min(Math.Clamp(RawTiles, 1, 4096) * SnesTileDecoder.BytesPerTile(Depth), rom.Length - offset);
+            return rom.ReadBytes(offset, length);
         }
         if (SelectedSource == null) return Array.Empty<byte>();
         return LufiaCompression.DecompressResource(rom, SelectedSource.Resource, out _);
     }
 
-    /// <summary>The colours for the current depth (2^bpp entries).</summary>
+    // the colours for the current depth (2^bpp of them)
     private uint[] Colours()
     {
-        int n = 1 << (int)Depth;
-        if (Ctx == null || PaletteMode == 0) return SnesPalette.Grayscale(n);
+        int count = 1 << (int)Depth;
+        if (Ctx == null || PaletteMode == 0) return SnesPalette.Grayscale(count);
         var rom = Ctx.Rom;
         if (PaletteMode == 2)
-            return Hex(PaletteOffsetText, out int po) && po >= 0 && po + n * 2 <= rom.Length ? SnesPalette.ReadFromRom(rom, po, n) : SnesPalette.Grayscale(n);
-        // map palette: rows 0-1 shared, rows 2-7 from the map palette table
+            return Hex(PaletteOffsetText, out int paletteOffset) && paletteOffset >= 0 && paletteOffset + count * 2 <= rom.Length ? SnesPalette.ReadFromRom(rom, paletteOffset, count) : SnesPalette.Grayscale(count);
+        // map palette: rows 0-1 are shared, rows 2-7 come from the map palette table
         var all = new uint[256];
         for (int i = 0; i < 32; i++) all[i] = SnesPalette.Bgr555ToArgb32(rom.ReadUInt16Le(LufiaMap.SharedPaletteRows + i * 2));
-        int rows = LufiaMap.MapPaletteTable + (Math.Max(0, MapPalette) + 1) * 0xC0;
-        for (int i = 0; i < 96; i++) if (rows + i * 2 + 1 < rom.Length) all[32 + i] = SnesPalette.Bgr555ToArgb32(rom.ReadUInt16Le(rows + i * 2));
-        if (n == 256) return all;
-        int start = n == 16 ? Math.Clamp(PaletteRow, 0, 7) * 16 : Math.Clamp(PaletteRow, 0, 63) * 4;
-        return all.Skip(start).Take(n).ToArray();
+        int mapRows = LufiaMap.MapPaletteTable + (Math.Max(0, MapPalette) + 1) * 0xC0;
+        for (int i = 0; i < 96; i++) if (mapRows + i * 2 + 1 < rom.Length) all[32 + i] = SnesPalette.Bgr555ToArgb32(rom.ReadUInt16Le(mapRows + i * 2));
+        if (count == 256) return all;
+        int start = count == 16 ? Math.Clamp(PaletteRow, 0, 7) * 16 : Math.Clamp(PaletteRow, 0, 63) * 4;
+        return all.Skip(start).Take(count).ToArray();
     }
 
     private (int Tiles, int Cols, int Rows) Grid()
@@ -141,18 +139,18 @@ public partial class GraphicsEditorViewModel : GameDataEditorBase
         return (tiles, cols, Math.Max(1, (tiles + cols - 1) / cols));
     }
 
-    /// <summary>Colour numbers of the sheet (cols*8 x rows*8).</summary>
+    // the sheet's colour numbers (cols*8 x rows*8)
     private byte[] Indices()
     {
         var (tiles, cols, rows) = Grid();
-        int w = cols * 8, bpt = SnesTileDecoder.BytesPerTile(Depth);
-        var idx = new byte[w * rows * 8];
-        for (int t = 0; t < tiles; t++)
+        int w = cols * 8, bytesPerTile = SnesTileDecoder.BytesPerTile(Depth);
+        var indices = new byte[w * rows * 8];
+        for (int tile = 0; tile < tiles; tile++)
         {
-            var px = SnesTileDecoder.DecodeTile(_data, t * bpt, Depth);
-            for (int y = 0; y < 8; y++) for (int x = 0; x < 8; x++) idx[(t / cols * 8 + y) * w + t % cols * 8 + x] = px[y * 8 + x];
+            var tilePixels = SnesTileDecoder.DecodeTile(_data, tile * bytesPerTile, Depth);
+            for (int y = 0; y < 8; y++) for (int x = 0; x < 8; x++) indices[(tile / cols * 8 + y) * w + tile % cols * 8 + x] = tilePixels[y * 8 + x];
         }
-        return idx;
+        return indices;
     }
 
     private void Draw()
@@ -161,9 +159,9 @@ public partial class GraphicsEditorViewModel : GameDataEditorBase
         try { _data = Load(); } catch (Exception ex) { _data = Array.Empty<byte>(); Info = ex.Message; }
         if (_data.Length == 0) { Picture = null; Info = "Nothing to show here."; return; }
         var (tiles, cols, rows) = Grid();
-        var pal = Colours();
-        var idx = Indices();
-        var bmp = BitmapSource.Create(cols * 8, rows * 8, 96, 96, PixelFormats.Bgra32, null, idx.Select(i => pal[i]).ToArray(), cols * 32);
+        var palette = Colours();
+        var indices = Indices();
+        var bmp = BitmapSource.Create(cols * 8, rows * 8, 96, 96, PixelFormats.Bgra32, null, indices.Select(i => palette[i]).ToArray(), cols * 32);
         bmp.Freeze();
         Picture = bmp;
         Info = $"{tiles} tiles, {cols * 8} x {rows * 8} pixels" + (RawMode ? " (raw bytes in the ROM)" : $" (resource {SelectedSource?.Resource:X3}, {_data.Length} bytes unpacked)");
@@ -200,66 +198,66 @@ public partial class GraphicsEditorViewModel : GameDataEditorBase
     {
         if (Ctx == null || _data.Length == 0) return;
         var (tiles, cols, rows) = Grid();
-        int w = cols * 8, h = rows * 8, n = 1 << (int)Depth;
-        var ip = IndexedPng.TryLoad(path);
-        BitmapSource? src = null;
-        if (ip == null) try { src = new BitmapImage(new Uri(path)); } catch (Exception ex) { Status = "Can't read the picture: " + ex.Message; return; }
-        int pw = ip?.Width ?? src!.PixelWidth, ph = ip?.Height ?? src!.PixelHeight;
-        if (pw != w || ph != h) { Status = $"The picture must be {w} x {h} pixels (as exported with these settings)."; return; }
-        var idx = new byte[w * h];
+        int w = cols * 8, h = rows * 8, colorCount = 1 << (int)Depth;
+        var indexedPng = IndexedPng.TryLoad(path);
+        BitmapSource? picture = null;
+        if (indexedPng == null) try { picture = new BitmapImage(new Uri(path)); } catch (Exception ex) { Status = "Can't read the picture: " + ex.Message; return; }
+        int pictureWidth = indexedPng?.Width ?? picture!.PixelWidth, pictureHeight = indexedPng?.Height ?? picture!.PixelHeight;
+        if (pictureWidth != w || pictureHeight != h) { Status = $"The picture must be {w} x {h} pixels (as exported with these settings)."; return; }
+        var indices = new byte[w * h];
         string how;
-        if (ip is { } png)
+        if (indexedPng is { } png)
         {
-            idx = png.Indices;
-            if (idx.Any(i => i >= n)) { Status = $"The picture uses colour numbers above {n - 1}; at this depth there are {n} colours."; return; }
+            indices = png.Indices;
+            if (indices.Any(i => i >= colorCount)) { Status = $"The picture uses colour numbers above {colorCount - 1}; at this depth there are {colorCount} colours."; return; }
             how = "colour numbers kept";
         }
         else
         {
-            var bgra = new FormatConvertedBitmap(src, PixelFormats.Bgra32, null, 0);
-            var px = new uint[w * h]; bgra.CopyPixels(px, w * 4, 0);
-            var pal = Colours();
-            for (int i = 0; i < px.Length; i++)
+            var bgra = new FormatConvertedBitmap(picture, PixelFormats.Bgra32, null, 0);
+            var pixels = new uint[w * h]; bgra.CopyPixels(pixels, w * 4, 0);
+            var palette = Colours();
+            for (int i = 0; i < pixels.Length; i++)
             {
-                if (px[i] >> 24 < 128) { idx[i] = 0; continue; }
+                if (pixels[i] >> 24 < 128) { indices[i] = 0; continue; }
                 long best = long.MaxValue;
-                for (int c = 0; c < n; c++)
+                for (int color = 0; color < colorCount; color++)
                 {
-                    long dr = (long)(px[i] >> 16 & 255) - (pal[c] >> 16 & 255), dg = (long)(px[i] >> 8 & 255) - (pal[c] >> 8 & 255), db = (long)(px[i] & 255) - (pal[c] & 255);
-                    long e = dr * dr * 3 + dg * dg * 4 + db * db * 2;
-                    if (e < best) { best = e; idx[i] = (byte)c; }
+                    long dr = (long)(pixels[i] >> 16 & 255) - (palette[color] >> 16 & 255), dg = (long)(pixels[i] >> 8 & 255) - (palette[color] >> 8 & 255), db = (long)(pixels[i] & 255) - (palette[color] & 255);
+                    long distance = dr * dr * 3 + dg * dg * 4 + db * db * 2;
+                    if (distance < best) { best = distance; indices[i] = (byte)color; }
                 }
             }
             how = "colours matched to the palette shown";
         }
-        int bpt = SnesTileDecoder.BytesPerTile(Depth);
+        int bytesPerTile = SnesTileDecoder.BytesPerTile(Depth);
         var data = (byte[])_data.Clone();
-        for (int t = 0; t < tiles; t++)
+        for (int tile = 0; tile < tiles; tile++)
         {
-            var px = new byte[64];
-            for (int y = 0; y < 8; y++) for (int x = 0; x < 8; x++) px[y * 8 + x] = idx[(t / cols * 8 + y) * w + t % cols * 8 + x];
-            SnesTileDecoder.EncodeTile(px, Depth).CopyTo(data, t * bpt);
+            var tilePixels = new byte[64];
+            for (int y = 0; y < 8; y++) for (int x = 0; x < 8; x++) tilePixels[y * 8 + x] = indices[(tile / cols * 8 + y) * w + tile % cols * 8 + x];
+            SnesTileDecoder.EncodeTile(tilePixels, Depth).CopyTo(data, tile * bytesPerTile);
         }
         var rom = Ctx.Rom;
         if (RawMode)
         {
-            if (!Hex(RawOffsetText, out int off)) return;
-            Commit($"Graphics at {off:X6}", () => rom.WriteBytes(off, data));
-            Status = $"Graphics written at 0x{off:X6} ({how}); Save Project keeps it.";
+            if (!Hex(RawOffsetText, out int offset)) return;
+            Commit($"Graphics at {offset:X6}", () => rom.WriteBytes(offset, data));
+            Status = $"Graphics written at 0x{offset:X6} ({how}); Save Project keeps it.";
         }
         else
         {
-            int res = SelectedSource!.Resource;
+            int resource = SelectedSource!.Resource;
             bool expand = rom.Length >= MapWriter.ExpandedSize;
-            if (LufiaCompression.Compress(data).Length > ResourceWriter.SlotSize(rom, res) && !expand)
+            if (LufiaCompression.Compress(data).Length > ResourceWriter.SlotSize(rom, resource) && !expand)
             {
                 if (MessageBox.Show("The new graphics don't fit in their original space. Expand the ROM to 2 MB?", "Expand ROM?", MessageBoxButton.YesNo) != MessageBoxResult.Yes)
                 { Status = "Not imported."; return; }
                 expand = true;
             }
-            ResourceWriter.Result? r = null;
-            Commit($"Graphics resource {res:X3}", () => r = ResourceWriter.Save(rom, res, data, expand));
-            if (r != null) Status = $"Resource {res:X3} written ({how}{(r.Moved ? ", moved to the expanded space" : "")}); Save Project keeps it.";
+            ResourceWriter.Result? result = null;
+            Commit($"Graphics resource {resource:X3}", () => result = ResourceWriter.Save(rom, resource, data, expand));
+            if (result != null) Status = $"Resource {resource:X3} written ({how}{(result.Moved ? ", moved to the expanded space" : "")}); Save Project keeps it.";
         }
         Draw();
     }

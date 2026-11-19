@@ -2,30 +2,24 @@ using LufiaForge.Core.Battle;
 
 namespace LufiaForge.Core.Maps;
 
-/// <summary>
-/// The field monsters of Lufia II: Rise of the Sinistrals (USA), as map character sprites for Lufia 1 (for visible
-/// monsters, <see cref="VisibleMonsters"/>).
-/// <para>
-/// Lufia II's map sprites: sprite n → u16 at $CF:F000 + 2n → a 5-byte entry in bank CF: [kind][palette row]
-/// [LoROM address of the graphics, 4bpp, uncompressed]. Its 8 sprite palette rows are fixed, at $A6:BF00 (file
-/// 0x133F00). The monster kinds (seen in the game's dungeons and by drawing every entry):
-/// <list type="bullet">
-/// <item>10: 16x16, 6 frames: front, front, side, side, back, back (side frames face left); 4 tiles row by row</item>
-/// <item>11: 16x32, 6 frames as above; 256 bytes: rows 0-7 at +00/+20, 8-15 at +80/+A0, 16-23 at +40/+60, 24-31 at +C0/+E0</item>
-/// <item>13: 32x32, 6 frames as above; 16 tiles row by row</item>
-/// <item>08: 16x16, 2 frames (the same every way it faces); 0B: 32x32, 2 frames</item>
-/// </list>
-/// Lufia 1 draws a map character as 16x24 (two 16x16 objects, $01:A6D6), or 16x16 / 32x32 by its other routine;
-/// its frames are side, side (drawn flipped when it faces right), side, side, front, front, back, back. So 16x16
-/// monsters get 8 empty rows on top, 16x32 ones lose their top 8 rows when those are empty in every frame (else they
-/// go on the left of a 32x32 frame: the game draws 32x32 characters from their tile's left edge, $01:A487).
-/// </para>
-/// </summary>
+// the field monsters of Lufia II: Rise of the Sinistrals (USA), as map character sprites for Lufia 1 (for visible
+// monsters, VisibleMonsters).
+// Lufia II's map sprites: sprite n -> u16 at $CF:F000 + 2n -> a 5-byte entry in bank CF: [kind][palette row]
+// [LoROM address of the graphics, 4bpp, uncompressed]. its 8 sprite palette rows are fixed, at $A6:BF00 (file
+// 0x133F00). the monster kinds (seen in the game's dungeons and by drawing every entry):
+// - 10: 16x16, 6 frames: front, front, side, side, back, back (side frames face left), 4 tiles row by row
+// - 11: 16x32, 6 frames like above, 256 bytes: rows 0-7 at +00/+20, 8-15 at +80/+A0, 16-23 at +40/+60, 24-31 at +C0/+E0
+// - 13: 32x32, 6 frames like above, 16 tiles row by row
+// - 08: 16x16, 2 frames (the same whichever way it faces). 0B: 32x32, 2 frames
+// Lufia 1 draws a map character as 16x24 (two 16x16 objects, $01:A6D6), or 16x16 / 32x32 by its other routine.
+// its frames are side, side (drawn flipped when it faces right), side, side, front, front, back, back. so 16x16
+// monsters get 8 empty rows on top, and 16x32 ones lose their top 8 rows if those are empty in every frame (if not
+// they go on the left of a 32x32 frame, since the game draws 32x32 characters from their tile's left edge, $01:A487)
 public static class Lufia2Sprites
 {
     private const int PointerTable = 0x27F000, PaletteTable = 0x133F00, SpriteCount = 251;
 
-    /// <summary>The monsters (Lufia II sprite number, a name: Lufia II gives them none).</summary>
+    // the monsters (Lufia II sprite number, and a name since Lufia II gives them none)
     public static readonly (int Number, string Name)[] Monsters =
     {
         (0x80, "Octopus"), (0x81, "Snail"), (0x82, "Ninja"), (0x83, "Worm"), (0x84, "Mammoth"), (0x85, "Deer"),
@@ -42,8 +36,8 @@ public static class Lufia2Sprites
         (0xD3, "Blue Beast"), (0xD4, "Mantis"),
     };
 
-    /// <summary>Lufia II's 8 sprite palette rows (colours 1-15, BGR555; file 0x133F00), so a monster gets its whole row
-    /// and the monsters sharing a row in Lufia II share one in Lufia 1 too.</summary>
+    // Lufia II's 8 sprite palette rows (colours 1-15, BGR555, file 0x133F00), so a monster gets its whole row
+    // and monsters that share a row in Lufia II share one in Lufia 1 too
     public static readonly ushort[][] Palettes =
     {
         new ushort[] { 0x0001, 0x0D30, 0x15F5, 0x473C, 0x08C2, 0x4549, 0x6230, 0x088A, 0x08F6, 0x2DAB, 0x56F5, 0x29F9, 0x5B1F, 0x7B17, 0x7FFF },
@@ -69,11 +63,11 @@ public static class Lufia2Sprites
         ["Big Spider"] = 0, ["Bone Beast"] = 0, ["Blue Beast"] = 4, ["Mantis"] = 4,
     };
 
-    /// <summary>The whole Lufia II palette row of monster <paramref name="name"/> (15 colours), or null.</summary>
-    public static ushort[]? PaletteOf(string name) => Rows.TryGetValue(name, out int r) ? Palettes[r] : null;
+    // the whole Lufia II palette row of monster name (15 colours), or null
+    public static ushort[]? PaletteOf(string name) => Rows.TryGetValue(name, out int row) ? Palettes[row] : null;
 
-    /// <summary>A monster as a Lufia 1 sprite sheet: the 8 frames side by side (ARGB, alpha 0 = transparent),
-    /// <paramref name="FrameWidth"/> x <paramref name="Height"/> pixels each (16x24 or 32x32).</summary>
+    // a monster as a Lufia 1 sprite sheet: the 8 frames side by side (ARGB, alpha 0 = transparent),
+    // FrameWidth x Height pixels each (16x24 or 32x32)
     public sealed record Sheet(uint[] Pixels, int FrameWidth, int Height)
     {
         public int Width => FrameWidth * 8;
@@ -81,16 +75,16 @@ public static class Lufia2Sprites
 
     private static int FileOffset(int snes) => (snes >> 16 & 0x7F) * 0x8000 + (snes & 0x7FFF);
 
-    /// <summary>The Lufia II ROM without a copier header, or null (<see cref="Lufia2Backgrounds.Rom"/>).</summary>
+    // the Lufia II rom without a copier header, or null (Lufia2Backgrounds.Rom)
     public static byte[]? Rom(byte[] file) => Lufia2Backgrounds.Rom(file);
 
-    /// <summary>Monster <paramref name="number"/> (a Lufia II sprite number) as a Lufia 1 sheet.</summary>
-    public static Sheet Read(byte[] r, int number)
+    // monster number (a Lufia II sprite number) as a Lufia 1 sheet
+    public static Sheet Read(byte[] rom, int number)
     {
         if (number < 0 || number >= SpriteCount) throw new ArgumentOutOfRangeException(nameof(number));
-        int e = FileOffset(0xCF0000 | r[PointerTable + number * 2] | r[PointerTable + number * 2 + 1] << 8);
-        int kind = r[e], row = r[e + 1] & 7, gfx = FileOffset(r[e + 2] | r[e + 3] << 8 | r[e + 4] << 16);
-        var (w, h, frames) = kind switch
+        int entry = FileOffset(0xCF0000 | rom[PointerTable + number * 2] | rom[PointerTable + number * 2 + 1] << 8);
+        int kind = rom[entry], row = rom[entry + 1] & 7, graphics = FileOffset(rom[entry + 2] | rom[entry + 3] << 8 | rom[entry + 4] << 16);
+        var (tilesWide, tilesHigh, frames) = kind switch
         {
             0x10 => (2, 2, 6), 0x11 => (2, 4, 6), 0x13 => (4, 4, 6), 0x08 => (2, 2, 2), 0x0B => (4, 4, 2),
             _ => throw new InvalidOperationException($"Lufia II sprite {number:X2} isn't a monster.")
@@ -98,49 +92,49 @@ public static class Lufia2Sprites
         var colours = new uint[16];
         for (int i = 1; i < 16; i++)
         {
-            int c = r[PaletteTable + row * 32 + i * 2] | r[PaletteTable + row * 32 + i * 2 + 1] << 8;
-            uint R = (uint)(c & 31), G = (uint)(c >> 5 & 31), B = (uint)(c >> 10 & 31);
-            colours[i] = 0xFF000000 | (R << 3 | R >> 2) << 16 | (G << 3 | G >> 2) << 8 | (B << 3 | B >> 2);
+            int colour = rom[PaletteTable + row * 32 + i * 2] | rom[PaletteTable + row * 32 + i * 2 + 1] << 8;
+            uint red = (uint)(colour & 31), green = (uint)(colour >> 5 & 31), blue = (uint)(colour >> 10 & 31);
+            colours[i] = 0xFF000000 | (red << 3 | red >> 2) << 16 | (green << 3 | green >> 2) << 8 | (blue << 3 | blue >> 2);
         }
         // Lufia II's frames as colour numbers
-        int pw = w * 8, ph = h * 8, bytes = w * h * 32;
-        var l2 = new byte[frames][];
-        for (int f = 0; f < frames; f++)
+        int pixelWidth = tilesWide * 8, pixelHeight = tilesHigh * 8, frameBytes = tilesWide * tilesHigh * 32;
+        var l2Frames = new byte[frames][];
+        for (int frame = 0; frame < frames; frame++)
         {
-            var px = new byte[pw * ph];
-            for (int t = 0; t < w * h; t++)
+            var pixels = new byte[pixelWidth * pixelHeight];
+            for (int tile = 0; tile < tilesWide * tilesHigh; tile++)
             {
-                int tx = t % w, ty = t / w, off = (w, h) == (2, 4) ? (ty & 1) * 0x80 + (ty >> 1) * 0x40 + tx * 0x20 : t * 32;
-                int o = gfx + f * bytes + off;
+                int tx = tile % tilesWide, ty = tile / tilesWide, tileStart = (tilesWide, tilesHigh) == (2, 4) ? (ty & 1) * 0x80 + (ty >> 1) * 0x40 + tx * 0x20 : tile * 32;
+                int tileOffset = graphics + frame * frameBytes + tileStart;
                 for (int y = 0; y < 8; y++)
                     for (int x = 0; x < 8; x++)
                     {
-                        int bit = 7 - x, a = o + y * 2;
-                        px[(ty * 8 + y) * pw + tx * 8 + x] = (byte)((r[a] >> bit & 1) | (r[a + 1] >> bit & 1) << 1 | (r[a + 16] >> bit & 1) << 2 | (r[a + 17] >> bit & 1) << 3);
+                        int bit = 7 - x, rowOffset = tileOffset + y * 2;
+                        pixels[(ty * 8 + y) * pixelWidth + tx * 8 + x] = (byte)((rom[rowOffset] >> bit & 1) | (rom[rowOffset + 1] >> bit & 1) << 1 | (rom[rowOffset + 16] >> bit & 1) << 2 | (rom[rowOffset + 17] >> bit & 1) << 3);
                     }
             }
-            l2[f] = px;
+            l2Frames[frame] = pixels;
         }
-        // Lufia 1's size: 16x16 → 16x24 (empty top), 16x32 → 16x24 when its top 8 rows are empty, else 32x32
-        int fw, fh, dx, dy;
-        if (ph == 16) (fw, fh, dx, dy) = pw == 16 ? (16, 24, 0, 8) : (pw, ph, 0, 0);
-        else if (pw == 16 && ph == 32 && l2.All(px => px.Take(16 * 8).All(c => c == 0))) (fw, fh, dx, dy) = (16, 24, 0, -8);
-        else if (pw == 16 && ph == 32) (fw, fh, dx, dy) = (32, 32, 0, 0);   // (left: the game draws a 32x32 character from its tile's left edge)
-        else (fw, fh, dx, dy) = (pw, ph, 0, 0);
+        // Lufia 1's size: 16x16 -> 16x24 (empty top), 16x32 -> 16x24 if its top 8 rows are empty, otherwise 32x32
+        int frameWidth, frameHeight, dx, dy;
+        if (pixelHeight == 16) (frameWidth, frameHeight, dx, dy) = pixelWidth == 16 ? (16, 24, 0, 8) : (pixelWidth, pixelHeight, 0, 0);
+        else if (pixelWidth == 16 && pixelHeight == 32 && l2Frames.All(px => px.Take(16 * 8).All(c => c == 0))) (frameWidth, frameHeight, dx, dy) = (16, 24, 0, -8);
+        else if (pixelWidth == 16 && pixelHeight == 32) (frameWidth, frameHeight, dx, dy) = (32, 32, 0, 0);   // (on the left, the game draws a 32x32 character from its tile's left edge)
+        else (frameWidth, frameHeight, dx, dy) = (pixelWidth, pixelHeight, 0, 0);
         // Lufia 1's order: side, side, side, side, front, front, back, back
         int[] order = frames == 6 ? new[] { 2, 3, 2, 3, 0, 1, 4, 5 } : new[] { 0, 1, 0, 1, 0, 1, 0, 1 };
-        var sheet = new uint[fw * 8 * fh];
+        var sheet = new uint[frameWidth * 8 * frameHeight];
         for (int k = 0; k < 8; k++)
         {
-            var src = l2[order[k]];
-            for (int y = 0; y < ph; y++)
-                for (int x = 0; x < pw; x++)
+            var source = l2Frames[order[k]];
+            for (int y = 0; y < pixelHeight; y++)
+                for (int x = 0; x < pixelWidth; x++)
                 {
-                    int c = src[y * pw + x], sx = x + dx, sy = y + dy;
-                    if (c == 0 || sx < 0 || sy < 0 || sx >= fw || sy >= fh) continue;
-                    sheet[sy * fw * 8 + k * fw + sx] = colours[c];
+                    int colourIndex = source[y * pixelWidth + x], destX = x + dx, destY = y + dy;
+                    if (colourIndex == 0 || destX < 0 || destY < 0 || destX >= frameWidth || destY >= frameHeight) continue;
+                    sheet[destY * frameWidth * 8 + k * frameWidth + destX] = colours[colourIndex];
                 }
         }
-        return new Sheet(sheet, fw, fh);
+        return new Sheet(sheet, frameWidth, frameHeight);
     }
 }

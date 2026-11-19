@@ -21,10 +21,8 @@ public record RomLoadReport(
     int           RomSizeBytes
 );
 
-/// <summary>
-/// Handles opening a ROM file, stripping optional SMC headers,
-/// validating that this is Lufia 1 US, and returning a RomBuffer.
-/// </summary>
+// opens a rom file, strips an smc header if there is one, checks it's lufia 1 or lufia 2 (us) and returns a RomBuffer
+// (its Game says which one)
 public static class RomLoader
 {
     public static RomLoadReport Load(string filePath)
@@ -36,7 +34,7 @@ public static class RomLoader
 
             byte[] raw = File.ReadAllBytes(filePath);
 
-            // Detect and strip 512-byte SMC copier header
+            // find and strip the 512-byte smc copier header
             bool hadSmcHeader = false;
             if (raw.Length % 1024 == Lufia1Constants.SmcHeaderSize)
             {
@@ -49,19 +47,20 @@ public static class RomLoader
                     $"ROM is {raw.Length} bytes after header strip. Expected at least {Lufia1Constants.ExpectedRomSize}.",
                     filePath);
 
-            // Read the SNES internal header title (21 chars at 0x7FC0)
+            // the snes internal header title (21 chars at 0x7FC0)
             string title = ReadAscii(raw, Lufia1Constants.SnesHeaderOffset, 21).TrimEnd();
 
-            if (!title.StartsWith("LUFIA", StringComparison.OrdinalIgnoreCase))
+            var game = GameDetect.Detect(raw);
+            if (game == GameKind.Unknown)
                 return new RomLoadReport(
                     RomLoadResult.WrongGame,
                     null,
-                    $"ROM title \"{title}\" does not match Lufia 1. Wrong game or wrong region?",
+                    GameDetect.WhyNot(raw),
                     hadSmcHeader,
                     title,
                     raw.Length);
 
-            // Validate SNES checksum
+            // check the snes checksum
             ushort storedChecksum    = ReadUInt16Le(raw, Lufia1Constants.SnesChecksumOffset);
             ushort storedComplement  = ReadUInt16Le(raw, Lufia1Constants.SnesComplementOffset);
             ushort computedChecksum  = ComputeChecksum(raw);
@@ -70,7 +69,7 @@ public static class RomLoader
                               (storedChecksum == computedChecksum);
 
             string message = checksumOk
-                ? $"Loaded successfully. Title: \"{title}\". SMC header: {hadSmcHeader}."
+                ? $"Loaded successfully: {GameDetect.Name(game)}. Title: \"{title}\". SMC header: {hadSmcHeader}."
                 : $"Loaded with checksum warning (stored: 0x{storedChecksum:X4}, computed: 0x{computedChecksum:X4}). " +
                   $"ROM may be modified or a bad dump.";
 
@@ -95,10 +94,6 @@ public static class RomLoader
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Private helpers
-    // -------------------------------------------------------------------------
-
     private static RomLoadReport Fail(RomLoadResult result, string message, string path) =>
         new(result, null, message, false, string.Empty, 0);
 
@@ -108,13 +103,11 @@ public static class RomLoader
     private static ushort ReadUInt16Le(byte[] data, int offset) =>
         (ushort)(data[offset] | (data[offset + 1] << 8));
 
-    /// <summary>
-    /// SNES checksum: sum of all bytes in the ROM (wrapping at 16 bits).
-    /// For LoROM 1MB, the checksum range covers the entire file.
-    /// </summary>
+    // snes checksum: the sum of all bytes in the rom (wrapping at 16 bits).
+    // for a 1 MB lorom the checksum covers the whole file
     private static ushort ComputeChecksum(byte[] rom)
     {
-        // (the stored checksum and complement add up to the same as FFFF/0000, so they can stay in the sum)
+        // the stored checksum and complement add up to the same as FFFF/0000, so they can stay in the sum
         return RomBuffer.SnesChecksum(rom);
     }
 }

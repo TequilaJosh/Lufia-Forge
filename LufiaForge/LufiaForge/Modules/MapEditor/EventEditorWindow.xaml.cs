@@ -5,7 +5,7 @@ using System.Windows;
 
 namespace LufiaForge.Modules.MapEditor;
 
-/// <summary>Pop-up event editor (the same panel as the Events tab).</summary>
+// pop-up event editor (same panel as the Events tab)
 public partial class EventEditorWindow : Window
 {
     public EventEditorWindow(RomBuffer rom, EventScript script, string title, IEventHost owner)
@@ -15,6 +15,8 @@ public partial class EventEditorWindow : Window
         Panel.Load(rom, script, title, owner);
         Panel.ShowCloseButton = true;
         Panel.CloseRequested += () => { _confirmed = true; Close(); };
+        // coming back from the main window (it stays open beside it), so re-read whatever changed there in the meantime
+        Activated += (_, _) => Panel.RefreshIfStale();
     }
 
     private bool _confirmed;

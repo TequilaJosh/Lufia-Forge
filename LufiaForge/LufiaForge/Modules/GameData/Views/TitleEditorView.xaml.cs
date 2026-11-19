@@ -46,8 +46,8 @@ public partial class TitleEditorView : UserControl
     private (int X, int Y) Pixel(MouseEventArgs e)
     {
         var p = e.GetPosition(Paper);
-        int z = Math.Max(1, Vm?.Zoom ?? 1);
-        return ((int)Math.Floor(p.X / z), (int)Math.Floor(p.Y / z));
+        int zoom = Math.Max(1, Vm?.Zoom ?? 1);
+        return ((int)Math.Floor(p.X / zoom), (int)Math.Floor(p.Y / zoom));
     }
 
     private void Paper_MouseDown(object sender, MouseButtonEventArgs e)
@@ -75,31 +75,31 @@ public partial class TitleEditorView : UserControl
 
     private void Swatch_Click(object sender, MouseButtonEventArgs e)
     {
-        if (sender is FrameworkElement { DataContext: TitleSwatch s }) Vm?.SelectColourCommand.Execute(s.Index);
+        if (sender is FrameworkElement { DataContext: TitleSwatch swatch }) Vm?.SelectColourCommand.Execute(swatch.Index);
     }
 
     private void OnKeys(object sender, KeyEventArgs e)
     {
-        if (Vm == null || e.OriginalSource is TextBox) return;
+        if (Vm == null || System.Windows.Input.Keyboard.FocusedElement is System.Windows.Controls.Primitives.TextBoxBase) return;
         bool ctrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
         if (ctrl && e.Key == Key.Z) { Vm.UndoCommand.Execute(null); e.Handled = true; }
         else if (ctrl && e.Key == Key.Y) { Vm.RedoCommand.Execute(null); e.Handled = true; }
     }
 }
 
-/// <summary>Zoom 1-4 ↔ combo index 0-3.</summary>
+// zoom 1-4 <-> combo index 0-3
 public sealed class TitleZoomConverter : IValueConverter
 {
     public static readonly TitleZoomConverter Instance = new();
-    public object Convert(object value, Type t, object p, CultureInfo c) => value is int z ? z - 1 : 1;
-    public object ConvertBack(object value, Type t, object p, CultureInfo c) => value is int i && i >= 0 ? i + 1 : 2;
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) => value is int zoom ? zoom - 1 : 1;
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => value is int index && index >= 0 ? index + 1 : 2;
 }
 
-/// <summary>Tool ↔ radio button (parameter = the tool's name).</summary>
+// tool <-> radio button (parameter = the tool's name)
 public sealed class TitleToolConverter : IValueConverter
 {
     public static readonly TitleToolConverter Instance = new();
-    public object Convert(object value, Type t, object p, CultureInfo c) => value?.ToString() == p as string;
-    public object ConvertBack(object value, Type t, object p, CultureInfo c) =>
-        value is true && Enum.TryParse<TitleEditorViewModel.Tool>(p as string, out var tool) ? tool : Binding.DoNothing;
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) => value?.ToString() == parameter as string;
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+        value is true && Enum.TryParse<TitleEditorViewModel.Tool>(parameter as string, out var tool) ? tool : Binding.DoNothing;
 }
