@@ -240,7 +240,7 @@ public partial class MemoryMonitorViewModel : ObservableObject, IDisposable
         var sb = new StringBuilder(HexRows * 80);
         for (int row = start; row < end; row += HexCols)
         {
-            sb.Append($"$7E{row:X4}  ");
+            sb.Append($"${0x7E0000 + row:X6}  ");   // wram is $7E0000-$7FFFFF, so rows past 0xFFFF are bank $7F
             for (int col = 0; col < HexCols && row + col < end; col++)
             {
                 sb.Append($"{wram[row + col]:X2} ");
