@@ -139,6 +139,8 @@ public partial class L2LineVm : ObservableObject
     [ObservableProperty] private string _commandName = "";
     [ObservableProperty] private string _description = "";
     [ObservableProperty] private string _waitsText = "";
+    // plain words for what the step does, when the step's name alone doesn't say enough (go to another map)
+    [ObservableProperty] private string _explain = "";
     [ObservableProperty] private string _sureText = "";
     [ObservableProperty] private string _note = "";
     [ObservableProperty] private string _flow = "";
@@ -156,6 +158,7 @@ public partial class L2LineVm : ObservableObject
     public ObservableCollection<L2FieldVm> Fields { get; } = new();
 
     public bool HasWaits => WaitsText.Length > 0;
+    public bool HasExplain => Explain.Length > 0;
     public bool HasNote => Note.Length > 0;
     public bool HasFlow => Flow.Length > 0;
     public bool HasWarning => Warning.Length > 0;
@@ -167,11 +170,13 @@ public partial class L2LineVm : ObservableObject
     public string OpenSceneText => CanOpenScene ? $"▶ Open scene {Step!.Bytes[2]:X2} of map {Step.Bytes[1]:X2}" : "";
 
     partial void OnWaitsTextChanged(string value) => OnPropertyChanged(nameof(HasWaits));
+    partial void OnExplainChanged(string value) => OnPropertyChanged(nameof(HasExplain));
     partial void OnNoteChanged(string value) => OnPropertyChanged(nameof(HasNote));
     partial void OnFlowChanged(string value) => OnPropertyChanged(nameof(HasFlow));
     partial void OnWarningChanged(string value) => OnPropertyChanged(nameof(HasWarning));
-    // -1 no button, 0 Maxim look-alike, 1-6 a hero look-alike, -2 make a ring like the game's
-    public bool HasHeroFix => HeroFix >= 0 || HeroFix == -2;
+    // -1 no button, 0 Maxim look-alike, 1-6 a hero look-alike, -2 make a ring like the game's,
+    // -3 make the scene a map change arrives at, -4 add a fade-in to it (L2ScriptEditor.Arrival.cs)
+    public bool HasHeroFix => HeroFix >= 0 || HeroFix is -2 or L2ScriptEditor.FixMakeScene or L2ScriptEditor.FixAddFadeIn;
     partial void OnHeroFixChanged(int value) => OnPropertyChanged(nameof(HasHeroFix));
     partial void OnReachedChanged(bool value) => OnPropertyChanged(nameof(Dim));
     public void RefreshShowBytes() => OnPropertyChanged(nameof(ShowBytes));
@@ -974,6 +979,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
             vm.CommandName = step.IsText ? (step.Op == 0x10 ? "Ask a question" : "") : def?.Name ?? $"Unknown command {step.Op:X2}";
             vm.Description = step.IsText ? SpokenBy(step) + (step.Op == 0x10 ? " Write the question, then one line per answer at the end." : "") : Sentence(step);
             vm.WaitsText = !step.IsText && def?.Waits.Length > 0 ? "The event waits here " + def.Waits + "." : "";
+            vm.Explain = ArrivalExplain(step);
             vm.SureText = def?.SureText ?? "";
             vm.BytesText = Convert.ToHexString(step.Bytes) + (step.IsText ? " + text" : "");
             if (step.IsText)
@@ -1078,7 +1084,7 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
             case L2Kind.Hero or L2Kind.Item or L2Kind.Spell or L2Kind.Song or L2Kind.Sound or L2Kind.Map or L2Kind.Capsule or L2Kind.Flag
                 or L2Kind.Point or L2Kind.Path or L2Kind.Area or L2Kind.Exit or L2Kind.Door:
                 choices = ChoicesOf(paramDef.Kind); break;
-            case L2Kind.Scene: choices = SceneChoices(step.Bytes.Length > 1 ? step.Bytes[1] : 0); break;
+            case L2Kind.Scene: choices = SceneChoices(step.Bytes.Length > 1 ? step.Bytes[1] : 0, value); break;
             case L2Kind.ArrivalPoint:
                 int arrivalMap = step.Bytes.Length > 1 ? step.Bytes[1] : 0;
                 choices = L2MapInfo.Records(_rom!, arrivalMap, L2MapInfo.Points, 3).Select(r => new L2Option(r.Bytes[0], $"point {r.Bytes[0]} ({r.Bytes[1]},{r.Bytes[2]})"));
@@ -1109,14 +1115,6 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
     }
 
     private static int SafeGet(L2ParamDef paramDef, byte[] bytes) { try { return paramDef.Get(bytes); } catch (Exception) { return -1; } }
-
-    private IEnumerable<L2Option> SceneChoices(int map)
-    {
-        int block = L2Events.Block(_rom!, map);
-        if (block < 0) return Enumerable.Empty<L2Option>();
-        return L2EventBlocks.ReadLists(_rom!, block).Where(e => e.Head == L2EventBlocks.SceneList)
-            .Select(e => new L2Option(e.Id, $"scene {e.Id}: {Short(FirstText(_rom!, block + e.Offset, block))}"));
-    }
 
     private static string FlagChoice(RomBuffer rom, int flag)
     {
@@ -1238,6 +1236,8 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
             var bytes = (byte[])step.Bytes.Clone();
             paramDef.Set(bytes, value);
             step.Bytes = bytes;
+            // a go-to step sent to another map keeps a scene and a point that map has
+            if (paramDef.Kind == L2Kind.Map && FitArrival(step) is { } fitted) step.Bytes = fitted;
             rebuild = L2EventCommands.Find(step.Op)?.ParamsFor != null || paramDef.Kind is L2Kind.Map or L2Kind.Who or L2Kind.Sprite;
         }
         if (rebuild) Dispatch(() => Changed(false, line));
@@ -1760,6 +1760,8 @@ public partial class L2ScriptEditor : ObservableObject, IPendingEdits
             vm.Flow = !reached && _run.Count > 0 ? "Playback doesn't reach this step with these story flags." : flow;
             // a hero who isn't in the party here, the game's character commands then act on the leader
             vm.HeroFix = -1; vm.HeroFixText = "";
+            // a map change that would leave the screen black
+            ArrivalWarning(vm, step);
             // commands only the start-up script or the "before the map loads" event may hold
             if (!step.IsText && step.Op is 0x68 or 0x7B && _event is { IsInit: false })
                 vm.Warning = (vm.Warning.Length > 0 ? vm.Warning + " " : "") +

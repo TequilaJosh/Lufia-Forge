@@ -903,6 +903,50 @@ public static class L2Cutscene
         throw new InvalidOperationException("The map has no free scene number.");
     }
 
+    // what's wrong with where a "Go to another map" step (16 map scene point) sends the party, if anything.
+    // the game fades to black, loads the map with the leader hidden and runs that map's scene with that number.
+    // if the map has no such scene, or the scene never fades the screen back in, the screen stays black for good
+    // (checked in the game 2026-11-18 on map F3: a missing scene, an empty one and one with only a text box all stay black)
+    public enum ArrivalTrouble { None, NoEvents, NoScene, NoFadeIn }
+
+    // steps that bring the screen back, or leave it to another map change that does
+    private static bool BringsScreenBack(L2Step step) => !step.IsText && step.Op is 0x59 or 0xA4 or 0x3F or 0x16 or 0x5E;
+
+    public static ArrivalTrouble CheckArrival(RomBuffer rom, int map, int scene)
+    {
+        int block = L2Events.Block(rom, map);
+        if (block < 0) return ArrivalTrouble.NoEvents;
+        List<L2EventBlocks.Entry> lists;
+        try { lists = L2EventBlocks.ReadLists(rom, block); } catch (Exception) { return ArrivalTrouble.None; }
+        var entry = lists.FirstOrDefault(e => e.Head == L2EventBlocks.SceneList && e.Id == scene);
+        if (entry == null) return ArrivalTrouble.NoScene;
+        if (!entry.IsScript) return ArrivalTrouble.None;
+        try { return L2EventScript.Read(rom, block + entry.Offset, block).Steps.Any(BringsScreenBack) ? ArrivalTrouble.None : ArrivalTrouble.NoFadeIn; }
+        catch (Exception) { return ArrivalTrouble.None; }
+    }
+
+    // makes a scene on map for a "Go to another map" step to arrive at: it shows the leader, fades in and has a "..."
+    // box to start writing from (the same as a new "arrive" cutscene). returns its number
+    public static int MakeArrivalScene(RomBuffer rom, int map) => Create(rom, map, new NewOptions { Start = StartKind.Arrive }).Id;
+
+    // puts "show the leader, fade in, wait for the fade" at the top of a scene that never fades the screen back in
+    public static void AddFadeIn(RomBuffer rom, int map, int scene)
+    {
+        int block = L2Events.Block(rom, map);
+        if (block < 0) throw new InvalidOperationException("That map has no events.");
+        var entry = L2EventBlocks.ReadLists(rom, block).FirstOrDefault(e => e.Head == L2EventBlocks.SceneList && e.Id == scene)
+                    ?? throw new InvalidOperationException($"That map has no scene {scene:X2}.");
+        var script = L2EventScript.Read(rom, block + entry.Offset, block);
+        if (script.Problem != null) throw new InvalidOperationException($"Scene {scene:X2} can't be changed: {script.Problem}");
+        script.Steps.InsertRange(0, new[]
+        {
+            new L2Step { Bytes = new byte[] { 0x2D, 0x00 } },
+            new L2Step { Bytes = new byte[] { 0x59, 0x13 } },
+            new L2Step { Bytes = new byte[] { 0x76 } },
+        });
+        L2Rom.AllOrNothing(rom, () => L2EventBlocks.Save(rom, map, entry, script));
+    }
+
     // what a new cutscene gets made with
     public sealed class NewOptions
     {

@@ -337,7 +337,8 @@ public partial class L2EventEditorPanel : UserControl
     private void HeroFix_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement { DataContext: L2LineVm line } || !line.HasHeroFix || _editor == null) return;
-        if (line.HeroFix == -2) _editor.RingLikeGame(line.Index);
+        if (line.HeroFix is L2ScriptEditor.FixMakeScene or L2ScriptEditor.FixAddFadeIn) _editor.FixArrival(line.Index, line.HeroFix);
+        else if (line.HeroFix == -2) _editor.RingLikeGame(line.Index);
         else if (line.HeroFix == 0) _editor.LeaderVanishToStandIn();
         else _editor.HeroToCharacter(line.HeroFix);
     }
@@ -580,6 +581,20 @@ public partial class L2EventEditorPanel : UserControl
 
     // a sprite to place with the next click on the stage (-1 = none)
     private int _placeSprite = -1;
+
+    // "Go to another map": pick the map and where the party arrives; the editor makes the scene there and the step
+    private void GoToMap_Click(object sender, RoutedEventArgs e)
+    {
+        if (_editor?.Rom is not { } rom || !_editor.CanEdit) return;
+        int map = Math.Max(2, _editor.Map);
+        var window = new L2PickPlaceWindow(rom, map, 0, 0, m => L2Maps.Name(rom, m))
+        {
+            Owner = Window.GetWindow(this),
+            Title = "Go to another map: pick the map, then click where the party arrives - Lufia Forge",
+        };
+        if (window.ShowDialog() != true) return;
+        _editor.AddGoTo(window.Map, window.X, window.Y);
+    }
 
     private void AddCast_Click(object sender, RoutedEventArgs e)
     {

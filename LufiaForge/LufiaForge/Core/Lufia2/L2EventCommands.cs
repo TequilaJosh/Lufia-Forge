@@ -510,7 +510,8 @@ public static class L2EventCommands
 
         // maps and places
         One(0x16, "Go to another map", Places, (b, w) => $"Go to {w.Map(b[1])}, arriving at point {b[3]}, and play its scene {b[2]}", new byte[] { 0x16, 0x03, 0x01, 0x01 },
-            "The scene (an event of that map's scene list) runs on arrival; it must exist. The party faces down.", 'D',
+            "The screen fades to black, the map loads with the party on the point (facing down, Maxim hidden) and that map's scene plays. " +
+            "The scene has to exist there and fade the screen in (Show Maxim, Fade in), or the screen stays black for good. Nothing after this step runs.", 'D',
             ps: new[] { P("map", L2Kind.Map, 1), P("scene", L2Kind.Scene, 2), P("arrival point", L2Kind.ArrivalPoint, 3) });
         One(0x5E, "Leave through an exit", Places, (b, w) => $"Leave through {w.Exit(b[1])}", new byte[] { 0x5E, 0x00 }, "As if the party walked through that exit of the map.",
             ps: P("exit", L2Kind.Exit, 1));

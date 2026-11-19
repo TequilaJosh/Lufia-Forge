@@ -212,7 +212,8 @@ public partial class L2ScriptEditor
             var mapField = L2EventCommands.Find(step.Op)?.FieldsFor(step.Bytes).FirstOrDefault(q => q.Kind == L2Kind.Map);
             _placeField = field;
             _choices.Clear();
-            Finish(b => { mapField?.Set(b, map); field.Def.Set(b, id); }, $"map {map:X2} point {id} ({x}, {y})" + (made ? ", a new point" : ""));
+            // (a map picked in the window keeps a scene that map has)
+            Finish(b => { mapField?.Set(b, map); field.Def.Set(b, id); FitArrivalBytes(b); }, $"map {map:X2} point {id} ({x}, {y})" + (made ? ", a new point" : ""));
         }
         catch (Exception ex) { StageInfo = "Not written: " + ex.Message; }
     }

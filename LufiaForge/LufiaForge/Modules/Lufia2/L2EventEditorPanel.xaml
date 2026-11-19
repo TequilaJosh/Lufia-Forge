@@ -135,6 +135,8 @@
                                 <TextBlock Text="{Binding Description}" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap" Margin="0,2,0,0"/>
                                 <TextBlock Text="{Binding WaitsText}" Style="{StaticResource GdHint}" Margin="0,1,0,0"
                                            Visibility="{Binding HasWaits, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                <TextBlock Text="{Binding Explain}" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,2,0,0"
+                                           Visibility="{Binding HasExplain, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                 <Button Content="{Binding OpenSceneText}" Style="{StaticResource LufiaButtonGold}" HorizontalAlignment="Left" Margin="0,4,0,0" Click="OpenScene_Click"
                                         ToolTip="Open the scene the party arrives in (the editor shows it in place of this one)"
                                         Visibility="{Binding CanOpenScene, Converter={StaticResource BoolToVisibilityConverter}}"/>
@@ -199,6 +201,28 @@
             </DockPanel>
             <TextBlock Text="{Binding Info}" Style="{StaticResource GdHint}" TextWrapping="Wrap"/>
             <TextBlock x:Name="HelpText" Style="{StaticResource GdHint}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+            <!-- the guide: how cutscenes work, in plain words -->
+            <Expander Header="❓ How cutscenes work" Foreground="{StaticResource GoldBrush}" Margin="0,4,0,0" IsExpanded="False"
+                      ToolTip="What starts a cutscene, scenes, going to another map, characters, story flags, the stage and testing">
+                <StackPanel Margin="18,0,0,4" MaxWidth="900" HorizontalAlignment="Left">
+                    <TextBlock Text="What a cutscene is" Foreground="{StaticResource GoldLightBrush}" FontWeight="SemiBold" Margin="0,6,0,0"/>
+                    <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Text="A cutscene is one of the map's events: a list of steps the game runs from top to bottom. A step can show a text box, move a character, move the camera, fade the screen, play a sound or check a story flag. The game waits on some steps (a walk, a text box, a fade) and goes straight on after the others. The steps are the cards on the left, top to bottom."/>
+                    <TextBlock Text="What starts it" Foreground="{StaticResource GoldLightBrush}" FontWeight="SemiBold" Margin="0,6,0,0"/>
+                    <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Text="Entering the map (the map's &quot;on entering&quot; event sends the party to a scene once, and a story flag stops it playing again), stepping onto an area, talking to a character, or arriving from another cutscene's &quot;Go to another map&quot; step. + New cutscene... sets any of these up for you."/>
+                    <TextBlock Text="Scenes" Foreground="{StaticResource GoldLightBrush}" FontWeight="SemiBold" Margin="0,6,0,0"/>
+                    <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Text="Scenes are the numbered events in a map's scene list (scene 20, scene 21...). A scene only plays when a &quot;Go to another map&quot; step sends the party there, or when a new game starts with it. Scenes F0 and up are test starts made by Test in the game."/>
+                    <TextBlock Text="Going to another map" Foreground="{StaticResource GoldLightBrush}" FontWeight="SemiBold" Margin="0,6,0,0"/>
+                    <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Text="&quot;Go to another map&quot; fades to black, loads the other map with the party on one of its points (Maxim hidden) and plays a scene of that map. Nothing after that step runs. The scene there has to show Maxim and fade the screen in, or the screen stays black for good. The easy way: press 🚪 Go to another map... on the stage, pick the map and click where the party arrives. A scene that fades in is made there, and a step that goes to it is added. Then press &quot;Open scene&quot; on that step to write what happens next. A step with a problem shows it in red with a button that fixes it."/>
+                    <TextBlock Text="Characters" Foreground="{StaticResource GoldLightBrush}" FontWeight="SemiBold" Margin="0,6,0,0"/>
+                    <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Text="Map characters are made by the map's start-up script and stand there whenever the map loads. A cutscene character (+ Cutscene character...) is made with the map but stays hidden until a step shows it. A hero who isn't in the party at that point of the story can't be moved: the game moves Maxim instead, so use a map character that looks like that hero."/>
+                    <TextBlock Text="Story flags" Foreground="{StaticResource GoldLightBrush}" FontWeight="SemiBold" Margin="0,6,0,0"/>
+                    <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Text="Story flags remember what has happened. A check step goes one way or the other depending on a flag, and a once-only cutscene turns its flag on so it doesn't play again. Tick flags under the stage to play the cutscene as it goes at that point of the story."/>
+                    <TextBlock Text="The stage and the timeline" Foreground="{StaticResource GoldLightBrush}" FontWeight="SemiBold" Margin="0,6,0,0"/>
+                    <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Text="Click a step to see where everyone stands at that moment. ▶ Play plays from the picked step. On the stage, click a character and then a tile: it walks, appears or turns there. Right-click a tile for the camera or the party's start. The timeline shows how long each step takes, per character, camera, dialogue and screen."/>
+                    <TextBlock Text="Testing in the game" Foreground="{StaticResource GoldLightBrush}" FontWeight="SemiBold" Margin="0,6,0,0"/>
+                    <TextBlock Style="{StaticResource GdHint}" TextWrapping="Wrap" Text="Test in the game writes the ROM and opens it in BizHawk: a new game starts on this map with the story flags and the party set, so the cutscene plays straight away. Normal start puts the game's opening back."/>
+                </StackPanel>
+            </Expander>
 
             <!-- the map's characters: sprite, the start-up line that makes each, the lines of this event that use it -->
             <Expander x:Name="CastExpander" Header="{Binding CastHeader}" Foreground="{StaticResource GoldBrush}" Margin="0,6,0,0"
@@ -364,7 +388,7 @@
                     <WrapPanel Grid.Row="0" Margin="0,0,0,6">
                         <Button Content="▶ Play" Style="{StaticResource LufiaButtonGold}" Command="{Binding PlayCommand}" Margin="0,0,6,4"
                                 ToolTip="Play the event from the picked step, roughly as the game does: checks and jumps are followed with the story flags ticked under the stage"/>
-                        <Button Content="■ Stop" Style="{StaticResource LufiaButton}" Command="{Binding StopCommand}" Margin="0,0,12,4"/>
+                        <Button Content="■ Stop" Style="{StaticResource LufiaButton}" Command="{Binding StopCommand}" Margin="0,0,12,4" ToolTip="Stop playing"/>
                         <Button x:Name="PickStartButton" Content="📍 Party start…" Style="{StaticResource LufiaButton}" Click="PickStart_Click" Margin="0,0,10,4"
                                 ToolTip="Click a tile on the stage where the party stands when the event begins"/>
                         <TextBlock Text="Zoom" Style="{StaticResource GdFieldLabel}" VerticalAlignment="Center" Margin="0,0,4,4"/>
@@ -372,8 +396,10 @@
                                 ToolTip="Or Ctrl + mouse wheel on the stage; hold the middle mouse button to drag the map"/>
                         <CheckBox Content="Camera" IsChecked="{Binding ShowCamera}" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" Margin="0,0,10,4"
                                   ToolTip="The dashed box: what the screen shows (256 x 224)"/>
-                        <Button Content="🧱 Change the map…" Style="{StaticResource LufiaButton}" Command="{Binding StartChangeMapCommand}" Margin="0,0,10,4"
-                                ToolTip="A step that changes part of the map: drag over the place, then click where its new look is (or use a preset)"/>
+                        <Button Content="🚪 Go to another map…" Style="{StaticResource LufiaButtonGold}" Click="GoToMap_Click" Margin="0,0,10,4"
+                                ToolTip="Continue the cutscene somewhere else: pick a map and click where the party arrives. A new scene is made there (it shows Maxim and fades in) and a step that goes to it is added after the picked step"/>
+                        <Button Content="🧱 Change the map's tiles…" Style="{StaticResource LufiaButton}" Command="{Binding StartChangeMapCommand}" Margin="0,0,10,4"
+                                ToolTip="A step that changes how part of this map looks (a door opens, a bridge appears): drag over the place, then click where its new look is (or use a preset)"/>
                         <Button Content="＋ Cutscene character…" Style="{StaticResource LufiaButton}" Click="AddCast_Click" Margin="0,0,10,4"
                                 ToolTip="A new character for this map's cutscenes: made with the map, hidden until a step makes it appear"/>
                         <TextBlock Text="{Binding Caption}" Foreground="{StaticResource GoldLightBrush}" VerticalAlignment="Center" Margin="0,0,0,4"/>
