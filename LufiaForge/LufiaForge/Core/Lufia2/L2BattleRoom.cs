@@ -1,35 +1,30 @@
 namespace LufiaForge.Core.Lufia2;
 
-/// <summary>
-/// How much of the battle sprite buffer (64 squares of 16x16, sprite tiles 0x100-0x1FF) the kinds of monster of one
-/// battle need (read from the game's code 2026-10-27; docs/lufia2/graphics.md section 8.4).
-/// <list type="bullet">
-/// <item>A monster group's battle ($81:839F): the monster in place 1 or 2 (picked at random when both are filled) is the
-/// first kind; the other places are shuffled and the first 2 filled ones are the other kinds (so any 2 of them). Monsters
-/// are then dealt to the kinds ($81:84FC) while their widths fit: each adds its width in 8x8 tiles + 1 and the sum must
-/// stay under 25, so a kind that can't fit beside the others never comes with them. Place 1 empty with place 2 filled is
-/// a fixed battle (not counted here).</item>
-/// <item>A story battle: every different monster of its six is a kind; $85:DF44 keeps 3 kinds and runs into a BRK at
-/// $85:DF73 on a 4th (checked: the game drops back to its title screen).</item>
-/// <item>$85:EB91 loads each kind's sprite into the buffer one after the other; a sprite another kind already loaded is
-/// used again, so kinds that share a sprite count once. Past 64 squares the tiles run off the sprite tiles the battle
-/// has.</item>
-/// </list>
-/// </summary>
+// how much of the battle sprite buffer (64 squares of 16x16, sprite tiles 0x100-0x1FF) the kinds of monster in one
+// battle need (read from the game's code 2026-10-27, docs/lufia2/graphics.md section 8.4)
+// - a monster group's battle ($81:839F): the monster in place 1 or 2 (random pick when both are filled) is the first
+//   kind. the other places get shuffled and the first 2 filled ones are the other kinds (so any 2 of them). then
+//   monsters get dealt to the kinds ($81:84FC) while their widths fit: each adds its width in 8x8 tiles + 1 and the
+//   sum has to stay under 25, so a kind that can't fit beside the others never comes with them. place 1 empty with
+//   place 2 filled is a fixed battle (not counted here)
+// - a story battle: every different monster of its six is a kind. $85:DF44 keeps 3 kinds and runs into a BRK at
+//   $85:DF73 on a 4th (checked: the game drops back to its title screen)
+// - $85:EB91 loads each kind's sprite into the buffer one after the other. a sprite another kind already loaded gets
+//   used again, so kinds sharing a sprite count once. past 64 squares the tiles run off the sprite tiles the battle has
 public static class L2BattleRoom
 {
     public const int Squares = L2MonsterSprites.MaxSquares, MaxKinds = 3, MaxWidth = 24;
 
-    /// <summary>What a battle's kinds need: the most squares one battle can take, the monsters of that battle, how many
-    /// kinds it can have; <see cref="Fixed"/> for a fixed group (not counted).</summary>
+    // what a battle's kinds need: the most squares one battle can take, the monsters of that battle, how many kinds
+    // it can have. Fixed for a fixed group (not counted)
     public sealed record Need(int Squares, IReadOnlyList<int> Monsters, int Kinds, bool Fixed = false)
     {
         public bool TooBig => Squares > L2BattleRoom.Squares;
         public bool TooManyKinds => Kinds > MaxKinds;
     }
 
-    /// <summary>A monster's sprite, its squares and its width in tiles (for the sums), with an optional sprite to try
-    /// instead for one monster.</summary>
+    // a monster's sprite, its squares and its width in tiles (for the sums), with an optional sprite to try instead
+    // for one monster
     public sealed class Sizes
     {
         private readonly RomBuffer _rom;
@@ -44,113 +39,113 @@ public static class L2BattleRoom
 
         public (int Squares, int Across) Sprite(int sprite)
         {
-            if (_sprites.TryGetValue(sprite, out var v)) return v;
-            if (sprite < 1 || sprite > L2MonsterSprites.Count(_rom)) v = (0, 0);
+            if (_sprites.TryGetValue(sprite, out var size)) return size;
+            if (sprite < 1 || sprite > L2MonsterSprites.Count(_rom)) size = (0, 0);
             else
             {
-                var (tx, ty, _) = L2MonsterSprites.Size(_rom, sprite);
-                var (sx, sy) = L2MonsterSprites.Squares(tx, ty);
-                v = (sx * sy, tx);
+                var (tilesAcross, tilesDown, _) = L2MonsterSprites.Size(_rom, sprite);
+                var (squaresAcross, squaresDown) = L2MonsterSprites.Squares(tilesAcross, tilesDown);
+                size = (squaresAcross * squaresDown, tilesAcross);
             }
-            return _sprites[sprite] = v;
+            return _sprites[sprite] = size;
         }
 
-        /// <summary>Squares the monsters' sprites take together (a shared sprite once).</summary>
+        // squares the monsters' sprites take together (a shared sprite once)
         public int SquaresOf(IEnumerable<int> monsters) => monsters.Select(SpriteOf).Distinct().Sum(s => Sprite(s).Squares);
 
         public bool FitsAcross(IEnumerable<int> monsters) => monsters.Sum(m => Sprite(SpriteOf(m)).Across + 1) <= MaxWidth;
     }
 
-    /// <summary>The most squares a battle of group <paramref name="g"/> can need.</summary>
-    public static Need Group(RomBuffer rom, int g, Sizes? sizes = null) => Group(L2Encounters.Group(rom, g), sizes ?? new Sizes(rom));
+    // the most squares a battle of group group can need
+    public static Need Group(RomBuffer rom, int group, Sizes? sizes = null) => Group(L2Encounters.Group(rom, group), sizes ?? new Sizes(rom));
 
-    public static Need Group(int[] e, Sizes sizes)
+    public static Need Group(int[] places, Sizes sizes)
     {
-        if (L2Encounters.IsFixed(e)) return new Need(sizes.SquaresOf(new[] { e[1] }), new[] { e[1] }, 1, Fixed: true);
-        var filled = Enumerable.Range(0, e.Length).Where(i => e[i] != 0xFF).ToList();
-        var firsts = e[0] != 0xFF && e[1] != 0xFF ? new List<int> { 0, 1 } : e[0] != 0xFF ? new List<int> { 0 } : new List<int>();
+        if (L2Encounters.IsFixed(places)) return new Need(sizes.SquaresOf(new[] { places[1] }), new[] { places[1] }, 1, Fixed: true);
+        var filled = Enumerable.Range(0, places.Length).Where(i => places[i] != 0xFF).ToList();
+        var firsts = places[0] != 0xFF && places[1] != 0xFF ? new List<int> { 0, 1 } : places[0] != 0xFF ? new List<int> { 0 } : new List<int>();
         var combos = new List<List<int>>();
         if (firsts.Count == 0)
             combos.AddRange(Choose(filled, Math.Min(MaxKinds, filled.Count)));
         else
-            foreach (int f in firsts)
+            foreach (int first in firsts)
             {
-                var rest = filled.Where(i => i != f).ToList();
-                foreach (var c in Choose(rest, Math.Min(MaxKinds - 1, rest.Count))) combos.Add(new List<int> { f }.Concat(c).ToList());
+                var rest = filled.Where(i => i != first).ToList();
+                foreach (var combo in Choose(rest, Math.Min(MaxKinds - 1, rest.Count))) combos.Add(new List<int> { first }.Concat(combo).ToList());
             }
         Need best = new(0, Array.Empty<int>(), 0);
-        foreach (var c in combos)
+        foreach (var combo in combos)
         {
-            var ms = c.Select(i => e[i]).ToList();
+            var monsters = combo.Select(i => places[i]).ToList();
             // the kinds that can come together: the first always (when it fits alone), the others while the widths fit
-            foreach (var sub in Subsets(ms, firsts.Count > 0))
+            foreach (var subset in Subsets(monsters, firsts.Count > 0))
             {
-                if (!sizes.FitsAcross(sub)) continue;
-                int sq = sizes.SquaresOf(sub);
-                if (sq > best.Squares) best = new Need(sq, sub, sub.Distinct().Count());
+                if (!sizes.FitsAcross(subset)) continue;
+                int squares = sizes.SquaresOf(subset);
+                if (squares > best.Squares) best = new Need(squares, subset, subset.Distinct().Count());
             }
         }
         return best;
     }
 
-    /// <summary>The squares a story battle's kinds need (every different monster of its six is a kind).</summary>
-    public static Need Story(RomBuffer rom, int b, Sizes? sizes = null)
+    // the squares a story battle's kinds need (every different monster of its six is a kind)
+    public static Need Story(RomBuffer rom, int battle, Sizes? sizes = null)
     {
         sizes ??= new Sizes(rom);
-        var kinds = L2Encounters.StoryBattle(rom, b).Select(s => s.Monster).Where(m => m != 0xFF).Distinct().ToList();
+        var kinds = L2Encounters.StoryBattle(rom, battle).Select(s => s.Monster).Where(m => m != 0xFF).Distinct().ToList();
         return new Need(sizes.SquaresOf(kinds), kinds, kinds.Count);
     }
 
-    /// <summary>The groups and story battles that have monster <paramref name="monster"/> and would need more than 64
-    /// squares if it showed sprite <paramref name="sprite"/>.</summary>
+    // the groups and story battles that have monster monster and would need more than 64 squares if it showed
+    // sprite sprite
     public static List<(string What, Need Need)> Overflows(RomBuffer rom, int monster, int sprite)
     {
         var sizes = new Sizes(rom) { TryMonster = monster, TrySprite = sprite };
-        var r = new List<(string, Need)>();
-        for (int g = 0; g < L2Encounters.GroupCount; g++)
+        var overflows = new List<(string, Need)>();
+        for (int group = 0; group < L2Encounters.GroupCount; group++)
         {
-            var e = L2Encounters.Group(rom, g);
-            if (!e.Contains(monster)) continue;
-            var n = Group(e, sizes);
-            if (n.TooBig && n.Monsters.Contains(monster)) r.Add(($"group {g:X2}", n));
+            var places = L2Encounters.Group(rom, group);
+            if (!places.Contains(monster)) continue;
+            var need = Group(places, sizes);
+            if (need.TooBig && need.Monsters.Contains(monster)) overflows.Add(($"group {group:X2}", need));
         }
         var seen = new HashSet<int>();
-        for (int b = 0; b < L2Encounters.StoryBattleCount(rom); b++)
+        for (int battle = 0; battle < L2Encounters.StoryBattleCount(rom); battle++)
         {
-            if (!seen.Add(L2Encounters.StoryBattleAt(rom, b))) continue;   // battles sharing a record: the first
-            var n = Story(rom, b, sizes);
-            if (n.Monsters.Contains(monster) && n.TooBig) r.Add(($"story battle {b:X2}", n));
+            if (!seen.Add(L2Encounters.StoryBattleAt(rom, battle))) continue;   // battles sharing a record: only the first
+            var need = Story(rom, battle, sizes);
+            if (need.Monsters.Contains(monster) && need.TooBig) overflows.Add(($"story battle {battle:X2}", need));
         }
-        return r;
+        return overflows;
     }
 
-    /// <summary>The most squares any battle with monster <paramref name="monster"/> needs (with its sprite as
-    /// <paramref name="sprite"/>), or 0 when no group or story battle has it.</summary>
+    // the most squares any battle with monster monster needs (with its sprite as sprite), 0 if no group or story
+    // battle has it
     public static int MostWith(RomBuffer rom, int monster, int sprite)
     {
         var sizes = new Sizes(rom) { TryMonster = monster, TrySprite = sprite };
         int most = 0;
-        for (int g = 0; g < L2Encounters.GroupCount; g++)
+        for (int group = 0; group < L2Encounters.GroupCount; group++)
         {
-            var e = L2Encounters.Group(rom, g);
-            if (e.Contains(monster)) most = Math.Max(most, Group(e, sizes).Squares);
+            var places = L2Encounters.Group(rom, group);
+            if (places.Contains(monster)) most = Math.Max(most, Group(places, sizes).Squares);
         }
-        for (int b = 0; b < L2Encounters.StoryBattleCount(rom); b++)
+        for (int battle = 0; battle < L2Encounters.StoryBattleCount(rom); battle++)
         {
-            var n = Story(rom, b, sizes);
-            if (n.Monsters.Contains(monster)) most = Math.Max(most, n.Squares);
+            var need = Story(rom, battle, sizes);
+            if (need.Monsters.Contains(monster)) most = Math.Max(most, need.Squares);
         }
         return most;
     }
 
-    /// <summary>A need in words: "up to 70 squares with 1A Goblin, 2B Bat" (and the kinds past 3).</summary>
-    public static string Describe(Need n, IReadOnlyList<L2Battle.Monster>? monsters = null)
+    // a need in words: "up to 70 squares with 1A Goblin, 2B Bat" (and the kinds past 3)
+    public static string Describe(Need need, IReadOnlyList<L2Battle.Monster>? monsters = null)
     {
         string Name(int m) => monsters != null && m < monsters.Count ? $"{m:X2} {monsters[m].Name.Trim()}" : m.ToString("X2");
-        string s = $"up to {n.Squares} of {Squares} squares";
-        if (n.Monsters.Count > 0) s += " with " + string.Join(", ", n.Monsters.Distinct().Select(Name));
-        if (n.TooManyKinds) s += $"; {n.Kinds} kinds, and the game drops back to its title screen on a 4th";
-        return s;
+        string text = $"up to {need.Squares} of {Squares} squares";
+        if (need.Monsters.Count > 0) text += " with " + string.Join(", ", need.Monsters.Distinct().Select(Name));
+        if (need.TooManyKinds) text += $"; {need.Kinds} kinds, and the game drops back to its title screen on a 4th";
+        return text;
     }
 
     private static IEnumerable<List<int>> Choose(List<int> items, int k)
@@ -161,7 +156,7 @@ public static class L2BattleRoom
                 yield return new List<int> { items[i] }.Concat(rest).ToList();
     }
 
-    /// <summary>Non-empty subsets (keeping the first item when <paramref name="keepFirst"/>).</summary>
+    // non-empty subsets (keeping the first item if keepFirst)
     private static IEnumerable<List<int>> Subsets(List<int> items, bool keepFirst)
     {
         for (int mask = 1; mask < 1 << items.Count; mask++)

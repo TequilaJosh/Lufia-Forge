@@ -1,15 +1,13 @@
 namespace LufiaForge.Core.Lufia2;
 
-/// <summary>
-/// Monster attack names Lufia Forge adds after the game's 8A (numbers 8B-FF), for an attack with a name of its own.
-/// <para>The game shows a name with EnemyAttackName ($85:9532): the number (battle register 25) minus one indexes the
-/// table at $85:F2D7, and the record found there (an animation byte, the name, 00) is copied to $7E:1262 (the
-/// animation byte and the first letter) and $7E:1269 (the name, 37 bytes). A hook at $85:954A (in place of DEC / ASL /
-/// TAX / LDY $F2D7,X) does the same lookup for 01-8A; for 8B and up it copies the record from Lufia Forge's block itself
-/// and returns past the game's copy ($85:9572). Read from the game's code (2026-11-11).</para>
-/// <para>The block: "LF2AN", version, how many names, code at +10, a table of 0x75 record addresses at +80, records
-/// of 0x28 bytes from +180 (animation, up to 26 letters, 00).</para>
-/// </summary>
+// monster attack names we add after the game's 8A (numbers 8B-FF), for an attack that gets its own name
+// the game shows a name with EnemyAttackName ($85:9532): the number (battle register 25) minus one indexes the
+// table at $85:F2D7, and the record there (an animation byte, the name, 00) gets copied to $7E:1262 (animation byte
+// and first letter) and $7E:1269 (the name, 37 bytes). our hook at $85:954A (in place of DEC / ASL / TAX /
+// LDY $F2D7,X) does the same lookup for 01-8A, for 8B and up it copies the record from our block itself and
+// returns past the game's copy ($85:9572). read from the game's code 2026-11-11
+// block: "LF2AN", version, how many names, code at +10, a table of 0x75 record addresses at +80, records of 0x28
+// bytes from +180 (animation, up to 26 letters, 00)
 public static class L2AttackNames
 {
     public const int First = L2AiScripts.AttackNameCount + 1, Last = 0xFF, Slots = Last - First + 1;
@@ -19,7 +17,7 @@ public static class L2AttackNames
     private const int Site = 0x2954A;
     private static readonly byte[] SiteOriginal = { 0x3A, 0x0A, 0xAA, 0xBC, 0xD7, 0xF2 };
 
-    /// <summary>File offset of the block, or -1 when no name was added yet.</summary>
+    // file offset of the block, -1 if no name was added yet
     public static int Block(RomBuffer rom)
     {
         if (rom.Length <= Site + 4 || rom.ReadByte(Site) != 0x22) return -1;
@@ -27,42 +25,42 @@ public static class L2AttackNames
         return block >= 0 && block + BlockSize <= rom.Length && System.Text.Encoding.ASCII.GetString(rom.ReadBytes(block, Magic.Length)) == Magic ? block : -1;
     }
 
-    /// <summary>How many names were added.</summary>
-    public static int Count(RomBuffer rom) => Block(rom) is var b && b >= 0 ? Math.Min((int)rom.ReadByte(b + Magic.Length + 1), Slots) : 0;
+    // how many names were added
+    public static int Count(RomBuffer rom) => Block(rom) is var block && block >= 0 ? Math.Min((int)rom.ReadByte(block + Magic.Length + 1), Slots) : 0;
 
     private static int Slot(int block, int name) => block + RecordsAt + (name - First) * SlotSize;
 
-    /// <summary>The added names, in order (name <see cref="First"/> first).</summary>
+    // the added names in order (name First first)
     public static List<string> Names(RomBuffer rom)
     {
-        var l = new List<string>();
-        int b = Block(rom);
-        for (int n = First; n < First + Count(rom); n++)
+        var names = new List<string>();
+        int block = Block(rom);
+        for (int name = First; name < First + Count(rom); name++)
         {
             var sb = new System.Text.StringBuilder();
-            int at = Slot(b, n) + 1;
-            for (int i = 0; i < SlotSize - 1; i++) { byte c = rom.ReadByte(at + i); if (c == 0) break; sb.Append(L2Charset.ToChar(rom, c) ?? '?'); }
-            l.Add(sb.ToString());
+            int textOffset = Slot(block, name) + 1;
+            for (int i = 0; i < SlotSize - 1; i++) { byte c = rom.ReadByte(textOffset + i); if (c == 0) break; sb.Append(L2Charset.ToChar(rom, c) ?? '?'); }
+            names.Add(sb.ToString());
         }
-        return l;
+        return names;
     }
 
     public static bool IsAdded(RomBuffer rom, int name) => name >= First && name < First + Count(rom);
 
-    /// <summary>The animation an added name brings (E0 = none).</summary>
+    // the animation an added name brings (E0 = none)
     public static int Animation(RomBuffer rom, int name) => IsAdded(rom, name) ? rom.ReadByte(Slot(Block(rom), name)) : 0xE0;
 
-    /// <summary>Why names can't be added to this ROM, or null when they can.</summary>
+    // why names can't be added to this rom, null if they can
     public static string? CantAdd(RomBuffer rom)
     {
         if (!rom.IsLufia2) return "Only Lufia II has these attack names.";
-        if (Block(rom) is var b && b >= 0) return Count(rom) >= Slots ? $"All {Slots} added names are taken: rename one of them instead." : null;
+        if (Block(rom) is var block && block >= 0) return Count(rom) >= Slots ? $"All {Slots} added names are taken: rename one of them instead." : null;
         if (!rom.ReadBytes(Site, SiteOriginal.Length).SequenceEqual(SiteOriginal))
             return "This ROM's code that shows attack names isn't the US game's (another patch changed it), so names can't be added.";
         return null;
     }
 
-    /// <summary>Why <paramref name="text"/> can't be a name, or null.</summary>
+    // why text can't be a name, or null
     public static string? Check(RomBuffer rom, string text)
     {
         if (text.Length == 0) return "A name can't be empty.";
@@ -71,43 +69,43 @@ public static class L2AttackNames
         return null;
     }
 
-    /// <summary>Adds a name (with the animation it brings, E0 = none) and returns its number.</summary>
+    // adds a name (with the animation it brings, E0 = none), returns its number
     public static int Add(RomBuffer rom, string text, int animation = 0xE0)
     {
         text = text.Trim();
-        if (CantAdd(rom) is { } no) throw new InvalidOperationException(no);
-        if (Check(rom, text) is { } bad) throw new InvalidOperationException(bad);
-        int b = Install(rom);
-        int n = First + Count(rom);
-        Write(rom, b, n, text, animation);
-        rom.WriteByte(b + Magic.Length + 1, (byte)(n - First + 1));
-        return n;
+        if (CantAdd(rom) is { } whyNot) throw new InvalidOperationException(whyNot);
+        if (Check(rom, text) is { } problem) throw new InvalidOperationException(problem);
+        int block = Install(rom);
+        int name = First + Count(rom);
+        Write(rom, block, name, text, animation);
+        rom.WriteByte(block + Magic.Length + 1, (byte)(name - First + 1));
+        return name;
     }
 
-    /// <summary>Renames an added name; null when done, else why not.</summary>
+    // renames an added name, null when done, else why not
     public static string? Rename(RomBuffer rom, int name, string text)
     {
         text = text.Trim();
         if (!IsAdded(rom, name)) return "There's no such added name.";
-        if (Check(rom, text) is { } bad) return bad;
-        int b = Block(rom);
-        Write(rom, b, name, text, rom.ReadByte(Slot(b, name)));
+        if (Check(rom, text) is { } problem) return problem;
+        int block = Block(rom);
+        Write(rom, block, name, text, rom.ReadByte(Slot(block, name)));
         return null;
     }
 
     private static void Write(RomBuffer rom, int block, int name, string text, int animation)
     {
-        var rec = new byte[SlotSize];
-        rec[0] = (byte)animation;
-        for (int i = 0; i < text.Length; i++) rec[1 + i] = L2Charset.ToByte(rom, text[i]) ?? (byte)' ';
-        rom.WriteBytes(Slot(block, name), rec);
+        var record = new byte[SlotSize];
+        record[0] = (byte)animation;
+        for (int i = 0; i < text.Length; i++) record[1 + i] = L2Charset.ToByte(rom, text[i]) ?? (byte)' ';
+        rom.WriteBytes(Slot(block, name), record);
     }
 
-    /// <summary>Puts the block and the hook in (once).</summary>
+    // puts the block and the hook in (once)
     private static int Install(RomBuffer rom)
     {
-        int have = Block(rom);
-        if (have >= 0) return have;
+        int existing = Block(rom);
+        if (existing >= 0) return existing;
         int block = L2Rom.Allocate(rom, BlockSize);
         int code = L2Rom.FileToSnes(block + CodeAt), table = L2Rom.FileToSnes(block + TableAt);
         int bank = code >> 16;
@@ -124,29 +122,30 @@ public static class L2AttackNames
         return block;
     }
 
-    /// <summary>The hook (JSL from $85:954A; A = the name number, 16-bit A and X, data bank $85). 01-8A: Y = the game's
-    /// record, back to its copy. 8B and up: copies the record as the game does (data bank $7E for the stores), then
-    /// returns to $85:9572, past the game's copy.</summary>
+    // the hook (JSL from $85:954A, A = the name number, 16-bit A and X, data bank $85)
+    // 01-8A: Y = the game's record, back to its copy
+    // 8B and up: copies the record like the game does (data bank $7E for the stores), then returns to $85:9572,
+    // past the game's copy
     private static byte[] Assemble(int code, int table, int bank)
     {
-        var a = new L2AiScripts.Asm(code);
-        void Long(byte op, int addr) => a.B(op, (byte)addr, (byte)(addr >> 8), (byte)(addr >> 16));
-        a.B(0xC9, First, 0x00); a.Br(0xB0, "added");          // CMP #First / BCS
-        a.B(0x3A, 0x0A, 0xAA);                                // DEC / ASL / TAX (as the game)
+        var asm = new L2AiScripts.Asm(code);
+        void Long(byte op, int addr) => asm.B(op, (byte)addr, (byte)(addr >> 8), (byte)(addr >> 16));
+        asm.B(0xC9, First, 0x00); asm.Br(0xB0, "added");          // CMP #First / BCS
+        asm.B(0x3A, 0x0A, 0xAA);                                // DEC / ASL / TAX (same as the game)
         Long(0xBF, 0x85F2D7);                                 // LDA $85:F2D7,X
-        a.B(0xA8, 0x6B);                                      // TAY / RTL
-        a.Label("added");
-        a.B(0x38, 0xE9, First, 0x00, 0x0A, 0xAA);             // SEC / SBC #First / ASL / TAX
-        Long(0xBF, table); a.B(0xAA);                         // LDA table,X / TAX (the record)
-        a.B(0x8B, 0xE2, 0x20, 0xA9, 0x7E, 0x48, 0xAB, 0xC2, 0x20);   // PHB / SEP / LDA #$7E / PHA / PLB / REP
-        Long(0xBF, bank << 16); a.B(0x8D, 0x62, 0x12);        // LDA bank:0000,X / STA $1262
-        a.B(0xA0, 0x00, 0x00);                                // LDY #0
-        a.Label("copy");
-        Long(0xBF, bank << 16 | 1); a.B(0x99, 0x69, 0x12);    // LDA bank:0001,X / STA $1269,Y
-        a.B(0xE8, 0xE8, 0xC8, 0xC8, 0xC0, 0x24, 0x00); a.Br(0xD0, "copy");   // INX INX INY INY / CPY #$24 / BNE
-        a.B(0xE2, 0x20); Long(0xBF, bank << 16 | 1); a.B(0x99, 0x69, 0x12, 0xC2, 0x20);   // the last byte, as the game
-        a.B(0xAB);                                            // PLB
-        a.B(0xA9, 0x71, 0x95, 0x83, 0x01, 0x6B);              // LDA #$9571 / STA 1,S / RTL (to $85:9572)
-        return a.Done();
+        asm.B(0xA8, 0x6B);                                      // TAY / RTL
+        asm.Label("added");
+        asm.B(0x38, 0xE9, First, 0x00, 0x0A, 0xAA);             // SEC / SBC #First / ASL / TAX
+        Long(0xBF, table); asm.B(0xAA);                         // LDA table,X / TAX (the record)
+        asm.B(0x8B, 0xE2, 0x20, 0xA9, 0x7E, 0x48, 0xAB, 0xC2, 0x20);   // PHB / SEP / LDA #$7E / PHA / PLB / REP
+        Long(0xBF, bank << 16); asm.B(0x8D, 0x62, 0x12);        // LDA bank:0000,X / STA $1262
+        asm.B(0xA0, 0x00, 0x00);                                // LDY #0
+        asm.Label("copy");
+        Long(0xBF, bank << 16 | 1); asm.B(0x99, 0x69, 0x12);    // LDA bank:0001,X / STA $1269,Y
+        asm.B(0xE8, 0xE8, 0xC8, 0xC8, 0xC0, 0x24, 0x00); asm.Br(0xD0, "copy");   // INX INX INY INY / CPY #$24 / BNE
+        asm.B(0xE2, 0x20); Long(0xBF, bank << 16 | 1); asm.B(0x99, 0x69, 0x12, 0xC2, 0x20);   // the last byte, same as the game
+        asm.B(0xAB);                                            // PLB
+        asm.B(0xA9, 0x71, 0x95, 0x83, 0x01, 0x6B);              // LDA #$9571 / STA 1,S / RTL (to $85:9572)
+        return asm.Done();
     }
 }

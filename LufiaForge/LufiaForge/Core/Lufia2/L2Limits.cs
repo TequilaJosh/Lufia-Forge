@@ -1,26 +1,23 @@
 namespace LufiaForge.Core.Lufia2;
 
-/// <summary>
-/// Lufia II: higher limits. Levels up to 255 (saved, shown with 3 digits: the idea and the menu level bytes are
-/// Colmines92's patch, shared on the Lufia Forge Discord), HP and MP up to 9999 (saved, shown with 4 digits).
-/// <list type="bullet">
-/// <item>Save data keeps its size (the slot is full): a hero record (<c>$85:CA22</c> packs, <c>$85:C754</c> unpacks) kept
-/// the level as level &lt;&lt; 1 (7 bits: level 128 came back as 0, and the load's check, <c>$85:C932</c>, then gave the
-/// party the new-game data) and HP/MP as 10 bits. Now the level byte is the level rotated left (bit 7 in bit 0, which was
-/// always 0) and HP/MP bits 10-13 go in the record's +95 byte (always 0: nothing else uses it). Old saves read the same.
-/// The file screen reads the level the same way (<c>$82:F291</c>).</item>
-/// <item>Growth: rows of 8 levels, 13 in the table; past level 104 the game read the next hero's table. Row 12 now goes
-/// on for every level from 96 (<c>$81:F8C5</c>). EXP: up to FFFFFF instead of 9,999,999 (the three clamps), and a table for
-/// levels 98-255 (<c>$81:FABB</c>, which gave 9,999,999 for every level from 98): 98 keeps 9,999,999, then rising to 16.4
-/// million at 254.</item>
-/// <item>Field menu hero header (<c>$8E:D439</c>: main menu, status, equip, items): "L" and 3 digits, HP and MP
-/// "1234/5678" (the 999 branches out). Save / load screen: 3-digit level (<c>$8E:CA96</c>).</item>
-/// <item>Battle status bar: "L" and 3 digits (<c>$81:E1EC</c>); HP and MP as the game shows them below 1000 and with 4
-/// digits and a one-tile label from 1000 (<c>$81:E2C8</c>); the gauge no longer overflows from HP 2521 (<c>$81:E308</c>).</item>
-/// </list>
-/// Checked in the game (BizHawk): the battle bar at levels 7, 99, 150 and HP up to 9999; the menu screens; saving a hero at
-/// level 200 with HP 1100 and loading it back; levelling from 98 past 127. The level cap itself is on the Settings page.
-/// </summary>
+// lufia 2: higher limits. levels up to 255 (saved, shown with 3 digits: the idea and the menu level bytes are
+// Colmines92's patch, shared on the Lufia Forge Discord), HP and MP up to 9999 (saved, shown with 4 digits)
+// - save data keeps its size (the slot is full). a hero record ($85:CA22 packs, $85:C754 unpacks) kept the level as
+//   level << 1 (7 bits: level 128 came back as 0, and then the load's check, $85:C932, gave the party the new-game
+//   data) and HP/MP as 10 bits. now the level byte is the level rotated left (bit 7 in bit 0, which was always 0)
+//   and HP/MP bits 10-13 go in the record's +95 byte (always 0, nothing else uses it). old saves read the same. the
+//   file screen reads the level the same way ($82:F291)
+// - growth: rows of 8 levels, 13 in the table, and past level 104 the game read the next hero's table. now row 12
+//   goes on for every level from 96 ($81:F8C5). EXP: up to FFFFFF instead of 9,999,999 (the three clamps), and a
+//   table for levels 98-255 ($81:FABB, which gave 9,999,999 for every level from 98): 98 keeps 9,999,999, then it
+//   rises to 16.4 million at 254
+// - field menu hero header ($8E:D439: main menu, status, equip, items): "L" and 3 digits, HP and MP "1234/5678" (the
+//   999 branches out). save / load screen: 3-digit level ($8E:CA96)
+// - battle status bar: "L" and 3 digits ($81:E1EC). HP and MP the way the game shows them below 1000 and with 4
+//   digits and a one-tile label from 1000 ($81:E2C8). the gauge doesn't overflow from HP 2521 any more ($81:E308)
+// checked in the game (BizHawk): the battle bar at levels 7, 99, 150 and HP up to 9999, the menu screens, saving a
+// hero at level 200 with HP 1100 and loading it back, levelling from 98 past 127. the level cap itself is on the
+// Settings page
 public static class L2Limits
 {
     private static HookPatch? _patch;
@@ -29,7 +26,7 @@ public static class L2Limits
     public const int MaxLevel = 255;
 
     public static bool IsApplied(RomBuffer rom) => Patch.AppliedAt(rom, L2Rom.SnesToFile) >= 0;
-    /// <summary>Every place the patch changes still holds the game's bytes.</summary>
+    // every place the patch changes still holds the game's bytes
     public static bool IsOriginal(RomBuffer rom) => Patch.IsOriginal(rom);
 
     public static void Apply(RomBuffer rom)
@@ -38,26 +35,26 @@ public static class L2Limits
         if (!IsOriginal(rom)) throw new InvalidOperationException("Some of the code and menu bytes the higher limits change aren't the US game's (another patch or a fan hack changed them), so it can't be added safely.");
         L2Rom.AllOrNothing(rom, () =>
         {
-            int at = L2Rom.Allocate(rom, Patch.Code.Bytes.Length);
-            Patch.Write(rom, at, L2Rom.FileToSnes(at));
-            return at;
+            int codeAt = L2Rom.Allocate(rom, Patch.Code.Bytes.Length);
+            Patch.Write(rom, codeAt, L2Rom.FileToSnes(codeAt));
+            return codeAt;
         });
     }
 
-    /// <summary>The EXP table's place in the added block: its last 158 entries of 3 bytes (levels 98-255).</summary>
+    // the EXP table's place in the added block: its last 158 entries of 3 bytes (levels 98-255)
     private const int ExpLevels = 158;
 
-    /// <summary>The total EXP the game asks for to leave <paramref name="level"/> (98 and up) with the patch in, else null.</summary>
+    // the total EXP the game asks for to leave level (98 and up) with the patch in, else null
     public static int? ExpForLevel(RomBuffer rom, int level)
     {
         if (level < 98) return null;
-        int at = Patch.AppliedAt(rom, L2Rom.SnesToFile);
-        if (at < 0) return null;
-        int t = at + Patch.Code.Bytes.Length - ExpLevels * 3 + (Math.Min(level, 255) - 98) * 3;
-        return (int)rom.ReadUInt24Le(t);
+        int codeAt = Patch.AppliedAt(rom, L2Rom.SnesToFile);
+        if (codeAt < 0) return null;
+        int entryAt = codeAt + Patch.Code.Bytes.Length - ExpLevels * 3 + (Math.Min(level, 255) - 98) * 3;
+        return (int)rom.ReadUInt24Le(entryAt);
     }
 
-    /// <summary>Puts the game's code back (a level cap above 99 goes back to 99: the game's EXP stops there).</summary>
+    // puts the game's code back (a level cap above 99 goes back to 99, the game's EXP stops there)
     public static void Remove(RomBuffer rom)
     {
         if (!IsApplied(rom)) return;

@@ -3,24 +3,22 @@ using Kind = LufiaForge.Core.Lufia2.L2AiScripts.Kind;
 
 namespace LufiaForge.Core.Lufia2;
 
-/// <summary>
-/// Lufia II's named monster attacks, as the monsters' battle scripts make them. An attack is the run of steps around a
-/// "show an attack name" (1E) up to the action (00 End or 01): who it targets (32), its element (1F), criticals (20),
-/// its own damage (21 physical, 22 magic, 23 fixed), effects (27 cause a status, 26 cure, 25 a stat up or down, 24
-/// restore...), its animation (5A) and sound (3D), and how it hits: with no damage step it is a normal attack under
-/// that name (Beak bash), 0C 23 05 makes it only its effects (Chorus, Flame defender), 41 only shows the name (taunts).
-/// Read from the game's 136 named attacks (2026-11-11).
-///
-/// Steps are changed where they are, so whatever else the script does (counters, chances, shared scripts) stays as it
-/// was; a step added at the attack's first step takes over the jumps that went there.
-/// </summary>
+// lufia 2's named monster attacks, the way the monsters' battle scripts build them. an attack is the run of steps
+// around a "show an attack name" (1E) up to the action (00 End or 01): who it targets (32), its element (1F),
+// criticals (20), its own damage (21 physical, 22 magic, 23 fixed), effects (27 cause a status, 26 cure, 25 a stat
+// up or down, 24 restore...), its animation (5A) and sound (3D), and how it hits. with no damage step it's a normal
+// attack under that name (Beak bash), 0C 23 05 makes it only its effects (Chorus, Flame defender), 41 only shows
+// the name (taunts). read from the game's 136 named attacks (2026-11-11)
+//
+// we change steps where they are, so whatever else the script does (counters, chances, shared scripts) stays how
+// it was. a step added at the attack's first step takes over the jumps that went there
 public static class L2Attacks
 {
-    /// <summary>One attack in one script: the monster, which script (its turn or when it is hit), the attack name and
-    /// which one of that name in the script (a script can use a name twice).</summary>
+    // one attack in one script: the monster, which script (its turn or when it gets hit), the attack name and which
+    // one of that name in the script (a script can use a name twice)
     public sealed record Use(Kind Kind, int Monster, int Name, int Ordinal);
 
-    /// <summary>The steps of one attack: <see cref="From"/>..<see cref="To"/> (indices into the script's steps).</summary>
+    // the steps of one attack: From..To (indexes into the script's steps)
     public sealed class Block
     {
         public List<Step> Steps { get; init; } = new();
@@ -33,15 +31,15 @@ public static class L2Attacks
         public Step? End => Steps[To].Op is 0x00 or 0x01 ? Steps[To] : null;
     }
 
-    /// <summary>Steps that start another path: an attack never reaches over them.</summary>
-    private static bool Breaks(Step s) => s.Op is 0x00 or 0x01 or 0x03 or 0x04 or 0x05 or >= 0x06 and <= 0x0B or 0x3F or 0x46 or 0x43 or 0x4F;
+    // steps that start another path, an attack never reaches over them
+    private static bool Breaks(Step step) => step.Op is 0x00 or 0x01 or 0x03 or 0x04 or 0x05 or >= 0x06 and <= 0x0B or 0x3F or 0x46 or 0x43 or 0x4F;
 
-    private static bool IsTarget(IReadOnlyList<Step> steps, Step s) => steps.Any(o => o.Targets.Contains(s));
+    private static bool IsTarget(IReadOnlyList<Step> steps, Step step) => steps.Any(other => other.Targets.Contains(step));
 
-    /// <summary>The attacks (blocks around each 1E) of a script.</summary>
+    // the attacks (blocks around each 1E) of a script
     public static List<Block> Blocks(List<Step> steps)
     {
-        var l = new List<Block>();
+        var blocks = new List<Block>();
         for (int i = 0; i < steps.Count; i++)
         {
             if (steps[i].Op != 0x1E) continue;
@@ -50,110 +48,110 @@ public static class L2Attacks
             int to = i;
             while (to + 1 < steps.Count && steps[to].Op is not (0x00 or 0x01) && !Breaks(steps[to]) && !IsTarget(steps, steps[to + 1])) to++;
             if (Breaks(steps[to]) && steps[to].Op is not (0x00 or 0x01) && to > i) to--;
-            l.Add(new Block { Steps = steps, From = from, To = to, NameAt = i });
+            blocks.Add(new Block { Steps = steps, From = from, To = to, NameAt = i });
         }
-        return l;
+        return blocks;
     }
 
-    /// <summary>Every named attack in the monsters' scripts (as they run now: edited ones included).</summary>
+    // every named attack in the monsters' scripts (as they run now, edited ones included)
     public static List<Use> Uses(RomBuffer rom)
     {
         var uses = new List<Use>();
         int count = L2Battle.MonsterCountIn(rom);
-        for (int m = 0; m < count; m++)
+        for (int monster = 0; monster < count; monster++)
             foreach (var kind in new[] { Kind.MonsterAttack, Kind.MonsterDefense })
             {
                 List<Step> steps;
-                try { steps = L2AiScripts.Load(rom, kind, m).Steps; } catch (Exception) { continue; }
+                try { steps = L2AiScripts.Load(rom, kind, monster).Steps; } catch (Exception) { continue; }
                 var seen = new Dictionary<int, int>();
-                foreach (var b in Blocks(steps))
+                foreach (var block in Blocks(steps))
                 {
-                    int name = b.NameStep.Args[0];
-                    int k = seen.GetValueOrDefault(name);
-                    seen[name] = k + 1;
-                    uses.Add(new Use(kind, m, name, k));
+                    int name = block.NameStep.Args[0];
+                    int ordinal = seen.GetValueOrDefault(name);
+                    seen[name] = ordinal + 1;
+                    uses.Add(new Use(kind, monster, name, ordinal));
                 }
             }
         return uses;
     }
 
-    /// <summary>The script of a use and its attack's steps.</summary>
-    public static Block Open(RomBuffer rom, Use u)
+    // the script of a use and its attack's steps
+    public static Block Open(RomBuffer rom, Use use)
     {
-        var steps = L2AiScripts.Load(rom, u.Kind, u.Monster).Steps;
-        return Blocks(steps).Where(b => b.NameStep.Args[0] == u.Name).ElementAtOrDefault(u.Ordinal)
+        var steps = L2AiScripts.Load(rom, use.Kind, use.Monster).Steps;
+        return Blocks(steps).Where(b => b.NameStep.Args[0] == use.Name).ElementAtOrDefault(use.Ordinal)
                ?? throw new InvalidOperationException("That attack isn't in the monster's script any more.");
     }
 
-    public static void Save(RomBuffer rom, Use u, Block b) => L2AiScripts.Save(rom, u.Kind, u.Monster, b.Steps);
+    public static void Save(RomBuffer rom, Use use, Block block) => L2AiScripts.Save(rom, use.Kind, use.Monster, block.Steps);
 
-    /// <summary>Changes several uses (every monster's, "change it for all") and writes each script once: two uses in one
-    /// script were each opened on a copy of the whole script, so the second save put back the first one's old steps.
-    /// In one script the later uses are changed first (an inserted step doesn't move the earlier ones). All are changed
-    /// before anything is written, and the writes go in all together or not at all.</summary>
+    // changes several uses (every monster's, "change it for all") and writes each script once. before, two uses in
+    // one script were each opened on a copy of the whole script, so the second save put back the first one's old
+    // steps. in one script the later uses get changed first (an inserted step doesn't move the earlier ones).
+    // everything is changed before anything gets written, and the writes go in all together or not at all
     public static void ChangeAll(RomBuffer rom, IEnumerable<Use> uses, Action<Block> op)
     {
         var scripts = new List<(Use First, List<Step> Steps)>();
-        foreach (var g in uses.GroupBy(u => (u.Kind, u.Monster)))
+        foreach (var script in uses.GroupBy(u => (u.Kind, u.Monster)))
         {
-            var steps = L2AiScripts.Load(rom, g.Key.Kind, g.Key.Monster).Steps;
-            foreach (var u in g.OrderByDescending(u => u.Ordinal))
-                op(Blocks(steps).Where(b => b.NameStep.Args[0] == u.Name).ElementAtOrDefault(u.Ordinal)
+            var steps = L2AiScripts.Load(rom, script.Key.Kind, script.Key.Monster).Steps;
+            foreach (var use in script.OrderByDescending(u => u.Ordinal))
+                op(Blocks(steps).Where(b => b.NameStep.Args[0] == use.Name).ElementAtOrDefault(use.Ordinal)
                    ?? throw new InvalidOperationException("That attack isn't in the monster's script any more."));
-            scripts.Add((g.First(), steps));
+            scripts.Add((script.First(), steps));
         }
-        L2Rom.AllOrNothing(rom, () => { foreach (var (u, steps) in scripts) L2AiScripts.Save(rom, u.Kind, u.Monster, steps); return 0; });
+        L2Rom.AllOrNothing(rom, () => { foreach (var (use, steps) in scripts) L2AiScripts.Save(rom, use.Kind, use.Monster, steps); return 0; });
     }
 
-    // ── changing steps where they are ─────────────────────────────────────────
+    // changing steps where they are
 
-    /// <summary>Puts a new step at <paramref name="at"/> (inside the attack, or right after it). At the attack's first
-    /// step it takes over the jumps that went there, so every path into the attack runs it.</summary>
-    public static void Insert(Block b, int at, Step s)
+    // puts a new step at index (inside the attack, or right after it). at the attack's first step it takes over the
+    // jumps that went there, so every path into the attack runs it
+    public static void Insert(Block block, int index, Step step)
     {
-        at = Math.Clamp(at, b.From, b.To + 1);
-        if (at == b.From && b.From < b.Steps.Count)
+        index = Math.Clamp(index, block.From, block.To + 1);
+        if (index == block.From && block.From < block.Steps.Count)
         {
-            var first = b.Steps[b.From];
-            foreach (var o in b.Steps)
-                for (int j = 0; j < o.Targets.Length; j++)
-                    if (o.Targets[j] == first) o.Targets[j] = s;
+            var first = block.Steps[block.From];
+            foreach (var other in block.Steps)
+                for (int j = 0; j < other.Targets.Length; j++)
+                    if (other.Targets[j] == first) other.Targets[j] = step;
         }
-        b.Steps.Insert(at, s);
-        b.To++;
-        if (b.NameAt >= at) b.NameAt++;
+        block.Steps.Insert(index, step);
+        block.To++;
+        if (block.NameAt >= index) block.NameAt++;
     }
 
-    /// <summary>Takes a step out; jumps that went to it go to the step that takes its place.</summary>
-    public static void Remove(Block b, Step s)
+    // takes a step out, jumps that went to it go to the step that takes its place
+    public static void Remove(Block block, Step step)
     {
-        int i = b.Steps.IndexOf(s);
-        if (i < 0 || s.Op == 0x1E) return;
-        b.Steps.RemoveAt(i);
-        var next = b.Steps.ElementAtOrDefault(i) ?? b.Steps.LastOrDefault();
-        foreach (var o in b.Steps)
-            for (int j = 0; j < o.Targets.Length; j++)
-                if (o.Targets[j] == s) o.Targets[j] = next;
-        b.To--;
-        if (b.NameAt > i) b.NameAt--;
+        int i = block.Steps.IndexOf(step);
+        if (i < 0 || step.Op == 0x1E) return;
+        block.Steps.RemoveAt(i);
+        var next = block.Steps.ElementAtOrDefault(i) ?? block.Steps.LastOrDefault();
+        foreach (var other in block.Steps)
+            for (int j = 0; j < other.Targets.Length; j++)
+                if (other.Targets[j] == step) other.Targets[j] = next;
+        block.To--;
+        if (block.NameAt > i) block.NameAt--;
     }
 
     private static Step Make(byte op, params byte[] args)
     {
-        var s = L2AiScripts.New(op);
-        Array.Copy(args, s.Args, Math.Min(args.Length, s.Args.Length));
-        return s;
+        var step = L2AiScripts.New(op);
+        Array.Copy(args, step.Args, Math.Min(args.Length, step.Args.Length));
+        return step;
     }
 
-    /// <summary>Where a step of an effect or a damage goes: before the name, as the game writes them.</summary>
-    private static int BeforeName(Block b) => b.NameAt;
+    // where an effect or damage step goes: before the name, the way the game writes them
+    private static int BeforeName(Block block) => block.NameAt;
 
-    /// <summary>Where the animation, sound and the like go: after the name and the steps that follow it, before the action.</summary>
-    private static int BeforeAction(Block b) => b.End != null ? b.To : b.To + 1;
+    // where the animation, sound and so on go: after the name and the steps that follow it, before the action
+    private static int BeforeAction(Block block) => block.End != null ? block.To : block.To + 1;
 
-    // ── target ─────────────────────────────────────────────────────────────────
+    // target
 
-    /// <summary>Who the attack goes to, as the target steps (32) the game writes for it. "" = the target its script picked before.</summary>
+    // who the attack goes to, as the target steps (32) the game writes for it. "" = the target its script picked before
     public static readonly (string Key, string Label, byte[] Modes)[] Targets =
     {
         ("", "the target picked before (not set here)", Array.Empty<byte>()),
@@ -165,24 +163,24 @@ public static class L2Attacks
         ("hero", "a random hero", new byte[] { 0x08 }),
     };
 
-    public static string Target(Block b)
+    public static string Target(Block block)
     {
-        var modes = b.All.Where(s => s.Op == 0x32).Select(s => s.Args[0]).ToArray();
+        var modes = block.All.Where(s => s.Op == 0x32).Select(s => s.Args[0]).ToArray();
         if (modes.Length == 0) return "";
         if (modes.SequenceEqual(new byte[] { 0x05 })) return "foes";   // Gades: everyone on the side of the foe it attacks
-        var t = Targets.FirstOrDefault(t => t.Modes.SequenceEqual(modes));
-        return t.Key ?? $"modes {Convert.ToHexString(modes)}";
+        var target = Targets.FirstOrDefault(t => t.Modes.SequenceEqual(modes));
+        return target.Key ?? $"modes {Convert.ToHexString(modes)}";
     }
 
-    public static void SetTarget(Block b, string key)
+    public static void SetTarget(Block block, string key)
     {
-        var t = Targets.FirstOrDefault(x => x.Key == key);
-        if (t.Modes == null) return;
-        foreach (var s in b.All.Where(s => s.Op == 0x32).ToList()) Remove(b, s);
-        for (int k = t.Modes.Length - 1; k >= 0; k--) Insert(b, b.From, Make(0x32, t.Modes[k]));
+        var target = Targets.FirstOrDefault(x => x.Key == key);
+        if (target.Modes == null) return;
+        foreach (var s in block.All.Where(s => s.Op == 0x32).ToList()) Remove(block, s);
+        for (int k = target.Modes.Length - 1; k >= 0; k--) Insert(block, block.From, Make(0x32, target.Modes[k]));
     }
 
-    // ── how it hits ───────────────────────────────────────────────────────────
+    // how it hits
 
     public enum Hit { Attack, Damage, EffectsOnly, ShowOnly }
 
@@ -194,166 +192,166 @@ public static class L2Attacks
         (Hit.ShowOnly, "only shows the name (nothing happens)"),
     };
 
-    private static bool IsEffectsOnly(Step s) => s.Op == 0x0C && s.Args.Length >= 3 && s.Args[0] == 0x23 && s.Args[1] == 0x05 && s.Args[2] == 0x00;
+    private static bool IsEffectsOnly(Step step) => step.Op == 0x0C && step.Args.Length >= 3 && step.Args[0] == 0x23 && step.Args[1] == 0x05 && step.Args[2] == 0x00;
 
-    public static Hit HowItHits(Block b)
+    public static Hit HowItHits(Block block)
     {
-        if (b.All.Any(s => s.Op == 0x41)) return Hit.ShowOnly;
-        if (b.All.Any(s => s.Op is 0x21 or 0x22 or 0x23)) return Hit.Damage;
-        if (b.All.Any(IsEffectsOnly)) return Hit.EffectsOnly;
+        if (block.All.Any(s => s.Op == 0x41)) return Hit.ShowOnly;
+        if (block.All.Any(s => s.Op is 0x21 or 0x22 or 0x23)) return Hit.Damage;
+        if (block.All.Any(IsEffectsOnly)) return Hit.EffectsOnly;
         return Hit.Attack;
     }
 
-    public static void SetHowItHits(Block b, Hit h)
+    public static void SetHowItHits(Block block, Hit hit)
     {
-        if (h == HowItHits(b)) return;
-        foreach (var s in b.All.Where(s => s.Op == 0x41 || IsEffectsOnly(s)).ToList()) Remove(b, s);
-        if (h != Hit.Damage)
+        if (hit == HowItHits(block)) return;
+        foreach (var s in block.All.Where(s => s.Op == 0x41 || IsEffectsOnly(s)).ToList()) Remove(block, s);
+        if (hit != Hit.Damage)
         {
-            // the damage goes; its element stays (as a step of its own)
-            int element = Element(b);
-            foreach (var s in b.All.Where(s => s.Op is 0x21 or 0x22 or 0x23 || IsSpreadStep(s)).ToList()) Remove(b, s);
-            if (element != 0) SetElement(b, element);
+            // the damage goes but its element stays (as a step of its own)
+            int element = Element(block);
+            foreach (var s in block.All.Where(s => s.Op is 0x21 or 0x22 or 0x23 || IsSpreadStep(s)).ToList()) Remove(block, s);
+            if (element != 0) SetElement(block, element);
         }
-        switch (h)
+        switch (hit)
         {
             case Hit.Damage:
-                if (!b.All.Any(s => s.Op is 0x21 or 0x22 or 0x23)) Insert(b, BeforeName(b), Make(0x21, 0x00, 0x00, 100, 0x00, 0x00));
+                if (!block.All.Any(s => s.Op is 0x21 or 0x22 or 0x23)) Insert(block, BeforeName(block), Make(0x21, 0x00, 0x00, 100, 0x00, 0x00));
                 break;
-            case Hit.EffectsOnly: Insert(b, b.NameAt + 1, Make(0x0C, 0x23, 0x05, 0x00)); break;
-            case Hit.ShowOnly: Insert(b, BeforeAction(b), Make(0x41)); break;
+            case Hit.EffectsOnly: Insert(block, block.NameAt + 1, Make(0x0C, 0x23, 0x05, 0x00)); break;
+            case Hit.ShowOnly: Insert(block, BeforeAction(block), Make(0x41)); break;
         }
     }
 
-    // ── damage ─────────────────────────────────────────────────────────────────
+    // damage
 
     public enum DamageKind { Physical = 0x21, Magic = 0x22, Fixed = 0x23 }
 
-    public static Step? DamageStep(Block b) => b.All.FirstOrDefault(s => s.Op is 0x21 or 0x22 or 0x23);
+    public static Step? DamageStep(Block block) => block.All.FirstOrDefault(s => s.Op is 0x21 or 0x22 or 0x23);
 
-    /// <summary>The game's spread: every damage step sets register 2B to 32 (up to 12% more at random); the byte in 21
-    /// and 22 is read and ignored ($85:B93D).</summary>
+    // the game's spread: every damage step sets register 2B to 32 (up to 12% more at random). the byte in 21 and 22
+    // gets read and ignored ($85:B93D)
     public const int GameSpread = 32;
 
-    private static bool IsSpreadStep(Step s) => s.Op == 0x0C && s.Args.Length >= 3 && s.Args[0] == 0x2B && s.Args[2] == 0x00;
+    private static bool IsSpreadStep(Step step) => step.Op == 0x0C && step.Args.Length >= 3 && step.Args[0] == 0x2B && step.Args[2] == 0x00;
 
-    /// <summary>The "set the damage spread" step after the damage, when the attack has one.</summary>
-    public static Step? SpreadStep(Block b) => DamageStep(b) is { } d ? b.All.SkipWhile(s => s != d).FirstOrDefault(IsSpreadStep) : null;
+    // the "set the damage spread" step after the damage, if the attack has one
+    public static Step? SpreadStep(Block block) => DamageStep(block) is { } damage ? block.All.SkipWhile(s => s != damage).FirstOrDefault(IsSpreadStep) : null;
 
-    /// <summary>The damage: its kind, how much (null when the script works it out in a counter), the spread (of 256,
-    /// <see cref="GameSpread"/> unless a step after the damage sets it).</summary>
-    public static (DamageKind Kind, int? Power, int Spread)? Damage(Block b)
+    // the damage: its kind, how much (null when the script works it out in a counter), the spread (of 256,
+    // GameSpread unless a step after the damage sets it)
+    public static (DamageKind Kind, int? Power, int Spread)? Damage(Block block)
     {
-        var s = DamageStep(b);
-        if (s == null) return null;
-        int spread = SpreadStep(b)?.Args[1] ?? GameSpread;
-        if (s.Op == 0x23) return (DamageKind.Fixed, s.Args[0] | s.Args[1] << 8, spread);
-        int v = s.Args[2] | s.Args[3] << 8;
-        return ((DamageKind)s.Op, (v >> 8) == 0x80 ? null : (short)v, spread);
+        var step = DamageStep(block);
+        if (step == null) return null;
+        int spread = SpreadStep(block)?.Args[1] ?? GameSpread;
+        if (step.Op == 0x23) return (DamageKind.Fixed, step.Args[0] | step.Args[1] << 8, spread);
+        int power = step.Args[2] | step.Args[3] << 8;
+        return ((DamageKind)step.Op, (power >> 8) == 0x80 ? null : (short)power, spread);
     }
 
-    public static void SetDamageKind(Block b, DamageKind k)
+    public static void SetDamageKind(Block block, DamageKind kind)
     {
-        var s = DamageStep(b);
-        if (s == null) { SetHowItHits(b, Hit.Damage); s = DamageStep(b)!; }
-        if ((int)k == s.Op) return;
-        int power = Damage(b)?.Power ?? 100, element = s.Op is 0x21 or 0x22 ? s.Args[0] | s.Args[1] << 8 : 0;
-        var n = k == DamageKind.Fixed
+        var step = DamageStep(block);
+        if (step == null) { SetHowItHits(block, Hit.Damage); step = DamageStep(block)!; }
+        if ((int)kind == step.Op) return;
+        int power = Damage(block)?.Power ?? 100, element = step.Op is 0x21 or 0x22 ? step.Args[0] | step.Args[1] << 8 : 0;
+        var newStep = kind == DamageKind.Fixed
             ? Make(0x23, (byte)power, (byte)(power >> 8))
-            : Make((byte)k, (byte)element, (byte)(element >> 8), (byte)power, (byte)(power >> 8), 0);
-        int at = b.Steps.IndexOf(s);
-        Remove(b, s);
-        Insert(b, at, n);
+            : Make((byte)kind, (byte)element, (byte)(element >> 8), (byte)power, (byte)(power >> 8), 0);
+        int index = block.Steps.IndexOf(step);
+        Remove(block, step);
+        Insert(block, index, newStep);
     }
 
-    public static void SetPower(Block b, int power)
+    public static void SetPower(Block block, int power)
     {
-        var s = DamageStep(b);
-        if (s == null) { SetHowItHits(b, Hit.Damage); s = DamageStep(b)!; }
+        var step = DamageStep(block);
+        if (step == null) { SetHowItHits(block, Hit.Damage); step = DamageStep(block)!; }
         power = Math.Clamp(power, 0, 0x7FFF);
-        if (s.Op == 0x23) { s.Args[0] = (byte)power; s.Args[1] = (byte)(power >> 8); }
-        else { s.Args[2] = (byte)power; s.Args[3] = (byte)(power >> 8); }
+        if (step.Op == 0x23) { step.Args[0] = (byte)power; step.Args[1] = (byte)(power >> 8); }
+        else { step.Args[2] = (byte)power; step.Args[3] = (byte)(power >> 8); }
     }
 
-    /// <summary>The spread (of 256): the game's 32 takes the step out, any other value sets register 2B after the damage.</summary>
-    public static void SetSpread(Block b, int spread)
+    // the spread (of 256): the game's 32 takes the step out, any other value sets register 2B after the damage
+    public static void SetSpread(Block block, int spread)
     {
-        var d = DamageStep(b);
-        if (d == null) return;
+        var damage = DamageStep(block);
+        if (damage == null) return;
         spread = Math.Clamp(spread, 0, 255);
-        var s = SpreadStep(b);
-        if (spread == GameSpread) { if (s != null) Remove(b, s); return; }
-        if (s == null) Insert(b, b.Steps.IndexOf(d) + 1, s = Make(0x0C, 0x2B, 0, 0));
-        s.Args[1] = (byte)spread;
+        var spreadStep = SpreadStep(block);
+        if (spread == GameSpread) { if (spreadStep != null) Remove(block, spreadStep); return; }
+        if (spreadStep == null) Insert(block, block.Steps.IndexOf(damage) + 1, spreadStep = Make(0x0C, 0x2B, 0, 0));
+        spreadStep.Args[1] = (byte)spread;
     }
 
-    // ── element ───────────────────────────────────────────────────────────────
+    // element
 
-    /// <summary>The attack's element bits: its "set the element" step and its damage's element together.</summary>
-    public static int Element(Block b)
+    // the attack's element bits: its "set the element" step and its damage's element together
+    public static int Element(Block block)
     {
-        int w = 0;
-        if (b.Find(0x1F) is { } e) w |= e.Args[0] | e.Args[1] << 8;
-        if (DamageStep(b) is { Op: 0x21 or 0x22 } d) w |= d.Args[0] | d.Args[1] << 8;
-        return w;
+        int elementBits = 0;
+        if (block.Find(0x1F) is { } elementStep) elementBits |= elementStep.Args[0] | elementStep.Args[1] << 8;
+        if (DamageStep(block) is { Op: 0x21 or 0x22 } damage) elementBits |= damage.Args[0] | damage.Args[1] << 8;
+        return elementBits;
     }
 
-    public static void SetElement(Block b, int w)
+    public static void SetElement(Block block, int elementBits)
     {
-        var e = b.Find(0x1F);
-        var d = DamageStep(b) is { Op: 0x21 or 0x22 } x ? x : null;
-        bool dHas = d != null && (d.Args[0] | d.Args[1]) != 0;
-        if (e != null && w == 0 && d == null) { Remove(b, e); return; }
-        if (e != null) { e.Args[0] = (byte)w; e.Args[1] = (byte)(w >> 8); }
-        if (d != null && (dHas || e == null)) { d.Args[0] = (byte)w; d.Args[1] = (byte)(w >> 8); }
-        if (e == null && d == null && w != 0) Insert(b, b.From, Make(0x1F, (byte)w, (byte)(w >> 8)));
+        var elementStep = block.Find(0x1F);
+        var damage = DamageStep(block) is { Op: 0x21 or 0x22 } x ? x : null;
+        bool damageHasElement = damage != null && (damage.Args[0] | damage.Args[1]) != 0;
+        if (elementStep != null && elementBits == 0 && damage == null) { Remove(block, elementStep); return; }
+        if (elementStep != null) { elementStep.Args[0] = (byte)elementBits; elementStep.Args[1] = (byte)(elementBits >> 8); }
+        if (damage != null && (damageHasElement || elementStep == null)) { damage.Args[0] = (byte)elementBits; damage.Args[1] = (byte)(elementBits >> 8); }
+        if (elementStep == null && damage == null && elementBits != 0) Insert(block, block.From, Make(0x1F, (byte)elementBits, (byte)(elementBits >> 8)));
     }
 
-    // ── criticals ─────────────────────────────────────────────────────────────
+    // criticals
 
-    public static (int Chance, int Multiplier)? Critical(Block b) => b.Find(0x20) is { } s ? (s.Args[0], s.Args[1]) : null;
+    public static (int Chance, int Multiplier)? Critical(Block block) => block.Find(0x20) is { } step ? (step.Args[0], step.Args[1]) : null;
 
-    public static void SetCritical(Block b, (int Chance, int Multiplier)? c)
+    public static void SetCritical(Block block, (int Chance, int Multiplier)? critical)
     {
-        var s = b.Find(0x20);
-        if (c == null) { if (s != null) Remove(b, s); return; }
-        if (s == null) Insert(b, b.From, s = Make(0x20));
-        s.Args[0] = (byte)Math.Clamp(c.Value.Chance, 0, 100);
-        s.Args[1] = (byte)Math.Clamp(c.Value.Multiplier, 0, 255);
+        var step = block.Find(0x20);
+        if (critical == null) { if (step != null) Remove(block, step); return; }
+        if (step == null) Insert(block, block.From, step = Make(0x20));
+        step.Args[0] = (byte)Math.Clamp(critical.Value.Chance, 0, 100);
+        step.Args[1] = (byte)Math.Clamp(critical.Value.Multiplier, 0, 255);
     }
 
-    // ── animation and sound ───────────────────────────────────────────────────
+    // animation and sound
 
-    /// <summary>The animation it plays (5A), or null when it has none of its own (the name's own animation plays).</summary>
-    public static int? Animation(Block b) => b.Find(0x5A)?.Args[0];
+    // the animation it plays (5A), null if it has none of its own (then the name's own animation plays)
+    public static int? Animation(Block block) => block.Find(0x5A)?.Args[0];
 
-    /// <summary>The animation that comes with attack name <paramref name="name"/> (the byte before the name; E0 = none).</summary>
+    // the animation that comes with attack name name (the byte before the name, E0 = none)
     public static int NameAnimation(RomBuffer rom, int name) =>
         name >= L2AttackNames.First ? L2AttackNames.Animation(rom, name)
         : name < 1 || name > L2AiScripts.AttackNameCount ? 0xE0 : rom.ReadByte(0x28000 + (rom.ReadUInt16Le(L2AiScripts.AttackNameTable + (name - 1) * 2) & 0x7FFF));
 
-    public static void SetAnimation(Block b, int? a)
+    public static void SetAnimation(Block block, int? animation)
     {
-        var s = b.Find(0x5A);
-        if (a == null) { if (s != null) Remove(b, s); return; }
-        if (s == null) Insert(b, b.NameAt + 1, s = Make(0x5A));
-        s.Args[0] = (byte)a.Value;
+        var step = block.Find(0x5A);
+        if (animation == null) { if (step != null) Remove(block, step); return; }
+        if (step == null) Insert(block, block.NameAt + 1, step = Make(0x5A));
+        step.Args[0] = (byte)animation.Value;
     }
 
-    public static int? Sound(Block b) => b.Find(0x3D)?.Args[0];
+    public static int? Sound(Block block) => block.Find(0x3D)?.Args[0];
 
-    public static void SetSound(Block b, int? id)
+    public static void SetSound(Block block, int? id)
     {
-        var s = b.Find(0x3D);
-        if (id == null) { if (s != null) Remove(b, s); return; }
-        if (s == null) Insert(b, BeforeAction(b), s = Make(0x3D));
-        s.Args[0] = (byte)id.Value;
+        var step = block.Find(0x3D);
+        if (id == null) { if (step != null) Remove(block, step); return; }
+        if (step == null) Insert(block, BeforeAction(block), step = Make(0x3D));
+        step.Args[0] = (byte)id.Value;
     }
 
-    // ── effects ───────────────────────────────────────────────────────────────
+    // effects
 
-    /// <summary>A kind of effect: a command, or (keys from 0x10000) one of the action's flags added with 17 26 (register
-    /// 26, read from the game's code: the damage steps set it to 20 or 1DC, so these go after them).</summary>
+    // a kind of effect: a command, or (keys from 0x10000) one of the action's flags added with 17 26 (register 26,
+    // read from the game's code: the damage steps set it to 20 or 1DC, so these go after them)
     public sealed record EffectKind(int Key, string Label, string Help);
 
     public const int FlagKey = 0x10000;
@@ -379,7 +377,7 @@ public static class L2Attacks
         new(0x5B, "Lose the battle if it dies by this", "As the Master's fight: the heroes lose when this kills one of them."),
     };
 
-    /// <summary>The add menu: each entry an effect kind with the values it starts with.</summary>
+    // the add menu: each entry is an effect kind with the values it starts with
     public static readonly (string Label, string Help, int Key, Func<Step> Make)[] AddMenu =
     {
         ("Cause a status", "Poison, sleep, confusion... with a chance.", 0x27, () => Make(0x27, 0x00, 50)),
@@ -402,58 +400,57 @@ public static class L2Attacks
         ("Lose the battle if it dies by this", "", 0x5B, () => Make(0x5B)),
     };
 
-    /// <summary>The effect kind of a step, or -1 when it isn't one of the effects.</summary>
-    public static int KeyOf(Step s)
+    // the effect kind of a step, -1 if it isn't one of the effects
+    public static int KeyOf(Step step)
     {
-        if (s.Op == 0x17 && s.Args.Length >= 3 && s.Args[0] == 0x26)
+        if (step.Op == 0x17 && step.Args.Length >= 3 && step.Args[0] == 0x26)
         {
-            int key = FlagKey | s.Args[1] | s.Args[2] << 8;
+            int key = FlagKey | step.Args[1] | step.Args[2] << 8;
             return EffectKinds.Any(k => k.Key == key) ? key : -1;
         }
-        return EffectKinds.Any(k => k.Key == s.Op) ? s.Op : -1;
+        return EffectKinds.Any(k => k.Key == step.Op) ? step.Op : -1;
     }
 
-    public static bool IsEffect(Step s) => KeyOf(s) >= 0;
+    public static bool IsEffect(Step step) => KeyOf(step) >= 0;
 
-    public static List<Step> Effects(Block b) => b.All.Where(IsEffect).ToList();
+    public static List<Step> Effects(Block block) => block.All.Where(IsEffect).ToList();
 
-    /// <summary>Adds the effect of add menu entry <paramref name="entry"/>; returns its step.</summary>
-    public static Step AddEffect(Block b, int entry)
+    // adds the effect of add menu entry entry, returns its step
+    public static Step AddEffect(Block block, int entry)
     {
-        var s = AddMenu[entry].Make();
-        if (s.Op == 0x20)
+        var step = AddMenu[entry].Make();
+        if (step.Op == 0x20)
         {
             // ignore DFP: every hit a critical one, x1 (the criticals step)
-            SetCritical(b, (100, 16));
-            return b.Find(0x20)!;
+            SetCritical(block, (100, 16));
+            return block.Find(0x20)!;
         }
-        // shown effects and the action's flags go with the animation (after the damage step, which sets the flags);
-        // the rest before the name, as the game writes them
-        Insert(b, s.Op is 0x5C or 0x4A or 0x4C or 0x35 or 0x17 ? BeforeAction(b) : BeforeName(b), s);
+        // shown effects and the action's flags go with the animation (after the damage step, which sets the flags),
+        // the rest before the name like the game writes them
+        Insert(block, step.Op is 0x5C or 0x4A or 0x4C or 0x35 or 0x17 ? BeforeAction(block) : BeforeName(block), step);
         // with no damage and no action of its own, the effects need the attack to be "only its effects"
-        if (s.Op is 0x27 or 0x26 or 0x25 or 0x24 or 0x5D or 0x5E or 0x60 or 0x61 && HowItHits(b) == Hit.Attack) SetHowItHits(b, Hit.EffectsOnly);
-        return s;
+        if (step.Op is 0x27 or 0x26 or 0x25 or 0x24 or 0x5D or 0x5E or 0x60 or 0x61 && HowItHits(block) == Hit.Attack) SetHowItHits(block, Hit.EffectsOnly);
+        return step;
     }
 
-    /// <summary>Adds an effect of kind <paramref name="key"/> (the first add menu entry of that kind).</summary>
-    public static Step AddEffectOfKind(Block b, int key) => AddEffect(b, Array.FindIndex(AddMenu, m => m.Key == key));
+    // adds an effect of kind key (the first add menu entry of that kind)
+    public static Step AddEffectOfKind(Block block, int key) => AddEffect(block, Array.FindIndex(AddMenu, m => m.Key == key));
 
-    /// <summary>The <paramref name="ordinal"/>-th effect step of kind <paramref name="key"/> (to change the same effect in
-    /// every monster that has the attack).</summary>
-    public static Step? EffectStep(Block b, int key, int ordinal) => b.All.Where(s => KeyOf(s) == key).ElementAtOrDefault(ordinal);
+    // the ordinal-th effect step of kind key (to change the same effect in every monster that has the attack)
+    public static Step? EffectStep(Block block, int key, int ordinal) => block.All.Where(s => KeyOf(s) == key).ElementAtOrDefault(ordinal);
 
-    // ── names ─────────────────────────────────────────────────────────────────
+    // names
 
-    /// <summary>The longest name the game has (its battle window shows it in one line).</summary>
+    // the longest name the game has (its battle window shows it on one line)
     public const int NameMax = 26;
 
-    /// <summary>Renames attack <paramref name="name"/>; null when done, else why not.</summary>
+    // renames attack name, null when done, else why not
     public static string? Rename(RomBuffer rom, int name, string text)
     {
         text = text.Trim();
         if (name >= L2AttackNames.First) return L2AttackNames.Rename(rom, name, text);
         if (name < 1 || name > L2AiScripts.AttackNameCount) return "There's no such attack name.";
-        if (L2AttackNames.Check(rom, text) is { } bad) return bad;
+        if (L2AttackNames.Check(rom, text) is { } problem) return problem;
         var all = L2AiScripts.MonsterAttackNames(rom).Skip(1).Take(L2AiScripts.AttackNameCount).ToList();
         all[name - 1] = text;
         return L2Dutch.RepackAttackNames(rom, all) ? null : "The names have no more room (shorten this one or another).";

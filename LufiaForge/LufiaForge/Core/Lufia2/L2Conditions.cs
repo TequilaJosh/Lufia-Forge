@@ -1,10 +1,8 @@
 namespace LufiaForge.Core.Lufia2;
 
-/// <summary>
-/// Event command 14, "check conditions" ($80:A074): a list of checks ended by FF. Each check sets the result (story
-/// flag checks can join it with "or" / "and"); "if true, go to" and "if false, go to" jump on the result so far. When no
-/// jump is taken the event carries on after the FF. Checks are edited as fields: a kind, then its values.
-/// </summary>
+// event command 14, "check conditions" ($80:A074): a list of checks ended by FF. each check sets the result (story
+// flag checks can join it with "or" / "and"), and "if true, go to" / "if false, go to" jump on the result so far.
+// if no jump is taken the event carries on after the FF. checks get edited as fields: a kind, then its values
 public static class L2Conditions
 {
     public const int KFlag = 0, KCounter = 1, KItems = 2, KHp = 3, KMp = 4, KSpell = 5, KLevel = 6, KFacing = 7, KDefeated = 8,
@@ -17,7 +15,7 @@ public static class L2Conditions
         (KDefeated, "a field monster was beaten"), (KIfTrue, "if so, go to"), (KIfFalse, "if not, go to"),
     };
 
-    /// <summary>A check: where its code byte is in the command's bytes, the code, and its length (code included).</summary>
+    // a check: where its code byte is in the command's bytes, the code, and its length (code included)
     public sealed record Check(int At, int Code, int Length)
     {
         public int Kind => Code switch
@@ -29,27 +27,27 @@ public static class L2Conditions
         public bool IsJump => Kind is KIfTrue or KIfFalse;
     }
 
-    /// <summary>Bytes after a check's code byte.</summary>
-    public static int ArgLength(int c) => (c & 0xC0) == 0xC0
-        ? (c & 0xF8) switch { 0xC0 => 4, 0xC8 or 0xD0 or 0xD8 => 3, _ => 2 }
-        : (c & 0x30) == 0 ? 1 : 2;
+    // bytes after a check's code byte
+    public static int ArgLength(int code) => (code & 0xC0) == 0xC0
+        ? (code & 0xF8) switch { 0xC0 => 4, 0xC8 or 0xD0 or 0xD8 => 3, _ => 2 }
+        : (code & 0x30) == 0 ? 1 : 2;
 
-    public static List<Check> Parse(byte[] b)
+    public static List<Check> Parse(byte[] bytes)
     {
         var list = new List<Check>();
-        for (int p = 1; p < b.Length && b[p] != 0xFF;)
+        for (int position = 1; position < bytes.Length && bytes[position] != 0xFF;)
         {
-            int n = 1 + ArgLength(b[p]);
-            list.Add(new Check(p, b[p], n));
-            p += n;
+            int length = 1 + ArgLength(bytes[position]);
+            list.Add(new Check(position, bytes[position], length));
+            position += length;
         }
         return list;
     }
 
-    /// <summary>Where the jump pointers (u16) are in the command's bytes, in order.</summary>
-    public static List<int> JumpPositions(byte[] b) => Parse(b).Where(c => c.IsJump).Select(c => c.At + 1).ToList();
+    // where the jump pointers (u16) are in the command's bytes, in order
+    public static List<int> JumpPositions(byte[] bytes) => Parse(bytes).Where(c => c.IsJump).Select(c => c.At + 1).ToList();
 
-    /// <summary>The bytes of a new check of a kind.</summary>
+    // the bytes of a new check of a kind
     public static byte[] NewCheck(int kind) => kind switch
     {
         KFlag => new byte[] { 0x00, 0x00 },
@@ -65,35 +63,35 @@ public static class L2Conditions
         _ => new byte[] { 0x30, 0x00, 0x00 },
     };
 
-    private static string Op(int c) => L2EventCommands.Compare.FirstOrDefault(o => o.Item1 == (c & 7)).Item2 ?? "is less than";
+    private static string Op(int code) => L2EventCommands.Compare.FirstOrDefault(o => o.Item1 == (code & 7)).Item2 ?? "is less than";
 
-    public static string Describe(byte[] b, L2EventCommands.Words w)
+    public static string Describe(byte[] bytes, L2EventCommands.Words words)
     {
         var parts = new List<string>();
         var current = new List<string>();
         int jump = 0;
-        foreach (var c in Parse(b))
+        foreach (var check in Parse(bytes))
         {
-            int a(int k) => b[c.At + k];
-            int u(int k) => b[c.At + k] | b[c.At + k + 1] << 8;
-            string join = c.Kind == KFlag && current.Count > 0 ? (c.Code & 0xC0) switch { 0x40 => "or ", 0x80 => "and ", _ => "(only) " } : "";
-            if (c.IsJump)
+            int ByteAt(int k) => bytes[check.At + k];
+            int WordAt(int k) => bytes[check.At + k] | bytes[check.At + k + 1] << 8;
+            string join = check.Kind == KFlag && current.Count > 0 ? (check.Code & 0xC0) switch { 0x40 => "or ", 0x80 => "and ", _ => "(only) " } : "";
+            if (check.IsJump)
             {
-                parts.Add((current.Count > 0 ? string.Join(" ", current) : "the same") + (c.Kind == KIfTrue ? ": if so, go to " : ": if not, go to ") + w.Jump(jump++));
+                parts.Add((current.Count > 0 ? string.Join(" ", current) : "the same") + (check.Kind == KIfTrue ? ": if so, go to " : ": if not, go to ") + words.Jump(jump++));
                 current.Clear();
                 continue;
             }
-            current.Add(c.Kind switch
+            current.Add(check.Kind switch
             {
-                KFlag => $"{join}{w.Flag(L2ExtraFlags.CheckFlag(c.Code, a(1)))} is {((c.Code & 1) == 0 ? "on" : "off")}",
-                KCounter => $"counter {a(1):X2} {Op(c.Code)} {a(2)}",
-                KItems => $"the number of {w.Item(u(1))} {Op(c.Code)} {u(3)}",
-                KHp => $"{L2EventCommands.HeroName(a(1))}'s HP {Op(c.Code)} {u(2)}",
-                KMp => $"{L2EventCommands.HeroName(a(1))}'s MP {Op(c.Code)} {u(2)}",
-                KSpell => $"{L2EventCommands.HeroName(a(1))} knows {w.Spell(a(2))}",
-                KLevel => $"{L2EventCommands.HeroName(a(1))}'s level {Op(c.Code)} {a(2)}",
-                KFacing => $"the party came from the world map facing {L2EventCommands.Facings.FirstOrDefault(f => f.Item1 == a(2)).Item2 ?? "?"}",
-                KDefeated => $"{w.Who(a(1))} was beaten",
+                KFlag => $"{join}{words.Flag(L2ExtraFlags.CheckFlag(check.Code, ByteAt(1)))} is {((check.Code & 1) == 0 ? "on" : "off")}",
+                KCounter => $"counter {ByteAt(1):X2} {Op(check.Code)} {ByteAt(2)}",
+                KItems => $"the number of {words.Item(WordAt(1))} {Op(check.Code)} {WordAt(3)}",
+                KHp => $"{L2EventCommands.HeroName(ByteAt(1))}'s HP {Op(check.Code)} {WordAt(2)}",
+                KMp => $"{L2EventCommands.HeroName(ByteAt(1))}'s MP {Op(check.Code)} {WordAt(2)}",
+                KSpell => $"{L2EventCommands.HeroName(ByteAt(1))} knows {words.Spell(ByteAt(2))}",
+                KLevel => $"{L2EventCommands.HeroName(ByteAt(1))}'s level {Op(check.Code)} {ByteAt(2)}",
+                KFacing => $"the party came from the world map facing {L2EventCommands.Facings.FirstOrDefault(f => f.Item1 == ByteAt(2)).Item2 ?? "?"}",
+                KDefeated => $"{words.Who(ByteAt(1))} was beaten",
                 _ => "(a broken check)",
             });
         }
@@ -101,21 +99,21 @@ public static class L2Conditions
         return string.Join("; then whether ", parts);
     }
 
-    /// <summary>The fields of a 14 command: per check its kind (or "take this out"), then its values; then "add a check".</summary>
-    public static L2ParamDef[] Fields(byte[] b)
+    // the fields of a 14 command: per check its kind (or "take this out"), then its values, then "add a check"
+    public static L2ParamDef[] Fields(byte[] bytes)
     {
         var fields = new List<L2ParamDef>();
-        var checks = Parse(b);
+        var checks = Parse(bytes);
         int jump = 0;
         for (int i = 0; i < checks.Count; i++)
         {
-            var c = checks[i];
-            int at = c.At, index = i;
+            var check = checks[i];
+            int at = check.At, index = i;
             fields.Add(new L2ParamDef
             {
                 Label = $"check {i + 1}", Kind = L2Kind.Choice,
                 Options = Kinds.Where(k => k.Item1 != KUnused).Append((KRemove, "(take this check out)")).ToArray(),
-                Get = _ => c.Kind, Set = (_, _) => { },
+                Get = _ => check.Kind, Set = (_, _) => { },
                 Rebuild = (old, v) => Replace(old, index, v == KRemove ? Array.Empty<byte>() : NewCheck(v)),
             });
             L2ParamDef Byte(string label, L2Kind kind, int k, int max = 255) => L2ParamDef.Byte(label, kind, at + k, max);
@@ -125,7 +123,7 @@ public static class L2Conditions
                 Label = "", Kind = L2Kind.Choice, Options = L2EventCommands.Compare,
                 Get = x => x[at] & 7, Set = (x, v) => x[at] = (byte)((x[at] & 0xF8) | v),
             };
-            switch (c.Kind)
+            switch (check.Kind)
             {
                 case KFlag:
                     if (i > 0) fields.Add(new L2ParamDef
@@ -165,27 +163,27 @@ public static class L2Conditions
         return fields.ToArray();
     }
 
-    /// <summary>The bytes with check <paramref name="index"/> replaced by <paramref name="check"/> (empty: taken out; index =
-    /// count: added before the FF), and which old jump each new jump keeps.</summary>
+    // the bytes with check index replaced by check (empty = taken out, index = count = added before the FF), and
+    // which old jump each new jump keeps
     public static (byte[] Bytes, int[]? JumpMap) Replace(byte[] old, int index, byte[] check)
     {
         var checks = Parse(old);
-        var n = new List<byte> { old[0] };
-        var map = new List<int>();
+        var bytes = new List<byte> { old[0] };
+        var jumpMap = new List<int>();
         int oldJump = 0;
         for (int i = 0; i <= checks.Count; i++)
         {
             if (i == index && check.Length > 0)
             {
-                n.AddRange(check);
-                if (check[0] is >= 0x20 and < 0x40) map.Add(i < checks.Count && checks[i].IsJump ? oldJump : -1);
+                bytes.AddRange(check);
+                if (check[0] is >= 0x20 and < 0x40) jumpMap.Add(i < checks.Count && checks[i].IsJump ? oldJump : -1);
             }
             if (i == checks.Count) break;
-            var c = checks[i];
-            if (i != index) { n.AddRange(old.AsSpan(c.At, c.Length).ToArray()); if (c.IsJump) map.Add(oldJump); }
-            if (c.IsJump) oldJump++;
+            var existing = checks[i];
+            if (i != index) { bytes.AddRange(old.AsSpan(existing.At, existing.Length).ToArray()); if (existing.IsJump) jumpMap.Add(oldJump); }
+            if (existing.IsJump) oldJump++;
         }
-        n.Add(0xFF);
-        return (n.ToArray(), map.ToArray());
+        bytes.Add(0xFF);
+        return (bytes.ToArray(), jumpMap.ToArray());
     }
 }

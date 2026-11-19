@@ -1,80 +1,75 @@
 namespace LufiaForge.Core.Lufia2;
 
-/// <summary>
-/// Lufia II encounters (US ROM, found 2026-10-22 from the loader at $81:839F and its caller at $81:8372):
-/// 0xD8 monster groups of 8 monster numbers (FF = empty) at $97:BE93 (file 0xBBE93); for each map a list of group
-/// numbers, one per monster placed on the map, at $97:B9AC + the map's u16 (file 0xBB9AC; maps without monsters
-/// share a list). Edited in place.
-/// </summary>
+// lufia 2 encounters (US rom, found 2026-10-22 from the loader at $81:839F and its caller at $81:8372): 0xD8 monster
+// groups of 8 monster numbers (FF = empty) at $97:BE93 (file 0xBBE93). for each map a list of group numbers, one per
+// monster placed on the map, at $97:B9AC + the map's u16 (file 0xBB9AC, maps without monsters share a list).
+// edited in place
 public static class L2Encounters
 {
     public const int Groups = 0xBBE93, GroupCount = 0xD8, GroupSize = 8, MapLists = 0xBB9AC;
 
-    /// <summary>How the game reads a group ($81:839F): places 1 and 2 (bytes 0, 1) are swapped at random, the other
-    /// places shuffled; the first 3 kinds of monster found (the first from place 1 or 2) are the battle's kinds, and the
-    /// number of monsters is random by party size ($85:9EA1: 1, 2, 3, 4, 4 for 0-4 heroes; about 1-2 alone, up to 7).
-    /// With place 1 empty and place 2 filled the group is a fixed battle ($81:84CF): place 2's monster, and the other
-    /// bytes copied as they are.</summary>
+    // how the game reads a group ($81:839F): places 1 and 2 (bytes 0, 1) get swapped at random, the other places
+    // shuffled. the first 3 kinds of monster found (the first from place 1 or 2) are the battle's kinds, and the number
+    // of monsters is random by party size ($85:9EA1: 1, 2, 3, 4, 4 for 0-4 heroes, about 1-2 alone, up to 7).
+    // with place 1 empty and place 2 filled the group is a fixed battle ($81:84CF): place 2's monster, and the other
+    // bytes copied as they are
     public static bool IsFixed(int[] group) => group[0] == 0xFF && group[1] != 0xFF;
 
-    public static int[] Group(RomBuffer rom, int g) => Enumerable.Range(0, GroupSize).Select(i => (int)rom.ReadByte(Groups + g * GroupSize + i)).ToArray();
+    public static int[] Group(RomBuffer rom, int group) => Enumerable.Range(0, GroupSize).Select(i => (int)rom.ReadByte(Groups + group * GroupSize + i)).ToArray();
 
-    public static void WriteGroup(RomBuffer rom, int g, int[] monsters)
+    public static void WriteGroup(RomBuffer rom, int group, int[] monsters)
     {
-        for (int i = 0; i < GroupSize; i++) rom.WriteByte(Groups + g * GroupSize + i, (byte)(i < monsters.Length ? monsters[i] : 0xFF));
+        for (int i = 0; i < GroupSize; i++) rom.WriteByte(Groups + group * GroupSize + i, (byte)(i < monsters.Length ? monsters[i] : 0xFF));
     }
 
-    /// <summary>File offset of map <paramref name="map"/>'s u16 list offset (from <see cref="MapLists"/>; New map moves
-    /// the offsets, not the lists).</summary>
+    // file offset of map map's u16 list offset (from MapLists, New map moves the offsets, not the lists)
     public static int IndexAt(RomBuffer rom, int map) => L2NewMaps.Entry(rom, L2MapTable.Encounters, map);
 
-    /// <summary>Where a map's list starts (file offset) and how long it is (up to the next list).</summary>
+    // where a map's list starts (file offset) and how long it is (up to the next list)
     public static (int At, int Length) MapList(RomBuffer rom, int map)
     {
         var starts = Enumerable.Range(0, L2Maps.Count(rom)).Select(m => (int)rom.ReadUInt16Le(IndexAt(rom, m))).Distinct().OrderBy(v => v).ToList();
-        int p = rom.ReadUInt16Le(IndexAt(rom, map));
-        int next = starts.FirstOrDefault(v => v > p, p);
-        int len = next > p ? next - p : 0;
-        return (MapLists + p, Math.Min(len, 32));
+        int listOffset = rom.ReadUInt16Le(IndexAt(rom, map));
+        int next = starts.FirstOrDefault(v => v > listOffset, listOffset);
+        int length = next > listOffset ? next - listOffset : 0;
+        return (MapLists + listOffset, Math.Min(length, 32));
     }
 
-    /// <summary>Maps that share map <paramref name="map"/>'s list (it changes for all of them).</summary>
+    // maps that share map map's list (it changes for all of them)
     public static List<int> SharingWith(RomBuffer rom, int map)
     {
-        int p = rom.ReadUInt16Le(IndexAt(rom, map));
-        return Enumerable.Range(0, L2Maps.Count(rom)).Where(m => m != map && rom.ReadUInt16Le(IndexAt(rom, m)) == p).ToList();
+        int listOffset = rom.ReadUInt16Le(IndexAt(rom, map));
+        return Enumerable.Range(0, L2Maps.Count(rom)).Where(m => m != map && rom.ReadUInt16Le(IndexAt(rom, m)) == listOffset).ToList();
     }
 
-    // ---------------------------------------------------------------- world map battle zones
+    // world map battle zones
 
-    /// <summary>The world map's battle zones (read from the battle check at $86:9CF3, US ROM): the zone map is packed file
-    /// 0x193 (64 x 64 bytes, one per 2 x 2 big blocks, copied to $7F:E000); zone z is 5 (group, weight) pairs at
-    /// $97:C493 + z * 10 (file 0xBC493). On each battle the game adds up the 5 weights (0 = no battles in the zone) and
-    /// picks a group in proportion to its weight; the weights don't change how often battles come. 17 zones (0-16) fit
-    /// before the next table ($97:C53D); zone 0 has none.
-    ///
-    /// More zones: the zone byte is any value 0-255 and the check reads its pairs as $97:C493 + zone * 10 (the multiply
-    /// is the SNES's 8 x 8 unit, so up to 2550) with three long loads ($86:9D22 and $86:9D3E: +1, $86:9D59: +0). A zone
-    /// past 16 would read the next table, so Lufia Forge moves the table to the added space (room for all 256 zones;
-    /// "LF2ZN" and the zone count 16 bytes before it) and points those three loads at it. Nothing else reads it.</summary>
+    // the world map's battle zones (read from the battle check at $86:9CF3, US rom): the zone map is packed file 0x193
+    // (64 x 64 bytes, one per 2 x 2 big blocks, copied to $7F:E000). zone z is 5 (group, weight) pairs at $97:C493 +
+    // z * 10 (file 0xBC493). on each battle the game adds up the 5 weights (0 = no battles in the zone) and picks a
+    // group in proportion to its weight. the weights don't change how often battles come. 17 zones (0-16) fit before
+    // the next table ($97:C53D), zone 0 has none
+    //
+    // more zones: the zone byte can be any value 0-255 and the check reads its pairs as $97:C493 + zone * 10 (the
+    // multiply is the SNES's 8 x 8 unit, so up to 2550) with three long loads ($86:9D22 and $86:9D3E: +1, $86:9D59: +0).
+    // a zone past 16 would read the next table, so we move the table to the added space (room for all 256 zones,
+    // "LF2ZN" and the zone count 16 bytes before it) and point those three loads at it. nothing else reads it
     public const int ZoneTable = 0xBC493, ZoneCount = 17, ZoneSlots = 5, ZoneFile = 0x193, MaxZones = 256;
     private static readonly int[] ZoneSites = { 0x31D22, 0x31D3E, 0x31D59 };
     private static readonly int[] ZoneSiteOffsets = { 1, 1, 0 };
     private const string ZoneMagic = "LF2ZN";
 
-    /// <summary>File offset of the zone table the game reads now (its own, or Lufia Forge's moved one).</summary>
+    // file offset of the zone table the game reads now (its own, or our moved one)
     public static int ZoneTableAt(RomBuffer rom)
     {
-        int at = MovedZoneTable(rom);
-        return at >= 0 ? at : ZoneTable;
+        int movedAt = MovedZoneTable(rom);
+        return movedAt >= 0 ? movedAt : ZoneTable;
     }
 
-    /// <summary>The moved table (file offset), or -1 when the game reads its own.</summary>
-    /// <summary>The moved zone table's block (file offset, its 16-byte head first), or -1.</summary>
-    internal static int ZoneBlock(RomBuffer rom) => MovedZoneTable(rom) is var at and >= 0 ? at - 0x10 : -1;
+    // the moved zone table's block (file offset, its 16-byte head first), or -1
+    internal static int ZoneBlock(RomBuffer rom) => MovedZoneTable(rom) is var movedAt and >= 0 ? movedAt - 0x10 : -1;
 
-    /// <summary>Moves the zone table's block to <paramref name="to"/> (room for <see cref="ZoneBlockSize"/> bytes) and
-    /// points the battle check at it (<see cref="L2HighBanks"/>).</summary>
+    // moves the zone table's block to to (room for ZoneBlockSize bytes) and points the battle check at it (L2HighBanks)
     internal static void MoveZoneBlock(RomBuffer rom, int to)
     {
         int block = ZoneBlock(rom);
@@ -83,197 +78,198 @@ public static class L2Encounters
         int snes = L2Rom.FileToSnes(to + 0x10);
         for (int i = 0; i < 3; i++)
         {
-            int a = snes + ZoneSiteOffsets[i];
-            rom.WriteBytes(ZoneSites[i] + 1, new[] { (byte)a, (byte)(a >> 8), (byte)(a >> 16) });
+            int addr = snes + ZoneSiteOffsets[i];
+            rom.WriteBytes(ZoneSites[i] + 1, new[] { (byte)addr, (byte)(addr >> 8), (byte)(addr >> 16) });
         }
     }
 
     internal const int ZoneBlockSize = 0x10 + MaxZones * 10;
 
+    // the moved table (file offset), -1 if the game reads its own
     private static int MovedZoneTable(RomBuffer rom)
     {
         if (rom.Length <= 0x31D5D || rom.ReadByte(ZoneSites[2]) != 0xBF) return -1;
         int snes = (int)rom.ReadUInt24Le(ZoneSites[2] + 1);
         if (snes == 0x97C493) return -1;
-        int at = L2Rom.SnesToFile(snes);
-        return at >= 0x10 && at + MaxZones * 10 <= rom.Length && System.Text.Encoding.ASCII.GetString(rom.ReadBytes(at - 0x10, ZoneMagic.Length)) == ZoneMagic ? at : -1;
+        int tableAt = L2Rom.SnesToFile(snes);
+        return tableAt >= 0x10 && tableAt + MaxZones * 10 <= rom.Length && System.Text.Encoding.ASCII.GetString(rom.ReadBytes(tableAt - 0x10, ZoneMagic.Length)) == ZoneMagic ? tableAt : -1;
     }
 
-    /// <summary>Whether Lufia Forge moved the zone table (so the battle check reads it elsewhere).</summary>
+    // whether we moved the zone table (so the battle check reads it somewhere else)
     public static bool ZonesMoved(RomBuffer rom) => MovedZoneTable(rom) >= 0;
 
-    /// <summary>How many zones there are: the game's 17, or as many as were added.</summary>
+    // how many zones there are: the game's 17, or as many as were added
     public static int ZoneCountIn(RomBuffer rom)
     {
-        int at = MovedZoneTable(rom);
-        return at < 0 ? ZoneCount : Math.Clamp(rom.ReadByte(at - 0x10 + ZoneMagic.Length) + 1, ZoneCount, MaxZones);
+        int movedAt = MovedZoneTable(rom);
+        return movedAt < 0 ? ZoneCount : Math.Clamp(rom.ReadByte(movedAt - 0x10 + ZoneMagic.Length) + 1, ZoneCount, MaxZones);
     }
 
-    /// <summary>Why zones can't be added in this ROM, or null.</summary>
+    // why zones can't be added in this rom, or null
     public static string? CantAddZones(RomBuffer rom)
     {
         if (ZonesMoved(rom)) return ZoneCountIn(rom) >= MaxZones ? $"There are {MaxZones} zones already (a zone is one byte on the zone map)." : null;
-        var orig = new[] { "BF 94 C4 97", "BF 94 C4 97", "BF 93 C4 97" };
+        var original = new[] { "BF 94 C4 97", "BF 94 C4 97", "BF 93 C4 97" };
         for (int i = 0; i < 3; i++)
-            if (BitConverter.ToString(rom.ReadBytes(ZoneSites[i], 4)).Replace("-", " ") != orig[i])
+            if (BitConverter.ToString(rom.ReadBytes(ZoneSites[i], 4)).Replace("-", " ") != original[i])
                 return "This ROM's battle check isn't the US game's (another hack changed it), so the zone table can't be moved to make room.";
         return null;
     }
 
-    /// <summary>Adds a zone (no battles yet): the first time, the table moves to the added space. Returns its number.</summary>
+    // adds a zone (no battles yet). the first time, the table moves to the added space. returns its number
     public static int AddZone(RomBuffer rom)
     {
         if (CantAddZones(rom) is { } why) throw new InvalidOperationException(why);
-        int at = MovedZoneTable(rom);
-        if (at < 0)
+        int tableAt = MovedZoneTable(rom);
+        if (tableAt < 0)
         {
             int block = L2Rom.Allocate(rom, 0x10 + MaxZones * 10, upper: true);
-            at = block + 0x10;
+            tableAt = block + 0x10;
             rom.WriteBytes(block, new byte[0x10 + MaxZones * 10]);
             rom.WriteBytes(block, System.Text.Encoding.ASCII.GetBytes(ZoneMagic));
-            rom.WriteBytes(at, rom.ReadBytes(ZoneTable, ZoneCount * 10));
+            rom.WriteBytes(tableAt, rom.ReadBytes(ZoneTable, ZoneCount * 10));
             rom.WriteByte(block + ZoneMagic.Length, ZoneCount - 1);
-            int snes = L2Rom.FileToSnes(at);
+            int snes = L2Rom.FileToSnes(tableAt);
             for (int i = 0; i < 3; i++)
             {
-                int a = snes + ZoneSiteOffsets[i];
-                rom.WriteBytes(ZoneSites[i] + 1, new[] { (byte)a, (byte)(a >> 8), (byte)(a >> 16) });
+                int addr = snes + ZoneSiteOffsets[i];
+                rom.WriteBytes(ZoneSites[i] + 1, new[] { (byte)addr, (byte)(addr >> 8), (byte)(addr >> 16) });
             }
         }
-        int z = ZoneCountIn(rom);
-        rom.WriteBytes(at + z * 10, new byte[10]);
-        rom.WriteByte(at - 0x10 + ZoneMagic.Length, (byte)z);
-        return z;
+        int zone = ZoneCountIn(rom);
+        rom.WriteBytes(tableAt + zone * 10, new byte[10]);
+        rom.WriteByte(tableAt - 0x10 + ZoneMagic.Length, (byte)zone);
+        return zone;
     }
 
     public sealed record ZoneSlot(int Group, int Weight);
 
-    public static ZoneSlot[] Zone(RomBuffer rom, int z)
+    public static ZoneSlot[] Zone(RomBuffer rom, int zone)
     {
-        int t = ZoneTableAt(rom);
-        return Enumerable.Range(0, ZoneSlots).Select(i => new ZoneSlot(rom.ReadByte(t + z * 10 + i * 2), rom.ReadByte(t + z * 10 + i * 2 + 1))).ToArray();
+        int table = ZoneTableAt(rom);
+        return Enumerable.Range(0, ZoneSlots).Select(i => new ZoneSlot(rom.ReadByte(table + zone * 10 + i * 2), rom.ReadByte(table + zone * 10 + i * 2 + 1))).ToArray();
     }
 
-    public static void WriteZone(RomBuffer rom, int z, IReadOnlyList<ZoneSlot> slots)
+    public static void WriteZone(RomBuffer rom, int zone, IReadOnlyList<ZoneSlot> slots)
     {
-        if (z >= ZoneCountIn(rom)) throw new InvalidOperationException($"Zone {z:X2} doesn't exist (add zones on the Encounters page).");
-        int t = ZoneTableAt(rom);
+        if (zone >= ZoneCountIn(rom)) throw new InvalidOperationException($"Zone {zone:X2} doesn't exist (add zones on the Encounters page).");
+        int table = ZoneTableAt(rom);
         for (int i = 0; i < ZoneSlots; i++)
         {
-            var s = i < slots.Count ? slots[i] : new ZoneSlot(0, 0);
-            rom.WriteByte(t + z * 10 + i * 2, (byte)(s.Weight == 0 ? 0 : s.Group));
-            rom.WriteByte(t + z * 10 + i * 2 + 1, (byte)Math.Clamp(s.Weight, 0, 255));
+            var slot = i < slots.Count ? slots[i] : new ZoneSlot(0, 0);
+            rom.WriteByte(table + zone * 10 + i * 2, (byte)(slot.Weight == 0 ? 0 : slot.Group));
+            rom.WriteByte(table + zone * 10 + i * 2 + 1, (byte)Math.Clamp(slot.Weight, 0, 255));
         }
     }
 
-    /// <summary>The zone's groups that can come up (weight above 0), with their share of the zone's battles (0-1).</summary>
-    public static List<(int Group, int Weight, double Share)> ZoneGroups(RomBuffer rom, int z)
+    // the zone's groups that can come up (weight above 0), with their share of the zone's battles (0-1)
+    public static List<(int Group, int Weight, double Share)> ZoneGroups(RomBuffer rom, int zone)
     {
-        var slots = Zone(rom, z).Where(s => s.Weight > 0).ToList();
+        var slots = Zone(rom, zone).Where(s => s.Weight > 0).ToList();
         double sum = slots.Sum(s => s.Weight);
         return slots.Select(s => (s.Group, s.Weight, sum > 0 ? s.Weight / sum : 0)).ToList();
     }
 
-    /// <summary>How many 2 x 2 big-block cells of the zone map each zone has.</summary>
+    // how many 2 x 2 big-block cells of the zone map each zone has
     public static int[] ZoneSizes(byte[] zoneMap)
     {
-        var n = new int[256];
-        foreach (var b in zoneMap) n[b]++;
-        return n;
+        var sizes = new int[256];
+        foreach (var zone in zoneMap) sizes[zone]++;
+        return sizes;
     }
 
-    /// <summary>Who uses group <paramref name="g"/>: the zones (with their share) and the maps whose field monsters fight it.</summary>
-    public static (List<(int Zone, double Share)> Zones, List<int> Maps) UsersOf(RomBuffer rom, int g)
+    // who uses group group: the zones (with their share) and the maps whose field monsters fight it
+    public static (List<(int Zone, double Share)> Zones, List<int> Maps) UsersOf(RomBuffer rom, int group)
     {
         var zones = new List<(int, double)>();
-        for (int z = 1; z < ZoneCountIn(rom); z++)
-            foreach (var s in ZoneGroups(rom, z)) if (s.Group == g) zones.Add((z, s.Share));
+        for (int zone = 1; zone < ZoneCountIn(rom); zone++)
+            foreach (var slot in ZoneGroups(rom, zone)) if (slot.Group == group) zones.Add((zone, slot.Share));
         var maps = new List<int>();
         for (int m = 0; m < L2Maps.Count(rom); m++)
         {
-            var (at, len) = MapList(rom, m);
-            for (int i = 0; i < len; i++) if (rom.ReadByte(at + i) == g) { maps.Add(m); break; }
+            var (listAt, length) = MapList(rom, m);
+            for (int i = 0; i < length; i++) if (rom.ReadByte(listAt + i) == group) { maps.Add(m); break; }
         }
         return (zones, maps);
     }
 
-    // ── story battles ─────────────────────────────────────────────────────────
+    // story battles
 
-    /// <summary>The story battles event command 53 xx starts (found 2026-10-27; table $97:C53D, file 0xBC53D, read by
-    /// $81:82C6): a u16 offset per battle from the table, the battles 26 bytes each: six monster ids (FF = none), their
-    /// places on the screen (x, y each), then the battle's settings (a skipped byte, two words, three bytes; left as they
-    /// are). Battles 00-26; some share a record (00, 03, 06... point at the same one).
-    /// <para>New battles (<see cref="AddStoryBattle"/>): the battle number is a byte ($7FF8A4), so up to 256. The table
-    /// and its records are moved once to a block of Lufia Forge's ("LF2SB", count, then the table with room for 256
-    /// offsets, then the records at their new offsets) and the nine reads of $97:C53D in $81:82C6-8343 are pointed there;
-    /// battles sharing a record still share it.</para></summary>
+    // the story battles event command 53 xx starts (found 2026-10-27, table $97:C53D, file 0xBC53D, read by $81:82C6):
+    // a u16 offset per battle from the table, the battles 26 bytes each: six monster ids (FF = none), their places on
+    // the screen (x, y each), then the battle's settings (a skipped byte, two words, three bytes, left as they are).
+    // battles 00-26, some share a record (00, 03, 06... point at the same one)
+    // new battles (AddStoryBattle): the battle number is a byte ($7FF8A4), so up to 256. the table and its records get
+    // moved once to a block of ours ("LF2SB", count, then the table with room for 256 offsets, then the records at
+    // their new offsets) and the nine reads of $97:C53D in $81:82C6-8343 get pointed there. battles sharing a record
+    // still share it
     public const int StoryBattles = 0xBC53D, GameStoryBattleCount = 0x27, StorySlots = 6, StoryRecordSize = 26;
 
-    /// <summary>The operands of the nine "LDA $97C53D,X" of the story battle loader.</summary>
+    // the operands of the nine "LDA $97C53D,X" of the story battle loader
     private static readonly int[] StorySites = { 0x82C7, 0x82D3, 0x8303, 0x830B, 0x8320, 0x8329, 0x8334, 0x833C, 0x8344 };
     private const string StoryMagic = "LF2SB";
     private const int StoryBlockSize = 0x2000, StoryHeader = 8, StoryMax = 256;
 
-    /// <summary>File offset of the story battle table: the game's, or the moved one.</summary>
+    // file offset of the story battle table: the game's, or the moved one
     public static int StoryTable(RomBuffer rom)
     {
         int snes = (int)rom.ReadUInt24Le(StorySites[0]);
         if (snes == 0x97C53D) return StoryBattles;
-        int at = L2Rom.SnesToFile(snes);
-        return at - StoryHeader >= 0 && System.Text.Encoding.ASCII.GetString(rom.ReadBytes(at - StoryHeader, StoryMagic.Length)) == StoryMagic ? at : StoryBattles;
+        int tableAt = L2Rom.SnesToFile(snes);
+        return tableAt - StoryHeader >= 0 && System.Text.Encoding.ASCII.GetString(rom.ReadBytes(tableAt - StoryHeader, StoryMagic.Length)) == StoryMagic ? tableAt : StoryBattles;
     }
 
-    /// <summary>How many story battles there are (39 in the game).</summary>
+    // how many story battles there are (39 in the game)
     public static int StoryBattleCount(RomBuffer rom)
     {
-        int t = StoryTable(rom);
-        return t == StoryBattles ? GameStoryBattleCount : rom.ReadByte(t - StoryHeader + 5) + 1;
+        int table = StoryTable(rom);
+        return table == StoryBattles ? GameStoryBattleCount : rom.ReadByte(table - StoryHeader + 5) + 1;
     }
 
-    public static int StoryBattleAt(RomBuffer rom, int b) { int t = StoryTable(rom); return t + rom.ReadUInt16Le(t + b * 2); }
+    public static int StoryBattleAt(RomBuffer rom, int battle) { int table = StoryTable(rom); return table + rom.ReadUInt16Le(table + battle * 2); }
 
-    /// <summary>Why no story battle can be added, or null.</summary>
+    // why no story battle can be added, or null
     public static string? CantAddStoryBattle(RomBuffer rom)
     {
         if (StoryTable(rom) != StoryBattles) return StoryBattleCount(rom) >= StoryMax ? "There are 256 story battles, the most the game can number." : null;
         return StorySites.All(a => rom.ReadUInt24Le(a) == 0x97C53D) ? null : "This ROM's story battle code isn't the US game's.";
     }
 
-    /// <summary>Adds a story battle: a copy of battle <paramref name="from"/> (its monsters, places and settings) with a
-    /// record of its own. Returns its number (53 xx starts it).</summary>
+    // adds a story battle: a copy of battle from (its monsters, places and settings) with a record of its own.
+    // returns its number (53 xx starts it)
     public static int AddStoryBattle(RomBuffer rom, int from)
     {
         if (CantAddStoryBattle(rom) is { } why) throw new InvalidOperationException(why);
         int count = StoryBattleCount(rom);
-        int t = StoryTable(rom);
-        if (t == StoryBattles)
+        int table = StoryTable(rom);
+        if (table == StoryBattles)
         {
             // move: the table with room for 256, then each record once (sharing kept), at new offsets
-            int b = L2Rom.Allocate(rom, StoryBlockSize);
-            rom.WriteBytes(b, new byte[StoryBlockSize]);
-            rom.WriteBytes(b, System.Text.Encoding.ASCII.GetBytes(StoryMagic));
-            int nt = b + StoryHeader, next = StoryMax * 2;
+            int block = L2Rom.Allocate(rom, StoryBlockSize);
+            rom.WriteBytes(block, new byte[StoryBlockSize]);
+            rom.WriteBytes(block, System.Text.Encoding.ASCII.GetBytes(StoryMagic));
+            int newTable = block + StoryHeader, next = StoryMax * 2;
             var placed = new Dictionary<int, int>();
             for (int i = 0; i < count; i++)
             {
-                int old = rom.ReadUInt16Le(StoryBattles + i * 2);
-                if (!placed.TryGetValue(old, out int off))
+                int oldOffset = rom.ReadUInt16Le(StoryBattles + i * 2);
+                if (!placed.TryGetValue(oldOffset, out int newOffset))
                 {
-                    off = next; next += StoryRecordSize; placed[old] = off;
-                    rom.WriteBytes(nt + off, rom.ReadBytes(StoryBattles + old, StoryRecordSize));
+                    newOffset = next; next += StoryRecordSize; placed[oldOffset] = newOffset;
+                    rom.WriteBytes(newTable + newOffset, rom.ReadBytes(StoryBattles + oldOffset, StoryRecordSize));
                 }
-                rom.WriteBytes(nt + i * 2, new[] { (byte)off, (byte)(off >> 8) });
+                rom.WriteBytes(newTable + i * 2, new[] { (byte)newOffset, (byte)(newOffset >> 8) });
             }
-            WriteStoryUsed(rom, nt, count, next);
-            int snes = L2Rom.FileToSnes(nt);
-            foreach (int a in StorySites) rom.WriteBytes(a, new[] { (byte)snes, (byte)(snes >> 8), (byte)(snes >> 16) });
-            t = nt;
+            WriteStoryUsed(rom, newTable, count, next);
+            int snes = L2Rom.FileToSnes(newTable);
+            foreach (int site in StorySites) rom.WriteBytes(site, new[] { (byte)snes, (byte)(snes >> 8), (byte)(snes >> 16) });
+            table = newTable;
         }
-        int used = rom.ReadUInt16Le(t - StoryHeader + 6);
-        if (t + used + StoryRecordSize > t - StoryHeader + StoryBlockSize) throw new InvalidOperationException("The story battle block is full.");
-        rom.WriteBytes(t + used, rom.ReadBytes(StoryBattleAt(rom, from), StoryRecordSize));
-        rom.WriteBytes(t + count * 2, new[] { (byte)used, (byte)(used >> 8) });
-        WriteStoryUsed(rom, t, count + 1, used + StoryRecordSize);
+        int used = rom.ReadUInt16Le(table - StoryHeader + 6);
+        if (table + used + StoryRecordSize > table - StoryHeader + StoryBlockSize) throw new InvalidOperationException("The story battle block is full.");
+        rom.WriteBytes(table + used, rom.ReadBytes(StoryBattleAt(rom, from), StoryRecordSize));
+        rom.WriteBytes(table + count * 2, new[] { (byte)used, (byte)(used >> 8) });
+        WriteStoryUsed(rom, table, count + 1, used + StoryRecordSize);
         return count;
     }
 
@@ -283,26 +279,26 @@ public static class L2Encounters
         rom.WriteBytes(table - StoryHeader + 6, new[] { (byte)used, (byte)(used >> 8) });
     }
 
-    /// <summary>A story battle's six slots: monster (FF = none) and its place.</summary>
-    public static (int Monster, int X, int Y)[] StoryBattle(RomBuffer rom, int b)
+    // a story battle's six slots: monster (FF = none) and its place
+    public static (int Monster, int X, int Y)[] StoryBattle(RomBuffer rom, int battle)
     {
-        int at = StoryBattleAt(rom, b);
-        return Enumerable.Range(0, StorySlots).Select(i => ((int)rom.ReadByte(at + i), (int)rom.ReadByte(at + 6 + i * 2), (int)rom.ReadByte(at + 7 + i * 2))).ToArray();
+        int recordAt = StoryBattleAt(rom, battle);
+        return Enumerable.Range(0, StorySlots).Select(i => ((int)rom.ReadByte(recordAt + i), (int)rom.ReadByte(recordAt + 6 + i * 2), (int)rom.ReadByte(recordAt + 7 + i * 2))).ToArray();
     }
 
-    public static void WriteStoryBattle(RomBuffer rom, int b, IReadOnlyList<(int Monster, int X, int Y)> slots)
+    public static void WriteStoryBattle(RomBuffer rom, int battle, IReadOnlyList<(int Monster, int X, int Y)> slots)
     {
-        int at = StoryBattleAt(rom, b);
+        int recordAt = StoryBattleAt(rom, battle);
         for (int i = 0; i < StorySlots; i++)
         {
-            var (m, x, y) = i < slots.Count ? slots[i] : (0xFF, 0, 0);
-            rom.WriteByte(at + i, (byte)m);
-            rom.WriteByte(at + 6 + i * 2, (byte)x);
-            rom.WriteByte(at + 7 + i * 2, (byte)y);
+            var (monster, x, y) = i < slots.Count ? slots[i] : (0xFF, 0, 0);
+            rom.WriteByte(recordAt + i, (byte)monster);
+            rom.WriteByte(recordAt + 6 + i * 2, (byte)x);
+            rom.WriteByte(recordAt + 7 + i * 2, (byte)y);
         }
     }
 
-    /// <summary>Battles that use the same record as battle <paramref name="b"/> (a change there changes them too).</summary>
-    public static List<int> StorySharing(RomBuffer rom, int b) =>
-        Enumerable.Range(0, StoryBattleCount(rom)).Where(o => o != b && StoryBattleAt(rom, o) == StoryBattleAt(rom, b)).ToList();
+    // battles that use the same record as battle battle (a change there changes them too)
+    public static List<int> StorySharing(RomBuffer rom, int battle) =>
+        Enumerable.Range(0, StoryBattleCount(rom)).Where(other => other != battle && StoryBattleAt(rom, other) == StoryBattleAt(rom, battle)).ToList();
 }

@@ -2,53 +2,50 @@ using System.Text;
 
 namespace LufiaForge.Core.Lufia2;
 
-/// <summary>
-/// Lufia II dialogue as the event editor shows it: plain text with a few tokens. [Name] = the hero's name (Maxim's,
-/// 09), [Pause 20] = a pause of 20 frames (04 82), [Voice 3] = the letters' sound (04 03), [Glyph 41] = a letter of the
-/// third font page (07 41), [0C] etc. for other codes. Dictionary words (05/06/80-FF) and repeats of earlier text (0A)
-/// are written out; when the text is changed it is packed again with the dictionary (<see cref="L2Text.Encode"/>).
-/// The code that ends the text (00 end, 01 wait and go on, 0B question cursor) is kept apart.
-/// </summary>
+// lufia 2 dialogue the way the event editor shows it: plain text with a few tokens. [Name] = the hero's name
+// (Maxim's, 09), [Pause 20] = a pause of 20 frames (04 82), [Voice 3] = the letters' sound (04 03), [Glyph 41] = a
+// letter of the third font page (07 41), [0C] etc. for other codes. dictionary words (05/06/80-FF) and repeats of
+// earlier text (0A) get written out. when the text changes it gets packed again with the dictionary (L2Text.Encode).
+// the code that ends the text (00 end, 01 wait and go on, 0B question cursor) is kept apart
 public static class L2EventText
 {
-    /// <summary>Reads text from <paramref name="at"/> to its end code; <paramref name="next"/> is the byte after the end
-    /// code (or where reading stopped).</summary>
+    // reads text from at to its end code. next is the byte after the end code (or where reading stopped)
     public static string Decode(RomBuffer rom, int at, out int next, out byte end, out bool backReference) =>
         DecodeCore(rom, at, int.MaxValue, 0, out next, out end, out backReference);
 
-    /// <summary>Decodes up to <paramref name="limit"/> bytes (a back-reference copies that many bytes of earlier text).</summary>
+    // decodes up to limit bytes (a back-reference copies that many bytes of earlier text)
     private static string DecodeCore(RomBuffer rom, int at, int limit, int depth, out int next, out byte end, out bool backReference)
     {
         var words = L2Text.Words(rom);
         var sb = new StringBuilder();
-        int p = at;
+        int position = at;
         end = 0xFF;
         backReference = false;
-        for (int guard = 0; guard < 4000 && p < rom.Length && p - at < limit; guard++)
+        for (int guard = 0; guard < 4000 && position < rom.Length && position - at < limit; guard++)
         {
-            byte b = rom.ReadByte(p++);
+            byte b = rom.ReadByte(position++);
             if (b is 0x00 or 0x01 or 0x0B) { end = b; break; }
             switch (b)
             {
                 case 0x03: sb.Append('\n'); break;
                 case 0x04:
                 {
-                    byte v = rom.ReadByte(p++);
-                    if (v != 0x80) sb.Append(v > 0x80 ? $"[Pause {(v & 0x7F) * 10}]" : $"[Voice {v}]");   // 04 80 (no pause) fills up shortened text
+                    byte value = rom.ReadByte(position++);
+                    if (value != 0x80) sb.Append(value > 0x80 ? $"[Pause {(value & 0x7F) * 10}]" : $"[Voice {value}]");   // 04 80 (no pause) fills up shortened text
                     break;
                 }
-                case 0x05: sb.Append(words[rom.ReadByte(p++)]); break;
-                case 0x06: sb.Append(words[0x100 + rom.ReadByte(p++)]); break;
-                case 0x07: sb.Append($"[Glyph {rom.ReadByte(p++):X2}]"); break;
+                case 0x05: sb.Append(words[rom.ReadByte(position++)]); break;
+                case 0x06: sb.Append(words[0x100 + rom.ReadByte(position++)]); break;
+                case 0x07: sb.Append($"[Glyph {rom.ReadByte(position++):X2}]"); break;
                 case 0x09: sb.Append("[Name]"); break;
                 case 0x0A:
                 {
-                    byte lo = rom.ReadByte(p), hi = rom.ReadByte(p + 1);
-                    int d = lo | (hi & 0x0F) << 8, n = (hi >> 4) + 2;
-                    // n bytes of the text d bytes back (bytes, not letters: a Dutch letter 10-1F or a word is one byte)
-                    if (depth < 4) sb.Append(DecodeCore(rom, p - d, n, depth + 1, out _, out _, out _));
+                    byte lo = rom.ReadByte(position), hi = rom.ReadByte(position + 1);
+                    int distance = lo | (hi & 0x0F) << 8, count = (hi >> 4) + 2;
+                    // count bytes of the text distance bytes back (bytes, not letters: a Dutch letter 10-1F or a word is one byte)
+                    if (depth < 4) sb.Append(DecodeCore(rom, position - distance, count, depth + 1, out _, out _, out _));
                     backReference = true;
-                    p += 2;
+                    position += 2;
                     break;
                 }
                 case >= 0x0C and <= 0x0F: sb.Append("?!,."[b - 0x0C]).Append('\n'); break;
@@ -57,23 +54,23 @@ public static class L2EventText
                 default: sb.Append($"[{b:X2}]"); break;
             }
         }
-        next = p;
+        next = position;
         return sb.ToString();
     }
 
-    /// <summary>Checks typed text: returns what's wrong, or null.</summary>
+    // checks typed text: returns what's wrong, or null
     public static string? Check(string text, RomBuffer? rom = null)
     {
-        foreach (var t in Tokens(text))
+        foreach (var token in Tokens(text))
         {
-            if (t is "Name") continue;
-            if (Pause(t) is int f) { if (f is < 0 or > 250) return $"[{t}]: pauses are 0 to 250 frames."; continue; }
-            if (t.StartsWith("Voice ") && int.TryParse(t[6..], out int v)) { if (v is < 0 or > 0x7F) return $"[{t}]: voices are 0 to 127."; continue; }
-            if (t.StartsWith("Glyph ") && t.Length == 8 && IsHex(t[6..])) continue;
-            // codes shown as [XX] that are written back as they are (08 opens the game's questions: inns, shops...);
-            // not the end codes 00-02 and 0B; 5B is "[" itself (in the Dutch font "(")
-            if (t.Length == 2 && IsHex(t) && Convert.ToInt32(t, 16) is 0x03 or 0x08 or >= 0x0C and <= 0x1F or 0x5B or 0x7F) continue;
-            return $"[{t}] isn't a known code. Use [Name], [Pause 20], [Voice 3] or [Glyph 41].";
+            if (token is "Name") continue;
+            if (Pause(token) is int frames) { if (frames is < 0 or > 250) return $"[{token}]: pauses are 0 to 250 frames."; continue; }
+            if (token.StartsWith("Voice ") && int.TryParse(token[6..], out int voice)) { if (voice is < 0 or > 0x7F) return $"[{token}]: voices are 0 to 127."; continue; }
+            if (token.StartsWith("Glyph ") && token.Length == 8 && IsHex(token[6..])) continue;
+            // codes shown as [XX] that get written back as they are (08 opens the game's questions: inns, shops...).
+            // not the end codes 00-02 and 0B. 5B is "[" itself (in the Dutch font "(")
+            if (token.Length == 2 && IsHex(token) && Convert.ToInt32(token, 16) is 0x03 or 0x08 or >= 0x0C and <= 0x1F or 0x5B or 0x7F) continue;
+            return $"[{token}] isn't a known code. Use [Name], [Pause 20], [Voice 3] or [Glyph 41].";
         }
         foreach (char c in text)
             if (c != '\n' && !(rom != null ? L2Charset.CanShow(rom, c) : c is >= ' ' and <= '~'))
@@ -81,8 +78,8 @@ public static class L2EventText
         return null;
     }
 
-    private static bool IsHex(string s) => s.All(Uri.IsHexDigit);
-    private static int? Pause(string t) => t.StartsWith("Pause ") && int.TryParse(t[6..], out int f) ? f : null;
+    private static bool IsHex(string text) => text.All(Uri.IsHexDigit);
+    private static int? Pause(string token) => token.StartsWith("Pause ") && int.TryParse(token[6..], out int frames) ? frames : null;
 
     private static IEnumerable<string> Tokens(string text)
     {
@@ -94,7 +91,7 @@ public static class L2EventText
         }
     }
 
-    /// <summary>The text packed for the game (without the end code).</summary>
+    // the text packed for the game (without the end code)
     public static byte[] Encode(RomBuffer rom, string text)
     {
         var sb = new StringBuilder();
@@ -103,13 +100,13 @@ public static class L2EventText
         {
             if (text[i] == '[' && text.IndexOf(']', i) is int close && close > i)
             {
-                string t = text.Substring(i + 1, close - i - 1);
-                if (t == "Name") sb.Append("[NAME]");
-                else if (Pause(t) is int f) sb.Append($"[PAUSE {0x80 | Math.Clamp((f + 5) / 10, 0, 25):X2}]");
-                else if (t.StartsWith("Voice ") && int.TryParse(t[6..], out int v)) sb.Append($"[PAUSE {v & 0x7F:X2}]");
-                else if (t.StartsWith("Glyph ")) sb.Append($"[GLYPH {t[6..]}]");
-                else if (t.Length == 2 && IsHex(t)) sb.Append('[').Append(t).Append(']');
-                else throw new InvalidOperationException(Check($"[{t}]") ?? $"[{t}] isn't a known code. Use [Name], [Pause 20], [Voice 3] or [Glyph 41].");
+                string token = text.Substring(i + 1, close - i - 1);
+                if (token == "Name") sb.Append("[NAME]");
+                else if (Pause(token) is int frames) sb.Append($"[PAUSE {0x80 | Math.Clamp((frames + 5) / 10, 0, 25):X2}]");
+                else if (token.StartsWith("Voice ") && int.TryParse(token[6..], out int voice)) sb.Append($"[PAUSE {voice & 0x7F:X2}]");
+                else if (token.StartsWith("Glyph ")) sb.Append($"[GLYPH {token[6..]}]");
+                else if (token.Length == 2 && IsHex(token)) sb.Append('[').Append(token).Append(']');
+                else throw new InvalidOperationException(Check($"[{token}]") ?? $"[{token}] isn't a known code. Use [Name], [Pause 20], [Voice 3] or [Glyph 41].");
                 i = close + 1;
                 continue;
             }

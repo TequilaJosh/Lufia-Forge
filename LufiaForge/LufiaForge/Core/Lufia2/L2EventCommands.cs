@@ -1,6 +1,6 @@
 namespace LufiaForge.Core.Lufia2;
 
-/// <summary>What kind of value a field of a Lufia II event command holds (picks the editor and the wording).</summary>
+// what kind of value a field of a lufia 2 event command holds (picks the editor and the wording)
 public enum L2Kind
 {
     Number,     // plain number
@@ -26,7 +26,7 @@ public enum L2Kind
     Choice,     // one of a fixed list (Options)
 }
 
-/// <summary>One field of a command: where it sits in the bytes (opcode at 0) and what it means.</summary>
+// one field of a command: where it sits in the bytes (opcode at 0) and what it means
 public sealed class L2ParamDef
 {
     public string Label { get; init; } = "";
@@ -35,15 +35,15 @@ public sealed class L2ParamDef
     public Action<byte[], int> Set { get; init; } = (_, _) => { };
     public int Min { get; init; }
     public int Max { get; init; } = 255;
-    /// <summary>The fixed choices of a <see cref="L2Kind.Choice"/> field.</summary>
+    // the fixed choices of an L2Kind.Choice field
     public IReadOnlyList<(int Value, string Name)>? Options { get; init; }
-    /// <summary>Which jump of the command (Jump fields).</summary>
+    // which jump of the command (Jump fields)
     public int JumpIndex { get; init; } = -1;
-    /// <summary>A short explanation shown under the field.</summary>
+    // a short explanation shown under the field
     public string Hint { get; init; } = "";
-    /// <summary>For fields that change the command's shape (a camera form, a check added or taken out, the number of
-    /// answers): new bytes for the value, and for each jump of the new bytes the old jump it keeps (-1: a new one).
-    /// Null: <see cref="Set"/> is enough.</summary>
+    // for fields that change the command's shape (a camera form, a check added or taken out, the number of answers):
+    // new bytes for the value, and for each jump of the new bytes the old jump it keeps (-1 = a new one).
+    // null = Set is enough
     public Func<byte[], int, (byte[] Bytes, int[]? JumpMap)>? Rebuild { get; init; }
 
     public static L2ParamDef Byte(string label, L2Kind kind, int pos, int max = 255, string hint = "", int min = 0) => new()
@@ -76,7 +76,7 @@ public sealed class L2ParamDef
     public static L2ParamDef Jump(string label, int k) => new() { Label = label, Kind = L2Kind.Jump, JumpIndex = k };
 }
 
-/// <summary>A command (or a family of opcodes shown as one, like "Give an item" = 20 and 21).</summary>
+// a command (or a family of opcodes shown as one, like "Give an item" = 20 and 21)
 public sealed class L2CommandDef
 {
     public int[] Ops { get; init; } = Array.Empty<int>();
@@ -84,17 +84,17 @@ public sealed class L2CommandDef
     public string Category { get; init; } = "";
     public string Help { get; init; } = "";
     public L2ParamDef[] Params { get; init; } = Array.Empty<L2ParamDef>();
-    /// <summary>Fields that depend on the bytes (command 41's forms, 14's conditions); null = <see cref="Params"/>.</summary>
+    // fields that depend on the bytes (command 41's forms, 14's conditions), null = Params
     public Func<byte[], L2ParamDef[]>? ParamsFor { get; init; }
     public Func<byte[], L2EventCommands.Words, string> Describe { get; init; } = (_, _) => "";
-    /// <summary>Bytes of the command when added from the menu (null: not offered).</summary>
+    // bytes of the command when added from the menu (null = not offered)
     public byte[]? Template { get; init; }
-    /// <summary>The event waits here until something finishes.</summary>
+    // the event waits here until something finishes
     public string Waits { get; init; } = "";
-    /// <summary>How sure the meaning is: G = checked in the game, C = read from the game's code, D = from how the game's own
-    /// scripts use it, ? = a guess.</summary>
+    // how sure the meaning is: G = checked in the game, C = read from the game's code, D = from how the game's own
+    // scripts use it, ? = a guess
     public char Sure { get; init; } = 'C';
-    /// <summary>Only meaningful in a map's start-up script (or never used by the game: offered under "Rarely used").</summary>
+    // only meaningful in a map's start-up script (or never used by the game: offered under "Rarely used")
     public bool Rare { get; init; }
 
     public L2ParamDef[] FieldsFor(byte[] b) => ParamsFor?.Invoke(b) ?? Params;
@@ -108,15 +108,13 @@ public sealed class L2CommandDef
     };
 }
 
-/// <summary>
-/// Every Lufia II event command in plain words, with its fields (research of 2026-10-25 from the interpreter at
-/// $80:9D32 and the 2962 scripts of the 242 maps; docs/lufia2/events.md has the evidence). Directions in commands 31
-/// and 41: 1 up, 2 down, 3 left, 4 right. Characters: 0-6 the heroes, 10-4F story characters (they keep their map
-/// and hidden state), 50 + n map character n (the map's character start n + 1).
-/// </summary>
+// every lufia 2 event command in plain words, with its fields (research of 2026-10-25 from the interpreter at
+// $80:9D32 and the 2962 scripts of the 242 maps, docs/lufia2/events.md has the evidence). directions in commands 31
+// and 41: 1 up, 2 down, 3 left, 4 right. characters: 0-6 the heroes, 10-4F story characters (they keep their map and
+// hidden state), 50 + n map character n (the map's character start n + 1)
 public static class L2EventCommands
 {
-    /// <summary>Names for descriptions, supplied by the editor for the map being edited.</summary>
+    // names for descriptions, the editor fills them in for the map being edited
     public sealed class Words
     {
         public Func<int, string> Who { get; init; } = DefaultWho;
@@ -146,10 +144,10 @@ public static class L2EventCommands
 
     public static readonly string[] HeroNames = { "Maxim", "Selan", "Guy", "Artea", "Tia", "Dekar", "Lexis" };
     public static readonly string[] CapsuleNames = { "Jelze", "Flash", "Gusto", "Zeppy", "Darbi", "Sully", "Blaze" };
-    /// <summary>Who speaks for 61-67 (the code maps them to actors 0, 1, 2, 3, 5, 4, 6).</summary>
+    // who speaks for 61-67 (the code maps them to actors 0, 1, 2, 3, 5, 4, 6)
     public static readonly int[] SpeakerOf61 = { 0, 1, 2, 3, 5, 4, 6 };
 
-    /// <summary>A character's name without its ", sprite xx" (the command says which sprite it gets).</summary>
+    // a character's name without its ", sprite xx" (the command says which sprite it gets)
     private static string NoSprite(string who) => System.Text.RegularExpressions.Regex.Replace(who, @", sprite [0-9A-F]{2}$", "");
 
     private static (int, string)[] L(params string[] names) => names.Select((n, i) => (i, n)).ToArray();
@@ -164,8 +162,7 @@ public static class L2EventCommands
         (0x07, "Stand facing right (turns back after talking)"), (0x08, "Stand facing left (turns back after talking)"),
         (0x09, "Stand still, keep facing"), (0x0A, "Follow the party"));
 
-    /// <summary>Actions (<c>A3</c>, <c>86</c>, <c>BF</c>; the game's table at $91:8000). Groups of four go up, down, left,
-    /// right.</summary>
+    // actions (A3, 86, BF, the game's table at $91:8000). groups of four go up, down, left, right
     public static readonly (int, string)[] Actions = L(
         (0x00, "Step up one tile"), (0x01, "Step down one tile"), (0x02, "Step left one tile"), (0x03, "Step right one tile"),
         (0x04, "Walk in place (up)"), (0x05, "Walk in place (down)"), (0x06, "Walk in place (left)"), (0x07, "Walk in place (right)"),
@@ -221,9 +218,9 @@ public static class L2EventCommands
     private static string DirName(int d) => d is >= 1 and <= 4 ? Directions[d - 1].Item2 : $"direction {d}";
     private static string Opt(IReadOnlyList<(int, string)> list, int v) => list.FirstOrDefault(o => o.Item1 == v).Item2 ?? $"{v:X2}";
 
-    /// <summary>A ring change's rate: the signed step (high nibble) and the frames between steps (low nibble).</summary>
+    // a ring change's rate: the signed step (high nibble) and the frames between steps (low nibble)
     public static (int Step, int Every) RingRate(int rate) => ((rate >> 4) >= 8 ? (rate >> 4) - 16 : rate >> 4, rate & 0x0F);
-    /// <summary>A ring change's stop: bit 7 set = it stops (at the rest x 2), else it keeps going.</summary>
+    // a ring change's stop: bit 7 set = it stops (at the rest x 2), else it keeps going
     public static bool RingStops(int stop) => (stop & 0x80) != 0;
 
     private static string Every(int frames) => frames switch { 0 => "every 256 frames", 1 => "every frame", _ => $"every {frames} frames" };
@@ -254,15 +251,15 @@ public static class L2EventCommands
         Moves = "Character actions", Party = "Party and items", Cam = "Camera", Screen = "Screen effects", Sound = "Music and sound",
         Places = "Maps and places", Shops = "Shops and services", Time = "Waiting", Special = "Rarely used";
 
-    /// <summary>The order categories are offered in.</summary>
+    // the order categories are offered in
     public static readonly string[] Categories = { Text, Chars, Moves, Party, Flags, Flow, Places, Shops, Cam, Screen, Sound, Time, Special };
 
     private static List<L2CommandDef> Build()
     {
-        var l = new List<L2CommandDef>();
+        var commands = new List<L2CommandDef>();
         void Add(int[] ops, string name, string cat, Func<byte[], Words, string> describe, byte[]? template, string help = "",
                  char sure = 'C', string waits = "", bool rare = false, params L2ParamDef[] ps) =>
-            l.Add(new L2CommandDef { Ops = ops, Name = name, Category = cat, Describe = describe, Template = template, Help = help, Sure = sure, Waits = waits, Rare = rare, Params = ps });
+            commands.Add(new L2CommandDef { Ops = ops, Name = name, Category = cat, Describe = describe, Template = template, Help = help, Sure = sure, Waits = waits, Rare = rare, Params = ps });
         void One(int op, string name, string cat, Func<byte[], Words, string> describe, byte[]? template, string help = "",
                  char sure = 'C', string waits = "", bool rare = false, params L2ParamDef[] ps) =>
             Add(new[] { op }, name, cat, describe, template, help, sure, waits, rare, ps);
@@ -284,7 +281,7 @@ public static class L2EventCommands
             Set = (b, v) => { b[0] = (byte)(lowOp + (v >= 0x100 ? 1 : 0)); b[1] = (byte)v; },
         };
 
-        // ── text (the text itself is edited in the step; these are the commands around it) ──
+        // text (the text itself is edited in the step, these are the commands around it)
         One(0x08, "Text: the person talked to speaks", Text, (_, _) => "The person talked to says:", new byte[] { 0x08 },
             "Opens the text box for the character the player talked to.", sure: 'G');
         One(0x13, "Text: a character speaks", Text, (b, w) => $"{Cap(w.Who(b[1]))} says:", new byte[] { 0x13, 0x50 },
@@ -298,7 +295,7 @@ public static class L2EventCommands
             });
         One(0x9E, "Text: narration (centred box)", Text, (b, _) => $"Narration (box at row {b[1]}):", new byte[] { 0x9E, 0x05 },
             "A text box centred on its text, at this row of the screen (0 top, 27 bottom). The voice is off.", ps: P("row", L2Kind.Number, 1, 27));
-        l.Add(new L2CommandDef
+        commands.Add(new L2CommandDef
         {
             Ops = new[] { 0x10 }, Name = "Ask a question", Category = Text, Template = new byte[] { 0x10, 0x02, 0, 0, 0, 0 },
             Describe = (b, w) => "Ask: " + string.Join(", ", Enumerable.Range(0, b[1]).Select(k => $"answer {k + 1} goes to {w.Jump(k)}")),
@@ -320,7 +317,7 @@ public static class L2EventCommands
         One(0xB8, "Next message stays up while the player walks on", Text, (_, _) => "The next message stays up while the player walks on (like a sign)",
             new byte[] { 0xB8 }, "The event ends as soon as the next message is shown; the box stays up for 4 seconds or until the player moves.");
 
-        // ── flow ──
+        // flow
         One(0x00, "End the event", Flow, (_, _) => "End of the event", new byte[] { 0x00 }, "Closes any text box, brings the camera back and ends.", 'G');
         One(0x42, "End the event", Flow, (_, _) => "End of the event", new byte[] { 0x42 }, "The same as the usual end.", rare: true);
         One(0x1C, "Go to a step", Flow, (_, w) => $"Go to {w.Jump(0)}", new byte[] { 0x1C, 0, 0 }, "", 'G', ps: L2ParamDef.Jump("go to", 0));
@@ -328,13 +325,13 @@ public static class L2EventCommands
             "", 'G', ps: new[] { FlagField(), L2ParamDef.Jump("go to", 0) });
         Add(new[] { 0x6A, L2ExtraFlags.OpIfOff }, "If a story flag is off, go to a step", Flow, (b, w) => $"If {w.Flag(L2ExtraFlags.FlagOf(b))} is off, go to {w.Jump(0)}", new byte[] { 0x6A, 0, 0, 0 },
             "", ps: new[] { FlagField(), L2ParamDef.Jump("go to", 0) });
-        l.Add(new L2CommandDef
+        commands.Add(new L2CommandDef
         {
             Ops = new[] { 0x14 }, Name = "Check conditions", Category = Flow, Template = new byte[] { 0x14, 0x00, 0x00, 0x30, 0, 0, 0xFF },
             Help = "The checks run in order; story flag checks can be joined with \"and\" / \"or\". \"If so, go to\" and \"if not, go to\" jump on the result so far; when no jump is taken the event carries on with the next step.",
             Describe = (b, w) => "Check whether " + L2Conditions.Describe(b, w), ParamsFor = L2Conditions.Fields,
         });
-        l.Add(new L2CommandDef
+        commands.Add(new L2CommandDef
         {
             Ops = new[] { 0x12 }, Name = "Say something different each time", Category = Flow, Template = new byte[] { 0x12, 0x0F, 0x02, 0, 0, 0, 0 },
             Describe = (b, w) => $"Counter {b[1]:X2} picks the next of: " + string.Join(", ", Enumerable.Range(0, b[2]).Select(k => w.Jump(k))) + " (the last one repeats)",
@@ -350,7 +347,7 @@ public static class L2EventCommands
         One(0xAB, "Check Dragon eggs", Flow, (b, _) => $"Check: at least {b[1]} Dragon eggs (the answer goes in flag FF)", new byte[] { 0xAB, 0x08 },
             "Follow it with \"If a story flag is on\" for flag FF.", ps: P("eggs", L2Kind.Number, 1));
 
-        // ── story flags and counters ──
+        // story flags and counters
         Add(new[] { 0x1A, L2ExtraFlags.OpOn }, "Turn a story flag on", Flags, (b, w) => $"Turn {w.Flag(L2ExtraFlags.FlagOf(b))} on", new byte[] { 0x1A, 0x00 },
             "Story flags remember what happened (shared by the whole game).", 'G', ps: FlagField());
         Add(new[] { 0x1B, L2ExtraFlags.OpOff }, "Turn a story flag off", Flags, (b, w) => $"Turn {w.Flag(L2ExtraFlags.FlagOf(b))} off", new byte[] { 0x1B, 0x00 }, "", ps: FlagField());
@@ -359,7 +356,7 @@ public static class L2EventCommands
         One(0x1E, "Add to a counter", Flags, (b, _) => $"Counter {b[1]:X2} + {b[2]}", new byte[] { 0x1E, 0x0F, 0x01 }, "", ps: new[] { P("counter", L2Kind.Variable, 1), P("add", L2Kind.Number, 2) });
         One(0x1F, "Take from a counter", Flags, (b, _) => $"Counter {b[1]:X2} - {b[2]}", new byte[] { 0x1F, 0x0F, 0x01 }, "", ps: new[] { P("counter", L2Kind.Variable, 1), P("take", L2Kind.Number, 2) });
 
-        // ── party and items ──
+        // party and items
         Add(new[] { 0x20, 0x21 }, "Give an item", Party, (b, w) => $"Give {w.Item((b[0] - 0x20) * 0x100 + b[1])}{(b[2] != 1 ? $" x{b[2]}" : "")}",
             new byte[] { 0x20, 0x01, 0x01 }, "No message is shown by itself: say it in a text box before.", ps: new[] { ItemOf(0x20), P("how many", L2Kind.Number, 2, 99, min: 1) });
         Add(new[] { 0x24, 0x25 }, "Take an item", Party, (b, w) => $"Take {w.Item((b[0] - 0x24) * 0x100 + b[1])}{(b[2] != 1 ? $" x{b[2]}" : "")}",
@@ -384,7 +381,7 @@ public static class L2EventCommands
             "", waits: "until they are there");
         One(0x3D, "Line up the party", Party, (_, _) => "Line up the party behind the leader (after members join or leave)", new byte[] { 0x3D, 0x00 }, "", 'D');
 
-        // ── characters ──
+        // characters
         One(0x2D, "Show a character", Chars, (b, w) => $"Show {w.Who(b[1])}", new byte[] { 0x2D, 0x50 },
             "Story characters (10-4F) stay shown.", ps: Who(1));
         One(0x2E, "Hide a character", Chars, (b, w) => $"Hide {w.Who(b[1])}", new byte[] { 0x2E, 0x50 }, "Story characters (10-4F) stay hidden.", ps: Who(1));
@@ -443,7 +440,7 @@ public static class L2EventCommands
         One(0xBD, "Add an effect character", Chars, (b, _) => $"Add effect character {b[1]:X2} (type {b[2]:X2})", new byte[] { 0xBD, 0x5E, 0x00 }, "Used once by the game.", '?', rare: true,
             ps: new[] { P("id", L2Kind.Hex, 1), P("type", L2Kind.Hex, 2) });
 
-        // ── character actions ──
+        // character actions
         One(0xA3, "A character does an action", Moves, (b, w) => $"{Cap(w.Who(b[1]))}: {Opt(Actions, b[2]).ToLowerInvariant()}", new byte[] { 0xA3, 0x00, 0x64 },
             "Follow it with \"Wait for the action\" to wait until it's done.", ps: new[] { Who(1), Pk("action", 2, Actions) });
         One(0x86, "A character acts toward the leader's facing", Moves, (b, w) => $"{Cap(w.Who(b[1]))}: {Opt(ActionGroups, b[2]).ToLowerInvariant()} (turned the way the leader faces)",
@@ -465,10 +462,10 @@ public static class L2EventCommands
             ps: new[] { P("animation", L2Kind.Hex, 1, 0x5F), P("point", L2Kind.Point, 2) });
         One(0x9C, "Scatter animations over an area", Moves, (b, w) => $"{b[2]} x animation {b[3]:X2} scattered over {w.Area(b[1])}", new byte[] { 0x9C, 0x01, 0x08, 0x26 }, "",
             ps: new[] { P("area", L2Kind.Area, 1), P("how many", L2Kind.Number, 2), P("animation", L2Kind.Hex, 3) });
-        // rings, as the game makes them ($80:AA20, $83:C729, moved each frame at $83:E27D): how many sprites, their distance
-        // from the centre in pixels, two tilt angles. Changes (8E/9F size, 8F/90 the tilts): "rate" high nibble = signed
-        // step, low nibble = every that many frames; "stop" with bit 7 = stop at (stop & 7F) x 2, without = keeps going.
-        // 9F removes the ring when its size change stops. The game's warps: ring 0A 78 40 00, 8F 00 41, 9F 84 E1, A2.
+        // rings, the way the game makes them ($80:AA20, $83:C729, moved each frame at $83:E27D): how many sprites, their
+        // distance from the centre in pixels, two tilt angles. changes (8E/9F size, 8F/90 the tilts): "rate" high nibble =
+        // signed step, low nibble = every that many frames. "stop" with bit 7 = stop at (stop & 7F) x 2, without = keeps
+        // going. 9F removes the ring when its size change stops. the game's warps: ring 0A 78 40 00, 8F 00 41, 9F 84 E1, A2
         const string ringHelp = "Sparkles around {0}, as in the game's warps (the Sinistrals at Shrine of Daos, characters appearing in a flash). " +
                                 "On its own a ring stands still and stays: the game always follows it with Tilt a ring (it keeps turning), " +
                                 "Grow or shrink then remove it (it closes in and goes) and Wait until a ring is gone, and adding it from the + menu adds those too. " +
@@ -511,7 +508,7 @@ public static class L2EventCommands
         One(0xC1, "Effect settings", Moves, (b, _) => $"Effect settings {b[1]:X2}, {b[2]:X2}", new byte[] { 0xC1, 0x1D, 0x00 }, "Unknown use; always before a ring of sparkles.", '?', rare: true,
             ps: new[] { P("first", L2Kind.Hex, 1), P("second", L2Kind.Hex, 2) });
 
-        // ── maps and places ──
+        // maps and places
         One(0x16, "Go to another map", Places, (b, w) => $"Go to {w.Map(b[1])}, arriving at point {b[3]}, and play its scene {b[2]}", new byte[] { 0x16, 0x03, 0x01, 0x01 },
             "The scene (an event of that map's scene list) runs on arrival; it must exist. The party faces down.", 'D',
             ps: new[] { P("map", L2Kind.Map, 1), P("scene", L2Kind.Scene, 2), P("arrival point", L2Kind.ArrivalPoint, 3) });
@@ -543,7 +540,7 @@ public static class L2EventCommands
         One(0x7F, "Ship: party aboard", Places, (b, _) => b[1] == 0 ? "The party is on foot" : "The party is aboard the ship", new byte[] { 0x7F, 0xFF }, "", 'C', rare: true, ps: Pk("party", 1, L((0, "on foot"), (0xFF, "aboard"))));
         One(0x80, "Ship: facing", Places, (b, _) => $"Ship faces {b[1]:X2}", null, "", '?', rare: true, ps: P("facing", L2Kind.Hex, 1));
 
-        // ── shops and services ──
+        // shops and services
         One(0x17, "Rest at the inn", Shops, (b, _) => $"Rest at the inn ({b[1]} gold)", new byte[] { 0x17, 0x0A }, "Music, fade, everyone alive is healed, then the gold is paid (nothing when the party has less).",
             waits: "until the rest is over", ps: P("price", L2Kind.Number, 1));
         One(0x18, "Open a shop", Shops, (b, w) => $"Open {w.Shop(b[1])} (the event ends)", new byte[] { 0x18, 0x01 }, "The event ends when the shop closes.", 'G', ps: P("shop", L2Kind.Shop, 1));
@@ -552,8 +549,8 @@ public static class L2EventCommands
             "Afterwards story flag FF is on when the party did not win (losing is game over except battles 0B and 25).", 'G', ps: P("battle", L2Kind.Battle, 1, 0x26));
         One(0xA5, "Game over", Shops, (_, _) => "Game over (back to the title screen)", new byte[] { 0xA5 }, "", rare: true);
 
-        // ── camera ──
-        l.Add(new L2CommandDef
+        // camera
+        commands.Add(new L2CommandDef
         {
             Ops = new[] { 0x41 }, Name = "Camera", Category = Cam, ParamsFor = CameraFields,
             Describe = (b, w) => CameraForm(b) switch
@@ -574,7 +571,7 @@ public static class L2EventCommands
         One(0x3A, "Camera jumps to a tile", Cam, (b, _) => $"Camera jumps to tile ({b[1]}, {b[2]})", new byte[] { 0x3A, 0, 0 }, "At once (the map is drawn again).", rare: true,
             ps: new[] { P("x", L2Kind.Number, 1), P("y", L2Kind.Number, 2) });
 
-        // ── screen effects ──
+        // screen effects
         One(0x58, "Fade the screen out", Screen, (b, _) => $"Fade to black (step {b[1] >> 4}, every {Math.Max(1, b[1] & 15)} frames)", new byte[] { 0x58, 0x11 },
             "Follow it with \"Wait for the fade\". Also stops a quake and any tint.", ps: new[] { L2ParamDef.Nibble("step", L2Kind.Number, 1, true), L2ParamDef.Nibble("frames per step", L2Kind.Number, 1, false) });
         One(0x59, "Fade the screen in", Screen, (b, _) => $"Fade in from black (step {b[1] >> 4}, every {Math.Max(1, b[1] & 15)} frames)", new byte[] { 0x59, 0x11 },
@@ -610,7 +607,7 @@ public static class L2EventCommands
             ps: new[] { Pk("layer", 1, L((0, "1"), (2, "2"), (4, "3"), (6, "4"))), Pk("mode", 2, L((0, "follows the camera"), (1, "fixed"), (2, "parallax"), (3, "scrolls by itself"), (4, "parallax (other)"))), P("setting", L2Kind.Hex, 3) });
         One(0x74, "Battle background", Screen, (b, _) => $"Battles here use background {b[1]:X2}", new byte[] { 0x74, 0x05 }, "Usually in the start-up script.", rare: true, ps: P("background", L2Kind.Hex, 1));
 
-        // ── music and sound ──
+        // music and sound
         One(0x4B, "Set the map's music", Sound, (b, w) => $"Music: {w.Song(b[1])}", new byte[] { 0x4B, 0x01 }, "Nothing changes when that song already plays; it comes back after a battle.",
             ps: P("song", L2Kind.Song, 1, 0x3E));
         One(0x6F, "Play a song now", Sound, (b, w) => $"Play {w.Song(b[1])} now", new byte[] { 0x6F, 0x02 }, "For a scene; the map's own music comes back later.", ps: P("song", L2Kind.Song, 1, 0x3E));
@@ -622,11 +619,11 @@ public static class L2EventCommands
         One(0x4D, "Wait for a music cue", Sound, (b, _) => $"Wait for music cue {b[1]}", new byte[] { 0x4D, 0x21 }, "", waits: "until the song gets there", rare: true, ps: P("cue", L2Kind.Number, 1));
         One(0x4E, "Wait for the sound to end", Sound, (_, _) => "Wait for the sound to end", null, "", '?', "until the sound ends", true);
 
-        // ── waiting ──
+        // waiting
         One(0x37, "Wait (frames)", Time, (b, _) => $"Wait {Frames(b[1])}", new byte[] { 0x37, 0x1E }, "60 frames are a second.", waits: "the time given", ps: P("frames", L2Kind.Frames, 1));
         One(0x38, "Wait (seconds)", Time, (b, _) => $"Wait {b[1]} second{(b[1] == 1 ? "" : "s")}", new byte[] { 0x38, 0x01 }, "", waits: "the time given", ps: P("seconds", L2Kind.Number, 1));
 
-        // ── rarely used / system ──
+        // rarely used / system
         var specials = L((0, "screen bars"), (1, "title sequence"), (2, "cinema bars"), (3, "reset the game"), (4, "ferry crossing"),
                          (5, "reload after the staff roll"), (6, "hang"), (7, "big font"), (8, "normal font"));
         var specialWhat = new L2ParamDef
@@ -634,7 +631,7 @@ public static class L2EventCommands
             Label = "what", Kind = L2Kind.Choice, Options = specials, Get = b => b[1], Set = (b, v) => b[1] = (byte)v,
             Rebuild = (b, v) => (v is 3 or 6 ? new byte[] { 0x5B, (byte)v } : new byte[] { 0x5B, (byte)v, (byte)(v == 4 ? 2 : b.Length > 2 ? b[2] : 0) }, null),
         };
-        l.Add(new L2CommandDef
+        commands.Add(new L2CommandDef
         {
             Ops = new[] { 0x5B }, Name = "Special scene", Category = Special, Rare = true, Template = new byte[] { 0x5B, 0x04, 0x02 },
             Help = "Ferry crossings are followed by \"Go to another map\" to the port.",
@@ -671,25 +668,24 @@ public static class L2EventCommands
             One(op, "Nothing", Special, (_, _) => "(does nothing)", null, "This command does nothing.", rare: true);
         foreach (int op in new[] { 0x02, 0x11, 0x5C, 0x5D })
             One(op, "Crash", Special, (_, _) => "(crashes the game)", null, "Not a real command: the game stops here.", rare: true);
-        return l;
+        return commands;
     }
 
-    /// <summary>A count of jumps (question answers, counter choices) at <paramref name="pos"/>; the jumps follow from
-    /// <paramref name="jumpsAt"/>, 2 bytes each.</summary>
+    // a count of jumps (question answers, counter choices) at pos. the jumps follow from jumpsAt, 2 bytes each
     private static L2ParamDef Count(string label, int pos, int min, int jumpsAt) => new()
     {
         Label = label, Kind = L2Kind.Number, Min = min, Max = 8,
         Get = b => b[pos], Set = (_, _) => { },
         Rebuild = (b, v) =>
         {
-            var n = new byte[jumpsAt + 2 * v];
-            Array.Copy(b, n, Math.Min(b.Length, n.Length));
-            n[pos] = (byte)v;
-            return (n, Enumerable.Range(0, v).Select(k => k < b[pos] ? k : -1).ToArray());
+            var bytes = new byte[jumpsAt + 2 * v];
+            Array.Copy(b, bytes, Math.Min(b.Length, bytes.Length));
+            bytes[pos] = (byte)v;
+            return (bytes, Enumerable.Range(0, v).Select(k => k < b[pos] ? k : -1).ToArray());
         },
     };
 
-    /// <summary>The fields of a camera command (41) for the form its bytes have.</summary>
+    // the fields of a camera command (41) for the form its bytes have
     private static L2ParamDef[] CameraFields(byte[] b)
     {
         var form = new L2ParamDef
@@ -711,11 +707,11 @@ public static class L2EventCommands
         };
     }
 
-    /// <summary>Which form a camera command has: 0 back, 1 move, 2 to a point, 3 to a tile, 4 wait.</summary>
+    // which form a camera command has: 0 back, 1 move, 2 to a point, 3 to a tile, 4 wait
     public static int CameraForm(byte[] b) =>
         b.Length < 3 ? 4 : b[2] == 0xFF ? 4 : (b[1] >> 4) == 6 ? 3 : (b[1] >> 4) == 7 ? 2 : b[2] == 0 ? 0 : 1;
 
-    /// <summary>A camera command of the given form, keeping the speed.</summary>
+    // a camera command of the given form, keeping the speed
     public static byte[] CameraBytes(int form, int speed) => form switch
     {
         1 => new byte[] { 0x41, (byte)(0x10 | speed), 0x02 },

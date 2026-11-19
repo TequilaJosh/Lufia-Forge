@@ -2,20 +2,18 @@ using System.Text;
 
 namespace LufiaForge.Core.Lufia2;
 
-/// <summary>
-/// Lufia II battle scripts (monster AI, item and spell effects; handlers at $85:B483, opcodes 00-5C, all 828 scripts
-/// parse). A command byte, then its arguments; jump targets are u16 offsets from the start of the record that owns
-/// the script. 42 w calls shared script w (library at $96:FADD), 43 returns. A script ends at 00 or 4F (43 in a
-/// library script) once no jump goes further; 02, 31, 33, 34 and 38-3B aren't commands.
-/// </summary>
+// lufia 2 battle scripts (monster AI, item and spell effects, handlers at $85:B483, opcodes 00-5C, all 828 scripts
+// parse). a command byte then its arguments. jump targets are u16 offsets from the start of the record that owns
+// the script. 42 w calls shared script w (library at $96:FADD), 43 returns. a script ends at 00 or 4F (43 in a
+// library script) once no jump goes further. 02, 31, 33, 34 and 38-3B aren't commands
 public static class L2BattleScript
 {
     private static readonly Dictionary<int, (int Args, string Name)> Ops = Build();
 
     private static Dictionary<int, (int, string)> Build()
     {
-        var o = new Dictionary<int, (int, string)>();
-        void S(int n, string name, params int[] ops) { foreach (var op in ops) o[op] = (n, name); }
+        var table = new Dictionary<int, (int, string)>();
+        void S(int argCount, string name, params int[] ops) { foreach (var op in ops) table[op] = (argCount, name); }
         S(0, "end (do the queued action)", 0x00); S(0, "do the action, go on", 0x01); S(2, "go to", 0x03); S(2, "if that failed go to", 0x04);
         S(3, "with chance b/256 go to", 0x05);
         S(5, "if reg == value go to", 0x06); S(5, "if reg != value go to", 0x07); S(5, "if reg > value go to", 0x08);
@@ -38,20 +36,19 @@ public static class L2BattleScript
         S(3, "if battle byte is 0 go to", 0x46); S(0, "$85:9671", 0x48); S(0, "wait for the effect timer", 0x49); S(1, "flash / shake times", 0x4A);
         S(0, "screen effect 4", 0x4B); S(1, "screen effect", 0x4C); S(0, "drop targets that can't be hit", 0x4D); S(2, "reg = attacker's stat", 0x4E);
         S(0, "keep only allowed targets", 0x50); S(0, "reflect flag 4", 0x52); S(1, "action 9", 0x53); S(0, "$85:DA9C", 0x59);
-        return o;
+        return table;
     }
 
-    /// <summary>A readable listing of the script at <paramref name="at"/>; <paramref name="record"/> is the start
-    /// of the record that owns it (jumps count from there).</summary>
+    // a readable listing of the script at at. record is the start of the record that owns it (jumps count from there)
     public static string Disassemble(RomBuffer rom, int at, int record, string[]? spellNames = null, string[]? monsterNames = null, string[]? capsuleAttacks = null)
     {
         var sb = new StringBuilder();
-        int p = at, furthest = at;
-        for (int guard = 0; guard < 300 && p < rom.Length; guard++)
+        int position = at, furthest = at;
+        for (int guard = 0; guard < 300 && position < rom.Length; guard++)
         {
-            byte op = rom.ReadByte(p);
-            if (!Ops.TryGetValue(op, out var def)) { sb.AppendLine($"{p - record:X4}  {op:X2}        (command not known: stops here)"); break; }
-            var args = rom.ReadBytes(p + 1, def.Args);
+            byte op = rom.ReadByte(position);
+            if (!Ops.TryGetValue(op, out var def)) { sb.AppendLine($"{position - record:X4}  {op:X2}        (command not known: stops here)"); break; }
+            var args = rom.ReadBytes(position + 1, def.Args);
             string text = def.Name;
             int target = -1;
             switch (op)
@@ -72,14 +69,14 @@ public static class L2BattleScript
                     break;
                 default: if (args.Length > 0) text += " " + string.Join(" ", args.Select(b => b.ToString("X2"))); break;
             }
-            sb.AppendLine($"{p - record:X4}  {text}");
+            sb.AppendLine($"{position - record:X4}  {text}");
             if (target >= 0) furthest = Math.Max(furthest, record + target);
-            p += 1 + def.Args;
-            if (op is 0x00 or 0x43 or 0x4F && p > furthest) break;
+            position += 1 + def.Args;
+            if (op is 0x00 or 0x43 or 0x4F && position > furthest) break;
         }
         return sb.ToString().TrimEnd();
     }
 
-    /// <summary>A value operand: 80 in the high byte means register lo, otherwise a number.</summary>
+    // a value operand: 80 in the high byte means register lo, otherwise a number
     private static string Operand(byte lo, byte hi) => hi == 0x80 ? $"reg {lo:X2}" : $"{lo | hi << 8}";
 }

@@ -2,13 +2,13 @@ using System.Runtime.CompilerServices;
 
 namespace LufiaForge.Core.Lufia2;
 
-/// <summary>
-/// The letters a Lufia II ROM's fonts show for each byte. The US game shows ASCII (20-7E). With the Dutch font (the
-/// Dutch ROM itself, or a ROM <see cref="L2Dutch.Import"/> put it in) 10-1F are À Á È É Ë Ï Ò Ó Ö Ù Ú Ü à á è é and a
-/// few signs are letters: " ë, # ï, $ ò, &amp; ó, ( ö, ) ù, * ú, ; ü, &lt; ä, = Ä, &gt; ì, \ ñ, ^ Ñ, ` ¿, | ß, ~ ê,
-/// 7F ¡, while [ and ] draw ( and ) (the dialogue font and the menu font agree; read from the Dutch ROM's fonts,
-/// 2026-10-30). Names and text are shown and typed with the letters themselves.
-/// </summary>
+// the letters a lufia 2 rom's fonts show for each byte. the US game shows ASCII (20-7E). with the Dutch font (the
+// Dutch rom itself, or a rom L2Dutch.Import put it in) 10-1F are A-grave A-acute E-grave E-acute E-umlaut I-umlaut
+// O-grave O-acute O-umlaut U-grave U-acute U-umlaut a-grave a-acute e-grave e-acute, and a few signs are letters:
+// " e-umlaut, # i-umlaut, $ o-grave, & o-acute, ( o-umlaut, ) u-grave, * u-acute, ; u-umlaut, < a-umlaut,
+// = A-umlaut, > i-grave, \ n-tilde, ^ N-tilde, ` upside-down ?, | sharp s, ~ e-circumflex, 7F upside-down !,
+// while [ and ] draw ( and ) (the dialogue font and the menu font agree, read from the Dutch rom's fonts 2026-10-30).
+// names and text get shown and typed with the letters themselves
 public static class L2Charset
 {
     private static readonly (byte Code, char Letter)[] DutchMap = BuildDutch();
@@ -30,40 +30,40 @@ public static class L2Charset
     private static readonly Dictionary<byte, char> DutchChar = DutchMap.ToDictionary(x => x.Code, x => x.Letter);
     private static readonly Dictionary<char, byte> DutchByte = DutchMap.ToDictionary(x => x.Letter, x => x.Code);
 
-    /// <summary>The Dutch letters and their codes (for help texts).</summary>
+    // the Dutch letters and their codes (for help texts)
     public static IReadOnlyList<(byte Code, char Letter)> DutchLetters => DutchMap;
 
     private static readonly ConditionalWeakTable<RomBuffer, StrongBox<int>> Sites = new();
 
-    /// <summary>Whether the ROM's dialogue font is the Dutch one (its glyph code starts the font at character 10).</summary>
+    // whether the rom's dialogue font is the Dutch one (its glyph code starts the font at character 10)
     public static bool IsDutch(RomBuffer rom)
     {
         if (rom.Game != GameKind.Lufia2 && rom.Game != GameKind.Unknown) return false;
         var box = Sites.GetValue(rom, r => new StrongBox<int>(L2Dutch.FontSite(r).Operand));
-        int op = box.Value;
-        // the operand of LDA long,X; 27 bytes before it the SBC's value: 20 in the US code, 10 in the Dutch one
-        return op >= 27 && op < rom.Length && rom.ReadByte(op - 27) == 0x10 && rom.ReadByte(op - 28) == 0xE9;
+        int operandAt = box.Value;
+        // the operand of LDA long,X. 27 bytes before it is the SBC's value: 20 in the US code, 10 in the Dutch one
+        return operandAt >= 27 && operandAt < rom.Length && rom.ReadByte(operandAt - 27) == 0x10 && rom.ReadByte(operandAt - 28) == 0xE9;
     }
 
-    /// <summary>The letter byte <paramref name="b"/> shows, or null (a code, not a letter).</summary>
+    // the letter byte b shows, or null (a code, not a letter)
     public static char? ToChar(RomBuffer rom, byte b)
     {
         if (IsDutch(rom) && DutchChar.TryGetValue(b, out char c)) return c;
         return b is >= 0x20 and < 0x7F ? (char)b : null;
     }
 
-    /// <summary>The byte for letter <paramref name="c"/>, or null when the font has no such letter.</summary>
+    // the byte for letter c, null if the font has no such letter
     public static byte? ToByte(RomBuffer rom, char c)
     {
         if (IsDutch(rom))
         {
-            if (DutchByte.TryGetValue(c, out byte d)) return d;
-            // signs the Dutch font draws as letters have no other place: they can't be typed
+            if (DutchByte.TryGetValue(c, out byte code)) return code;
+            // signs the Dutch font draws as letters have no other place, so they can't be typed
             if (DutchChar.ContainsKey((byte)c) && c < 0x80) return null;
         }
         return c is >= ' ' and < (char)0x7F ? (byte)c : null;
     }
 
-    /// <summary>Whether <paramref name="c"/> can be written in this ROM's text.</summary>
+    // whether c can be written in this rom's text
     public static bool CanShow(RomBuffer rom, char c) => ToByte(rom, c) != null;
 }
