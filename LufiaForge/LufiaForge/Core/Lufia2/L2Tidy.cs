@@ -546,7 +546,8 @@ public static class L2Tidy
         res.Checked.Add($"{dn} descriptions, {sa.Count} shops and the monster attack names: the same");
     }
 
-    // the bytes that differ between two roms (and the ones past the shorter one's end)
+    // the bytes that differ between two roms, only up to the shorter one's length (bytes past that aren't listed,
+    // the monster move checks the size by itself and the spell move is allowed to add on past the old end)
     private static List<int> Diff(byte[] a, byte[] b)
     {
         var differ = new List<int>();

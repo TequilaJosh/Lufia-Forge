@@ -650,10 +650,10 @@ public static class L2EventBlocks
     }
 
     // when the map's start-up script makes character id: always (flag -1), or only while story flag flag is on (on)
-    // or off. its create (68 / 7B) gets taken out of where it was and put at the end of the script with its own check,
-    // like the game's maps do (Elcid's start-up script makes its people under "Check whether story flag 0A is off: if
-    // not, go to" the end). a character made in more than one place (with other sprites under other flags) is refused,
-    // edit the start-up script for that
+    // or off. its create (68 / 7B) gets taken out of where it was and put at the top of the script with its own check
+    // (the game's maps do the same kind of check, Elcid's start-up script makes its people under "Check whether story
+    // flag 0A is off: if not, go to" the end). a character made in more than one place (with other sprites under other
+    // flags) is refused, edit the start-up script for that
     public static string SetCreateCondition(RomBuffer rom, int map, int id, int flag, bool on)
     {
         int init = InitScript(rom, map);

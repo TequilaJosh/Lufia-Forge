@@ -524,7 +524,7 @@ public partial class DisassemblerViewModel : ObservableObject
     private static bool TryParseAddress(string text, out int value)
     {
         text = (text ?? "").Trim();
-        // takes $XXXXXX, 0xXXXXXX, or plain decimal
+        // takes $XXXXXX, 0xXXXXXX or plain XXXXXX, all hex (a plain number is hex too, not decimal)
         if (text.StartsWith('$'))
             return int.TryParse(text[1..], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out value);
         return TryParseHex(text, out value);
