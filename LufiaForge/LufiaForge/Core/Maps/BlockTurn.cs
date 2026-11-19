@@ -2,141 +2,140 @@ using LufiaForge.Core.Lufia2;
 
 namespace LufiaForge.Core.Maps;
 
-/// <summary>
-/// Turned blocks for Lufia 1 maps: a block turned a quarter clockwise, flipped across or flipped up/down, as a block of
-/// the map's tileset. A map cell can't turn its block, so the turned look is a block of its own: its picture turned (each
-/// 8x8 tile turned too; the SNES can only mirror tiles, so a quarter turn draws new tiles unless the graphics have the
-/// turned picture already, maybe mirrored) and its walls turned. A block of the tileset that draws the same with the
-/// same walls is used as it is; otherwise one is added at the end, or into a spare block (<see cref="BlockRoom"/>) on a
-/// tileset with composite blocks. A composite block (a roof or tree top drawn over a ground block) turns into a
-/// composite the map has that looks the same, else into a plain block drawing the two together.
-/// </summary>
+// turned blocks for lufia 1 maps: a block turned a quarter clockwise, flipped across or flipped up/down, as a block of
+// the map's tileset. a map cell can't turn its block, so the turned look has to be a block of its own, with its picture
+// turned and its walls turned. each 8x8 tile gets turned too, and the snes can only mirror tiles, so a quarter turn
+// draws new tiles unless the graphics already have the turned picture (maybe mirrored).
+// if the tileset has a block that draws the same with the same walls we use that, otherwise one gets added at the end,
+// or into a spare block (BlockRoom) on a tileset with composite blocks.
+// a composite block (roof or tree top drawn over a ground block) turns into a composite the map has that looks the
+// same, or else into a plain block that draws the two together
 public static class BlockTurn
 {
     public sealed record Result(int[] Blocks, int Added, int NewTiles, string Where);
 
-    // a wall side as the cell beside it on a 3 x 3 grid around the block: 01 = a wall on its left side (can't be entered
+    // a wall side as the cell next to it on a 3 x 3 grid around the block: 01 = wall on its left side (can't be entered
     // walking right), 02 = right side, 04 = top, 08 = bottom
     private static readonly (int Bit, int X, int Y)[] Sides =
         { (BlockSet.AttrRight, 0, 1), (BlockSet.AttrLeft, 2, 1), (BlockSet.AttrDown, 1, 0), (BlockSet.AttrUp, 1, 2) };
 
-    /// <summary>A block's attribute byte with its walls turned (the other bits kept).</summary>
+    // a block's attribute byte with its walls turned (the other bits stay)
     public static byte TurnWalls(byte attr, int quarters, bool flip)
     {
-        int o = attr & ~0x0F;
+        int turned = attr & ~0x0F;
         foreach (var (bit, x, y) in Sides)
         {
             if ((attr & bit) == 0) continue;
-            var (nx, ny) = L2BlockTurn.Point(x, y, 3, 3, quarters, flip);
-            o |= Sides.First(s => s.X == nx && s.Y == ny).Bit;
+            var (newX, newY) = L2BlockTurn.Point(x, y, 3, 3, quarters, flip);
+            turned |= Sides.First(side => side.X == newX && side.Y == newY).Bit;
         }
-        return (byte)o;
+        return (byte)turned;
     }
 
-    /// <summary>Blocks <paramref name="blocks"/> of <paramref name="map"/> turned (<paramref name="quarters"/> quarter turns
-    /// clockwise, after flipping across when <paramref name="flip"/>), new blocks and tiles written into the ROM (all or
-    /// nothing). Throws <see cref="BlockBring.NeedsRoomException"/> when the tileset has composite blocks and no spare.</summary>
+    // map's blocks turned (quarters quarter turns clockwise, after flipping across if flip), with the new blocks and
+    // tiles written into the rom (all or nothing). throws BlockBring.NeedsRoomException when the tileset has composite
+    // blocks and no spare
     public static Result Turn(RomBuffer rom, LufiaMap map, IReadOnlyList<int> blocks, int quarters, bool flip)
     {
         quarters &= 3;
         if (map.IsWorld) throw new InvalidOperationException("World map blocks can't be turned (the world map has a fixed set of blocks).");
         if (quarters == 0 && !flip) return new Result(blocks.ToArray(), 0, 0, "");
-        var ts = MapTileset.ForMap(rom, map);
-        var set = BlockSet.FromMap(rom, map);
-        int limit = map.CompositeThreshold >= 0 ? Math.Min(map.CompositeThreshold, set.BlockCount) : set.BlockCount;
+        var tileset = MapTileset.ForMap(rom, map);
+        var blockSet = BlockSet.FromMap(rom, map);
+        int limit = map.CompositeThreshold >= 0 ? Math.Min(map.CompositeThreshold, blockSet.BlockCount) : blockSet.BlockCount;
 
-        int Priority(int b, int q)
+        int Priority(int block, int q)
         {
-            if (ts.CompositeParts(b) is var (g, o)) return (Word(g, q) | Word(o, q)) & 0x2000;
-            return Word(b, q) & 0x2000;
+            if (tileset.CompositeParts(block) is var (ground, overlay)) return (Word(ground, q) | Word(overlay, q)) & 0x2000;
+            return Word(block, q) & 0x2000;
         }
-        int Word(int b, int q) => b < set.BlockCount ? set.Word(b, q) : 0;
-        byte Attr(int b) => ts.CompositeParts(b) is var (g, o) ? (byte)(ts.Attribute(g) | ts.Attribute(o)) : ts.Attribute(b);
-        string Key(byte[] idx, byte attr, int[] prio) => Convert.ToHexString(idx) + attr.ToString("X2") + string.Concat(prio.Select(p => p != 0 ? '1' : '0'));
-        string LookOf(int b) => Key(ts.MetatileIndices(b), Attr(b), Enumerable.Range(0, 4).Select(q => Priority(b, q)).ToArray());
+        int Word(int block, int q) => block < blockSet.BlockCount ? blockSet.Word(block, q) : 0;
+        byte Attr(int block) => tileset.CompositeParts(block) is var (ground, overlay) ? (byte)(tileset.Attribute(ground) | tileset.Attribute(overlay)) : tileset.Attribute(block);
+        string Key(byte[] indices, byte attr, int[] priority) => Convert.ToHexString(indices) + attr.ToString("X2") + string.Concat(priority.Select(p => p != 0 ? '1' : '0'));
+        string LookOf(int block) => Key(tileset.MetatileIndices(block), Attr(block), Enumerable.Range(0, 4).Select(q => Priority(block, q)).ToArray());
 
-        // the blocks a turned block may become: the tileset's plain blocks (not the blank spares, which new blocks fill)
+        // what a turned block can become: the tileset's plain blocks (not the blank spares, new blocks fill those)
         // and the composites this map and these blocks use
-        var have = new Dictionary<string, int>();
-        var spares = set.Spares.ToHashSet();
+        var existing = new Dictionary<string, int>();
+        var spares = blockSet.Spares.ToHashSet();
         for (int k = 0; k < limit; k++)
-            if (!spares.Contains(k)) have.TryAdd(LookOf(k), k);
+            if (!spares.Contains(k)) existing.TryAdd(LookOf(k), k);
         if (map.CompositeThreshold >= 0)
             foreach (int k in map.Layer.Select(c => c & 0x3FF).Concat(blocks.Select(b => b & 0x3FF)).Where(c => c >= map.CompositeThreshold).Distinct().Order())
-                if (ts.CompositeParts(k) is var (g, o) && g < limit && o < limit) have.TryAdd(LookOf(k), k);
+                if (tileset.CompositeParts(k) is var (ground, overlay) && ground < limit && overlay < limit) existing.TryAdd(LookOf(k), k);
 
         TileImport? import = null;
         var made = new Dictionary<string, int>();
-        var done = new Dictionary<int, int>();
+        var alreadyTurned = new Dictionary<int, int>();
         int added = 0, newTiles = 0;
         var result = new int[blocks.Count];
         for (int i = 0; i < blocks.Count; i++)
         {
-            int b = blocks[i] & 0x3FF;
-            if (done.TryGetValue(b, out int got)) { result[i] = got; continue; }
-            // the picture (palette row * 16 + colour, 0 see-through), each quarter's priority and the walls, turned
-            var idx = ts.MetatileIndices(b);
-            var t = new byte[256];
+            int block = blocks[i] & 0x3FF;
+            if (alreadyTurned.TryGetValue(block, out int turnedBefore)) { result[i] = turnedBefore; continue; }
+            // turn the picture (palette row * 16 + colour, 0 = see-through), each quarter's priority and the walls
+            var indices = tileset.MetatileIndices(block);
+            var turnedPicture = new byte[256];
             for (int y = 0; y < 16; y++)
                 for (int x = 0; x < 16; x++)
                 {
-                    var (nx, ny) = L2BlockTurn.Point(x, y, 16, 16, quarters, flip);
-                    t[ny * 16 + nx] = idx[y * 16 + x];
+                    var (newX, newY) = L2BlockTurn.Point(x, y, 16, 16, quarters, flip);
+                    turnedPicture[newY * 16 + newX] = indices[y * 16 + x];
                 }
-            var prio = new int[4];
+            var priority = new int[4];
             for (int q = 0; q < 4; q++)
             {
                 var (qx, qy) = BlockSet.Quadrants[q];
-                var (nx, ny) = L2BlockTurn.Point(qx, qy, 2, 2, quarters, flip);
-                prio[Array.IndexOf(BlockSet.Quadrants, (nx, ny))] = Priority(b, q);
+                var (newX, newY) = L2BlockTurn.Point(qx, qy, 2, 2, quarters, flip);
+                priority[Array.IndexOf(BlockSet.Quadrants, (newX, newY))] = Priority(block, q);
             }
-            byte attr = TurnWalls(Attr(b), quarters, flip);
-            string key = Key(t, attr, prio);
-            if (!have.TryGetValue(key, out int found) && !made.TryGetValue(key, out found))
+            byte attr = TurnWalls(Attr(block), quarters, flip);
+            string key = Key(turnedPicture, attr, priority);
+            if (!existing.TryGetValue(key, out int match) && !made.TryGetValue(key, out match))
             {
-                // a new block: each quarter one tile of the graphics (or a new one), in its own palette row
-                import ??= new TileImport(rom, map, ts);
+                // new block: each quarter is one tile of the graphics (or a new one), in its own palette row
+                import ??= new TileImport(rom, map, tileset);
                 var words = new ushort[4];
                 uint[]? argb = null;
                 for (int q = 0; q < 4; q++)
                 {
                     var (qx, qy) = BlockSet.Quadrants[q];
-                    var px = new byte[64];
-                    for (int y = 0; y < 8; y++) for (int x = 0; x < 8; x++) px[y * 8 + x] = t[(qy * 8 + y) * 16 + qx * 8 + x];
-                    var rows = px.Where(v => v != 0).Select(v => v >> 4).Distinct().ToList();
+                    var tilePixels = new byte[64];
+                    for (int y = 0; y < 8; y++) for (int x = 0; x < 8; x++) tilePixels[y * 8 + x] = turnedPicture[(qy * 8 + y) * 16 + qx * 8 + x];
+                    var rows = tilePixels.Where(v => v != 0).Select(v => v >> 4).Distinct().ToList();
                     bool isNew;
                     if (rows.Count <= 1)
                     {
-                        var (tile, h, v, n) = import.PlaceTile(px.Select(c => (byte)(c & 15)).ToArray());
-                        isNew = n;
-                        words[q] = BlockSet.MakeWord(tile, rows.Count == 0 ? 0 : rows[0], prio[q] != 0, h, v);
+                        var (tile, flipH, flipV, placedNew) = import.PlaceTile(tilePixels.Select(c => (byte)(c & 15)).ToArray());
+                        isNew = placedNew;
+                        words[q] = BlockSet.MakeWord(tile, rows.Count == 0 ? 0 : rows[0], priority[q] != 0, flipH, flipV);
                     }
                     else
                     {
-                        // a composite's two blocks in other palette rows meet in this tile: the closest colours of one row
-                        argb ??= t.Select(c => c == 0 ? 0u : ts.Palette[c & 127]).ToArray();
-                        words[q] = import.QuarterWord(argb, q, prio[q], out isNew);
+                        // a composite's two blocks in different palette rows meet in this tile, so take the closest colours of one row
+                        argb ??= turnedPicture.Select(c => c == 0 ? 0u : tileset.Palette[c & 127]).ToArray();
+                        words[q] = import.QuarterWord(argb, q, priority[q], out isNew);
                     }
                     if (isNew) newTiles++;
                 }
-                if (!set.CanAddBlocks)
+                if (!blockSet.CanAddBlocks)
                     throw map.CompositeThreshold >= 0
                         ? new BlockBring.NeedsRoomException("This map's tileset has composite blocks (roofs, tree tops) and no spare block left for the turned ones.")
                         : new InvalidOperationException($"Tileset {map.Tileset} is full (1024 blocks).");
-                found = set.AddBlock(0);
-                for (int q = 0; q < 4; q++) set.SetWord(found, q, words[q]);
-                set.SetAttribute(found, attr);
-                made[key] = found;
+                match = blockSet.AddBlock(0);
+                for (int q = 0; q < 4; q++) blockSet.SetWord(match, q, words[q]);
+                blockSet.SetAttribute(match, attr);
+                made[key] = match;
                 added++;
             }
-            done[b] = result[i] = found;
+            alreadyTurned[block] = result[i] = match;
         }
         if (added == 0) return new Result(result, 0, 0, "");
         string where = L2Rom.AllOrNothing(rom, () =>
         {
-            string blocksNote = set.Save(rom, allowExpand: true);
+            string blocksNote = blockSet.Save(rom, allowExpand: true);
             string tilesNote = import?.SaveTiles(allowExpand: true) ?? "";
-            return string.Join("; ", new[] { blocksNote, tilesNote }.Select(s => s.TrimEnd('.')).Where(s => s.Length > 0));
+            return string.Join("; ", new[] { blocksNote, tilesNote }.Select(note => note.TrimEnd('.')).Where(note => note.Length > 0));
         });
         return new Result(result, added, newTiles, where);
     }

@@ -1,40 +1,40 @@
 namespace LufiaForge.Core.Maps;
 
-/// <summary>One dialogue box of the game and where it is used.</summary>
+// one dialogue box of the game and where it's used
 public sealed class DialogueLine
 {
     public int MapId { get; init; }
     public int Event { get; init; }
-    /// <summary>Start of the decoded code holding the line (event start, or code the event jumps to).</summary>
+    // start of the decoded code holding the line (the event start, or code the event jumps to)
     public int RegionStart { get; init; }
-    /// <summary>Start of the event (jump offsets are counted from here).</summary>
+    // start of the event (jump offsets count from here)
     public int JumpBase { get; init; }
-    /// <summary>Index of the line inside the decoded code.</summary>
+    // index of the line inside the decoded code
     public int Line { get; init; }
     public int Offset { get; init; }
     public string Speaker { get; init; } = "";
     public string Text { get; set; } = "";
-    /// <summary>What starts the event: "Character 3", "Step-on area D1", or empty.</summary>
+    // what starts the event: "Character 3", "Step-on area D1", or empty
     public string Source { get; init; } = "";
-    /// <summary>Sprite number of the character whose event this is, or -1.</summary>
+    // sprite number of the character whose event this is, or -1
     public int Sprite { get; init; } = -1;
     public bool IsCodeView => RegionStart != JumpBase;
 }
 
-/// <summary>Every dialogue box in every map's events (and the code those events jump to).</summary>
+// every dialogue box in every map's events (and the code those events jump to)
 public static class DialogueIndex
 {
     public static List<DialogueLine> Build(RomBuffer rom, IEnumerable<int> mapIds, Action<int, int>? progress = null)
     {
         var lines = new List<DialogueLine>();
-        var seen = new HashSet<int>();      // decoded regions (shared scripts appear once)
+        var seen = new HashSet<int>();      // decoded regions (shared scripts show up once)
         var ids = mapIds.ToList();
-        for (int mi = 0; mi < ids.Count; mi++)
+        for (int mapIndex = 0; mapIndex < ids.Count; mapIndex++)
         {
-            int map = ids[mi];
-            progress?.Invoke(mi, ids.Count);
-            var npcs = new Dictionary<int, int>();
-            try { foreach (var n in LufiaMap.Load(rom, map).Npcs.Where(n => !n.IsUnused)) npcs[MapEvents.TalkEvent(n.Index)] = n.Sprite; } catch { }
+            int map = ids[mapIndex];
+            progress?.Invoke(mapIndex, ids.Count);
+            var npcSprites = new Dictionary<int, int>();
+            try { foreach (var npc in LufiaMap.Load(rom, map).Npcs.Where(n => !n.IsUnused)) npcSprites[MapEvents.TalkEvent(npc.Index)] = npc.Sprite; } catch { }
             var triggers = new Dictionary<int, string>();
             try { foreach (var (area, ev, _, _) in MapSetupScript.ReadTriggers(rom, map)) triggers.TryAdd(ev, $"Step-on area D{area}"); } catch { }
 
@@ -43,36 +43,36 @@ public static class DialogueIndex
                 EventScript? first = null;
                 try { first = EventScript.Load(rom, map, ev); } catch { }
                 if (first == null || !seen.Add(first.Start)) continue;
-                string source = npcs.ContainsKey(ev) ? $"Character {ev}" : triggers.GetValueOrDefault(ev, "");
-                int sprite = npcs.TryGetValue(ev, out int sp) ? sp : -1;
+                string source = npcSprites.ContainsKey(ev) ? $"Character {ev}" : triggers.GetValueOrDefault(ev, "");
+                int sprite = npcSprites.TryGetValue(ev, out int eventSprite) ? eventSprite : -1;
 
                 var queue = new Queue<EventScript>(); queue.Enqueue(first);
                 int regions = 0;
                 while (queue.Count > 0 && regions++ < 64)
                 {
-                    var s = queue.Dequeue();
-                    for (int i = 0; i < s.Ops.Count; i++)
+                    var script = queue.Dequeue();
+                    for (int i = 0; i < script.Ops.Count; i++)
                     {
-                        var o = s.Ops[i];
-                        if (o.IsText && o.Text.Trim().Length > 0)
+                        var scriptOp = script.Ops[i];
+                        if (scriptOp.IsText && scriptOp.Text.Trim().Length > 0)
                         {
                             // "Actor N says": actor 7 + k is "character k", the map's record k - 1
-                            string speaker = EventScript.SpeakerName(o.Bytes);
+                            string speaker = EventScript.SpeakerName(scriptOp.Bytes);
                             int lineSprite = sprite;
-                            int op = o.Bytes[0];
+                            int op = scriptOp.Bytes[0];
                             int actor = op is >= 0x88 and <= 0x8F ? op - 0x88 : op is >= 0x90 and <= 0xAF ? op - 0x90 + 8 : -1;
-                            if (actor >= 8 && npcs.TryGetValue(actor - 8, out int ns)) { speaker = $"Character {actor - 7} says"; lineSprite = ns; }
+                            if (actor >= 8 && npcSprites.TryGetValue(actor - 8, out int speakerSprite)) { speaker = $"Character {actor - 7} says"; lineSprite = speakerSprite; }
                             else if (actor >= 7) { speaker = $"Character {actor - 7} says"; }
                             else if (actor is >= 0 and < 7) { speaker = $"Party actor {actor} says"; lineSprite = -1; }
                             lines.Add(new DialogueLine
                             {
-                                MapId = map, Event = ev, RegionStart = s.Start, JumpBase = first.Start, Line = i, Offset = o.Offset,
-                                Speaker = speaker, Text = o.Text, Source = source, Sprite = lineSprite,
+                                MapId = map, Event = ev, RegionStart = script.Start, JumpBase = first.Start, Line = i, Offset = scriptOp.Offset,
+                                Speaker = speaker, Text = scriptOp.Text, Source = source, Sprite = lineSprite,
                             });
                         }
-                        foreach (var t in o.Targets)
-                            if (t.Op == null && t.Absolute >= s.BlockBase && t.Absolute < s.BlockBase + 0x10000 && seen.Add(t.Absolute))
-                                try { queue.Enqueue(EventScript.LoadAt(rom, map, ev, t.Absolute, first.Start)); } catch { }
+                        foreach (var target in scriptOp.Targets)
+                            if (target.Op == null && target.Absolute >= script.BlockBase && target.Absolute < script.BlockBase + 0x10000 && seen.Add(target.Absolute))
+                                try { queue.Enqueue(EventScript.LoadAt(rom, map, ev, target.Absolute, first.Start)); } catch { }
                     }
                 }
             }

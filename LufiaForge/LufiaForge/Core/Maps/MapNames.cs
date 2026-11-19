@@ -3,24 +3,20 @@ using System.Text.Json;
 
 namespace LufiaForge.Core.Maps;
 
-/// <summary>
-/// Readable names for maps. The game only has name text for towns, so names are built from:
-/// <list type="bullet">
-/// <item>the map -> town table at $01:E93E (values 01-1E are towns, see <see cref="Lufia1Constants.TownNames"/>),</item>
-/// <item>the map's tileset, which tells what kind of place it is (castle, cave, tower, shrine...),</item>
-/// <item>exits: maps that connect to each other (other than towns) form one place, named after where it is
-///   entered - a world map entrance ("Cave near Treck", nearest town entrance) or a town ("Medan Castle").</item>
-/// </list>
-/// Names the user types win over generated ones. With a project open they are kept in the project (<see cref="ProjectNames"/>);
-/// names kept in %AppData%\LufiaForge\mapnames.json (from before projects had their own) apply to every project that
-/// hasn't named that map itself.
-/// </summary>
+// readable names for maps. the game only has name text for towns, so we build names from:
+// - the map -> town table at $01:E93E (values 01-1E are towns, see Lufia1Constants.TownNames)
+// - the map's tileset, which tells what kind of place it is (castle, cave, tower, shrine...)
+// - exits: maps that connect to each other (other than towns) are one place, named after where you enter it,
+//   a world map entrance ("Cave near Treck", nearest town entrance) or a town ("Medan Castle")
+// names the user types win over generated ones. with a project open they're kept in the project (ProjectNames).
+// names kept in %AppData%\LufiaForge\mapnames.json (from before projects had their own) apply to every project that
+// hasn't named that map itself
 public static class MapNames
 {
     public const int TownTable = 0xE93E;
     public const int PrologueFortress = 0x97;
 
-    /// <summary>What kind of place a tileset shows (checked against renders of every map).</summary>
+    // what kind of place a tileset shows (checked against renders of every map)
     public static string PlaceType(int tileset) => tileset switch
     {
         0 or 1 => "Town",
@@ -44,7 +40,7 @@ public static class MapNames
         foreach (int id in mapIds)
         {
             try { exits[id] = LufiaMap.ReadExits(rom, id); } catch { exits[id] = new(); }
-            tileset[id] = LufiaMap.IsValidMap(rom, id, out var d, out _) && d != null ? d[8] : -1;
+            tileset[id] = LufiaMap.IsValidMap(rom, id, out var data, out _) && data != null ? data[8] : -1;
         }
         int Code(int id) => rom.ReadByte(TownTable + id);
         bool IsTown(int id) => Code(id) is >= 1 and < 0x80 && Lufia1Constants.TownNames.ContainsKey((byte)Code(id));
@@ -53,9 +49,9 @@ public static class MapNames
         names[LufiaMap.WorldMap] = "World map";
 
         // towns (a town split over several maps gets numbered)
-        foreach (var g in mapIds.Where(IsTown).GroupBy(Code))
+        foreach (var town in mapIds.Where(IsTown).GroupBy(Code))
         {
-            var ids = g.OrderBy(i => i).ToList();
+            var ids = town.OrderBy(i => i).ToList();
             for (int i = 0; i < ids.Count; i++) names[ids[i]] = ids.Count == 1 ? TownOf(ids[i]) : $"{TownOf(ids[i])} ({i + 1})";
         }
 
@@ -63,25 +59,25 @@ public static class MapNames
         var places = mapIds.Where(id => id != LufiaMap.WorldMap && !IsTown(id)).ToHashSet();
         var neighbours = places.ToDictionary(id => id, _ => new HashSet<int>());
         var entrances = places.ToDictionary(id => id, _ => new List<(int from, MapExit exit)>());
-        foreach (var (src, list) in exits)
-            foreach (var e in list.Where(e => !e.IsUnused))
+        foreach (var (fromMap, list) in exits)
+            foreach (var exit in list.Where(e => !e.IsUnused))
             {
-                int dest = e.DestMap == 0 ? src : e.DestMap;
-                if (dest == src || !places.Contains(dest)) continue;
-                if (places.Contains(src))
+                int dest = exit.DestMap == 0 ? fromMap : exit.DestMap;
+                if (dest == fromMap || !places.Contains(dest)) continue;
+                if (places.Contains(fromMap))
                 {
-                    // only maps of the same kind form one place (a castle's cellar cave is its own place)
-                    if (PlaceType(tileset.GetValueOrDefault(src, -1)) == PlaceType(tileset.GetValueOrDefault(dest, -1)))
-                    { neighbours[src].Add(dest); neighbours[dest].Add(src); }
-                    else entrances[dest].Add((src, e));
+                    // only maps of the same kind are one place (a castle's cellar cave is its own place)
+                    if (PlaceType(tileset.GetValueOrDefault(fromMap, -1)) == PlaceType(tileset.GetValueOrDefault(dest, -1)))
+                    { neighbours[fromMap].Add(dest); neighbours[dest].Add(fromMap); }
+                    else entrances[dest].Add((fromMap, exit));
                 }
-                else entrances[dest].Add((src, e));
+                else entrances[dest].Add((fromMap, exit));
             }
 
         // maps sharing a dungeon code (80+) in the town table are floors of one place
-        foreach (var g in places.Where(id => Code(id) >= 0x80).GroupBy(Code))
+        foreach (var floors in places.Where(id => Code(id) >= 0x80).GroupBy(Code))
         {
-            var ids = g.ToList();
+            var ids = floors.ToList();
             for (int i = 1; i < ids.Count; i++) { neighbours[ids[0]].Add(ids[i]); neighbours[ids[i]].Add(ids[0]); }
         }
 
@@ -89,10 +85,10 @@ public static class MapNames
         var worldExits = exits.GetValueOrDefault(LufiaMap.WorldMap) ?? new();
         var townSpots = worldExits.Where(e => !e.IsUnused && mapIds.Contains(e.DestMap) && IsTown(e.DestMap))
             .Select(e => (x: (e.X1 + e.X2) / 2.0, y: (e.Y1 + e.Y2) / 2.0, town: TownOf(e.DestMap))).ToList();
-        string? NearestTown(MapExit e)
+        string? NearestTown(MapExit entrance)
         {
             if (townSpots.Count == 0) return null;
-            double cx = (e.X1 + e.X2) / 2.0, cy = (e.Y1 + e.Y2) / 2.0;
+            double cx = (entrance.X1 + entrance.X2) / 2.0, cy = (entrance.Y1 + entrance.Y2) / 2.0;
             return townSpots.OrderBy(t => (t.x - cx) * (t.x - cx) + (t.y - cy) * (t.y - cy)).First().town;
         }
         string TypeOf(int id) => PlaceType(tileset.GetValueOrDefault(id, -1));
@@ -103,23 +99,23 @@ public static class MapNames
         foreach (int start in places.OrderBy(i => i))
         {
             if (seen.Contains(start)) continue;
-            var comp = new List<int>();
-            var q = new Queue<int>(); q.Enqueue(start); seen.Add(start);
-            while (q.Count > 0)
+            var component = new List<int>();
+            var queue = new Queue<int>(); queue.Enqueue(start); seen.Add(start);
+            while (queue.Count > 0)
             {
-                int m = q.Dequeue(); comp.Add(m);
-                foreach (int n in neighbours[m].OrderBy(i => i)) if (seen.Add(n)) q.Enqueue(n);
+                int current = queue.Dequeue(); component.Add(current);
+                foreach (int next in neighbours[current].OrderBy(i => i)) if (seen.Add(next)) queue.Enqueue(next);
             }
-            groups.Add(comp);
+            groups.Add(component);
         }
 
         var placeNames = new List<(List<int> maps, string name)>();
-        foreach (var comp in groups)
+        foreach (var component in groups)
         {
-            // entry map: one entered from the world map, else from a town, else the lowest number
-            var fromWorld = comp.SelectMany(m => entrances[m].Where(x => x.from == LufiaMap.WorldMap).Select(x => (m, x.exit))).FirstOrDefault();
-            var fromTown = comp.SelectMany(m => entrances[m].Where(x => x.from != LufiaMap.WorldMap && IsTown(x.from)).Select(x => (m, x.from))).FirstOrDefault();
-            var fromPlace = comp.SelectMany(m => entrances[m].Where(x => x.from != LufiaMap.WorldMap && !IsTown(x.from)).Select(x => (m, x.from))).FirstOrDefault();
+            // entry map: one entered from the world map, otherwise from a town, otherwise the lowest number
+            var fromWorld = component.SelectMany(m => entrances[m].Where(x => x.from == LufiaMap.WorldMap).Select(x => (m, x.exit))).FirstOrDefault();
+            var fromTown = component.SelectMany(m => entrances[m].Where(x => x.from != LufiaMap.WorldMap && IsTown(x.from)).Select(x => (m, x.from))).FirstOrDefault();
+            var fromPlace = component.SelectMany(m => entrances[m].Where(x => x.from != LufiaMap.WorldMap && !IsTown(x.from)).Select(x => (m, x.from))).FirstOrDefault();
             int entry; string name;
             if (fromWorld.exit != null)
             {
@@ -134,32 +130,32 @@ public static class MapNames
             }
             else if (fromPlace.from != 0)
             {
-                // entered from another (non-town) place: resolved after that place has a name
+                // entered from another (non-town) place, worked out once that place has a name
                 entry = fromPlace.m;
                 name = $"@{fromPlace.from}|{TypeOf(entry)}";
             }
             else
             {
-                entry = comp.Min();
+                entry = component.Min();
                 name = TypeOf(entry) switch
                 {
                     "Fortress" => "Fortress of Doom",
                     "Island" => "Opening scene",
-                    var t => $"Unconnected {t.ToLowerInvariant()}",
+                    var kind => $"Unconnected {kind.ToLowerInvariant()}",
                 };
             }
             if (TypeOf(entry) == "Fortress")
-                name = "Fortress of Doom" + (comp.Contains(PrologueFortress) ? " (prologue)" : " (finale)");
+                name = "Fortress of Doom" + (component.Contains(PrologueFortress) ? " (prologue)" : " (finale)");
 
             // order the parts by distance from the entry
             var order = new List<int>();
-            var q = new Queue<int>(); var s2 = new HashSet<int> { entry }; q.Enqueue(entry);
-            while (q.Count > 0)
+            var queue = new Queue<int>(); var reached = new HashSet<int> { entry }; queue.Enqueue(entry);
+            while (queue.Count > 0)
             {
-                int m = q.Dequeue(); order.Add(m);
-                foreach (int n in neighbours[m].OrderBy(i => i)) if (s2.Add(n)) q.Enqueue(n);
+                int current = queue.Dequeue(); order.Add(current);
+                foreach (int next in neighbours[current].OrderBy(i => i)) if (reached.Add(next)) queue.Enqueue(next);
             }
-            order.AddRange(comp.Where(m => !s2.Contains(m)).OrderBy(i => i));
+            order.AddRange(component.Where(m => !reached.Contains(m)).OrderBy(i => i));
             placeNames.Add((order, name));
         }
 
@@ -181,30 +177,30 @@ public static class MapNames
         // places with the same name get numbered, then parts within a place
         foreach (var same in placeNames.GroupBy(p => p.name))
         {
-            int k = 1;
+            int number = 1;
             foreach (var (maps, name) in same.OrderBy(p => p.maps.Min()))
             {
-                string n = same.Count() > 1 ? $"{name} {k++}" : name;
-                for (int i = 0; i < maps.Count; i++) names[maps[i]] = maps.Count == 1 ? n : $"{n} - part {i + 1}";
+                string placeName = same.Count() > 1 ? $"{name} {number++}" : name;
+                for (int i = 0; i < maps.Count; i++) names[maps[i]] = maps.Count == 1 ? placeName : $"{placeName} - part {i + 1}";
             }
         }
         return names;
     }
 
-    // ── user names ──────────────────────────────────────────────────────────
+    // user names
 
     private static string StorePath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "LufiaForge", "mapnames.json");
 
-    /// <summary>The open project's names (null = no project): they win over the shared ones, and renames are kept here.
-    /// An empty name means "the automatic name" (it hides a shared name in this project).</summary>
+    // the open project's names (null = no project). they win over the shared ones, and renames get kept here.
+    // an empty name means "the automatic name" (it hides a shared name in this project)
     public static Dictionary<int, string>? ProjectNames { get; set; }
 
-    /// <summary>A rename changed <see cref="ProjectNames"/> (the project has something to save).</summary>
+    // a rename changed ProjectNames (the project has something to save)
     public static event Action? ProjectNamesChanged;
 
-    /// <summary>Names one map in the open project only (Lufia II's maps: the shared names are Lufia 1's). Empty: back to
-    /// the game's name.</summary>
+    // names one map in the open project only (Lufia II's maps, since the shared names are Lufia 1's). empty = back to
+    // the game's name
     public static void SetProjectName(int id, string name)
     {
         if (ProjectNames == null) return;
@@ -214,7 +210,7 @@ public static class MapNames
         ProjectNamesChanged?.Invoke();
     }
 
-    /// <summary>The names to show: the shared ones with the open project's on top.</summary>
+    // the names to show: the shared ones with the open project's on top
     public static Dictionary<int, string> LoadCustom()
     {
         var names = LoadShared();
@@ -224,8 +220,8 @@ public static class MapNames
         return names;
     }
 
-    /// <summary>Keeps the names to show (what <see cref="LoadCustom"/> gave, changed): in the open project when there is
-    /// one (only where they differ from the shared names), else in the shared file.</summary>
+    // keeps the names to show (what LoadCustom gave, changed): in the open project if there is one (only where they
+    // differ from the shared names), otherwise in the shared file
     public static void SaveCustom(Dictionary<int, string> names)
     {
         if (ProjectNames == null) { SaveShared(names); return; }
@@ -233,9 +229,9 @@ public static class MapNames
         bool changed = false;
         foreach (int id in shared.Keys.Concat(names.Keys).Concat(ProjectNames.Keys).Distinct().ToList())
         {
-            string? want = names.TryGetValue(id, out var n) && !string.IsNullOrWhiteSpace(n) ? n.Trim() : null;
+            string? want = names.TryGetValue(id, out var typed) && !string.IsNullOrWhiteSpace(typed) ? typed.Trim() : null;
             string? keep = want == shared.GetValueOrDefault(id) ? null : want ?? "";
-            string? had = ProjectNames.TryGetValue(id, out var h) ? h : null;
+            string? had = ProjectNames.TryGetValue(id, out var stored) ? stored : null;
             if (keep == had) continue;
             if (keep == null) ProjectNames.Remove(id); else ProjectNames[id] = keep;
             changed = true;
@@ -263,6 +259,6 @@ public static class MapNames
             var raw = names.Where(kv => !string.IsNullOrWhiteSpace(kv.Value)).ToDictionary(kv => kv.Key.ToString("X2"), kv => kv.Value.Trim());
             File.WriteAllText(StorePath, JsonSerializer.Serialize(raw, new JsonSerializerOptions { WriteIndented = true }));
         }
-        catch { /* not fatal: names are a convenience */ }
+        catch { /* not fatal, names are just a convenience */ }
     }
 }

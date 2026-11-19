@@ -3,31 +3,27 @@ using System.Text;
 
 namespace LufiaForge.Core.Audio;
 
-/// <summary>
-/// Lufia's song format, read from the sound driver (song loaded at $2800 in sound RAM; driver at $0400):
-/// <code>
-/// header  "SFC", tempo (timer 0 = tempo x 125 µs per tick, $1789), name to 0x10, channel table 0x10-0x17
-///         (voice number, +80 = drum channel: the note picks the drum sound, FF = channel not used), 8 order-list
-///         pointers at 0x20, instruments to load at 0x30.
-/// order   [hi][lo] = phrase address, 80+t = transpose t for the next phrase (each phrase end resets it), FF = end ($1B70).
-/// phrase  00-7F n d g v   note n (+ transpose), next event after d ticks, sounds g ticks (0 = rest), velocity v
-///         80-EF           note (n &amp; 7F) with the last full note's d, g and v
-///         F0 d x          wait d          F1 d v  channel volume    F2 d p  pan (40 = centre)
-///         F6 d t x        tune            F7 d i  instrument         F3-F5 F8-FA  nothing
-///         FB              loop start      FC n    loop end: the body plays n times, 0 = forever
-///         FD              phrase end      FE      channel end        FF s p  effect (echo, noise, ADSR...)
-/// </code>
-/// The first FB of a channel takes the outer loop slot for good, later ones the inner slot ($1A56-$1B4F).
-/// MIDI: 48 ticks per quarter note, one track per channel; commands MIDI has no word for travel as
-/// "lufia:" text events so a song survives export and import.
-/// </summary>
+// Lufia's song format, read from the sound driver (song loaded at $2800 in sound RAM, driver at $0400):
+//   header  "SFC", tempo (timer 0 = tempo x 125 microseconds per tick, $1789), name to 0x10, channel table 0x10-0x17
+//           (voice number, +80 = drum channel: the note picks the drum sound, FF = channel not used), 8 order-list
+//           pointers at 0x20, instruments to load at 0x30.
+//   order   [hi][lo] = phrase address, 80+t = transpose t for the next phrase (each phrase end resets it), FF = end ($1B70).
+//   phrase  00-7F n d g v   note n (+ transpose), next event after d ticks, sounds g ticks (0 = rest), velocity v
+//           80-EF           note (n & 7F) with the last full note's d, g and v
+//           F0 d x          wait d          F1 d v  channel volume    F2 d p  pan (40 = centre)
+//           F6 d t x        tune            F7 d i  instrument         F3-F5 F8-FA  nothing
+//           FB              loop start      FC n    loop end: the body plays n times, 0 = forever
+//           FD              phrase end      FE      channel end        FF s p  effect (echo, noise, ADSR...)
+// the first FB of a channel takes the outer loop slot for good, later ones the inner slot ($1A56-$1B4F).
+// MIDI: 48 ticks per quarter note, one track per channel. commands MIDI has no word for travel as "lufia:" text
+// events so a song survives export and import
 public static class SongCodec
 {
     public const int Base = 0x2800;
     public const int MaxSize = 0x1800;
     public const int TicksPerQuarter = 48;
 
-    /// <summary>End: the song stops here (FE, or the end of the order list).</summary>
+    // End = the song stops here (FE, or the end of the order list)
     public enum Kind { Note, Volume, Pan, Program, Raw, LoopStart, LoopEnd, End }
 
     public sealed record Event(int Tick, Kind Kind, int A = 0, int B = 0, int C = 0, byte[]? Raw = null);
@@ -38,36 +34,36 @@ public static class SongCodec
         public byte[] Header = new byte[0x40];
         public List<Event>[] Channels = Enumerable.Range(0, 8).Select(_ => new List<Event>()).ToArray();
         public bool[] Drum = new bool[8];
-        /// <summary>Microseconds per quarter note.</summary>
+        // microseconds per quarter note
         public int MicrosPerQuarter => Tempo * 125 * TicksPerQuarter;
     }
 
-    // ── decode ──
+    // decode
 
-    /// <summary>Song data as stored in the ROM (2-byte length, then the sound RAM image from $2800).</summary>
+    // song data the way the rom stores it (2-byte length, then the sound RAM image from $2800)
     public static Song Decode(byte[] data, int maxTicks = 48 * 4 * 400)
     {
-        var m = new byte[0x10000];
-        Array.Copy(data, 2, m, Base, Math.Min(data.Length - 2, MaxSize));
-        var song = new Song { Tempo = m[Base + 3] };
-        Array.Copy(m, Base, song.Header, 0, 0x40);
+        var ram = new byte[0x10000];
+        Array.Copy(data, 2, ram, Base, Math.Min(data.Length - 2, MaxSize));
+        var song = new Song { Tempo = ram[Base + 3] };
+        Array.Copy(ram, Base, song.Header, 0, 0x40);
         for (int ch = 0; ch < 8; ch++)
         {
-            if (m[Base + 0x10 + ch] == 0xFF) continue;   // not used (the driver skips it, $18A8)
-            song.Drum[ch] = (m[Base + 0x10 + ch] & 0x80) != 0;
-            int order = m[Base + 0x20 + ch * 2] | m[Base + 0x21 + ch * 2] << 8;
+            if (ram[Base + 0x10 + ch] == 0xFF) continue;   // not used (the driver skips it, $18A8)
+            song.Drum[ch] = (ram[Base + 0x10 + ch] & 0x80) != 0;
+            int order = ram[Base + 0x20 + ch * 2] | ram[Base + 0x21 + ch * 2] << 8;
             if (order < Base || order >= Base + MaxSize) continue;
-            DecodeChannel(m, order, song.Channels[ch], maxTicks);
+            DecodeChannel(ram, order, song.Channels[ch], maxTicks);
         }
         return song;
     }
 
-    private static void DecodeChannel(byte[] m, int order, List<Event> ev, int maxTicks)
+    private static void DecodeChannel(byte[] ram, int order, List<Event> events, int maxTicks)
     {
-        int tick = 0, transpose = 0, p = -1;
+        int tick = 0, transpose = 0, pos = -1;
         int lastDelay = 0, lastGate = 0, lastVel = 0x60;
         // loop slots: (order, phrase, transpose, counter); counter FE = not started, FF = forever
-        int[] lo = { -1, -1 }, lp = { 0, 0 }, lt = { 0, 0 }, lc = { 0, 0 };
+        int[] loopOrder = { -1, -1 }, loopPos = { 0, 0 }, loopTranspose = { 0, 0 }, loopCount = { 0, 0 };
         bool outerTaken = false, innerTaken = false;
         bool forever = false;
         int guard = 0;
@@ -76,11 +72,11 @@ public static class SongCodec
         {
             while (true)
             {
-                if (order < 0 || order >= m.Length) return false;
-                int b = m[order];
-                if (b == 0xFF) { if (p >= 0) ev.Add(new Event(tick, Kind.End)); return false; }
-                if ((b & 0x80) != 0) { transpose = b & 0x7F; order++; continue; }
-                p = b << 8 | m[order + 1];
+                if (order < 0 || order >= ram.Length) return false;
+                int entry = ram[order];
+                if (entry == 0xFF) { if (pos >= 0) events.Add(new Event(tick, Kind.End)); return false; }
+                if ((entry & 0x80) != 0) { transpose = entry & 0x7F; order++; continue; }
+                pos = entry << 8 | ram[order + 1];
                 order += 2;
                 return true;
             }
@@ -88,84 +84,82 @@ public static class SongCodec
         if (!NextPhrase()) return;
         while (tick < maxTicks && guard++ < 200000)
         {
-            int e = m[p];
-            if (e < 0x80)
+            int command = ram[pos];
+            if (command < 0x80)
             {
-                lastDelay = m[p + 1]; lastGate = m[p + 2]; lastVel = m[p + 3];
-                ev.Add(new Event(tick, Kind.Note, e + transpose & 0x7F, lastGate, lastVel));
-                tick += lastDelay; p += 4;
+                lastDelay = ram[pos + 1]; lastGate = ram[pos + 2]; lastVel = ram[pos + 3];
+                events.Add(new Event(tick, Kind.Note, command + transpose & 0x7F, lastGate, lastVel));
+                tick += lastDelay; pos += 4;
                 continue;
             }
-            if (e < 0xF0)
+            if (command < 0xF0)
             {
-                ev.Add(new Event(tick, Kind.Note, (e & 0x7F) + transpose & 0x7F, lastGate, lastVel));
-                tick += lastDelay; p += 1;
+                events.Add(new Event(tick, Kind.Note, (command & 0x7F) + transpose & 0x7F, lastGate, lastVel));
+                tick += lastDelay; pos += 1;
                 continue;
             }
-            switch (e)
+            switch (command)
             {
-                case 0xF0: tick += m[p + 1]; p += 3; break;
-                case 0xF1: ev.Add(new Event(tick, Kind.Volume, m[p + 2])); tick += m[p + 1]; p += 3; break;
-                case 0xF2: ev.Add(new Event(tick, Kind.Pan, m[p + 2])); tick += m[p + 1]; p += 3; break;
-                case 0xF6: ev.Add(new Event(tick, Kind.Raw, Raw: new byte[] { 0xF6, 0, m[p + 2], m[p + 3] })); tick += m[p + 1]; p += 4; break;
-                case 0xF7: ev.Add(new Event(tick, Kind.Program, m[p + 2])); tick += m[p + 1]; p += 3; break;
+                case 0xF0: tick += ram[pos + 1]; pos += 3; break;
+                case 0xF1: events.Add(new Event(tick, Kind.Volume, ram[pos + 2])); tick += ram[pos + 1]; pos += 3; break;
+                case 0xF2: events.Add(new Event(tick, Kind.Pan, ram[pos + 2])); tick += ram[pos + 1]; pos += 3; break;
+                case 0xF6: events.Add(new Event(tick, Kind.Raw, Raw: new byte[] { 0xF6, 0, ram[pos + 2], ram[pos + 3] })); tick += ram[pos + 1]; pos += 4; break;
+                case 0xF7: events.Add(new Event(tick, Kind.Program, ram[pos + 2])); tick += ram[pos + 1]; pos += 3; break;
                 case 0xFB:
                 {
-                    int s = !outerTaken ? 0 : !innerTaken ? 1 : -1;
-                    if (s >= 0)
+                    int slot = !outerTaken ? 0 : !innerTaken ? 1 : -1;
+                    if (slot >= 0)
                     {
-                        if (s == 0) outerTaken = true; else innerTaken = true;
-                        lo[s] = order; lp[s] = p + 1; lt[s] = transpose; lc[s] = 0xFE;
-                        ev.Add(new Event(tick, Kind.LoopStart, s));
+                        if (slot == 0) outerTaken = true; else innerTaken = true;
+                        loopOrder[slot] = order; loopPos[slot] = pos + 1; loopTranspose[slot] = transpose; loopCount[slot] = 0xFE;
+                        events.Add(new Event(tick, Kind.LoopStart, slot));
                     }
-                    p += 1;
+                    pos += 1;
                     break;
                 }
                 case 0xFC:
                 {
-                    // as $1ABD: the inner slot when its counter is set, else the outer one
-                    int s = innerTaken && lc[1] != 0 ? 1 : 0;
-                    int c = lc[s];
+                    // like $1ABD: the inner slot if its counter is set, otherwise the outer one
+                    int slot = innerTaken && loopCount[1] != 0 ? 1 : 0;
+                    int counter = loopCount[slot];
                     bool back;
-                    if (c == 0xFF) back = true;                                   // forever
-                    else if (c == 0xFE)                                            // first time at this end
+                    if (counter == 0xFF) back = true;                                   // forever
+                    else if (counter == 0xFE)                                            // first time at this end
                     {
-                        int n = m[p + 1] - 1 & 0xFF;
+                        int n = ram[pos + 1] - 1 & 0xFF;
                         back = n != 0;
-                        if (back) lc[s] = n;                                       // (n = 1: leaves, counter untouched)
+                        if (back) loopCount[slot] = n;                                       // (n = 1: leaves, counter untouched)
                     }
                     else
                     {
-                        lc[s] = c - 1 & 0xFF;
-                        back = lc[s] != 0;
-                        if (!back) { innerTaken = false; lc[1] = 0; }             // the driver clears the inner slot
+                        loopCount[slot] = counter - 1 & 0xFF;
+                        back = loopCount[slot] != 0;
+                        if (!back) { innerTaken = false; loopCount[1] = 0; }             // the driver clears the inner slot
                     }
-                    if (back && lc[s] == 0xFF)
+                    if (back && loopCount[slot] == 0xFF)
                     {
                         // forever: mark the end of one pass and stop here
-                        ev.Add(new Event(tick, Kind.LoopEnd, s));
+                        events.Add(new Event(tick, Kind.LoopEnd, slot));
                         return;
                     }
-                    if (back) { order = lo[s]; p = lp[s]; transpose = lt[s]; }
-                    else p += 2;
+                    if (back) { order = loopOrder[slot]; pos = loopPos[slot]; transpose = loopTranspose[slot]; }
+                    else pos += 2;
                     break;
                 }
                 case 0xFD: transpose = 0; if (!NextPhrase()) return; break;   // $1B52 clears the transpose
-                case 0xFE: ev.Add(new Event(tick, Kind.End)); return;   // $1B95: the whole song stops
-                case 0xFF: ev.Add(new Event(tick, Kind.Raw, Raw: new byte[] { 0xFF, m[p + 1], m[p + 2] })); p += 3; break;
-                default: p += 1; break;
+                case 0xFE: events.Add(new Event(tick, Kind.End)); return;   // $1B95: the whole song stops
+                case 0xFF: events.Add(new Event(tick, Kind.Raw, Raw: new byte[] { 0xFF, ram[pos + 1], ram[pos + 2] })); pos += 3; break;
+                default: pos += 1; break;
             }
         }
     }
 
-    // ── encode ──
+    // encode
 
-    /// <summary>
-    /// Song data (with the 2-byte length) from per-channel events, header bytes from <paramref name="headerTemplate"/>
-    /// with the new tempo and drum flags. Each channel loops forever (FB ... FC 00) as one phrase or cut into pieces,
-    /// whichever is smaller; a piece that repeats (also at another pitch) is stored once and the order list plays it
-    /// again, as the game's own songs do.
-    /// </summary>
+    // song data (with the 2-byte length) from per-channel events, header bytes from headerTemplate with the new tempo
+    // and drum flags. each channel loops forever (FB ... FC 00) as one phrase or cut into pieces, whichever is
+    // smaller. a piece that repeats (also at another pitch) is stored once and the order list plays it again, like
+    // the game's own songs do
     public static byte[] Encode(Song song, byte[] headerTemplate)
     {
         var used = Enumerable.Range(0, 8).Select(ch => song.Channels[ch].Any(e => e.Kind is not (Kind.LoopStart or Kind.LoopEnd or Kind.End))).ToArray();
@@ -185,7 +179,7 @@ public static class SongCodec
         for (int i = 0; i < 0x40; i++) if (i is < 0x10 or >= 0x18 and < 0x20 or >= 0x30) img[i] = headerTemplate[i];
         img[3] = (byte)Math.Clamp(song.Tempo, 1, 255);
         for (int ch = 0; ch < 8; ch++)
-            // channel table: the voice (its own number), +80 = drums (the note picks the drum sound); FF = not used
+            // channel table: the voice (its own number), +80 = drums (the note picks the drum sound), FF = not used
             img[0x10 + ch] = used[ch] ? (byte)(ch | (song.Drum[ch] ? 0x80 : 0)) : (byte)0xFF;
         if (img.Count > MaxSize) throw new InvalidOperationException($"The song needs {img.Count} bytes; the sound driver gives songs {MaxSize}.");
         var data = new byte[img.Count + 2];
@@ -194,23 +188,21 @@ public static class SongCodec
         return data;
     }
 
-    /// <summary>A phrase's bytes and where its note numbers are (pieces that differ only by a transposition share one phrase).</summary>
+    // a phrase's bytes and where its note numbers are (pieces that only differ by a transposition share one phrase)
     private sealed record Piece(List<byte> Bytes, List<int> Notes)
     {
         public int Low => Notes.Count == 0 ? 0 : Notes.Min(i => Bytes[i] & 0x7F);
-        /// <summary>The bytes with the notes moved down by the lowest one.</summary>
+        // the bytes with the notes moved down by the lowest one
         public string Shape()
         {
-            var b = Bytes.ToArray(); int low = Low;
-            foreach (int i in Notes) b[i] = (byte)(b[i] & 0x80 | (b[i] & 0x7F) - low);
-            return Convert.ToHexString(b);
+            var shifted = Bytes.ToArray(); int low = Low;
+            foreach (int i in Notes) shifted[i] = (byte)(shifted[i] & 0x80 | (shifted[i] & 0x7F) - low);
+            return Convert.ToHexString(shifted);
         }
     }
 
-    /// <summary>
-    /// The sound RAM image from $2800: header (order pointers filled in), order lists, phrases. A phrase is stored
-    /// once at the lowest pitch it's used at; higher uses get a transpose (80+t) before them in the order list.
-    /// </summary>
+    // the sound RAM image from $2800: header (order pointers filled in), order lists, phrases. a phrase is stored once
+    // at the lowest pitch it's used at, higher uses get a transpose (80+t) before them in the order list
     private static List<byte> Layout(List<Piece>[] plan)
     {
         var img = new List<byte>(new byte[0x40]);
@@ -253,16 +245,14 @@ public static class SongCodec
         return img;
     }
 
-    /// <summary>
-    /// A channel's phrases, each ending in FD (the last one in FC 00 FD, or FE where the song stops). Grid 0: one
-    /// phrase with the loop start inside it; otherwise a new phrase at the first event of every grid step and the
-    /// loop start as a phrase of its own (FB FD: the loop-back lands on the FD and carries on with the next entry).
-    /// </summary>
+    // a channel's phrases, each ending in FD (the last one in FC 00 FD, or FE where the song stops). grid 0 = one
+    // phrase with the loop start inside it. otherwise a new phrase at the first event of every grid step and the loop
+    // start as a phrase of its own (FB FD: the loop-back lands on the FD and carries on with the next entry)
     private static List<Piece> EncodeChannel(List<Event> events, int grid)
     {
         // events in time order, keeping the original order within a tick (markers included)
         var ordered = events.Select((e, i) => (e, i)).OrderBy(x => x.e.Tick).ThenBy(x => x.i).Select(x => x.e).ToList();
-        // the loop that repeats forever starts at the LoopStart of the LoopEnd's slot (the last one before it);
+        // the loop that repeats forever starts at the LoopStart of the LoopEnd's slot (the last one before it).
         // without one the whole channel repeats
         var loopEnd = ordered.LastOrDefault(e => e.Kind == Kind.LoopEnd);
         var stop = ordered.FirstOrDefault(e => e.Kind == Kind.End);
@@ -280,7 +270,7 @@ public static class SongCodec
             if (i == loopStartIndex) { fbBefore = ev.Count; loopTick = ordered[i].Tick; }
             if (ordered[i].Kind is not (Kind.LoopStart or Kind.LoopEnd or Kind.End)) ev.Add(ordered[i]);
         }
-        if (fbBefore >= ev.Count) { fbBefore = 0; loopTick = 0; }   // an empty loop would hang the driver: repeat everything
+        if (fbBefore >= ev.Count) { fbBefore = 0; loopTick = 0; }   // an empty loop would hang the driver, so repeat everything
         bool loops = stop == null;
         // (a note may sound past the loop end: its gate can be longer than its delay)
         int end = stop?.Tick ?? loopEnd?.Tick ?? (ev.Count == 0 ? 0 : ev[^1].Tick + (ev[^1].Kind == Kind.Note ? Math.Max(1, ev[^1].B) : 1));
@@ -325,7 +315,7 @@ public static class SongCodec
                 {
                     var r = (byte[])e.Raw!.Clone();
                     if (r[0] is 0xF6 && r.Length >= 4) r[1] = (byte)d;
-                    else d = 0;   // no wait of its own: the gap is filled with F0
+                    else d = 0;   // no wait of its own, the gap gets filled with F0
                     o.AddRange(r);
                     break;
                 }
@@ -338,15 +328,15 @@ public static class SongCodec
         return phrases;
     }
 
-    // ── MIDI ──
+    // MIDI
 
-    /// <summary>Lufia 1 plays note n an octave up, as Lufia II does: its instruments' pitch multipliers are their loop
-    /// length / 16 (some a little under, 11.4-12 semitones), with the same pitch table (file 0x12F4E, 0x217D-0x3F38).
-    /// Measured 2026-11-01 on every looping instrument.</summary>
+    // Lufia 1 plays note n an octave up, like Lufia II does: its instruments' pitch multipliers are their loop
+    // length / 16 (some a little under, 11.4-12 semitones), with the same pitch table (file 0x12F4E, 0x217D-0x3F38).
+    // measured 2026-11-01 on every looping instrument
     public const int Lufia1Transpose = 12;
 
-    /// <summary>A General MIDI program like each Lufia 1 instrument (00-3F; 30-3F are the drum sounds), guessed from
-    /// its overtones, range and the songs that use it (0B, the flute of Flower and the field, is near a pure tone).</summary>
+    // a General MIDI program like each Lufia 1 instrument (00-3F, 30-3F are the drum sounds), guessed from its
+    // overtones, range and the songs that use it (0B, the flute of Flower and the field, is near a pure tone)
     private static readonly int[] Lufia1Gm =
     {
         49, 49, 45, 61, 43, 19, 48, 56, 74, 60, 68, 73, 71, 0, 0, 0,        // 00-0F
@@ -357,14 +347,14 @@ public static class SongCodec
 
     public static int Lufia1GmProgram(int instrument) => instrument is >= 0 and < 0x40 ? Lufia1Gm[instrument] : 0;
 
-    /// <summary>The song as a MIDI file. <paramref name="transpose"/>: added to the notes of every channel but the drums,
-    /// so they sound where the game plays them (Lufia II: note n sounds as MIDI n + 12); written as "lufia: transpose"
-    /// so <see cref="FromMidi"/> takes it off again. <paramref name="program"/>: the General MIDI program for an
-    /// instrument slot (the slot itself travels as "lufia: instrument"); without it the program is the slot.
-    /// <para><paramref name="fullLevel"/>: the loudest channel volume and the loudest note of the song are brought up to
-    /// 127 (each scaled by the same factor, so the parts keep their balance): the game's own levels (volumes 48-96,
-    /// notes near 55) sound faint in a MIDI player. "lufia: levels V N" keeps the song's own loudest volume and note,
-    /// so <see cref="FromMidi"/> scales them back exactly.</para></summary>
+    // the song as a MIDI file. transpose gets added to the notes of every channel but the drums, so they sound where the
+    // game plays them (Lufia II: note n sounds as MIDI n + 12). it's written as "lufia: transpose" so FromMidi takes it
+    // off again. program = the General MIDI program for an instrument slot (the slot itself travels as
+    // "lufia: instrument"), without it the program is the slot.
+    // fullLevel: the loudest channel volume and the loudest note of the song get brought up to 127 (each scaled by the
+    // same factor, so the parts keep their balance), since the game's own levels (volumes 48-96, notes near 55) sound
+    // faint in a MIDI player. "lufia: levels V N" keeps the song's own loudest volume and note, so FromMidi scales
+    // them back exactly
     public static byte[] ToMidi(Song song, string name, int transpose = 0, Func<int, int>? program = null, bool fullLevel = false)
     {
         int maxVol = song.Channels.SelectMany(c => c).Where(e => e.Kind == Kind.Volume).Select(e => e.A).DefaultIfEmpty(0).Max();
@@ -376,20 +366,20 @@ public static class SongCodec
         int Vel(int v) => Math.Clamp((int)Math.Round(v * 127.0 / maxVel), 1, 127);
         var tracks = new List<byte[]>();
         // track 0: tempo and name
-        var t0 = new List<byte>();
-        Meta(t0, 0, 0x03, Encoding.ASCII.GetBytes(name));
-        int us = song.MicrosPerQuarter;
-        Meta(t0, 0, 0x51, new[] { (byte)(us >> 16), (byte)(us >> 8), (byte)us });
-        Meta(t0, 0, 0x01, Encoding.ASCII.GetBytes($"lufia: tempo {song.Tempo}"));
-        if (transpose != 0) Meta(t0, 0, 0x01, Encoding.ASCII.GetBytes($"lufia: transpose {transpose}"));
-        if (scale) Meta(t0, 0, 0x01, Encoding.ASCII.GetBytes($"lufia: levels {maxVol} {maxVel}"));
-        EndTrack(t0, 0);
-        tracks.Add(t0.ToArray());
+        var headerTrack = new List<byte>();
+        Meta(headerTrack, 0, 0x03, Encoding.ASCII.GetBytes(name));
+        int micros = song.MicrosPerQuarter;
+        Meta(headerTrack, 0, 0x51, new[] { (byte)(micros >> 16), (byte)(micros >> 8), (byte)micros });
+        Meta(headerTrack, 0, 0x01, Encoding.ASCII.GetBytes($"lufia: tempo {song.Tempo}"));
+        if (transpose != 0) Meta(headerTrack, 0, 0x01, Encoding.ASCII.GetBytes($"lufia: transpose {transpose}"));
+        if (scale) Meta(headerTrack, 0, 0x01, Encoding.ASCII.GetBytes($"lufia: levels {maxVol} {maxVel}"));
+        EndTrack(headerTrack, 0);
+        tracks.Add(headerTrack.ToArray());
         for (int ch = 0; ch < 8; ch++)
         {
             var list = song.Channels[ch];
             if (list.Count == 0) continue;
-            int mc = song.Drum[ch] ? 9 : ch;
+            int midiChannel = song.Drum[ch] ? 9 : ch;
             var msgs = new List<(int Tick, int Order, byte[] Bytes, bool Meta)>();
             msgs.Add((0, 0, Encoding.ASCII.GetBytes($"lufia: channel {ch}{(song.Drum[ch] ? " drums" : "")}"), true));
             var sounding = list.Where(x => x.Kind == Kind.Note && x.B > 0).ToList();
@@ -400,7 +390,7 @@ public static class SongCodec
                     case Kind.Note:
                     {
                         if (e.B <= 0) break;   // a rest
-                        // a gate past the next note's start ties into it (the driver slurs, $1958); MIDI ends the
+                        // a gate past the next note's start ties into it (the driver slurs, $1958). MIDI ends the
                         // note there and a text keeps the real gate
                         int at = sounding.IndexOf(e);
                         int room = at + 1 < sounding.Count ? sounding[at + 1].Tick - e.Tick : int.MaxValue;
@@ -409,56 +399,54 @@ public static class SongCodec
                         if (e.C <= 0) msgs.Add((e.Tick, 2, Encoding.ASCII.GetBytes("lufia: velocity 0"), true));   // MIDI's velocity 0 = note off
                         if (len <= 0) break;
                         byte key = (byte)(song.Drum[ch] ? e.A : Math.Clamp(e.A + transpose, 0, 127));
-                        msgs.Add((e.Tick, 2, new[] { (byte)(0x90 | mc), key, (byte)Vel(e.C) }, false));
-                        msgs.Add((e.Tick + len, 1, new[] { (byte)(0x80 | mc), key, (byte)0 }, false));
+                        msgs.Add((e.Tick, 2, new[] { (byte)(0x90 | midiChannel), key, (byte)Vel(e.C) }, false));
+                        msgs.Add((e.Tick + len, 1, new[] { (byte)(0x80 | midiChannel), key, (byte)0 }, false));
                         break;
                     }
-                    case Kind.Volume: msgs.Add((e.Tick, 2, new[] { (byte)(0xB0 | mc), (byte)7, (byte)Vol(e.A) }, false)); break;
-                    case Kind.Pan: msgs.Add((e.Tick, 2, new[] { (byte)(0xB0 | mc), (byte)10, (byte)Math.Clamp(e.A, 0, 127) }, false)); break;
-                    case Kind.Program: msgs.Add((e.Tick, 2, new[] { (byte)(0xC0 | mc), (byte)((program?.Invoke(e.A) ?? e.A) & 0x7F) }, false));
+                    case Kind.Volume: msgs.Add((e.Tick, 2, new[] { (byte)(0xB0 | midiChannel), (byte)7, (byte)Vol(e.A) }, false)); break;
+                    case Kind.Pan: msgs.Add((e.Tick, 2, new[] { (byte)(0xB0 | midiChannel), (byte)10, (byte)Math.Clamp(e.A, 0, 127) }, false)); break;
+                    case Kind.Program: msgs.Add((e.Tick, 2, new[] { (byte)(0xC0 | midiChannel), (byte)((program?.Invoke(e.A) ?? e.A) & 0x7F) }, false));
                         if (e.A > 0x7F || program != null) msgs.Add((e.Tick, 2, Encoding.ASCII.GetBytes($"lufia: instrument {e.A:X2}"), true));
                         break;
                     case Kind.Raw: msgs.Add((e.Tick, 2, Encoding.ASCII.GetBytes("lufia: " + Convert.ToHexString(e.Raw!)), true)); break;
                     case Kind.LoopStart:
                         // only the start of the loop that repeats forever (the LoopEnd's slot, last before it)
-                        var le = list.LastOrDefault(x => x.Kind == Kind.LoopEnd);
-                        if (le != null && e == list.Take(list.IndexOf(le)).LastOrDefault(x => x.Kind == Kind.LoopStart && x.A == le.A))
+                        var loopEnd = list.LastOrDefault(x => x.Kind == Kind.LoopEnd);
+                        if (loopEnd != null && e == list.Take(list.IndexOf(loopEnd)).LastOrDefault(x => x.Kind == Kind.LoopStart && x.A == loopEnd.A))
                             msgs.Add((e.Tick, 0, Encoding.ASCII.GetBytes("loopStart"), true));
                         break;
                     case Kind.LoopEnd: msgs.Add((e.Tick, 0, Encoding.ASCII.GetBytes("loopEnd"), true)); break;
                     case Kind.End: msgs.Add((e.Tick, 3, Encoding.ASCII.GetBytes("songEnd"), true)); break;
                 }
             }
-            var tr = new List<byte>();
+            var track = new List<byte>();
             int last = 0;
             foreach (var (tick, _, bytes, meta) in msgs.OrderBy(x => x.Tick).ThenBy(x => x.Order))
             {
-                if (meta) Meta(tr, tick - last, bytes.Length > 0 && Encoding.ASCII.GetString(bytes).StartsWith("loop") || Encoding.ASCII.GetString(bytes) == "songEnd" ? 0x06 : 0x01, bytes);
-                else { VarLen(tr, tick - last); tr.AddRange(bytes); }
+                if (meta) Meta(track, tick - last, bytes.Length > 0 && Encoding.ASCII.GetString(bytes).StartsWith("loop") || Encoding.ASCII.GetString(bytes) == "songEnd" ? 0x06 : 0x01, bytes);
+                else { VarLen(track, tick - last); track.AddRange(bytes); }
                 last = tick;
             }
-            EndTrack(tr, 0);
-            tracks.Add(tr.ToArray());
+            EndTrack(track, 0);
+            tracks.Add(track.ToArray());
         }
-        var f = new List<byte>();
-        f.AddRange(Encoding.ASCII.GetBytes("MThd")); Be32(f, 6); Be16(f, 1); Be16(f, tracks.Count); Be16(f, TicksPerQuarter);
-        foreach (var t in tracks) { f.AddRange(Encoding.ASCII.GetBytes("MTrk")); Be32(f, t.Length); f.AddRange(t); }
-        return f.ToArray();
+        var file = new List<byte>();
+        file.AddRange(Encoding.ASCII.GetBytes("MThd")); Be32(file, 6); Be16(file, 1); Be16(file, tracks.Count); Be16(file, TicksPerQuarter);
+        foreach (var t in tracks) { file.AddRange(Encoding.ASCII.GetBytes("MTrk")); Be32(file, t.Length); file.AddRange(t); }
+        return file.ToArray();
     }
 
-    /// <summary>
-    /// A song from a MIDI file: each track (and MIDI channel within it) becomes a game channel - the one named by a
-    /// "lufia: channel N" text, else the next free one (at most 8; MIDI channel 10 = drums). A game channel plays
-    /// one note at a time; times are scaled to 48 per quarter note. The notes of every channel but the drums lose the
-    /// "lufia: transpose" of an export; a MIDI made elsewhere (no "lufia: tempo") loses <paramref name="foreignTranspose"/>,
-    /// so it sounds at the pitch it was written in (Lufia II: 12).
-    /// </summary>
+    // a song from a MIDI file: each track (and MIDI channel inside it) becomes a game channel, the one named by a
+    // "lufia: channel N" text, otherwise the next free one (at most 8, MIDI channel 10 = drums). a game channel plays
+    // one note at a time, and times get scaled to 48 per quarter note. the notes of every channel but the drums lose
+    // the "lufia: transpose" of an export. a MIDI made somewhere else (no "lufia: tempo") loses foreignTranspose, so it
+    // sounds at the pitch it was written in (Lufia II: 12)
     public static Song FromMidi(byte[] midi, out List<string> warnings, int foreignTranspose = 0)
     {
         var song = FromMidiAsWritten(midi, out warnings);
         var (_, all) = ReadMidi(midi);
         var texts = all.Where(e => e.Type == 0x01).Select(e => Encoding.ASCII.GetString(e.Data!).Trim()).ToList();
-        // levels brought up by the export: back to the song's own
+        // levels the export brought up go back to the song's own
         if (texts.FirstOrDefault(x => x.StartsWith("lufia: levels ")) is { } lv && lv[14..].Split(' ') is [var a, var b] &&
             int.TryParse(a, out int maxVol) && int.TryParse(b, out int maxVel) && maxVol is >= 1 and <= 127 && maxVel is >= 1 and <= 127)
             foreach (var list in song.Channels)
@@ -576,17 +564,17 @@ public static class SongCodec
                 if (gates.TryGetValue(list[k].Tick, out int g)) list[k] = list[k] with { B = g };
                 if (silent.Contains(list[k].Tick)) list[k] = list[k] with { C = 0 };
             }
-            // one note at a time: of notes starting together the highest stays
+            // one note at a time: of notes that start together, the highest stays
             var chords = list.Where(x => x.Kind == Kind.Note).GroupBy(x => x.Tick).Where(gr => gr.Count() > 1).ToList();
             foreach (var gr in chords) foreach (var x in gr.OrderByDescending(x => x.A).Skip(1)) list.Remove(x);
             if (chords.Count > 0)
                 warnings.Add($"Track {u.Track} (MIDI channel {u.Ch + 1}): {chords.Count} chords cut to their top note (a game channel plays one note at a time).");
-            // in time order; within a tick: loop start, settings, the note, then loop end / song end
+            // in time order, and within a tick: loop start, settings, the note, then loop end / song end
             static int Rank(Event x) => x.Kind switch { Kind.LoopStart => 0, Kind.Note => 2, Kind.LoopEnd or Kind.End => 3, _ => 1 };
             var sorted = list.OrderBy(x => x.Tick).ThenBy(Rank).ToList();
             list.Clear(); list.AddRange(sorted);
         }
-        // a MIDI without loop markers (not from here) repeats as a whole: every channel loops at the song's end
+        // a MIDI with no loop markers (not made here) repeats as a whole, so every channel loops at the song's end
         // (the last end-of-track, or where the last note stops), so the channels stay together
         if (!song.Channels.Any(c => c.Any(x => x.Kind is Kind.LoopEnd or Kind.End)))
         {
@@ -611,14 +599,14 @@ public static class SongCodec
         if ((div & 0x8000) != 0) throw new InvalidDataException("MIDI files timed in SMPTE frames aren't supported.");
         var list = new List<MidiEv>();
         int p = 8 + (f[4] << 24 | f[5] << 16 | f[6] << 8 | f[7]);
-        // chunks other than MTrk (a sequencer's own, e.g. Yamaha's XF "XFIH") are skipped and don't count as tracks
+        // chunks other than MTrk (a sequencer's own, like Yamaha's XF "XFIH") get skipped and don't count as tracks
         for (int t = 0; t < ntr && p + 8 <= f.Length; p += 8 + (f[p + 4] << 24 | f[p + 5] << 16 | f[p + 6] << 8 | f[p + 7]))
         {
             int len = f[p + 4] << 24 | f[p + 5] << 16 | f[p + 6] << 8 | f[p + 7];
             if (len < 0 || (long)p + 8 + len > int.MaxValue) break;
             if (Encoding.ASCII.GetString(f, p, 4) != "MTrk") continue;
             int q = p + 8, end = (int)Math.Min(f.Length, (long)q + len);
-            // running status: the last channel message's status byte; meta events and sysex don't take its place
+            // running status: the last channel message's status byte, meta events and sysex don't take its place
             long tick = 0; int status = 0;
             while (q < end)
             {
@@ -648,7 +636,7 @@ public static class SongCodec
                     continue;
                 }
                 if (s >= 0x80) { status = s; q++; }
-                else if (status == 0) break;   // a data byte with no status before it: the rest of the track can't be read
+                else if (status == 0) break;   // a data byte with no status before it, the rest of the track can't be read
                 int hi = status & 0xF0;
                 if (q + (hi is 0xC0 or 0xD0 ? 1 : 2) > end) break;
                 int a = f[q++], bb = hi is 0xC0 or 0xD0 ? 0 : f[q++];

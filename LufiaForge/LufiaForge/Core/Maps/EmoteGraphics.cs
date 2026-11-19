@@ -1,17 +1,15 @@
 namespace LufiaForge.Core.Maps;
 
-/// <summary>
-/// The emote bubbles of the cutscene command 6F (see <see cref="Battle.EmotePatch"/>): 16x16, drawn as four 8x8
-/// sprite tiles each (top-left, top-right, bottom-left, bottom-right, 4bpp), all in one 16-colour palette.
-/// Generated from the pixel art in tools/emotes/make_emotes.py by tools/emotes/gen_cs.py.
-/// </summary>
+// the emote bubbles for cutscene command 6F (see Battle.EmotePatch). 16x16, each drawn as four 8x8 sprite tiles
+// (top-left, top-right, bottom-left, bottom-right, 4bpp), all in one 16-colour palette.
+// made from the pixel art in tools/emotes/make_emotes.py by tools/emotes/gen_cs.py
 public static partial class EmoteGraphics
 {
     public static readonly string[] Names = { "Exclamation", "Question", "Heart", "Laugh", "Tears", "Anger", "Sweat", "Music", "Idea", "Sleep", "Silence", "Shock" };
 
     public const int BytesPerEmote = 128;
 
-    /// <summary>SNES colours (BGR555), colour 0 = see-through.</summary>
+    // snes colours (BGR555), colour 0 = see-through
     public static readonly ushort[] Palette = { 0x0000, 0x1443, 0x7FFF, 0x66F7, 0x1CDD, 0x1473, 0x7E29, 0x5D25, 0x1F5F, 0x0E39, 0x5E7F, 0x28E8, 0x45CF, 0x26E9, 0x161F, 0x7F9B };
 
     public static readonly byte[] Tiles =

@@ -2,7 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace LufiaForge.Core.Maps;
 
-/// <summary>One entry in the list of maps.</summary>
+// one entry in the list of maps
 public partial class MapInfo : ObservableObject
 {
     public int MapId { get; }
@@ -13,12 +13,12 @@ public partial class MapInfo : ObservableObject
     public int ExitCount { get; }
     public int NpcCount { get; }
 
-    /// <summary>Readable name (generated, or typed by the user).</summary>
+    // readable name (generated, or typed in by the user)
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Label))]
     private string _name = "";
 
-    /// <summary>True when <see cref="Name"/> was typed by the user.</summary>
+    // true when the user typed Name in
     [ObservableProperty] private bool _isCustomName;
 
     public MapInfo(int mapId, int resourceId, int tileset, int width, int height, int exitCount, int npcCount)
@@ -34,35 +34,35 @@ public partial class MapInfo : ObservableObject
         : $"{MapId:X2}  {Width}x{Height}  ts{Tileset}  {NpcCount} NPCs";
 }
 
-/// <summary>Finds every map in the ROM (117 in the US ROM).</summary>
+// finds every map in the rom (117 in the US rom)
 public static class MapCatalog
 {
     public static List<MapInfo> Scan(RomBuffer rom)
     {
         var list = new List<MapInfo>();
-        for (int m = 0; m < 256; m++)
+        for (int mapId = 0; mapId < 256; mapId++)
         {
-            if (!LufiaMap.IsValidMap(rom, m, out var data, out _) || data == null) continue;
-            int res = LufiaMap.MapDataResource(rom, m);
-            int w = data[0x12] | (data[0x13] << 8), h = data[0x14] | (data[0x15] << 8);
-            int ob = data[0x30] | (data[0x31] << 8);
+            if (!LufiaMap.IsValidMap(rom, mapId, out var data, out _) || data == null) continue;
+            int resource = LufiaMap.MapDataResource(rom, mapId);
+            int width = data[0x12] | (data[0x13] << 8), height = data[0x14] | (data[0x15] << 8);
+            int objects = data[0x30] | (data[0x31] << 8);
             int exits = 0, npcs = 0;
-            if (m != LufiaMap.WorldMap && ob > 0 && ob + 8 < data.Length) { exits = data[ob]; npcs = data[ob + 2]; }
-            list.Add(new MapInfo(m, res, data[8], w, h, exits, npcs));
+            if (mapId != LufiaMap.WorldMap && objects > 0 && objects + 8 < data.Length) { exits = data[objects]; npcs = data[objects + 2]; }
+            list.Add(new MapInfo(mapId, resource, data[8], width, height, exits, npcs));
         }
         return list;
     }
 
-    /// <summary>Scan and give every map a name (user names win over generated ones).</summary>
+    // scans and gives every map a name (user names win over generated ones)
     public static List<MapInfo> ScanNamed(RomBuffer rom)
     {
         var list = Scan(rom);
         var generated = MapNames.Generate(rom, list.Select(m => m.MapId).ToList());
         var custom = MapNames.LoadCustom();
-        foreach (var m in list)
+        foreach (var map in list)
         {
-            if (custom.TryGetValue(m.MapId, out var c) && !string.IsNullOrWhiteSpace(c)) { m.Name = c; m.IsCustomName = true; }
-            else m.Name = generated.GetValueOrDefault(m.MapId, "");
+            if (custom.TryGetValue(map.MapId, out var customName) && !string.IsNullOrWhiteSpace(customName)) { map.Name = customName; map.IsCustomName = true; }
+            else map.Name = generated.GetValueOrDefault(map.MapId, "");
         }
         return list;
     }

@@ -2,7 +2,7 @@ using LufiaForge.Modules.GameData;
 
 namespace LufiaForge.Core.Maps;
 
-/// <summary>What kind of value an event-command field holds (picks the editor and the wording).</summary>
+// what kind of value an event-command field holds (picks the editor and the wording)
 public enum ParamKind
 {
     Number,      // decimal number
@@ -24,7 +24,7 @@ public enum ParamKind
     FlashKind,
 }
 
-/// <summary>One editable field of a command. Get/Set read and write it in the command bytes (opcode included).</summary>
+// one editable field of a command. Get/Set read and write it in the command bytes (opcode included)
 public sealed class ParamDef
 {
     public string Label { get; init; } = "";
@@ -33,7 +33,7 @@ public sealed class ParamDef
     public Action<byte[], int> Set { get; init; } = (_, _) => { };
     public int Min { get; init; }
     public int Max { get; init; } = 255;
-    /// <summary>Index into the command's jump targets (Jump fields only).</summary>
+    // index into the command's jump targets (Jump fields only)
     public int JumpIndex { get; init; } = -1;
 
     public static ParamDef Byte(string label, ParamKind kind, int pos, int add = 0, int max = 255) => new()
@@ -57,12 +57,10 @@ public sealed class ParamDef
         Set = (b, v) => b[pos] = (byte)((b[pos] & ~mask) | (((v - add) << shift) & mask)),
     };
 
-    public static ParamDef Jump(string label, int k) => new() { Label = label, Kind = ParamKind.Jump, JumpIndex = k };
+    public static ParamDef Jump(string label, int jumpIndex) => new() { Label = label, Kind = ParamKind.Jump, JumpIndex = jumpIndex };
 
-    /// <summary>
-    /// "Who" for commands with an even (map character) and an odd (actor id) opcode. Value: actor ids 0-6 as is,
-    /// map character n as 0x100 + n. <paramref name="mask"/> keeps other bits of the operand (20-27 use bit 7 for X).
-    /// </summary>
+    // "who" for commands with an even (map character) and an odd (actor id) opcode. the value is actor ids 0-6 as
+    // they are, map character n as 0x100 + n. mask keeps the operand's other bits (20-27 use bit 7 for X)
     public static ParamDef Who(int pos, int mask = 0xFF, string label = "who") => new()
     {
         Label = label, Kind = ParamKind.Who, Max = 0x1FF,
@@ -77,7 +75,7 @@ public sealed class ParamDef
     };
 }
 
-/// <summary>A command (or a family of opcodes) with its name, menu category and fields.</summary>
+// a command (or a family of opcodes) with its name, menu category and fields
 public sealed class CommandDef
 {
     public int First { get; init; }
@@ -86,22 +84,20 @@ public sealed class CommandDef
     public string Category { get; init; } = "";
     public ParamDef[] Params { get; init; } = Array.Empty<ParamDef>();
     public Func<byte[], EventCommands.Words, string> Describe { get; init; } = (_, _) => "";
-    /// <summary>Bytes of a new command added from the menu (null = not offered in the menu).</summary>
+    // bytes of a new command added from the menu (null = not offered in the menu)
     public byte[]? Template { get; init; }
-    /// <summary>Script pauses here until something finishes.</summary>
+    // the script pauses here until something finishes
     public string Waits { get; init; } = "";
-    /// <summary>Offered in the Cutscenes tab's menu only (still shown and editable wherever it's used).</summary>
+    // only offered in the Cutscenes tab's menu (still shown and editable wherever it's used)
     public bool CutsceneOnly { get; init; }
     public bool Matches(int op) => op >= First && op <= Last;
 }
 
-/// <summary>
-/// Every event-script command the engine has, decoded from the handlers at $01:C78C / $01:C868
-/// (see research-script-engine.md, "Event command reference").
-/// </summary>
+// every event script command the engine has, decoded from the handlers at $01:C78C / $01:C868
+// (see research-script-engine.md, "Event command reference")
 public static class EventCommands
 {
-    /// <summary>Wording helpers for descriptions (names of items, flags, jump targets, ...).</summary>
+    // how descriptions word things (names of items, flags, jump targets, ...)
     public sealed class Words
     {
         public Func<int, string> Item { get; init; } = i => $"item {i:X2}";
@@ -113,11 +109,11 @@ public static class EventCommands
 
     public static readonly string[] Directions = { "right", "left", "down", "up" };
 
-    /// <summary>Event base of a map (set by the app when a ROM is loaded; command 51 counts from it).</summary>
+    // event base of a map (the app sets it when a rom loads, command 51 counts from it)
     public static Func<int, int> EventBase { get; set; } = _ => 0;
 
-    /// <summary>The event number command 51 (<paramref name="b"/> = its bytes) runs on its map.</summary>
-    public static int ChainedEvent(byte[] b) => (EventBase(b[1]) + b[2]) & 0xFF;
+    // the event number command 51 (bytes = its bytes) runs on its map
+    public static int ChainedEvent(byte[] bytes) => (EventBase(bytes[1]) + bytes[2]) & 0xFF;
     public static readonly int[] ShortWaitFrames = { 4, 8, 12, 20, 40, 60, 80, 100 };
     public static readonly int[] ScrollSpeeds = { 0x10, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80 };
 
@@ -139,15 +135,15 @@ public static class EventCommands
         "Set $0D1E", "Give the selected item", "Test $0D9E", "Switch to screen 12", "Nothing",
     };
 
-    /// <summary>The 5-letter name in a rename command (6E), as typed.</summary>
-    public static string NameText(byte[] b) =>
-        b.Length < 7 ? "" : new string(b.Skip(2).Take(5).TakeWhile(c => c != 0).Select(c => (char)c).ToArray());
+    // the 5-letter name in a rename command (6E), as typed
+    public static string NameText(byte[] bytes) =>
+        bytes.Length < 7 ? "" : new string(bytes.Skip(2).Take(5).TakeWhile(c => c != 0).Select(c => (char)c).ToArray());
 
-    public static string Who(int v) => v >= 0x100 ? $"character {v - 0x100}" : Actor(v);
+    public static string Who(int who) => who >= 0x100 ? $"character {who - 0x100}" : Actor(who);
 
-    public static string EmoteName(int i) => i < EmoteGraphics.Names.Length ? EmoteGraphics.Names[i] : $"Emote {i:X2}";
+    public static string EmoteName(int emote) => emote < EmoteGraphics.Names.Length ? EmoteGraphics.Names[emote] : $"Emote {emote:X2}";
 
-    /// <summary>The emote command's actor byte (1-6 = actors, 7 + n = map character n), as a "who" value.</summary>
+    // the emote command's actor byte (1-6 = actors, 7 + n = map character n), as a "who" value
     private static readonly ParamDef EmoteWho = new()
     {
         Label = "who", Kind = ParamKind.Who, Max = 0x1FF,
@@ -155,18 +151,18 @@ public static class EventCommands
         Set = (b, v) => b[1] = (byte)(v >= 0x100 ? Math.Min(v - 0x100 + 7, 0x3F) : Math.Max(v, 1)),
     };
 
-    public static string Actor(int a) => a switch
+    public static string Actor(int actor) => actor switch
     {
         0 => "actor 0",
         1 => "the leader",
-        >= 2 and <= 5 => $"party member {a}",
+        >= 2 and <= 5 => $"party member {actor}",
         6 => "the vehicle",
-        _ => $"character {a - 7}",
+        _ => $"character {actor - 7}",
     };
 
-    private static int W(byte[] b, int p) => b[p] | (b[p + 1] << 8);
-    private static string Frames(int f) => f == 1 ? "1 frame" : $"{f} frames ({f / 60.0:0.##} s)";
-    private static string PartyName(int v) => v == 0xFF ? "the whole party" : CharacterNames[v & 3];
+    private static int W(byte[] bytes, int pos) => bytes[pos] | (bytes[pos + 1] << 8);
+    private static string Frames(int frames) => frames == 1 ? "1 frame" : $"{frames} frames ({frames / 60.0:0.##} s)";
+    private static string PartyName(int slot) => slot == 0xFF ? "the whole party" : CharacterNames[slot & 3];
 
     private static readonly List<CommandDef> All = Build();
     public static IReadOnlyList<CommandDef> Definitions => All;
@@ -175,16 +171,16 @@ public static class EventCommands
 
     private static List<CommandDef> Build()
     {
-        var l = new List<CommandDef>();
-        void Add(int first, int last, string name, string cat, Func<byte[], Words, string> describe, byte[]? template, string waits = "",
-                 params ParamDef[] ps) =>
-            l.Add(new CommandDef { First = first, Last = last, Name = name, Category = cat, Describe = describe, Template = template, Waits = waits, Params = ps });
+        var commands = new List<CommandDef>();
+        void Add(int first, int last, string name, string category, Func<byte[], Words, string> describe, byte[]? template, string waits = "",
+                 params ParamDef[] fields) =>
+            commands.Add(new CommandDef { First = first, Last = last, Name = name, Category = category, Describe = describe, Template = template, Waits = waits, Params = fields });
         var P = ParamDef.Byte;
 
         const string Flow = "Flow", Flags = "Story flags", Chars = "Characters", Cam = "Camera & screen", Snd = "Music & sound",
                      Time = "Timing", Party = "Party & items", Place = "Places & map", Serv = "Shops & services", Win = "Text window";
 
-        // ── flow ──
+        // flow
         Add(0x00, 0x00, "End", Flow, (_, _) => "End of the event", new byte[] { 0x00 });
         Add(0x01, 0x01, "Go to", Flow, (_, w) => $"Go to {w.Jump(0)}", new byte[] { 0x01, 0, 0 }, "", ParamDef.Jump("go to", 0));
         Add(0x02, 0x02, "First time only", Flow,
@@ -193,7 +189,7 @@ public static class EventCommands
         Add(0x03, 0x03, "Choice targets (for the next text box)", Flow,
             (b, w) => $"The next text box asks a question: " + string.Join(", ", Enumerable.Range(0, b[1]).Select(k => $"answer {k + 1} → {w.Jump(k)}")),
             new byte[] { 0x03, 2, 0, 0, 0, 0 });
-        // the event number is counted from the target map's event base (byte 4 of its $03:8200 entry)
+        // the event number counts from the target map's event base (byte 4 of its $03:8200 entry)
         Add(0x51, 0x51, "Run an event of another map", Flow,
             (b, w) => $"Continue with event {ChainedEvent(b)} of {w.Map(b[1])} (does not come back)", new byte[] { 0x51, 0, 0 }, "",
             P("map", ParamKind.Map, 1),
@@ -205,7 +201,7 @@ public static class EventCommands
             });
         Add(0x1E, 0x1E, "Church menu", Serv, (_, _) => "Church menu (revive, cure, save)", new byte[] { 0x1E });
 
-        // ── conditions ──
+        // conditions
         Add(0x04, 0x04, "If flag is set, go to", Flags, (b, w) => $"If story flag {w.Flag(b[1])} is set, go to {w.Jump(0)}",
             new byte[] { 0x04, 0, 0, 0 }, "", P("flag", ParamKind.Flag, 1), ParamDef.Jump("go to", 0));
         Add(0x05, 0x05, "If flag is not set, go to", Flags, (b, w) => $"If story flag {w.Flag(b[1])} is not set, go to {w.Jump(0)}",
@@ -239,7 +235,7 @@ public static class EventCommands
             (b, w) => $"If the party has key item {b[1]} ({w.Item(0xF0 + b[1] - 1)}), go to {w.Jump(0)}", new byte[] { 0x4F, 1, 0, 0 }, "",
             P("key item", ParamKind.KeyItem, 1, 0, 16), ParamDef.Jump("go to", 0));
 
-        // ── characters ──
+        // characters
         Add(0x20, 0x27, "Place a character", Chars,
             (b, _) => $"Place {Who(ParamDef.Who(1, 0x7F).Get(b))} at ({((b[1] >> 7) << 8) | b[2]}, {b[3]}) facing {Directions[(b[0] >> 1) & 3]}",
             new byte[] { 0x24, 1, 0, 0 }, "",
@@ -275,7 +271,7 @@ public static class EventCommands
                 : $"Rename {CharacterNames[b[1] & 7]} (party slot {(b[1] & 3) + 1}) to \"{NameText(b)}\"",
             new byte[] { 0x6E, 4, (byte)'M', (byte)'a', (byte)'x', (byte)'i', (byte)'m' }, "",
             P("character", ParamKind.Character, 1, 0, 7), new ParamDef { Label = "name (5 letters, * = normal name)", Kind = ParamKind.Name, Get = b => 0, Set = (_, _) => { } });
-        l.Add(new CommandDef
+        commands.Add(new CommandDef
         {
             First = 0x6F, Last = 0x6F, Name = "Emote bubble", Category = Chars, CutsceneOnly = true,
             Describe = (b, _) => b.Length < 4 ? "Emote bubble"
@@ -287,13 +283,13 @@ public static class EventCommands
         Add(0x1B, 0x1B, "Character leaves", Chars, (b, _) => $"{CharacterNames[b[1] & 15]} leaves the party (the last follower disappears)",
             new byte[] { 0x1B, 1 }, "", P("character", ParamKind.Character, 1, 0, 15));
 
-        // ── camera & screen ──
+        // camera & screen
         Add(0x09, 0x09, "Move the camera to", Cam, (b, _) => $"Camera jumps to centre on ({W(b, 1)}, {W(b, 3)})", new byte[] { 0x09, 0, 0, 0, 0 }, "",
             ParamDef.Word("X", 1), ParamDef.Word("Y", 3));
         Add(0x10, 0x13, "Scroll the camera", Cam,
             (b, _) => $"Camera scrolls {Directions[b[0] & 3]} {(b[1] == 0 ? 256 : b[1])} tiles (speed {b[2]})", new byte[] { 0x12, 4, 1 }, "until the scroll ends",
             ParamDef.Bits("direction", ParamKind.Direction, 0, 3, 0), P("tiles", ParamKind.Number, 1), P("speed", ParamKind.ScrollSpeed, 2, 0, 7));
-        // 18 fades the colours in from black, 19 fades them out (19 is always used right before warps that stay black)
+        // 18 fades the colours in from black, 19 fades them out (19 always comes right before warps that stay black)
         Add(0x18, 0x18, "Fade in", Cam, (b, _) => $"Screen fades in from black ({b[1]} frames per step)", new byte[] { 0x18, 2 }, "", P("frames per step", ParamKind.Number, 1));
         Add(0x19, 0x19, "Fade to black", Cam, (b, _) => $"Screen fades to black ({b[1]} frames per step)", new byte[] { 0x19, 1 }, "", P("frames per step", ParamKind.Number, 1));
         Add(0x5A, 0x5A, "Wait for the fade", Cam, (_, _) => "Wait until the screen fade has finished", new byte[] { 0x5A }, "until the fade ends");
@@ -318,7 +314,7 @@ public static class EventCommands
         Add(0x08, 0x08, "Refresh the map's characters", Cam, (_, _) => "Refresh the map's characters and objects (re-checks story flags)", new byte[] { 0x08 });
         Add(0x56, 0x56, "Redraw the screen", Cam, (_, _) => "Redraw the screen (after tile stamps)", new byte[] { 0x56 });
 
-        // ── music & sound ──
+        // music & sound
         Add(0x0A, 0x0A, "Play music", Snd, (b, _) => b[1] == 0xFF ? "Stop the music" : $"Play music {b[1]:X2}", new byte[] { 0x0A, 1 }, "", P("song (FF = stop)", ParamKind.Music, 1));
         Add(0x54, 0x54, "Play sound effect", Snd, (b, _) => $"Play sound effect {b[1]:X2}: {Audio.SoundNames.Name(false, b[1])}", new byte[] { 0x54, 0x10 }, "", P("sound", ParamKind.Sound, 1));
         Add(0x3A, 0x3A, "Set the text sound", Snd, (b, _) => $"Text prints with sound {b[1]:X2} ({Audio.SoundNames.Name(false, b[1])})", new byte[] { 0x3A, 4 }, "", P("sound", ParamKind.Sound, 1));
@@ -326,13 +322,13 @@ public static class EventCommands
         Add(0x6C, 0x6C, "Wait for the music", Snd, (b, _) => $"Wait until the music reaches point {b[1]} (about {b[1] * 1.5:0.#} s into the song)", new byte[] { 0x6C, 1 }, "until the music reaches that point",
             P("music point", ParamKind.Number, 1));
 
-        // ── timing ──
+        // timing
         Add(0x80, 0x87, "Wait (short)", Time, (b, _) => $"Wait {Frames(ShortWaitFrames[b[0] & 7])}", new byte[] { 0x84 }, "for the time given",
             ParamDef.Bits("length", ParamKind.ShortWait, 0, 7, 0));
         Add(0x0B, 0x0B, "Wait", Time, (b, _) => $"Wait {Frames((b[1] * 4) & 0xFF)}", new byte[] { 0x0B, 15 }, "for the time given",
             P("time (× 4 frames, max 63)", ParamKind.Number, 1, 0, 63));
 
-        // ── text window ──
+        // text window
         Add(0x69, 0x69, "Text advances by itself", Win, (b, _) => $"Text boxes close by themselves after {Frames(b[1] * 8 + 1)}", new byte[] { 0x69, 8 }, "",
             P("time (× 8 frames)", ParamKind.Number, 1));
         Add(0x6A, 0x6A, "Text waits for a button again", Win, (_, _) => "Text boxes wait for a button again", new byte[] { 0x6A });
@@ -341,7 +337,7 @@ public static class EventCommands
             new byte[] { 0x6B, 0x20, 0x0A }, "", P("column (20+ = centre)", ParamKind.Number, 1), P("row", ParamKind.Number, 2));
         Add(0x6D, 0x6D, "Text window colours", Win, (b, _) => $"Text window colour scheme {b[1]}", new byte[] { 0x6D, 2 }, "", P("scheme", ParamKind.Number, 1, 0, 7));
 
-        // ── party & items ──
+        // party & items
         Add(0x3E, 0x3E, "Give item", Party, (b, w) => $"Give {w.Item(b[1])} × {b[2]} (flag FF set if it didn't fit)", new byte[] { 0x3E, 0x94, 1 }, "",
             P("item", ParamKind.Item, 1), P("quantity", ParamKind.Number, 2));
         Add(0x3F, 0x3F, "Take item", Party, (b, w) => $"Take {w.Item(b[1])} × {b[2]}", new byte[] { 0x3F, 0x94, 1 }, "",
@@ -359,7 +355,7 @@ public static class EventCommands
             P("character", ParamKind.Character, 1, 0, 3), P("amount", ParamKind.Number, 2));
         Add(0x58, 0x58, "Raise max HP (crashes the game)", Party, (b, _) => "Raise max HP - this command crashes the game", null);
 
-        // ── places & map ──
+        // places & map
         Add(0x4C, 0x4C, "Warp to a map", Place, (b, w) => b[1] == 0 ? $"Move the party to arrival point {b[2]} of this map" : $"Warp to {w.Map(b[1])}, arrival point {b[2]}",
             new byte[] { 0x4C, 0, 1 }, "until the new map has faded in", P("map (00 = this map)", ParamKind.Map, 1), P("arrival point", ParamKind.Number, 2));
         Add(0x5B, 0x5B, "Warp to a map (stay black)", Place, (b, w) => $"Warp to {w.Map(b[1])}, arrival point {b[2]}; the screen stays black",
@@ -373,19 +369,19 @@ public static class EventCommands
         Add(0x4B, 0x4B, "Place a vehicle", Place, (b, _) => $"Vehicle {b[1]} waits at world map ({W(b, 2)}, {W(b, 4)})", new byte[] { 0x4B, 1, 0, 0, 0, 0 }, "",
             P("vehicle", ParamKind.Number, 1), ParamDef.Word("X", 2), ParamDef.Word("Y", 4));
 
-        // ── shops & services ──
+        // shops & services
         Add(0x1C, 0x1C, "Open a shop", Serv, (b, _) => $"Open shop {b[1]} (flag FF set if something was bought or sold)", new byte[] { 0x1C, 1 }, "until the shop closes", P("shop", ParamKind.Shop, 1));
         Add(0x1D, 0x1D, "Stay at the inn", Serv, (b, _) => $"Stay at the inn for {W(b, 1)} GP (check the gold first)", new byte[] { 0x1D, 10, 0 }, "until the night is over", ParamDef.Word("price", 1));
         Add(0x4A, 0x4A, "Save menu", Serv, (_, _) => "Open the save menu", new byte[] { 0x4A }, "until the menu closes");
         Add(0x1F, 0x1F, "Start a battle", Serv, (b, _) => $"Battle with formation {b[1]:X2}", new byte[] { 0x1F, 0 }, "until the battle ends", P("formation", ParamKind.Formation, 1));
         Add(0x50, 0x50, "System function", Serv, (b, _) => b[1] < SystemCalls.Length ? $"System: {SystemCalls[b[1]]}" : $"System function {b[1]:X2}",
             new byte[] { 0x50, 0x05 }, "", P("function", ParamKind.SystemCall, 1, 0, SystemCalls.Length - 1));
-        return l;
+        return commands;
     }
 
-    private static string Cap(string s) => s.Length == 0 ? s : char.ToUpper(s[0]) + s[1..];
+    private static string Cap(string text) => text.Length == 0 ? text : char.ToUpper(text[0]) + text[1..];
 
-    /// <summary>Choices for a field kind, as (value, label) pairs; null = plain number field.</summary>
+    // choices for a field kind as (value, label) pairs, null = plain number field
     public static IReadOnlyList<(int Value, string Label)>? Choices(ParamKind kind, RomBuffer rom, Func<int, string>? mapLabel = null) => kind switch
     {
         ParamKind.Sound => Enumerable.Range(0, Audio.SoundNames.Count(false)).Select(i => (i, Audio.SoundNames.Label(false, i))).ToList(),

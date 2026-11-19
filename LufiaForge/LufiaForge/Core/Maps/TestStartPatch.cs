@@ -1,26 +1,22 @@
 namespace LufiaForge.Core.Maps;
 
-/// <summary>
-/// "Test start" for test runs: power-on skips the opening and goes straight to the file select (Continue / Initial),
-/// as when a button is pressed during the opening.
-/// <list type="bullet">
-/// <item>The opening ($01:8501, called while the opening plays) waits for A/B/Start; when one is pressed it sets the
-/// message speed and music ($0DA0/$0DA1), runs the file select (New Game and the Hero's name, or Continue) and starts
-/// the game. The patch skips the wait (BRA at $01:8508), so all of that runs at power-on: nothing the game sets up is
-/// missed and saves load as usual.</item>
-/// <item>After the file select the opening (map 4F event 08) would still play its narration: right after its first
-/// wait ("TAITO PRESENTS", 6C 04 85 50 14, where the file select runs) a goto to its end is written, the warp to the
-/// Fortress of Doom and the chain to event 02, the prologue's start.</item>
-/// <item><see cref="Mode.Fortress"/>: only that: a new game starts the prologue at the Fortress of Doom.</item>
-/// <item><see cref="Mode.SkipPrologue"/>: the prologue's first event (map 93 event 02) does what its last event (map
-/// 97 event 10) does: the four prologue heroes leave (1B 04-07), warp to map 02 and chain to its event 01 (the "90
-/// years had passed" text), then the Hero's game starts in Alekia as usual.</item>
-/// <item><see cref="Mode.ChosenMap"/>: the prologue's first event sets the party up, then (before the Fortress's
-/// conversation) warps to the chosen map and arrival point (4C mm ee): the prologue party on any map.</item>
-/// </list>
-/// What was changed is kept in a small block ("LFST") so Off puts it back. (Test starts made before kept the opening's
-/// first bytes and the demo flag at $01:802D instead: Off puts those back too.)
-/// </summary>
+// "test start" for test runs: power-on skips the opening and goes straight to the file select (Continue / Initial),
+// same as pressing a button during the opening.
+// - the opening ($01:8501, called while the opening plays) waits for A/B/Start. when one is pressed it sets the
+//   message speed and music ($0DA0/$0DA1), runs the file select (New Game and the Hero's name, or Continue) and
+//   starts the game. the patch skips the wait (BRA at $01:8508), so all of that runs at power-on: nothing the game
+//   sets up gets missed and saves load like normal
+// - after the file select the opening (map 4F event 08) would still play its narration, so right after its first
+//   wait ("TAITO PRESENTS", 6C 04 85 50 14, where the file select runs) we write a goto to its end, the warp to the
+//   Fortress of Doom and the chain to event 02, the prologue's start
+// - Mode.Fortress: just that, a new game starts the prologue at the Fortress of Doom
+// - Mode.SkipPrologue: the prologue's first event (map 93 event 02) does what its last event (map 97 event 10)
+//   does: the four prologue heroes leave (1B 04-07), warp to map 02 and chain to its event 01 (the "90 years had
+//   passed" text), then the Hero's game starts in Alekia like normal
+// - Mode.ChosenMap: the prologue's first event sets the party up, then (before the Fortress's conversation) warps
+//   to the chosen map and arrival point (4C mm ee), so the prologue party on any map
+// what we changed is kept in a small block ("LFST") so Off can put it back. (older test starts kept the opening's
+// first bytes and the demo flag at $01:802D instead, Off puts those back too)
 public static class TestStartPatch
 {
     public enum Mode { Off = 0, Fortress = 1, SkipPrologue = 2, ChosenMap = 3 }
@@ -40,133 +36,133 @@ public static class TestStartPatch
     private static int Block(RomBuffer rom)
     {
         if (rom.Length < MapWriter.ExpandedSize) return 0;
-        var e = ExpansionSpace.Load(rom).Entries.FirstOrDefault(x => x.Kind == ExpansionSpace.Kind.Patch && x.Id == 21);
-        return e != null && rom.ReadBytes(e.Start, 4).SequenceEqual(Magic) ? e.Start : 0;
+        var entry = ExpansionSpace.Load(rom).Entries.FirstOrDefault(x => x.Kind == ExpansionSpace.Kind.Patch && x.Id == 21);
+        return entry != null && rom.ReadBytes(entry.Start, 4).SequenceEqual(Magic) ? entry.Start : 0;
     }
 
-    public static Mode Current(RomBuffer rom) { int b = Block(rom); return b > 0 ? (Mode)rom.ReadByte(b + 4) : Mode.Off; }
-    public static (int Map, int Entrance) Target(RomBuffer rom) { int b = Block(rom); return b > 0 ? (rom.ReadByte(b + 5), rom.ReadByte(b + 6)) : (0, 0); }
+    public static Mode Current(RomBuffer rom) { int block = Block(rom); return block > 0 ? (Mode)rom.ReadByte(block + 4) : Mode.Off; }
+    public static (int Map, int Entrance) Target(RomBuffer rom) { int block = Block(rom); return block > 0 ? (rom.ReadByte(block + 5), rom.ReadByte(block + 6)) : (0, 0); }
     public static bool IsApplied(RomBuffer rom) => Current(rom) != Mode.Off;
     public static bool IsOriginal(RomBuffer rom) => rom.ReadByte(DemoFlag) == 0xFF && rom.ReadBytes(WaitButton, 2).SequenceEqual(WaitOriginal);
-    /// <summary>A test start made before the file select was kept (the opening jumped over; saves couldn't load).</summary>
+    // a test start made before we kept the file select (the opening got jumped over and saves couldn't load)
     public static bool IsOldStyle(RomBuffer rom) => IsApplied(rom) && rom.ReadByte(DemoFlag) == 0x00;
 
     private static int OpeningStart(RomBuffer rom) => LufiaMap.EventScriptOffset(rom, OpeningMap, OpeningEvent);
 
-    /// <summary>Sets the test start (Off puts the game's start back).</summary>
+    // sets the test start (Off puts the game's start back)
     public static void Set(RomBuffer rom, Mode mode, int map = 0, int entrance = 1)
     {
         Restore(rom);
         if (mode == Mode.Off) { rom.FixChecksum(); return; }
         if (!IsOriginal(rom)) throw new InvalidOperationException("The game's start isn't the original, so the test start can't be added safely.");
-        int ev = OpeningStart(rom);
-        var opening = rom.ReadBytes(ev, 0x400);
+        int openingStart = OpeningStart(rom);
+        var opening = rom.ReadBytes(openingStart, 0x400);
         int tail = IndexOf(opening, PrologueEnd), wait = IndexOf(opening, FirstWait);
         if (tail < 0 || wait < 0 || wait > tail) throw new InvalidOperationException("The opening's first wait or its end (warp to the Fortress of Doom) wasn't found.");
-        int at = wait + FirstWait.Length;
+        int gotoAt = wait + FirstWait.Length;
         if (rom.Length < MapWriter.ExpandedSize) rom.Expand(MapWriter.ExpandedSize);
-        var space = ExpansionSpace.Load(rom);
-        int b = space.Allocate(BlockSize, ExpansionSpace.Kind.Patch, 21);
-        space.Save();
+        var freeSpace = ExpansionSpace.Load(rom);
+        int blockOffset = freeSpace.Allocate(BlockSize, ExpansionSpace.Kind.Patch, 21);
+        freeSpace.Save();
         var block = new byte[BlockSize];
         Magic.CopyTo(block, 0);
         block[4] = (byte)mode; block[5] = (byte)map; block[6] = (byte)entrance; block[7] = 2;
-        Array.Copy(opening, at, block, 8, Saved);
+        Array.Copy(opening, gotoAt, block, 8, Saved);
         rom.ReadBytes(LufiaMap.MapScriptTable + PrologueMap * 5, 5).CopyTo(block, 8 + Saved);
-        rom.WriteBytes(b, block);
-        // map 93's events already in the added space (edited in this project): the changes below go into a copy of
-        // its block, so the block the saved entry points at stays as it is (saving moved it and freed the old one, and
-        // turning the test start off then pointed map 93 at freed bytes)
+        rom.WriteBytes(blockOffset, block);
+        // if map 93's events are already in the added space (edited in this project), the changes below go into a
+        // copy of its block, so the block the saved entry points at stays as it is (before, saving moved it and freed
+        // the old one, and turning the test start off then pointed map 93 at freed bytes)
         if (mode is Mode.SkipPrologue or Mode.ChosenMap)
         {
-            int pb = EventScript.BlockOffset(rom, PrologueMap);
-            if (ExpansionSpace.Load(rom).Entries.Any(e => pb >= e.Start && pb < e.End)) EventScript.CopyBlockFor(rom, PrologueMap);
+            int prologueBlock = EventScript.BlockOffset(rom, PrologueMap);
+            if (ExpansionSpace.Load(rom).Entries.Any(e => prologueBlock >= e.Start && prologueBlock < e.End)) EventScript.CopyBlockFor(rom, PrologueMap);
         }
         rom.WriteBytes(WaitButton, WaitSkipped);
-        rom.WriteBytes(ev + at, new byte[] { 0x01, (byte)tail, (byte)(tail >> 8) });
+        rom.WriteBytes(openingStart + gotoAt, new byte[] { 0x01, (byte)tail, (byte)(tail >> 8) });
         if (mode is Mode.SkipPrologue or Mode.ChosenMap)
         {
-            var s = EventScript.Load(rom, PrologueMap, PrologueEvent) ?? throw new InvalidOperationException("The prologue's first event wasn't found.");
+            var script = EventScript.Load(rom, PrologueMap, PrologueEvent) ?? throw new InvalidOperationException("The prologue's first event wasn't found.");
             if (mode == Mode.SkipPrologue)
             {
-                s.Ops.Clear();
+                script.Ops.Clear();
                 for (int i = 0; i < SkipScript.Length;)
                 {
-                    int n = SkipScript[i] is 0x5B or 0x51 ? 3 : 2;
-                    s.Ops.Add(new ScriptOp { Bytes = SkipScript[i..(i + n)] });
-                    i += n;
+                    int length = SkipScript[i] is 0x5B or 0x51 ? 3 : 2;
+                    script.Ops.Add(new ScriptOp { Bytes = SkipScript[i..(i + length)] });
+                    i += length;
                 }
-                s.Ops.Add(new ScriptOp { Bytes = new byte[] { 0x00 } });
+                script.Ops.Add(new ScriptOp { Bytes = new byte[] { 0x00 } });
             }
             else
             {
-                // the prologue's first event runs an event of the chosen map, which does the warp: the map loads while
-                // its own event runs, as with the game's own story warps, so its step-on areas run its events (a warp
-                // from the Fortress's event made them run the Fortress's events of the same numbers)
+                // the prologue's first event runs an event of the chosen map, and that one does the warp: the map loads
+                // while its own event runs, like the game's own story warps, so its step-on areas run its events (a warp
+                // from the Fortress's event made them run the Fortress's events with the same numbers)
                 int arrive = MapEvents.FreeChainedNumber(rom, map);
                 MapEvents.Create(rom, map, arrive);
                 var warp = EventScript.Load(rom, map, arrive)!;
                 warp.Ops.Insert(0, new ScriptOp { Bytes = new byte[] { 0x4C, (byte)map, (byte)Math.Max(1, entrance) } });
                 warp.Save(true);
-                s = EventScript.Load(rom, PrologueMap, PrologueEvent)!;
-                // right after the party is set up (spells, items, gathering): before the first line of the Fortress's
-                // conversation, which a test start skips. Its "text advances by itself" (69) is left out too, and the
-                // screen fades in first (the Fortress starts dark, and its fade-in comes after the first lines: without
+                script = EventScript.Load(rom, PrologueMap, PrologueEvent)!;
+                // right after the party is set up (spells, items, gathering), before the first line of the Fortress's
+                // conversation, which a test start skips. its "text advances by itself" (69) gets left out too, and the
+                // screen fades in first (the Fortress starts dark and its fade-in comes after the first lines, without
                 // it the party's sprites stay black on every map)
-                int end = s.Ops.FindIndex(o => o.IsText);
+                int end = script.Ops.FindIndex(o => o.IsText);
                 if (end > 0)
                 {
-                    while (end > 0 && !s.Ops[end - 1].IsText && s.Ops[end - 1].Bytes[0] == 0x69) end--;
-                    s.Ops.Insert(end++, new ScriptOp { Bytes = new byte[] { 0x6A } });   // text waits for a button (the opening's auto text is still on: the prologue turns it off later)
-                    s.Ops.Insert(end++, new ScriptOp { Bytes = new byte[] { 0x18, 0x02 } });
-                    s.Ops.Insert(end++, new ScriptOp { Bytes = new byte[] { 0x5A } });
+                    while (end > 0 && !script.Ops[end - 1].IsText && script.Ops[end - 1].Bytes[0] == 0x69) end--;
+                    script.Ops.Insert(end++, new ScriptOp { Bytes = new byte[] { 0x6A } });   // text waits for a button (the opening's auto text is still on, the prologue turns it off later)
+                    script.Ops.Insert(end++, new ScriptOp { Bytes = new byte[] { 0x18, 0x02 } });
+                    script.Ops.Insert(end++, new ScriptOp { Bytes = new byte[] { 0x5A } });
                 }
-                else end = s.Ops.FindLastIndex(o => !o.IsText && o.Bytes.Length == 1 && o.Bytes[0] == 0x00);
+                else end = script.Ops.FindLastIndex(o => !o.IsText && o.Bytes.Length == 1 && o.Bytes[0] == 0x00);
                 if (end < 0) throw new InvalidOperationException("The prologue's first event has no end.");
-                s.Ops.Insert(end, new ScriptOp { Bytes = new byte[] { 0x51, (byte)map, (byte)((arrive - LufiaMap.EventBase(rom, map)) & 0xFF) } });
-                if (end < s.Ops.Count - 2)
+                script.Ops.Insert(end, new ScriptOp { Bytes = new byte[] { 0x51, (byte)map, (byte)((arrive - LufiaMap.EventBase(rom, map)) & 0xFF) } });
+                if (end < script.Ops.Count - 2)
                 {
-                    // the game can come back to this event after the chain (when a later event ends): it then goes
-                    // straight to its end instead of playing the Fortress's conversation where the party is
+                    // the game can come back to this event after the chain (when a later event ends), and then it goes
+                    // straight to its end instead of playing the Fortress's conversation wherever the party is
                     var toEnd = new ScriptOp { Bytes = new byte[] { 0x01, 0x00, 0x00 } };
-                    toEnd.Targets.Add(new JumpRef { Op = s.Ops[^1] });
-                    s.Ops.Insert(end + 1, toEnd);
+                    toEnd.Targets.Add(new JumpRef { Op = script.Ops[^1] });
+                    script.Ops.Insert(end + 1, toEnd);
                 }
             }
-            s.Save(true);
-            rom.WriteByte(b + 7, 3);
+            script.Save(true);
+            rom.WriteByte(blockOffset + 7, 3);
         }
         rom.FixChecksum();
     }
 
-    /// <summary>Puts the game's start back (the button wait, map 93's events; for older test starts the opening's first
-    /// bytes and the demo flag).</summary>
+    // puts the game's start back (the button wait, map 93's events, and for older test starts the opening's first
+    // bytes and the demo flag)
     private static void Restore(RomBuffer rom)
     {
-        int b = Block(rom);
-        if (b == 0) return;
-        int flags = rom.ReadByte(b + 7);
+        int block = Block(rom);
+        if (block == 0) return;
+        int flags = rom.ReadByte(block + 7);
         if ((flags & 2) != 0)
         {
             var opening = rom.ReadBytes(OpeningStart(rom), 0x400);
             int wait = IndexOf(opening, FirstWait);
-            if (wait >= 0) rom.WriteBytes(OpeningStart(rom) + wait + FirstWait.Length, rom.ReadBytes(b + 8, Saved));
+            if (wait >= 0) rom.WriteBytes(OpeningStart(rom) + wait + FirstWait.Length, rom.ReadBytes(block + 8, Saved));
         }
         else if (rom.ReadByte(DemoFlag) == 0x00)
         {
-            rom.WriteBytes(OpeningStart(rom), rom.ReadBytes(b + 8, Saved));
+            rom.WriteBytes(OpeningStart(rom), rom.ReadBytes(block + 8, Saved));
             rom.WriteByte(DemoFlag, 0xFF);
         }
         if (rom.ReadBytes(WaitButton, 2).SequenceEqual(WaitSkipped)) rom.WriteBytes(WaitButton, WaitOriginal);
-        if ((flags & 1) != 0) rom.WriteBytes(LufiaMap.MapScriptTable + PrologueMap * 5, rom.ReadBytes(b + 8 + Saved, 5));
-        var space = ExpansionSpace.Load(rom);
-        space.Free(b);
-        space.Save();
+        if ((flags & 1) != 0) rom.WriteBytes(LufiaMap.MapScriptTable + PrologueMap * 5, rom.ReadBytes(block + 8 + Saved, 5));
+        var freeSpace = ExpansionSpace.Load(rom);
+        freeSpace.Free(block);
+        freeSpace.Save();
     }
 
-    private static int IndexOf(byte[] h, byte[] n)
+    private static int IndexOf(byte[] haystack, byte[] needle)
     {
-        for (int i = 0; i + n.Length <= h.Length; i++) if (h.AsSpan(i, n.Length).SequenceEqual(n)) return i;
+        for (int i = 0; i + needle.Length <= haystack.Length; i++) if (haystack.AsSpan(i, needle.Length).SequenceEqual(needle)) return i;
         return -1;
     }
 }

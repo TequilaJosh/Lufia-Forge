@@ -3,76 +3,70 @@ using System.Text.Json;
 
 namespace LufiaForge.Core.Maps;
 
-/// <summary>One place a story flag is used.</summary>
-/// <param name="RegionStart">Start of the decoded code holding the use: the event start, or code the event jumps to.</param>
+// one place a story flag is used.
+// RegionStart = start of the decoded code holding the use: the event start, or code the event jumps to
 public sealed record FlagUse(int Flag, int MapId, int Event, int Line, int Offset, string Action, bool IsSetup, int RegionStart = -1, int JumpBase = -1)
 {
     public bool Sets => Action is "sets" or "clears" or "sets as a result";
-    /// <summary>Dialogue next to the use (what is said when the flag is set, or what the check leads to).</summary>
+    // dialogue next to the use (what's said when the flag gets set, or what the check leads to)
     public string Context { get; init; } = "";
-    /// <summary>What the event the use is in seems to do (EventHints).</summary>
+    // what the event the use is in seems to do (EventHints)
     public string EventHint { get; init; } = "";
 }
 
-/// <summary>
-/// Story flags: the game's global bit flags ($1296 + flag/8, bit flag&amp;7). Event commands 04/05 test them,
-/// 06/07 set/clear them, and map setup scripts test them (05-0A) to choose what a map looks like.
-/// This builds a cross-reference over every map's events and setup script, and keeps the user's names for
-/// flags in %AppData%\LufiaForge\flagnames.json.
-/// </summary>
+// story flags: the game's global bit flags ($1296 + flag/8, bit flag&7). event commands 04/05 test them, 06/07
+// set/clear them, and map setup scripts test them (05-0A) to pick what a map looks like.
+// this builds a cross-reference over every map's events and setup script, and keeps the user's names for flags in
+// %AppData%\LufiaForge\flagnames.json
 public static class StoryFlags
 {
-    /// <summary>Flags some event or map setup script uses (from the last <see cref="BuildIndex"/>), or null before that.</summary>
+    // flags some event or map setup script uses (from the last BuildIndex), or null before that
     public static HashSet<int>? UsedByScripts { get; private set; }
 
     private static RomBuffer? _codeRom;
     private static HashSet<int> _codeFlags = new();
 
-    /// <summary>
-    /// Flags the game's own code reads or writes directly (absolute addressing of $1296-$12B5: all 8 flags of
-    /// that byte). A plain byte scan, so a few data bytes may count as code: it errs on the side of "in use".
-    /// Indexed access through the general flag routines (what event commands use) isn't counted here.
-    /// </summary>
+    // flags the game's own code reads or writes directly (absolute addressing of $1296-$12B5, all 8 flags of that
+    // byte). it's a plain byte scan, so a few data bytes might count as code, it errs on the side of "in use".
+    // indexed access through the general flag routines (what event commands use) isn't counted here
     public static HashSet<int> UsedByCode(RomBuffer rom)
     {
         if (ReferenceEquals(rom, _codeRom)) return _codeFlags;
         var flags = new HashSet<int>();
         // absolute (3-byte) and long (4-byte, bank $00 or $7E) forms of loads, stores, compares, bit ops, inc/dec
-        int[] abs = { 0xAD, 0x8D, 0x0D, 0x2D, 0x4D, 0x6D, 0xCD, 0xED, 0x2C, 0x0C, 0x1C, 0x9C, 0xEE, 0xCE, 0xAE, 0xAC, 0x8E, 0x8C, 0xEC, 0xCC };
-        int[] lng = { 0xAF, 0x8F, 0x0F, 0x2F, 0x4F, 0x6F, 0xCF, 0xEF };
-        var absSet = abs.ToHashSet(); var lngSet = lng.ToHashSet();
+        int[] absoluteOps = { 0xAD, 0x8D, 0x0D, 0x2D, 0x4D, 0x6D, 0xCD, 0xED, 0x2C, 0x0C, 0x1C, 0x9C, 0xEE, 0xCE, 0xAE, 0xAC, 0x8E, 0x8C, 0xEC, 0xCC };
+        int[] longOps = { 0xAF, 0x8F, 0x0F, 0x2F, 0x4F, 0x6F, 0xCF, 0xEF };
+        var absSet = absoluteOps.ToHashSet(); var lngSet = longOps.ToHashSet();
         int end = Math.Min(rom.Length, 0x100000);
         for (int i = 0; i + 3 < end; i++)
         {
             int op = rom.ReadByte(i);
             if (!absSet.Contains(op) && !lngSet.Contains(op)) continue;
-            int addr = rom.ReadByte(i + 1) | rom.ReadByte(i + 2) << 8;
-            if (addr < 0x1296 || addr > 0x12B5) continue;
+            int address = rom.ReadByte(i + 1) | rom.ReadByte(i + 2) << 8;
+            if (address < 0x1296 || address > 0x12B5) continue;
             if (lngSet.Contains(op) && rom.ReadByte(i + 3) is not (0x00 or 0x7E or 0x80)) continue;
-            int b = addr - 0x1296;
-            for (int k = 0; k < 8; k++) flags.Add(b * 8 + k);
+            int flagByte = address - 0x1296;
+            for (int k = 0; k < 8; k++) flags.Add(flagByte * 8 + k);
         }
         _codeRom = rom; _codeFlags = flags;
         return flags;
     }
 
-    /// <summary>
-    /// A flag nothing in the game uses: no event, no map setup script, no direct access in the game's code, and
-    /// not one of F0-FF (the short-form flags and FF, where commands report results). Safe for your own quests.
-    /// </summary>
+    // a flag nothing in the game uses: no event, no map setup script, no direct access in the game's code, and not
+    // one of F0-FF (the short-form flags and FF, where commands report results). safe for your own quests
     public static bool IsFree(RomBuffer rom, int flag) =>
         flag is >= 0 and < 0xF0 && UsedByScripts != null && !UsedByScripts.Contains(flag) && !UsedByCode(rom).Contains(flag);
 
-    /// <summary>All 256 flags for a picker: number, name, and whether it's free.</summary>
+    // all 256 flags for a picker: number, name, and whether it's free
     public static List<(int Value, string Label)> Choices(RomBuffer rom) =>
-        Enumerable.Range(0, 256).Select(f =>
+        Enumerable.Range(0, 256).Select(flag =>
         {
-            string name = DisplayName(f) ?? "";
-            string free = IsFree(rom, f) ? (NameOf(f) != null ? "  (your flag)" : "  (free)") : "";
-            return (f, $"{f:X2} {name}{free}".TrimEnd());
+            string name = DisplayName(flag) ?? "";
+            string free = IsFree(rom, flag) ? (NameOf(flag) != null ? "  (your flag)" : "  (free)") : "";
+            return (flag, $"{flag:X2} {name}{free}".TrimEnd());
         }).ToList();
 
-    /// <summary>Every use of every flag. Decodes each distinct event script once.</summary>
+    // every use of every flag. decodes each distinct event script once
     public static List<FlagUse> BuildIndex(RomBuffer rom, IEnumerable<int> mapIds)
     {
         var result = BuildIndexCore(rom, mapIds);
@@ -99,35 +93,35 @@ public static class StoryFlags
                 var regions = new HashSet<int> { first.Start };
                 while (queue.Count > 0 && regions.Count < 64)
                 {
-                    var s = queue.Dequeue();
-                    for (int i = 0; i < s.Ops.Count; i++)
+                    var script = queue.Dequeue();
+                    for (int i = 0; i < script.Ops.Count; i++)
                     {
-                        var o = s.Ops[i];
-                        if (o.IsText || o.Bytes.Length == 0) continue;
-                        int b0 = o.Bytes[0];
+                        var scriptOp = script.Ops[i];
+                        if (scriptOp.IsText || scriptOp.Bytes.Length == 0) continue;
+                        int b0 = scriptOp.Bytes[0];
                         (int flag, string? action) = b0 switch
                         {
-                            0x04 => (o.Bytes[1], "checks if set"),
-                            0x05 => (o.Bytes[1], "checks if not set"),
-                            0x06 => (o.Bytes[1], "sets"),
-                            0x07 => (o.Bytes[1], "clears"),
+                            0x04 => (scriptOp.Bytes[1], "checks if set"),
+                            0x05 => (scriptOp.Bytes[1], "checks if not set"),
+                            0x06 => (scriptOp.Bytes[1], "sets"),
+                            0x07 => (scriptOp.Bytes[1], "clears"),
                             >= 0xC0 and <= 0xCF => (0xF0 + (b0 & 15), "checks if set"),
                             >= 0xD0 and <= 0xDF => (0xF0 + (b0 & 15), "checks if not set"),
                             >= 0xE0 and <= 0xEF => (0xF0 + (b0 & 15), "sets"),
                             >= 0xF0 => (0xF0 + (b0 & 15), "clears"),
                             // commands that report their result in flag FF
                             0x1C or 0x3E or 0x41 or 0x4A => (0xFF, "sets as a result"),
-                            0x50 when o.Bytes.Length > 1 && o.Bytes[1] is 0x01 or 0x02 or 0x03 or 0x0F or 0x10 or 0x11 or 0x17 or 0x1D or 0x1E => (0xFF, "sets as a result"),
+                            0x50 when scriptOp.Bytes.Length > 1 && scriptOp.Bytes[1] is 0x01 or 0x02 or 0x03 or 0x0F or 0x10 or 0x11 or 0x17 or 0x1D or 0x1E => (0xFF, "sets as a result"),
                             _ => (-1, null),
                         };
                         if (action != null)
-                            uses.Add(new FlagUse(flag, map, ev, i, o.Offset, action, false, s.Start, first.Start)
+                            uses.Add(new FlagUse(flag, map, ev, i, scriptOp.Offset, action, false, script.Start, first.Start)
                             {
-                                Context = Context(s, i, action), EventHint = hint ??= Hint(rom, first),
+                                Context = Context(script, i, action), EventHint = hint ??= Hint(rom, first),
                             });
-                        foreach (var t in o.Targets)
-                            if (t.Op == null && t.Absolute >= s.BlockBase && t.Absolute < s.BlockBase + 0x10000 && regions.Add(t.Absolute))
-                                try { queue.Enqueue(EventScript.LoadAt(rom, map, ev, t.Absolute, first.Start)); } catch { }
+                        foreach (var target in scriptOp.Targets)
+                            if (target.Op == null && target.Absolute >= script.BlockBase && target.Absolute < script.BlockBase + 0x10000 && regions.Add(target.Absolute))
+                                try { queue.Enqueue(EventScript.LoadAt(rom, map, ev, target.Absolute, first.Start)); } catch { }
                     }
                 }
             }
@@ -135,22 +129,22 @@ public static class StoryFlags
             // map setup script: 05-0A test flags to decide what the map shows
             try
             {
-                int p = MapSetupScript.Offset(rom, map) + 2;
-                for (int steps = 0; steps < 1000 && p < rom.Length - 4; steps++)
+                int pos = MapSetupScript.Offset(rom, map) + 2;
+                for (int steps = 0; steps < 1000 && pos < rom.Length - 4; steps++)
                 {
-                    int op = rom.ReadByte(p);
+                    int op = rom.ReadByte(pos);
                     if (op == 0x00) break;
                     if (op < 0x20)
                     {
                         if (op is >= 0x05 and <= 0x0A)
-                            uses.Add(new FlagUse(rom.ReadByte(p + 1), map, -1, -1, p, "checked by the map setup", true));
+                            uses.Add(new FlagUse(rom.ReadByte(pos + 1), map, -1, -1, pos, "checked by the map setup", true));
                         if (op > 0x0D) break;
-                        p += op is 0x04 or 0x0B ? 3 : 2;
+                        pos += op is 0x04 or 0x0B ? 3 : 2;
                     }
-                    else if (op < 0x40) p += 4;
-                    else if (op < 0x80) p += 1;
-                    else if (op < 0xC0) p += 2;
-                    else p += 4;
+                    else if (op < 0x40) pos += 4;
+                    else if (op < 0x80) pos += 1;
+                    else if (op < 0xC0) pos += 2;
+                    else pos += 4;
                 }
             }
             catch { /* no setup script */ }
@@ -160,42 +154,42 @@ public static class StoryFlags
         return list;
     }
 
-    private static string Hint(RomBuffer rom, EventScript s)
+    private static string Hint(RomBuffer rom, EventScript script)
     {
-        try { return EventHints.Summarize(rom, s); } catch { return ""; }
+        try { return EventHints.Summarize(rom, script); } catch { return ""; }
     }
 
     private static string Short(string text, int max = 70)
     {
-        var t = text.Replace("\n", " ").Replace("  ", " ").Trim();
-        return t.Length > max ? t[..max].TrimEnd() + "…" : t;
+        var plain = text.Replace("\n", " ").Replace("  ", " ").Trim();
+        return plain.Length > max ? plain[..max].TrimEnd() + "…" : plain;
     }
 
-    /// <summary>Dialogue near a use: for a set/clear the closest box before it (what just happened), else after;
-    /// for a check the first box on the path it chooses (the jump target), else the next box.</summary>
-    private static string Context(EventScript s, int i, string action)
+    // dialogue near a use. for a set/clear it's the closest box before it (what just happened), otherwise after.
+    // for a check it's the first box on the path it picks (the jump target), otherwise the next box
+    private static string Context(EventScript script, int i, string action)
     {
-        var ops = s.Ops;
+        var ops = script.Ops;
         string? Text(int k) => k >= 0 && k < ops.Count && ops[k].IsText && ops[k].Text.Trim().Length > 2 ? Short(ops[k].Text) : null;
         if (action.StartsWith("checks"))
         {
-            var t = ops[i].Targets.FirstOrDefault()?.Op;
-            int j = t != null ? ops.IndexOf(t) : -1;
-            for (int k = j; k >= 0 && k < Math.Min(ops.Count, j + 4); k++) if (Text(k) is { } a) return a;
-            for (int k = i + 1; k < Math.Min(ops.Count, i + 4); k++) if (Text(k) is { } b) return b;
+            var target = ops[i].Targets.FirstOrDefault()?.Op;
+            int targetLine = target != null ? ops.IndexOf(target) : -1;
+            for (int k = targetLine; k >= 0 && k < Math.Min(ops.Count, targetLine + 4); k++) if (Text(k) is { } onPath) return onPath;
+            for (int k = i + 1; k < Math.Min(ops.Count, i + 4); k++) if (Text(k) is { } next) return next;
             return "";
         }
-        for (int k = i - 1; k >= Math.Max(0, i - 14); k--) if (Text(k) is { } a) return a;
-        for (int k = i + 1; k < Math.Min(ops.Count, i + 8); k++) if (Text(k) is { } b) return b;
+        for (int k = i - 1; k >= Math.Max(0, i - 14); k--) if (Text(k) is { } before) return before;
+        for (int k = i + 1; k < Math.Min(ops.Count, i + 8); k++) if (Text(k) is { } after) return after;
         return "";
     }
 
-    // ── descriptions ───────────────────────────────────────────────────────
+    // descriptions
 
     private static Dictionary<int, string> _autoNames = new();
 
-    /// <summary>The user's name for a flag, or a short automatic one worked out from where it is set.</summary>
-    public static string? DisplayName(int flag) => NameOf(flag) ?? (_autoNames.TryGetValue(flag, out var a) && a.Length > 0 ? a : null);
+    // the user's name for a flag, or a short automatic one worked out from where it gets set
+    public static string? DisplayName(int flag) => NameOf(flag) ?? (_autoNames.TryGetValue(flag, out var auto) && auto.Length > 0 ? auto : null);
 
     private static string AutoName(int flag, List<FlagUse> uses)
     {
@@ -209,9 +203,9 @@ public static class StoryFlags
             : $"set in map {set.MapId:X2} event {set.Event}";
     }
 
-    private static string Plural(int n, string word) => n == 1 ? $"1 {word}" : $"{n} {word}s";
+    private static string Plural(int count, string word) => count == 1 ? $"1 {word}" : $"{count} {word}s";
 
-    /// <summary>The most telling part of an event hint ("Someone joins" rather than "Cutscene (51 boxes)").</summary>
+    // the most telling part of an event hint ("Someone joins" rather than "Cutscene (51 boxes)")
     private static string BestHint(string hint)
     {
         var parts = hint.Split('·').Select(p => p.Trim()).Where(p => p.Length > 0).ToList();
@@ -220,7 +214,7 @@ public static class StoryFlags
                ?? parts.FirstOrDefault() ?? "";
     }
 
-    /// <summary>A plain-language description of what a flag is and does, from every place it is used.</summary>
+    // a plain description of what a flag is and does, from every place it's used
     public static string Describe(int flag, IReadOnlyList<FlagUse> uses, Func<int, string> mapLabel)
     {
         var sb = new System.Text.StringBuilder();
@@ -273,7 +267,7 @@ public static class StoryFlags
         return sb.ToString().TrimEnd();
     }
 
-    // ── names ───────────────────────────────────────────────────────────────
+    // names
 
     private static string StorePath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "LufiaForge", "flagnames.json");
@@ -289,15 +283,15 @@ public static class StoryFlags
             try
             {
                 if (File.Exists(StorePath))
-                    foreach (var (k, v) in JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(StorePath)) ?? new())
-                        if (int.TryParse(k, System.Globalization.NumberStyles.HexNumber, null, out int f)) _names[f] = v;
+                    foreach (var (key, value) in JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(StorePath)) ?? new())
+                        if (int.TryParse(key, System.Globalization.NumberStyles.HexNumber, null, out int flag)) _names[flag] = value;
             }
             catch { }
             return _names;
         }
     }
 
-    public static string? NameOf(int flag) => Names.TryGetValue(flag, out var n) ? n : null;
+    public static string? NameOf(int flag) => Names.TryGetValue(flag, out var name) ? name : null;
 
     public static void SetName(int flag, string? name)
     {

@@ -2,14 +2,12 @@ using LufiaForge.Core.Maps;
 
 namespace LufiaForge.Core.Audio;
 
-/// <summary>
-/// The music of a cutscene as a stream of samples on the cutscene's frame clock: songs start where the script
-/// starts them (command 0A, or the song a known cutscene begins with, see <see cref="MusicSync"/>), silent while
-/// the game uploads them, and stop at 0A FF; sound effects (54, and the thunder of 60) play over them.
-/// </summary>
+// the music of a cutscene as a stream of samples on the cutscene's frame clock: songs start where the script starts
+// them (command 0A, or the song a known cutscene begins with, see MusicSync), stay silent while the game uploads them,
+// and stop at 0A FF. sound effects (54, and the thunder of 60) play over them
 public sealed class CutsceneMusic : IDisposable
 {
-    /// <summary>At a frame of the cutscene: a song starting (or -1: the music stopping), or a sound effect.</summary>
+    // at a frame of the cutscene: a song starting (or -1 = the music stopping), or a sound effect
     public readonly record struct Cue(int Frame, int Song, int Effect = -1)
     {
         public bool IsEffect => Effect >= 0;
@@ -35,31 +33,31 @@ public sealed class CutsceneMusic : IDisposable
 
     public bool HasMusic => _cues.Count > 0;
 
-    /// <summary>The emulated driver (tests).</summary>
+    // the emulated driver (for tests)
     public LufiaSound? Sound => _sound;
 
-    /// <summary>Sound cues of a script: the song it starts with (if known), every 0A, sound effects (54) and the
-    /// thunder of lightning flashes (60).</summary>
+    // sound cues of a script: the song it starts with (if we know it), every 0A, sound effects (54) and the thunder of
+    // lightning flashes (60)
     public static List<Cue> Cues(RomBuffer rom, EventScript script, IReadOnlyList<TimelineItem> timeline)
     {
         var cues = new List<Cue>();
         var (song, lead) = MusicSync.StartOf(script.MapId, script.Event);
         if (song >= 0) cues.Add(new Cue(-lead, song));
-        foreach (var it in timeline)
+        foreach (var item in timeline)
         {
-            if (it.Line >= script.Ops.Count || script.Ops[it.Line] is not { IsText: false } op) continue;
+            if (item.Line >= script.Ops.Count || script.Ops[item.Line] is not { IsText: false } op) continue;
             if (op.Bytes.Length < 2) continue;
             switch (op.Bytes[0])
             {
-                case 0x0A: cues.Add(new Cue(it.Start, op.Bytes[1] == 0xFF ? -1 : op.Bytes[1])); break;
-                case 0x54: cues.Add(new Cue(it.Start, 0, op.Bytes[1])); break;
-                case 0x60 when LufiaSound.FlashSoundEffect(rom, op.Bytes[1]) is var fx and > 0: cues.Add(new Cue(it.Start, 0, fx)); break;
+                case 0x0A: cues.Add(new Cue(item.Start, op.Bytes[1] == 0xFF ? -1 : op.Bytes[1])); break;
+                case 0x54: cues.Add(new Cue(item.Start, 0, op.Bytes[1])); break;
+                case 0x60 when LufiaSound.FlashSoundEffect(rom, op.Bytes[1]) is var effect and > 0: cues.Add(new Cue(item.Start, 0, effect)); break;
             }
         }
         return cues;
     }
 
-    /// <summary>Gets ready to produce the music from <paramref name="frame"/> on.</summary>
+    // gets ready to produce the music from frame on
     public void Seek(double frame)
     {
         _sound?.Dispose();
@@ -73,16 +71,16 @@ public sealed class CutsceneMusic : IDisposable
         long skip = (long)Math.Round((frame - _origin) * SamplesPerFrame);
         while (skip > 0)
         {
-            int n = (int)Math.Min(skip, _scratch.Length / 2);
-            Render(_scratch, n);
-            skip -= n;
+            int chunk = (int)Math.Min(skip, _scratch.Length / 2);
+            Render(_scratch, chunk);
+            skip -= chunk;
         }
     }
 
     private double FrameAt(long sample) => _origin + sample / SamplesPerFrame;
     private long SampleAt(double frame) => (long)Math.Ceiling((frame - _origin) * SamplesPerFrame);
 
-    /// <summary>Fills <paramref name="pairs"/> stereo sample pairs (16-bit, 32 kHz).</summary>
+    // fills pairs stereo sample pairs (16-bit, 32 kHz)
     public void Render(short[] buffer, int pairs)
     {
         int done = 0;
@@ -94,30 +92,30 @@ public sealed class CutsceneMusic : IDisposable
                 Apply(_cues[_next++]);
                 continue;
             }
-            long n = pairs - done;
-            if (_next < _cues.Count) n = Math.Min(n, Math.Max(1, SampleAt(_cues[_next].Frame) - _sample));
+            long count = pairs - done;
+            if (_next < _cues.Count) count = Math.Min(count, Math.Max(1, SampleAt(_cues[_next].Frame) - _sample));
             // the driver keeps running (sound effects) except while the game is still uploading a song
             bool silent = _sound == null || now < _silentUntil;
-            if (now < _silentUntil) n = Math.Min(n, Math.Max(1, SampleAt(_silentUntil) - _sample));
-            if (silent) Array.Clear(buffer, done * 2, (int)n * 2);
+            if (now < _silentUntil) count = Math.Min(count, Math.Max(1, SampleAt(_silentUntil) - _sample));
+            if (silent) Array.Clear(buffer, done * 2, (int)count * 2);
             else
             {
-                var chunk = done == 0 && n == pairs ? buffer : new short[n * 2];
-                _sound!.Render(chunk, (int)n * 2);
-                if (!ReferenceEquals(chunk, buffer)) Array.Copy(chunk, 0, buffer, done * 2, n * 2);
+                var chunk = done == 0 && count == pairs ? buffer : new short[count * 2];
+                _sound!.Render(chunk, (int)count * 2);
+                if (!ReferenceEquals(chunk, buffer)) Array.Copy(chunk, 0, buffer, done * 2, count * 2);
             }
-            done += (int)n; _sample += n;
+            done += (int)count; _sample += count;
         }
     }
 
-    private void Apply(Cue c)
+    private void Apply(Cue cue)
     {
         if (_sound == null) return;
-        if (c.IsEffect) { _sound.PlaySoundEffect(c.Effect); return; }
-        if (c.Song < 0) { if (_playing) _sound.StopMusic(); _playing = false; return; }
-        double latency = _sound.PlaySong(c.Song);
+        if (cue.IsEffect) { _sound.PlaySoundEffect(cue.Effect); return; }
+        if (cue.Song < 0) { if (_playing) _sound.StopMusic(); _playing = false; return; }
+        double latency = _sound.PlaySong(cue.Song);
         _playing = true;
-        _silentUntil = c.Frame + latency;
+        _silentUntil = cue.Frame + latency;
     }
 
     public void Dispose() { _sound?.Dispose(); _sound = null; }

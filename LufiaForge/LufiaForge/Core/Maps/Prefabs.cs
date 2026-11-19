@@ -1,20 +1,18 @@
 namespace LufiaForge.Core.Maps;
 
-/// <summary>
-/// Ready-made structures (houses, shops, rooms, towers) cut out of the game's own maps, for stamping.
-/// For a tileset, the solid blocks of each map (walls, counters) fall apart into separate structures (cells side by
-/// side), and identical structures are merged. Trees and other outdoor blocks never belong to one, nor do rivers,
-/// ponds and a list of pieces picked out by hand. Cells of a structure's box that aren't part of it are
-/// <see cref="Keep"/>: stamping leaves the ground and trees already painted there.
-/// <para>Composite blocks (roof and tree overlays) are numbered from each map's own threshold, so a structure keeps
-/// composites as "pair index"; <see cref="Placer"/> fits it to a map by matching block records, so it also works on
-/// a tileset copied by Make room.</para>
-/// </summary>
+// ready-made structures (houses, shops, rooms, towers) cut out of the game's own maps, for stamping.
+// for a tileset, the solid blocks of each map (walls, counters) fall apart into separate structures (cells side by
+// side), and identical structures get merged. trees and other outdoor blocks never belong to one, and neither do
+// rivers, ponds and a list of pieces picked out by hand. cells in a structure's box that aren't part of it are Keep,
+// so stamping leaves the ground and trees already painted there.
+// composite blocks (roof and tree overlays) are numbered from each map's own threshold, so a structure keeps
+// composites as "pair index". Placer fits it to a map by matching block records, so it also works on a tileset
+// copied by Make room
 public static class Prefabs
 {
-    /// <summary>A cell left out of a structure (stamping keeps what's there).</summary>
+    // a cell left out of a structure (stamping keeps what's there)
     public const ushort Keep = 0xFFFF;
-    /// <summary>Marks a composite cell in <see cref="Prefab.Cells"/>: the low 10 bits are its pair index.</summary>
+    // marks a composite cell in Prefab.Cells, the low 10 bits are its pair index
     public const ushort CompositeFlag = 0x8000;
 
     public sealed record Prefab(int W, int H, ushort[] Cells, string Source, int Count, int Area, int Tileset = -1)
@@ -24,25 +22,25 @@ public static class Prefabs
 
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<RomBuffer, Dictionary<string, List<Prefab>>> Cache = new();
 
-    /// <summary>The structures for a tileset: its own maps' and those of tilesets with the same graphics (a tileset
-    /// copied by Make room, or its original), each with its source tileset (see <see cref="Placer"/>).</summary>
+    // the structures for a tileset: its own maps' and the ones from tilesets with the same graphics (a tileset copied
+    // by Make room, or its original), each with its source tileset (see Placer)
     public static List<Prefab> ForTileset(RomBuffer rom, int tileset, IEnumerable<MapInfo> maps)
     {
         var list = maps as IList<MapInfo> ?? maps.ToList();
         var result = new List<Prefab>();
-        foreach (int t in Family(rom, tileset)) result.AddRange(Find(rom, t, list));
+        foreach (int relative in Family(rom, tileset)) result.AddRange(Find(rom, relative, list));
         return result;
     }
 
-    /// <summary>The tileset and the others with the same graphics (itself first).</summary>
+    // the tileset and the others with the same graphics (itself first)
     public static List<int> Family(RomBuffer rom, int tileset)
     {
         var tiles = TilesOf(rom, tileset);
         var family = new List<int> { tileset };
-        for (int t = 0; t < Tilesets.Count(rom); t++)
+        for (int other = 0; other < Tilesets.Count(rom); other++)
         {
-            if (t == tileset) continue;
-            try { if (TilesOf(rom, t).AsSpan().SequenceEqual(tiles)) family.Add(t); } catch { }
+            if (other == tileset) continue;
+            try { if (TilesOf(rom, other).AsSpan().SequenceEqual(tiles)) family.Add(other); } catch { }
         }
         return family;
     }
@@ -50,23 +48,23 @@ public static class Prefabs
     private static byte[] TilesOf(RomBuffer rom, int tileset) =>
         LufiaCompression.DecompressResource(rom, Tilesets.TilesResource(rom, tileset), out _);
 
-    /// <summary>The structures of every map with this tileset (cached per ROM and tileset key until the maps change).</summary>
+    // the structures of every map with this tileset (cached per rom and tileset key until the maps change)
     public static List<Prefab> Find(RomBuffer rom, int tileset, IEnumerable<MapInfo> maps)
     {
         var ids = maps.Where(m => m.MapId != LufiaMap.WorldMap && m.Tileset == tileset).Select(m => m.MapId).ToList();
         string key = tileset + ":" + string.Join(",", ids) + ":" + string.Join(",", ids.Select(i => LufiaCompression.ResourceOffset(rom, LufiaMap.MapDataResource(rom, i))));
         var cache = Cache.GetOrCreateValue(rom);
-        if (cache.TryGetValue(key, out var hit)) return hit;
+        if (cache.TryGetValue(key, out var cached)) return cached;
 
         var loaded = new List<LufiaMap>();
         foreach (int id in ids) { try { loaded.Add(LufiaMap.Load(rom, id)); } catch { } }
         // a cell's identity across maps: plain block b, or composite pair p (| flag)
-        ushort Id(LufiaMap m, int c) { int b = c & 0x3FF; return m.CompositeThreshold >= 0 && b >= m.CompositeThreshold ? (ushort)(CompositeFlag | (b - m.CompositeThreshold)) : (ushort)b; }
+        ushort Id(LufiaMap map, int cell) { int block = cell & 0x3FF; return map.CompositeThreshold >= 0 && block >= map.CompositeThreshold ? (ushort)(CompositeFlag | (block - map.CompositeThreshold)) : (ushort)block; }
 
         // ground: the most used cells, covering about 70% of all cells
         var usage = new Dictionary<ushort, int>();
         long total = 0;
-        foreach (var m in loaded) foreach (var c in m.Layer) { var i = Id(m, c); usage[i] = usage.GetValueOrDefault(i) + 1; total++; }
+        foreach (var map in loaded) foreach (var cell in map.Layer) { var id = Id(map, cell); usage[id] = usage.GetValueOrDefault(id) + 1; total++; }
         var ground = new HashSet<ushort>();
         long covered = 0;
         foreach (var kv in usage.OrderByDescending(kv => kv.Value))
@@ -77,154 +75,154 @@ public static class Prefabs
 
         // per map: which cells are solid (walls, roofs, trees)
         var solids = new Dictionary<LufiaMap, bool[]>();
-        foreach (var m in loaded)
+        foreach (var map in loaded)
         {
-            var ts0 = MapTileset.ForMap(rom, m);
-            var sol = new bool[m.Layer.Length];
-            for (int i = 0; i < sol.Length; i++)
+            var mapTiles = MapTileset.ForMap(rom, map);
+            var solid = new bool[map.Layer.Length];
+            for (int i = 0; i < solid.Length; i++)
             {
-                int b = m.Layer[i] & 0x3FF, a;
-                if (ts0.CompositeParts(b) is var (g, o)) a = ts0.Attribute(g) | ts0.Attribute(o); else a = ts0.Attribute(b);
-                sol[i] = (a & (BlockSet.AttrBlocked | BlockSet.AttrLeft | BlockSet.AttrRight | BlockSet.AttrUp | BlockSet.AttrDown)) != 0;
+                int block = map.Layer[i] & 0x3FF, attribute;
+                if (mapTiles.CompositeParts(block) is var (groundBlock, overlay)) attribute = mapTiles.Attribute(groundBlock) | mapTiles.Attribute(overlay); else attribute = mapTiles.Attribute(block);
+                solid[i] = (attribute & (BlockSet.AttrBlocked | BlockSet.AttrLeft | BlockSet.AttrRight | BlockSet.AttrUp | BlockSet.AttrDown)) != 0;
             }
-            solids[m] = sol;
+            solids[map] = solid;
         }
-        // outdoor blocks (trees, tree tops, forest edges): never part of a structure
+        // outdoor blocks (trees, tree tops, forest edges) are never part of a structure
         var outdoor = new HashSet<ushort>();
         var keys = CellKeys(rom, tileset);
-        foreach (var m in loaded)
-            foreach (var c in m.Layer)
+        foreach (var map in loaded)
+            foreach (var cell in map.Layer)
             {
-                var id = Id(m, c);
+                var id = Id(map, cell);
                 if (!outdoor.Contains(id) && OutdoorRecords.Contains(keys(id))) outdoor.Add(id);
             }
         // and the blocks that are nearly always right next to them (bush edges, tree shadows on the grass)
         var nextTo = new Dictionary<ushort, int>();
-        foreach (var m in loaded)
-            for (int i = 0; i < m.Layer.Length; i++)
+        foreach (var map in loaded)
+            for (int i = 0; i < map.Layer.Length; i++)
             {
-                int x = i % m.Width, y = i / m.Width;
-                bool by = false;
-                for (int dy = -1; dy <= 1 && !by; dy++)
-                    for (int dx = -1; dx <= 1 && !by; dx++)
+                int x = i % map.Width, y = i / map.Width;
+                bool besideOutdoor = false;
+                for (int dy = -1; dy <= 1 && !besideOutdoor; dy++)
+                    for (int dx = -1; dx <= 1 && !besideOutdoor; dx++)
                     {
                         int nx = x + dx, ny = y + dy;
-                        if ((dx | dy) != 0 && nx >= 0 && ny >= 0 && nx < m.Width && ny < m.Height && outdoor.Contains(Id(m, m.Layer[ny * m.Width + nx]))) by = true;
+                        if ((dx | dy) != 0 && nx >= 0 && ny >= 0 && nx < map.Width && ny < map.Height && outdoor.Contains(Id(map, map.Layer[ny * map.Width + nx]))) besideOutdoor = true;
                     }
-                if (by) { var id = Id(m, m.Layer[i]); nextTo[id] = nextTo.GetValueOrDefault(id) + 1; }
+                if (besideOutdoor) { var id = Id(map, map.Layer[i]); nextTo[id] = nextTo.GetValueOrDefault(id) + 1; }
             }
         foreach (var kv in nextTo)
             if (!ground.Contains(kv.Key) && kv.Value >= 4 && kv.Value >= usage[kv.Key] * 0.8) outdoor.Add(kv.Key);
 
         var found = new Dictionary<string, (Prefab P, int Count, string Source)>();
         var waterCache = new Dictionary<(int, int), bool>();
-        foreach (var m in loaded)
+        foreach (var map in loaded)
         {
-            int w = m.Width, h = m.Height;
-            var cells = new ushort[w * h];
-            for (int i = 0; i < cells.Length; i++) cells[i] = Id(m, m.Layer[i]);
-            var solid = solids[m];
-            var removed = RemovedCells(m.MapId, w);
+            int width = map.Width, height = map.Height;
+            var cells = new ushort[width * height];
+            for (int i = 0; i < cells.Length; i++) cells[i] = Id(map, map.Layer[i]);
+            var solid = solids[map];
+            var removed = RemovedCells(map.MapId, width);
             for (int i = 0; i < cells.Length; i++) if (outdoor.Contains(cells[i]) || removed.Contains(i)) solid[i] = false;
-            var seen = new bool[w * h];
+            var seen = new bool[width * height];
             for (int start = 0; start < cells.Length; start++)
             {
                 if (seen[start] || !solid[start]) continue;
-                // the structure: solid cells side by side (blocks touching only at a corner are something else)
+                // the structure: solid cells side by side (blocks that only touch at a corner are something else)
                 var part = new List<int>();
                 var stack = new Stack<int>(); stack.Push(start); seen[start] = true;
                 while (stack.Count > 0)
                 {
-                    int p = stack.Pop(); part.Add(p);
-                    int px = p % w, py = p / w;
+                    int pos = stack.Pop(); part.Add(pos);
+                    int cellX = pos % width, cellY = pos / width;
                     foreach (var (dx, dy) in Sides)
                     {
-                        int nx = px + dx, ny = py + dy;
-                        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
-                        int q = ny * w + nx;
-                        if (seen[q] || !solid[q]) continue;
-                        seen[q] = true; stack.Push(q);
+                        int nx = cellX + dx, ny = cellY + dy;
+                        if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+                        int neighbour = ny * width + nx;
+                        if (seen[neighbour] || !solid[neighbour]) continue;
+                        seen[neighbour] = true; stack.Push(neighbour);
                     }
                 }
-                int x1 = part.Min(p => p % w), x2 = part.Max(p => p % w), y1 = part.Min(p => p / w), y2 = part.Max(p => p / w);
-                int bw = x2 - x1 + 1, bh = y2 - y1 + 1;
+                int x1 = part.Min(p => p % width), x2 = part.Max(p => p % width), y1 = part.Min(p => p / width), y2 = part.Max(p => p / width);
+                int boxWidth = x2 - x1 + 1, boxHeight = y2 - y1 + 1;
                 // something you'd place: at least 2 x 2 and 4 cells, at most 24 x 20, and mostly solid (not a long border)
-                if (bw < 2 || bh < 2 || part.Count < 4 || bw > 24 || bh > 20 || part.Count < bw * bh * 0.30) continue;
+                if (boxWidth < 2 || boxHeight < 2 || part.Count < 4 || boxWidth > 24 || boxHeight > 20 || part.Count < boxWidth * boxHeight * 0.30) continue;
                 // a plain patch of one or two blocks isn't a structure
                 if (part.Select(p => cells[p]).Distinct().Count() < 3) continue;
-                if (IsRejected(m.MapId, part, w)) continue;
-                if (part.Count < 16 && part.Any(p => removed.Contains(p - 1) || removed.Contains(p + 1) || removed.Contains(p - w) || removed.Contains(p + w))) continue;
-                // rivers and ponds: painted, not placed
-                if (Watery(rom, m, part.Select(p => m.Layer[p]).ToList(), waterCache) * 10 >= part.Count * 3) continue;
+                if (IsRejected(map.MapId, part, width)) continue;
+                if (part.Count < 16 && part.Any(p => removed.Contains(p - 1) || removed.Contains(p + 1) || removed.Contains(p - width) || removed.Contains(p + width))) continue;
+                // rivers and ponds get painted, not placed
+                if (Watery(rom, map, part.Select(p => map.Layer[p]).ToList(), waterCache) * 10 >= part.Count * 3) continue;
                 var mine = part.ToHashSet();
-                var pc = new ushort[bw * bh];
-                for (int y = 0; y < bh; y++)
-                    for (int x = 0; x < bw; x++)
+                var prefabCells = new ushort[boxWidth * boxHeight];
+                for (int y = 0; y < boxHeight; y++)
+                    for (int x = 0; x < boxWidth; x++)
                     {
-                        int p = (y1 + y) * w + x1 + x;
+                        int pos = (y1 + y) * width + x1 + x;
                         // walkable cells in the box: doors, steps and other rare blocks touching the structure, or enclosed by it
-                        // (never outdoor blocks: stamping keeps the ground and trees already painted there)
-                        bool near = mine.Contains(p - 1) && x > 0 || mine.Contains(p + 1) && x < bw - 1 || mine.Contains(p - w) || mine.Contains(p + w);
-                        bool keep = mine.Contains(p) || !outdoor.Contains(cells[p]) && !removed.Contains(p) &&
-                                    (near && !ground.Contains(cells[p]) || Enclosed(cells, mine, ground, w, h, x1 + x, y1 + y, x1, y1, x2, y2));
-                        pc[y * bw + x] = keep ? cells[p] : Keep;
+                        // (never outdoor blocks, stamping keeps the ground and trees already painted there)
+                        bool near = mine.Contains(pos - 1) && x > 0 || mine.Contains(pos + 1) && x < boxWidth - 1 || mine.Contains(pos - width) || mine.Contains(pos + width);
+                        bool keep = mine.Contains(pos) || !outdoor.Contains(cells[pos]) && !removed.Contains(pos) &&
+                                    (near && !ground.Contains(cells[pos]) || Enclosed(cells, mine, ground, width, height, x1 + x, y1 + y, x1, y1, x2, y2));
+                        prefabCells[y * boxWidth + x] = keep ? cells[pos] : Keep;
                     }
-                string k = bw + "x" + bh + ":" + string.Join(",", pc);
-                string source = $"{m.MapId:X2}";
-                if (found.TryGetValue(k, out var f)) found[k] = (f.P, f.Count + 1, f.Source.Contains(source) ? f.Source : f.Source + ", " + source);
-                else found[k] = (new Prefab(bw, bh, pc, "", 1, part.Count, tileset), 1, source);
+                string shapeKey = boxWidth + "x" + boxHeight + ":" + string.Join(",", prefabCells);
+                string source = $"{map.MapId:X2}";
+                if (found.TryGetValue(shapeKey, out var existing)) found[shapeKey] = (existing.P, existing.Count + 1, existing.Source.Contains(source) ? existing.Source : existing.Source + ", " + source);
+                else found[shapeKey] = (new Prefab(boxWidth, boxHeight, prefabCells, "", 1, part.Count, tileset), 1, source);
             }
         }
         var list = found.Values.Select(v => v.P with { Count = v.Count, Source = "maps " + v.Source })
                           .OrderByDescending(p => p.Area).ToList();
         cache[key] = list;
         int pairs = 0;
-        foreach (var m in loaded)
-            if (m.CompositeThreshold >= 0) pairs = Math.Max(pairs, m.Layer.Max(c => c & 0x3FF) - m.CompositeThreshold + 1);
+        foreach (var map in loaded)
+            if (map.CompositeThreshold >= 0) pairs = Math.Max(pairs, map.Layer.Max(c => c & 0x3FF) - map.CompositeThreshold + 1);
         PairCounts.GetOrCreateValue(rom)[tileset] = pairs;
         return list;
     }
 
-    /// <summary>How many of these cells look like water (mostly blue).</summary>
-    private static int Watery(RomBuffer rom, LufiaMap m, List<ushort> cells, Dictionary<(int, int), bool> cache)
+    // how many of these cells look like water (mostly blue)
+    private static int Watery(RomBuffer rom, LufiaMap map, List<ushort> cells, Dictionary<(int, int), bool> cache)
     {
-        MapTileset? ts = null;
-        int n = 0;
-        foreach (var c in cells)
+        MapTileset? mapTiles = null;
+        int count = 0;
+        foreach (var cell in cells)
         {
-            int b = c & 0x3FF;
-            if (!cache.TryGetValue((m.MapId, b), out bool blue))
+            int block = cell & 0x3FF;
+            if (!cache.TryGetValue((map.MapId, block), out bool blue))
             {
-                ts ??= MapTileset.ForMap(rom, m);
+                mapTiles ??= MapTileset.ForMap(rom, map);
                 int bluePx = 0;
-                foreach (uint px in ts.MetatilePixels(b))
+                foreach (uint pixel in mapTiles.MetatilePixels(block))
                 {
-                    int rr = (int)(px >> 16) & 0xFF, gg = (int)(px >> 8) & 0xFF, bb = (int)px & 0xFF;
-                    if (bb > rr + 80 && bb > gg + 60) bluePx++;   // deep blue (water), not the light blue sky
+                    int red = (int)(pixel >> 16) & 0xFF, green = (int)(pixel >> 8) & 0xFF, blueValue = (int)pixel & 0xFF;
+                    if (blueValue > red + 80 && blueValue > green + 60) bluePx++;   // deep blue (water), not the light blue sky
                 }
-                cache[(m.MapId, b)] = blue = bluePx >= 128;
+                cache[(map.MapId, block)] = blue = bluePx >= 128;
             }
-            if (blue) n++;
+            if (blue) count++;
         }
-        return n;
+        return count;
     }
 
     private static readonly (int dx, int dy)[] Sides = { (1, 0), (-1, 0), (0, 1), (0, -1) };
 
-    /// <summary>A block's identity across tilesets: its record and a checksum of its tiles' graphics.</summary>
-    public static string BlockKey(byte[] blocks, byte[] tiles, int b)
+    // a block's identity across tilesets: its record and a checksum of its tiles' graphics
+    public static string BlockKey(byte[] blocks, byte[] tiles, int block)
     {
-        if (b * BlockSet.Size + BlockSet.Size > blocks.Length) return "";
+        if (block * BlockSet.Size + BlockSet.Size > blocks.Length) return "";
         uint hash = 2166136261;
         for (int q = 0; q < 4; q++)
         {
-            int t = BlockSet.TileOf((ushort)(blocks[b * BlockSet.Size + q * 2] | blocks[b * BlockSet.Size + q * 2 + 1] << 8)) * 32;
-            for (int i = t; i < t + 32 && i < tiles.Length; i++) hash = (hash ^ tiles[i]) * 16777619;
+            int tileStart = BlockSet.TileOf((ushort)(blocks[block * BlockSet.Size + q * 2] | blocks[block * BlockSet.Size + q * 2 + 1] << 8)) * 32;
+            for (int i = tileStart; i < tileStart + 32 && i < tiles.Length; i++) hash = (hash ^ tiles[i]) * 16777619;
         }
-        return Convert.ToHexString(blocks, b * BlockSet.Size, BlockSet.Size) + "-" + hash.ToString("X8");
+        return Convert.ToHexString(blocks, block * BlockSet.Size, BlockSet.Size) + "-" + hash.ToString("X8");
     }
 
-    /// <summary>Keys (<see cref="BlockKey"/>) of a tileset's cells: plain blocks, or "ground/overlay" for composites.</summary>
+    // keys (BlockKey) of a tileset's cells: plain blocks, or "ground/overlay" for composites
     public static Func<ushort, string> CellKeys(RomBuffer rom, int tileset)
     {
         var blocks = LufiaCompression.DecompressResource(rom, Tilesets.BlocksResource(rom, tileset), out _);
@@ -233,35 +231,35 @@ public static class Prefabs
         var memo = new Dictionary<ushort, string>();
         return id =>
         {
-            if (memo.TryGetValue(id, out var k)) return k;
-            if ((id & CompositeFlag) == 0) k = BlockKey(blocks, tiles, id);
+            if (memo.TryGetValue(id, out var cellKey)) return cellKey;
+            if ((id & CompositeFlag) == 0) cellKey = BlockKey(blocks, tiles, id);
             else
             {
-                int e = pairs + (id & 0x3FF) * 4;
-                k = e + 4 > rom.Length ? "" : BlockKey(blocks, tiles, rom.ReadUInt16Le(e) & 0x3FF) + "/" + BlockKey(blocks, tiles, rom.ReadUInt16Le(e + 2) & 0x3FF);
+                int pairEntry = pairs + (id & 0x3FF) * 4;
+                cellKey = pairEntry + 4 > rom.Length ? "" : BlockKey(blocks, tiles, rom.ReadUInt16Le(pairEntry) & 0x3FF) + "/" + BlockKey(blocks, tiles, rom.ReadUInt16Le(pairEntry + 2) & 0x3FF);
             }
-            return memo[id] = k;
+            return memo[id] = cellKey;
         };
     }
 
-    /// <summary>Cells of a map taken out of its structures by hand (stray bits of wall, ledges, grass).</summary>
-    private static HashSet<int> RemovedCells(int mapId, int w)
+    // cells of a map taken out of its structures by hand (stray bits of wall, ledges, grass)
+    private static HashSet<int> RemovedCells(int mapId, int width)
     {
         var set = new HashSet<int>();
-        foreach (var c in Removed) if (c.Map == mapId) set.Add(c.Y * w + c.X);
+        foreach (var cell in Removed) if (cell.Map == mapId) set.Add(cell.Y * width + cell.X);
         return set;
     }
 
-    /// <summary>Structures left out on purpose (mostly inside one of these rectangles of a game map).</summary>
-    private static bool IsRejected(int mapId, List<int> part, int w)
+    // structures left out on purpose (mostly inside one of these rectangles of a game map)
+    private static bool IsRejected(int mapId, List<int> part, int width)
     {
-        foreach (var r in Rejected)
-            if (r.Map == mapId && part.Count(p => p % w >= r.X1 && p % w <= r.X2 && p / w >= r.Y1 && p / w <= r.Y2) * 2 > part.Count) return true;
+        foreach (var rect in Rejected)
+            if (rect.Map == mapId && part.Count(p => p % width >= rect.X1 && p % width <= rect.X2 && p / width >= rect.Y1 && p / width <= rect.Y2) * 2 > part.Count) return true;
         return false;
     }
 
-    // Picked out by hand from the game's maps: blocks that belong outdoors (trees, tree tops, forest edges), and
-    // structures that aren't worth placing (cave walls, ruins, lakes, plain floors).
+    // picked out by hand from the game's maps: blocks that belong outdoors (trees, tree tops, forest edges), and
+    // structures that aren't worth placing (cave walls, ruins, lakes, plain floors)
     private static readonly HashSet<string> OutdoorRecords = new(StringComparer.Ordinal)
     {
         "071D171D081D181D00-A71DA4F9", "201020102010201000-2E197EE5", "201020102010201000-2E197EE5/00007C106D107D1000-FD47B918", "201020102010201000-2E197EE5/00207C306D307D3000-FD47B918",
@@ -442,13 +440,13 @@ public static class Prefabs
         (0x7E, 49, 21), (0x7E, 50, 21), (0x7E, 53, 22), (0x7E, 53, 23), (0x7E, 53, 24),   // tileset 7 #25
     };
 
-    /// <summary>A ground cell inside the box with structure cells on both sides, across and up/down (kept: courtyards).</summary>
-    private static bool Enclosed(ushort[] cells, HashSet<int> mine, HashSet<ushort> ground, int w, int h, int x, int y, int x1, int y1, int x2, int y2)
+    // a ground cell inside the box with structure cells on both sides, across and up/down (kept, for courtyards)
+    private static bool Enclosed(ushort[] cells, HashSet<int> mine, HashSet<ushort> ground, int width, int height, int x, int y, int x1, int y1, int x2, int y2)
     {
         bool Hit(int dx, int dy)
         {
             for (int cx = x + dx, cy = y + dy; cx >= x1 && cx <= x2 && cy >= y1 && cy <= y2; cx += dx, cy += dy)
-                if (mine.Contains(cy * w + cx)) return true;
+                if (mine.Contains(cy * width + cx)) return true;
             return false;
         }
         return Hit(-1, 0) && Hit(1, 0) && (Hit(0, -1) || Hit(0, 1));
@@ -456,20 +454,20 @@ public static class Prefabs
 
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<RomBuffer, Dictionary<int, int>> PairCounts = new();
 
-    /// <summary>How many (ground, overlay) pairs a tileset's maps use (the part of its pair table that's in use).</summary>
+    // how many (ground, overlay) pairs a tileset's maps use (the part of its pair table that's in use)
     public static int PairCount(RomBuffer rom, int tileset, IEnumerable<MapInfo> maps)
     {
         Find(rom, tileset, maps);
-        return PairCounts.GetOrCreateValue(rom).TryGetValue(tileset, out int n) ? n : 0;
+        return PairCounts.GetOrCreateValue(rom).TryGetValue(tileset, out int count) ? count : 0;
     }
 
-    /// <summary>A structure ready for a map: its cells as the map's block numbers (<see cref="Keep"/> where the map's
-    /// blocks stay), and the composite threshold the map needs for them (higher than its own when the structure uses
-    /// blocks the map shows as composites: <see cref="LufiaMap.RaiseThreshold"/>).</summary>
+    // a structure ready for a map: its cells as the map's block numbers (Keep where the map's blocks stay), and the
+    // composite threshold the map needs for them (higher than its own when the structure uses blocks the map shows
+    // as composites, see LufiaMap.RaiseThreshold)
     public sealed record Placement(Prefab Prefab, ushort[] Cells, int Threshold);
 
-    /// <summary>Fits structures (from the map's own tileset or one with the same graphics) to a map: blocks are matched
-    /// by their records, composites by the records of their ground and overlay.</summary>
+    // fits structures (from the map's own tileset or one with the same graphics) to a map. blocks get matched by
+    // their records, composites by the records of their ground and overlay
     public sealed class Placer
     {
         private readonly RomBuffer _rom;
@@ -485,63 +483,63 @@ public static class Prefabs
             _rom = rom; _map = map;
             _blocks = LufiaCompression.DecompressResource(rom, Tilesets.BlocksResource(rom, map.Tileset), out _);
             _count = _blocks.Length / BlockSet.Size;
-            for (int b = 0; b < _count; b++)
+            for (int block = 0; block < _count; block++)
             {
-                string k = Record(_blocks, b);
-                if (!_byRecord.TryGetValue(k, out var l)) _byRecord[k] = l = new List<int>();
-                l.Add(b);
+                string record = Record(_blocks, block);
+                if (!_byRecord.TryGetValue(record, out var list)) _byRecord[record] = list = new List<int>();
+                list.Add(block);
             }
             if (map.CompositeThreshold >= 0)
             {
                 int table = Tilesets.CompositePairs(rom, map.Tileset);
-                int own = map.Layer.Max(c => c & 0x3FF) - map.CompositeThreshold + 1;
+                int ownPairs = map.Layer.Max(c => c & 0x3FF) - map.CompositeThreshold + 1;
                 // a copy made by Make room holds the pairs its original's maps use
-                int pairs = Math.Max(own, Family(rom, map.Tileset).Max(t => PairCount(rom, t, maps)));
-                for (int q = pairs - 1; q >= 0; q--)
+                int pairs = Math.Max(ownPairs, Family(rom, map.Tileset).Max(t => PairCount(rom, t, maps)));
+                for (int pair = pairs - 1; pair >= 0; pair--)
                 {
-                    if (table + q * 4 + 4 > rom.Length) continue;
-                    var (g, o) = PairAt(rom, table, q);
-                    if (g < _count && o < _count) _byPair[Record(_blocks, g) + "/" + Record(_blocks, o)] = q;
+                    if (table + pair * 4 + 4 > rom.Length) continue;
+                    var (ground, overlay) = PairAt(rom, table, pair);
+                    if (ground < _count && overlay < _count) _byPair[Record(_blocks, ground) + "/" + Record(_blocks, overlay)] = pair;
                 }
             }
         }
 
-        private static string Record(byte[] blocks, int b) =>
-            b * BlockSet.Size + BlockSet.Size <= blocks.Length ? Convert.ToHexString(blocks, b * BlockSet.Size, BlockSet.Size) : "";
+        private static string Record(byte[] blocks, int block) =>
+            block * BlockSet.Size + BlockSet.Size <= blocks.Length ? Convert.ToHexString(blocks, block * BlockSet.Size, BlockSet.Size) : "";
 
-        private static (int G, int O) PairAt(RomBuffer rom, int table, int q) =>
-            (rom.ReadUInt16Le(table + q * 4) & 0x3FF, rom.ReadUInt16Le(table + q * 4 + 2) & 0x3FF);
+        private static (int G, int O) PairAt(RomBuffer rom, int table, int pair) =>
+            (rom.ReadUInt16Le(table + pair * 4) & 0x3FF, rom.ReadUInt16Le(table + pair * 4 + 2) & 0x3FF);
 
-        /// <summary>The structure for this map, or null when some of its blocks aren't in the map's tileset.</summary>
-        public Placement? Place(Prefab p)
+        // the structure for this map, or null when some of its blocks aren't in the map's tileset
+        public Placement? Place(Prefab prefab)
         {
-            if (p.Tileset < 0 || _map.IsWorld) return null;
-            if (!_sources.TryGetValue(p.Tileset, out var src))
-                _sources[p.Tileset] = src = (p.Tileset == _map.Tileset ? _blocks : LufiaCompression.DecompressResource(_rom, Tilesets.BlocksResource(_rom, p.Tileset), out _),
-                                             Tilesets.CompositePairs(_rom, p.Tileset));
-            var keys = new string[p.Cells.Length];
-            var same = new int[p.Cells.Length];
+            if (prefab.Tileset < 0 || _map.IsWorld) return null;
+            if (!_sources.TryGetValue(prefab.Tileset, out var source))
+                _sources[prefab.Tileset] = source = (prefab.Tileset == _map.Tileset ? _blocks : LufiaCompression.DecompressResource(_rom, Tilesets.BlocksResource(_rom, prefab.Tileset), out _),
+                                             Tilesets.CompositePairs(_rom, prefab.Tileset));
+            var keys = new string[prefab.Cells.Length];
+            var same = new int[prefab.Cells.Length];
             for (int i = 0; i < keys.Length; i++)
             {
-                ushort c = p.Cells[i];
+                ushort cell = prefab.Cells[i];
                 same[i] = -1;
-                if (c == Keep) { keys[i] = ""; continue; }
-                if ((c & CompositeFlag) != 0)
+                if (cell == Keep) { keys[i] = ""; continue; }
+                if ((cell & CompositeFlag) != 0)
                 {
-                    var (g, o) = PairAt(_rom, src.Pairs, c & 0x3FF);
-                    keys[i] = Record(src.Blocks, g) + "/" + Record(src.Blocks, o);
+                    var (ground, overlay) = PairAt(_rom, source.Pairs, cell & 0x3FF);
+                    keys[i] = Record(source.Blocks, ground) + "/" + Record(source.Blocks, overlay);
                 }
                 else
                 {
-                    keys[i] = Record(src.Blocks, c);
-                    if (p.Tileset == _map.Tileset) same[i] = c;   // the same block number when it is the same block
+                    keys[i] = Record(source.Blocks, cell);
+                    if (prefab.Tileset == _map.Tileset) same[i] = cell;   // the same block number when it's the same block
                 }
             }
-            return PlaceKeys(p, keys, same);
+            return PlaceKeys(prefab, keys, same);
         }
 
-        /// <summary>A preset the user made (cells kept as block records), fitted to this map; null when some of its
-        /// blocks aren't in the map's tileset.</summary>
+        // a preset the user made (cells kept as block records), fitted to this map. null when some of its
+        // blocks aren't in the map's tileset
         public Placement? Place(CustomPresets.Preset preset)
         {
             if (_map.IsWorld) return null;
@@ -549,38 +547,38 @@ public static class Prefabs
             return PlaceKeys(shell, preset.Cells, Enumerable.Repeat(-1, preset.Cells.Length).ToArray());
         }
 
-        /// <summary>Cells given by their block records ("" = left out, "ground/overlay" = a composite) as this map's
-        /// block numbers. <paramref name="same"/>: a block number to keep when it still is that block (or -1).</summary>
-        private Placement? PlaceKeys(Prefab p, string[] keys, int[] same)
+        // cells given by their block records ("" = left out, "ground/overlay" = a composite) as this map's block
+        // numbers. same = a block number to keep if it's still that block (or -1)
+        private Placement? PlaceKeys(Prefab prefab, string[] keys, int[] same)
         {
-            int t = _map.CompositeThreshold;
+            int threshold = _map.CompositeThreshold;
             var plain = new int[keys.Length];
             var pair = new int[keys.Length];
-            int need = t;
+            int need = threshold;
             for (int i = 0; i < keys.Length; i++)
             {
-                string k = keys[i];
+                string key = keys[i];
                 plain[i] = pair[i] = -1;
-                if (k.Length == 0) continue;
-                if (k.Contains('/'))
+                if (key.Length == 0) continue;
+                if (key.Contains('/'))
                 {
-                    if (t < 0 || !_byPair.TryGetValue(k, out int q)) return null;
-                    pair[i] = q;
+                    if (threshold < 0 || !_byPair.TryGetValue(key, out int pairIndex)) return null;
+                    pair[i] = pairIndex;
                 }
                 else
                 {
-                    if (!_byRecord.TryGetValue(k, out var list)) return null;
-                    // the same block number when it is the same block, else the first copy the map shows as a block
-                    int b = same[i] >= 0 && (t < 0 || same[i] < t) ? same[i] : list.FirstOrDefault(x => t < 0 || x < t, list[0]);
-                    plain[i] = b;
-                    if (t >= 0 && b >= t) need = Math.Max(need, b + 1);
+                    if (!_byRecord.TryGetValue(key, out var list)) return null;
+                    // the same block number if it's the same block, otherwise the first copy the map shows as a block
+                    int block = same[i] >= 0 && (threshold < 0 || same[i] < threshold) ? same[i] : list.FirstOrDefault(x => threshold < 0 || x < threshold, list[0]);
+                    plain[i] = block;
+                    if (threshold >= 0 && block >= threshold) need = Math.Max(need, block + 1);
                 }
             }
-            if (t >= 0 && need > t)
+            if (threshold >= 0 && need > threshold)
             {
-                // the map's own composites must still fit below 400 after raising the threshold
+                // the map's own composites still have to fit under 400 after raising the threshold
                 int ownMax = _map.Layer.Max(c => c & 0x3FF);
-                if (ownMax >= t && ownMax + need - t > 0x3FF) return null;
+                if (ownMax >= threshold && ownMax + need - threshold > 0x3FF) return null;
             }
             var cells = new ushort[keys.Length];
             for (int i = 0; i < cells.Length; i++)
@@ -588,16 +586,16 @@ public static class Prefabs
                 if (plain[i] >= 0) cells[i] = (ushort)plain[i];
                 else if (pair[i] >= 0)
                 {
-                    int b = need + pair[i];
-                    if (b > 0x3FF) return null;
-                    cells[i] = (ushort)b;
+                    int block = need + pair[i];
+                    if (block > 0x3FF) return null;
+                    cells[i] = (ushort)block;
                 }
                 else cells[i] = Keep;
             }
-            return new Placement(p, cells, need);
+            return new Placement(prefab, cells, need);
         }
 
-        /// <summary>Blocks copied from a map (any blocks) as a structure, so <see cref="Place"/> can fit them here.</summary>
+        // blocks copied from a map (any blocks) as a structure, so Place can fit them here
         public static Prefab FromMap(LufiaMap from, int w, int h, ushort[] blocks, string source) =>
             new(w, h, blocks.Select(b => b == Keep ? Keep : from.CompositeThreshold >= 0 && (b & 0x3FF) >= from.CompositeThreshold
                 ? (ushort)(CompositeFlag | ((b & 0x3FF) - from.CompositeThreshold)) : (ushort)(b & 0x3FF)).ToArray(),
